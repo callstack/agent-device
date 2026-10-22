@@ -332,18 +332,23 @@ extension RunnerTests {
   /// that took the bound one's place.
   func resolveTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
     guard target.boundIdentity != nil else {
-      return resolveUnboundTextEntryElement(app: app, target: target)
+      return resolveUnboundTextEntry(app: app, target: target)?.element
     }
     return resolveTextEntryInput(app: app, target: target)?.element
   }
 
   /// `resolveTextEntryElement` with the snapshot the resolution read. A bound target's resolution
-  /// already snapshots the input to check its identity. An unbound target's resolution takes one
-  /// snapshot after it finds the input.
+  /// already snapshots the input to check its identity. An unbound target's resolution keeps the
+  /// snapshot its point lookup read, and otherwise takes one snapshot after it finds the input.
   func resolveTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
     guard let boundIdentity = target.boundIdentity else {
-      return resolveUnboundTextEntryElement(app: app, target: target).map { element in
-        ResolvedTextEntryInput(element: element, snapshot: snapshotTextEntryInput(element).snapshot)
+      switch resolveUnboundTextEntry(app: app, target: target) {
+      case .lookup(let input)?:
+        return input
+      case .element(let element)?:
+        return ResolvedTextEntryInput(element: element, snapshot: snapshotTextEntryInput(element).snapshot)
+      case nil:
+        return nil
       }
     }
     func boundInput(_ candidate: XCUIElement) -> ResolvedTextEntryInput? {
@@ -457,26 +462,42 @@ extension RunnerTests {
     return exception == nil ? (probe, snapshot) : (.unavailable, nil)
   }
 
+  /// What an unbound target's resolution found: a handle it has not read, or the input its point
+  /// lookup found, with the snapshot the lookup read.
+  private enum UnboundTextEntryResolution {
+    case element(XCUIElement)
+    case lookup(ResolvedTextEntryInput)
+
+    var element: XCUIElement {
+      switch self {
+      case .element(let element):
+        return element
+      case .lookup(let input):
+        return input.element
+      }
+    }
+  }
+
   /// Resolution for a target not bound to an input yet: the first element that exists.
-  private func resolveUnboundTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
+  private func resolveUnboundTextEntry(app: XCUIApplication, target: TextEntryTarget) -> UnboundTextEntryResolution? {
     if target.prefersFocusedElement {
       if let focused = focusedTextInput(app: app) {
-        return focused
+        return .element(focused)
       }
       if let element = target.element, element.exists {
-        return element
+        return .element(element)
       }
     } else {
       if let element = target.element, element.exists {
-        return element
+        return .element(element)
       }
     }
     if let refreshPoint = target.refreshPoint,
        let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
-      return refreshed.element
+      return .lookup(refreshed)
     }
     if let focused = focusedTextInput(app: app) {
-      return focused
+      return .element(focused)
     }
     return nil
   }

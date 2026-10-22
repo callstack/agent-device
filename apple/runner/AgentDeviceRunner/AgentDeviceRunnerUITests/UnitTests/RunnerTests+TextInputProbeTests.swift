@@ -85,67 +85,6 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
   }
 
-  // The lookup reads its candidates through one query for every text input type, in the order text
-  // field, first search field, second search field. Each case removes the text field after the lookup
-  // reads one position, which moves each search field into the position before it, one already read.
-
-  // The second search field moves into the first one's position, the one the lookup reads next. The
-  // input the lookup hands out must be the second search field, whose snapshot it read.
-  @MainActor
-  func testTextInputLookupKeepsItsInputWhenAnEarlierInputOfAnotherTypeLeaves() throws {
-    try assertMixedTextInputLookup(finds: "mixed-search-b", removingTextFieldAfterPosition: 0)
-  }
-
-  // The first search field moves into the position already read. The position read next holds the
-  // second search field, which is not at the point.
-  @MainActor
-  func testTextInputLookupFindsTheFirstSearchFieldWhenTheTextFieldLeavesAfterTheFirstRead() throws {
-    try assertMixedTextInputLookup(finds: "mixed-search-a", removingTextFieldAfterPosition: 0)
-  }
-
-  // The second search field moves into the position already read. The position read next no longer
-  // exists.
-  @MainActor
-  func testTextInputLookupFindsTheSecondSearchFieldWhenTheTextFieldLeavesAfterTheSecondRead() throws {
-    try assertMixedTextInputLookup(finds: "mixed-search-b", removingTextFieldAfterPosition: 1)
-  }
-
-  @MainActor
-  private func assertMixedTextInputLookup(
-    finds identifier: String,
-    removingTextFieldAfterPosition removalPosition: Int
-  ) throws {
-    app.launchArguments = ["--agent-device-mixed-text-inputs"]
-    app.launch()
-    defer {
-      textInputCandidateReadForTesting = nil
-      app.terminate()
-    }
-    let field = app.textFields["mixed-text"]
-    let target = app.searchFields[identifier]
-    XCTAssertTrue(target.waitForFixtureExistence(timeout: appExistenceTimeout))
-    XCTAssertTrue(field.exists)
-    let frame = target.frame
-    let removeField = app.buttons["mixed-remove-text"]
-    var removals = 0
-    textInputCandidateReadForTesting = { position in
-      guard position == removalPosition, removals == 0 else { return }
-      removals += 1
-      removeField.tap()
-    }
-    let failures = currentXCTestFailureCount()
-
-    let input = try XCTUnwrap(textInputAt(app: app, x: frame.midX, y: frame.midY))
-    textInputCandidateReadForTesting = nil
-
-    XCTAssertFalse(didRecordXCTestFailure(since: failures))
-    XCTAssertEqual(removals, 1)
-    XCTAssertFalse(field.exists)
-    XCTAssertEqual(input.snapshot?.identifier, identifier)
-    XCTAssertEqual(input.element.identifier, identifier)
-    XCTAssertEqual(input.element.frame, frame)
-  }
-
   func testTextInputProbeContainmentExcludesRequiredReadsAndLaterIssues() {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()

@@ -157,98 +157,38 @@ extension RunnerTests {
     return true
   }
 
-  private static let textInputElementTypeRawValues: [UInt] = [
-    XCUIElement.ElementType.textField,
-    .secureTextField,
-    .searchField,
-    .textView,
-  ].map(\.rawValue)
-
   private func queryTextInputs(
     app: XCUIApplication,
     point: CGPoint,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
-    // One query for every text input type: each query snapshots the whole application.
-    let candidates = app.descendants(matching: .any)
-      .matching(NSPredicate(format: "elementType IN %@", Self.textInputElementTypeRawValues))
-      .allElementsBoundByIndex
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-    if let issue = textInputProbeIssueForTesting {
-      textInputProbeIssueForTesting = nil
-      record(issue)
-    }
-#endif
-    guard !shouldStop() else { return [] }
-    // One snapshot per candidate answers enablement, frame, and the ordering below: each attribute
-    // read from the live element runs the candidate's query again. A candidate that cannot be
-    // snapshotted is read live, so its failure still reaches the caller's issue handling.
-    // Each handle binds by index within its own element type, so an input of another type that
-    // appears ahead of it later does not take its place.
-    var indexByType: [XCUIElement.ElementType: Int] = [:]
-    var inputs: [ResolvedTextEntryInput] = []
-    for (position, element) in candidates.enumerated() {
-      if shouldStop() { break }
-      // Each candidate re-runs the shared query, so an input that left the app since an earlier
-      // candidate's read moves a later input into a position already read, and the per-type count
-      // no longer names the input a position reads. Every position must still exist and every
-      // handle must read as its position's input, at the point or not, or the lookup can miss an
-      // input. A missing position's snapshot throws only after XCTest waits for a match, which only
-      // a lookup that falls back pays, so existence is read only when the snapshot fails.
-      let snapshot = try? element.snapshot()
-      guard snapshot != nil || element.exists else {
-        return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
-      }
-      let elementType = snapshot?.elementType ?? element.elementType
-      let typeIndex = indexByType[elementType, default: 0]
-      indexByType[elementType] = typeIndex + 1
-      let handle = app.descendants(matching: elementType).element(boundBy: typeIndex)
-      let candidate: ResolvedTextEntryInput
-      if let snapshot {
-        guard let handleSnapshot = try? handle.snapshot(), Self.isSameTextInput(handleSnapshot, as: snapshot) else {
-          return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
-        }
-        candidate = ResolvedTextEntryInput(element: handle, snapshot: handleSnapshot)
-      } else {
-        candidate = ResolvedTextEntryInput(element: handle, snapshot: nil)
-      }
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-      textInputCandidateReadForTesting?(position)
-#endif
-      let attributes = candidate.attributes
-      if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
-        inputs.append(candidate)
-      }
-    }
-    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
-  }
-
-  /// `queryTextInputs` with one query per element type, whose handles each read through their own
-  /// snapshot, for a lookup whose shared query changed while it read the candidates.
-  private func queryTextInputsByType(
-    app: XCUIApplication,
-    point: CGPoint,
-    shouldStop: () -> Bool
-  ) -> [ResolvedTextEntryInput] {
-    NSLog("AGENT_DEVICE_RUNNER_TEXT_INPUT_LOOKUP_BY_TYPE reason=inputs-changed-during-lookup")
     var inputs: [ResolvedTextEntryInput] = []
     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
-      for element in query.allElementsBoundByIndex {
-        guard !shouldStop() else { return [] }
-        guard element.exists else { continue }
-        let input = ResolvedTextEntryInput(element: element, snapshot: try? element.snapshot())
-        let attributes = input.attributes
+      if shouldStop() { break }
+      let candidates = query.allElementsBoundByIndex
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      if let issue = textInputProbeIssueForTesting {
+        textInputProbeIssueForTesting = nil
+        record(issue)
+      }
+#endif
+      // One snapshot per candidate answers enablement, frame, and the ordering below: each attribute
+      // read from the live element runs the candidate's query again. A candidate that cannot be
+      // snapshotted is read live, so its failure still reaches the caller's issue handling. A missing
+      // candidate's snapshot throws only after XCTest waits for a match, so existence is read only
+      // when the snapshot fails.
+      for element in candidates {
+        if shouldStop() { break }
+        let snapshot = try? element.snapshot()
+        guard snapshot != nil || element.exists else { continue }
+        let candidate = ResolvedTextEntryInput(element: element, snapshot: snapshot)
+        let attributes = candidate.attributes
         if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
-          inputs.append(input)
+          inputs.append(candidate)
         }
       }
     }
+    guard !shouldStop() else { return [] }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
-  }
-
-  private static func isSameTextInput(_ read: XCUIElementSnapshot, as candidate: XCUIElementSnapshot) -> Bool {
-    read.elementType == candidate.elementType
-      && read.identifier == candidate.identifier
-      && read.frame == candidate.frame
   }
 }

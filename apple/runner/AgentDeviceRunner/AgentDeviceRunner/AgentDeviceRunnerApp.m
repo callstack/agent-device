@@ -110,7 +110,6 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
 @property(nonatomic, strong) NSLayoutConstraint *textEntryFieldTop;
 @property(nonatomic, weak) UITextField *textEntryField;
-@property(nonatomic, weak) UITextField *mixedTextInputField;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -574,11 +573,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
 }
 
-- (void)agentDeviceMixedTextInputRemoveFieldDidPress:(UIButton *)sender {
-  (void)sender;
-  [self.mixedTextInputField removeFromSuperview];
-}
-
 // Stops answering the element-type query that found it, the moment it takes focus, under
 // `--agent-device-text-entry-unqueryable-on-focus`. #3060's Flutter password field reaches this shape
 // because its two accessibility channels disagree once focused — `TextField` through the legacy
@@ -707,31 +701,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       toggle.on = index == 1;
       [self.view addSubview:toggle];
     }
-  }
-
-  // A text field ahead of two search fields among all text inputs. Removing the text field moves the
-  // second search field into the first one's position among all text inputs, but not among search
-  // fields. A search bar's field reads as a search field; a bare `UISearchTextField` reads as a text
-  // field.
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-mixed-text-inputs"]) {
-    UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(40, 120, 260, 44)];
-    field.accessibilityIdentifier = @"mixed-text";
-    field.borderStyle = UITextBorderStyleRoundedRect;
-    [self.view addSubview:field];
-    self.mixedTextInputField = field;
-    for (NSUInteger index = 0; index < 2; index++) {
-      UISearchBar *search = [[UISearchBar alloc] initWithFrame:CGRectMake(40, 180 + index * 60, 260, 44)];
-      search.searchTextField.accessibilityIdentifier = @[@"mixed-search-a", @"mixed-search-b"][index];
-      [self.view addSubview:search];
-    }
-    UIButton *removeField = [UIButton buttonWithType:UIButtonTypeSystem];
-    removeField.frame = CGRectMake(40, 320, 260, 44);
-    removeField.accessibilityIdentifier = @"mixed-remove-text";
-    [removeField setTitle:@"Remove text field" forState:UIControlStateNormal];
-    [removeField addTarget:self
-                    action:@selector(agentDeviceMixedTextInputRemoveFieldDidPress:)
-          forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:removeField];
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
