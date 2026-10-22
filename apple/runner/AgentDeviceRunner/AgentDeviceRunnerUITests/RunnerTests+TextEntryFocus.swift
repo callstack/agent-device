@@ -74,14 +74,12 @@ extension RunnerTests {
       }
 #if os(iOS)
       // The tapped input's own read comes before the keyboard. While a software keyboard is
-      // presented, the keyboard query blocks and then finds none: after a fill's focus tap it took
-      // 0.68 s on an iPhone 17 Pro simulator (iOS 27.0) and 0.57–3.77 s on CI. An input that
-      // reports keyboard focus is stronger evidence than the keyboard's arrival, which shows only
-      // that some input took focus.
-      if let target, let read = ResolvedTextEntryInput(reading: target), let snapshot = read.snapshot,
-        snapshotHasKeyboardFocus(snapshot)
-      {
-        return TextEntryStabilization(element: target, evidence: .inputReportsKeyboardFocus, focusRead: read)
+      // presented, the keyboard query blocks and then finds none. An input that reports keyboard
+      // focus is stronger evidence than the keyboard's arrival, which shows only that some input
+      // took focus.
+      let read = target.flatMap(ResolvedTextEntryInput.init(reading:))
+      if let read, let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
+        return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read))
       }
 #endif
       // focusedTextInput is intentionally nil on iOS; the keyboard transitioning to visible after
@@ -90,7 +88,8 @@ extension RunnerTests {
         return TextEntryStabilization(element: target, evidence: .keyboardAppeared)
       }
 #if os(iOS)
-      if let target, keyboardFocusConfirmed(app: app, element: target) {
+      // The read came before the keyboard query, so it is not handed on as the post-focus read.
+      if let read, keyboardFocusConfirmed(app: app, read: read) {
         return TextEntryStabilization(element: target, evidence: .focusQueryMatchesInput)
       }
 #endif
@@ -149,8 +148,8 @@ extension RunnerTests {
       target: target,
       keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
     )
-    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence=%@", stabilized.evidence?.rawValue ?? "none")
-    if let read = stabilized.focusRead {
+    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence=%@", stabilized.evidence?.name ?? "none")
+    if case .inputReportsKeyboardFocus(let read) = stabilized.evidence {
       return focusedTextEntryTarget(read.element, read: read, requestedPoint: requestedPoint)
     }
     let readyTarget = TextEntryTarget(
