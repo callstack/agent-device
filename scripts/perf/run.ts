@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { invokeCli } from './cli.ts';
 import { parseConfig, REPO_ROOT, usesSourceCli, type PerfConfig } from './config.ts';
 import { runScenario, setupIsolation, teardownIsolation } from './harness.ts';
-import { copyRawState, runIosSuite, type IosSuiteContext } from './ios-harness.ts';
+import { iosRunFinalizer, runIosSuite, type IosSuiteContext } from './ios-harness.ts';
 import {
   describeCoverage,
   FIXTURE_APP_EVENT_URL_TEMPLATE,
@@ -57,18 +56,13 @@ async function runIos(
   };
   fs.mkdirSync(ctx.artifactsDir, { recursive: true });
   log(`state-dir: ${ctx.stateDir}`);
-  const stop = (): void => {
-    invokeCli(['close'], ['--state-dir', ctx.stateDir, '--session', 'perf']);
-    invokeCli(['daemon', 'stop', '--clean'], ['--state-dir', ctx.stateDir]);
-  };
-  onInterrupt(stop);
+  const finalize = iosRunFinalizer(ctx, cfg.keepArtifacts);
+  onInterrupt(finalize);
   try {
     const measurements = await runIosSuite(ctx, cfg, scenarios);
     return { measurements, coverage: describeCoverage(scenarios, IOS_SUITE_EXCLUSIONS) };
   } finally {
-    stop();
-    copyRawState(ctx);
-    if (!cfg.keepArtifacts) fs.rmSync(ctx.stateDir, { recursive: true, force: true });
+    finalize();
   }
 }
 

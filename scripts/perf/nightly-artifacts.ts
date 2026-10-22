@@ -30,39 +30,47 @@ function gh(args: string[]): { ok: boolean; stdout: string; stderr: string } {
   return { ok: result.exitCode === 0, stdout: result.stdout, stderr: result.stderr };
 }
 
-/** Lists the workflow's completed runs on one branch, newest first. */
-export function listRuns(source: NightlySource, limit = 100): WorkflowRun[] {
-  const result = gh([
-    'run',
-    'list',
-    '--repo',
-    source.repo,
-    '--workflow',
-    source.workflow,
-    '--branch',
-    source.branch,
-    '--status',
-    'completed',
-    '--limit',
-    String(limit),
-    '--json',
-    'databaseId,createdAt,headSha,event',
-  ]);
-  if (!result.ok) throw new Error(`gh run list failed: ${result.stderr.trim()}`);
-  const rows = JSON.parse(result.stdout) as {
-    databaseId: number;
-    createdAt: string;
-    headSha: string;
-    event: string;
-  }[];
-  return sortNewestFirst(
-    rows.map((row) => ({
-      id: String(row.databaseId),
-      createdAt: row.createdAt,
-      headSha: row.headSha,
-      event: row.event,
-    })),
-  );
+const RUNS_PER_PAGE = 100;
+
+/**
+ * Yields the workflow's completed runs on one branch, newest first, one API page at a time. A
+ * caller that stops early fetches only the pages that it read.
+ */
+export function* listRuns(source: NightlySource): Generator<WorkflowRun> {
+  const seen = new Set<string>();
+  for (let page = 1; ; page++) {
+    const result = gh([
+      'api',
+      '--method',
+      'GET',
+      `repos/${source.repo}/actions/workflows/${source.workflow}/runs`,
+      '-f',
+      `branch=${source.branch}`,
+      '-f',
+      'status=completed',
+      '-f',
+      `per_page=${RUNS_PER_PAGE}`,
+      '-f',
+      `page=${page}`,
+      '--jq',
+      '[.workflow_runs[] | {id, created_at, head_sha, event}]',
+    ]);
+    if (!result.ok) throw new Error(`gh api workflow runs failed: ${result.stderr.trim()}`);
+    const rows = JSON.parse(result.stdout) as {
+      id: number;
+      created_at: string;
+      head_sha: string;
+      event: string;
+    }[];
+    for (const row of rows) {
+      const id = String(row.id);
+      // A run created during paging moves later pages by one place.
+      if (seen.has(id)) continue;
+      seen.add(id);
+      yield { id, createdAt: row.created_at, headSha: row.head_sha, event: row.event };
+    }
+    if (rows.length < RUNS_PER_PAGE) return;
+  }
 }
 
 function sortNewestFirst(runs: WorkflowRun[]): WorkflowRun[] {
@@ -112,13 +120,35 @@ export function coversTarget(candidate: PerfSummary, target: PerfSummary): boole
   );
 }
 
-/** Baseline candidates: runs created before the target, newest first, never the target itself. */
-export function baselineCandidates(
-  runs: WorkflowRun[],
-  before: string,
-  exclude: ReadonlySet<string>,
-): WorkflowRun[] {
-  return sortNewestFirst(runs).filter((run) => run.createdAt < before && !exclude.has(run.id));
+/**
+ * Selects the rolling baseline: one scheduled run for each UTC night before the target, newest night
+ * first. A night counts the newest of its scheduled runs that `load` accepts, so manual dispatches
+ * cannot fill the baseline with measurements from one afternoon. `runs` is newest first and is read
+ * only until `nights` nights are found.
+ */
+export function selectNightlyBaseline<T>(
+  runs: Iterable<WorkflowRun>,
+  options: { before: string; exclude: ReadonlySet<string>; nights: number },
+  load: (run: WorkflowRun) => T | undefined,
+): { run: WorkflowRun; value: T }[] {
+  const selected: { run: WorkflowRun; value: T }[] = [];
+  const nights = new Set<string>();
+  for (const run of runs) {
+    const night = run.createdAt.slice(0, 10);
+    if (
+      run.event !== 'schedule' ||
+      run.createdAt >= options.before ||
+      options.exclude.has(run.id) ||
+      nights.has(night)
+    )
+      continue;
+    const value = load(run);
+    if (value === undefined) continue;
+    nights.add(night);
+    selected.push({ run, value });
+    if (selected.length >= options.nights) break;
+  }
+  return selected;
 }
 
 /**

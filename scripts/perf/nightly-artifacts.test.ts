@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  baselineCandidates,
   coversTarget,
   resolveRunRef,
+  selectNightlyBaseline,
   selectRange,
   type WorkflowRun,
 } from './nightly-artifacts.ts';
 import { summaryFixture } from './summary-fixture.ts';
 
-const run = (id: string, createdAt: string): WorkflowRun => ({
+const run = (id: string, createdAt: string, event = 'schedule'): WorkflowRun => ({
   id,
   createdAt,
   headSha: `sha-${id}`,
-  event: 'schedule',
+  event,
 });
 
 // Deliberately unsorted, with two runs on 2026-10-19.
@@ -32,12 +32,55 @@ test('resolves latest, run ids, and dates to the newest matching run', () => {
   assert.throws(() => resolveRunRef('yesterday', RUNS), /Unknown run reference/);
 });
 
-test('baseline candidates are earlier runs, newest first, without excluded runs', () => {
-  const candidates = baselineCandidates(RUNS, '2026-10-20T03:00:00Z', new Set(['103']));
-  assert.deepEqual(
-    candidates.map((r) => r.id),
-    ['102', '101'],
-  );
+const baselineIds = (
+  runs: Iterable<WorkflowRun>,
+  options: { nights?: number; exclude?: string[]; reject?: string[] } = {},
+) =>
+  selectNightlyBaseline(
+    runs,
+    {
+      before: '2026-10-20T03:00:00Z',
+      exclude: new Set(options.exclude),
+      nights: options.nights ?? 3,
+    },
+    (r) => (options.reject?.includes(r.id) ? undefined : r.id),
+  ).map(({ value }) => value);
+
+test('a rolling baseline takes one scheduled run per UTC night and skips dispatches', () => {
+  const newestFirst = [
+    run('20', '2026-10-19T16:00:00Z', 'workflow_dispatch'),
+    run('19', '2026-10-19T15:00:00Z', 'workflow_dispatch'),
+    run('18', '2026-10-19T14:00:00Z', 'workflow_dispatch'),
+    run('17', '2026-10-19T02:50:00Z'),
+    run('16', '2026-10-19T02:40:00Z'),
+    run('15', '2026-10-18T02:40:00Z'),
+    run('14', '2026-10-17T02:40:00Z'),
+  ];
+  // Three dispatches in one afternoon are not three nights; 2026-10-19 counts its newest run once.
+  assert.deepEqual(baselineIds(newestFirst), ['17', '15', '14']);
+});
+
+test('a night without a usable summary gives way to an older scheduled run of that night', () => {
+  const newestFirst = [
+    run('17', '2026-10-19T02:50:00Z'),
+    run('16', '2026-10-19T02:40:00Z'),
+    run('15', '2026-10-18T02:40:00Z'),
+    run('14', '2026-10-17T02:40:00Z'),
+  ];
+  assert.deepEqual(baselineIds(newestFirst, { reject: ['17'], exclude: ['15'] }), ['16', '14']);
+});
+
+test('a rolling baseline reads past 100 runs and stops once it has enough nights', () => {
+  function* history(): Generator<WorkflowRun> {
+    for (let i = 0; i < 150; i++) {
+      yield run(`d${i}`, '2026-10-19T12:00:00Z', 'workflow_dispatch');
+    }
+    yield run('n3', '2026-10-18T02:40:00Z');
+    yield run('n2', '2026-10-17T02:40:00Z');
+    yield run('n1', '2026-10-16T02:40:00Z');
+    throw new Error('read past the last needed night');
+  }
+  assert.deepEqual(baselineIds(history()), ['n3', 'n2', 'n1']);
 });
 
 test('a range includes both ends whichever order they are given in', () => {

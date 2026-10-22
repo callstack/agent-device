@@ -3,12 +3,12 @@ import path from 'node:path';
 import { compareRuns, renderComparison, type Comparison } from './compare.ts';
 import { REPO_ROOT } from './config.ts';
 import {
-  baselineCandidates,
   coversTarget,
   fetchSummary,
   listRuns,
   readLocalSummary,
   resolveRunRef,
+  selectNightlyBaseline,
   selectRange,
   SUMMARY_ARTIFACT,
   type NightlySource,
@@ -24,9 +24,9 @@ A <ref> is latest, a workflow run id, a YYYY-MM-DD date (the newest run that UTC
 path to a summary.json or a \`pnpm perf\` output directory.
 
   --to <ref>            Run to judge (default: latest).
-  --from <ref>          Baseline run, or an inclusive range <ref>..<ref>. Without it the baseline is
-                        the --nights runs before --to.
-  --nights <n>          Rolling baseline size (default: 7).
+  --from <ref>          Baseline run, or an inclusive range <ref>..<ref> of runs of any trigger.
+                        Without it the baseline is the --nights scheduled nights before --to.
+  --nights <n>          Rolling baseline size in UTC nights, one scheduled run each (default: 7).
   --branch <name>       Branch whose nightly runs are listed (default: main).
   --repo <owner/name>   Repository (default: $GITHUB_REPOSITORY or callstack/agent-device).
   --workflow <file>     Workflow file (default: perf-nightly.yml).
@@ -117,7 +117,7 @@ type Loaded = { summary: PerfSummary; label: string; run?: WorkflowRun };
 function main(): void {
   const options = parse(process.argv.slice(2));
   let runs: WorkflowRun[] | undefined;
-  const allRuns = (): WorkflowRun[] => (runs ??= listRuns(options.source));
+  const allRuns = (): WorkflowRun[] => (runs ??= [...listRuns(options.source)]);
   const runLabel = (run: WorkflowRun) => `run ${run.id} (${run.createdAt.slice(0, 10)})`;
   const load = (ref: string): Loaded => {
     if (fs.existsSync(ref))
@@ -131,19 +131,11 @@ function main(): void {
     if (!summary) throw new Error(`Run ${run.id} has no ${options.source.artifact} artifact.`);
     return { summary, label: runLabel(run), run };
   };
-  const loadRuns = (
-    candidates: WorkflowRun[],
-    limit: number,
-    accept: (summary: PerfSummary) => boolean = () => true,
-  ): Loaded[] => {
-    const loaded: Loaded[] = [];
-    for (const run of candidates) {
-      if (loaded.length >= limit) break;
+  const loadRuns = (candidates: WorkflowRun[]): Loaded[] =>
+    candidates.flatMap((run) => {
       const summary = fetchSummary(options.source, run);
-      if (summary && accept(summary)) loaded.push({ summary, label: runLabel(run), run });
-    }
-    return loaded;
-  };
+      return summary ? [{ summary, label: runLabel(run), run }] : [];
+    });
 
   const target = load(options.to);
   const exclude = new Set([...options.exclude, ...(target.run ? [target.run.id] : [])]);
@@ -151,14 +143,19 @@ function main(): void {
   if (options.from?.includes('..')) {
     const [fromRef, toRef] = options.from.split('..');
     const range = selectRange(allRuns(), fromRef!, toRef!).filter((run) => !exclude.has(run.id));
-    baseline = loadRuns(range, range.length);
+    baseline = loadRuns(range);
   } else if (options.from) {
     baseline = [load(options.from)];
   } else {
     const before = target.run?.createdAt ?? target.summary.startedAt;
-    baseline = loadRuns(baselineCandidates(allRuns(), before, exclude), options.nights, (summary) =>
-      coversTarget(summary, target.summary),
-    );
+    baseline = selectNightlyBaseline(
+      runs ?? listRuns(options.source),
+      { before, exclude, nights: options.nights },
+      (run) => {
+        const summary = fetchSummary(options.source, run);
+        return summary && coversTarget(summary, target.summary) ? summary : undefined;
+      },
+    ).map(({ run, value }) => ({ summary: value, label: runLabel(run), run }));
   }
 
   const comparison = compareRuns(target, baseline);
@@ -178,12 +175,15 @@ function publishToGitHub(comparison: Comparison, markdown: string): void {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (summaryPath) fs.appendFileSync(summaryPath, `${markdown}\n`);
   for (const row of comparison.rows) {
-    if (row.verdict === 'regression' || row.verdict === 'new-failures') {
-      const change =
-        row.verdict === 'regression'
-          ? `median ${row.target?.median.toFixed(0)} ms vs ${row.baseline?.median.toFixed(0)} ms baseline`
-          : `${row.target?.failures}/${row.target?.samples} samples failed`;
-      process.stdout.write(`::warning title=perf ${row.verdict}::${row.id}: ${change}\n`);
+    if (row.timing === 'regression') {
+      process.stdout.write(
+        `::warning title=perf regression::${row.id}: median ${row.target?.median.toFixed(0)} ms vs ${row.baseline?.median.toFixed(0)} ms baseline\n`,
+      );
+    }
+    if (row.failures === 'new-failures' || row.failures === 'more-failures') {
+      process.stdout.write(
+        `::warning title=perf ${row.failures}::${row.id}: ${row.target?.failures}/${row.target?.samples} samples failed\n`,
+      );
     }
   }
 }
