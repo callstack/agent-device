@@ -114,6 +114,7 @@ test('routed batch install reports its deadline and does not dispatch a later st
       app: 'com.android.settings',
       platform: 'android',
       serial: PROVIDER_SCENARIO_ANDROID.id,
+      testIme: false,
     });
     const apkPath = path.join(daemon.stateDir, 'deadline-install.apk');
     fs.writeFileSync(apkPath, 'fixture apk');
