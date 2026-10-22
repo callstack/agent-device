@@ -25,6 +25,7 @@ import {
 } from './snapshot-source-facade.ts';
 import {
   createLaunchObservationProbe,
+  hasSimulatorBridge,
   type LaunchObservationPort,
 } from './snapshot-observability.ts';
 import {
@@ -69,6 +70,14 @@ const BRIDGE_PREPARATION_PENDING = 'bridge-preparation-pending';
  * the bridge path and uses it again once the surface is gone.
  */
 const WINDOW_COORDINATE_SPACE_UNRESOLVED = 'window-coordinate-space-unresolved';
+
+/**
+ * Why this capture left the bridge: the app runs in an iPadOS window that does not fill the screen.
+ * The snapshot API reports such an app's frames relative to its window, so the tree cannot be placed
+ * on the screen (#3844). That is evidence about the screen arrangement, not the app, so the
+ * generation stays on the bridge path and uses it again once the app fills the screen.
+ */
+const APP_WINDOW_NOT_FULL_SCREEN = 'app-window-not-full-screen';
 
 /**
  * Why this capture left the bridge: another surface owned the foreground when the reader checked, or
@@ -315,9 +324,7 @@ function rethrowIfResolutionCancelled(signal: AbortSignal, error: unknown): void
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
   return (
-    device.platform === 'apple' &&
-    device.appleOs === 'ios' &&
-    device.kind === 'simulator' &&
+    hasSimulatorBridge(device) &&
     Boolean(input.options?.appBundleId) &&
     input.options?.customActions !== true &&
     input.options?.preferredBackend === undefined
@@ -334,12 +341,6 @@ async function fallbackAfterFailure(
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  // A failed bridge is evidence about this app generation, so its captures take the runner until the
-  // generation is rebaselined. Two failures are evidence about something else instead: a bridge that is
-  // merely still being prepared speaks for the daemon's build queue, and a screen holding a surface in
-  // another coordinate space speaks for this capture only. Both have to be able to use the bridge on
-  // the next capture, which is what let one cold host cost every later capture of a stable screen
-  // (#2491) and would otherwise cost every portrait capture after one landscape keyboard (#2612).
   if (opensGenerationCircuit(failure)) disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
@@ -362,17 +363,18 @@ async function fallbackAfterFailure(
 /**
  * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
  *
- * Three failures say something else instead. A bridge that is still being prepared speaks for the
- * daemon's build queue. A screen holding a surface in another coordinate space, and a screen whose
- * foreground another surface owns, speak for this capture only: the surface is on screen now and gone
- * after the next keystroke or tap, so retiring the generation would move every later capture of a
- * healthy app to the runner to work around one screen (#2491 settled the first of these, and #2612
- * the second).
+ * Four failures say something else instead. A bridge that is still being prepared speaks for the
+ * daemon's build queue. A screen holding a surface in another coordinate space, a screen whose
+ * foreground another surface owns, and an app window that does not fill the screen speak for this
+ * capture only: the arrangement is on screen now and gone after the next keystroke, tap, or resize,
+ * so retiring the generation would move every later capture of a healthy app to the runner to work
+ * around one screen (#2491 settled the first of these, and #2612 the second).
  */
 function opensGenerationCircuit(failure: SnapshotSourceFailure): boolean {
   return (
     failure.kind !== 'preparing' &&
     failure.code !== WINDOW_COORDINATE_SPACE_UNRESOLVED &&
+    failure.code !== APP_WINDOW_NOT_FULL_SCREEN &&
     !FOREGROUND_OWNER_REFUSALS.has(failure.code)
   );
 }
@@ -528,6 +530,9 @@ function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: bo
   }
   if (FOREGROUND_OWNER_REFUSALS.has(reason)) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while another surface owned the foreground.`;
+  }
+  if (reason === APP_WINDOW_NOT_FULL_SCREEN) {
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen.`;
   }
   if (reason === WINDOW_COORDINATE_SPACE_UNRESOLVED) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, which reports captured geometry in the app's own orientation space.`;

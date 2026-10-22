@@ -8,7 +8,7 @@ import type {
   PostOpenObservationFailure,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import {
@@ -67,9 +67,13 @@ const LAUNCH_TRANSITION_WINDOW_MS: ReadonlyMap<string, number> = new Map([
   ['foreground-owner-changed', 1_000],
 ]);
 
-/** Only iOS Simulators carry the host AX bridge; other Apple simulators observe through XCTest. */
+/**
+ * Only iPhone and iPad Simulators carry the host AX bridge: both run the iOS Simulator runtime that
+ * the bridge reader is built for. tvOS and visionOS Simulators, the macOS host, and every physical
+ * device observe through XCTest.
+ */
 export function hasSimulatorBridge(device: DeviceInfo): boolean {
-  return device.platform === 'apple' && device.appleOs === 'ios' && device.kind === 'simulator';
+  return device.platform === 'apple' && isHandheldAppleSimulator(device);
 }
 
 export function createLaunchObservationProbe(

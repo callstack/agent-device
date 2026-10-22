@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { clampInteger } from '../route-params';
 import { useAppColors, type AppColors } from '../theme';
 
 /**
@@ -60,12 +61,6 @@ function DeepLevel({
       <DeepLevel chain={chain} level={level + 1} styles={styles} width={width} />
     </View>
   );
-}
-
-function clampInteger(value: string | undefined, fallback: number, min: number, max: number) {
-  const parsed = Number.parseInt(value ?? '', 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
 }
 
 function createStyles(colors: AppColors) {
