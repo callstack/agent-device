@@ -56,15 +56,20 @@ jobs:
         shell: bash
         run: |
           git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; Apple selection will fail open."
-      - name: Build the shared CLI
-        id: build
-        uses: ./.github/actions/run-gate
-        with:
-          gate: build
       - name: Select iOS smoke tests
         id: ios-impact
         shell: bash
         run: node --experimental-strip-types scripts/apple-ci-impact.ts smoke
+      - name: Select macOS smoke tests
+        id: macos-impact
+        shell: bash
+        run: node --experimental-strip-types scripts/apple-ci-impact.ts macos
+      - name: Build the shared CLI
+        id: build
+        if: steps.ios-impact.outputs.run != 'false' || steps.macos-impact.outputs.run != 'false'
+        uses: ./.github/actions/run-gate
+        with:
+          gate: build
       # The macOS clean-install proof may raise permission UI. Run the iOS focus proof first.
       - name: iOS smoke tests
         id: ios
@@ -101,7 +106,7 @@ jobs:
           RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-host/RunnerTests.xcresult
           RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
           XCTEST_LANE: host
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-cleanup.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-cleanup.outcome == 'success' && steps.macos-impact.outputs.run != 'false' }}
       - name: Diagnose the Apple host after a phase failure
         if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure') }}
         continue-on-error: true
@@ -119,11 +124,12 @@ jobs:
         shell: bash
         run: |
           pnpm clean:daemon
-      - name: Require both Apple phases to succeed
+      - name: Require the selected Apple phases to succeed
         if: always()
         env:
           IOS_SELECTED: ${{ steps.ios-impact.outputs.run }}
           IOS_OUTCOME: ${{ steps.ios.outcome }}
+          MACOS_SELECTED: ${{ steps.macos-impact.outputs.run }}
           MACOS_OUTCOME: ${{ steps.macos.outcome }}
           IOS_CLEANUP_OUTCOME: ${{ steps.ios-cleanup.outcome }}
           MACOS_CLEANUP_OUTCOME: ${{ steps.macos-cleanup.outcome }}
@@ -136,9 +142,18 @@ jobs:
           else
             test "$IOS_OUTCOME" = success
           fi
-          test "$MACOS_OUTCOME" = success
-          test "$IOS_CLEANUP_OUTCOME" = success
-          test "$MACOS_CLEANUP_OUTCOME" = success
+          if [ "$MACOS_SELECTED" = false ]; then
+            test "$MACOS_OUTCOME" = skipped
+          else
+            test "$MACOS_OUTCOME" = success
+          fi
+          if [ "$IOS_SELECTED" = false ] && [ "$MACOS_SELECTED" = false ]; then
+            test "$IOS_CLEANUP_OUTCOME" = skipped
+            test "$MACOS_CLEANUP_OUTCOME" = skipped
+          else
+            test "$IOS_CLEANUP_OUTCOME" = success
+            test "$MACOS_CLEANUP_OUTCOME" = success
+          fi
       - name: Upload Apple artifacts
         if: always()
         uses: ./.github/actions/upload-agent-device-artifacts

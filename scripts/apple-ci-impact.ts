@@ -1,58 +1,40 @@
-import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { selectChecks } from './check-affected/model.ts';
-
-type Selection = { run: boolean; reason: string };
+import {
+  checkOwnership,
+  pullRequestChangedPaths,
+  reportSelection,
+  selectDeviceLane,
+  type Selection,
+} from './device-lane-impact.ts';
 
 export function selectIosSmoke(
   eventName: string,
   changedPaths: readonly string[] | null,
 ): Selection {
-  if (eventName !== 'pull_request') return { run: true, reason: 'main runs exercise iOS smoke' };
-  const checked = checkOwnership(changedPaths);
-  if (checked.early) return checked.early;
-  const input = checked.plan.reasons.find(
-    (entry) => entry.check === 'swift-runner-ios' || entry.check === 'replay-ios',
-  );
-  return input
-    ? { run: true, reason: `iOS device-lane input changed: ${input.path}` }
-    : { run: false, reason: 'the affected-check model selected no iOS device lane' };
+  return selectDeviceLane(eventName, changedPaths, ['swift-runner-ios', 'replay-ios']);
 }
 
-function checkOwnership(
+// The macOS phase also hosts the darwin-only bridge proof, so its inputs keep the phase.
+export function selectMacosSmoke(
+  eventName: string,
   changedPaths: readonly string[] | null,
-): { early: Selection; plan?: never } | { early?: never; plan: ReturnType<typeof selectChecks> } {
-  if (changedPaths === null) {
-    return { early: { run: true, reason: 'the PR change set could not be established' } };
-  }
-  if (changedPaths.length === 0) {
-    return { early: { run: true, reason: 'the PR diff is empty' } };
-  }
-  const plan = selectChecks({ changedFiles: changedPaths });
-  if (plan.failOpen) {
-    return {
-      early: {
-        run: true,
-        reason: `affected-check ownership is uncertain: ${plan.failOpenReasons[0]?.path}`,
-      },
-    };
-  }
-  return { plan };
+): Selection {
+  const lanes = selectDeviceLane(eventName, changedPaths, [
+    'macos-coverage',
+    'packaged-runner-swift',
+    'ios-snapshot-differential',
+    'swift-runner-macos',
+    'macos-helper',
+    'replay-macos',
+  ]);
+  return lanes.run ? lanes : selectAppleBridgeProof(changedPaths);
 }
 
 export function selectIosXctests(
   eventName: string,
   changedPaths: readonly string[] | null,
 ): Selection {
-  if (eventName !== 'pull_request')
-    return { run: true, reason: 'main and manual runs exercise XCTest' };
-  const checked = checkOwnership(changedPaths);
-  if (checked.early) return checked.early;
-  const input = checked.plan.reasons.find((entry) => entry.check === 'swift-runner-ios');
-  return input
-    ? { run: true, reason: `XCTest input changed: ${input.path}` }
-    : { run: false, reason: 'the affected-check model selected no iOS runner build' };
+  return selectDeviceLane(eventName, changedPaths, ['swift-runner-ios']);
 }
 
 export function selectAppleBridgeProof(changedPaths: readonly string[] | null): Selection {
@@ -66,41 +48,25 @@ export function selectAppleBridgeProof(changedPaths: readonly string[] | null): 
     : { run: false, reason: 'the PR changed no Apple implementation or gate tooling' };
 }
 
-function changedPathsFromGit(baseSha: string): string[] | null {
-  if (!/^[a-f0-9]{40}$/.test(baseSha)) return null;
-  const result = spawnSync('git', ['diff', '--name-only', '-z', baseSha, 'HEAD'], {
-    encoding: 'utf8',
-  });
-  if (result.error || result.status !== 0 || result.stdout === null) return null;
-  return result.stdout.split('\0').filter(Boolean);
-}
+const TARGETS = {
+  smoke: { label: 'iOS smoke', select: selectIosSmoke },
+  macos: { label: 'macOS smoke', select: selectMacosSmoke },
+  xctest: { label: 'iOS XCTest', select: selectIosXctests },
+  bridge: {
+    label: 'Apple bridge proof',
+    select: (_eventName: string, changedPaths: readonly string[] | null) =>
+      selectAppleBridgeProof(changedPaths),
+  },
+} as const;
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const target = process.argv[2];
-  if (target !== 'xctest' && target !== 'bridge' && target !== 'smoke') {
-    process.stderr.write('Expected xctest, bridge, or smoke target\n');
+  const target = process.argv[2] ?? '';
+  if (!Object.hasOwn(TARGETS, target)) {
+    process.stderr.write(`Expected one of: ${Object.keys(TARGETS).join(', ')}\n`);
     process.exitCode = 2;
   } else {
+    const { label, select } = TARGETS[target as keyof typeof TARGETS];
     const eventName = process.env.GITHUB_EVENT_NAME ?? '';
-    const changedPaths =
-      eventName === 'pull_request' ? changedPathsFromGit(process.env.BASE_SHA ?? '') : [];
-    const selection =
-      target === 'smoke'
-        ? selectIosSmoke(eventName, changedPaths)
-        : target === 'xctest'
-          ? selectIosXctests(eventName, changedPaths)
-          : selectAppleBridgeProof(changedPaths);
-    const label =
-      target === 'smoke' ? 'iOS smoke' : target === 'xctest' ? 'iOS XCTest' : 'Apple bridge proof';
-    process.stdout.write(`${label}: ${selection.run ? 'run' : 'skip'}; ${selection.reason}\n`);
-    if (process.env.GITHUB_OUTPUT) {
-      fs.appendFileSync(process.env.GITHUB_OUTPUT, `run=${selection.run}\n`);
-    }
-    if (process.env.GITHUB_STEP_SUMMARY) {
-      fs.appendFileSync(
-        process.env.GITHUB_STEP_SUMMARY,
-        `### ${label} selection\n\n${selection.run ? 'Run' : 'Skip'}: ${selection.reason}.\n`,
-      );
-    }
+    reportSelection(label, select(eventName, pullRequestChangedPaths(eventName)));
   }
 }
