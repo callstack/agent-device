@@ -121,9 +121,7 @@ export function parsePerfRuntimeRequest(
 }
 
 /** Public CLI form of the already parsed daemon perf request. */
-export function formatPerfRuntimeRequestArgs(
-  request: PerfRuntimeRequest,
-):
+export function formatPerfRuntimeRequestArgs(request: PerfRuntimeRequest):
   | Readonly<{
       positionals: readonly string[];
       options: Readonly<{ kind?: string; perfTemplate?: string; out?: string }>;
