@@ -135,9 +135,10 @@ extension RunnerTests {
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
     // The input's frame arrives from a snapshot, which reports a placed window's content in the
-    // window's own space; the tap below is a screen point (#3899).
-    if let read = input, !read.attributes.frame.isEmpty {
-      let frame = snapshotFrameOnScreen(read.attributes.frame, translation: liveContentTranslation(app: app))
+    // window's own space; the tap below is a screen point (#3899). An input read live (no
+    // snapshot) already names screen space, so only the snapshot frame is translated here.
+    if let snapshotFrame = input?.snapshot?.frame, !snapshotFrame.isEmpty {
+      let frame = snapshotFrameOnScreen(snapshotFrame, translation: liveContentTranslation(app: app))
       _ = tapAt(app: app, x: frame.midX, y: frame.midY)
     } else {
       _ = tapAt(app: app, x: x, y: y)
@@ -146,7 +147,11 @@ extension RunnerTests {
     // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
     // so after tapping it the iOS readiness timeout cannot prove anything stronger.
     if keyboardVisibleBeforeTap, let target {
-      return focusedTextEntryTarget(target, requestedPoint: requestedPoint)
+      return focusedTextEntryTarget(
+        target,
+        requestedPoint: requestedPoint,
+        translation: liveContentTranslation(app: app)
+      )
     }
     let stabilized = stabilizeTextInputBeforeTyping(
       app: app,
@@ -160,7 +165,12 @@ extension RunnerTests {
       stabilized.polls
     )
     if case .inputReportsKeyboardFocus(let read) = stabilized.evidence {
-      return focusedTextEntryTarget(read.element, read: read, requestedPoint: requestedPoint)
+      return focusedTextEntryTarget(
+        read.element,
+        read: read,
+        requestedPoint: requestedPoint,
+        translation: liveContentTranslation(app: app)
+      )
     }
     let readyTarget = TextEntryTarget(
       element: stabilized.element ?? target,
@@ -170,26 +180,44 @@ extension RunnerTests {
     let element = stabilized.focusConfirmed
       ? readyTarget.element
       : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
-    return focusedTextEntryTarget(element, requestedPoint: requestedPoint)
+    return focusedTextEntryTarget(
+      element,
+      requestedPoint: requestedPoint,
+      translation: liveContentTranslation(app: app)
+    )
   }
 
   /// The target the focus step hands to text entry, with the read its refresh point came from.
-  private func focusedTextEntryTarget(_ element: XCUIElement?, requestedPoint: CGPoint) -> TextEntryTarget {
+  private func focusedTextEntryTarget(
+    _ element: XCUIElement?,
+    requestedPoint: CGPoint,
+    translation: CGSize?
+  ) -> TextEntryTarget {
     guard let element else {
       return TextEntryTarget(element: nil, refreshPoint: requestedPoint, prefersFocusedElement: false)
     }
-    return focusedTextEntryTarget(element, read: ResolvedTextEntryInput(reading: element), requestedPoint: requestedPoint)
+    return focusedTextEntryTarget(
+      element,
+      read: ResolvedTextEntryInput(reading: element),
+      requestedPoint: requestedPoint,
+      translation: translation
+    )
   }
 
   /// `read` is `element` read after the focus tap, or nil when the read found no element.
   private func focusedTextEntryTarget(
     _ element: XCUIElement,
     read: ResolvedTextEntryInput?,
-    requestedPoint: CGPoint
+    requestedPoint: CGPoint,
+    translation: CGSize?
   ) -> TextEntryTarget {
     return TextEntryTarget(
       element: element,
-      refreshPoint: textEntryRefreshPoint(frame: read?.snapshot?.frame, fallbackTo: requestedPoint),
+      refreshPoint: textEntryRefreshPoint(
+        frame: read?.snapshot?.frame,
+        fallbackTo: requestedPoint,
+        translation: translation
+      ),
       prefersFocusedElement: false,
       postFocusRead: read?.snapshot == nil ? nil : read
     )
@@ -206,7 +234,8 @@ extension RunnerTests {
   /// typing into that other field.
   private func textEntryRefreshPoint(
     frame: CGRect?,
-    fallbackTo requestedPoint: CGPoint
+    fallbackTo requestedPoint: CGPoint,
+    translation: CGSize?
   ) -> CGPoint? {
     guard let frame else {
       return nil
@@ -214,6 +243,9 @@ extension RunnerTests {
     guard !frame.isEmpty else {
       return requestedPoint
     }
-    return CGPoint(x: frame.midX, y: frame.midY)
+    // The read's frame names the window's content space on a placed window; a refresh point is
+    // compared against screen-space probes, so the center enters the target translated (#3899).
+    let onScreen = snapshotFrameOnScreen(frame, translation: translation)
+    return CGPoint(x: onScreen.midX, y: onScreen.midY)
   }
 }

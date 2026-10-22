@@ -188,7 +188,7 @@ extension RunnerTests {
     /// compared against screen-space probes, so the center enters the target translated.
     func withResolvedInput(
       _ input: ResolvedTextEntryInput?,
-      translation: CGSize? = nil
+      translation: CGSize?
     ) -> TextEntryTarget {
       guard let input else {
         return self
@@ -270,7 +270,7 @@ extension RunnerTests {
 
     init(
       target: TextEntryTarget,
-      translation: CGSize? = nil,
+      translation: CGSize?,
       resolve: @escaping (TextEntryTarget) -> ResolvedTextEntryInput?
     ) {
       self.translation = translation

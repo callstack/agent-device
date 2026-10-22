@@ -78,7 +78,7 @@ final class CoordinateSpaceTests: XCTestCase {
       ),
       CGPoint(x: 288, y: 1030),
       "a frame offset from the screen never moves the turned point (#3899)"
-    );
+    )
   }
 
   func testNativeSynthesizedVectorRotatesByInterfaceOrientation() {
@@ -581,7 +581,7 @@ final class CoordinateSpaceTests: XCTestCase {
         )
       ).map(\.rect),
       acquired.map(\.rect)
-    );
+    )
 
     // A windowed app, measured shape: the app's own window declares the translation and carries the
     // subtree; the keyboard window and the SpringBoard overlay report the screen's own box, so their

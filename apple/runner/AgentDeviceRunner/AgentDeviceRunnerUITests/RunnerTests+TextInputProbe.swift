@@ -170,7 +170,15 @@ extension RunnerTests {
         if shouldStop() { break }
         guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
         let attributes = candidate.attributes
-        let frame = snapshotFrameOnScreen(attributes.frame, translation: translation)
+        // Only the snapshot names the window's content space; a candidate read live (no snapshot)
+        // already reports screen space, and translating it again would move the candidate off the
+        // point it is being matched against (#3899).
+        let frame: CGRect
+        if let snapshot = candidate.snapshot {
+          frame = snapshotFrameOnScreen(snapshot.frame, translation: translation)
+        } else {
+          frame = attributes.frame
+        }
         if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: frame, point: point) {
           inputs.append(candidate)
         }

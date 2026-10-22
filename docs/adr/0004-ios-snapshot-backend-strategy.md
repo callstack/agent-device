@@ -663,6 +663,11 @@ The measured dispatch spaces for a placed window are both screen-anchored: the s
 The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (641,321) for a window at (324,307).
 The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
 So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the two live boxes (`app.frame` against the resolved window's frame); every other live read needs no conversion.
+Where a probe read has no snapshot and falls back to the live element, its frame is already screen space and is not translated.
+`app.frame` unions transformed subtrees, so content pushed off a placed window (a closed drawer at negative x) can stop the two live boxes matching and read no vector; the capture still converts from the snapshot root box, so a probe may then read window-local frames where the capture published screen space. A mid-command window move has the same effect on a vector read at command start.
+Both are reads of a moving target, not a second space: a re-opened command reads the current vector.
+The host bridge keeps refusing a windowed capture (`app-window-not-full-screen`) rather than converting one, so the TypeScript twin of the rule runs today only in the parity replay.
+Portrait is the only orientation measured for a placed window; the quarter-turn table's windowed row pins the arithmetic (a frame origin never travels through the turn), not a device measurement, and landscape under Windowed Apps stays unverified until measured.
 
 ## Amendment: modal containment in the presentation cut
 
