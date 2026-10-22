@@ -684,15 +684,10 @@ That is the same healthy empty answer that any other unmatched scope gives, beca
 ## Amendment: iPad Simulators (issue #3844)
 
 An iPad Simulator runs the iOS Simulator runtime that the bridge reader is built for.
-The route admitted only the iPhone leaf (`appleOs: 'ios'`).
-Thus, every iPad Simulator capture used XCTest.
-On a deep UIKit tree, the XCTest-channel penalty then kept long sessions in private-AX fallback.
-No decision excluded iPad Simulators.
-The exclusion came from the leaf check, not from evidence.
+On XCTest, a deep UIKit tree on an iPad Simulator can keep a long session in private-AX fallback.
 
 Decision. The bridge serves iPhone and iPad Simulators.
 tvOS and visionOS Simulators, the macOS host, providers, and physical devices keep XCTest.
-One predicate (`hasSimulatorBridge`) decides this for capture, launch observation, runner prewarm, and native find.
 
 Two iPad facts change what the bridge reports.
 
@@ -707,7 +702,7 @@ The snapshot API reports the frames of a windowed app relative to its window, no
 Windowed Apps and Stage Manager both put an app in such a window.
 A tap at a published point then misses the app.
 The guest compares the AXRuntime frame of the primary app with the frame of the system app.
-Both frames use the native space of the screen.
+Both frames use the native space of the screen, also in landscape.
 If the frames differ, the guest refuses the capture (`app-window-not-full-screen`) before acquisition.
 This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
 If the runtime cannot report either frame, the guest keeps the capture.

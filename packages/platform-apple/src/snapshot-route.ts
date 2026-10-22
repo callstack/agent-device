@@ -341,12 +341,6 @@ async function fallbackAfterFailure(
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  // A failed bridge is evidence about this app generation, so its captures take the runner until the
-  // generation is rebaselined. Two failures are evidence about something else instead: a bridge that is
-  // merely still being prepared speaks for the daemon's build queue, and a screen holding a surface in
-  // another coordinate space speaks for this capture only. Both have to be able to use the bridge on
-  // the next capture, which is what let one cold host cost every later capture of a stable screen
-  // (#2491) and would otherwise cost every portrait capture after one landscape keyboard (#2612).
   if (opensGenerationCircuit(failure)) disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
@@ -538,7 +532,7 @@ function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: bo
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while another surface owned the foreground.`;
   }
   if (reason === APP_WINDOW_NOT_FULL_SCREEN) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while the app window did not fill the screen.`;
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen.`;
   }
   if (reason === WINDOW_COORDINATE_SPACE_UNRESOLVED) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, which reports captured geometry in the app's own orientation space.`;

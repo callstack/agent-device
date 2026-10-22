@@ -56,7 +56,7 @@ The snapshot API reports the frames of an app that runs in an iPadOS window
 (Windowed Apps or Stage Manager) relative to that window, not to the screen.
 Before acquisition, the reader compares the AXRuntime frame of the primary app
 with the frame of the system app. Both frames use the native space of the
-screen. If they differ, the reader returns `app-window-not-full-screen` without
+screen, also in landscape. If they differ, the reader returns `app-window-not-full-screen` without
 the app tree. Like an ownership refusal, this is evidence about the screen, so
 the route sends only that capture to XCTest. If the runtime cannot report either
 frame, the reader keeps the capture.

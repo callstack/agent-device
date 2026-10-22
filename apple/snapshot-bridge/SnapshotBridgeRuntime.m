@@ -193,7 +193,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 // window, so its tree cannot be placed on the screen. AXRuntime reports the primary app's window and
 // the system app, which spans the screen, in one native space. A window that differs from the screen
 // is refused; a runtime that cannot report either frame keeps the capture.
-- (BOOL)isPrimaryWindowSmallerThanScreen
+- (BOOL)primaryAppWindowDiffersFromScreen
 {
   Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
   if (![elementClass respondsToSelector:@selector(primaryApp)] ||
@@ -410,7 +410,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
-    if ([self isPrimaryWindowSmallerThanScreen]) {
+    if ([self primaryAppWindowDiffersFromScreen]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"app-window-not-full-screen", @"target app window does not fill the screen");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
