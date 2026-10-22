@@ -181,6 +181,36 @@ describe('managed app-log process host', () => {
     expect(fixture.child.kill).toHaveBeenCalledWith('SIGINT');
   });
 
+  test('terminate settles when an escaped descendant keeps the output pipes open', async () => {
+    const fixture = processFixture();
+    let open = 2;
+    const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+      for (const stream of [fixture.child.stdout, fixture.child.stderr]) {
+        stream.on('close', () => {
+          open -= 1;
+          if (open === 0) resolve({ stdout: '', stderr: '', exitCode: 1 });
+        });
+      }
+    });
+    exec.run.mockReturnValue({ child: fixture.child, wait });
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
+      fixture.request,
+    );
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let terminated = false;
+      void running.terminate().then(() => (terminated = true));
+
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      await vi.waitFor(() => expect(terminated).toBe(true));
+      await expect(running.wait).resolves.toMatchObject({ exitCode: 1 });
+      expect(fs.existsSync(fixture.markerPath)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('retains a marker that is corrupted before the managed child exits', async () => {
     const fixture = processFixture();
     const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
