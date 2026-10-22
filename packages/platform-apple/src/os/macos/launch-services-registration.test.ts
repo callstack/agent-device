@@ -135,9 +135,6 @@ test('openBundle opens the listed running copy by its own path, not by bundle id
 
   await openBundle(runCommand);
 
-  // `open -b` opens whichever registered copy LaunchServices resolves the bundle id to, which can be
-  // a stale build at another path; the running copy's own path attaches to it. A listed copy is
-  // never waited for.
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
@@ -185,7 +182,6 @@ test('openBundle leaves copies running from two paths to open -b', async () => {
   ]);
   const { runCommand, calls } = fakeMacHost((call) => {
     if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
-    // Both bundles carry the opened identifier, so no one path names the running app.
     if (call.cmd === 'plutil') return { stdout: 'com.example.demo\ncom.example.demo\n' };
     return {};
   });
@@ -193,6 +189,26 @@ test('openBundle leaves copies running from two paths to open -b', async () => {
   await openBundle(runCommand);
 
   expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-b', BUNDLE_ID] });
+});
+
+test.each([
+  ['a relative', 'Contents/Resources/FortiTray/FortiTray.app/Contents/MacOS/FortiTray'],
+  ['a dash-led', '-Demo.app/Contents/MacOS/Demo'],
+])('openBundle leaves a copy run from %s path to open -b', async (_shape, command) => {
+  processTable.stdout = psRows([[4242, command]]);
+  const { runCommand, transcript } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: `${BUNDLE_ID}\n` };
+    return {};
+  });
+
+  await openBundle(runCommand);
+
+  expect(transcript()).toEqual([
+    { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+  ]);
 });
 
 test('openBundle runs open at once when no process of the opened bundle runs', async () => {

@@ -35,23 +35,17 @@ const APP_BUNDLE_INFO_PLIST = 'Contents/Info.plist';
 const LSAPPINFO_ASN = /ASN:/;
 
 /**
- * The bundle path of the one running copy of `bundleId` that LaunchServices lists, which `open`
- * must name instead of the bundle id, after waiting out the registration race (#3406). Undefined
- * leaves the open to `open -b`.
- *
- * `open -b` opens the copy LaunchServices resolves the bundle id to, which is not always the one
- * running: when several copies of the bundle are registered, such as successive dev builds at
- * different paths, it can launch a stale build with no arguments next to the running one. Naming
- * the running copy's own path attaches to it.
+ * The bundle path of the one running copy of `bundleId` that LaunchServices lists, or undefined to
+ * leave the open to `open -b`. `open -b` opens the copy LaunchServices resolves the bundle id to,
+ * which can be a stale build registered at another path rather than the running copy.
  *
  * A copy started directly — by a supervisor or a dev script — is only listed by LaunchServices
- * about half a second after it spawns. While it is unlisted, `open` sees no instance and launches
- * a second one with no arguments, which the session then drives instead of the copy the caller
- * owns. So the copy is only named once LaunchServices lists it. An open with no running copy pays
- * one `lsappinfo find` and one process-table read (plus a bundle-identifier read only when
- * app-shaped candidates exist) to learn that; an open of a running copy pays the bundle-identifier
- * read as well; only a copy that runs while unlisted is waited for. Every read shares one budget,
- * and the wait itself stays well inside it:
+ * about half a second after it spawns (#3406). While it is unlisted, `open` sees no instance and
+ * launches a second one with no arguments, which the session then drives instead of the copy the
+ * caller owns. An open with no running copy pays one `lsappinfo find` and one process-table read
+ * (plus a bundle-identifier read only when app-shaped candidates exist) to learn that; an open of a
+ * running copy pays the bundle-identifier read as well; only a copy that runs while unlisted is
+ * waited for. Every read shares one budget, and the wait itself stays well inside it:
  *
  * - `LAUNCH_SERVICES_PROBE_BUDGET_MS` bounds every read below, each read also taking its own
  *   smaller cap so a single hung tool cannot consume the budget alone;
@@ -78,7 +72,6 @@ export async function resolveListedRunningBundle(
     ) {
       return undefined;
     }
-    // Copies at several paths leave the choice to LaunchServices, as `open -b` always did.
     return running.size === 1 ? [...running.keys()][0] : undefined;
   } catch (error) {
     // The probe is an extra read on someone else's app launch, so a host that cannot answer it at
@@ -96,7 +89,6 @@ export async function resolveListedRunningBundle(
   }
 }
 
-/** Whether LaunchServices came to list one of `pids` before the wait's bounds ran out. */
 async function waitForListing(
   runCommand: AppleToolCommandExecutor,
   bundleId: string,
@@ -154,10 +146,6 @@ async function readsLaunchServicesInstance(
   return LSAPPINFO_ASN.test(result.stdout);
 }
 
-/**
- * The processes running `bundleId`, by the app bundle path each one runs from. Identifiers compare
- * without regard to case, as LaunchServices compares them.
- */
 async function findRunningInstances(
   runCommand: AppleToolCommandExecutor,
   bundleId: string,
@@ -198,6 +186,7 @@ async function findRunningInstances(
   return new Map(
     bundlePaths
       .filter(
+        // LaunchServices compares bundle identifiers without regard to case.
         (bundlePath) =>
           bundleIds.get(path.join(bundlePath, APP_BUNDLE_INFO_PLIST))?.trim().toLowerCase() ===
           bundleId.toLowerCase(),
@@ -213,6 +202,7 @@ async function findRunningInstances(
  * XPC services, app extensions, and driver bundles, whose identifiers match no app anyone opens.
  */
 function macAppBundlePath(command: string): string | undefined {
+  if (!path.isAbsolute(command)) return undefined;
   const marker = command.indexOf(APP_EXECUTABLE_MARKER);
   if (marker <= 0) return undefined;
   const bundlePath = command.slice(0, marker);
