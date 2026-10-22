@@ -245,13 +245,12 @@ Issue #3844 showed that the bounded recovery probe could renew its own penalty.
 A bounded recovery probe now leaves the penalty deadline unchanged when it fails.
 Its short slice tests recovery under a known penalty, so its timeout supplies no new evidence about the channel.
 A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
-After an independent backend succeeds, a penalized regular plan can schedule the existing bounded tree probe once per 30 seconds.
-The interval starts when the penalty is armed.
-The one-second idle-only probe bounds all acquisition and processing work.
-The accepted independent capture remains the response.
-The existing serial command queue runs the optional probe after that response.
-A queued probe reserves the interval and checks that its penalty is still current before it starts.
-The schedule excludes physical-device plans, explicit backend pins, occupied main-thread work, and plans with less than one second remaining.
+Thirty seconds after the penalty is armed, and thirty seconds after each probe starts, a recovery probe is due.
+A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
+The runner starts no XCTest main-thread work after it answers a command.
+Probe work that outlives its slice is charged to the capture that started it, so that response reports the main thread as busy.
+Physical-device plans probe on every capture already. Explicit backend pins and the raw plan keep their order.
+After the iPad amendment below, a Simulator capture meets this policy only when the bridge sends it to XCTest, for example for a windowed app or a presented system surface.
 The interval limits hostile-screen probe cost while giving healthy screens a recovery opportunity before penalty expiry.
 A normal-plan query-sweep timeout rejects the partial capture and penalizes the channel.
 Its short slice is evidence of a hostile tree, and deferral prevents repeated slow sweeps on that tree.
