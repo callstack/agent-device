@@ -72,11 +72,12 @@ test.each(['batch', 'replay'] as const)(
   },
 );
 
-test('Maestro stop and bounded reopen keep the IME; capture still bars caller close', async () => {
+test('Maestro stop keeps the IME and app log; capture still bars caller close', async () => {
   const helper = androidHelperWorld();
   const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
   try {
     assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+    assertRpcOk(await world.call('logs', ['start']));
     const flow = path.join(world.daemon.stateDir, 'stop-app.yaml');
     assertRpcOk(
       await world.call('replay', [flow], {
@@ -97,7 +98,6 @@ test('Maestro stop and bounded reopen keep the IME; capture still bars caller cl
       }),
     );
     expect(helper.currentIme()).toBe(helperIme);
-    assertRpcOk(await world.call('logs', ['start']));
     const binds = world.bind.mock.calls.length;
     const facts = world.inspectFacts.mock.calls.length;
     const refused = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
