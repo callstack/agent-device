@@ -118,9 +118,9 @@ extension RunnerTests {
 
   /// A fill whose focus tap raises the software keyboard hands the read that confirmed focus to the
   /// entry as its first read. The fixture counts queries as in
-  /// `testFillReadsEachResolvedFieldThroughOneSnapshot`: this fill made 17, and 19 when the entry
-  /// resolved the input again. The one read of headroom covers a keyboard that arrives before the
-  /// field reports focus.
+  /// `testFillReadsEachResolvedFieldThroughOneSnapshot`: this fill made 17, and 19 when the focus step
+  /// or the entry read the input again. The one read of headroom covers a keyboard that arrives
+  /// before the field reports focus.
   @MainActor
   func testFillThatRaisesTheSoftwareKeyboardReusesTheReadThatConfirmedFocus() throws {
     app.launchArguments = [
