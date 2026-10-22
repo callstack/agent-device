@@ -104,71 +104,55 @@ test('Maestro app-only stop preserves owned IME while caller close refuses dispo
   }
 });
 
-test.each(['close', 'open'] as const)(
-  'bounded %s preserves owned audio authority and manifest before binding',
-  async (command) => {
-    const world = await resourceAdmissionWorld();
-    try {
-      const owned = seedExistingCapture(world, 'audio-probe');
-      const before = fs.readFileSync(owned.resourcePath, 'utf8');
-      const response = await world.call('batch', [], {
-        batchSteps: [{ command, positionals: command === 'open' ? ['com.android.settings'] : [] }],
-      });
-      expect(response.json.error?.data?.details).toMatchObject({
-        reason: 'bounded_composite_resource_unsupported',
-        shape:
-          command === 'open'
-            ? 'session-reopen-with-resources'
-            : 'session-resource-disposal:audio-probe',
-        standaloneCommandName: command,
-        dispatched: 'no',
-        executed: 0,
-      });
-      expect(world.bind).not.toHaveBeenCalled();
-      expect(owned.finish).not.toHaveBeenCalled();
-      expect(owned.forceCleanup).not.toHaveBeenCalled();
-      expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
-      expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
-    } finally {
-      await world.daemon.close();
-    }
-  },
-);
+test('bounded close preserves owned audio authority and manifest before binding', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const owned = seedExistingCapture(world, 'audio-probe');
+    const before = fs.readFileSync(owned.resourcePath, 'utf8');
+    const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:audio-probe',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(world.bind).not.toHaveBeenCalled();
+    expect(owned.finish).not.toHaveBeenCalled();
+    expect(owned.forceCleanup).not.toHaveBeenCalled();
+    expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+    expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
+  } finally {
+    await world.daemon.close();
+  }
+});
 
-test.each(['close', 'open'] as const)(
-  'bounded %s preserves existing app log and its durable manifest',
-  async (command) => {
-    const world = await resourceAdmissionWorld();
-    try {
-      assertRpcOk(await world.call('logs', ['start']));
-      const log = world.sessionStore.requireCurrent(world.ref).appLog;
-      const dir = world.sessionStore.resolveSessionDir('resource-session');
-      const manifest = path.join(dir, 'app-log.resource.json');
-      const before = fs.readFileSync(manifest, 'utf8');
-      const bindings = world.bind.mock.calls.length;
-      const response = await world.call('batch', [], {
-        batchSteps: [{ command, positionals: command === 'open' ? ['com.android.settings'] : [] }],
-      });
-      expect(response.json.error?.data?.details).toMatchObject({
-        reason: 'bounded_composite_resource_unsupported',
-        shape:
-          command === 'open'
-            ? 'session-reopen-with-resources'
-            : 'session-resource-disposal:app-log',
-        standaloneCommandName: command,
-        dispatched: 'no',
-        executed: 0,
-      });
-      expect(world.bind).toHaveBeenCalledTimes(bindings);
-      expect(world.finish).not.toHaveBeenCalled();
-      expect(world.forceCleanup).not.toHaveBeenCalled();
-      expect(world.sessionStore.requireCurrent(world.ref).appLog).toBe(log);
-      expect(fs.readFileSync(manifest, 'utf8')).toBe(before);
-    } finally {
-      await world.daemon.close();
-    }
-  },
-);
+test('bounded close preserves existing app log and its durable manifest', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    assertRpcOk(await world.call('logs', ['start']));
+    const log = world.sessionStore.requireCurrent(world.ref).appLog;
+    const dir = world.sessionStore.resolveSessionDir('resource-session');
+    const manifest = path.join(dir, 'app-log.resource.json');
+    const before = fs.readFileSync(manifest, 'utf8');
+    const bindings = world.bind.mock.calls.length;
+    const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:app-log',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(world.bind).toHaveBeenCalledTimes(bindings);
+    expect(world.finish).not.toHaveBeenCalled();
+    expect(world.forceCleanup).not.toHaveBeenCalled();
+    expect(world.sessionStore.requireCurrent(world.ref).appLog).toBe(log);
+    expect(fs.readFileSync(manifest, 'utf8')).toBe(before);
+  } finally {
+    await world.daemon.close();
+  }
+});
 
 test.each(['audio-probe', 'screen-recording'] as const)(
   'bounded close preserves %s after an earlier completed step',
@@ -301,7 +285,7 @@ test.each([
   },
 );
 
-test('provider-releasing close refuses while resource-free reopen stays admissible', async () => {
+test('provider-releasing close refuses while reopen keeps the provider lease', async () => {
   const world = await resourceAdmissionWorld('capture', { withLifecycleProvider: true });
   try {
     const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });

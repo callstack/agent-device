@@ -112,9 +112,6 @@ async function admitSessionLifecycleRequest(
   if (req.command === 'open' && session) await params.validateSessionReopen(session);
   const platformOwned =
     req.command === 'close' && session ? await params.inspectSessionTeardownResources(session) : [];
-  if (req.command === 'open' && sessionResourceKinds(session, platformOwned).length > 0) {
-    refuseBoundedCompositeResourceOperation(req, 'session-reopen-with-resources');
-  }
   if (req.command === 'close') {
     assertBoundedCompositeSessionDisposal(
       req,

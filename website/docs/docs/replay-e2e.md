@@ -22,13 +22,13 @@ If a resource step cannot run within replay's budget, the error includes
 `details.reason: bounded_composite_resource_unsupported`, `details.shape`,
 `details.dispatched: no` for that step, and `details.standaloneCommandName` for a known public
 command. This can affect `perf`, `audio`, `record`, `trace`, and some `logs` operations. It also
-affects `close` when it would dispose owned resources or release a provider lease, `open` when it
-would replace owned resources, and acquisition that would recover another session's durable
-resources. An active Android test IME can make an authored `close` one such step, including at the
-end of a replay. The name is not a complete command. Inspect the failed script path and line,
-then run that original operation separately with its original arguments and options, the same `--session`
-value, and the same private CLI context. If steps remain and the report offers
-`resume.alternateFrom`, use it with `planDigest` after completing the refused step directly.
+affects `close` when it would dispose owned resources or release a provider lease, and acquisition
+that would recover another session's durable resources. Opening another app in the same session
+keeps its owned resource handles. An active Android test IME can make an authored `close` one such
+step, including at the end of a replay. The name is not a complete command. Inspect the failed
+script path and line, then run that original operation separately with its original arguments and
+options, the same `--session` value, and the same private CLI context. If steps remain and the
+report offers `resume.alternateFrom`, use it with `planDigest` after completing the refused step directly.
 `resume.from` retries the same bounded step and refuses it again. A final
 unrecorded `logs` or `audio` step leaves no replay tail to resume. Inspect completed steps before
 retrying; earlier steps may have changed the app. A nested `test` with an attempt timeout or

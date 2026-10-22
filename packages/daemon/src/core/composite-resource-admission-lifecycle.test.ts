@@ -65,7 +65,7 @@ test('bounded reopen keeps an owned IME and skips close teardown inspection', as
   }
 });
 
-test('invalid foreground reopen preserves the open validity error before resource refusal', async () => {
+test('invalid foreground reopen preserves the open validity error before runtime admission', async () => {
   const world = await resourceAdmissionWorld();
   try {
     const owned = seedExistingCapture(world, 'audio-probe');
