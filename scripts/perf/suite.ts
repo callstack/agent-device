@@ -130,8 +130,10 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('orientation-landscape', C.orientation, ['orientation', 'landscape-left']),
       step('orientation-portrait', C.orientation, ['orientation', 'portrait']),
       step('settings-appearance', C.settings, ['settings', 'appearance', 'light']),
-      step('clipboard-write', C.clipboard, ['clipboard', 'write', 'agent-device perf']),
-      step('clipboard-read', C.clipboard, ['clipboard', 'read']),
+      step('clipboard-write', C.clipboard, ['clipboard', 'write', 'agent-device perf'], {
+        only: 'ios',
+      }),
+      step('clipboard-read', C.clipboard, ['clipboard', 'read'], { only: 'ios' }),
       step('action-button', C.actionButton, ['action-button'], { only: 'ios' }),
       // `wake` is the one hardware key that leaves an awake device as it was.
       step('hardware-button', C.hardwareButton, ['hardware-button', 'wake'], { only: 'android' }),
@@ -386,6 +388,8 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('snapshot-raw-one-shot', C.snapshot, ['snapshot', '--raw'], {
         only: 'android',
         daemonEnv: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
+        // The restarted daemon verifies the helper install on its first capture; keep that out.
+        before: [['snapshot', '-i']],
         expect: { maxDepthAtLeast: 56, transport: 'instrumentation' },
       }),
       step('back', C.back, ['back']),
@@ -446,6 +450,8 @@ export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, st
     [C.prepare]:
       'prepare has only the ios-runner action; the snapshot helper installs on first use.',
     [C.actionButton]: 'Android has no key event for the Action button.',
+    [C.clipboard]:
+      'The API 35 and 36 emulator images ship no shell clipboard service, so adb cannot read or write the clipboard.',
     [C.audio]:
       'Host audio capture uses macOS ScreenCaptureKit; the Linux emulator runner has none.',
     [C.hover]: 'The Android runtime refuses hover; it is a web pointer contract.',

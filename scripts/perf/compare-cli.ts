@@ -134,14 +134,17 @@ function main(): void {
   const load = (ref: string): Loaded => {
     if (fs.existsSync(ref))
       return { summary: readLocalSummary(ref), label: path.basename(path.resolve(ref)) };
-    const run = resolveRunRef(ref, allRuns());
+    const summaries = new Map<string, PerfSummary>();
+    const run = resolveRunRef(ref, allRuns(), (candidate) => {
+      const summary = fetchSummary(options.source, candidate);
+      if (summary) summaries.set(candidate.id, summary);
+      return summary !== undefined;
+    });
     if (!run)
       throw new Error(
-        `No completed ${options.source.workflow} run on ${options.source.branch} matches ${ref}.`,
+        `No completed ${options.source.workflow} run on ${options.source.branch} matches ${ref} with a ${options.source.artifact} artifact.`,
       );
-    const summary = fetchSummary(options.source, run);
-    if (!summary) throw new Error(`Run ${run.id} has no ${options.source.artifact} artifact.`);
-    return { summary, label: runLabel(run), run };
+    return { summary: summaries.get(run.id)!, label: runLabel(run), run };
   };
   const loadRuns = (candidates: WorkflowRun[]): Loaded[] =>
     candidates.flatMap((run) => {

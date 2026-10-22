@@ -30,6 +30,11 @@ test('resolves latest, run ids, and dates to the newest matching run', () => {
   assert.equal(resolveRunRef('2026-10-19', RUNS)?.id, '103');
   assert.equal(resolveRunRef('2026-10-18', RUNS), undefined);
   assert.throws(() => resolveRunRef('yesterday', RUNS), /Unknown run reference/);
+  // A run without the platform artifact gives way to the newest run that has it.
+  const withArtifact = (run: WorkflowRun) => run.id !== '104' && run.id !== '103';
+  assert.equal(resolveRunRef('latest', RUNS, withArtifact)?.id, '102');
+  assert.equal(resolveRunRef('2026-10-19', RUNS, withArtifact)?.id, '102');
+  assert.equal(resolveRunRef('104', RUNS, withArtifact), undefined);
 });
 
 const baselineIds = (

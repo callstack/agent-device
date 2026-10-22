@@ -66,7 +66,6 @@ export function parseConfig(argv: string[]): PerfConfig {
         cfg.platform = v;
         break;
       }
-      case '--n':
       case '--rounds':
         cfg.rounds = readIntValue(argv, i++, a, MIN_MEASURED_ROUNDS);
         break;

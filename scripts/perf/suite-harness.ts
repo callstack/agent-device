@@ -32,6 +32,9 @@ export type SuiteContext = {
   daemonStuck?: boolean;
   // Variables that the running daemon was started with, set by a step with `daemonEnv`.
   daemonEnv?: Readonly<Record<string, string>>;
+  // Set when the daemon restart after a `daemonEnv` step could not reopen the session. The rest
+  // of the scenario is skipped, and the next scenario reopens the session.
+  restoreFailed?: string;
 };
 
 function log(msg: string): void {
@@ -156,7 +159,10 @@ function restartDaemon(
   const stop = invokeCli(['daemon', 'stop'], ['--state-dir', ctx.stateDir]);
   if (!stop.ok) return `daemon stop: ${errorOf(stop).errorMessage}`;
   ctx.daemonEnv = env;
-  return sessionError(openSession(ctx, { relaunch: false }));
+  const failure = sessionError(openSession(ctx, { relaunch: false }));
+  // A fresh daemon holds no request from before the restart.
+  if (!failure) ctx.daemonStuck = false;
+  return failure;
 }
 
 async function runTimedStep(
@@ -167,8 +173,7 @@ async function runTimedStep(
 ): Promise<Sample> {
   const id = `${scenario.id}/${step.id}`;
   const restoreDaemon = (): void => {
-    // The rest of the scenario cannot run without its session; the next scenario reopens it.
-    if (step.daemonEnv && restartDaemon(ctx, undefined)) ctx.daemonStuck = true;
+    if (step.daemonEnv) ctx.restoreFailed = restartDaemon(ctx, undefined);
   };
   const before =
     (step.daemonEnv ? restartDaemon(ctx, step.daemonEnv) : undefined) ?? untimed(ctx, step.before);
@@ -252,6 +257,7 @@ function stopStuckDaemon(ctx: SuiteContext): void {
   invokeCli(['daemon', 'stop', '--clean'], ['--state-dir', ctx.stateDir]);
   ctx.daemonStuck = false;
   ctx.daemonEnv = undefined;
+  ctx.restoreFailed = undefined;
 }
 
 /** Opens the session with device selectors; later calls address it by session name alone. */
@@ -261,7 +267,7 @@ function openSession(ctx: SuiteContext, options: { relaunch: boolean }): CliResu
 }
 
 function establishSession(ctx: SuiteContext): CliResult {
-  if (ctx.daemonStuck) stopStuckDaemon(ctx);
+  if (ctx.daemonStuck || ctx.restoreFailed) stopStuckDaemon(ctx);
   return openSession(ctx, { relaunch: true });
 }
 
@@ -277,8 +283,10 @@ export async function runSuite(
     log(`round ${round + 1}/${totalRounds}${measured ? '' : ' (warmup, dropped)'}`);
     let sessionFailure = sessionError(establishSession(ctx));
     for (const scenario of scenarios) {
-      // A request that outlived its timeout still holds the session; reopen before the next scenario.
-      if (ctx.daemonStuck) sessionFailure = sessionError(establishSession(ctx));
+      // A request that outlived its timeout still holds the session, and a failed daemon restore
+      // lost it; reopen before the next scenario.
+      if (ctx.daemonStuck || ctx.restoreFailed)
+        sessionFailure = sessionError(establishSession(ctx));
       log(` scenario ${scenario.id}`);
       const setupFailure = sessionFailure ?? untimed(ctx, scenario.setup);
       if (setupFailure) log(`  ✗ setup failed: ${setupFailure}`);
@@ -288,12 +296,14 @@ export async function runSuite(
         const id = `${scenario.id}/${step.id}`;
         const skipped = setupFailure
           ? { errorCode: 'setup_failed', errorMessage: setupFailure }
-          : ctx.daemonStuck
-            ? {
-                errorCode: 'daemon_stuck',
-                errorMessage: 'an earlier request still holds the session',
-              }
-            : undefined;
+          : ctx.restoreFailed
+            ? { errorCode: 'restore_failed', errorMessage: ctx.restoreFailed }
+            : ctx.daemonStuck
+              ? {
+                  errorCode: 'daemon_stuck',
+                  errorMessage: 'an earlier request still holds the session',
+                }
+              : undefined;
         const sample: Sample = skipped
           ? { round, ok: false, wallClockMs: 0, ...skipped }
           : await runTimedStep(scenario, step, ctx, round);

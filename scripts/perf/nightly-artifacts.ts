@@ -81,13 +81,20 @@ function sortNewestFirst(runs: WorkflowRun[]): WorkflowRun[] {
 
 /**
  * Resolves one run reference: `latest`, a numeric run id, or a `YYYY-MM-DD` date (the newest run
- * created that UTC day). Returns undefined when no listed run matches.
+ * created that UTC day). Only runs that `accept` takes count, so a run that skipped a platform
+ * does not hide an older run of that platform. Returns undefined when no listed run matches.
  */
-export function resolveRunRef(ref: string, runs: WorkflowRun[]): WorkflowRun | undefined {
+export function resolveRunRef(
+  ref: string,
+  runs: WorkflowRun[],
+  accept: (run: WorkflowRun) => boolean = () => true,
+): WorkflowRun | undefined {
   const newestFirst = sortNewestFirst(runs);
-  if (ref === 'latest') return newestFirst[0];
-  if (/^\d+$/.test(ref)) return newestFirst.find((run) => run.id === ref);
-  if (DATE_REF.test(ref)) return newestFirst.find((run) => run.createdAt.slice(0, 10) === ref);
+  const first = (match: (run: WorkflowRun) => boolean) =>
+    newestFirst.find((run) => match(run) && accept(run));
+  if (ref === 'latest') return first(() => true);
+  if (/^\d+$/.test(ref)) return first((run) => run.id === ref);
+  if (DATE_REF.test(ref)) return first((run) => run.createdAt.slice(0, 10) === ref);
   throw new Error(
     `Unknown run reference ${JSON.stringify(ref)}: use latest, a run id, a YYYY-MM-DD date, or a path.`,
   );

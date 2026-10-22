@@ -55,6 +55,7 @@ Some shared steps use other screen coordinates or waits on Android. The `on.andr
 | --- | --- | --- |
 | `action-button` | lifecycle | Not timed: Android has no key event for the Action button. |
 | `prepare` | lifecycle (`prepare ios-runner`) | Not timed: `prepare` has only the `ios-runner` action. |
+| `clipboard` | lifecycle ×2 | Not timed: the API 35 and 36 emulator images have no shell clipboard service. |
 | `hardware-button` | Not timed: the simulator refuses hardware-button presses. | lifecycle (`hardware-button wake`) |
 | `push` | Not timed: the fixture has no notification authorization. | lifecycle (adb broadcast) |
 | `telephony` | Not timed: the simulator refuses calls and SMS. | lifecycle (`telephony sms`) |
@@ -95,7 +96,7 @@ All times are milliseconds. Statistics use only the successful samples of a step
 | `producer` | The number of samples that each snapshot producer answered: `simulator-ax-bridge` and `apple-runner` on iOS; `android-helper/persistent-session` and `android-helper/instrumentation` (one-shot `am instrument`) on Android. |
 | backends | The `snapshotQuality` backend, state, and reason code, for example `private-ax/recovered/ax-rejected` or `android-helper/healthy`. |
 | fallbacks | Degraded paths: snapshot-source errors, truncated recovery, and warn-level phases. |
-| `fail` | The number of failed samples. `setup_failed` and `before_failed` mean that the untimed preparation failed. `daemon_stuck` means that an earlier request outlived its timeout; the suite restarts the daemon before the next scenario. `expectation_failed` means that the screen no longer has the shape that the step requires, for example the heavy-feed depth, or that the forced path did not serve the capture. |
+| `fail` | The number of failed samples. `setup_failed` and `before_failed` mean that the untimed preparation failed. `daemon_stuck` means that an earlier request outlived its timeout; the suite restarts the daemon before the next scenario. `restore_failed` means that the daemon restart after a forced-path step could not reopen the session. `expectation_failed` means that the screen no longer has the shape that the step requires, for example the heavy-feed depth, or that the forced path did not serve the capture. |
 
 ## Nightly results
 

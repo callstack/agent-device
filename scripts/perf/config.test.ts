@@ -6,8 +6,8 @@ test('a run measures at least three rounds, so every step can get a timing verdi
   assert.equal(parseConfig(['--udid', 'sim', '--rounds', '3']).rounds, 3);
   assert.throws(() => parseConfig(['--udid', 'sim', '--rounds', '2']), /--rounds must be .* >= 3/);
   assert.throws(
-    () => parseConfig(['--platform', 'android', '--serial', 'emulator-5554', '--n', '1']),
-    /--n must be .* >= 3/,
+    () => parseConfig(['--platform', 'android', '--serial', 'emulator-5554', '--rounds', '1']),
+    /--rounds must be .* >= 3/,
   );
 });
 

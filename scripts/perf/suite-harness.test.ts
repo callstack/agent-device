@@ -4,6 +4,7 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import type { PerfConfig } from './config.ts';
+import type { PlatformStep } from './suite.ts';
 
 // Stands in for the CLI: records each teardown call, and whether the logs were already saved,
 // then appends to the daemon log and fails like a teardown that went wrong.
@@ -72,6 +73,10 @@ const args = process.argv.slice(2);
 const command = args.slice(0, args.indexOf('--state-dir')).join(' ');
 const session = process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION ?? 'default';
 fs.appendFileSync(process.env.PERF_FAKE_CALLS, command + ' session=' + session + '\\n');
+if (process.env.PERF_FAKE_FAIL_RESTORE && command === 'open app --serial emulator-5554' && session === 'default') {
+  process.stdout.write(JSON.stringify({ success: false, error: { code: 'DEVICE_IN_USE', message: 'claimed' } }));
+  process.exit(1);
+}
 const transport = session === '0' ? 'instrumentation' : 'persistent-session';
 const data = args[0] === 'snapshot'
   ? { nodes: [{ depth: 0 }], androidSnapshot: { helperTransport: transport } }
@@ -79,7 +84,15 @@ const data = args[0] === 'snapshot'
 process.stdout.write(JSON.stringify({ success: true, data }));
 `;
 
-test('a step with daemon variables runs against a restarted daemon and restores it after', async () => {
+const ONE_SHOT: PlatformStep = {
+  id: 'one-shot',
+  command: 'snapshot',
+  args: ['snapshot', '--raw'],
+  daemonEnv: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
+  expect: { transport: 'instrumentation' },
+};
+
+async function runFakeDaemonSuite(steps: PlatformStep[]) {
   const root = mkdtempForTestSync('perf-daemon-env-');
   const fakeCli = path.join(root, 'fake-cli.mjs');
   fs.writeFileSync(fakeCli, FAKE_DAEMON_CLI);
@@ -88,8 +101,7 @@ test('a step with daemon variables runs against a restarted daemon and restores 
   vi.stubEnv('PERF_FAKE_CALLS', calls);
   vi.resetModules();
   const { runSuite } = await import('./suite-harness.ts');
-
-  const [measurement] = await runSuite(
+  const measurements = await runSuite(
     {
       platform: 'android',
       stateDir: path.join(root, 'state'),
@@ -104,21 +116,21 @@ test('a step with daemon variables runs against a restarted daemon and restores 
         id: 'heavy-feed',
         title: 'heavy feed',
         setup: [],
-        steps: [
-          {
-            id: 'one-shot',
-            command: 'snapshot',
-            args: ['snapshot', '--raw'],
-            daemonEnv: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
-            expect: { transport: 'instrumentation' },
-          },
-        ],
+        steps,
       },
     ],
   );
+  return { measurements, calls: fs.readFileSync(calls, 'utf8') };
+}
+
+test('a step with daemon variables runs against a restarted daemon and restores it after', async () => {
+  const {
+    measurements: [measurement],
+    calls,
+  } = await runFakeDaemonSuite([ONE_SHOT]);
 
   assert.equal(
-    fs.readFileSync(calls, 'utf8'),
+    calls,
     [
       'open app --relaunch --serial emulator-5554 session=default',
       'daemon stop session=default',
@@ -131,4 +143,14 @@ test('a step with daemon variables runs against a restarted daemon and restores 
   );
   assert.equal(measurement!.failures, 0);
   assert.equal(measurement!.samples[0]!.snapshot?.transport, 'instrumentation');
+});
+
+test('a failed daemon restore skips the rest of the scenario as restore_failed', async () => {
+  vi.stubEnv('PERF_FAKE_FAIL_RESTORE', '1');
+  const { measurements } = await runFakeDaemonSuite([
+    ONE_SHOT,
+    { id: 'back', command: 'back', args: ['back'] },
+  ]);
+  assert.equal(measurements[0]!.failures, 0);
+  assert.equal(measurements[1]!.samples[0]!.errorCode, 'restore_failed');
 });
