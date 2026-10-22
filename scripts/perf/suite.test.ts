@@ -100,3 +100,20 @@ test('an Android capture breaks its expectation when another helper transport se
   );
   assert.match(expectationViolation(oneShot, {})!, /unknown transport/);
 });
+
+test('the Android heavy-feed raw capture expects the persistent session to answer', () => {
+  const heavyFeed = suiteFor('android').find((s) => s.id === 'heavy-feed')!;
+  const raw = heavyFeed.steps.find((s) => s.id === 'snapshot-raw')!;
+  assert.match(
+    expectationViolation(raw.expect, { maxDepth: 60, transport: 'instrumentation' })!,
+    /instrumentation transport served the capture, not persistent-session/,
+  );
+  assert.equal(
+    expectationViolation(raw.expect, { maxDepth: 60, transport: 'persistent-session' }),
+    undefined,
+  );
+  const iosRaw = suiteFor('ios')
+    .find((s) => s.id === 'heavy-feed')!
+    .steps.find((s) => s.id === 'snapshot-raw')!;
+  assert.equal(iosRaw.expect?.transport, undefined);
+});

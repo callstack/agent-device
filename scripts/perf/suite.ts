@@ -373,7 +373,7 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       // The fixture renders more than 65 native levels on iOS and 60 on Android.
       step('snapshot-raw', C.snapshot, ['snapshot', '--raw'], {
         expect: { maxDepthAtLeast: 64 },
-        on: { android: { expect: { maxDepthAtLeast: 56 } } },
+        on: { android: { expect: { maxDepthAtLeast: 56, transport: 'persistent-session' } } },
       }),
       step('press-like-selector', C.press, ['press', 'id="heavy-post-0-like"']),
       step('press-like-settle', C.press, ['press', 'id="heavy-post-1-like"', '--settle']),

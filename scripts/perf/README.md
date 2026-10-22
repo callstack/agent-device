@@ -44,7 +44,7 @@ At the end, or on SIGINT or SIGTERM, the suite saves the logs to `raw/state/`, s
 Each platform times the normal snapshot path and one forced path.
 
 - iOS: the simulator accessibility bridge answers normal captures. `home-reads/snapshot-forced-tree` pins the XCTest tree backend through the SDK, because the CLI has no flag for it. Only a regular capture honors the pin; a raw capture runs its own backend ladder. The response must name the `tree` backend with the `requested-backend` reason code. The XCTest tree rejects the heavy feed, so the step runs on the home screen.
-- Android: the snapshot helper APK is the only snapshot engine (ADR 0002). Its persistent session answers normal captures. `snapshot-raw-one-shot` restarts the daemon with `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION=0`, so a one-shot `am instrument` capture answers. The harness restarts the daemon without the variable after the step. Both raw captures must reach depth 56. The forced capture must report the `instrumentation` transport.
+- Android: the snapshot helper APK is the only snapshot engine (ADR 0002). Its persistent session answers normal captures. `snapshot-raw-one-shot` restarts the daemon with `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION=0`, so a one-shot `am instrument` capture answers. The harness restarts the daemon without the variable after the step. Both raw captures must reach depth 56. `snapshot-raw` must report the `persistent-session` transport, and the forced capture must report the `instrumentation` transport.
 
 ## Platform parity
 

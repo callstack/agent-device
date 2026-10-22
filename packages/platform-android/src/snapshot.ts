@@ -479,7 +479,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   captureOptions.idleWait = params.idleWait;
   let sessionCapture: AndroidSnapshotHelperOutput | undefined;
   try {
-    sessionCapture = await withDiagnosticTimer(
+    await withDiagnosticTimer(
       ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
       async () => (sessionCapture = await captureAndroidSnapshotWithHelperSession(captureOptions)),
       () => ({
