@@ -29,15 +29,16 @@ export async function acquireValidationLock(
   signal: AbortSignal,
   lockDirPath = HOST_LOCK_PATH,
   report: (message: string) => void = (message) => process.stderr.write(`${message}\n`),
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ValidationLock> {
   if (process.platform !== 'darwin' && process.platform !== 'linux') {
     throw new Error(
       'Serialized validation requires macOS or Linux. Use plan mode or focused checks on this host.',
     );
   }
-  if (process.env[VALIDATION_PARENT_ENV]) {
+  if (env[VALIDATION_PARENT_ENV]) {
     throw new Error(
-      `Nested validation is not allowed. Parent receipt: ${process.env[VALIDATION_PARENT_ENV]}`,
+      `Nested validation is not allowed. Parent receipt: ${env[VALIDATION_PARENT_ENV]}`,
     );
   }
   const owner = { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() };

@@ -23,7 +23,10 @@ export type GateExecution = {
 
 export function requiresHostLock(id: string, env: NodeJS.ProcessEnv): boolean {
   return (
-    getCheckSpec(id).hostLocked && env.GITHUB_ACTIONS !== 'true' && !env[VALIDATION_PARENT_ENV]
+    getCheckSpec(id).hostLocked &&
+    (process.platform === 'darwin' || process.platform === 'linux') &&
+    env.GITHUB_ACTIONS !== 'true' &&
+    !env[VALIDATION_PARENT_ENV]
   );
 }
 
@@ -54,7 +57,12 @@ export async function executeGate(execution: GateExecution): Promise<number> {
   let lock: Awaited<ReturnType<typeof acquireValidationLock>> | undefined;
   let commandPid: number | undefined;
   try {
-    lock = await acquireValidationLock(controller.signal, execution.lockDirPath, execution.report);
+    lock = await acquireValidationLock(
+      controller.signal,
+      execution.lockDirPath,
+      execution.report,
+      env,
+    );
     lock.recordCommand(receipt, null);
     const result = await runCmdStreaming(
       process.execPath,

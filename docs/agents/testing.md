@@ -10,11 +10,10 @@
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Both broad commands acquire the same host lock.
-So do `pnpm gate` ids `unit`, `unit-ci`, `provider-integration`, `fuzz-parsers`, `mutation`, `mutation-affected`, and `concurrency-torture`.
-A heavy gate in a locked validation inherits the lock. GitHub runners skip it.
+These `pnpm gate` ids acquire the same lock: `unit`, `unit-ci`, `provider-integration`, `fuzz-parsers`, `mutation`, `mutation-affected`, and `concurrency-torture`.
+A gate inside a locked validation reuses that lock. A GitHub runner takes no lock.
 Wait for the owner to finish, or cancel your waiter with Ctrl-C.
-Do not delete lock files.
-A wait ends after two hours. Nested validation fails immediately.
+A wait ends after two hours. A nested `pnpm check` or `pnpm check:affected --run` fails immediately.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
 The runner prints progress and a receipt path. The receipt contains:
@@ -46,7 +45,6 @@ A full selection for these changes is intentional.
 Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
 
-Read required-check status on the PR.
 The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns:
 

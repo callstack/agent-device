@@ -36,15 +36,17 @@ function fixture() {
 
 test('the locked gates are the whole-repo suites and worker-spawning sweeps', () => {
   assert.deepEqual(
-    CHECK_CATALOG.filter((spec) => spec.hostLocked).map((spec) => spec.id),
+    CHECK_CATALOG.filter((spec) => spec.hostLocked)
+      .map((spec) => spec.id)
+      .sort(),
     [
-      'unit',
-      'provider-integration',
-      'unit-ci',
+      'concurrency-torture',
       'fuzz-parsers',
       'mutation',
       'mutation-affected',
-      'concurrency-torture',
+      'provider-integration',
+      'unit',
+      'unit-ci',
     ],
   );
 });
@@ -59,6 +61,7 @@ test(
         new AbortController().signal,
         lockDirPath,
         () => {},
+        cleanEnv(),
       );
       let waitReport = '';
       const waiting = executeGate({
@@ -127,6 +130,7 @@ test(
         new AbortController().signal,
         lockDirPath,
         () => {},
+        cleanEnv(),
       );
       const env = cleanEnv({ [VALIDATION_PARENT_ENV]: '/parent/receipt.json' });
       assert.equal(requiresHostLock('unit-ci', env), false);
@@ -151,7 +155,12 @@ test(
 test('cheap gates and GitHub runners do not wait for the lock', { skip }, async () => {
   const { lockDirPath, marker, writeMarker, cleanup } = fixture();
   try {
-    const owner = await acquireValidationLock(new AbortController().signal, lockDirPath, () => {});
+    const owner = await acquireValidationLock(
+      new AbortController().signal,
+      lockDirPath,
+      () => {},
+      cleanEnv(),
+    );
     for (const [id, env] of [
       ['lint', cleanEnv()],
       ['unit-ci', cleanEnv({ GITHUB_ACTIONS: 'true' })],
@@ -175,3 +184,33 @@ test('cheap gates and GitHub runners do not wait for the lock', { skip }, async 
     cleanup();
   }
 });
+
+test(
+  'a signal while waiting cancels the gate and leaves the owner in place',
+  { skip },
+  async () => {
+    const { lockDirPath, marker, writeMarker, cleanup } = fixture();
+    try {
+      const owner = await acquireValidationLock(
+        new AbortController().signal,
+        lockDirPath,
+        () => {},
+        cleanEnv(),
+      );
+      const waiting = executeGate({
+        id: 'unit-ci',
+        command: writeMarker,
+        cwd: process.cwd(),
+        env: cleanEnv(),
+        lockDirPath,
+        report: () => void process.emit('SIGTERM'),
+      });
+      assert.equal(await waiting, 143);
+      assert.equal(fs.existsSync(marker), false);
+      assert.ok(fs.existsSync(lockDirPath), 'cancelled waiter must not release the owner');
+      await owner.release();
+    } finally {
+      cleanup();
+    }
+  },
+);
