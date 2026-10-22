@@ -26,6 +26,7 @@ export function hostFixture(
   options: {
     failProcessStart?: boolean;
     startProcess?: AppLogRuntimeHost['processes']['start'];
+    sleep?: AppLogRuntimeHost['clock']['sleep'];
     commandRun?: AppLogRuntimeHost['commands']['run'];
     appleToolRun?: AppLogRuntimeHost['appleTools']['run'];
   } = {},
@@ -90,7 +91,7 @@ export function hostFixture(
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 10, sleep: async () => {} },
+    clock: { now: () => 10, sleep: options.sleep ?? (async () => {}) },
   };
   return {
     host,

@@ -95,7 +95,7 @@ test('simulator log stream takes the set of the device it streams from', async (
 
 test('simulator start returns only after the in-simulator stream writes output', async () => {
   const stream = launchingStream();
-  const fixture = hostFixture({ startProcess: stream.start });
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
 
   const starting = startAppleAppLogs(
     fixture.host,
@@ -111,9 +111,32 @@ test('simulator start returns only after the in-simulator stream writes output',
   await expect(starting).resolves.toMatchObject({ envelope: expect.anything() });
 });
 
-test('host log stream start does not wait for output', async () => {
+test('simulator start returns when the stream exits before writing output', async () => {
+  const stream = launchingStream({ exited: true });
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+
+  await expect(
+    startAppleAppLogs(fixture.host, appleDevice(), startInput(), localRuntimeOwner('apple')),
+  ).resolves.toMatchObject({ envelope: expect.anything() });
+});
+
+test('simulator start fails with a typed reason when the stream does not launch in time', async () => {
   const stream = launchingStream();
   const fixture = hostFixture({ startProcess: stream.start });
+
+  await expect(
+    startAppleAppLogs(fixture.host, appleDevice(), startInput(), localRuntimeOwner('apple')),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'simulator-log-stream-launch-timeout' },
+  });
+  expect(stream.disposed()).toBe(true);
+  expect(fixture.outputDisposed()).toBe(true);
+});
+
+test('host log stream start does not wait for output', async () => {
+  const stream = launchingStream();
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
 
   await expect(
     startAppleAppLogs(
@@ -127,7 +150,7 @@ test('host log stream start does not wait for output', async () => {
 
 test('simulator start cancelled before the stream launches terminates the process', async () => {
   const stream = launchingStream();
-  const fixture = hostFixture({ startProcess: stream.start });
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
   const controller = new AbortController();
   const reason = new Error('request cancelled');
 
@@ -155,13 +178,15 @@ function startInput() {
   };
 }
 
-function launchingStream() {
+function launchingStream(options: { exited?: boolean } = {}) {
   let output: AppLogOutputSink | undefined;
   let disposed = false;
   const start: AppLogRuntimeHost['processes']['start'] = async (request) => {
     output = request.output;
     return {
-      wait: new Promise<never>(() => {}),
+      wait: options.exited
+        ? Promise.resolve({ stdout: '', stderr: '', exitCode: 1 })
+        : new Promise<never>(() => {}),
       terminate: async () => {},
       [Symbol.asyncDispose]: async () => {
         disposed = true;
@@ -169,6 +194,12 @@ function launchingStream() {
     };
   };
   return { start, output: () => output, disposed: () => disposed };
+}
+
+async function sleepUntilAborted(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((_resolve, reject) => {
+    signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
 }
 
 async function settlesSoon(promise: Promise<unknown>): Promise<boolean> {

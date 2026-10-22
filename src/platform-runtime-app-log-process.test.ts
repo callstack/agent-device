@@ -183,16 +183,38 @@ describe('managed app-log process host', () => {
 
   test('terminate settles when an escaped descendant keeps the output pipes open', async () => {
     const fixture = processFixture();
-    let open = 2;
+    const events: string[] = [];
+    const child = Object.assign(new EventEmitter(), {
+      pid: 99,
+      exitCode: null,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn((signal?: NodeJS.Signals | number) => {
+        events.push(String(signal));
+        child.emit('exit', null, signal);
+        return true;
+      }),
+    });
+    // Like a Node child process, close needs the exit and both output pipes closed.
     const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
-      for (const stream of [fixture.child.stdout, fixture.child.stderr]) {
+      let exited = false;
+      let open = 2;
+      const close = () => {
+        if (exited && open === 0) resolve({ stdout: '', stderr: '', exitCode: 1 });
+      };
+      child.once('exit', () => {
+        exited = true;
+        close();
+      });
+      for (const stream of [child.stdout, child.stderr]) {
         stream.on('close', () => {
+          events.push('pipe-closed');
           open -= 1;
-          if (open === 0) resolve({ stdout: '', stderr: '', exitCode: 1 });
+          close();
         });
       }
     });
-    exec.run.mockReturnValue({ child: fixture.child, wait });
+    exec.run.mockReturnValue({ child, wait });
     const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
       fixture.request,
     );
@@ -204,6 +226,8 @@ describe('managed app-log process host', () => {
       await vi.advanceTimersByTimeAsync(4_000);
 
       await vi.waitFor(() => expect(terminated).toBe(true));
+      expect(events[0]).toBe('SIGINT');
+      expect(events.slice(-2)).toEqual(['pipe-closed', 'pipe-closed']);
       await expect(running.wait).resolves.toMatchObject({ exitCode: 1 });
       expect(fs.existsSync(fixture.markerPath)).toBe(false);
     } finally {

@@ -32,6 +32,9 @@ import {
   buildIosSimulatorLogStreamArgs,
 } from './log-predicate.ts';
 
+// Measured launches take 1-2 s on a loaded host.
+const SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS = 10_000;
+
 export async function startAppleAppLogs(
   host: AppLogRuntimeHost,
   device: DeviceInfo,
@@ -64,7 +67,7 @@ export async function startAppleAppLogs(
       if (!adopted) await backgroundProcess[Symbol.asyncDispose]();
     });
     if (device.kind === 'simulator') {
-      await waitForSimulatorStreamLaunch(launch.written, backgroundProcess.wait, signal);
+      await waitForSimulatorStreamLaunch(host, launch.written, backgroundProcess.wait, signal);
     }
     const handle = createAppleProcessHandle(
       host,
@@ -219,6 +222,7 @@ function observeFirstWrite(output: AppLogOutputSink): {
 // simctl forwards a stop signal only after the in-simulator process has launched. An earlier
 // signal ends simctl while the launch completes, and the orphan keeps the output pipes open.
 async function waitForSimulatorStreamLaunch(
+  host: AppLogRuntimeHost,
   written: Promise<void>,
   exited: Promise<unknown>,
   signal?: AbortSignal,
@@ -229,9 +233,28 @@ async function waitForSimulatorStreamLaunch(
     onAbort = () => reject(signal?.reason);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
+  const deadline = new AbortController();
+  const timedOut = host.clock
+    .sleep(SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS, deadline.signal)
+    .then(() => 'timed-out' as const);
+  timedOut.catch(noop);
   try {
-    await Promise.race([written, exited.then(noop, noop), aborted]);
+    const launched = Promise.race([written, exited.then(noop, noop)]).then(
+      () => 'launched' as const,
+    );
+    if ((await Promise.race([launched, timedOut, aborted])) === 'timed-out') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `iOS simulator log stream did not start within ${SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS}ms`,
+        {
+          reason: 'simulator-log-stream-launch-timeout',
+          timeoutMs: SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS,
+          hint: 'Check that the simulator finished booting, then retry logs start.',
+        },
+      );
+    }
   } finally {
+    deadline.abort();
     signal?.removeEventListener('abort', onAbort);
   }
 }
