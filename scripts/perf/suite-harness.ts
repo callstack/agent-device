@@ -253,7 +253,11 @@ function sessionError(result: CliResult): string | undefined {
 }
 
 function stopStuckDaemon(ctx: SuiteContext): void {
-  log(' ! a request outlived its timeout; restarting the daemon');
+  log(
+    ctx.restoreFailed
+      ? ` ! the daemon restore failed (${ctx.restoreFailed}); restarting the daemon`
+      : ' ! a request outlived its timeout; restarting the daemon',
+  );
   invokeCli(['daemon', 'stop', '--clean'], ['--state-dir', ctx.stateDir]);
   ctx.daemonStuck = false;
   ctx.daemonEnv = undefined;

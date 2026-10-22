@@ -115,7 +115,8 @@ pnpm perf:compare --platform android               # the same for Android
 pnpm perf:compare --to 2026-10-28                  # that night against the 7 nights before it
 pnpm perf:compare --to latest --from 2026-10-21    # latest against the newest run of that day
 pnpm perf:compare --to latest --from 2026-10-21..2026-10-25 --out .tmp/perf/compare  # every run in the range
-pnpm perf:compare --to .tmp/perf/local             # a local run against recent nights
+pnpm perf:compare --to .tmp/perf/ios               # a local run against recent nights
+pnpm perf:compare --platform android --to .tmp/perf/android
 ```
 
 A reference is `latest`, a run id, a `YYYY-MM-DD` date, or a local output path.
