@@ -124,7 +124,6 @@ extension RunnerTests {
   ) -> String? {
     guard channelState == .normal, kind.usesXCTestAccessibilityChannel else { return nil }
     let isSlow = attempt.timing.acquisitionMs > slowThresholdMs
-    guard kind == .recursiveTree || isSlow else { return nil }
     if case let .failed(failure, phase: .acquisition) = attempt.outcome,
       failure.code == Self.xCTestSnapshotTimeoutCode
     {

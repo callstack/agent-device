@@ -298,9 +298,8 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
-  /// An incomplete sweep must still reach private AX (#2781), but its short slice is insufficient
-  /// evidence for a channel penalty (#3844).
-  func testQuerySweepDeadlineRecoversWithoutPenalizingChannel() throws {
+  /// An incomplete normal-plan sweep must reach private AX and penalize the hostile channel.
+  func testQuerySweepDeadlineRecoversAndPenalizesChannel() throws {
     guard
       let queryMethod = class_getInstanceMethod(
         XCUIElementQuery.self,
@@ -373,9 +372,9 @@ extension RunnerTests {
     XCTAssertEqual(quality?.state, .recovered)
     XCTAssertGreaterThan(box.payload?.nodes?.count ?? 0, 1, "private AX answers with a real tree")
     XCTAssertFalse(box.abandonedAtReturn, "the sweep must answer inside its own main-thread hop")
-    XCTAssertFalse(
+    XCTAssertTrue(
       box.penalizedAtReturn,
-      "a single short query-sweep timeout must not arm the channel penalty"
+      "a normal-plan query-sweep timeout must arm the channel penalty"
     )
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
@@ -519,6 +518,49 @@ extension RunnerTests {
     let quality = try XCTUnwrap(payload.snapshotQuality)
     XCTAssertEqual(quality.reasonCode, "budget", "the tree tier ran out of its processing slice")
     XCTAssertNotEqual(quality.state, .healthy, "a tree without its collapsed tab items is not healthy")
+  }
+
+  func testScheduledRecoveryProbeAfterAcceptedPrivateAXIsBoundedAndCannotRepeatOrRearm() throws {
+    let captureTarget = try launchPenalizedPrivateAXBlindTarget(
+      bundleId: "com.callstack.agentdevice.runner.scheduled-probe-test"
+    )
+    defer { tearDownPenalizedPrivateAXBlindTarget() }
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let acquisition = try XCTUnwrap(privateAXSnapshotAcquisition(
+      target: captureTarget, hint: SnapshotPresentation.captureHint(for: options),
+      deadline: Date().addingTimeInterval(10)
+    ))
+    privateAXAcquisitionOverrideForTesting = { acquisition }
+    let snapshotMethod = try XCTUnwrap(class_getInstanceMethod(XCUIApplication.self, #selector(XCUIElement.snapshot)))
+    let stubMethod = try XCTUnwrap(class_getInstanceMethod(RunnerBlockingSnapshotStub.self, #selector(RunnerBlockingSnapshotStub.snapshot)))
+    let original = method_getImplementation(snapshotMethod)
+    RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
+    RunnerBlockingSnapshotGate.entered = DispatchSemaphore(value: 0)
+    method_setImplementation(snapshotMethod, method_getImplementation(stubMethod))
+    defer {
+      RunnerBlockingSnapshotGate.release.signal()
+      method_setImplementation(snapshotMethod, original)
+      let deadline = Date().addingTimeInterval(3)
+      while hasAbandonedMainThreadWork(), Date() < deadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+      }
+    }
+    snapshotXCTestChannelNextRecoveryProbeAt = .distantPast
+    let expiry = snapshotXCTestChannelPenaltyUntil
+    let started = Date()
+    let payload = try runDeferredPlanOffMain(target: captureTarget) {
+      RunnerBlockingSnapshotGate.release.signal()
+    }
+    XCTAssertEqual(payload.snapshotQuality?.backend, SnapshotBackendKind.privateAX.rawValue)
+    XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .success)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    XCTAssertEqual(snapshotXCTestChannelPenaltyUntil, expiry)
+    let next = snapshotXCTestChannelNextRecoveryProbeAt
+    XCTAssertGreaterThan(next.timeIntervalSince(started), 29)
+    _ = try runDeferredPlanOffMain(target: captureTarget)
+    XCTAssertEqual(snapshotXCTestChannelNextRecoveryProbeAt, next)
+    XCTAssertEqual(snapshotXCTestChannelPenaltyUntil, expiry)
+    XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .timedOut)
   }
 
   private func launchPenalizedPrivateAXBlindTarget(bundleId: String) throws -> SnapshotCaptureTarget {

@@ -120,7 +120,7 @@ extension RunnerTests {
     XCTAssertEqual(timer.timing.presentationMs, 5_000, accuracy: 0.001)
   }
 
-  func testShortSweepTimeoutDoesNotPenalizeButSlowSweepStillDoes() {
+  func testNormalPlanSweepTimeoutPenalizesRegardlessOfItsShortSlice() {
     let timeout = SnapshotCaptureFailure(
       code: Self.xCTestSnapshotTimeoutCode, message: "same timeout text", hint: "test"
     )
@@ -130,9 +130,9 @@ extension RunnerTests {
         timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
         tierOutcome: .deadlineExhausted
       )
-      XCTAssertNil(Self.snapshotXCTestPenaltyReason(
+      XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
         kind: .querySweep, attempt: short, slowThresholdMs: 3_000
-      ))
+      ), "queries_backend_timeout")
       XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
         kind: .recursiveTree, attempt: short, slowThresholdMs: 3_000
       ), "tree_backend_timeout")

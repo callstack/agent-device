@@ -632,6 +632,11 @@ extension RunnerTests {
           kind: kind, attempt: fast, channelState: state
         ))
       }
+      XCTAssertTrue(Self.snapshotXCTestRecoveryProbeSucceeded(
+        kind: .recursiveTree,
+        attempt: SnapshotBackendAttempt(outcome: .captured(healthy), timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10)),
+        channelState: state
+      ))
       let rejected = [
         SnapshotBackendAttempt(outcome: .captured(healthy), timing: fast.timing, tierOutcome: .deadlineExhausted),
         SnapshotBackendAttempt(outcome: .noCapture, timing: fast.timing),
@@ -650,5 +655,42 @@ extension RunnerTests {
       kind: .recursiveTree, attempt: fast, channelState: .normal
     ))
   }
+  func testScheduledRecoveryProbeRequiresDueIndependentRegularPlanAndIdleBudget() {
+    let now = Date(timeIntervalSinceReferenceDate: 100)
+    let deferred = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, xCTestChannelPenalized: true)
+    func schedules(
+      _ effective: EffectiveSnapshotCapturePlan,
+      backend: SnapshotBackendKind = .privateAX,
+      next: Date = now,
+      remaining: TimeInterval = 1,
+      abandoned: Bool = false
+    ) -> Bool {
+      Self.shouldScheduleSnapshotXCTestRecoveryProbe(
+        effective: effective, acceptedBackend: backend, now: now, nextProbeAt: next,
+        deadline: now.addingTimeInterval(remaining), hasAbandonedWork: abandoned
+      )
+    }
+    XCTAssertTrue(schedules(deferred))
+    XCTAssertFalse(schedules(deferred, next: now.addingTimeInterval(0.001)))
+    XCTAssertFalse(schedules(deferred, remaining: 0.999))
+    XCTAssertFalse(schedules(deferred, abandoned: true))
+    XCTAssertFalse(schedules(deferred, backend: .recursiveTree))
+    XCTAssertFalse(schedules(deferred, backend: .querySweep))
+    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: false
+    )))
+    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
+      Self.rawDiagnosticPlan, xCTestChannelPenalized: true
+    )))
+    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: true,
+      availableBackends: [.recursiveTree, .querySweep]
+    )))
+    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: true, preferredBackend: "private-ax"
+    )))
+    XCTAssertEqual(Self.snapshotXCTestRecoveryProbeInterval, 30)
+  }
+
 }
 #endif

@@ -127,6 +127,7 @@ final class RunnerTests: XCTestCase {
   let snapshotXCTestChannelPenaltyLock = NSLock()
   var snapshotXCTestChannelPenaltyBundleId: String?
   var snapshotXCTestChannelPenaltyUntil = Date.distantPast
+  var snapshotXCTestChannelNextRecoveryProbeAt = Date.distantFuture
   let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
   let snapshotXCTestPenaltyWarmupExemption = SnapshotXCTestPenaltyWarmupExemption()
   // Sticky per-bundle hint for the private AX depth ladder: deep RN screens reject the default
