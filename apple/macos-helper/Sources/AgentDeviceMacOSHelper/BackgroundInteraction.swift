@@ -259,9 +259,8 @@ func scrollBarValue(current: Double, signedTravel: Double, overflow: Double) -> 
   min(1, max(0, current + signedTravel / overflow))
 }
 
-/// How far a scroll area's content reaches past the area along one axis. The content is the span
-/// all of its children cover: a SwiftUI `Form` lists each row as a child of the scroll area, with no
-/// single document view as tall as the content.
+/// A SwiftUI `Form` lists each row as a child of the scroll area, with no single document view as
+/// tall as the content, so the content is the span all of the area's children cover.
 func scrollContentOverflow(area: RectResponse, contentFrames: [RectResponse], isVertical: Bool)
   -> Double
 {

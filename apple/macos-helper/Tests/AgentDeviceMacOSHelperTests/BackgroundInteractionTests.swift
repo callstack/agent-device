@@ -78,8 +78,6 @@ final class BackgroundInteractionTests: XCTestCase {
     XCTAssertEqual(scrollBarValue(current: 0.1, signedTravel: -600, overflow: 1200), 0)
   }
 
-  /// A SwiftUI `Form` lists its rows as children of the scroll area: together they overflow it
-  /// although no single row is as tall as the area.
   func testScrollOverflowSpansEveryContentChild() {
     let area = RectResponse(x: 0, y: 100, width: 400, height: 600)
     let rows = (0..<10).map { row in
@@ -87,6 +85,16 @@ final class BackgroundInteractionTests: XCTestCase {
     }
     XCTAssertEqual(scrollContentOverflow(area: area, contentFrames: rows, isVertical: true), 580)
     XCTAssertEqual(scrollContentOverflow(area: area, contentFrames: rows, isVertical: false), -40)
+  }
+
+  func testScrollOverflowCountsAChildFarOutsideTheContent() {
+    let area = RectResponse(x: 0, y: 100, width: 400, height: 600)
+    let rows = (0..<10).map { row in
+      RectResponse(x: 20, y: 100 + Double(row) * 120, width: 360, height: 100)
+    }
+    let header = RectResponse(x: 0, y: -5000, width: 400, height: 40)
+    XCTAssertEqual(
+      scrollContentOverflow(area: area, contentFrames: rows + [header], isVertical: true), 5680)
   }
 
   func testScrollOverflowIgnoresEmptyFrames() {
