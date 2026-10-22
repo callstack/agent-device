@@ -8,7 +8,6 @@ import {
   ANDROID_TOUCH_HELPER_GESTURE_PHASE,
 } from '@agent-device/platform-android/mechanics';
 import { test } from 'vitest';
-import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import {
   aggregateProfiles,
   profileRequestLog,
@@ -111,7 +110,7 @@ test('reads the client daemon timer from --debug stderr', () => {
   const stderr = [
     `${DIAGNOSTIC_STDERR_PREFIX}{"phase":"daemon_startup","durationMs":30,"requestId":"r1"}`,
     'noise',
-    `${DIAGNOSTIC_STDERR_PREFIX}{"phase":"${DAEMON_REQUEST_PHASE}","durationMs":812,"requestId":"r1"}`,
+    `${DIAGNOSTIC_STDERR_PREFIX}{"phase":"daemon_request","durationMs":812,"requestId":"r1"}`,
   ].join('\n');
   assert.deepEqual(readClientDiagnostics(stderr), { daemonMs: 812, requestId: 'r1' });
   assert.deepEqual(readClientDiagnostics(`${DIAGNOSTIC_STDERR_PREFIX}{"phase":"daemon_req`), {});

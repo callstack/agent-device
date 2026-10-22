@@ -6,7 +6,6 @@ import {
   ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
   ANDROID_TOUCH_HELPER_GESTURE_PHASE,
 } from '@agent-device/platform-android/mechanics';
-import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import { median } from './stats.ts';
 import type {
   MeasurementProfile,
@@ -17,11 +16,12 @@ import type {
   Timing,
 } from './types.ts';
 
-// The platform-apple façades export only what production code consumes, so its phase names stay
-// literal here.
+// The platform-apple façades and the root client export only what production code consumes, so
+// these phase names stay literal here.
 const RUNNER_COMMAND_SEND_PHASE = 'ios_runner_command_send';
 const SNAPSHOT_SOURCE_ACQUIRE_PHASE = 'ios.snapshot-source.acquire';
 const SNAPSHOT_SOURCE_RECOVERY_PHASE = 'ios_snapshot_source_recovery';
+const DAEMON_REQUEST_PHASE = 'daemon_request';
 
 type DiagnosticEvent = {
   ts?: string;
