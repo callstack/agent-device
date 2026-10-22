@@ -325,12 +325,16 @@ extension RunnerTests {
     /// The app-wide keyboard-focus query answered with the tapped input.
     case focusQueryMatchesInput
 
+    /// The log line that records the evidence and the number of focus polls: `logMarker`, the name, then `polls=<n>`.
+    static let logMarker = "AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence="
+    static let inputReportsKeyboardFocusName = "input-reports-keyboard-focus"
+
     /// The name `runner.log` records.
     var name: String {
       switch self {
       case .focusEngine: return "focus-engine"
       case .focusedInput: return "focused-input"
-      case .inputReportsKeyboardFocus: return "input-reports-keyboard-focus"
+      case .inputReportsKeyboardFocus: return Self.inputReportsKeyboardFocusName
       case .keyboardAppeared: return "keyboard-appeared"
       case .focusQueryMatchesInput: return "focus-query-matches-input"
       }
@@ -341,6 +345,8 @@ extension RunnerTests {
     let element: XCUIElement?
     /// Nil when nothing confirmed focus before the focus timeout.
     let evidence: TextEntryFocusEvidence?
+    /// The focus polls that ran, which is 1 when the first poll confirmed focus.
+    let polls: Int
 
     var focusConfirmed: Bool { evidence != nil }
   }

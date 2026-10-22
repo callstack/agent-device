@@ -64,13 +64,15 @@ extension RunnerTests {
     keyboardVisibleBeforeTap: Bool? = nil
   ) -> TextEntryStabilization {
 #if os(tvOS)
-    return TextEntryStabilization(element: target, evidence: .focusEngine)
+    return TextEntryStabilization(element: target, evidence: .focusEngine, polls: 0)
 #else
     let keyboardVisibleAtEntry = keyboardVisibleBeforeTap ?? isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(TextEntryTiming.focusTimeout)
+    var polls = 0
     while Date() < deadline {
+      polls += 1
       if let focused = focusedTextInput(app: app) {
-        return TextEntryStabilization(element: focused, evidence: .focusedInput)
+        return TextEntryStabilization(element: focused, evidence: .focusedInput, polls: polls)
       }
 #if os(iOS)
       // The tapped input's own read comes before the keyboard. While a software keyboard is
@@ -79,23 +81,23 @@ extension RunnerTests {
       // took focus.
       let read = target.flatMap(ResolvedTextEntryInput.init(reading:))
       if let read, let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
-        return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read))
+        return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read), polls: polls)
       }
 #endif
       // focusedTextInput is intentionally nil on iOS; the keyboard transitioning to visible after
       // our tap is also a focus-moved signal. Don't fast-path when it was already up.
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return TextEntryStabilization(element: target, evidence: .keyboardAppeared)
+        return TextEntryStabilization(element: target, evidence: .keyboardAppeared, polls: polls)
       }
 #if os(iOS)
       // The read came before the keyboard query, so it is not handed on as the post-focus read.
       if let read, keyboardFocusConfirmed(app: app, read: read) {
-        return TextEntryStabilization(element: target, evidence: .focusQueryMatchesInput)
+        return TextEntryStabilization(element: target, evidence: .focusQueryMatchesInput, polls: polls)
       }
 #endif
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return TextEntryStabilization(element: target, evidence: nil)
+    return TextEntryStabilization(element: target, evidence: nil, polls: polls)
 #endif
   }
 
@@ -148,7 +150,12 @@ extension RunnerTests {
       target: target,
       keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
     )
-    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence=%@", stabilized.evidence?.name ?? "none")
+    NSLog(
+      "%@%@ polls=%d",
+      TextEntryFocusEvidence.logMarker,
+      stabilized.evidence?.name ?? "none",
+      stabilized.polls
+    )
     if case .inputReportsKeyboardFocus(let read) = stabilized.evidence {
       return focusedTextEntryTarget(read.element, read: read, requestedPoint: requestedPoint)
     }
