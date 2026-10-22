@@ -1,5 +1,11 @@
 import { buildMeasurement } from './measurement.ts';
-import { PERF_SUMMARY_SCHEMA, type Measurement, type PerfSummary, type Sample } from './types.ts';
+import {
+  PERF_SUMMARY_SCHEMA,
+  type Measurement,
+  type PerfSummary,
+  type Platform,
+  type Sample,
+} from './types.ts';
 
 export type StepFixture = {
   id: string;
@@ -37,11 +43,11 @@ function measurement(step: StepFixture): Measurement {
 /** A schema-valid summary whose steps carry the given timings. */
 export function summaryFixture(
   steps: StepFixture[],
-  overrides: { startedAt?: string; xcode?: string; runId?: string } = {},
+  overrides: { startedAt?: string; xcode?: string; runId?: string; platform?: Platform } = {},
 ): PerfSummary {
   return {
     schema: PERF_SUMMARY_SCHEMA,
-    platform: 'ios',
+    platform: overrides.platform ?? 'ios',
     startedAt: overrides.startedAt ?? '2026-10-20T03:00:00.000Z',
     finishedAt: '2026-10-20T03:30:00.000Z',
     config: {

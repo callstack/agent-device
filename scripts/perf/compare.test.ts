@@ -128,3 +128,19 @@ test('warns when the baseline ran on another toolchain', () => {
   assert.equal(comparison.warnings.length, 1);
   assert.match(comparison.warnings[0]!, /xcode/);
 });
+
+test('refuses a baseline run from another platform', () => {
+  const android = summaryFixture(flat(1000), { platform: 'android' });
+  assert.throws(
+    () =>
+      compareRuns({ summary: summaryFixture(flat(1000)), label: 'tonight' }, [
+        ...nights(flat(1000), flat(1000)),
+        { summary: android, label: 'android night' },
+      ]),
+    /An ios run cannot be compared with android night \(android\)/,
+  );
+  const comparison = compareRuns({ summary: android, label: 'tonight' }, [
+    { summary: summaryFixture(flat(1000), { platform: 'android' }), label: 'night' },
+  ]);
+  assert.equal(comparison.platform, 'android');
+});

@@ -20,6 +20,13 @@ const RUNNER_COMMAND_PHASE = 'ios_runner_command_send';
 const SPAWN_PHASE = 'exec_command';
 const SNAPSHOT_SOURCE_PHASE = 'ios.snapshot-source.acquire';
 const SNAPSHOT_RECOVERY_PHASE = 'ios_snapshot_source_recovery';
+// Android: the snapshot helper answers through its persistent session, or through a one-shot
+// `am instrument` capture when the session is off or fails. Touch gestures run in the helper too.
+const ANDROID_SESSION_CAPTURE_PHASE = 'android_snapshot_helper_session_capture';
+const ANDROID_ONE_SHOT_CAPTURE_PHASE = 'android_snapshot_helper_capture';
+const ANDROID_SESSION_PRODUCER = 'android-helper/persistent-session';
+const ANDROID_ONE_SHOT_PRODUCER = 'android-helper/instrumentation';
+const ANDROID_GESTURE_PHASE = 'android_touch_helper_gesture';
 const STABILIZATION_PHASE = /settle|stabiliz/i;
 const FALLBACK_TEXT_LIMIT = 140;
 const CLIENT_DIAG_PREFIX = '[agent-device][diag] ';
@@ -44,8 +51,10 @@ function eventDuration(event: DiagnosticEvent): number | undefined {
 
 /**
  * Reads one daemon request log (`--debug` ndjson). Process spawns count once, at their `settled`
- * event. Fallbacks name every degraded path the request took: snapshot-source errors, truncated
- * recovery, and warn- or error-level phases.
+ * event. Runner commands are XCTest runner commands on iOS and helper gestures on Android. Snapshot
+ * sources are the iOS accessibility producers and the Android helper transports. Fallbacks name
+ * every degraded path the request took: snapshot-source errors, truncated recovery, and warn- or
+ * error-level phases.
  */
 export function profileRequestLog(ndjson: string): SampleProfile {
   const profile: SampleProfile = {
@@ -58,6 +67,19 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     fallbacks: [],
   };
   const fallbacks = new Set<string>();
+  const addSource = (producer: string, event: DiagnosticEvent): boolean => {
+    const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
+    entry.count += 1;
+    entry.totalMs += eventDuration(event) ?? 0;
+    const error = text(event.data?.error);
+    if (!error && event.level !== 'error') return true;
+    entry.failures += 1;
+    fallbacks.add(`${producer}: ${error ?? 'failed'}`);
+    return false;
+  };
+  // A session capture that settles cleanly but is followed by a one-shot capture did not answer:
+  // the session is off, and the one-shot capture served the request.
+  let sessionAnswered = false;
   let firstTs: number | undefined;
   let lastTs: number | undefined;
   for (const line of ndjson.split('\n')) {
@@ -83,15 +105,16 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     } else if (phase === RUNNER_COMMAND_PHASE) {
       addTiming(profile.runnerCommands, text(data.command) ?? 'unknown', duration);
     } else if (phase === SNAPSHOT_SOURCE_PHASE) {
-      const producer = text(data.producer) ?? 'unknown';
-      const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
-      entry.count += 1;
-      entry.totalMs += duration ?? 0;
-      const error = text(data.error);
-      if (error || event.level === 'error') {
-        entry.failures += 1;
-        fallbacks.add(`${producer}: ${error ?? 'failed'}`);
-      }
+      addSource(text(data.producer) ?? 'unknown', event);
+    } else if (phase === ANDROID_SESSION_CAPTURE_PHASE) {
+      sessionAnswered = addSource(ANDROID_SESSION_PRODUCER, event);
+    } else if (phase === ANDROID_ONE_SHOT_CAPTURE_PHASE) {
+      if (sessionAnswered) profile.snapshotSources[ANDROID_SESSION_PRODUCER]!.failures += 1;
+      sessionAnswered = false;
+      addSource(ANDROID_ONE_SHOT_PRODUCER, event);
+    } else if (phase === ANDROID_GESTURE_PHASE) {
+      addTiming(profile.runnerCommands, 'gesture', duration);
+      if (event.level === 'error') fallbacks.add(`${phase}: ${text(data.error) ?? 'failed'}`);
     } else if (phase === SNAPSHOT_RECOVERY_PHASE && data.truncated === true) {
       fallbacks.add(
         `${text(data.producer) ?? 'unknown'}: truncated at ${String(data.acceptedLevels)} levels`,
@@ -152,8 +175,10 @@ export function readSnapshotFacts(json: unknown): SnapshotFacts | undefined {
   const nodes = data.nodes as { depth?: unknown }[];
   const quality = (data.snapshotQuality ?? {}) as Record<string, unknown>;
   const depths = nodes.map((node) => (typeof node.depth === 'number' ? node.depth : 0));
+  const android = (data.androidSnapshot ?? {}) as Record<string, unknown>;
   return {
     backend: text(quality.backend),
+    transport: text(android.helperTransport),
     state: text(quality.state),
     reasonCode: text(quality.reasonCode),
     nodeCount: nodes.length,

@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import type { SnapshotFacts } from './types.ts';
+import type { Platform, SnapshotFacts } from './types.ts';
 
 /** Routes `trigger-app-event` into the fixture's automation screen. */
 export const FIXTURE_APP_EVENT_URL_TEMPLATE =
@@ -17,7 +17,7 @@ type Cli = readonly string[];
  * or center point of the element with that identifier in an untimed `snapshot -i` taken just
  * before the step. `before` and `after` run untimed around the step in every round.
  */
-export type SuiteStep = {
+export type PlatformStep = {
   id: string;
   command: PublicCommand;
   args: Cli;
@@ -26,9 +26,23 @@ export type SuiteStep = {
   // `sdk-forced-tree` captures a raw snapshot through the daemon with the XCTest tree backend
   // pinned; the CLI has no flag for it.
   via?: 'cli' | 'sdk-forced-tree';
+  // The step runs against a daemon started with these variables. The harness restarts the daemon
+  // and reopens the session on the current screen, untimed, before and after the step.
+  daemonEnv?: Readonly<Record<string, string>>;
   // A sample that succeeds but breaks the expectation fails with `expectation_failed`, so a
   // fixture that stops reproducing its shape shows up as a new failure.
   expect?: StepExpectation;
+};
+
+type StepDelta = Partial<Omit<PlatformStep, 'id' | 'command'>>;
+
+/**
+ * A step of the shared suite. It runs on every platform unless `only` names one. `on` replaces
+ * fields on one platform, for example screen coordinates or a platform-only wait.
+ */
+export type SuiteStep = PlatformStep & {
+  only?: Platform;
+  on?: Partial<Record<Platform, StepDelta>>;
 };
 
 export type StepExpectation = {
@@ -36,6 +50,8 @@ export type StepExpectation = {
   maxDepthAtLeast?: number;
   // The pinned XCTest tree backend did not serve a healthy capture.
   treeBackendDegraded?: boolean;
+  // The Android helper transport that served the capture.
+  transport?: string;
 };
 
 /** Describes how a snapshot breaks the step expectation, or returns undefined. */
@@ -50,16 +66,32 @@ export function expectationViolation(
   if (expect.treeBackendDegraded && snapshot?.backend === 'tree' && snapshot.state !== 'sparse') {
     return 'the pinned tree backend served a non-sparse capture';
   }
+  if (expect.transport !== undefined && snapshot?.transport !== expect.transport) {
+    return `the ${snapshot?.transport ?? 'unknown'} transport served the capture, not ${expect.transport}`;
+  }
   return undefined;
 }
 
 /** A scenario starts from `setup` (untimed, every round) and runs its steps in order. */
-export type SuiteScenario = {
+export type SuiteScenario<TStep = PlatformStep> = {
   id: string;
   title: string;
   setup: readonly Cli[];
-  steps: SuiteStep[];
+  steps: TStep[];
 };
+
+/** Resolves the shared suite for one platform: drops other platforms' steps, applies deltas. */
+export function suiteFor(
+  platform: Platform,
+  suite: readonly SuiteScenario<SuiteStep>[] = SUITE,
+): SuiteScenario[] {
+  return suite.map(({ steps, ...scenario }) => ({
+    ...scenario,
+    steps: steps
+      .filter((s) => s.only === undefined || s.only === platform)
+      .map(({ only: _only, on, ...shared }) => ({ ...shared, ...on?.[platform] })),
+  }));
+}
 
 // A cold relaunch on a hosted runner can take longer than 15 s before the first landmark.
 const LANDMARK_WAIT_MS = '60000';
@@ -76,6 +108,7 @@ const toSettingsLab = (button: string, landmark: string): Cli[] => [
   ['click', `id="${button}"`],
   ['wait', landmark, LANDMARK_WAIT_MS],
 ];
+const SWIPE_COUNT_FLAGS = ['--count', '2', '--pause-ms', '50', '--pattern', 'ping-pong'] as const;
 const step = (
   id: string,
   command: PublicCommand,
@@ -83,7 +116,7 @@ const step = (
   extra: Omit<SuiteStep, 'id' | 'command' | 'args'> = {},
 ): SuiteStep => ({ id, command, args, ...extra });
 
-export const IOS_SUITE: readonly SuiteScenario[] = [
+export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
   {
     id: 'lifecycle',
     title: 'App lifecycle, device state, and inventory',
@@ -99,9 +132,26 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
       step('settings-appearance', C.settings, ['settings', 'appearance', 'light']),
       step('clipboard-write', C.clipboard, ['clipboard', 'write', 'agent-device perf']),
       step('clipboard-read', C.clipboard, ['clipboard', 'read']),
-      step('action-button', C.actionButton, ['action-button']),
-      step('prepare-runner', C.prepare, ['prepare', 'ios-runner']),
-      step('devices', C.devices, ['devices', '--platform', 'ios']),
+      step('action-button', C.actionButton, ['action-button'], { only: 'ios' }),
+      // `wake` is the one hardware key that leaves an awake device as it was.
+      step('hardware-button', C.hardwareButton, ['hardware-button', 'wake'], { only: 'android' }),
+      step(
+        'push',
+        C.push,
+        [
+          'push',
+          '{app}',
+          '{"action":"com.callstack.agentdevicelab.PERF","extras":{"source":"perf"}}',
+        ],
+        { only: 'android' },
+      ),
+      step('telephony-sms', C.telephony, ['telephony', 'sms', '5551234', 'agent-device perf'], {
+        only: 'android',
+        // The SMS notification can cover the app; reopen it for the next step.
+        after: [['open', '{app}']],
+      }),
+      step('prepare-runner', C.prepare, ['prepare', 'ios-runner'], { only: 'ios' }),
+      step('devices', C.devices, ['devices']),
       step('apps', C.apps, ['apps']),
       step('capabilities', C.capabilities, ['capabilities']),
       step('doctor', C.doctor, ['doctor']),
@@ -118,6 +168,8 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
             ['alert', 'accept'],
             ['wait', 'id="automation-title"', LANDMARK_WAIT_MS],
           ],
+          // Android opens the event URL without a prompt.
+          on: { android: { after: [['wait', 'id="automation-title"', LANDMARK_WAIT_MS]] } },
         },
       ),
     ],
@@ -212,20 +264,13 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
       step('scroll-down-settle', C.scroll, ['scroll', 'down', '--settle']),
       step('scroll-top', C.scroll, ['scroll', 'top']),
       step('scroll-until', C.scroll, ['scroll', 'down', '--until', 'id="catalog-footer"']),
-      step('swipe', C.swipe, ['swipe', '200', '300', '200', '650']),
-      step('swipe-count', C.swipe, [
-        'swipe',
-        '200',
-        '650',
-        '200',
-        '450',
-        '--count',
-        '2',
-        '--pause-ms',
-        '50',
-        '--pattern',
-        'ping-pong',
-      ]),
+      // Coordinates are iOS points and Android pixels; the Android values keep the same screen share.
+      step('swipe', C.swipe, ['swipe', '200', '300', '200', '650'], {
+        on: { android: { args: ['swipe', '540', '800', '540', '1750'] } },
+      }),
+      step('swipe-count', C.swipe, ['swipe', '200', '650', '200', '450', ...SWIPE_COUNT_FLAGS], {
+        on: { android: { args: ['swipe', '540', '1750', '540', '1200', ...SWIPE_COUNT_FLAGS] } },
+      }),
     ],
   },
   {
@@ -238,6 +283,8 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
       step('type-suffix', C.type, ['type', '.test']),
       step('keyboard-dismiss', C.keyboard, ['keyboard', 'dismiss'], {
         before: [['wait', 'label="Done" visible=true', '10000']],
+        // Android emulators type through the headless test IME, which has no Done key.
+        on: { android: { before: [] } },
       }),
       step('press-checkbox', C.press, ['press', 'id="checkbox-agree"'], {
         before: [['scroll', 'down', '--until', 'id="checkbox-agree"']],
@@ -300,12 +347,16 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
   },
   {
     id: 'heavy-feed',
-    title: 'Heavy feed: Bluesky-depth tree (≥65 native levels) and virtualized list',
+    title: 'Heavy feed: Bluesky-depth tree and virtualized list',
     setup: toSettingsLab('open-heavy-feed', 'id="heavy-feed-title"'),
     steps: [
       step('snapshot-i', C.snapshot, ['snapshot', '-i']),
       step('snapshot', C.snapshot, ['snapshot']),
-      step('snapshot-raw', C.snapshot, ['snapshot', '--raw'], { expect: { maxDepthAtLeast: 64 } }),
+      // The fixture renders more than 65 native levels on iOS and 60 on Android.
+      step('snapshot-raw', C.snapshot, ['snapshot', '--raw'], {
+        expect: { maxDepthAtLeast: 64 },
+        on: { android: { expect: { maxDepthAtLeast: 56 } } },
+      }),
       step('press-like-selector', C.press, ['press', 'id="heavy-post-0-like"']),
       step('press-like-settle', C.press, ['press', 'id="heavy-post-1-like"', '--settle']),
       step('press-like-ref', C.press, ['press', '{ref:heavy-post-0-like}']),
@@ -318,13 +369,24 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
       step('scroll-down', C.scroll, ['scroll', 'down']),
       step('snapshot-i-scrolled', C.snapshot, ['snapshot', '-i']),
       step('scroll-down-settle', C.scroll, ['scroll', 'down', '--settle']),
-      step('swipe', C.swipe, ['swipe', '200', '650', '200', '300']),
+      step('swipe', C.swipe, ['swipe', '200', '650', '200', '300'], {
+        on: { android: { args: ['swipe', '540', '1750', '540', '800'] } },
+      }),
       // The pinned XCTest capture outlives its watchdog by about a second, and the next runner
       // command refuses until it ends; the untimed wait keeps that cost out of the next step.
       step('snapshot-raw-forced-tree', C.snapshot, ['snapshot', '--raw'], {
+        only: 'ios',
         via: 'sdk-forced-tree',
         expect: { treeBackendDegraded: true },
         after: [['wait', '2000']],
+      }),
+      // Android has one snapshot engine. Its other path is the one-shot `am instrument` capture that
+      // serves a request when the helper session is off or fails; only the daemon environment
+      // turns the session off.
+      step('snapshot-raw-one-shot', C.snapshot, ['snapshot', '--raw'], {
+        only: 'android',
+        daemonEnv: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
+        expect: { maxDepthAtLeast: 56, transport: 'instrumentation' },
       }),
       step('back', C.back, ['back']),
     ],
@@ -337,32 +399,60 @@ export const IOS_SUITE: readonly SuiteScenario[] = [
   },
 ];
 
-/**
- * Catalog commands the iOS suite does not time, with the reason. Every public command is either
- * measured by a step above or listed here; `ios-suite.test.ts` holds that partition.
- */
-export const IOS_SUITE_EXCLUSIONS: Partial<Record<PublicCommand, string>> = {
-  [C.boot]:
-    'Simulator power cycle: CoreSimulator boot time dominates and it ends the session under test.',
-  [C.shutdown]: 'Simulator power cycle: it ends the session and the runner under test.',
-  [C.install]:
-    'Bundle provisioning: simctl copy time dominates; the job installs the fixture once.',
-  [C.reinstall]:
-    'Bundle provisioning: simctl copy time dominates and it resets the app under test.',
-  [C.uninstall]: 'Bundle provisioning: it removes the app under test.',
-  [C.installFromSource]:
-    'Bundle provisioning from a source build; the job installs a cached Release fixture.',
+const COMPOSITE_RUNNERS: Partial<Record<PublicCommand, string>> = {
   [C.replay]: 'Composite runner: a replay is the sum of the measured commands it runs.',
   [C.test]: 'Composite runner: a test suite is the sum of the measured commands it runs.',
-  [C.push]:
-    'The fixture holds no notification authorization, so simctl refuses the payload; iOS push coverage is contract-only.',
-  [C.audio]: 'Host audio capture needs a macOS audio permission that hosted runners do not grant.',
-  [C.hover]: 'The iOS runtime refuses hover; it is a web pointer contract.',
-  [C.viewport]: 'The iOS runtime refuses viewport; it resizes web viewports only.',
-  [C.tvRemote]: 'tvOS only.',
-  [C.fold]: 'iPhone Duo only; the suite device has one panel.',
-  [C.telephony]: 'The iOS simulator runtime refuses simulated calls and SMS.',
-  [C.hardwareButton]: 'The iOS simulator runtime refuses hardware-button presses.',
+};
+
+/**
+ * Catalog commands that the suite does not time on each platform, with the reason. On each
+ * platform, every public command is either measured by a step above or listed here;
+ * `suite.test.ts` holds that partition.
+ */
+export const SUITE_EXCLUSIONS: Record<Platform, Partial<Record<PublicCommand, string>>> = {
+  ios: {
+    ...COMPOSITE_RUNNERS,
+    [C.boot]:
+      'Simulator power cycle: CoreSimulator boot time dominates and it ends the session under test.',
+    [C.shutdown]: 'Simulator power cycle: it ends the session and the runner under test.',
+    [C.install]:
+      'Bundle provisioning: simctl copy time dominates; the job installs the fixture once.',
+    [C.reinstall]:
+      'Bundle provisioning: simctl copy time dominates and it resets the app under test.',
+    [C.uninstall]: 'Bundle provisioning: it removes the app under test.',
+    [C.installFromSource]:
+      'Bundle provisioning from a source build; the job installs a cached Release fixture.',
+    [C.push]:
+      'The fixture holds no notification authorization, so simctl refuses the payload; iOS push coverage is contract-only.',
+    [C.audio]:
+      'Host audio capture needs a macOS audio permission that hosted runners do not grant.',
+    [C.hover]: 'The iOS runtime refuses hover; it is a web pointer contract.',
+    [C.viewport]: 'The iOS runtime refuses viewport; it resizes web viewports only.',
+    [C.tvRemote]: 'tvOS only.',
+    [C.fold]: 'iPhone Duo only; the suite device has one panel.',
+    [C.telephony]: 'The iOS simulator runtime refuses simulated calls and SMS.',
+    [C.hardwareButton]: 'The iOS simulator runtime refuses hardware-button presses.',
+  },
+  android: {
+    ...COMPOSITE_RUNNERS,
+    [C.boot]:
+      'Emulator power cycle: emulator boot time dominates and it ends the session under test.',
+    [C.shutdown]: 'Emulator power cycle: it ends the session and the helper under test.',
+    [C.install]: 'APK provisioning: adb install time dominates; the job installs the fixture once.',
+    [C.reinstall]: 'APK provisioning: adb install time dominates and it resets the app under test.',
+    [C.uninstall]: 'APK provisioning: it removes the app under test.',
+    [C.installFromSource]:
+      'APK provisioning from a source build; the job installs a cached Release fixture.',
+    [C.prepare]:
+      'prepare has only the ios-runner action; the snapshot helper installs on first use.',
+    [C.actionButton]: 'Android has no key event for the Action button.',
+    [C.audio]:
+      'Host audio capture uses macOS ScreenCaptureKit; the Linux emulator runner has none.',
+    [C.hover]: 'The Android runtime refuses hover; it is a web pointer contract.',
+    [C.viewport]: 'The Android runtime refuses viewport; it resizes web viewports only.',
+    [C.tvRemote]: 'Android TV only.',
+    [C.fold]: 'Foldable emulators only; the suite emulator is a pixel_7 with one display.',
+  },
 };
 
 /** Partitions the measured and excluded catalog commands for the report. */

@@ -110,4 +110,12 @@ test('a rolling baseline accepts only runs that measured every target scenario',
   assert.equal(coversTarget(full, full), true);
   assert.equal(coversTarget(partial, full), false);
   assert.equal(coversTarget(full, partial), true);
+  const android = summaryFixture(
+    [
+      { id: 'a/x', daemonMs: [1] },
+      { id: 'b/y', daemonMs: [1] },
+    ],
+    { platform: 'android' },
+  );
+  assert.equal(coversTarget(android, full), false);
 });

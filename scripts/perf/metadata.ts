@@ -35,10 +35,23 @@ function simulator(udid: string): { name: string; runtime?: string } | undefined
   return undefined;
 }
 
+function emulator(serial: string): { name: string; runtime?: string } | undefined {
+  const adb = (args: string[]) => capture('adb', ['-s', serial, ...args]);
+  const name = adb(['emu', 'avd', 'name'])?.split('\n')[0]?.trim();
+  const release = adb(['shell', 'getprop', 'ro.build.version.release']);
+  const sdk = adb(['shell', 'getprop', 'ro.build.version.sdk']);
+  if (!name && !release) return undefined;
+  return {
+    name: name || serial,
+    runtime: release ? `Android ${release}${sdk ? ` (API ${sdk})` : ''}` : undefined,
+  };
+}
+
 /** Records what the numbers depend on: source, toolchain, host, and device. */
-export function collectMetadata(cfg: PerfConfig, deviceName: string): RunMetadata {
+export function collectMetadata(cfg: PerfConfig): RunMetadata {
   const env = process.env;
-  const sim = cfg.platform === 'ios' && cfg.udid ? simulator(cfg.udid) : undefined;
+  const selector = cfg.platform === 'ios' ? cfg.udid : cfg.serial;
+  const target = selector ? (cfg.platform === 'ios' ? simulator : emulator)(selector) : undefined;
   const cpus = os.cpus();
   return {
     commit: env.GITHUB_SHA ?? capture('git', ['rev-parse', 'HEAD']) ?? 'unknown',
@@ -59,11 +72,11 @@ export function collectMetadata(cfg: PerfConfig, deviceName: string): RunMetadat
         : undefined,
     node: process.version,
     device: {
-      name: sim?.name ?? deviceName,
+      name: target?.name ?? selector ?? 'unknown',
       udid: cfg.udid,
       serial: cfg.serial,
-      runtime: sim?.runtime,
+      runtime: target?.runtime,
     },
-    fixture: cfg.platform === 'ios' ? { appId: cfg.appId, appPath: cfg.appPath } : undefined,
+    fixture: { appId: cfg.appId, appPath: cfg.appPath },
   };
 }

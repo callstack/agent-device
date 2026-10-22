@@ -10,19 +10,21 @@ import {
   resolveRunRef,
   selectNightlyBaseline,
   selectRange,
-  SUMMARY_ARTIFACT,
+  summaryArtifact,
   type NightlySource,
   type WorkflowRun,
 } from './nightly-artifacts.ts';
-import type { PerfSummary } from './types.ts';
+import type { PerfSummary, Platform } from './types.ts';
 
-const USAGE = `Usage: pnpm perf:compare [--to <ref>] [--from <ref>|<ref>..<ref>] [--nights <n>] [options]
+const USAGE = `Usage: pnpm perf:compare [--platform ios|android] [--to <ref>] [--from <ref>|<ref>..<ref>] [--nights <n>] [options]
 
 Compares one perf run with earlier runs and prints a Markdown verdict per step.
 
 A <ref> is latest, a workflow run id, a YYYY-MM-DD date (the newest run that UTC day), or a local
 path to a summary.json or a \`pnpm perf\` output directory.
 
+  --platform <name>     ios or android (default: ios). Nightly runs are read from
+                        perf-<platform>-summary; every compared run must be of this platform.
   --to <ref>            Run to judge (default: latest).
   --from <ref>          Baseline run, or an inclusive range <ref>..<ref> of runs of any trigger.
                         Without it the baseline is the --nights scheduled nights before --to.
@@ -36,6 +38,7 @@ path to a summary.json or a \`pnpm perf\` output directory.
   --github              Append the Markdown to $GITHUB_STEP_SUMMARY and annotate flagged steps.`;
 
 type Options = {
+  platform: Platform;
   to: string;
   from?: string;
   nights: number;
@@ -47,6 +50,7 @@ type Options = {
 
 function parse(argv: string[]): Options {
   const options: Options = {
+    platform: 'ios',
     to: 'latest',
     nights: 7,
     github: false,
@@ -55,7 +59,7 @@ function parse(argv: string[]): Options {
       repo: process.env.GITHUB_REPOSITORY ?? 'callstack/agent-device',
       workflow: 'perf-nightly.yml',
       branch: 'main',
-      artifact: SUMMARY_ARTIFACT,
+      artifact: summaryArtifact('ios'),
       cacheDir: path.join(REPO_ROOT, '.tmp', 'perf-nightly'),
     },
   };
@@ -67,6 +71,14 @@ function parse(argv: string[]): Options {
       return next;
     };
     switch (flag) {
+      case '--platform': {
+        const platform = value();
+        if (platform !== 'ios' && platform !== 'android')
+          throw new Error('--platform must be ios or android');
+        options.platform = platform;
+        options.source.artifact = summaryArtifact(platform);
+        break;
+      }
       case '--to':
         options.to = value();
         break;
@@ -138,6 +150,11 @@ function main(): void {
     });
 
   const target = load(options.to);
+  if (target.summary.platform !== options.platform) {
+    throw new Error(
+      `${target.label} is an ${target.summary.platform} run; pass --platform ${target.summary.platform}.`,
+    );
+  }
   const exclude = new Set([...options.exclude, ...(target.run ? [target.run.id] : [])]);
   let baseline: Loaded[];
   if (options.from?.includes('..')) {

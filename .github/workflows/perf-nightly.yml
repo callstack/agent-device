@@ -1,14 +1,15 @@
 name: Perf Nightly
 
-# Nightly iOS command performance against the fixture app, compared night over night (#1781 A3).
+# Nightly iOS and Android command performance against the fixture app, compared night over night
+# per platform (#1781 A3).
 # - Catches: a command whose daemon time moves beyond the noise of earlier nights, or that starts
 #   failing. PR lanes check behavior, not time.
 # - Wanted for: tuning runner, snapshot, and settle paths while watching the effect. iOS medians
 #   swing up to +122% between single nights at n=5, so a step is judged against the median of up to
 #   seven earlier nights and must clear their spread, its own sampling error, 20%, and 50 ms.
-# - Cost: one macos-26 job of about 45 minutes a night; summaries are kept 90 days, raw logs 30.
+# - Cost: one macos-26 job of about 45 minutes and one ubuntu emulator job a night; summaries are
+#   kept 90 days, raw logs 30.
 # - Delete or park when: no flagged change has been acted on for 60 nights.
-# Android stays report-only and runs only on request.
 
 on:
   schedule:
@@ -24,7 +25,7 @@ on:
         required: false
         default: '1'
       scenarios:
-        description: 'Comma-separated iOS scenario ids (empty runs all)'
+        description: 'Comma-separated scenario ids (empty runs all)'
         required: false
         default: ''
       baseline-nights:
@@ -35,8 +36,13 @@ on:
         description: 'Branch whose runs form the baseline'
         required: false
         default: 'main'
+      ios:
+        description: 'Run the iOS suite'
+        type: boolean
+        required: false
+        default: true
       android:
-        description: 'Also run the report-only Android Settings tour'
+        description: 'Run the Android suite'
         type: boolean
         required: false
         default: true
@@ -56,6 +62,7 @@ env:
 jobs:
   perf-ios:
     name: iOS Command Perf
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.ios == 'true' }}
     runs-on: macos-26
     timeout-minutes: 100
     env:
@@ -131,7 +138,7 @@ jobs:
           BASELINE_BRANCH: ${{ github.event.inputs.baseline-branch || 'main' }}
           BASELINE_NIGHTS: ${{ github.event.inputs.baseline-nights || '7' }}
         run: |
-          pnpm perf:compare --to perf-results \
+          pnpm perf:compare --platform ios --to perf-results \
             --branch "$BASELINE_BRANCH" \
             --nights "$BASELINE_NIGHTS" \
             --exclude-run "$GITHUB_RUN_ID" \
@@ -162,26 +169,44 @@ jobs:
 
   perf-android:
     name: Android Command Perf
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.android == 'true' }}
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.android == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 80
-    env:
-      AGENT_DEVICE_PERF_CLI: '--experimental-strip-types src/bin.ts'
+    timeout-minutes: 100
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+
+      - name: Build the shared CLI
+        uses: ./.github/actions/run-gate
+        with:
+          gate: build
 
       - name: Setup Android replay host
-        id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
         with:
           package-helpers: 'true'
 
-      - name: Run Android command perf benchmark
+      - name: Restore the fixture APK
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+        with:
+          platform: android
+          install: 'false'
+
+      # The emulator action runs each script line on its own, so the script is one folded line.
+      - name: Run Android command perf suite
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        env:
+          APP_ID: ${{ steps.fixture-app.outputs.app-id }}
+          APP_PATH: ${{ steps.fixture-app.outputs.apk-path }}
+          SCENARIOS: ${{ github.event.inputs.scenarios }}
         with:
           api-level: 36
           arch: x86_64
@@ -190,15 +215,45 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: >-
             set -e;
-            adb -s emulator-5554 shell settings put global window_animation_scale 0 || true;
-            adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true;
-            adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true;
-            pnpm perf --platform android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup "$PERF_WARMUP" --out-dir "$GITHUB_WORKSPACE/perf-results"
+            adb -s emulator-5554 install -r "$APP_PATH";
+            pnpm perf --platform android --serial emulator-5554
+            --app-id "$APP_ID" --app-path "$APP_PATH"
+            --rounds "$PERF_ROUNDS" --warmup "$PERF_WARMUP"
+            ${SCENARIOS:+--scenarios "$SCENARIOS"}
+            --out-dir "$GITHUB_WORKSPACE/perf-results"
 
-      - name: Upload Android perf report
-        if: always()
+      - name: Compare with earlier nights
+        if: ${{ !cancelled() && hashFiles('perf-results/summary.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_BRANCH: ${{ github.event.inputs.baseline-branch || 'main' }}
+          BASELINE_NIGHTS: ${{ github.event.inputs.baseline-nights || '7' }}
+        run: |
+          pnpm perf:compare --platform android --to perf-results \
+            --branch "$BASELINE_BRANCH" \
+            --nights "$BASELINE_NIGHTS" \
+            --exclude-run "$GITHUB_RUN_ID" \
+            --out perf-results --github
+          echo "Full report: the perf-android-summary artifact holds report.md and summary.json." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Android perf summary
+        if: ${{ !cancelled() && hashFiles('perf-results/summary.json') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: perf-android
-          path: perf-results/
+          name: perf-android-summary
+          path: |
+            perf-results/summary.json
+            perf-results/report.md
+            perf-results/comparison.json
+            perf-results/comparison.md
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload Android perf raw logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-android-raw
+          path: perf-results/raw/
+          retention-days: 30
           if-no-files-found: warn

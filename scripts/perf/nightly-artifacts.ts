@@ -3,10 +3,12 @@ import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { SUMMARY_FILE } from './report.ts';
 import { parsePerfSummary } from './summary.ts';
-import type { PerfSummary } from './types.ts';
+import type { PerfSummary, Platform } from './types.ts';
 
-/** The stable name of the summary artifact that the nightly workflow uploads for every run. */
-export const SUMMARY_ARTIFACT = 'perf-ios-summary';
+/** The stable name of the summary artifact that the nightly workflow uploads for each platform. */
+export function summaryArtifact(platform: Platform): string {
+  return `perf-${platform}-summary`;
+}
 
 export type WorkflowRun = {
   id: string;
@@ -156,7 +158,8 @@ export function selectNightlyBaseline<T>(
  * when the run has no such artifact (it failed before upload, or the artifact expired).
  */
 export function fetchSummary(source: NightlySource, run: WorkflowRun): PerfSummary | undefined {
-  const dir = path.join(source.cacheDir, run.id);
+  // One run uploads a summary artifact per platform, so each artifact has its own directory.
+  const dir = path.join(source.cacheDir, run.id, source.artifact);
   const file = path.join(dir, SUMMARY_FILE);
   if (!fs.existsSync(file)) {
     fs.rmSync(dir, { recursive: true, force: true });

@@ -2,7 +2,7 @@
 
 export type Platform = 'ios' | 'android';
 
-export type ExecMode = 'batch' | 'standalone' | 'sdk';
+export type ExecMode = 'standalone' | 'sdk';
 
 export type CliResult = {
   exitCode: number;
@@ -44,6 +44,8 @@ export type SettleFacts = { waitedMs: number; captures?: number; settled?: boole
 
 export type SnapshotFacts = {
   backend?: string;
+  // The Android helper transport: `persistent-session` or `instrumentation`.
+  transport?: string;
   state?: string;
   reasonCode?: string;
   nodeCount?: number;
@@ -54,10 +56,9 @@ export type SnapshotFacts = {
 export type Sample = {
   round: number;
   wallClockMs: number;
-  // Daemon request round trip: the client's `daemon_request` timer for CLI calls, the batch step
-  // duration for batch calls, or the request-log span for SDK calls.
+  // Daemon request round trip: the client's `daemon_request` timer for CLI calls, or the
+  // request-log span for SDK calls.
   daemonMs?: number;
-  elementCount?: number;
   requestId?: string;
   snapshot?: SnapshotFacts;
   settle?: SettleFacts;
