@@ -496,6 +496,10 @@
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
+    "./snapshot-private-evidence": {
+      "types": "./src/snapshot-private-evidence.ts",
+      "default": "./src/snapshot-private-evidence.ts"
+    },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"

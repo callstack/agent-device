@@ -1,7 +1,7 @@
 import {
   attachSnapshotTextInputGeometry,
   type SnapshotTextInputGeometry,
-} from '@agent-device/contracts/capture';
+} from '@agent-device/contracts/snapshot-private-evidence';
 import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
 import {
   IosSnapshotEngineError,
