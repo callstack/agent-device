@@ -298,12 +298,9 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
-  /// A query sweep that stops at its own slice deadline collected a partial tree, not an answer, so
-  /// it is a tier timeout: the plan must arm the XCTest-channel penalty and let private AX answer,
-  /// keeping the partial sweep only as the fallback. Accepting it because it carries more nodes than
-  /// the sparse threshold ships a hierarchy-free capture and leaves every later capture of the same
-  /// screen to pay for the full sweep again (#2781).
-  func testQuerySweepThatEndsOnItsSliceDeadlinePenalizesChannelAndReachesPrivateAX() throws {
+  /// An incomplete sweep must still reach private AX (#2781), but its short slice is insufficient
+  /// evidence for a channel penalty (#3844).
+  func testQuerySweepDeadlineRecoversWithoutPenalizingChannel() throws {
     guard
       let queryMethod = class_getInstanceMethod(
         XCUIElementQuery.self,
@@ -345,9 +342,6 @@ extension RunnerTests {
       var error: Error?
       var abandonedAtReturn = false
       var penalizedAtReturn = false
-      var sweepStartsAfterFirstPlan = 0
-      var secondPayload: DataPayload?
-      var secondError: Error?
     }
     let box = ResultBox()
     let planned = expectation(description: "slow-sweep plan answered")
@@ -365,18 +359,6 @@ extension RunnerTests {
       }
       box.abandonedAtReturn = self.hasAbandonedMainThreadWork()
       box.penalizedAtReturn = self.isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId)
-      box.sweepStartsAfterFirstPlan = RunnerSlowSweepQueryGate.recordedStarts().count
-      do {
-        box.secondPayload = try self.runSnapshotCapturePlan(
-          Self.regularVisiblePlan,
-          target: captureTarget,
-          options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
-          terminal: .sparseWithFatalOnAXFailure,
-          deadline: Date().addingTimeInterval(20)
-        )
-      } catch {
-        box.secondError = error
-      }
       planned.fulfill()
     }
 
@@ -391,21 +373,9 @@ extension RunnerTests {
     XCTAssertEqual(quality?.state, .recovered)
     XCTAssertGreaterThan(box.payload?.nodes?.count ?? 0, 1, "private AX answers with a real tree")
     XCTAssertFalse(box.abandonedAtReturn, "the sweep must answer inside its own main-thread hop")
-    XCTAssertTrue(
+    XCTAssertFalse(
       box.penalizedAtReturn,
-      "the tier timeout must arm the XCTest-channel penalty for the captured target"
-    )
-
-    XCTAssertNil(box.secondError)
-    XCTAssertEqual(
-      box.secondPayload?.snapshotQuality?.backend,
-      SnapshotBackendKind.privateAX.rawValue,
-      "the armed penalty must defer the next plan's XCTest tiers, not re-run the sweep"
-    )
-    XCTAssertEqual(
-      RunnerSlowSweepQueryGate.recordedStarts().count,
-      box.sweepStartsAfterFirstPlan,
-      "the deferred plan may start no sweep query at all"
+      "a single short query-sweep timeout must not arm the channel penalty"
     )
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
@@ -430,6 +400,14 @@ extension RunnerTests {
     XCTAssertEqual(quality.state, .recovered)
     XCTAssertEqual(quality.backend, SnapshotBackendKind.recursiveTree.rawValue)
     XCTAssertGreaterThan(payload.nodes?.count ?? 0, 1, "the bounded tree answers with a real tree")
+    let timing = try XCTUnwrap(quality.timing)
+    guard timing.acquisitionMs <= Self.penalizedXCTestProbeTreeSliceBudget * 1_000 else {
+      throw XCTSkip("the accepted tree's total acquisition exceeded the fast-probe threshold on this host")
+    }
+    XCTAssertFalse(
+      isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId),
+      "an accepted fast tree probe must clear the existing penalty early"
+    )
   }
 
   /// When the bounded tree also grinds past its slice, the plan ends sparse, and the verdict still
@@ -465,9 +443,15 @@ extension RunnerTests {
       tearDownPenalizedPrivateAXBlindTarget()
     }
 
+    let originalPenaltyUntil = snapshotXCTestChannelPenaltyUntil
     let payload = try runDeferredPlanOffMain(target: captureTarget) {
       RunnerBlockingSnapshotGate.release.signal()
     }
+    XCTAssertEqual(
+      snapshotXCTestChannelPenaltyUntil,
+      originalPenaltyUntil,
+      "the bounded recovery probe must not renew its own penalty when its tree work is abandoned"
+    )
 
     let quality = try XCTUnwrap(payload.snapshotQuality)
     XCTAssertEqual(quality.state, .sparse)

@@ -231,12 +231,21 @@ On heavy or animating screens, the recursive tree capture can work for many seco
 This pushes the chained plan past the runner's main-thread watchdog and fills the main queue with retries.
 The plan now carries its umbrella deadline into the query-sweep and private-AX tiers.
 When the budget is spent, later ladder rungs stop.
-A slow, timed-out, or watchdog-abandoned XCTest-backed capture penalizes the XCTest accessibility channel for that bundle for a bounded window.
+A slow XCTest acquisition, a timed-out tree capture, or watchdog-abandoned system-modal work penalizes the XCTest accessibility channel for that bundle for a bounded window.
 Subsequent regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
 If a runnable non-XCTest backend exists, they defer to that independent tier.
 If it does not exist, as on physical iOS devices today, they run a short XCTest probe instead of the full tree slice.
 Thus, healthy screens can recover without another long capture of the hostile screen.
 The raw diagnostic plan is exempt and keeps tree-first error propagation.
+
+Issue #3844 showed that the bounded recovery probe could renew its own penalty.
+A short query-sweep timeout could also start another window after the previous window expired.
+A bounded recovery probe now leaves the penalty deadline unchanged when it fails.
+Its short slice tests recovery under a known penalty, so its timeout supplies no new evidence about the channel.
+A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
+A short query-sweep timeout still rejects the partial capture and continues recovery, but it does not penalize the channel.
+A slow sweep remains penalty evidence because it exceeded the acquisition threshold.
+The plan deadline and abandoned-main-thread-work gate remain in force on every attempt, including physical-device probes (#1105, #1156, #2621).
 
 A third shape followed on the same app class after the plan recovered reliably.
 On that app class, each of the query-sweep tier's 19 `allElementsBoundByIndex` reads fails with `kAXErrorIllegalArgument`.

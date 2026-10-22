@@ -612,5 +612,43 @@ extension RunnerTests {
     XCTAssertLessThanOrEqual(nodes.count, unscoped.count)
   }
 #endif
+
+  func testOnlyFastAcceptedTreeProbeClearsPenalty() {
+    let payload = DataPayload(nodes: [
+      planTestNode(index: 0, type: "Application", label: "App"),
+      planTestNode(index: 1, type: "Button", label: "Open", hittable: true, parentIndex: 0),
+    ], truncated: false)
+    let healthy = SnapshotBackendCapture(payload: payload, effectiveDepth: nil)
+    let fast = SnapshotBackendAttempt(
+      outcome: .captured(healthy),
+      timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 10)
+    )
+    for state in [SnapshotXCTestChannelPlanState.deferredToIndependentBackend, .boundedXCTestProbe] {
+      XCTAssertTrue(Self.snapshotXCTestRecoveryProbeSucceeded(
+        kind: .recursiveTree, attempt: fast, channelState: state
+      ))
+      for kind in [SnapshotBackendKind.querySweep, .privateAX] {
+        XCTAssertFalse(Self.snapshotXCTestRecoveryProbeSucceeded(
+          kind: kind, attempt: fast, channelState: state
+        ))
+      }
+      let rejected = [
+        SnapshotBackendAttempt(outcome: .captured(healthy), timing: fast.timing, tierOutcome: .deadlineExhausted),
+        SnapshotBackendAttempt(outcome: .noCapture, timing: fast.timing),
+        SnapshotBackendAttempt(outcome: .captured(healthy), timing: SnapshotCaptureTiming(acquisitionMs: 1_001, presentationMs: 0)),
+        SnapshotBackendAttempt(outcome: .captured(SnapshotBackendCapture(
+          payload: payload, effectiveDepth: nil, qualityPayload: DataPayload(nodes: [], truncated: false)
+        )), timing: fast.timing),
+      ]
+      for attempt in rejected {
+        XCTAssertFalse(Self.snapshotXCTestRecoveryProbeSucceeded(
+          kind: .recursiveTree, attempt: attempt, channelState: state
+        ))
+      }
+    }
+    XCTAssertFalse(Self.snapshotXCTestRecoveryProbeSucceeded(
+      kind: .recursiveTree, attempt: fast, channelState: .normal
+    ))
+  }
 }
 #endif

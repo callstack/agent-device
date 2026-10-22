@@ -386,7 +386,8 @@ extension RunnerTests {
         kind,
         attempt: attempt,
         bundleId: target.bundleId,
-        penaltySuppressed: suppressXCTestPenalty
+        penaltySuppressed: suppressXCTestPenalty,
+        channelState: effective.xCTestChannelState
       )
       if case let .failed(failure, phase: _) = attempt.outcome {
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }

@@ -60,10 +60,7 @@ extension RunnerTests {
     )
   }
 
-  /// A tier that stopped starting work at its own deadline is a timeout for the breaker even when it
-  /// answered fast and with a payload: the partial sweep must arm the penalty exactly as a slow tier
-  /// does, and a tier that finished fast must not (#2781).
-  func testDeadlineExhaustedTierAttemptArmsTheChannelPenaltyWithoutBeingSlow() {
+  func testDeadlineExhaustedTreeAttemptArmsTheChannelPenaltyWithoutBeingSlow() {
     let capture = SnapshotBackendCapture(
       payload: DataPayload(nodes: [], truncated: true),
       effectiveDepth: nil
@@ -75,11 +72,11 @@ extension RunnerTests {
     )
     XCTAssertEqual(
       Self.snapshotXCTestPenaltyReason(
-        kind: .querySweep,
+        kind: .recursiveTree,
         attempt: exhausted,
         slowThresholdMs: 3_000
       ),
-      "queries_backend_timeout"
+      "tree_backend_timeout"
     )
 
     let completed = SnapshotBackendAttempt(
@@ -121,6 +118,77 @@ extension RunnerTests {
 
     XCTAssertEqual(timer.timing.acquisitionMs, 2_000, accuracy: 0.001)
     XCTAssertEqual(timer.timing.presentationMs, 5_000, accuracy: 0.001)
+  }
+
+  func testShortSweepTimeoutDoesNotPenalizeButSlowSweepStillDoes() {
+    let timeout = SnapshotCaptureFailure(
+      code: Self.xCTestSnapshotTimeoutCode, message: "same timeout text", hint: "test"
+    )
+    for outcome in [SnapshotBackendAttempt.Outcome.failed(timeout, phase: .acquisition), .noCapture] {
+      let short = SnapshotBackendAttempt(
+        outcome: outcome,
+        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
+        tierOutcome: .deadlineExhausted
+      )
+      XCTAssertNil(Self.snapshotXCTestPenaltyReason(
+        kind: .querySweep, attempt: short, slowThresholdMs: 3_000
+      ))
+      XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
+        kind: .recursiveTree, attempt: short, slowThresholdMs: 3_000
+      ), "tree_backend_timeout")
+      let slow = SnapshotBackendAttempt(
+        outcome: outcome,
+        timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 10),
+        tierOutcome: .deadlineExhausted
+      )
+      XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
+        kind: .querySweep, attempt: slow, slowThresholdMs: 3_000
+      ), "queries_backend_timeout")
+    }
+    let untyped = SnapshotBackendAttempt(
+      outcome: .failed(SnapshotCaptureFailure(
+        code: "OTHER_FAILURE", message: "same timeout text", hint: "test"
+      ), phase: .acquisition),
+      timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 0)
+    )
+    XCTAssertNil(Self.snapshotXCTestPenaltyReason(
+      kind: .recursiveTree, attempt: untyped, slowThresholdMs: 3_000
+    ))
+  }
+
+  func testBoundedRecoveryAttemptsCannotRenewPenaltyOnEitherPlatformPlan() {
+    let timeout = SnapshotCaptureFailure(
+      code: Self.xCTestSnapshotTimeoutCode, message: "test timeout", hint: "test"
+    )
+    let attempts = [
+      SnapshotBackendAttempt(
+        outcome: .failed(timeout, phase: .acquisition),
+        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0)
+      ),
+      SnapshotBackendAttempt(
+        outcome: .noCapture,
+        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0),
+        tierOutcome: .deadlineExhausted
+      ),
+      SnapshotBackendAttempt(
+        outcome: .noCapture,
+        timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 0)
+      ),
+    ]
+    for state in [SnapshotXCTestChannelPlanState.deferredToIndependentBackend, .boundedXCTestProbe] {
+      for kind in [SnapshotBackendKind.recursiveTree, .querySweep] {
+        for attempt in attempts {
+          XCTAssertNil(Self.snapshotXCTestPenaltyReason(
+            kind: kind, attempt: attempt, slowThresholdMs: 3_000, channelState: state
+          ))
+        }
+      }
+    }
+    for attempt in attempts {
+      XCTAssertNotNil(Self.snapshotXCTestPenaltyReason(
+        kind: .recursiveTree, attempt: attempt, slowThresholdMs: 3_000
+      ), "ordinary tree timeouts and slow acquisitions must still penalize")
+    }
   }
 }
 #endif
