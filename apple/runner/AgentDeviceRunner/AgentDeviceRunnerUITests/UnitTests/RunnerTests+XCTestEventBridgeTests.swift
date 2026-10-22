@@ -203,5 +203,84 @@ extension RunnerTests {
     XCTAssertNil(screen)
     XCTAssertEqual(displayID, 0)
   }
+  /// The sole-screen rule's decision, at the seam the production probe feeds: the values the
+  /// AXRuntime probe reads in, never a device list. The iPad halves below fail without the
+  /// fills-screen proof, on any family and on the macOS host lane.
+  func testFullScreenEvidenceDecidesFromForegroundValues() {
+    let screen = CGRect(x: 0, y: 0, width: 834, height: 1210)
+
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, screen, screen),
+      .fillsScreen
+    )
+
+    // A window that shows the app in part of the screen (Windowed Apps or Stage Manager).
+    let windowed = CGRect(x: 224, y: 128, width: 386, height: 954)
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, windowed, screen),
+      .windowed
+    )
+
+    // Sub-pixel layout rounding is not a window; it stays inside the 0.5 tolerance.
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, screen.offsetBy(dx: 0.4, dy: -0.4), screen),
+      .fillsScreen
+    )
+    XCTAssertNotEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, screen.offsetBy(dx: 1, dy: 0), screen),
+      .fillsScreen
+    )
+
+    // A different app owns the foreground, so the screen is not this app's to fill.
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 77, screen, screen),
+      .notPrimaryApp
+    )
+
+    // An unreadable pid or frame proves nothing, and the answer is Unknown, never a guess.
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(0, 100, screen, screen),
+      .unknown
+    )
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 0, screen, screen),
+      .unknown
+    )
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, .null, screen),
+      .unknown
+    )
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(100, 100, screen, .zero),
+      .unknown
+    )
+  }
+
+  /// The routing half of the rule: an iPhone always routes through its sole screen; anything else
+  /// routes only on the fills-screen proof.
+  func testSoleScreenRouteOpensOnlyOnProvedFullScreenOffThePhoneIdiom() {
+    for evidence: RunnerFullScreenEvidence in [
+      .fillsScreen,
+      .notPrimaryApp,
+      .windowed,
+      .unknown,
+    ] {
+      XCTAssertTrue(
+        RunnerSoleScreenRouteOpensForEvidence(true, evidence),
+        "an iPhone keeps every app full-screen whatever the probe reports"
+      )
+    }
+
+    XCTAssertTrue(RunnerSoleScreenRouteOpensForEvidence(false, .fillsScreen))
+    XCTAssertFalse(
+      RunnerSoleScreenRouteOpensForEvidence(false, .windowed),
+      "a windowed iPad app must never book a gesture on the screen frame"
+    )
+    XCTAssertFalse(RunnerSoleScreenRouteOpensForEvidence(false, .notPrimaryApp))
+    XCTAssertFalse(
+      RunnerSoleScreenRouteOpensForEvidence(false, .unknown),
+      "a runtime that cannot prove the fill keeps requiring a window"
+    )
+  }
 }
 #endif

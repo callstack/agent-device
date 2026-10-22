@@ -722,6 +722,8 @@ Both frames use the native space of the screen, also in landscape.
 If the frames differ, the guest refuses the capture (`app-window-not-full-screen`) before acquisition.
 This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
 If the runtime cannot report either frame, the guest keeps the capture.
+The runner's synthesized-gesture route compares the same two frames for the same question (`RunnerFullScreenEvidenceFromForeground`).
+An iPad app that proves it fills its sole screen may use that screen as its gesture reference frame when XCTest cannot resolve its window; one that does not, keeps requiring a window.
 
 The XCTest fallback is not correct for a windowed app either.
 The runner clips window-relative element frames against the screen-relative app frame.

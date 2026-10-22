@@ -133,11 +133,12 @@ extension RunnerTests {
   }
 
   /// Samples the same sole-screen route that synthesized gestures use when the app tree refuses
-  /// its window. This route cannot name a screen on an iPad or a multi-screen iPhone.
-  func captureSoleAppScreen() -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+  /// its window. On an iPad the route opens only while the app provably fills its sole screen, so
+  /// a windowed app keeps refusing instead of sampling the wrong frame.
+  func captureSoleAppScreen(app: XCUIApplication) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     var screen: AnyObject?
     var displayID: UInt = 0
-    guard RunnerResolveSoleScreen(&screen, &displayID) == nil,
+    guard RunnerResolveSoleScreen(app, &screen, &displayID) == nil,
       let captureScreen = screen as? XCUIScreen
     else {
       return .failure(.unresolvedScreen)

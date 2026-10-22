@@ -48,13 +48,17 @@ extension RunnerTests {
     }
   }
 
+  /// Whether the sole-screen route is open for the launched app: an iPhone with one screen always,
+  /// an iPad only while the app proves it fills that screen. `RunnerResolveSoleScreen` owns the rule;
+  /// a test reads its answer rather than restating a device list.
   private var showsAppsOnlyFullScreen: Bool {
-    UIDevice.current.userInterfaceIdiom == .phone && XCUIScreen.screens.count == 1
+    soleScreenRouteIsOpen(for: app)
   }
 
   /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
-  /// raises an exception that ends the runner test. A long press needs no tree: on an iPhone with one
-  /// screen it is synthesized on that screen, and anything else keeps the XCTest press.
+  /// raises an exception that ends the runner test. A long press needs no tree: when the sole-screen
+  /// route is open for the app it is synthesized on that screen, and anything else keeps the XCTest
+  /// press.
   @MainActor
   func testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen() throws {
     app.launch()
@@ -101,8 +105,8 @@ extension RunnerTests {
   }
 
   /// A swipe asks for the gesture viewport before it plans its path. On a tree XCTest cannot
-  /// serialize, an iPhone with one screen answers with that screen, the frame the planned gesture's
-  /// record is routed to; anything else keeps requiring a window.
+  /// serialize, the app whose sole screen it provably fills answers with that screen, the frame the
+  /// planned gesture's record is routed to; anything else keeps requiring a window.
   @MainActor
   func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
     app.launch()
@@ -156,16 +160,32 @@ extension RunnerTests {
   /// The sole-screen route is the boundary every window-less gesture crosses, so it decides the device
   /// rule itself: an iPhone with one screen names that screen, and an iPad refuses, because it can show
   /// the app in part of its screen. Run on both device families to cover both answers.
-  func testSoleScreenDisplayIDIsNamedOnlyForAnIPhoneWithOneScreen() {
-    var displayID: UInt = 0
-    let refusal = RunnerResolveSoleScreenDisplayID(&displayID)
-    if UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 {
-      XCTAssertNil(refusal)
-      XCTAssertNotEqual(displayID, 0)
-    } else {
-      XCTAssertNotNil(refusal)
-      XCTAssertEqual(displayID, 0)
+  /// The launched runner host app fills its simulator's only screen, so its window-less gestures
+  /// route through that screen on either family. A windowed iPad app is refused the same route — that
+  /// case needs an iPad set to Windowed Apps, which the nightly lane does not run; what the rule
+  /// refuses here is the closest executable negative: on an iPad, an app that is not the
+  /// accessibility primary app has no screen to fill, so naming one would book a tap on another
+  /// app's frame. An iPhone keeps the rule by idiom, as before this change.
+  @MainActor
+  func testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
     }
+    XCTAssertTrue(
+      soleScreenRouteIsOpen(for: app),
+      "the foreground app fills the simulator's only screen on both families"
+    )
+    guard UIDevice.current.userInterfaceIdiom != .phone else {
+      return
+    }
+
+    var displayID: UInt = 0
+    let refusal = RunnerResolveSoleScreenDisplayID(springboard, &displayID)
+    XCTAssertNotNil(refusal, "an iPad app that does not own the screen names no sole screen for its taps")
+    XCTAssertEqual(displayID, 0)
   }
 #endif
 

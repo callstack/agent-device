@@ -153,9 +153,9 @@ The `back` fallback compares before/after captures to determine whether this app
 Two SpringBoard home-screen captures are byte-identical regardless of the app's behavior.
 System-surface fallback would therefore report false "unchanged" evidence for the failure under test.
 The check observes the display of the app's resolved window.
-Exception: if XCTest cannot resolve a window on an iPhone with exactly one screen, the check uses the same sole screen as synthesized dispatch.
-An iPhone app occupies that screen, so this exception needs no app-tree query.
-iPad and multi-screen devices still require a resolved window.
+Exception: if XCTest cannot resolve a window and the sole screen is provably the app's full-screen frame, the check uses that screen, the same route synthesized dispatch takes.
+An iPhone app always occupies its sole screen; an iPad app does so only while the runner's full-screen proof (`RunnerFullScreenEvidenceFromForeground`) proves it.
+A multi-screen device and a windowed iPad app still require a resolved window.
 If neither route can name the display, typed refusal produces an unknown outcome instead of false no-change evidence from another process (#2728).
 
 Required and optional helper consumers differ in their frame requirements.

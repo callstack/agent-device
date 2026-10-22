@@ -50,8 +50,11 @@ extension RunnerTests {
     }
   }
 
-  /// Only an iPhone with one screen can skip the windows query after the tree rejected one; anywhere
-  /// else the windows query is still asked, and its window carries the tap.
+  /// Only an app that provably fills its sole screen can skip the windows query after the tree
+  /// rejected one; anywhere else the windows query is still asked, and its window carries the tap.
+  /// The runner host app fills its simulator's screen on both families, so this negative needs a
+  /// route the device cannot open: SpringBoard's app is not the accessibility primary app on an
+  /// iPad, and on an iPhone the idiom alone opens the route, where the expectation is the iPhone's.
   @MainActor
   func testInAppBackStillAsksForWindowsWhereNoSoleScreenAnswers() throws {
     let status = try launchBackFixture(["--agent-device-back-regression"])
@@ -68,7 +71,7 @@ extension RunnerTests {
   }
 
   private var showsAppsOnlyFullScreen: Bool {
-    UIDevice.current.userInterfaceIdiom == .phone && XCUIScreen.screens.count == 1
+    soleScreenRouteIsOpen(for: app)
   }
 
   /// Launches the runner app; with `--agent-device-back-regression` it shows a top-leading back
@@ -180,21 +183,52 @@ extension RunnerTests {
   }
 #endif
 
-  /// A 402x874 iPhone's navigation bar spans y 62-116 and its back control 62-106.
+  /// The fallback point sits inside the top bar on both families, from the screen's own top inset:
+  /// an iPhone 17 Pro measures a 59-pt inset with its bar at y 62-116; an iPad Pro 11" measures 32
+  /// with its bar at y 32-86, where a frame-height fraction that serves the iPhone (0.1·874=87, and
+  /// the old clamp's 96 at any taller height) lands below the iPad's bar.
   func testTopLeadingNavigationFallbackPointTargetsHeaderControlBand() throws {
-    let point = try XCTUnwrap(
+    let iPhone = try XCTUnwrap(
       Self.topLeadingNavigationFallbackPoint(
-        in: CGRect(x: 0, y: 0, width: 402, height: 874)
+        in: CGRect(x: 0, y: 0, width: 402, height: 874),
+        topSafeAreaInset: 59
       )
     )
+    XCTAssertEqual(iPhone.x, 32.16, accuracy: 0.01)
+    XCTAssertEqual(iPhone.y, 81, accuracy: 0.01, "inside the iPhone bar band 62-116")
 
-    XCTAssertEqual(point.x, 32.16, accuracy: 0.01)
-    XCTAssertEqual(point.y, 87.4, accuracy: 0.01)
+    let iPad = try XCTUnwrap(
+      Self.topLeadingNavigationFallbackPoint(
+        in: CGRect(x: 0, y: 0, width: 834, height: 1210),
+        topSafeAreaInset: 32
+      )
+    )
+    XCTAssertEqual(iPad.x, 44, accuracy: 0.01, "the leading-slot cap keeps a tablet tap inside the bar")
+    XCTAssertEqual(iPad.y, 56, accuracy: 0.01, "inside the iPad bar band 32-86")
   }
 
   func testTopLeadingNavigationFallbackPointRejectsInvalidFrame() {
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .infinite))
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .zero))
+    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .infinite, topSafeAreaInset: 59))
+    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .zero, topSafeAreaInset: 59))
+  }
+
+  /// A runtime that reports no inset proves nothing about the band, so the point stays inside the
+  /// compact bar it used to target; a large inset (a surface that pushed the content down) must not
+  /// send the tap deep into the page. A window that starts below the screen's top (a resolvable
+  /// Stage Manager window) places its bar at its own top, so the screen's inset must not shift it
+  /// further down.
+  func testTopLeadingNavigationFallbackPointStaysBoundedForUnknownAndLargeInsets() throws {
+    let frame = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    let noInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 0))
+    XCTAssertEqual(noInset.y, 56, accuracy: 0.01, "the compact bar bound")
+    let hugeInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 400))
+    XCTAssertEqual(hugeInset.y, 96, accuracy: 0.01, "never leaves the header band")
+
+    let loweredWindow = CGRect(x: 120, y: 130, width: 600, height: 950)
+    let lowered = try XCTUnwrap(
+      Self.topLeadingNavigationFallbackPoint(in: loweredWindow, topSafeAreaInset: 32)
+    )
+    XCTAssertEqual(lowered.y, 152, accuracy: 0.01, "the bar's middle sits at the window's own top plus half a standard bar")
   }
 
   func testNavigationBackControlRankPrefersBackThenCloseThenCancel() {
