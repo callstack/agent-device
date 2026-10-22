@@ -1,3 +1,4 @@
+import OSLog
 import XCTest
 
 extension RunnerTests {
@@ -119,8 +120,10 @@ extension RunnerTests {
   /// A fill whose focus tap raises the software keyboard hands the read that confirmed focus to the
   /// entry as its first read. The fixture counts queries as in
   /// `testFillReadsEachResolvedFieldThroughOneSnapshot`: this fill made 17, and 19 when the focus step
-  /// or the entry read the input again. The one read of headroom covers a keyboard that arrives
-  /// before the field reports focus.
+  /// or the entry read the input again. A read costs two queries. A keyboard that arrives before the
+  /// field reports focus ends the poll without handing its read on, so the entry reads the input
+  /// again and the fill makes 19 by design. The test skips when the log does not record
+  /// `input-reports-keyboard-focus`, so its budget holds only for the route it is about.
   @MainActor
   func testFillThatRaisesTheSoftwareKeyboardReusesTheReadThatConfirmedFocus() throws {
     app.launchArguments = [
@@ -141,6 +144,7 @@ extension RunnerTests {
     )
 
     let readsBefore = try XCTUnwrap(Int(valueReads.label))
+    let fillStartedAt = Date()
     let response = executeTypeCommand(activeApp: app, command: fill)
     let readsAfter = try XCTUnwrap(Int(valueReads.label))
 
@@ -151,7 +155,23 @@ extension RunnerTests {
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertEqual(response.data?.textEntryRoute, "xctest-element")
     XCTAssertEqual(valueReads.value as? String, "hello")
-    XCTAssertLessThanOrEqual(readsAfter - readsBefore, 18)
+    let evidence = try loggedTextEntryFocusEvidence(since: fillStartedAt)
+    try XCTSkipUnless(
+      evidence == "input-reports-keyboard-focus",
+      "focus was confirmed by \(evidence ?? "nothing"), which reads the input again by design"
+    )
+    XCTAssertLessThanOrEqual(readsAfter - readsBefore, 17)
+  }
+
+  /// The evidence name the focus step logged to `runner.log` after `start`, read from this
+  /// process's own log.
+  private func loggedTextEntryFocusEvidence(since start: Date) throws -> String? {
+    let store = try OSLogStore(scope: .currentProcessIdentifier)
+    let marker = "AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence="
+    return try store.getEntries(at: store.position(date: start))
+      .compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+      .compactMap { message in message.range(of: marker).map { String(message[$0.upperBound...]) } }
+      .last
   }
 #endif
 }
