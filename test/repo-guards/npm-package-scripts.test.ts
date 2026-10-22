@@ -36,7 +36,7 @@ test('perf uses one platform-selectable entry point', () => {
   assert.equal(script('perf'), 'node --experimental-strip-types scripts/perf/run.ts');
   assert.equal(packageJson.scripts['perf:ios'], undefined);
   assert.equal(packageJson.scripts['perf:android'], undefined);
-  assert.doesNotMatch(perfNightlyWorkflow, /pnpm perf:/);
+  assert.doesNotMatch(perfNightlyWorkflow, /pnpm perf:(ios|android)\b/);
   assert.match(perfNightlyWorkflow, /pnpm perf --platform ios/);
   assert.match(perfNightlyWorkflow, /pnpm perf --platform android/);
 });

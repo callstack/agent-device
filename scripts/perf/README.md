@@ -49,3 +49,39 @@ All times are milliseconds. Statistics use only the successful samples of a step
 | backends | The `snapshotQuality` backend, state, and reason code, for example `private-ax/recovered/ax-rejected`. |
 | fallbacks | Degraded paths: snapshot-source errors, truncated recovery, and warn-level phases. |
 | `fail` | The number of failed samples. `setup_failed` and `before_failed` mean that the untimed preparation failed. `daemon_stuck` means that an earlier request outlived its timeout; the suite restarts the daemon before the next scenario. `expectation_failed` means that the screen no longer has the shape that the step requires, for example the heavy-feed depth. |
+
+## Nightly results
+
+`.github/workflows/perf-nightly.yml` runs the iOS suite every night on `main`.
+Each run uploads `perf-ios-summary` (summary, report, comparison; 90 days) and `perf-ios-raw` (logs; 30 days).
+The job compares the run with up to seven earlier runs and writes the result to the job summary.
+
+To fetch and compare runs on your machine, use `gh` with access to the repository:
+
+```sh
+pnpm perf:compare                                  # latest night against the 7 nights before it
+pnpm perf:compare --to 2026-10-28                  # that night against the 7 nights before it
+pnpm perf:compare --to latest --from 2026-10-21    # latest against one night
+pnpm perf:compare --to latest --from 2026-10-21..2026-10-25 --out .tmp/perf/compare
+pnpm perf:compare --to .tmp/perf/local             # a local run against recent nights
+```
+
+A reference is `latest`, a run id, a `YYYY-MM-DD` date, or a local output path.
+Downloads stay in `.tmp/perf-nightly/<run-id>/`.
+Do not judge a local run against CI nights. The comparison warns when the device, Xcode, or CPU differs.
+
+## Comparison rule
+
+The baseline of a step is the median of its nightly medians.
+The noise of a step is the scaled median absolute deviation of those medians.
+A step is a `regression` or an `improvement` only when its change is more than all of these:
+
+- 20% of the baseline.
+- Three times the night-to-night noise.
+- Two times the coefficient of variation of the run divided by √n.
+- 50 ms.
+
+The rolling baseline skips runs that did not run every scenario of the judged run, such as a partial dispatch.
+Fewer than three baseline nights give `insufficient-baseline`.
+`new-failures` means that the step failed and no baseline night failed. `fixed` means the reverse.
+The thresholds are in `compare.ts`.

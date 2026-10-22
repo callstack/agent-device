@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { summarize } from './stats.ts';
+import { scaledMad, summarize } from './stats.ts';
 
 test('summarize reports sample spread, the middle median, and nearest-rank p95', () => {
   const stat = summarize([40, 10, 30, 20, Number.NaN])!;
@@ -25,4 +25,9 @@ test('summarize gives a single sample zero spread and no samples no summary', ()
   });
   assert.equal(summarize([]), null);
   assert.equal(summarize([0, 0])?.cv, 0);
+});
+
+test('scaledMad ignores one outlying night', () => {
+  // Deviations from the median 101 are 49, 1, 1, 3; their median is 2.
+  assert.ok(Math.abs(scaledMad([150, 100, 98, 102]) - 1.4826 * 2) < 1e-9);
 });
