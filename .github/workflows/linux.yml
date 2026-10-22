@@ -51,8 +51,7 @@ jobs:
       # PRs, which reported as a red check on branches that never ran a line of project code.
       # Two bounds fix that: apt retries and times out each mirror request itself (a blip
       # self-heals without a manual re-run), and `timeout-minutes` is the backstop for a mirror
-      # that drips bytes slowly enough to defeat the socket timeout. A healthy install takes
-      # about a minute, so six is generous.
+      # that drips bytes slowly enough to defeat the socket timeout.
       - name: Install Linux desktop dependencies
         timeout-minutes: 6
         run: |
@@ -64,8 +63,11 @@ jobs:
             # The runner's own unattended-upgrades timer holds the dpkg lock; wait, don't hang.
             -o DPkg::Lock::Timeout=60
           )
-          sudo apt-get update -qq "${APT_OPTS[@]}"
-          sudo apt-get install -y -qq "${APT_OPTS[@]}" \
+          printf 'APT update start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          sudo apt-get update "${APT_OPTS[@]}"
+          printf 'APT update complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          printf 'APT install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          sudo apt-get install -y "${APT_OPTS[@]}" \
             xvfb \
             xdotool \
             scrot \
@@ -76,6 +78,7 @@ jobs:
             dbus-x11 \
             gnome-calculator \
             wmctrl
+          printf 'APT install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
