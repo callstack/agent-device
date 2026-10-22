@@ -74,9 +74,10 @@ export async function preflightNativeRefInteraction(
   const pipeline = SELECTOR_PIPELINE_POLICIES.resolvedTarget;
   // #1542: dispatches by REF, not coordinate, so no point is re-derived for the dispatch — but
   // evidence/annotation below still describes the returned (visible) node.
+  const preAction = surfaceScopedNodes(storedSnapshot);
   const { node: visibleNode } = await runInteractionPipelineStages({
     policy: pipeline,
-    nodes,
+    observation: preAction,
     node: resolved.node,
     action,
     label: `Ref ${target.ref}`,
@@ -94,7 +95,7 @@ export async function preflightNativeRefInteraction(
     // ADR 0012 decision 3: the guard lookup above doubles as the record-time
     // evidence source for the fast path, at zero extra capture cost.
     node: visibleNode,
-    preAction: surfaceScopedNodes(storedSnapshot),
+    preAction,
   };
 }
 

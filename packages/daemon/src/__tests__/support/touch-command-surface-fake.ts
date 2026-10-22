@@ -23,8 +23,10 @@ import {
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
+import { rectContains } from '@agent-device/kernel/rect';
 import type {
   Point,
+  Rect,
   SnapshotNode,
   SnapshotPreferredBackend,
   SnapshotQualityVerdict,
@@ -50,9 +52,11 @@ import {
  * observation) names, and a selector is the first node of one fresh capture, written back as the
  * session's stored snapshot, that a `matchSelector` rule names (by default one of its `||`
  * alternatives, each a conjunction of `key=value` terms). A target that does not resolve refuses
- * with the typed `ref_not_found` / `selector_not_found` reason and `dispatched: 'no'`. Promotion,
- * occlusion, off-screen and bounds guards, label recovery, and `--verify` evidence are
- * command-family behavior and are asserted beside that code.
+ * with the typed `ref_not_found` / `selector_not_found` reason and `dispatched: 'no'`. A selector
+ * node outside the capture's root rect asks the backend's #1542 live read; a confirmed live rect
+ * replaces the node's rect, and its point then has no observation. Promotion, occlusion, off-screen
+ * refusals and bounds guards, label recovery, and `--verify` evidence are command-family behavior
+ * and are asserted beside that code.
  *
  * Values the fake supplies itself rather than reading from a backend: an `is` read always passes
  * (`pass: true`, `matches: 1`); selector reads (`get`, `is`) capture once with
@@ -374,16 +378,30 @@ async function resolveTarget(
       dispatched: 'no',
     });
   }
+  const liveRect = await readRescuedRect(config, tree.nodes, node, options);
+  const dispatched = liveRect ? { ...node, rect: liveRect } : node;
+  const observed = observedAt(tree);
   const resolved = {
     kind: 'selector' as const,
     target: { kind: 'selector' as const, selector: target.selector },
-    point: centerOf(node) as Point,
-    node,
+    point: centerOf(dispatched) as Point,
+    node: dispatched,
     selectorChain: selectorChainFor(config, node, tree.nodes, chainAction(nativeRefRoute)),
-    preAction: { nodes: tree.nodes },
+    ...(liveRect ? { preAction: observed.preAction } : observed),
   };
   resolvedTreeQuality.set(resolved, tree.snapshotQuality);
   return resolved;
+}
+
+async function readRescuedRect(
+  config: AgentDeviceRuntimeConfig,
+  nodes: SnapshotNode[],
+  node: SnapshotNode,
+  options: CommandOptions,
+): Promise<Rect | null | undefined> {
+  const root = nodes[0]?.rect;
+  if (!root || !node.rect || rectContains(root, node.rect)) return undefined;
+  return await config.backend.confirmOffscreenTargetVisible?.(context(config, options), node, root);
 }
 
 function chainAction(
@@ -418,10 +436,16 @@ function resolvedFromNode(
     point: centerOf(node),
     node,
     selectorChain: selectorChainFor(config, node, tree.nodes, action),
-    preAction: { nodes: tree.nodes },
+    ...observedAt(tree),
   };
   resolvedTreeQuality.set(resolved, tree.snapshotQuality);
   return resolved;
+}
+
+/** The tree a point was measured on: both its pre-action baseline and its point observation. */
+function observedAt(tree: Pick<SnapshotState, 'nodes'>) {
+  const observation = { nodes: tree.nodes };
+  return { preAction: observation, pointObservation: observation };
 }
 
 function refBody(ref: string): string {
@@ -497,10 +521,11 @@ async function dispatchTap(
   if (resolved.kind === 'ref' && !resolved.point && config.backend.tapTarget) {
     return await config.backend.tapTarget(context(config, options), resolved.target, tapOptions);
   }
+  const pointObservation = resolved.kind === 'point' ? undefined : resolved.pointObservation;
   return await backendOperation(config.backend.tap?.bind(config.backend))(
     context(config, options),
     requirePointOf(resolved),
-    tapOptions,
+    { ...tapOptions, ...(pointObservation ? { pointObservation } : {}) },
   );
 }
 

@@ -17,12 +17,7 @@ import { recordCaptureProof } from '../../../core/capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import { createDaemonRuntimeSessionStore } from '../../../core/runtime-session.ts';
-import {
-  expireRefFrame,
-  isOutdatedObservation,
-  refFrameState,
-  refFrameTree,
-} from '../../../core/ref-frame.ts';
+import { expireRefFrame, isOutdatedObservation } from '../../../core/ref-frame.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import type {
   CaptureSnapshotForSession,
@@ -62,7 +57,6 @@ export async function createInteractionRuntimeForRoute(
   const ref = bindInteractionSession(params).sessionRef;
   if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   const session = params.sessionStore.requireCurrent(ref);
-  const consumedCapture = params.consumedCapture ?? {};
   return await createInteractionAgentDevice({
     createCommandSurface: params.createCommandSurface,
     requestId: params.req.meta?.requestId,
@@ -77,7 +71,7 @@ export async function createInteractionRuntimeForRoute(
         params.contextFromFlags,
         options,
       );
-      consumedCapture.state = snapshot;
+      if (params.consumedCapture) params.consumedCapture.state = snapshot;
       return recordCaptureProof(params.captureProof, snapshot);
     },
     runtimeSessions: createDaemonRuntimeSessionStore({
@@ -93,27 +87,20 @@ export async function createInteractionRuntimeForRoute(
         setSessionSnapshot(current!, record.snapshot);
       },
     }),
-    coordinateTapTextInputEvidence: (point) => {
+    // Exclusion evidence comes only from the observation that measured the tap point, and only
+    // while that observation is still the session's current one.
+    coordinateTapTextInputEvidence: (point, pointObservation) => {
       const current = params.sessionStore.requireCurrent(ref);
-      if (publicPlatformString(current.device) !== 'ios') return undefined;
-      const target = params.tapTarget;
-      if (!target || target.kind === 'point') return undefined;
-      if (target.kind === 'selector') {
-        return buildCoordinateTapTextInputEvidence(
-          consumedCapture.state,
-          point,
-          current.appBundleId,
-          'selector-capture',
-        );
-      }
-      if (refFrameState(current) !== 'active') return undefined;
-      const snapshot = consumedCapture.state ?? current.snapshot;
-      if (
-        !consumedCapture.state &&
-        (!snapshot || refFrameTree(current) !== snapshot || isOutdatedObservation(snapshot))
-      )
+      if (publicPlatformString(current.device) !== 'ios' || !pointObservation) return undefined;
+      const latest = current.snapshot;
+      if (!latest || latest.nodes !== pointObservation.nodes || isOutdatedObservation(latest))
         return undefined;
-      return buildCoordinateTapTextInputEvidence(snapshot, point, current.appBundleId, 'ref-frame');
+      return buildCoordinateTapTextInputEvidence(
+        pointObservation,
+        point,
+        current.appBundleId,
+        params.tapTarget?.kind === 'ref' ? 'ref-frame' : 'selector-capture',
+      );
     },
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live
@@ -276,8 +263,8 @@ function touchBackendMembers(
   };
   return {
     tap: tapPoint
-      ? (_context, point) => {
-          const evidence = textInputEvidence?.(point);
+      ? (_context, point, options) => {
+          const evidence = textInputEvidence?.(point, options?.pointObservation);
           return run(() =>
             tapPoint(point, {
               ...flags,

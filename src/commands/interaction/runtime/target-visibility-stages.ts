@@ -14,6 +14,7 @@ import {
 } from '@agent-device/selectors/selector-pipeline';
 import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
   classifyOffscreenScrollDirection,
@@ -64,24 +65,27 @@ export function buildCoveredInteractionError(params: {
  * comes back, so the keyboard guard measures the coordinate the interaction is actually made of and no
  * path derives a second one. A path whose point can fail to exist — the native-ref fast path taps by
  * ref, reading the rect center the platform aims at — says so in its resolver's return type.
+ *
+ * `pointObservation` is `observation` only when the returned node is one of its nodes. A node the
+ * off-screen stage patched with a live rect (#1542) is not, so its point has no observation.
  */
 export async function runInteractionPipelineStages<TPoint extends Point | null>(params: {
   policy: ActingPipelinePolicy;
-  nodes: SnapshotState['nodes'];
-  /** The keyboard band `nodes`' capture measured, when it measured one (#2660). */
+  observation: SurfaceScopedNodes;
+  /** The keyboard band `observation`'s capture measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
   node: SnapshotNode;
   action: InteractionAction;
   label: string;
   hooks: SelectorPipelineHooks;
   resolveTapPoint: (node: SnapshotAddressableNode) => TPoint;
-}): Promise<{ node: SnapshotAddressableNode; tapPoint: TPoint }> {
-  const target = await runNodePipelineStages(
-    params.policy,
-    params.nodes,
-    params.node,
-    params.hooks,
-  );
+}): Promise<{
+  node: SnapshotAddressableNode;
+  tapPoint: TPoint;
+  pointObservation?: SurfaceScopedNodes;
+}> {
+  const { nodes } = params.observation;
+  const target = await runNodePipelineStages(params.policy, nodes, params.node, params.hooks);
   if (target.kind === 'occluded') {
     throw buildCoveredInteractionError({
       label: params.label,
@@ -91,14 +95,18 @@ export async function runInteractionPipelineStages<TPoint extends Point | null>(
   }
   const tapPoint = params.resolveTapPoint(target.node);
   assertTapTargetClearOfVisibleKeyboard({
-    nodes: params.nodes,
+    nodes,
     node: target.node,
     action: params.action,
     label: params.label,
     ...(params.keyboard ? { keyboard: params.keyboard } : {}),
     tapPoint,
   });
-  return { node: target.node, tapPoint };
+  return {
+    node: target.node,
+    tapPoint,
+    ...(nodes.includes(target.node) ? { pointObservation: params.observation } : {}),
+  };
 }
 
 /**

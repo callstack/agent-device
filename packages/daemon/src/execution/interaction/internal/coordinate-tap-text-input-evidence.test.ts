@@ -4,6 +4,8 @@ import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/int
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
+import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
 import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 
 type Fixture = {
@@ -49,7 +51,7 @@ test.each(cases)('$name preserves acquired input geometry through presentation',
   );
   const snapshot = buildSnapshotState(presented, { snapshotInteractiveOnly: true });
   const result = buildCoordinateTapTextInputEvidence(
-    snapshot,
+    surfaceScopedNodes(snapshot),
     fixture.point,
     fixture.appBundleId,
     fixture.source ?? 'selector-capture',
@@ -57,37 +59,20 @@ test.each(cases)('$name preserves acquired input geometry through presentation',
   expect(result ?? null).toEqual(fixture.expectedEvidence);
 });
 
-test('missing, empty, sparse, and unbound observations cannot establish exclusion', () => {
+test('an observation without acquisition geometry or a target bundle cannot establish exclusion', () => {
   const point = { x: 10, y: 20 };
   expect(
-    buildCoordinateTapTextInputEvidence(undefined, point, 'app', 'selector-capture'),
+    buildCoordinateTapTextInputEvidence({ nodes: [] }, point, 'app', 'selector-capture'),
   ).toBeUndefined();
+  const measured = { nodes: [{ index: 0, type: 'Button' }] };
+  attachSnapshotTextInputGeometry(measured.nodes, { rects: [] });
   expect(
-    buildCoordinateTapTextInputEvidence(
-      { nodes: [], createdAt: 1 },
-      point,
-      'app',
-      'selector-capture',
-    ),
+    buildCoordinateTapTextInputEvidence(measured, point, undefined, 'selector-capture'),
   ).toBeUndefined();
-  expect(
-    buildCoordinateTapTextInputEvidence(
-      {
-        nodes: [{ index: 0, type: 'Button' }],
-        createdAt: 1,
-        snapshotQuality: { state: 'sparse', backend: 'tree' },
-      },
-      point,
-      'app',
-      'selector-capture',
-    ),
-  ).toBeUndefined();
-  expect(
-    buildCoordinateTapTextInputEvidence(
-      { nodes: [{ index: 0, type: 'Button' }], createdAt: 1 },
-      point,
-      undefined,
-      'selector-capture',
-    ),
-  ).toBeUndefined();
+  expect(buildCoordinateTapTextInputEvidence(measured, point, 'app', 'selector-capture')).toEqual({
+    source: 'selector-capture',
+    targetBundleId: 'app',
+    point,
+    textInputRects: [],
+  });
 });

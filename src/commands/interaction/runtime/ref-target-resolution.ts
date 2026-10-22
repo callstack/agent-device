@@ -112,9 +112,13 @@ export async function resolveRefInteractionTarget(
     : await readRefResolution(runtime, options, target);
   const nodes = tree.nodes;
   // #1542: point/response read from the returned (possibly rescue-patched) node.
-  const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
+  const {
+    node: visibleNode,
+    tapPoint: point,
+    pointObservation,
+  } = await runInteractionPipelineStages({
     policy: params.pipeline,
-    nodes,
+    observation: tree,
     ...(keyboard ? { keyboard } : {}),
     node: resolved.node,
     action: params.action,
@@ -136,6 +140,7 @@ export async function resolveRefInteractionTarget(
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
     ...(adoptedFrom ? { adoptedFrom } : {}),
+    ...(pointObservation ? { pointObservation } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,

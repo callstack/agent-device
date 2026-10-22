@@ -1,4 +1,4 @@
-import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
+import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
 import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -14,6 +14,8 @@ import {
   mockInteractorSnapshot,
 } from '../../../__tests__/support/interactor-resolution-fixture.ts';
 import {
+  elementReadFixtureState,
+  mockQuerySelector,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
@@ -99,6 +101,33 @@ test('a selector uses this request capture rather than the stored input geometry
     point: { x: 40, y: 760 },
     textInputRects: [{ x: 200, y: 160, width: 100, height: 40 }],
   });
+});
+
+test('a rescued selector point keeps probing although the capture placed an input off-screen', async () => {
+  const { store, session } = setup();
+  const capturedRect = { x: 10, y: 900, width: 300, height: 40 };
+  const nodes = attachRefs([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'TextField',
+      label: 'Email',
+      identifier: 'email',
+      rect: capturedRect,
+      hittable: true,
+    },
+  ]);
+  attachSnapshotTextInputGeometry(nodes, { rects: [capturedRect] });
+  mockInteractorSnapshot.mockResolvedValue({ nodes, backend: 'xctest', producer: 'apple-runner' });
+  elementReadFixtureState.querySelectorAvailable = true;
+  mockQuerySelector.mockResolvedValue({
+    found: true,
+    node: { rect: { x: 10, y: 300, width: 300, height: 40 }, hittable: true },
+  });
+  expect((await runInteraction(store, session.name, 'click', ['id=email']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].point).toEqual({ x: 160, y: 320 });
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
 });
 
 test('a newer read-only observation keeps probing when the ref frame predates an input at the tap point', async () => {

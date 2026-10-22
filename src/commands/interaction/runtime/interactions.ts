@@ -179,6 +179,9 @@ async function tapCommand(
       holdMs: options.holdMs,
       jitterPx: options.jitterPx,
       doubleTap: options.doubleTap,
+      ...(atRest.kind !== 'point' && atRest.pointObservation
+        ? { pointObservation: atRest.pointObservation }
+        : {}),
     });
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of

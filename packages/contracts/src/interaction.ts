@@ -182,6 +182,11 @@ export type ResolvedInteractionTarget =
       recordingTarget?: RecordingTargetOverride;
       preAction?: SurfaceScopedNodes;
       /**
+       * The observation whose geometry produced `point`. Absent when a live read replaced that
+       * observation's off-screen rect (#1542); the dispatch then has no observation of its point.
+       */
+      pointObservation?: SurfaceScopedNodes;
+      /**
        * ADR 0014, "Mutation admission and read behavior": the source tree of the dispatched node, reported by the
        * reconciliation that chose it. `'observation'` means the session's newest capture, so the
        * node's rect is a position that capture measured; `'authorized-frame'` means the older tree
@@ -204,6 +209,11 @@ export type ResolvedInteractionTarget =
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
       preAction?: SurfaceScopedNodes;
+      /**
+       * The observation whose geometry produced `point`. Absent when a live read replaced that
+       * observation's off-screen rect (#1542); the dispatch then has no observation of its point.
+       */
+      pointObservation?: SurfaceScopedNodes;
     };
 
 /**

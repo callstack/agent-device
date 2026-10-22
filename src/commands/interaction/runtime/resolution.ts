@@ -145,9 +145,14 @@ async function resolveSelectorInteractionTarget(
   }
   // #1542: see the ref-target twin in ref-target-resolution.ts.
   const selected = resolved;
-  const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
+  const observation = surfaceScopedNodes(capture.snapshot);
+  const {
+    node: visibleNode,
+    tapPoint: point,
+    pointObservation,
+  } = await runInteractionPipelineStages({
     policy: params.pipeline,
-    nodes: capture.snapshot.nodes,
+    observation,
     ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
     node: selected.node,
     action: params.action,
@@ -168,10 +173,11 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector },
+    ...(pointObservation ? { pointObservation } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
-      surfaceScopedNodes(capture.snapshot),
+      observation,
       params.action,
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
     ),
