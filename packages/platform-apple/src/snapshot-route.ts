@@ -43,6 +43,11 @@ import {
   createSystemSurfacePresenceProbe,
   type SystemSurfacePresenceProbe,
 } from './system-surface-presence.ts';
+import {
+  bridgeFailureDisposition,
+  type BridgeFailureDisposition,
+  type CaptureScopedConsequence,
+} from './snapshot-route-failure-policy.ts';
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
@@ -57,38 +62,17 @@ const SYSTEM_SURFACE_PRESENTED = 'system-surface-presented';
 const SYSTEM_SURFACE_HOST_LINGERING = 'system-surface-host-lingering';
 
 /**
- * Why this capture left the bridge: the bridge binary is still being built. The generation stays on
- * the bridge path, so the warning has to say the runner served this capture rather than the
- * generation (#2491).
+ * Why this capture left the bridge. The literal causes are route decisions, separate from the
+ * guest's failure taxonomy; the disposition is the one classification a source failure receives in
+ * `fallbackAfterFailure`. Circuit scope and warning wording consume that one value (#3874, #3895).
  */
-const BRIDGE_PREPARATION_PENDING = 'bridge-preparation-pending';
-
-/**
- * Why this capture left the bridge: a window on this screen reports its subtree in the device's
- * native space and the reader cannot name the app's interface orientation to turn it back (#2612).
- * Like a bridge that is still being built, this says nothing about the app generation, which stays on
- * the bridge path and uses it again once the surface is gone.
- */
-const WINDOW_COORDINATE_SPACE_UNRESOLVED = 'window-coordinate-space-unresolved';
-
-/**
- * Why this capture left the bridge: the app runs in an iPadOS window that does not fill the screen.
- * The snapshot API reports such an app's frames relative to its window, so the tree cannot be placed
- * on the screen (#3844). That is evidence about the screen arrangement, not the app, so the
- * generation stays on the bridge path and uses it again once the app fills the screen.
- */
-const APP_WINDOW_NOT_FULL_SCREEN = 'app-window-not-full-screen';
-
-/**
- * Why this capture left the bridge: another surface owned the foreground when the reader checked, or
- * took it during acquisition, such as a permission alert over the app. That is evidence about the
- * screen, not the app, so the generation stays on the bridge path. Opening the circuit here sent every
- * later capture of the app to XCTest after one alert, which costs seconds per capture on a deep tree.
- */
-const FOREGROUND_OWNER_REFUSALS: ReadonlySet<string> = new Set([
-  'foreground-owner-unverified',
-  'foreground-owner-changed',
-]);
+type FallbackReason =
+  | BridgeFailureDisposition
+  | typeof SYSTEM_SURFACE_PRESENTED
+  | typeof SYSTEM_SURFACE_HOST_LINGERING
+  | 'system-surface-probe-unavailable'
+  | 'target-resolution-failed'
+  | 'circuit-disabled';
 
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
@@ -341,7 +325,8 @@ async function fallbackAfterFailure(
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  if (opensGenerationCircuit(failure)) disabledGenerations.add(generationKey(failedTarget));
+  const disposition = bridgeFailureDisposition(failure);
+  if (disposition.scope === 'generation') disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
     { id: failedTarget.simulator.udid },
@@ -355,27 +340,8 @@ async function fallbackAfterFailure(
     fallback,
     identity.lineage,
     request,
-    failure.code,
+    disposition,
     identity.residue,
-  );
-}
-
-/**
- * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
- *
- * Four failures say something else instead. A bridge that is still being prepared speaks for the
- * daemon's build queue. A screen holding a surface in another coordinate space, a screen whose
- * foreground another surface owns, and an app window that does not fill the screen speak for this
- * capture only: the arrangement is on screen now and gone after the next keystroke, tap, or resize,
- * so retiring the generation would move every later capture of a healthy app to the runner to work
- * around one screen (#2491 settled the first of these, and #2612 the second).
- */
-function opensGenerationCircuit(failure: SnapshotSourceFailure): boolean {
-  return (
-    failure.kind !== 'preparing' &&
-    failure.code !== WINDOW_COORDINATE_SPACE_UNRESOLVED &&
-    failure.code !== APP_WINDOW_NOT_FULL_SCREEN &&
-    !FOREGROUND_OWNER_REFUSALS.has(failure.code)
   );
 }
 
@@ -385,7 +351,7 @@ async function runFallback(
   fallback: SnapshotFallback,
   lineage: IosSnapshotLineage,
   request: ReturnType<typeof createIosSnapshotRequest>,
-  reason: string,
+  reason: FallbackReason,
   residue: readonly IosAcquisitionResidue[] = [],
 ): Promise<SnapshotResult> {
   return stampFallback(deviceId, await fallback(input), lineage, request, reason, residue);
@@ -460,7 +426,7 @@ function stampFallback(
   result: SnapshotResult,
   lineage: IosSnapshotLineage,
   request: ReturnType<typeof createIosSnapshotRequest>,
-  reason: string,
+  reason: FallbackReason,
   residue: readonly IosAcquisitionResidue[] = [],
 ): SnapshotResult {
   const served = result.systemSurface;
@@ -507,38 +473,49 @@ function runnerComparisonIdentity(
  * the surface, so it is inapplicable here rather than unavailable — and the capture belongs to that
  * surface, not to an app generation. A lingering host is the same decision over a surface the runner
  * did not serve, so that sentence says what the capture holds instead. Every other reason keeps the
- * unavailable sentence.
+ * unavailable sentence, in the scope the reason itself carries.
  */
-function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: boolean): string {
+function fallbackWarning(
+  reason: FallbackReason,
+  lineage: IosSnapshotLineage,
+  served: boolean,
+): string {
   if (reason === SYSTEM_SURFACE_PRESENTED) {
     return `Simulator AX snapshot inapplicable (${reason}); used XCTest to read the system surface presented over the app.`;
   }
   if (reason === SYSTEM_SURFACE_HOST_LINGERING) {
     return `Simulator AX snapshot inapplicable (${reason}); used XCTest, which read app content: the system surface host process was still running but no longer presenting.`;
   }
+  const code = typeof reason === 'string' ? reason : reason.code;
   // The bridge was skipped for its own reason and the runner then found a surface over the app. The
   // app-generation sentence would describe a capture this is not, so the reason keeps its wording
   // and the content sentence says what arrived.
   if (served) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest, which read the system surface presented over the app.`;
+    return `Simulator AX snapshot unavailable (${code}); used XCTest, which read the system surface presented over the app.`;
   }
-  // A bridge that is still being built says nothing about this generation, and the route keeps the
-  // generation on the bridge path because of it. The generation sentence would claim a retirement
-  // that did not happen (#2491).
-  if (reason === BRIDGE_PREPARATION_PENDING) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture while the bridge is still being prepared.`;
-  }
-  if (FOREGROUND_OWNER_REFUSALS.has(reason)) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while another surface owned the foreground.`;
-  }
-  if (reason === APP_WINDOW_NOT_FULL_SCREEN) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen.`;
-  }
-  if (reason === WINDOW_COORDINATE_SPACE_UNRESOLVED) {
-    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, which reports captured geometry in the app's own orientation space.`;
+  if (typeof reason !== 'string' && reason.scope === 'capture') {
+    return captureScopedFallbackWarning(code, reason.consequence);
   }
   const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
-  return `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
+  return `Simulator AX snapshot unavailable (${code}); used XCTest for ${generation}.`;
+}
+
+/**
+ * The sentence for a refusal the route did not retire the generation over; the generation sentence
+ * would claim a retirement that did not happen (#2491).
+ */
+function captureScopedFallbackWarning(code: string, consequence: CaptureScopedConsequence): string {
+  const thisCapture = `Simulator AX snapshot unavailable (${code}); used XCTest for this capture`;
+  switch (consequence) {
+    case 'bridge-preparation':
+      return `${thisCapture} while the bridge is still being prepared.`;
+    case 'foreground-ownership':
+      return `${thisCapture}, while another surface owned the foreground.`;
+    case 'window-not-full-screen':
+      return `${thisCapture}, while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen.`;
+    case 'coordinate-space-unresolved':
+      return `${thisCapture}, which reports captured geometry in the app's own orientation space.`;
+  }
 }
 
 type FallbackIdentity = Readonly<{
