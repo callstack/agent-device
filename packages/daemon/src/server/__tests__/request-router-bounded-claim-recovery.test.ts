@@ -269,7 +269,8 @@ test('claim preview uses the request workspace to recognize its own exact claim'
 test('bounded reopen renews its own claim after the caller changes cwd', async () => {
   const device = { ...makeIosDevice('SIM-REOPEN-CWD'), appleOs: 'ios' as const };
   process.env.AGENT_DEVICE_CLAIMS_DIR = root('bounded-reopen-cwd-');
-  const { handler } = route(device);
+  let inventory = [device];
+  const { handler } = route(device, { inventory: () => inventory });
   expect(
     (
       await handler(
@@ -279,6 +280,7 @@ test('bounded reopen renews its own claim after the caller changes cwd', async (
       )
     ).ok,
   ).toBe(true);
+  inventory = [device, { ...makeIosDevice('SIM-OTHER-DEVICE'), appleOs: 'ios' as const }];
   const request = batchStep('open', {}, 'reopen-other-cwd');
   const response = await handler({
     ...request,

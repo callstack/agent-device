@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { expect, test } from 'vitest';
 import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
 import { deviceIdentity } from '@agent-device/kernel/device';
+import { publishDaemonRegistration } from '@agent-device/test-kit';
 import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
 import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
 
@@ -106,44 +107,59 @@ test('bounded close may release a local lease when the daemon has no provider re
   }
 });
 
-test('active provider device skips local foreign-claim preview', async () => {
-  const world = await resourceAdmissionWorld('capture', { providerOwned: true });
-  try {
-    const device = world.sessionStore.requireCurrent(world.ref).device;
-    const deviceKey = canonicalLocalDeviceKey(deviceIdentity(device));
-    const claimsDir = path.join(world.daemon.stateDir, 'claims');
-    fs.mkdirSync(claimsDir, { recursive: true });
-    const claimPath = path.join(
-      claimsDir,
-      `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`,
-    );
-    fs.writeFileSync(
-      claimPath,
-      JSON.stringify({
-        schemaVersion: 3,
-        deviceKey,
-        device: { ...deviceIdentity(device), name: device.name },
-        session: 'foreign',
-        workspace: '/foreign',
-        stateDir: '/foreign/state',
-        ownerPid: process.ppid,
-        ownerStartTime: null,
-        ownerToken: 'foreign-token',
-        createdAtMs: 1,
-        updatedAtMs: 1,
-        claimOwnerKind: 'open-session',
-      }),
-    );
-    const before = fs.readFileSync(claimPath);
-    assertRpcOk(
-      await world.call('batch', [], {
-        batchSteps: [
-          { command: 'open', positionals: ['com.android.settings'], flags: { relaunch: true } },
-        ],
-      }),
-    );
-    expect(fs.readFileSync(claimPath)).toEqual(before);
-  } finally {
-    await world.daemon.close();
-  }
-});
+test.each([true, false])(
+  'fresh bounded open with providerOwned=%s handles a foreign local claim',
+  async (providerOwned) => {
+    const world = await resourceAdmissionWorld('capture', { providerOwned });
+    try {
+      const device = world.sessionStore.requireCurrent(world.ref).device;
+      world.sessionStore.retire(world.ref);
+      const deviceKey = canonicalLocalDeviceKey(deviceIdentity(device));
+      const claimsDir = path.join(world.daemon.stateDir, 'claims');
+      const foreignStateDir = path.join(world.daemon.stateDir, 'foreign-owner');
+      fs.mkdirSync(foreignStateDir, { recursive: true });
+      publishDaemonRegistration(foreignStateDir, { pid: process.ppid, startTime: null });
+      fs.mkdirSync(claimsDir, { recursive: true });
+      const claimPath = path.join(
+        claimsDir,
+        `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`,
+      );
+      fs.writeFileSync(
+        claimPath,
+        JSON.stringify({
+          schemaVersion: 3,
+          deviceKey,
+          device: { ...deviceIdentity(device), name: device.name },
+          session: 'foreign',
+          workspace: '/foreign',
+          stateDir: foreignStateDir,
+          ownerPid: process.ppid,
+          ownerStartTime: null,
+          ownerToken: 'foreign-token',
+          createdAtMs: 1,
+          updatedAtMs: 1,
+          claimOwnerKind: 'open-session',
+        }),
+      );
+      const before = fs.readFileSync(claimPath);
+      const response = await world.call('batch', [], {
+        batchSteps: [{ command: 'open', positionals: ['com.android.settings'] }],
+      });
+      if (providerOwned) {
+        assertRpcOk(response);
+        expect(world.sessionStore.lookup('resource-session')).toBeDefined();
+      } else {
+        expect(response.json.error?.data).toMatchObject({
+          code: 'DEVICE_IN_USE',
+          details: { reason: 'DEVICE_CLAIM_LIVE_OWNER' },
+        });
+        expect(world.sessionStore.lookup('resource-session')).toBeUndefined();
+        expect(world.inspectFacts).not.toHaveBeenCalled();
+        expect(world.bind).not.toHaveBeenCalled();
+      }
+      expect(fs.readFileSync(claimPath)).toEqual(before);
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);

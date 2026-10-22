@@ -19,6 +19,7 @@ import {
 } from '@agent-device/test-kit';
 import {
   localRuntimeOwner,
+  providerRuntimeOwner,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -44,7 +45,9 @@ export async function resourceAdmissionWorld(
     minLeaseTtlMs: 1,
     now: () => now,
   });
-  const owner = localRuntimeOwner(device.platform);
+  const owner = options.providerOwned
+    ? providerRuntimeOwner('fixture', 'lease-a')
+    : localRuntimeOwner(device.platform);
   const sessionStore = new SessionStore(
     path.join(mkdtempForTestSync('composite-resources-'), 'sessions'),
     createLiveTestHostEnvironment(),
