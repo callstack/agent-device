@@ -23,9 +23,6 @@ import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-/** The client diagnostic phase that times one daemon request round trip. */
-export const DAEMON_REQUEST_PHASE = 'daemon_request';
-
 export type DaemonRequest = DaemonWireRequest;
 export type DaemonResponse = SharedDaemonResponse;
 type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
@@ -141,7 +138,7 @@ async function sendToDaemonOnHost(
     settings,
     async () => {
       const response = await withDiagnosticTimer(
-        DAEMON_REQUEST_PHASE,
+        'daemon_request',
         async () =>
           await sendRequest(
             info,
