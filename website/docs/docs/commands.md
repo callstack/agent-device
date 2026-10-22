@@ -534,7 +534,8 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 
 When a command fails, read `error.details.dispatched` before you retry:
 
-- `no`: the action never reached the device. Retry it as it is.
+- `no`: the action never reached the device. Check `details.reason` before retrying; a bounded
+  resource refusal must run as a separate command.
 - `unknown`: the action may have landed. Take a snapshot before you retry; a blind retry can tap, type, or navigate twice.
 - Missing: no guarantee. Treat it as `unknown`.
 
@@ -545,7 +546,12 @@ command; it is not a complete command. Run the original step separately with its
 arguments and options, the same `--session` value, and the same private CLI context. Earlier
 steps may still have run.
 
-Read-only commands such as `get`, `snapshot`, and `wait` report `no`, and so do `record`, `trace`, and `perf`, whose controls the device refuses to repeat. On Android, dismissing a blocking system dialog or ANR prompt first does not count as a dispatched step. Once any step of a request reached the device, the failure is `unknown` and `error.details.dispatchedSteps` counts those steps; a `batch` or replay reports `no` only when none of its executed steps changed the app.
+Read-only commands such as `get`, `snapshot`, and `wait` report `no`, and so do `record`, `trace`,
+and `perf`, whose controls the device refuses to repeat. On Android, dismissing a blocking system
+dialog or ANR prompt first does not count as a dispatched step. For other failures, once any step
+of a request reached the device, the failure is `unknown` and `error.details.dispatchedSteps`
+counts those steps. A bounded resource refusal reports `no` for its refused step even when earlier
+batch or replay steps changed the app; check `dispatchedSteps` before retrying.
 
 These refusals carry `dispatched: no` and a typed `error.details.reason`, so branch on the reason, not the message:
 
