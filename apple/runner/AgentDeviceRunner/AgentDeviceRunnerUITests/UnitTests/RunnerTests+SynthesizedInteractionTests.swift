@@ -87,6 +87,38 @@ extension RunnerTests {
       XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
     }
   }
+
+  /// A swipe asks for the gesture viewport before it plans its path. On a tree XCTest cannot
+  /// serialize, an iPhone with one screen answers with that screen, the frame the planned gesture's
+  /// record is routed to; anything else keeps requiring a window.
+  @MainActor
+  func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"gestureViewport","commandId":"unserializable-gesture-viewport"}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    if showsAppsOnlyFullScreen {
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      let screen = UIScreen.main.bounds
+      XCTAssertEqual(response.data?.x, 0)
+      XCTAssertEqual(response.data?.y, 0)
+      XCTAssertEqual(response.data?.x2, Double(screen.width))
+      XCTAssertEqual(response.data?.y2, Double(screen.height))
+    } else {
+      XCTAssertFalse(response.ok)
+      XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
+    }
+  }
 }
 #endif
 

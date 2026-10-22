@@ -677,7 +677,7 @@ extension RunnerTests {
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
     case .gestureViewport:
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
+      let frame = gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }
