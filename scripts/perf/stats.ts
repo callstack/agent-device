@@ -41,3 +41,9 @@ export function median(values: number[]): number {
   const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   return sorted.length === 0 ? Number.NaN : middle(sorted);
 }
+
+/** Median absolute deviation scaled to estimate a normal standard deviation. */
+export function scaledMad(values: number[]): number {
+  const center = median(values);
+  return 1.4826 * median(values.map((v) => Math.abs(v - center)));
+}
