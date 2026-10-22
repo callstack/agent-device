@@ -537,9 +537,12 @@ extension RunnerTests {
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    guard let frame = input.snapshot?.frame, !frame.isEmpty else {
+    // The snapshot frame names the window's own content space on a placed window, so it enters
+    // `tapAt` translated (#3899).
+    guard let read = input.snapshot?.frame, !read.isEmpty else {
       return
     }
+    let frame = snapshotFrameOnScreen(read, translation: liveContentTranslation(app: app))
     _ = tapAt(
       app: app,
       x: frame.minX + max(2, frame.width - 4),
