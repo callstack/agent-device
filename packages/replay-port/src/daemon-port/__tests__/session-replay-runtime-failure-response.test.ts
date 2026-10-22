@@ -53,38 +53,42 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
 });
 
-test('bounded resource refusal keeps the public name and scrubs secret replay context', () => {
+test('bounded resource refusal keeps canonical typed fields on a replay-variable collision', () => {
   const response = buildReplayDivergenceFailureResponseFromDescriptor({
     error: {
       code: 'UNSUPPORTED_OPERATION',
-      message: 'secret-value cannot run within a bounded composite',
+      message: 'record:start secret-value cannot run within a bounded composite',
       hint: 'Use the original secret-value input in the same session.',
       details: {
         reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
-        shape: 'resource:secret-value',
-        standaloneCommandName: 'install-from-source',
+        shape: 'record:start',
+        standaloneCommandName: 'record',
         dispatched: 'no',
       },
     },
-    actionLabel: 'install-from-source secret-value',
-    action: 'install_source',
-    positionals: ['<redacted>'],
+    actionLabel: 'record start secret-value',
+    action: 'record',
+    positionals: ['start', '<redacted>'],
     step: 2,
-    replayPath: '/tmp/flows/install.ad',
+    replayPath: '/tmp/flows/record.ad',
     artifactPaths: [],
     divergence: {},
-    scrubVars: [{ name: 'SOURCE', value: 'secret-value' }],
+    scrubVars: [
+      { name: 'MODE', value: 'record' },
+      { name: 'SOURCE', value: 'secret-value' },
+    ],
   });
   if (response.ok) throw new Error('expected a failure response');
   expect(response.error.details).toMatchObject({
     reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
-    shape: 'resource:<var:SOURCE>',
-    standaloneCommandName: 'install-from-source',
+    shape: 'record:start',
+    standaloneCommandName: 'record',
     dispatched: 'no',
-    replayPath: '/tmp/flows/install.ad',
+    replayPath: '/tmp/flows/record.ad',
   });
   expect(response.error.details).not.toHaveProperty('standaloneCommand');
   expect(response.error.hint).toContain('<var:SOURCE>');
+  expect(response.error.message).toContain('<var:SOURCE>');
   expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 

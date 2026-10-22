@@ -386,6 +386,7 @@ test('nested bounded test refuses resource work while direct test retains native
     expect(nestedDetails.divergence.cause.hint).toContain('original test');
     expect(nestedDetails.divergence.cause.hint).toContain('live outer session');
     expect(nestedDetails.divergence.cause.hint).not.toContain('attempt-1');
+    expect(nestedDetails.divergence.screen.hint).toBe(nestedDetails.divergence.cause.hint);
     expect(world.native).not.toHaveBeenCalled();
     const direct = await world.call('test', [script], flags);
     expect(JSON.stringify(direct.json)).not.toContain('bounded_composite_resource_unsupported');
@@ -430,6 +431,7 @@ test('bounded test cleanup retires an attempt with another durable resource and 
     expect(details.divergence.cause.hint).toContain('original test');
     expect(details.divergence.cause.hint).toContain('live outer session');
     expect(details.divergence.cause.hint).not.toContain('attempt-1');
+    expect(details.divergence.screen.hint).toBe(details.divergence.cause.hint);
     expect(adopted).toHaveLength(1);
     expect(adopted[0]!.finish).toHaveBeenCalled();
     expect(world.sessionStore.listRefs()).toHaveLength(0);

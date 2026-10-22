@@ -37,11 +37,10 @@ export async function resourceAdmissionWorld(
   }> = {},
 ) {
   const device = options.device ?? ANDROID_EMULATOR;
-  let now = 1_000;
   const leaseRegistry = new LeaseRegistry({
     defaultLeaseTtlMs: 10,
     minLeaseTtlMs: 1,
-    now: () => now,
+    now: () => 1_000,
   });
   const owner = localRuntimeOwner(device.platform);
   const sessionStore = new SessionStore(
@@ -253,9 +252,6 @@ export async function resourceAdmissionWorld(
     setViewport,
     facts,
     leaseRegistry,
-    expireLease: () => {
-      now = 1_011;
-    },
   };
 }
 

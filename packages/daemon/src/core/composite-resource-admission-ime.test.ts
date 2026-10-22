@@ -119,6 +119,7 @@ test('nested Android test restores its activated helper after primary resource r
     expect(details.divergence.cause.hint).toContain('original test');
     expect(details.divergence.cause.hint).toContain('live outer session');
     expect(details.divergence.cause.hint).not.toContain('attempt-1');
+    expect(details.divergence.screen.hint).toBe(details.divergence.cause.hint);
     expect(helper.imeSelections()).toEqual([helperIme, originalIme]);
     expect(helper.currentIme()).toBe(originalIme);
     expect(helper.previousIme()).toBeUndefined();

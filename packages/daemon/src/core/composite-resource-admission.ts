@@ -1,4 +1,3 @@
-import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCommandCompositeResourceTrait } from '@agent-device/command-registry/registry';
 import {
@@ -13,7 +12,10 @@ import {
 import { resolveScreenRecordingRuntimePlan } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { parseTraceAction, TRACE_ACTION_REQUIRED_MESSAGE } from '@agent-device/contracts/recording';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
-import { refuseBoundedCompositeResourceOperation } from './lease-context.ts';
+import {
+  isBoundedCompositeRequest,
+  refuseBoundedCompositeResourceOperation,
+} from './lease-context.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
@@ -23,7 +25,7 @@ export async function admitBoundedCompositeResourceRequest(params: {
   session: SessionState | undefined;
 }): Promise<void> {
   const { req, session } = params;
-  if (getRequestExecutionDeadlineMs(req.meta?.requestId) === undefined) return;
+  if (!isBoundedCompositeRequest(req)) return;
   const trait = resolveCommandCompositeResourceTrait(req.command);
   switch (trait) {
     case 'none':

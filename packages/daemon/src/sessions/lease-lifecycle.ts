@@ -60,17 +60,11 @@ export async function cleanupExpiredLeasedSession(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
-  assertTeardownAllowed?: (ref: SessionRef) => void;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
-  if (
-    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () =>
-      params.assertTeardownAllowed?.(ref),
-    )
-  )
-    return false;
+  if (!params.leaseRegistry.consumeExpiredLease(lease.leaseId)) return false;
   await endLeasedSession(
     ref,
     params.sessionStore,

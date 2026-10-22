@@ -117,7 +117,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
       ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
-        ...pickSafeCauseDetails(error.details, scrubVars),
+        ...pickSafeCauseDetails(error.details),
         replayPath,
         step,
         action,
@@ -152,7 +152,6 @@ const SAFE_CAUSE_DETAIL_KEYS = [
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
-  scrubVars: readonly ReplayVarScrubEntry[],
 ): Record<string, unknown> {
   if (!details) return {};
   const safe: Record<string, unknown> = {};
@@ -162,10 +161,9 @@ function pickSafeCauseDetails(
   if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
     if (details.dispatched === 'no') safe.dispatched = 'no';
     const shape = readStringDetail(details, 'shape');
-    if (shape !== undefined) safe.shape = scrubReplayVarValues(shape, scrubVars);
+    if (shape !== undefined) safe.shape = shape;
     const commandName = readStringDetail(details, 'standaloneCommandName');
-    if (commandName !== undefined)
-      safe.standaloneCommandName = scrubReplayVarValues(commandName, scrubVars);
+    if (commandName !== undefined) safe.standaloneCommandName = commandName;
   }
   return safe;
 }

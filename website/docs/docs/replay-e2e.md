@@ -15,7 +15,7 @@ authored `close` may already have ended its session. A failed replay keeps the f
 and line. A replay that completes every step returns success even if it settles shortly after the
 deadline. Cancellation does not prove that native device work has stopped. If a step ignores
 cancellation beyond the remaining 30 seconds, the client may report a transport timeout. For a
-daemon that does not respond, the client checks daemon liveness before recovery. Direct `test`
+daemon that does not respond, the client's existing liveness check can reset it. Direct `test`
 runs keep their own timeout behavior.
 
 If a resource step cannot run within replay's budget, the error includes

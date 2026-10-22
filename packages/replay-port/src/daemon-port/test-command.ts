@@ -281,9 +281,22 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
           divergence && typeof divergence === 'object' && 'cause' in divergence
             ? divergence.cause
             : undefined;
+        const screen =
+          divergence && typeof divergence === 'object' && 'screen' in divergence
+            ? divergence.screen
+            : undefined;
         const correctedDivergence =
           divergence && typeof divergence === 'object' && cause && typeof cause === 'object'
-            ? { ...divergence, cause: { ...cause, hint } }
+            ? {
+                ...divergence,
+                cause: { ...cause, hint },
+                ...(screen &&
+                typeof screen === 'object' &&
+                'state' in screen &&
+                screen.state === 'unavailable'
+                  ? { screen: { ...screen, hint } }
+                  : {}),
+              }
             : divergence;
         return {
           ...attempt,

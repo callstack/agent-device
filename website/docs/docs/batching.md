@@ -16,7 +16,7 @@ already have ended its session. A failed batch keeps
 the failing step. A batch that completes every step returns success even if it settles shortly
 after the deadline. Cancellation does not prove that native device work has stopped. If a step
 ignores cancellation beyond the remaining 30 seconds, the client may report a transport timeout.
-For a daemon that does not respond, the client checks daemon liveness before recovery. Split
+For a daemon that does not respond, the client's existing liveness check can reset it. Split
 longer sequences into separate requests.
 
 Some resource operations cannot run as bounded steps. The failed step returns
