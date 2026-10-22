@@ -48,11 +48,11 @@ The versioned CLI help owns command semantics. To drive an app, start with the s
 - In a new worktree, run `pnpm install --frozen-lockfile && pnpm build` before you test.
 - Do not change other worktrees, devices, sessions, dirty files, or experiments. Do not use `git stash`; all worktrees share it.
 - Do not copy `.env` into a worktree. For host credentials, source the main checkout's file by its absolute path.
-- Give each parallel worker different files and a different device. `pnpm check:affected --run` and `pnpm check` run one at a time automatically.
+- Give each parallel worker different files and a different device. `pnpm check:affected --run`, `pnpm check`, and heavy `pnpm gate` ids run one at a time automatically.
 - The layering scan reads only tracked files. Stage new modules before you trust its result.
 - When you rename a file, move its Fallow baseline entry. Do not regenerate unrelated baselines.
 
-The validation lock automatically reclaims provably dead owners. An unknown owner continues to block.
+The validation lock reclaims provably dead owners. An unknown owner blocks.
 If the wait times out, report the printed owner and the lock state. Do not remove the lock manually.
 
 ## Agent docs

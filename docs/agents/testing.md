@@ -10,8 +10,10 @@
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Both broad commands acquire the same host lock.
+So do `pnpm gate` ids `unit`, `unit-ci`, `provider-integration`, `fuzz-parsers`, `mutation`, `mutation-affected`, and `concurrency-torture`.
+A heavy gate in a locked validation inherits the lock. GitHub runners skip it.
 Wait for the owner to finish, or cancel your waiter with Ctrl-C.
-Do not add lock wrappers. Do not delete lock files.
+Do not delete lock files.
 A wait ends after two hours. Nested validation fails immediately.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
@@ -34,7 +36,6 @@ Execution stops at the first failure. Unexecuted checks remain `not-run`.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
 A dirty-tree pass is local feedback. Detected checkout changes invalidate the run.
-Initial/final checks detect persistent changes. They do not sandbox the checkout.
 During validation, stop all edits.
 
 ## Interpret selection
@@ -63,7 +64,6 @@ Do not add tests that assert prose.
 ## A gate failed
 
 Keep failure attribution separate from validation status.
-Never call a failing gate passed.
 
 | Evidence | Next action | Outcome |
 | --- | --- | --- |
