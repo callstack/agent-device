@@ -59,6 +59,8 @@ test('the device key names one bundle, optionally one process', () => {
     bundleId: 'com.example.app',
     pid: 4242,
   });
+  assert.deepEqual(parseMacOsAppLeaseKey('Foo.Bar@4242'), { bundleId: 'Foo.Bar', pid: 4242 });
+  assert.deepEqual(parseMacOsAppLeaseKey('com.apple.TextEdit'), { bundleId: 'com.apple.TextEdit' });
   for (const key of ['', 'example', 'com.example.app@', 'com.example.app@0', 'com.example app']) {
     assert.throws(() => parseMacOsAppLeaseKey(key), { code: 'INVALID_ARGS' });
   }

@@ -49,6 +49,8 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => 
 
   test.each([
     'stable',
+    'full-screen',
+    'windowed',
     'identity',
     'request-budget',
     'runtime-budget',

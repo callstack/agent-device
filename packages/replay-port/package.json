@@ -116,6 +116,10 @@
       "types": "./src/daemon-port/session-test-outcome.ts",
       "default": "./src/daemon-port/session-test-outcome.ts"
     },
+    "./session-test-source-discovery": {
+      "types": "./src/daemon-port/session-test-source-discovery.ts",
+      "default": "./src/daemon-port/session-test-source-discovery.ts"
+    },
     "./session-test-shard-devices": {
       "types": "./src/daemon-port/session-test-shard-devices.ts",
       "default": "./src/daemon-port/session-test-shard-devices.ts"

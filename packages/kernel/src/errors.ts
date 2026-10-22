@@ -291,6 +291,10 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
   appNotInstalled: 'app_not_installed',
 } as const;
 
+/** The refused composite step did not dispatch; earlier steps may already have dispatched. */
+export const BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON =
+  'bounded_composite_resource_unsupported' as const;
+
 export type PreDispatchRefusalReason =
   (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS];
 

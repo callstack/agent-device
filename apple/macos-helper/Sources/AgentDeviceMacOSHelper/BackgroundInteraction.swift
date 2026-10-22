@@ -259,6 +259,18 @@ func scrollBarValue(current: Double, signedTravel: Double, overflow: Double) -> 
   min(1, max(0, current + signedTravel / overflow))
 }
 
+/// A SwiftUI `Form` lists each row as a child of the scroll area, with no single document view as
+/// tall as the content, so the content is the span all of the area's children cover.
+func scrollContentOverflow(area: RectResponse, contentFrames: [RectResponse], isVertical: Bool)
+  -> Double
+{
+  let spans = contentFrames
+    .filter { $0.width > 0 && $0.height > 0 }
+    .map { isVertical ? ($0.y, $0.y + $0.height) : ($0.x, $0.x + $0.width) }
+  guard let start = spans.map(\.0).min(), let end = spans.map(\.1).max() else { return 0 }
+  return end - start - (isVertical ? area.height : area.width)
+}
+
 func isPressableControlRole(_ role: String) -> Bool {
   pressableControlRoles.contains(role)
 }
@@ -426,15 +438,17 @@ private func performScrollBarScroll(
     guard let bar = elementAttribute(element, attribute: barAttribute as String),
       isAttributeSettable(bar, attribute: kAXValueAttribute as String),
       let value = numberAttribute(bar, attribute: kAXValueAttribute as String),
-      let area = rectAttribute(element),
-      let content = children(of: element)
-        .filter({ role(of: $0) != "AXScrollBar" })
-        .compactMap(rectAttribute)
-        .max(by: { $0.width * $0.height < $1.width * $1.height })
+      let area = rectAttribute(element)
     else {
       continue
     }
-    let overflow = isVertical ? content.height - area.height : content.width - area.width
+    let overflow = scrollContentOverflow(
+      area: area,
+      contentFrames: children(of: element)
+        .filter({ role(of: $0) != "AXScrollBar" })
+        .compactMap(rectAttribute),
+      isVertical: isVertical
+    )
     guard overflow > 0 else { continue }
     let next = scrollBarValue(current: value, signedTravel: signedTravel, overflow: overflow)
     return AXUIElementSetAttributeValue(bar, kAXValueAttribute as CFString, NSNumber(value: next))

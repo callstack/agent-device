@@ -34,7 +34,11 @@ vi.mock('../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
-import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  PRE_DISPATCH_REFUSAL_REASONS,
+} from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
@@ -366,11 +370,36 @@ async function batchReadThenRefusedStep(): Promise<unknown> {
   throw failure;
 }
 
+async function batchMutationThenResourceRefusal(): Promise<unknown> {
+  gestureRuntimeSpies.captureSnapshot.mockRejectedValueOnce(
+    new AppError('UNSUPPORTED_OPERATION', 'resource shape unsupported', {
+      reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+      dispatched: 'no',
+    }),
+  );
+  const failure = await route(makeIosAppSession(SESSION), {
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [
+        { command: 'press', positionals: ['50', '40'], flags: {} },
+        { command: 'press', positionals: ['label="Missing"'], flags: {} },
+      ],
+    },
+  }).catch((error: unknown) => error);
+  assert.ok(failure instanceof AppError);
+  assert.equal(routeOperationSpies.tapPoint.mock.calls.length, 1);
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  assert.equal(failure.details?.reason, BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON);
+  throw failure;
+}
+
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.find-type-refused-after-focus': findTypeRefusedAfterFocus,
   'daemon.route.session-close-then-finalize-refused': closeThenFinalizeRefused,
   'daemon.route.batch-mutation-then-refused-step': batchMutationThenRefusedStep,
   'daemon.route.batch-read-then-refused-step': batchReadThenRefusedStep,
+  'daemon.route.batch-mutation-then-resource-refusal': batchMutationThenResourceRefusal,
   'daemon.route.scroll-transport-failure': scrollWhoseGestureSendFailed,
   'daemon.route.scroll-until-before-first-gesture': scrollUntilRefusedBeforeFirstGesture,
   'daemon.route.scroll-until-third-pass-refused': () =>
@@ -413,4 +442,30 @@ test('a command without a declared recording effect rethrows its failure unnorma
     }),
     (error: unknown) => error === thrown,
   );
+});
+
+test('a typed refusal discloses no dispatch for its step after an earlier dispatched step', async () => {
+  const req: DaemonRequest = { token: 't', session: SESSION, command: 'record', positionals: [] };
+  const ledger = createRequestDispatchLedger();
+  ledger.dispatchedSteps = 1;
+  const response = await discloseRequestDispatch(
+    req,
+    ledger,
+    async (): Promise<import('@agent-device/kernel/contracts').DaemonResponse> => ({
+      ok: false as const,
+      error: {
+        code: 'UNSUPPORTED_OPERATION' as const,
+        message: 'resource shape unsupported',
+        details: {
+          reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+          dispatched: 'no' as const,
+        },
+      },
+    }),
+  );
+  assert.equal(response?.ok, false);
+  if (response && !response.ok) {
+    assert.equal(response.error.details?.dispatched, 'no');
+    assert.equal(response.error.details?.dispatchedSteps, 1);
+  }
 });

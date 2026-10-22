@@ -1,10 +1,13 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   clearRequestCanceled,
+  clearRequestAbortRegistration,
   getRequestSignal,
+  getRequestExecutionDeadlineMs,
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
+  withRequestDeadline,
 } from '@agent-device/host-kit/request';
 import { bindReplayTestAttemptCancellation } from '../test-command.ts';
 
@@ -76,4 +79,34 @@ test('an attempt that is its own parent binds no relay', () => {
   expect(getRequestSignal('attempt-5')?.aborted).toBe(false);
   cancellation.release();
   expect(isRequestCanceled('attempt-5')).toBe(false);
+});
+
+test('a nested attempt inherits its bounded parent cutoff and abort reason', async () => {
+  vi.useFakeTimers();
+  const parent = registerRequestAbort('suite-cutoff');
+  let releaseAttempt: (() => void) | undefined;
+  try {
+    const pending = withRequestDeadline('suite-cutoff', 1_000, async () => {
+      const attempt = bindReplayTestAttemptCancellation({
+        attemptId: 'attempt-cutoff',
+        parentAttemptId: 'suite-cutoff',
+      });
+      releaseAttempt = attempt.release;
+      expect(getRequestExecutionDeadlineMs('attempt-cutoff')).toBe(
+        getRequestExecutionDeadlineMs('suite-cutoff'),
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      return { ok: true as const, data: {} };
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(getRequestSignal('attempt-cutoff')?.aborted).toBe(true);
+    expect(getRequestSignal('attempt-cutoff')?.reason).toBe(
+      getRequestSignal('suite-cutoff')?.reason,
+    );
+    await pending;
+  } finally {
+    releaseAttempt?.();
+    clearRequestAbortRegistration(parent);
+    vi.useRealTimers();
+  }
 });

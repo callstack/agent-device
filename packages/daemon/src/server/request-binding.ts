@@ -1,6 +1,9 @@
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { hasDeviceSelectionInput } from '../core/device/device-selector-intent.ts';
+import {
+  hasDeviceSelectionInput,
+  normalizeFreshForegroundOpenSelection,
+} from '../core/device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
@@ -80,9 +83,9 @@ export function prepareLockedRequestBinding(params: {
 }
 
 function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
-  if (!req.meta?.lockPolicy) return req;
+  if (!req.meta?.lockPolicy) return normalizeFreshForegroundOpenSelection(req);
   try {
-    return applyRequestLockPolicy(req);
+    return normalizeFreshForegroundOpenSelection(applyRequestLockPolicy(req));
   } catch {
     // The request will be rejected during locked binding preparation. Keep lock
     // selection best-effort so invalid selectors do not block unrelated work.

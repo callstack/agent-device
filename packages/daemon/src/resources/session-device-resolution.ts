@@ -14,6 +14,19 @@ import {
 import { listSessionSelectorConflicts } from '../core/session-selector.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
+const pinnedSessionDevices = new WeakMap<
+  DaemonPlatformServices,
+  { originalId: string; selected: DeviceInfo }
+>();
+
+export function pinSessionDeviceSelection(
+  platformServices: DaemonPlatformServices,
+  original: DeviceInfo,
+  selected: DeviceInfo,
+): void {
+  pinnedSessionDevices.set(platformServices, { originalId: original.id, selected });
+}
+
 export function requireSessionOrExplicitSelector(
   command: string,
   session: SessionState | undefined,
@@ -38,11 +51,13 @@ export async function resolveCommandDevice(params: {
 }): Promise<DeviceInfo> {
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
   if (!shouldUseExplicitIdentity && params.session) {
-    return await refreshSessionDeviceIfNeeded(
+    const selected = await refreshSessionDeviceIfNeeded(
       params.session.device,
       params.platformServices,
       params.env,
     );
+    pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
+    return selected;
   }
   const device = await resolveTargetDevice(params.flags ?? {}, {
     env: params.env,
@@ -54,11 +69,20 @@ export async function resolveCommandDevice(params: {
   return hostApp && device.id === hostApp.hostDeviceId ? params.session!.device : device;
 }
 
+/** Boot and shutdown both allow a stopped Android AVD to be selected by name. */
+export async function resolvePowerCommandDevice(
+  params: Omit<Parameters<typeof resolveCommandDevice>[0], 'androidAvdSelection'>,
+): Promise<DeviceInfo> {
+  return await resolveCommandDevice({ ...params, androidAvdSelection: 'include-stopped' });
+}
+
 export async function refreshSessionDeviceIfNeeded(
   device: DeviceInfo,
   platformServices: DaemonPlatformServices,
   env: EnvMap,
 ): Promise<DeviceInfo> {
+  const pinned = pinnedSessionDevices.get(platformServices);
+  if (pinned?.originalId === device.id) return pinned.selected;
   if (isActiveProviderDevice(device)) {
     return device;
   }

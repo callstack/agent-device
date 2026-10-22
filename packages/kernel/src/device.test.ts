@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { devicesOverlap, hostAppDevice, hostDeviceIdOf, type DeviceInfo } from './device.ts';
+import {
+  devicesOverlap,
+  hostAppDevice,
+  hostDeviceIdOf,
+  isMacOsBundleId,
+  type DeviceInfo,
+} from './device.ts';
 
 const mac: DeviceInfo = {
   platform: 'apple',
@@ -26,4 +32,16 @@ test('hostDeviceIdOf names the host of an app device and any other device itself
   assert.equal(hostDeviceIdOf(hostAppDevice(mac, 'com.example.one').id), mac.id);
   assert.equal(hostDeviceIdOf(mac.id), mac.id);
   assert.equal(hostDeviceIdOf('emulator-5554'), 'emulator-5554');
+});
+
+test.each([
+  ['com.apple.TextEdit', true],
+  ['com.x.My_App', true],
+  ['Foo.Bar', true],
+  ['zoom.us', true],
+  ['TextEdit', false],
+  ['com..x', false],
+  ['com.example app', false],
+])('isMacOsBundleId(%j) is %s', (value, expected) => {
+  assert.equal(isMacOsBundleId(value), expected);
 });

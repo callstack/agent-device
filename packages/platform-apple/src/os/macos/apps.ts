@@ -1,7 +1,7 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { parseAppearanceAction } from '@agent-device/contracts/settings';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isMacOsBundleId, type DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -17,7 +17,9 @@ const MACOS_ALIASES: Record<string, string> = {
   settings: 'com.apple.systempreferences',
 };
 
-const MACOS_BUNDLE_ID_PATTERN = /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
+// `open` tells a dotted display name such as "Booking.com" from a bundle id by its lowercase
+// TLD-style first segment; the shared isMacOsBundleId check stays permissive for everyone else.
+const MACOS_BUNDLE_ID_FIRST_SEGMENT = /^[a-z0-9-]+\./;
 const MACOS_APP_TERMINATION_POLL_MS = 100;
 const MACOS_APP_TERMINATION_MAX_ATTEMPTS = 20;
 
@@ -29,16 +31,12 @@ const MACOS_APP_RESOLUTION_CACHE_SCOPE = {
 } satisfies AppResolutionCacheScope;
 const macOsAppResolutionCache = createAppResolutionCache<string>();
 
-function isMacOsBundleId(value: string): boolean {
-  return MACOS_BUNDLE_ID_PATTERN.test(value);
-}
-
 export async function resolveMacOsApp(app: string): Promise<string> {
   const trimmed = app.trim();
 
   const alias = MACOS_ALIASES[trimmed.toLowerCase()];
   if (alias) return alias;
-  if (isMacOsBundleId(trimmed)) {
+  if (isMacOsBundleId(trimmed) && MACOS_BUNDLE_ID_FIRST_SEGMENT.test(trimmed)) {
     return trimmed;
   }
 

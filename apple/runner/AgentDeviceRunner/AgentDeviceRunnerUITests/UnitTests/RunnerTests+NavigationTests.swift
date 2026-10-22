@@ -1,7 +1,67 @@
 import XCTest
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+#endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+#if os(iOS)
+  @MainActor
+  func testRankedInAppBackUsesSynthesisWithoutXCTestTap() throws {
+    try assertInAppBackDispatch(navigationBar: false)
+  }
+
+  /// A navigation bar button keeps XCTest's element tap, which aims at its computed hittable point.
+  @MainActor
+  func testNavigationBarBackKeepsTheElementTap() throws {
+    try assertInAppBackDispatch(navigationBar: true)
+  }
+
+  @MainActor
+  private func assertInAppBackDispatch(navigationBar: Bool) throws {
+    app.launchArguments = ["--agent-device-back-regression"] + (navigationBar ? ["--navigation-bar"] : [])
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let status = app.staticTexts["agent-device-back-status"]
+    XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
+    var xctestTaps = 0
+    var restorations: [() -> Void] = []
+    defer { restorations.reversed().forEach { $0() } }
+    for type in [XCUIElement.self, XCUICoordinate.self] {
+      let selector = NSSelectorFromString("tap")
+      let method = try XCTUnwrap(class_getInstanceMethod(type, selector))
+      let original = method_getImplementation(method)
+      let replacement = imp_implementationWithBlock({ (target: AnyObject) in
+        xctestTaps += 1
+        typealias Tap = @convention(c) (AnyObject, Selector) -> Void
+        unsafeBitCast(original, to: Tap.self)(target, selector)
+      } as @convention(block) (AnyObject) -> Void)
+      method_setImplementation(method, replacement)
+      restorations.append {
+        method_setImplementation(method, original)
+        imp_removeBlock(replacement)
+      }
+    }
+
+    guard case .performed = tapInAppBackControl(app: app) else {
+      return XCTFail("the selected back control must dispatch")
+    }
+    let changed = expectation(for: NSPredicate(format: "label == %@", "Back performed"), evaluatedWith: status)
+    wait(for: [changed], timeout: appExistenceTimeout)
+    if navigationBar {
+      XCTAssertEqual(xctestTaps, 1, "a navigation bar button keeps the element tap")
+    } else {
+      XCTAssertEqual(xctestTaps, 0, "a ranked back control uses synthesized dispatch without idle waits")
+    }
+  }
+#endif
+
   func testTopLeadingNavigationFallbackPointTargetsHeaderControlBand() throws {
     let point = try XCTUnwrap(
       Self.topLeadingNavigationFallbackPoint(

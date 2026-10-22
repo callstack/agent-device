@@ -165,6 +165,8 @@ export type CommandRecordingEffect =
   | RecordingEffect
   | ((req: DispatchedCommand) => RecordingEffect);
 
+export type CompositeResourceTrait = 'none' | 'operation' | 'session-lifecycle' | 'nested-test';
+
 /**
  * ADR 0012 / #1349: when replay verifies a recorded `target-v1` annotation.
  * `pre-dispatch` — the step loop verifies against a fresh capture before
@@ -213,6 +215,8 @@ type CommandDescriptorBase = {
   name: string;
   daemon?: DaemonCommandTraits;
   batchable: boolean;
+  /** Inert resource shape metadata for composite step admission. */
+  compositeResource?: CompositeResourceTrait;
   mcpExposed: boolean;
   timeoutPolicy: CommandTimeoutPolicy;
   /**

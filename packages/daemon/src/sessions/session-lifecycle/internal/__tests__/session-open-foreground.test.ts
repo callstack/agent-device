@@ -145,6 +145,18 @@ test('a bare iOS foreground request reaches the admitted lifecycle target resolv
   });
 });
 
+test('a fresh no-app foreground request narrows mixed inventory selection to iOS', async () => {
+  const resolution = await resolveForegroundOpenRequest({
+    req: baseRequest({ flags: { foreground: true } }),
+    hasExistingSession: false,
+  });
+
+  expect(resolution).toEqual({
+    type: 'resolved',
+    req: baseRequest({ flags: { foreground: true, platform: 'ios' } }),
+  });
+});
+
 // --- composeOpenWithInitialSnapshot ---
 
 const okOpenResponse: DaemonResponse = { ok: true, data: { session: 'default' } };

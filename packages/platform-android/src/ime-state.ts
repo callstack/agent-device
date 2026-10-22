@@ -202,6 +202,11 @@ export function isAndroidTestImeActive(device: DeviceInfo): boolean {
   return activeTestImeDevices.has(getAndroidImeHelperDeviceKey(device));
 }
 
+/** Existing owned IME restoration work, without touching the device. */
+export function inspectAndroidSessionTeardownResources(device: DeviceInfo): readonly string[] {
+  return isAndroidTestImeActive(device) ? ['android-test-ime'] : [];
+}
+
 export function getAndroidTestImeOwnership(
   device: DeviceInfo,
 ): AndroidTestImeOwnership | undefined {

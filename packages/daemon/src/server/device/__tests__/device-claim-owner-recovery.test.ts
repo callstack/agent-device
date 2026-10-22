@@ -1,11 +1,16 @@
 import {
   createOwnerScopedDeviceClaimReconciler,
+  inspectDeviceClaimRecovery,
   type OwnerScopedClaimRecoveryComposer,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
@@ -65,6 +70,118 @@ test('composes one recovery per claim from that claim state dir and disposes it'
     'reconcile:/state/owner-b',
     'dispose:/state/owner-b',
   ]);
+});
+
+test('a retained owner decision stops recovery before gateway composition', async () => {
+  const events: string[] = [];
+  const claim = makeClaim('/state/blocked', 'shared');
+  const reconcile = createOwnerScopedDeviceClaimReconciler({
+    scope,
+    beforeGateway: async (current) => {
+      assert.equal(current, claim);
+      events.push('inspect');
+      return { status: 'retained', reason: 'resource-recovery-requires-standalone' };
+    },
+    composeGateway: () => {
+      events.push('gateway');
+      throw new Error('gateway must not be composed');
+    },
+  });
+  assert.deepEqual(await reconcile(claim), {
+    status: 'retained',
+    reason: 'resource-recovery-requires-standalone',
+  });
+  assert.deepEqual(events, ['inspect']);
+});
+
+test('unreadable durable evidence prevents owner-scoped gateway construction', async () => {
+  const stateDir = mkdtempForTestSync('device-claim-unreadable-owner-');
+  const claim = makeClaim(stateDir, 'claimed-session');
+  const resourcePath = appLogResourceStore.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+  fs.writeFileSync(resourcePath, '{');
+  const reconcile = createOwnerScopedDeviceClaimReconciler({
+    scope,
+    beforeGateway: inspectDeviceClaimRecovery,
+    composeGateway: () => {
+      throw new Error('gateway must not be composed');
+    },
+  });
+  expect(await reconcile(claim)).toEqual({
+    status: 'retained',
+    reason: 'app-log-descriptor-invalid',
+  });
+  expect(fs.readFileSync(resourcePath, 'utf8')).toBe('{');
+});
+
+test('owner-scoped recovery uses its pre-gateway ownership decision for terminal cleanup', async () => {
+  const stateDir = mkdtempForTestSync('device-claim-terminal-owner-');
+  const claim = makeClaim(stateDir, 'claimed-session');
+  const resourcePath = appLogResourceStore.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  const screenPath = screenRecordingDurableResource.store.resolvePath(
+    path.join(stateDir, 'sessions', claim.session),
+  );
+  appLogResourceStore.write(
+    resourcePath,
+    createDurableResourceEnvelope({
+      resourceKind: 'app-log',
+      sessionId: claim.session,
+      device: claim.device,
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'completed',
+      descriptor: { version: 1, body: { pid: 123 } },
+    }),
+  );
+  screenRecordingDurableResource.store.write(
+    screenPath,
+    createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: claim.session,
+      device: claim.device,
+      owner: localRuntimeOwner('android'),
+      fence: { token: 'fence', generation: 1 },
+      lifecycle: 'completed',
+      descriptor: { version: 1, body: {} },
+    }),
+  );
+  const openedPaths: string[] = [];
+  const originalOpen = fs.openSync;
+  const open = vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
+    if (args[0] === resourcePath || args[0] === screenPath) openedPaths.push(args[0]);
+    return originalOpen(...args);
+  });
+  const shutdown = vi.fn(async () => {});
+  const bind = vi.fn();
+  try {
+    const reconcile = createOwnerScopedDeviceClaimReconciler({
+      scope,
+      beforeGateway: inspectDeviceClaimRecovery,
+      composeGateway: () => ({ bind, shutdown }) as never,
+    });
+    expect(await reconcile(claim)).toEqual({ status: 'reconciled' });
+    expect(openedPaths.slice(0, 2)).toEqual([resourcePath, screenPath]);
+    expect(bind).not.toHaveBeenCalled();
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(appLogResourceStore.read(resourcePath)).toMatchObject({
+      status: 'decoded',
+      envelope: { lifecycle: 'completed' },
+    });
+  } finally {
+    open.mockRestore();
+  }
+  expect(inspectDeviceClaimRecovery(claim)).toEqual({
+    status: 'inspectable',
+    recoveryKinds: [],
+    ownedResources: [
+      { resourceKind: 'app-log', resourcePath },
+      { resourceKind: 'screen-recording', resourcePath: screenPath },
+    ],
+  });
 });
 
 test('disposes the composed recovery when reconciliation retains or throws', async () => {

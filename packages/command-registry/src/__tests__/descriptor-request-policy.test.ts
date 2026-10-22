@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { readDeclaredPlatformExecution } from '../platform-execution-entry.ts';
+import { readDeclaredPlatformExecution } from '../descriptor-request-policy.ts';
 import { commandDescriptors } from '../registry.ts';
 
 describe('platform-execution registry entry gate', () => {

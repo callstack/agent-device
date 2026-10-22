@@ -1,28 +1,17 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import {
+  heldKeyedLockKeys,
+  withKeyedLock,
+  withKeyedLockHolder,
+  type KeyedLockHolder,
+} from '@agent-device/kernel/keyed-lock';
 import { hostDeviceIdOf } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RequestExecutionLockKey } from './request-binding.ts';
-
-type RetainedExecutionLock = {
-  acquired: Promise<void>;
-  completion: Promise<void>;
-  release(): void;
-};
 
 export type RequestExecutionLocks = {
   run<T>(task: () => Promise<T>): Promise<T>;
   retainDevice(deviceId: string): Promise<void>;
 };
-
-/**
- * The locks each enclosing request holds, innermost last. A request nested in another (a batch
- * step) takes its own locks while the enclosing request still holds its own, so the same-host rule
- * below applies to the locks it takes up front as much as to the ones it retains later.
- */
-const enclosingRequestLocks = new AsyncLocalStorage<
-  readonly ReadonlySet<RequestExecutionLockKey>[]
->();
 
 /**
  * Owns the stable execution locks for one request and any device lock discovered
@@ -35,20 +24,8 @@ export function createRequestExecutionLocks(params: {
   scope?: Readonly<{ signal: AbortSignal }>;
 }): RequestExecutionLocks {
   const { locks, initialKeys, scope } = params;
-  const initialKeySet = new Set(initialKeys);
-  const retainedLocks = new Map<RequestExecutionLockKey, RetainedExecutionLock>();
-  // Every lock this request holds, for the requests nested in it to see.
-  const heldLocks = new Set<RequestExecutionLockKey>();
-  const enclosing = (): readonly ReadonlySet<RequestExecutionLockKey>[] =>
-    enclosingRequestLocks.getStore() ?? [];
+  let holder: KeyedLockHolder | undefined;
   let running = false;
-
-  const releaseRetainedLocks = async (): Promise<void> => {
-    const held = [...retainedLocks.values()];
-    for (const lock of held) lock.release();
-    await Promise.all(held.map(async (lock) => await lock.completion));
-    retainedLocks.clear();
-  };
 
   return {
     run: async (task) => {
@@ -56,49 +33,39 @@ export function createRequestExecutionLocks(params: {
         throw new Error('Request execution locks cannot run the same scope concurrently.');
       }
       running = true;
-      const outer = enclosing();
-      const heldOutside = outer.flatMap((held) => [...held]);
+      // What the requests this one is nested in hold (a batch step runs inside its batch). Its own
+      // initial keys are taken in sorted order, waiting for each in turn.
+      const heldOutside = heldRequestLockKeys(locks);
       try {
         return await withRequestExecutionLockKeys(
           locks,
           initialKeys,
-          async () => await enclosingRequestLocks.run([...outer, heldLocks], task),
+          async () =>
+            await withKeyedLockHolder(async (taken) => {
+              holder = taken;
+              return await task();
+            }),
           scope?.signal,
-          (key) => {
-            // An enclosing request already holding this lock re-enters it without waiting.
-            if (!heldOutside.includes(key)) assertSameHostLockFree(locks, key, heldOutside);
-            heldLocks.add(key);
-          },
+          (key) => assertSameHostLockFree(locks, key, heldOutside),
         );
       } finally {
-        heldLocks.clear();
-        try {
-          await releaseRetainedLocks();
-        } finally {
-          running = false;
-        }
+        holder = undefined;
+        running = false;
       }
     },
     retainDevice: async (deviceId) => {
-      if (!running) {
+      if (!holder) {
         throw new Error('A device execution lock can only be retained by a running request.');
       }
       const key = `device:${deviceId}` as const;
-      if (initialKeySet.has(key)) return;
-      // An enclosing request already holds it, and this request runs inside that hold.
-      if (enclosing().some((held) => held.has(key))) return;
-
-      let retained = retainedLocks.get(key);
-      if (!retained) {
-        const heldKeys = [...heldLocks, ...enclosing().flatMap((held) => [...held])];
-        assertSameHostLockFree(locks, key, heldKeys);
-        retained = retainExecutionLock(locks, key, scope?.signal);
-        retainedLocks.set(key, retained);
-        heldLocks.add(key);
-      }
-      await retained.acquired;
+      assertSameHostLockFree(locks, key, heldRequestLockKeys(locks));
+      await holder.hold(locks, key, scope?.signal);
     },
   };
+}
+
+function heldRequestLockKeys(locks: Map<string, Promise<unknown>>): RequestExecutionLockKey[] {
+  return heldKeyedLockKeys(locks) as RequestExecutionLockKey[];
 }
 
 /**
@@ -113,7 +80,8 @@ function assertSameHostLockFree(
   key: RequestExecutionLockKey,
   heldKeys: readonly RequestExecutionLockKey[],
 ): void {
-  if (!key.startsWith('device:')) return;
+  // A held key re-enters, and only device keys belong to a host.
+  if (heldKeys.includes(key) || !key.startsWith('device:')) return;
   const deviceId = key.slice('device:'.length);
   if (holdsDeviceOfSameHost(deviceId, heldKeys) && locks.has(key)) {
     throw deviceExecutionLockBusy(deviceId);
@@ -163,32 +131,4 @@ export async function withRequestExecutionLockKeys<T>(
       await withRequestExecutionLockKeys(locks, remainingKeys, task, signal, beforeAcquire),
     signal,
   );
-}
-
-function retainExecutionLock(
-  locks: Map<string, Promise<unknown>>,
-  key: RequestExecutionLockKey,
-  signal?: AbortSignal,
-): RetainedExecutionLock {
-  let markAcquired: () => void = () => {};
-  let rejectAcquired: (error: unknown) => void = () => {};
-  let release: () => void = () => {};
-  const acquired = new Promise<void>((resolve, reject) => {
-    markAcquired = resolve;
-    rejectAcquired = reject;
-  });
-  const released = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const completion = withKeyedLock(
-    locks,
-    key,
-    async () => {
-      markAcquired();
-      await released;
-    },
-    signal,
-  );
-  void completion.catch((error) => rejectAcquired(error));
-  return { acquired, completion, release };
 }

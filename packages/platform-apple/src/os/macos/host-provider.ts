@@ -20,14 +20,14 @@ export function createLocalAppleMacOsHostProvider(
   return {
     openBundle: async (bundleId, url, options) => {
       // Loaded on the first bundle open, not when this provider is constructed: the probe's host-kit
-      // reads stay off the Apple façades' eager closure (ADR 0019), and an open of an already-listed
-      // app is the common path that never needs them until `open` actually runs.
-      const { waitForLaunchServicesRegistration } =
-        await import('./launch-services-registration.ts');
-      await waitForLaunchServicesRegistration(runCommand, bundleId);
+      // reads stay off the Apple façades' eager closure (ADR 0019).
+      const { resolveListedRunningBundle } = await import('./launch-services-registration.ts');
+      const runningBundle = await resolveListedRunningBundle(runCommand, bundleId);
       await runCommand('open', [
         ...openActivationArgs(options),
-        ...buildMacOpenArgs(bundleId, url),
+        ...(runningBundle
+          ? buildMacOpenPathArgs(runningBundle, url)
+          : buildMacOpenArgs(bundleId, url)),
       ]);
     },
     openTarget: async (target, options) => {
@@ -85,6 +85,10 @@ function buildMacOpenArgs(bundleId: string, url?: string): string[] {
     openArgs.push(url);
   }
   return openArgs;
+}
+
+function buildMacOpenPathArgs(bundlePath: string, url?: string): string[] {
+  return url ? ['-a', bundlePath, url] : [bundlePath];
 }
 
 async function listLocalMacApps(
