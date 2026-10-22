@@ -341,20 +341,22 @@ extension RunnerTests {
     return CGRect(x: 0, y: 0, width: 0, height: 0)
   }
 
-  /// The viewport the portable gesture planner lays pointer paths in. A planned gesture's record is
-  /// routed to the window this frame was read from, so when no window resolves on an iPhone with one
-  /// screen, the viewport is that screen: the same sole-screen route a synthesized tap or scroll takes.
+  /// The viewport the portable gesture planner lays pointer paths in: the frame of the synthesized
+  /// context its record is routed through, so a tree with no window on an iPhone with one screen
+  /// plans on that screen, the same route a synthesized tap or scroll takes.
   @MainActor
   func gestureViewportFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
-    if let resolved = resolveRunnerWindowElement(app: app) {
-      return frameAvoidingKeyboard(app: app, frame: resolved.frame)
+    guard let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    ) else {
+      return frameAvoidingKeyboard(app: app, frame: app.frame)
     }
-    // The windows query just failed on this tree, so a keyboard probe would fail on it too.
-    if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
-      return soleScreenFrame
-    }
-    return frameAvoidingKeyboard(app: app, frame: app.frame)
+    // The sole-screen route means the windows query just failed, so a keyboard probe would too.
+    return context.resolvedWindow == nil
+      ? context.referenceFrame
+      : frameAvoidingKeyboard(app: app, frame: context.referenceFrame)
 #else
     return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
 #endif
