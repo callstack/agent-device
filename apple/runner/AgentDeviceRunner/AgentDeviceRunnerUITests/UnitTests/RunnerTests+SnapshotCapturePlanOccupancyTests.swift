@@ -548,9 +548,14 @@ extension RunnerTests {
     snapshotXCTestChannelNextRecoveryProbeAt = .distantPast
     let expiry = snapshotXCTestChannelPenaltyUntil
     let started = Date()
-    let payload = try runDeferredPlanOffMain(target: captureTarget) {
+    let payload = try runDeferredPlanOffMain(target: captureTarget)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 0.5, "the accepted capture must answer before the optional probe")
+    let probeFinished = expectation(description: "scheduled probe answered")
+    commandExecutionQueue.async {
       RunnerBlockingSnapshotGate.release.signal()
+      probeFinished.fulfill()
     }
+    wait(for: [probeFinished], timeout: 3)
     XCTAssertEqual(payload.snapshotQuality?.backend, SnapshotBackendKind.privateAX.rawValue)
     XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .success)
     XCTAssertLessThan(Date().timeIntervalSince(started), 2)
@@ -558,8 +563,21 @@ extension RunnerTests {
     let next = snapshotXCTestChannelNextRecoveryProbeAt
     XCTAssertGreaterThan(next.timeIntervalSince(started), 29)
     _ = try runDeferredPlanOffMain(target: captureTarget)
+    let queueDrained = expectation(description: "second capture queued no probe")
+    commandExecutionQueue.async { queueDrained.fulfill() }
+    wait(for: [queueDrained], timeout: 3)
     XCTAssertEqual(snapshotXCTestChannelNextRecoveryProbeAt, next)
     XCTAssertEqual(snapshotXCTestChannelPenaltyUntil, expiry)
+    XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .timedOut)
+
+    snapshotXCTestChannelNextRecoveryProbeAt = .distantPast
+    _ = try runDeferredPlanOffMain(target: captureTarget) {
+      self.clearSnapshotXCTestChannelPenalty(reason: "replace-before-probe")
+      self.penalizeSnapshotXCTestChannel(bundleId: captureTarget.bundleId, reason: "new-penalty")
+    }
+    let staleProbeDrained = expectation(description: "stale queued probe refused")
+    commandExecutionQueue.async { staleProbeDrained.fulfill() }
+    wait(for: [staleProbeDrained], timeout: 3)
     XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .timedOut)
   }
 
@@ -602,7 +620,7 @@ extension RunnerTests {
     }
     let box = ResultBox()
     let planned = expectation(description: "deferred plan answered")
-    DispatchQueue(label: "agent-device.runner.tests.deferred-plan").async {
+    commandExecutionQueue.async {
       do {
         box.payload = try self.runSnapshotCapturePlan(
           Self.regularVisiblePlan,

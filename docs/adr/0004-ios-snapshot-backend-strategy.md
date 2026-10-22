@@ -246,6 +246,8 @@ After an independent backend succeeds, a penalized regular plan can schedule the
 The interval starts when the penalty is armed.
 The one-second idle-only probe bounds all acquisition and processing work.
 The accepted independent capture remains the response.
+The existing serial command queue runs the optional probe after that response.
+A queued probe reserves the interval and checks that its penalty is still current before it starts.
 The schedule excludes physical-device plans, explicit backend pins, occupied main-thread work, and plans with less than one second remaining.
 The interval limits hostile-screen probe cost while giving healthy screens a recovery opportunity before penalty expiry.
 A normal-plan query-sweep timeout rejects the partial capture and penalizes the channel.

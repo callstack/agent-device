@@ -317,7 +317,7 @@ extension RunnerTests {
       && deadline.timeIntervalSince(now) >= Self.penalizedXCTestProbeTreeSliceBudget
   }
 
-  private func runScheduledSnapshotXCTestRecoveryProbeIfNeeded(
+  private func scheduleSnapshotXCTestRecoveryProbeIfNeeded(
     effective: EffectiveSnapshotCapturePlan,
     acceptedBackend: SnapshotBackendKind,
     target: SnapshotCaptureTarget,
@@ -338,10 +338,34 @@ extension RunnerTests {
       hasAbandonedWork: abandoned
     )
     if scheduled {
-      snapshotXCTestChannelNextRecoveryProbeAt = now.addingTimeInterval(Self.snapshotXCTestRecoveryProbeInterval)
+      snapshotXCTestChannelNextRecoveryProbeAt = .distantFuture
     }
+    let penaltyUntil = snapshotXCTestChannelPenaltyUntil
     snapshotXCTestChannelPenaltyLock.unlock()
     guard scheduled else { return }
+    commandExecutionQueue.async {
+      self.snapshotXCTestChannelPenaltyLock.lock()
+      let stillCurrent = self.snapshotXCTestChannelPenaltyUntil == penaltyUntil
+        && Date() < penaltyUntil
+      if stillCurrent {
+        self.snapshotXCTestChannelNextRecoveryProbeAt = Date().addingTimeInterval(Self.snapshotXCTestRecoveryProbeInterval)
+      }
+      self.snapshotXCTestChannelPenaltyLock.unlock()
+      guard stillCurrent, !self.hasAbandonedMainThreadWork(),
+        deadline.timeIntervalSinceNow >= Self.penalizedXCTestProbeTreeSliceBudget
+      else { return }
+      self.runScheduledSnapshotXCTestRecoveryProbe(
+        target: target, options: options, channelState: effective.xCTestChannelState
+      )
+    }
+  }
+
+  private func runScheduledSnapshotXCTestRecoveryProbe(
+    target: SnapshotCaptureTarget,
+    options: PresentationOptions,
+    channelState: SnapshotXCTestChannelPlanState
+  ) {
+    let now = Date()
     let slice = Self.penalizedXCTestProbeTreeSliceBudget
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_RECOVERY_PROBE_SCHEDULED bundle=%@", target.bundleId ?? "")
     defer {
@@ -368,7 +392,7 @@ extension RunnerTests {
       attempt: attempt,
       bundleId: target.bundleId,
       penaltySuppressed: false,
-      channelState: effective.xCTestChannelState
+      channelState: channelState
     )
   }
 
@@ -512,7 +536,7 @@ extension RunnerTests {
           verdictReason?.reason ?? "sparse tree"
         )
       }
-      runScheduledSnapshotXCTestRecoveryProbeIfNeeded(
+      scheduleSnapshotXCTestRecoveryProbeIfNeeded(
         effective: effective,
         acceptedBackend: kind,
         target: target,
