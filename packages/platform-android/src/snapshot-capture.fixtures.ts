@@ -4,6 +4,7 @@ import type {
 } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { createAndroidSnapshotCapture, type AndroidSnapshotCapture } from './mechanics.ts';
+export { bindAndroidImeTestHost } from './ime-host.fixtures.ts';
 
 export function makeAndroidSnapshotCapture(
   nodes: RawSnapshotNode[],

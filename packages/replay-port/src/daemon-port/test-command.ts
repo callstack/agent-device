@@ -20,7 +20,12 @@ import {
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  asAppError,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+} from '@agent-device/kernel/errors';
+import { projectStandaloneCommand } from '@agent-device/command-registry/standalone-command';
 import {
   emitRequestProgress,
   clearRequestCanceled,
@@ -264,7 +269,39 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
           return response;
         },
       });
-      return toReplayTestAttemptOutcome(replayResponse);
+      const attempt = toReplayTestAttemptOutcome(replayResponse);
+      if (
+        attempt.status === 'failed' &&
+        attempt.error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON
+      ) {
+        const {
+          standaloneCommand: _retired,
+          standaloneCommandOmitted: _omitted,
+          ...details
+        } = attempt.error.details;
+        const projection = projectStandaloneCommand(req);
+        const hint = projection.standaloneCommand
+          ? `Run ${projection.standaloneCommand} directly with the same private CLI context.`
+          : 'Run the original test directly with the same --session value and private CLI context.';
+        const divergence = details.divergence;
+        const cause =
+          divergence && typeof divergence === 'object' && 'cause' in divergence
+            ? divergence.cause
+            : undefined;
+        const correctedDivergence =
+          divergence && typeof divergence === 'object' && cause && typeof cause === 'object'
+            ? { ...divergence, cause: { ...cause, hint } }
+            : divergence;
+        return {
+          ...attempt,
+          error: {
+            ...attempt.error,
+            hint,
+            details: { ...details, divergence: correctedDivergence, ...projection },
+          },
+        };
+      }
+      return attempt;
     },
     finalizeAttempt: async ({
       sessionName: testSessionName,

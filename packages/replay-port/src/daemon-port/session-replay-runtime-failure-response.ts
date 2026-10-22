@@ -1,5 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -110,13 +111,17 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
         `Replay failed at step ${step} (${actionLabel}): ${error.message}`,
         scrubVars,
       ),
-      hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
+      hint: hasScrubbedStandaloneCommand(error.details, scrubVars)
+        ? 'Run the refused operation directly with its original options and the same --session value.'
+        : error.hint === undefined
+          ? undefined
+          : scrubReplayVarValues(error.hint, scrubVars),
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
       ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
-        ...pickSafeCauseDetails(error.details),
+        ...pickSafeCauseDetails(error.details, scrubVars),
         replayPath,
         step,
         action,
@@ -151,11 +156,33 @@ const SAFE_CAUSE_DETAIL_KEYS = [
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
+  scrubVars: readonly ReplayVarScrubEntry[],
 ): Record<string, unknown> {
   if (!details) return {};
   const safe: Record<string, unknown> = {};
   for (const key of SAFE_CAUSE_DETAIL_KEYS) {
     if (details[key] !== undefined) safe[key] = details[key];
   }
+  if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
+    if (details.dispatched === 'no') safe.dispatched = 'no';
+    const shape = readStringDetail(details, 'shape');
+    if (shape !== undefined) safe.shape = scrubReplayVarValues(shape, scrubVars);
+    if (hasScrubbedStandaloneCommand(details, scrubVars))
+      safe.standaloneCommandOmitted = 'secret-bearing';
+    else {
+      const command = readStringDetail(details, 'standaloneCommand');
+      if (command !== undefined) safe.standaloneCommand = command;
+      const omitted = readStringDetail(details, 'standaloneCommandOmitted');
+      if (omitted !== undefined) safe.standaloneCommandOmitted = omitted;
+    }
+  }
   return safe;
+}
+
+function hasScrubbedStandaloneCommand(
+  details: Record<string, unknown> | undefined,
+  scrubVars: readonly ReplayVarScrubEntry[],
+): boolean {
+  const command = readStringDetail(details, 'standaloneCommand');
+  return command !== undefined && scrubReplayVarValues(command, scrubVars) !== command;
 }

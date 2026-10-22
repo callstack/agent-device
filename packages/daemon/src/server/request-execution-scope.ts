@@ -30,6 +30,7 @@ import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
 } from '../sessions/request-admission.ts';
+import { isBoundedCompositeRequest } from '../core/lease-context.ts';
 import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
@@ -316,12 +317,35 @@ export async function createRequestExecutionScope(params: {
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        const boundedStep =
+          command !== 'batch' && command !== 'replay' && isBoundedCompositeRequest(scopedReq);
+        let admissionCompleted = false;
         try {
+          const existingRef = sessionStore.lookup(sessionName);
+          const session = existingRef?.session;
+          const boundedResources = boundedStep
+            ? await import('../core/composite-resource-admission.ts')
+            : undefined;
+          if (boundedResources) {
+            await boundedResources.admitBoundedCompositeResourceRequest({
+              req: scopedReq,
+              session,
+            });
+          }
+          throwIfRequestCanceled(scopedReq.meta?.requestId);
           await cleanupExpiredLeasedSession({
             env: params.host.env,
             sessionName,
             sessionStore,
             leaseRegistry,
+            assertTeardownAllowed: () => {
+              if (command === 'batch' || command === 'replay' || boundedStep) {
+                throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+                  reason: 'LEASE_NOT_FOUND',
+                  dispatched: 'no',
+                });
+              }
+            },
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
@@ -341,6 +365,7 @@ export async function createRequestExecutionScope(params: {
             daemonPolicy: params.daemonPolicy,
           });
           scope.req = scopedReq;
+          admissionCompleted = true;
           const admittedLease = scopedReq.internal?.admittedLease;
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
@@ -357,7 +382,11 @@ export async function createRequestExecutionScope(params: {
           // polling keep another agent's abandoned claim alive forever. And a request whose client
           // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
           // timed out is the behavior this feature exists to catch.
-          if (attachesToSession && !isRequestCanceled(scopedReq.meta?.requestId)) {
+          if (
+            (!boundedStep || admissionCompleted) &&
+            attachesToSession &&
+            !isRequestCanceled(scopedReq.meta?.requestId)
+          ) {
             sessionStore.noteSessionActivity(sessionName);
           }
         }
@@ -546,7 +575,10 @@ export async function prepareLockedRequestScope(params: {
   scope.throwIfCanceled();
   const seededRef = sessionStore.lookup(scope.sessionName);
   if (seededRef) {
-    await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
+    // A composite's resource health is checked by its admitted steps; the outer read can invalidate a durable recording.
+    if (scope.command !== 'batch' && scope.command !== 'replay') {
+      await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
+    }
     scope.throwIfCanceled();
     sessionStore.requireCurrent(seededRef);
   }

@@ -1,4 +1,5 @@
 export const RECORDING_SCOPE_VALUES = ['app', 'device', 'system'] as const;
+export const TRACE_ACTION_REQUIRED_MESSAGE = 'trace requires start|stop';
 
 /** Shared trace command grammar for handler and composite admission. */
 export function parseTraceAction(

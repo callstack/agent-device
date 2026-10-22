@@ -5,6 +5,7 @@ import { parseArgs } from '../../cli/parser/args.ts';
 import { readCliBatchStepsJson } from '../batch/batch-steps.ts';
 import { buildCommandUsageText, buildUsageText, helpTopicIds } from './cli-help.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import { readInputFromCli } from '../cli-grammar.ts';
 import { findCommandMetadata, isCommandName } from '../command-metadata.ts';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -178,4 +179,27 @@ test('help macos keeps its menu bar example runnable', () => {
   // `session.surface`), so only open takes --surface.
   assert.deepEqual([...new Set(surfaceExamples.map((example) => example.argv[0]))], ['open']);
   assert.ok(examples.some((example) => example.argv[0] === 'snapshot'));
+});
+
+test('resource refusal projects install_source to a runnable public command with original input', () => {
+  const projection = resolveCommandStandaloneProjection('install_source');
+  assert.deepEqual(projection, {
+    command: 'install-from-source',
+    arguments: 'original-required',
+    session: 'same-session',
+  });
+  const parsed = parseArgs(
+    [
+      projection.command,
+      'https://artifacts.example.org/android/demo.apk',
+      '--session',
+      'device-run',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, projection.command);
+  assert.equal(parsed.positionals[0], 'https://artifacts.example.org/android/demo.apk');
+  assert.equal(parsed.flags.session, 'device-run');
+  if (!isCommandName(parsed.command)) throw new Error('projected command is not public');
+  readInputFromCli(parsed.command, parsed.positionals, parsed.flags);
 });

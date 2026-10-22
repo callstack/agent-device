@@ -16,8 +16,17 @@ already have ended its session. A failed batch keeps
 the failing step. A batch that completes every step returns success even if it settles shortly
 after the deadline. Cancellation does not prove that native device work has stopped. If a step
 ignores cancellation beyond the remaining 30 seconds, the client may report a transport timeout.
-For a daemon that does not respond, the client's existing liveness check can reset it. Split
+For a daemon that does not respond, the client checks daemon liveness before recovery. Split
 longer sequences into separate requests.
+
+Some resource operations cannot run as bounded steps. The failed step returns
+`details.reason: bounded_composite_resource_unsupported`, `details.shape`,
+`details.dispatched: no`, and a runnable `details.standaloneCommand` when its public options are
+safe to show. Run that command with the same CLI context. If `details.standaloneCommandOmitted`
+is `secret-bearing` or `not-cli-representable`, use the original step input directly in the same
+session. Inspect `details.partialResults` and
+`details.dispatchedSteps` before retrying the batch: earlier steps may already have changed the app.
+The batch still authenticates and renews its own lease while it runs.
 
 ## Run a batch from the CLI
 
@@ -123,7 +132,7 @@ Failure:
 - Treat earlier refs and snapshots as stale after the UI changes.
 - Prefer `--steps-file` over inline JSON.
 - Keep batches to about 5-20 steps.
-- When a batch fails, use `details.step` and `details.partialResults` to replan from the failing step.
+- When a batch fails, inspect `details.step`, `details.partialResults`, and `details.dispatchedSteps` before retrying.
 
 ## Example recipes
 

@@ -73,6 +73,37 @@ test('a command that completes under the session lock stamps the session it ran 
   expect(sessionStore.get('default')?.lastActivityAtMs).toBeGreaterThan(0);
 });
 
+test('ordinary failed lease admission retains the session activity stamp', async () => {
+  const sessionStore = storeWithSession();
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
+  const ref = sessionStore.lookup('default');
+  if (!ref) throw new Error('missing test session');
+  sessionStore.update(ref, {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+    },
+  });
+  const scope = await withDiagnosticsScope({ command: 'home', logPath: LOG_PATH }, () =>
+    createRequestExecutionScope({
+      host: createTestHostEnvironment(),
+      platformServices: daemonPlatformServicesFixture(),
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      req: makeRequest({ command: 'home', meta: { leaseId: 'foreign-lease' } }),
+      sessionStore,
+      leaseRegistry,
+    }),
+  );
+
+  await expect(scope.runLocked(async () => 'unreachable')).rejects.toMatchObject({
+    code: 'UNAUTHORIZED',
+  });
+  expect(sessionStore.get('default')?.lastActivityAtMs).toBeGreaterThan(0);
+});
+
 test('a lock-exempt inventory command reports no activity, even against a claim-holding session', async () => {
   const sessionStore = storeWithSession();
   const scope = await withDiagnosticsScope({ command: 'devices', logPath: LOG_PATH }, () =>

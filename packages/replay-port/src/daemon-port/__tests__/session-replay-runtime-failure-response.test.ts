@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import {
   ANDROID_TEST_IME_FLOW_HINT,
   buildReplayDivergenceFailureResponseFromDescriptor,
@@ -50,6 +51,39 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   });
   expect(response.error.details).toHaveProperty('reason');
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
+});
+
+test('bounded resource refusal omits a command that replay scrubbing would break', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'secret-value cannot run within a bounded composite',
+      details: {
+        reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+        shape: 'resource:secret-value',
+        standaloneCommand: 'agent-device install-from-source secret-value',
+        dispatched: 'no',
+      },
+    },
+    actionLabel: 'install-from-source secret-value',
+    action: 'install_source',
+    positionals: ['<redacted>'],
+    step: 2,
+    replayPath: '/tmp/flows/install.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [{ name: 'SOURCE', value: 'secret-value' }],
+  });
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details).toMatchObject({
+    reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+    shape: 'resource:<var:SOURCE>',
+    standaloneCommandOmitted: 'secret-bearing',
+    dispatched: 'no',
+    replayPath: '/tmp/flows/install.ad',
+  });
+  expect(response.error.details).not.toHaveProperty('standaloneCommand');
+  expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 
 // #2997: the Android platform states `open --test-ime` because it sees one dispatched

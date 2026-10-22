@@ -534,6 +534,12 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 
 When a command fails, read `error.details.dispatched` before you retry:
 
+For a failed `batch` or `replay`, inspect completed steps and `details.dispatchedSteps` first. A
+resource step refused with `details.reason: bounded_composite_resource_unsupported` has
+`details.dispatched: no` for that step. Run `details.standaloneCommand` with the same CLI context
+when present. A typed `details.standaloneCommandOmitted` means you must use the original step
+input directly in the same session. Earlier steps may still have run.
+
 - `no`: the action never reached the device. Retry it as it is.
 - `unknown`: the action may have landed. Take a snapshot before you retry; a blind retry can tap, type, or navigate twice.
 - Missing: no guarantee. Treat it as `unknown`.
