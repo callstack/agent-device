@@ -64,27 +64,38 @@ extension RunnerTests {
     keyboardVisibleBeforeTap: Bool? = nil
   ) -> TextEntryStabilization {
 #if os(tvOS)
-    return TextEntryStabilization(element: target, focusConfirmed: true)
+    return TextEntryStabilization(element: target, evidence: .focusEngine)
 #else
     let keyboardVisibleAtEntry = keyboardVisibleBeforeTap ?? isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(TextEntryTiming.focusTimeout)
     while Date() < deadline {
       if let focused = focusedTextInput(app: app) {
-        return TextEntryStabilization(element: focused, focusConfirmed: true)
-      }
-      // focusedTextInput is intentionally nil on iOS; treat the keyboard transitioning to
-      // visible after our tap as the focus-moved signal. Don't fast-path when it was already up.
-      if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return TextEntryStabilization(element: target, focusConfirmed: true)
+        return TextEntryStabilization(element: focused, evidence: .focusedInput)
       }
 #if os(iOS)
-      if let target, keyboardFocusConfirmed(app: app, element: target) {
-        return TextEntryStabilization(element: target, focusConfirmed: true)
+      // The tapped input's own read comes before the keyboard. While a software keyboard is
+      // presented, the keyboard query blocks and then finds none. An input that reports keyboard
+      // focus is stronger evidence than the keyboard's arrival, which shows only that some input
+      // took focus.
+      let read = target.flatMap(ResolvedTextEntryInput.init(reading:))
+      if let read, let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
+        return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read))
+      }
+#endif
+      // focusedTextInput is intentionally nil on iOS; the keyboard transitioning to visible after
+      // our tap is also a focus-moved signal. Don't fast-path when it was already up.
+      if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
+        return TextEntryStabilization(element: target, evidence: .keyboardAppeared)
+      }
+#if os(iOS)
+      // The read came before the keyboard query, so it is not handed on as the post-focus read.
+      if let read, keyboardFocusConfirmed(app: app, read: read) {
+        return TextEntryStabilization(element: target, evidence: .focusQueryMatchesInput)
       }
 #endif
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return TextEntryStabilization(element: target, focusConfirmed: false)
+    return TextEntryStabilization(element: target, evidence: nil)
 #endif
   }
 
@@ -95,10 +106,10 @@ extension RunnerTests {
       if !softwareKeyboardVisible, let rememberedTarget = rememberedTextEntryTarget() {
         return rememberedTarget
       }
-      // Bare `type` targets the current first responder. On iOS we intentionally do not trust
-      // `hasKeyboardFocus`, but an already-visible software keyboard is sufficient evidence that
-      // app.typeText has a receiver; waiting the full readiness timeout cannot prove a stronger
-      // target because there is no selector/coordinate focus move to validate.
+      // Bare `type` targets the current first responder. On iOS we intentionally do not let the
+      // app-wide `hasKeyboardFocus` query pick it, but an already-visible software keyboard is
+      // sufficient evidence that app.typeText has a receiver; waiting the full readiness timeout
+      // cannot prove a stronger target because there is no selector/coordinate focus move to validate.
       if softwareKeyboardVisible {
         return TextEntryTarget(
           element: focusedTextInput(app: app),
@@ -137,6 +148,10 @@ extension RunnerTests {
       target: target,
       keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
     )
+    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence=%@", stabilized.evidence?.name ?? "none")
+    if case .inputReportsKeyboardFocus(let read) = stabilized.evidence {
+      return focusedTextEntryTarget(read.element, read: read, requestedPoint: requestedPoint)
+    }
     let readyTarget = TextEntryTarget(
       element: stabilized.element ?? target,
       refreshPoint: requestedPoint,
@@ -153,7 +168,15 @@ extension RunnerTests {
     guard let element else {
       return TextEntryTarget(element: nil, refreshPoint: requestedPoint, prefersFocusedElement: false)
     }
-    let read = ResolvedTextEntryInput(reading: element)
+    return focusedTextEntryTarget(element, read: ResolvedTextEntryInput(reading: element), requestedPoint: requestedPoint)
+  }
+
+  /// `read` is `element` read after the focus tap, or nil when the read found no element.
+  private func focusedTextEntryTarget(
+    _ element: XCUIElement,
+    read: ResolvedTextEntryInput?,
+    requestedPoint: CGPoint
+  ) -> TextEntryTarget {
     return TextEntryTarget(
       element: element,
       refreshPoint: textEntryRefreshPoint(frame: read?.snapshot?.frame, fallbackTo: requestedPoint),
