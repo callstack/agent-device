@@ -79,6 +79,13 @@ extension RunnerTests {
       )
     )
     XCTAssertEqual(
+      synthesizedGesturePolicy(.coordinateLongPress),
+      SynthesizedGesturePolicy(
+        keyboardPolicy: .never,
+        fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
+      )
+    )
+    XCTAssertEqual(
       synthesizedGesturePolicy(.scroll),
       SynthesizedGesturePolicy(
         keyboardPolicy: .requiredWhenAvailable,
@@ -103,7 +110,19 @@ extension RunnerTests {
     XCTAssertEqual(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true)), .coordinateTap)
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: nil)))
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("doubleTap", synthesized: true)))
-    XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: true)))
+  }
+
+  func testSequenceLongPressStepsTakeTheLongPressPolicyWithoutARequestFlag() {
+    for synthesized in [nil, true] as [Bool?] {
+#if os(iOS)
+      XCTAssertEqual(
+        synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: synthesized)),
+        .coordinateLongPress
+      )
+#else
+      XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: synthesized)))
+#endif
+    }
   }
 
   @MainActor
@@ -144,6 +163,8 @@ extension RunnerTests {
       (.synthesizedDrag, unavailable, "refused"),
       (.synthesizedDrag, unknown, "xctestFallback"),
       (.coordinateTap, unavailable, "xctestFallback"),
+      (.coordinateLongPress, unavailable, "refused"),
+      (.coordinateLongPress, unknown, "xctestFallback"),
     ]
     for (kind, context, expected) in cases {
       let attempt = performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)

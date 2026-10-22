@@ -165,6 +165,63 @@ extension RunnerTests {
 #endif
   }
 
+#if os(iOS)
+  /// A long press is one stationary contact held for `durationMs`, synthesized like a tap: it needs
+  /// no app tree, so on a tree XCTest cannot serialize it lands through the sole-screen route.
+  @MainActor
+  func synthesizedLongPressAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    durationMs: Double,
+    context: SynthesizedCoordinateContext?
+  ) -> RunnerInteractionOutcome {
+    guard x.isFinite, y.isFinite, durationMs.isFinite, durationMs > 0 else {
+      return .unsupported(
+        message: "synthesized coordinate long press requires finite coordinates and a positive duration",
+        hint: "Retry with finite x and y values and a positive durationMs."
+      )
+    }
+    guard let context else {
+      return .unsupported(
+        message: "synthesized coordinate long press could not resolve an app window with a finite screen frame",
+        hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
+      )
+    }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let point = CoordinateSpaceRotation.native(
+      point: CGPoint(x: x, y: y),
+      in: context.referenceFrame,
+      interfaceOrientation: orientation
+    )
+    logSynthesizedDispatch(
+      kind: "longPress",
+      start: point,
+      end: nil,
+      referenceFrame: context.referenceFrame,
+      orientation: orientation
+    )
+    let samples: [[String: NSNumber]] = [0, durationMs].map { offsetMs in
+      [
+        "x": NSNumber(value: Double(point.x)),
+        "y": NSNumber(value: Double(point.y)),
+        "offsetMs": NSNumber(value: offsetMs),
+      ]
+    }
+    if let message = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: app,
+      resolvedWindow: context.resolvedWindow,
+      pointerSamples: [samples]
+    ) {
+      return .unsupported(
+        message: message,
+        hint: "Private XCTest event synthesis is required for an AX-free long press on iOS; update Xcode if this persists."
+      )
+    }
+    return .performed
+  }
+#endif
+
   func keyboardAvoidingDragPoints(
     app: XCUIApplication,
     x: Double,

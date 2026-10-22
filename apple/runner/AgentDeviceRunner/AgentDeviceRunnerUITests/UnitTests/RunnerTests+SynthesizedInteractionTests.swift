@@ -1,6 +1,95 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+/// Stands in for XCTest on an app tree it cannot serialize (a React Native feed at accessibility
+/// depth 62 or more): the windows query finds no window and every element frame, the application's
+/// included, reads as null.
+private final class RunnerUnserializableTreeStub: NSObject {
+  @objc var allElementsBoundByIndex: [XCUIElement] { [] }
+  @objc var frame: CGRect { .null }
+}
+
+/// Counts XCTest coordinate presses without performing them.
+private final class RunnerCoordinatePressCounter: NSObject {
+  static var presses = 0
+  @objc(pressForDuration:)
+  func press(forDuration duration: TimeInterval) {
+    Self.presses += 1
+  }
+}
+
+extension RunnerTests {
+  /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
+  private func simulateUnserializableAppTree() throws -> () -> Void {
+    let swaps: [(Method?, Method?)] = [
+      (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.allElementsBoundByIndex))),
+      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame))),
+      (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
+       class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
+    ]
+    var originals: [(Method, IMP)] = []
+    for (target, stub) in swaps {
+      let target = try XCTUnwrap(target)
+      let stub = try XCTUnwrap(stub)
+      originals.append((target, method_setImplementation(target, method_getImplementation(stub))))
+    }
+    RunnerCoordinatePressCounter.presses = 0
+    return {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+    }
+  }
+
+  private var showsAppsOnlyFullScreen: Bool {
+    UIDevice.current.userInterfaceIdiom == .phone && XCUIScreen.screens.count == 1
+  }
+
+  /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
+  /// raises an exception that ends the runner test. A long press needs no tree: on an iPhone with one
+  /// screen it is synthesized on that screen, and anything else keeps the XCTest press.
+  @MainActor
+  func testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .healthy
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let longPress = try runnerCommandFixture(
+      #"{"command":"longPress","commandId":"unserializable-long-press","x":40,"y":40,"durationMs":600}"#
+    )
+    let pressSeries = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"unserializable-press-series","steps":[{"kind":"longPress","x":40,"y":40,"durationMs":600,"pauseMs":50},{"kind":"longPress","x":40,"y":40,"durationMs":600}]}"#
+    )
+
+    let longPressResponse = try executeOnMainPrepared(command: longPress, activeApp: app)
+    let longPressCoordinatePresses = RunnerCoordinatePressCounter.presses
+    let pressSeriesResponse = try executeOnMainPrepared(command: pressSeries, activeApp: app)
+
+    XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
+    XCTAssertEqual(longPressResponse.data?.message, "long pressed")
+    XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
+    if showsAppsOnlyFullScreen {
+      XCTAssertEqual(longPressCoordinatePresses, 0)
+      XCTAssertNil(longPressResponse.data?.gestureFallback)
+      XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+    } else {
+      XCTAssertEqual(longPressCoordinatePresses, 1)
+      XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
+    }
+  }
+}
+#endif
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
   func testSoleScreenReferenceFrameLaysTheScreenInTheAppsOrientation() {
