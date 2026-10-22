@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { parseHardwareProfile } from './host.ts';
+import { parseHardwareProfile } from './bench-host.ts';
 
 test('parses the Mac model and CPU identity from system_profiler output', () => {
   assert.deepEqual(

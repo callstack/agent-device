@@ -181,6 +181,48 @@ describe('managed app-log process host', () => {
     expect(fixture.child.kill).toHaveBeenCalledWith('SIGINT');
   });
 
+  test('terminate settles when an escaped descendant keeps the output pipes open', async () => {
+    const { runCmdBackground } = await vi.importActual<
+      typeof import('@agent-device/host-kit/command')
+    >('@agent-device/host-kit/command');
+    const fixture = processFixture();
+    let launched: ReturnType<typeof runCmdBackground> | undefined;
+    exec.run.mockImplementation((...args: Parameters<typeof runCmdBackground>) => {
+      launched = runCmdBackground(...args);
+      return launched;
+    });
+    // SIGINT reaches only the direct child; the background loop keeps the inherited pipes open,
+    // like a log process that simctl launched inside the simulator.
+    let ticks = 0;
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start({
+      ...fixture.request,
+      output: { ...fixture.request.output, write: async () => void (ticks += 1) },
+      command: {
+        kind: 'host',
+        request: {
+          executable: 'sh',
+          args: ['-c', '(while echo tick; do sleep 0.1; done) & exec sleep 30'],
+          allowFailure: true,
+        },
+      },
+    });
+    await vi.waitFor(() => expect(ticks).toBeGreaterThan(0));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let terminated = false;
+      void running.terminate().then(() => (terminated = true));
+      await vi.waitFor(() => expect(launched?.child.signalCode).toBe('SIGINT'));
+
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      await vi.waitFor(() => expect(terminated).toBe(true));
+      await expect(running.wait).resolves.toMatchObject({ exitCode: 1 });
+      expect(fs.existsSync(fixture.markerPath)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('retains a marker that is corrupted before the managed child exits', async () => {
     const fixture = processFixture();
     const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(

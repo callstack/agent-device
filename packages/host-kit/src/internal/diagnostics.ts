@@ -53,6 +53,9 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   sortedSensitiveValues?: string[];
 };
 
+/** Prefixes each diagnostic event that a `--debug` client without a log file writes to stderr. */
+export const DIAGNOSTIC_STDERR_PREFIX = '[agent-device][diag] ';
+
 const diagnosticsStorage = new AsyncLocalStorage<DiagnosticsScope>();
 
 export function createRequestId(): string {
@@ -164,7 +167,7 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
       appendDiagnosticLine(scope, scope.traceLogPath, fileLine);
     }
     if (scope.debug && !scope.logPath && !scope.traceLogPath) {
-      process.stderr.write(`[agent-device][diag] ${fileLine}`);
+      process.stderr.write(`${DIAGNOSTIC_STDERR_PREFIX}${fileLine}`);
     }
   } catch {
     // Best-effort diagnostics should not break request flow.

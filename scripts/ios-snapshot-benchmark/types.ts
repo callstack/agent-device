@@ -1,3 +1,5 @@
+import type { GitRevision, HostIdentity, Target, Toolchain } from '../lib/bench-host.ts';
+
 export const BENCHMARK_SCHEMA_VERSION = 'ios-snapshot-convergence.v1' as const;
 export const ISSUE_ID = '#2189';
 export const PARENT_ISSUE_ID = '#2188';
@@ -93,38 +95,6 @@ export type Measurement = {
   network?: ProxyNetwork;
   failures: number;
   failureCategories: Partial<Record<FailureCategory, number>>;
-};
-
-export type Toolchain = {
-  node: string;
-  pnpm: string;
-  xcode: string;
-  simctl: string;
-  os: string;
-  arch: string;
-};
-
-export type HostIdentity = {
-  model: string;
-  modelIdentifier: string;
-  cpu: string;
-  cpuCores: number;
-};
-
-export type GitRevision = {
-  commit: string;
-  branch: string;
-  dirty: boolean;
-};
-
-export type Target = {
-  platform: 'ios';
-  kind: 'simulator';
-  udid: string;
-  name: string;
-  runtime: string;
-  appId: string;
-  appPath?: string;
 };
 
 export type PackageSize = {

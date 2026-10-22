@@ -33,7 +33,11 @@ function jsonOk(json: unknown): boolean {
 
 // Invoke the built CLI once. `args` includes the command + positionals + dash-flags;
 // `baseFlags` carries the isolation + device flags shared by every call.
-export function invokeCli(args: string[], baseFlags: string[]): CliResult {
+export function invokeCli(
+  args: string[],
+  baseFlags: string[],
+  options: { timeoutMs?: number } = {},
+): CliResult {
   const full = [...CLI_ARGV, ...args, ...baseFlags, '--json'];
   const t0 = performance.now();
   let stdout = '';
@@ -46,6 +50,7 @@ export function invokeCli(args: string[], baseFlags: string[]): CliResult {
       cwd: REPO_ROOT,
       maxBuffer: MAX_BUFFER,
       allowFailure: true,
+      timeoutMs: options.timeoutMs,
     });
     stdout = r.stdout;
     stderr = r.stderr;

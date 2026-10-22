@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import {
   emitDiagnostic,
   readProcessStartTime,
@@ -295,8 +296,7 @@ export function assertSafeDerivedCleanup(
   derivedPath: string,
   env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): void {
-  const override = env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
-  if (!override) {
+  if (!resolveRunnerDerivedOverride(env)) {
     return;
   }
   if (isPathInsideProjectTmp(derivedPath)) {

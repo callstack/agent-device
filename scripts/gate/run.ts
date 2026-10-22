@@ -10,9 +10,10 @@
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import { CHECK_CATALOG, resolveCommand } from '../check-affected/checks.ts';
+import { executeGate } from './host-locked.ts';
 
 const USAGE = 'Usage: pnpm gate <check-id> [args…]\n';
 
@@ -49,13 +50,7 @@ async function main(argv: readonly string[]): Promise<number> {
   };
   const command = resolveGate(id, pkg.scripts, rest);
   process.stdout.write(`[gate] ${id}: ${command.join(' ')}\n`);
-  const result = await runCmdStreaming(command[0] as string, command.slice(1), {
-    cwd: repoRoot,
-    allowFailure: true,
-    onStdoutChunk: (chunk) => void process.stdout.write(chunk),
-    onStderrChunk: (chunk) => void process.stderr.write(chunk),
-  });
-  return result.exitCode;
+  return executeGate({ id, command, cwd: repoRoot, env: process.env });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

@@ -513,6 +513,11 @@ extension RunnerTests {
     return focusBool(snapshot as! NSObject)
   }
 
+  /// `hasKeyboardFocus` alone: whether the snapshot's element is the one a keyboard types into.
+  func snapshotHasKeyboardFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
+    return kvcBool(snapshot as! NSObject, forKey: "hasKeyboardFocus")
+  }
+
   /// Either focus is focus. `hasFocus` is the focus engine's answer (tvOS, keyboard navigation);
   /// the field a software keyboard is typing into holds `hasKeyboardFocus` instead, which the
   /// text-entry readiness check already consults. Both an element and its snapshot answer the two

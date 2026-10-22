@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogBackgroundProcess,
   AppLogLiveSnapshot,
+  AppLogOutputSink,
   AppLogRuntimeHost,
   AppLogStartInput,
   AppLogStartResult,
@@ -31,6 +32,9 @@ import {
   buildIosSimulatorLogStreamArgs,
 } from './log-predicate.ts';
 
+// Measured launches take 1-2 s on a loaded host.
+const SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS = 10_000;
+
 export async function startAppleAppLogs(
   host: AppLogRuntimeHost,
   device: DeviceInfo,
@@ -50,17 +54,21 @@ export async function startAppleAppLogs(
       if (!adopted) await output[Symbol.asyncDispose]();
     });
     signal?.throwIfAborted();
+    const launch = observeFirstWrite(output);
     const backgroundProcess = await startCheckedAppleProcess(
       host,
       device,
       command,
-      output,
+      launch.sink,
       input.pidPath,
       signal,
     );
     rollback.defer(async () => {
       if (!adopted) await backgroundProcess[Symbol.asyncDispose]();
     });
+    if (device.kind === 'simulator') {
+      await waitForSimulatorStreamLaunch(host, launch.written, backgroundProcess.wait, signal);
+    }
     const handle = createAppleProcessHandle(
       host,
       backgroundProcess,
@@ -110,7 +118,7 @@ async function startCheckedAppleProcess(
   host: AppLogRuntimeHost,
   device: DeviceInfo,
   command: { executable: string; args: readonly string[]; allowFailure: true },
-  output: Awaited<ReturnType<AppLogRuntimeHost['outputs']['openAppend']>>,
+  output: AppLogOutputSink,
   pidPath: string | undefined,
   signal?: AbortSignal,
 ): Promise<AppLogBackgroundProcess> {
@@ -193,10 +201,70 @@ async function resolveSimulatorExecutable(
   return plist.exitCode === 0 ? plist.stdout.trim() || undefined : undefined;
 }
 
+function observeFirstWrite(output: AppLogOutputSink): {
+  sink: AppLogOutputSink;
+  written: Promise<void>;
+} {
+  let markWritten = noop;
+  const written = new Promise<void>((resolve) => {
+    markWritten = resolve;
+  });
+  const sink: AppLogOutputSink = {
+    write: async (chunk) => {
+      markWritten();
+      await output.write(chunk);
+    },
+    [Symbol.asyncDispose]: async () => await output[Symbol.asyncDispose](),
+  };
+  return { sink, written };
+}
+
+// simctl forwards a stop signal only after the in-simulator process has launched. An earlier
+// signal ends simctl while the launch completes, and the orphan keeps the output pipes open.
+async function waitForSimulatorStreamLaunch(
+  host: AppLogRuntimeHost,
+  written: Promise<void>,
+  exited: Promise<unknown>,
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
+  let onAbort = noop;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal?.reason);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+  const deadline = new AbortController();
+  const timedOut = host.clock
+    .sleep(SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS, deadline.signal)
+    .then(() => 'timed-out' as const);
+  timedOut.catch(noop);
+  try {
+    const launched = Promise.race([written, exited.then(noop, noop)]).then(
+      () => 'launched' as const,
+    );
+    if ((await Promise.race([launched, timedOut, aborted])) === 'timed-out') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Simulator log stream did not start within ${SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS}ms`,
+        {
+          reason: 'simulator-log-stream-launch-timeout',
+          timeoutMs: SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS,
+          hint: 'Check that the simulator finished booting, then retry logs start.',
+        },
+      );
+    }
+  } finally {
+    deadline.abort();
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+function noop(): void {}
+
 function createAppleProcessHandle(
   host: AppLogRuntimeHost,
   backgroundProcess: AppLogBackgroundProcess,
-  output: Awaited<ReturnType<AppLogRuntimeHost['outputs']['openAppend']>>,
+  output: AppLogOutputSink,
   backend: LogBackend,
   outputPath: string,
 ) {

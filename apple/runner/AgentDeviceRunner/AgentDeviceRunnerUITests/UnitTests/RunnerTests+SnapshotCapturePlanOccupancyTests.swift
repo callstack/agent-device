@@ -430,6 +430,14 @@ extension RunnerTests {
     XCTAssertEqual(quality.state, .recovered)
     XCTAssertEqual(quality.backend, SnapshotBackendKind.recursiveTree.rawValue)
     XCTAssertGreaterThan(payload.nodes?.count ?? 0, 1, "the bounded tree answers with a real tree")
+    let timing = try XCTUnwrap(quality.timing)
+    guard timing.acquisitionMs <= Self.penalizedXCTestProbeTreeSliceBudget * 1_000 else {
+      throw XCTSkip("the accepted tree's total acquisition exceeded the fast-probe threshold on this host")
+    }
+    XCTAssertFalse(
+      isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId),
+      "an accepted fast tree probe must clear the existing penalty early"
+    )
   }
 
   /// When the bounded tree also grinds past its slice, the plan ends sparse, and the verdict still
@@ -465,9 +473,15 @@ extension RunnerTests {
       tearDownPenalizedPrivateAXBlindTarget()
     }
 
+    let originalPenaltyUntil = snapshotXCTestChannelPenalty.until
     let payload = try runDeferredPlanOffMain(target: captureTarget) {
       RunnerBlockingSnapshotGate.release.signal()
     }
+    XCTAssertEqual(
+      snapshotXCTestChannelPenalty.until,
+      originalPenaltyUntil,
+      "the bounded recovery probe must not renew its own penalty when its tree work is abandoned"
+    )
 
     let quality = try XCTUnwrap(payload.snapshotQuality)
     XCTAssertEqual(quality.state, .sparse)
@@ -535,6 +549,64 @@ extension RunnerTests {
     let quality = try XCTUnwrap(payload.snapshotQuality)
     XCTAssertEqual(quality.reasonCode, "budget", "the tree tier ran out of its processing slice")
     XCTAssertNotEqual(quality.state, .healthy, "a tree without its collapsed tab items is not healthy")
+  }
+
+  /// A due recovery probe runs inside the capture, ahead of private AX. Its abandoned tree work is
+  /// charged to that capture: the plan answers while the work is outstanding, so that response's
+  /// occupancy stamp reports it. The probe cannot renew the penalty, and the next plan inside the
+  /// interval defers without entering the tree.
+  func testDueRecoveryProbeRunsInsideTheCaptureAndChargesItsAbandonedWorkToIt() throws {
+    let captureTarget = try launchPenalizedPrivateAXBlindTarget(
+      bundleId: "com.callstack.agentdevice.runner.due-probe-test"
+    )
+    defer { tearDownPenalizedPrivateAXBlindTarget() }
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let acquisition = try XCTUnwrap(privateAXSnapshotAcquisition(
+      target: captureTarget, hint: SnapshotPresentation.captureHint(for: options),
+      deadline: Date().addingTimeInterval(10)
+    ))
+    privateAXAcquisitionOverrideForTesting = { acquisition }
+    let snapshotMethod = try XCTUnwrap(class_getInstanceMethod(XCUIApplication.self, #selector(XCUIElement.snapshot)))
+    let stubMethod = try XCTUnwrap(class_getInstanceMethod(RunnerBlockingSnapshotStub.self, #selector(RunnerBlockingSnapshotStub.snapshot)))
+    let original = method_getImplementation(snapshotMethod)
+    RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
+    RunnerBlockingSnapshotGate.entered = DispatchSemaphore(value: 0)
+    method_setImplementation(snapshotMethod, method_getImplementation(stubMethod))
+    defer {
+      RunnerBlockingSnapshotGate.release.signal()
+      method_setImplementation(snapshotMethod, original)
+      waitForAbandonedMainThreadWorkToDrain()
+    }
+    snapshotXCTestChannelPenalty.claimProbe(
+      at: Date(timeIntervalSinceNow: -SnapshotXCTestChannelPenalty.recoveryProbeInterval)
+    )
+    let expiry = snapshotXCTestChannelPenalty.until
+    final class Occupancy { var atAnswer = false }
+    let occupancy = Occupancy()
+
+    let probed = try runDeferredPlanOffMain(target: captureTarget) {
+      occupancy.atAnswer = self.hasAbandonedMainThreadWork()
+      RunnerBlockingSnapshotGate.release.signal()
+    }
+
+    XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .success, "the probe ran before the answer")
+    XCTAssertTrue(occupancy.atAnswer, "the capture that ran the probe answers as busy")
+    XCTAssertEqual(probed.snapshotQuality?.backend, SnapshotBackendKind.privateAX.rawValue)
+    XCTAssertEqual(probed.snapshotQuality?.reasonCode, "deferred")
+    XCTAssertEqual(snapshotXCTestChannelPenalty.until, expiry, "a failed probe must not renew the penalty")
+    XCTAssertFalse(isSnapshotXCTestRecoveryProbeDue(bundleId: captureTarget.bundleId))
+    waitForAbandonedMainThreadWorkToDrain()
+
+    let deferred = try runDeferredPlanOffMain(target: captureTarget)
+    XCTAssertEqual(deferred.snapshotQuality?.backend, SnapshotBackendKind.privateAX.rawValue)
+    XCTAssertEqual(RunnerBlockingSnapshotGate.entered.wait(timeout: .now()), .timedOut, "no probe inside the interval")
+  }
+
+  private func waitForAbandonedMainThreadWorkToDrain() {
+    let deadline = Date().addingTimeInterval(3)
+    while hasAbandonedMainThreadWork(), Date() < deadline {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+    }
   }
 
   private func launchPenalizedPrivateAXBlindTarget(bundleId: String) throws -> SnapshotCaptureTarget {

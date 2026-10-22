@@ -159,6 +159,7 @@ export default defineConfig({
             'scripts/__tests__/xctest-declarations.test.ts',
             'scripts/__tests__/xctest-selection.test.ts',
             'scripts/__tests__/apple-ci-impact.test.ts',
+            'scripts/__tests__/device-lane-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',
@@ -196,6 +197,8 @@ export default defineConfig({
             'scripts/__tests__/release-version.test.ts',
             'scripts/__tests__/release-plan.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            // The perf suite's pure logic, without a device.
+            'scripts/perf/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',

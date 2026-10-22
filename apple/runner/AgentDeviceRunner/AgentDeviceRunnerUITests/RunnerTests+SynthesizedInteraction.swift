@@ -165,6 +165,63 @@ extension RunnerTests {
 #endif
   }
 
+#if os(iOS)
+  /// A long press is one stationary contact held for `durationMs`, synthesized like a tap: it needs
+  /// no app tree, so on a tree XCTest cannot serialize it lands through the sole-screen route.
+  @MainActor
+  func synthesizedLongPressAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    durationMs: Double,
+    context: SynthesizedCoordinateContext?
+  ) -> RunnerInteractionOutcome {
+    guard x.isFinite, y.isFinite, durationMs.isFinite, durationMs > 0 else {
+      return .unsupported(
+        message: "synthesized coordinate long press requires finite coordinates and a positive duration",
+        hint: "Retry with finite x and y values and a positive durationMs."
+      )
+    }
+    guard let context else {
+      return .unsupported(
+        message: "synthesized coordinate long press could not resolve an app window with a finite screen frame",
+        hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
+      )
+    }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let point = CoordinateSpaceRotation.native(
+      point: CGPoint(x: x, y: y),
+      in: context.referenceFrame,
+      interfaceOrientation: orientation
+    )
+    logSynthesizedDispatch(
+      kind: "longPress",
+      start: point,
+      end: nil,
+      referenceFrame: context.referenceFrame,
+      orientation: orientation
+    )
+    let samples: [[String: NSNumber]] = [0, durationMs].map { offsetMs in
+      [
+        "x": NSNumber(value: Double(point.x)),
+        "y": NSNumber(value: Double(point.y)),
+        "offsetMs": NSNumber(value: offsetMs),
+      ]
+    }
+    if let message = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: app,
+      resolvedWindow: context.resolvedWindow,
+      pointerSamples: [samples]
+    ) {
+      return .unsupported(
+        message: message,
+        hint: "Private XCTest event synthesis is required for an AX-free long press on iOS; update Xcode if this persists."
+      )
+    }
+    return .performed
+  }
+#endif
+
   func keyboardAvoidingDragPoints(
     app: XCUIApplication,
     x: Double,
@@ -239,6 +296,21 @@ extension RunnerTests {
     )
   }
 
+  /// The touch visualization frame of a synthesized gesture, read from its context instead of the
+  /// app tree.
+  func touchVisualizationFrame(
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext
+  ) -> TouchVisualizationFrame {
+    TouchVisualizationFrame(
+      x: Double(context.referenceFrame.minX) + x,
+      y: Double(context.referenceFrame.minY) + y,
+      referenceWidth: Double(context.referenceFrame.width),
+      referenceHeight: Double(context.referenceFrame.height)
+    )
+  }
+
   func resolvedDragVisualizationFrame(
     app: XCUIApplication,
     x: Double,
@@ -267,6 +339,27 @@ extension RunnerTests {
       return frameAvoidingKeyboard(app: app, frame: appFrame)
     }
     return CGRect(x: 0, y: 0, width: 0, height: 0)
+  }
+
+  /// The viewport the portable gesture planner lays pointer paths in: the frame of the synthesized
+  /// context its record is routed through, so a tree with no window on an iPhone with one screen
+  /// plans on that screen, the same route a synthesized tap or scroll takes.
+  @MainActor
+  func gestureViewportFrame(app: XCUIApplication) -> CGRect {
+#if os(iOS)
+    guard let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.synthesizedDrag)
+    ) else {
+      return frameAvoidingKeyboard(app: app, frame: app.frame)
+    }
+    // The sole-screen route means the windows query just failed, so a keyboard probe would too.
+    return context.resolvedWindow == nil
+      ? context.referenceFrame
+      : frameAvoidingKeyboard(app: app, frame: context.referenceFrame)
+#else
+    return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+#endif
   }
 
   private func frameAvoidingKeyboard(app: XCUIApplication, frame: CGRect) -> CGRect {
@@ -384,16 +477,20 @@ extension RunnerTests {
   @MainActor
   func synthesizedCoordinateContext(
     app: XCUIApplication,
-    policy: SynthesizedGesturePolicy
+    policy: SynthesizedGesturePolicy,
+    windowQueryRejected: Bool = false
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
-    if let resolved = resolveRunnerWindowElement(app: app) {
+    // A tree that just rejected a query skips the windows query only where the sole screen answers
+    // without it; anywhere else that query is still the only route.
+    let rejectedTreeSoleScreenFrame = windowQueryRejected ? soleScreenReferenceFrame(app: app) : nil
+    if rejectedTreeSoleScreenFrame == nil, let resolved = resolveRunnerWindowElement(app: app) {
       window = resolved.window
       referenceFrame = resolved.frame
-    } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
+    } else if let soleScreenFrame = rejectedTreeSoleScreenFrame ?? soleScreenReferenceFrame(app: app) {
       window = nil
       referenceFrame = soleScreenFrame
       // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest

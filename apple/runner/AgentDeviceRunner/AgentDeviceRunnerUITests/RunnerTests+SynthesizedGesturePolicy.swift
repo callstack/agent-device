@@ -46,6 +46,7 @@ enum SynthesizedFallbackPolicy: String, Equatable, Hashable {
 
 enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   case coordinateTap
+  case coordinateLongPress
   case scroll
   case synthesizedDrag
 }
@@ -86,6 +87,14 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
       keyboardPolicy: .never,
       fallbackPolicy: .xctestCoordinateAllowed
     )
+  case .coordinateLongPress:
+    // XCTest's coordinate press resolves the app frame through the tree. On a tree XCTest cannot
+    // serialize, that read fails after its retries and the press raises an exception that ends the
+    // runner test, so the fallback needs a tree that answers.
+    return SynthesizedGesturePolicy(
+      keyboardPolicy: .never,
+      fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
+    )
   case .scroll:
     // Scroll places a viewport-center-symmetric swipe, so it cannot tell a keyboard-struck swipe
     // from a scroll that reached the edge without reading the live keyboard frame (#2500). The
@@ -124,9 +133,19 @@ func shouldProbeCoordinateTapTextInput(
   return false
 }
 
-/// A synthesized `tap` step in a `sequence` is a standalone coordinate tap and follows its policy.
+/// A synthesized `tap` step in a `sequence` is a standalone coordinate tap and follows its policy. On
+/// iOS a `longPress` step is a standalone long press, which is always synthesized.
 func synthesizedPolicyKind(forSequenceStep step: SequenceStep) -> SynthesizedGesturePolicyKind? {
-  step.synthesized == true && step.kind == "tap" ? .coordinateTap : nil
+  switch step.kind {
+  case "tap":
+    return step.synthesized == true ? .coordinateTap : nil
+#if os(iOS)
+  case "longPress":
+    return .coordinateLongPress
+#endif
+  default:
+    return nil
+  }
 }
 
 /// A synthesized gesture's result for its call site, which owns the XCTest coordinate gesture.

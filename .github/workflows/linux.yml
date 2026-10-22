@@ -46,6 +46,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Fetch the PR base for Linux smoke selection
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; Linux smoke selection will fail open."
+
+      - name: Select Linux smoke tests
+        id: impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node --experimental-strip-types scripts/device-lane-impact.ts replay-linux linux-command-evidence
+
       # Unbounded, this step could not fail — it could only stall. On 2026-08-19 a slow mirror
       # held apt past the job's 30-minute budget on four main-branch runs and several unrelated
       # PRs, which reported as a red check on branches that never ran a line of project code.
@@ -54,6 +69,7 @@ jobs:
       # that drips bytes slowly enough to defeat the socket timeout. A healthy install takes
       # about a minute, so six is generous.
       - name: Install Linux desktop dependencies
+        if: steps.impact.outputs.run != 'false'
         timeout-minutes: 6
         run: |
           set -euo pipefail
@@ -77,10 +93,8 @@ jobs:
             gnome-calculator \
             wmctrl
 
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
       - name: Start Xvfb and D-Bus
+        if: steps.impact.outputs.run != 'false'
         run: |
           # Start virtual framebuffer (1280x1024, 24-bit color)
           Xvfb :99 -screen 0 1280x1024x24 &
@@ -93,6 +107,7 @@ jobs:
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
 
       - name: Start AT-SPI2 registry
+        if: steps.impact.outputs.run != 'false'
         run: |
           # The registry must start AFTER DBUS_SESSION_BUS_ADDRESS is available
           # (it was written to GITHUB_ENV in the previous step).
@@ -112,6 +127,7 @@ jobs:
           fi
 
       - name: Verify environment
+        if: steps.impact.outputs.run != 'false'
         run: |
           echo "=== Display ==="
           xdotool getdisplaygeometry
@@ -125,9 +141,11 @@ jobs:
           xdotool version
 
       - name: Run Linux replay smoke test
+        if: steps.impact.outputs.run != 'false'
         run: pnpm clean:daemon
 
       - name: Execute Linux replay smoke test
+        if: steps.impact.outputs.run != 'false'
         uses: ./.github/actions/run-gate
         with:
           gate: replay-linux
@@ -138,15 +156,17 @@ jobs:
             test/artifacts/replays-linux.junit.xml
 
       - name: Reset daemon before Linux command evidence
+        if: steps.impact.outputs.run != 'false'
         run: pnpm clean:daemon
 
       - name: Execute Linux command evidence
+        if: steps.impact.outputs.run != 'false'
         uses: ./.github/actions/run-gate
         with:
           gate: linux-command-evidence
 
       - name: Upload Linux artifacts
-        if: always()
+        if: always() && steps.impact.outputs.run != 'false'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-artifacts

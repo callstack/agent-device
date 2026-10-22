@@ -58,6 +58,7 @@ extension RunnerTests {
     _ = pressTvRemote(.menu)
     return .performed
 #else
+    let rejectedQueriesBefore = navigationRejectedQueryCount()
     let buttons = app.navigationBars.buttons.allElementsBoundByIndex
     if let back = buttons.first(where: { $0.isHittable }) {
       // `isHittable` promises a hittable point, not a hittable center: a bar button partly under an
@@ -65,12 +66,17 @@ extension RunnerTests {
       back.tap()
       return .performed
     }
-    if isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId) {
+    if navigationRejectedQueryCount() != rejectedQueriesBefore
+      || isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
+    {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
     } else if let frame = topNavigationBackFrame(app: app) {
       return tapResolvedNavigationBackControl(app: app, frame: frame)
     }
-    return tapTopLeadingNavigationFallback(app: app)
+    return tapTopLeadingNavigationFallback(
+      app: app,
+      windowQueryRejected: navigationRejectedQueryCount() != rejectedQueriesBefore
+    )
 #endif
   }
 
@@ -179,28 +185,31 @@ extension RunnerTests {
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.
     let xOffset = min(max(frame.width * 0.08, 28), 44)
-    // Sit below the status/dynamic-island region and inside common custom RN search headers.
-    let yOffset = min(max(frame.height * 0.155, 56), 132)
+    // Sit below the status/dynamic-island region, inside the bar's leading control: on a 402x874
+    // iPhone the bar spans y 62-116 and its back control 62-106.
+    let yOffset = min(max(frame.height * 0.1, 56), 96)
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
   }
 
   @MainActor
-  private func tapTopLeadingNavigationFallback(app: XCUIApplication) -> InAppBackOutcome {
+  private func tapTopLeadingNavigationFallback(
+    app: XCUIApplication,
+    windowQueryRejected: Bool
+  ) -> InAppBackOutcome {
 #if os(iOS)
-    let frame = onScreenWindowFrame(app: app)
-    guard let point = Self.topLeadingNavigationFallbackPoint(in: frame) else {
+    guard let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap),
+      windowQueryRejected: windowQueryRejected
+    ), let point = Self.topLeadingNavigationFallbackPoint(in: context.referenceFrame) else {
       return .unavailable
     }
-    let before = captureNavigationFallbackVisualState(app: app)
-    let context = synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.coordinateTap)
-    )?.withReferenceFrame(frame)
+    let before = captureNavigationFallbackVisualState(app: app, context: context)
     switch performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
       synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
     }) {
     case .performed:
-      return verifyNavigationFallbackOutcome(app: app, before: before)
+      return verifyNavigationFallbackOutcome(app: app, before: before, context: context)
     case .refused:
       return .unavailable
     case .xctestFallback:
@@ -208,17 +217,30 @@ extension RunnerTests {
         tapAt(app: app, x: point.x, y: point.y)
       }
       if case .performed = fallback.outcome {
-        return verifyNavigationFallbackOutcome(app: app, before: before)
+        return verifyNavigationFallbackOutcome(app: app, before: before, context: context)
       }
     }
 #endif
     return .unavailable
   }
 
-  private func captureNavigationFallbackVisualState(app: XCUIApplication) -> NavigationVisualSample {
+  private func navigationRejectedQueryCount() -> Int {
+    suppressedIssueLock.lock()
+    defer { suppressedIssueLock.unlock() }
+    return suppressedAxSnapshotIssueCount
+  }
+
+  private func captureNavigationFallbackVisualState(
+    app: XCUIApplication,
+    context: SynthesizedCoordinateContext
+  ) -> NavigationVisualSample {
 #if os(iOS)
     return Self.navigationFallbackSample(
-      resolvingApp: { self.captureResolvedAppScreen(app: app) },
+      resolvingApp: {
+        context.resolvedWindow == nil
+          ? self.captureSoleAppScreen()
+          : self.captureResolvedAppScreen(app: app)
+      },
       systemSurface: { self.captureResolvedAppScreen(app: self.springboard) },
       encoding: { runnerPngData(for: $0.image) }
     )
@@ -273,10 +295,11 @@ extension RunnerTests {
 
   private func verifyNavigationFallbackOutcome(
     app: XCUIApplication,
-    before: NavigationVisualSample
+    before: NavigationVisualSample,
+    context: SynthesizedCoordinateContext
   ) -> InAppBackOutcome {
     sleepFor(Self.navigationFallbackVerificationDelay)
-    let after = captureNavigationFallbackVisualState(app: app)
+    let after = captureNavigationFallbackVisualState(app: app, context: context)
     let observation = Self.navigationVisualObservation(before: before.data, after: after.data)
     // The sample sizes and the observation name together tell a refused capture apart from an
     // unchanged screen, and the fallback is rare enough that saying so every time costs nothing.

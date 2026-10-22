@@ -118,6 +118,7 @@ iOS Simulator launch behavior:
 Back, orientation, and hardware buttons:
 
 - `back` uses app-owned back navigation: visible in-app back UI on Apple targets, and the back keyevent on Android. `--in-app` names this default explicitly.
+- On a single-screen iPhone, `back` can use a top-leading tap when the app tree is unreadable. It compares the screen before and after the tap. If the screen cannot be captured, the command reports an unknown outcome; inspect the screen before you retry.
 - `back --system` sends system back input: the Android back keyevent, the iOS back gesture, or the tvOS Siri Remote Menu button. macOS has no system back, so it reports unavailable.
 - `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only. On ADB-backed Android it turns auto-rotate off, and the lock persists after the session ends until something turns it back on.
 - `orientation auto` hands rotation back to the sensor on ADB-backed Android, local or Limrun (`accelerometer_rotation=1`, `user_rotation` untouched), and reports `orientation: "auto"`. It does not wait for the display to rotate, because there is no target rotation: the sensor decides, and an emulator usually settles on portrait. Every other backend refuses `auto` with `UNSUPPORTED_OPERATION`.
@@ -1062,7 +1063,7 @@ agent-device network dump 25 --include headers --platform web # Browser requests
 ```
 
 - `logs` works on iOS simulators, iOS physical devices, Android, and macOS (app-scoped Unified Logging). On iOS, capture relies on Unified Logging (`os_log`); plain stdout/stderr may be limited.
-- `logs start` appends to `app.log` and rotates at 5 MB. Override with `AGENT_DEVICE_APP_LOG_MAX_BYTES` and `AGENT_DEVICE_APP_LOG_MAX_FILES`; set `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` to a comma-separated regex list for write-time redaction.
+- `logs start` appends to `app.log` and rotates at 5 MB. Override with `AGENT_DEVICE_APP_LOG_MAX_BYTES` and `AGENT_DEVICE_APP_LOG_MAX_FILES`; set `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` to a comma-separated regex list for write-time redaction. On Apple simulators, `logs start` returns once the simulator log stream is running, so lines that the app logs after that are captured. If the stream does not start within 10 s, `logs start` fails with `details.reason: "simulator-log-stream-launch-timeout"`.
 - `open` prints `Session state: <path>`; see [Sessions](/docs/sessions#find-a-sessions-logs-and-artifacts) for the files it contains.
 - `events` reads the session timeline, which leaves out user-entered content; `--no-record` suppresses `action.recorded` entries. `events.ndjson` rotates at 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`) and keeps one generation. Cursors stay valid across rotation; a cursor older than the retained window fails with `details.reason: "EVENT_LOG_CURSOR_EXPIRED"` and `details.earliestCursor`. If the retained files were edited or deleted, `events` fails with `details.reason: "EVENT_LOG_WINDOW_UNVERIFIED"`.
 - `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log`, or from managed `agent-browser` request history on web; `network log` is an alias. Prefer `--include` over the positional detail level. It scans up to 4000 log lines, returns up to 200 entries, and truncates fields at 2048 characters. Web does not expose bodies.

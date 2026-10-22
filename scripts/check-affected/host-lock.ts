@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import {
   publishFileSync,
   inspectProcessLock,
@@ -17,6 +18,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 export const VALIDATION_PARENT_ENV = 'AGENT_DEVICE_VALIDATION_PARENT';
+const COMMAND_RUNNER = path.join(import.meta.dirname, 'command.ts');
 const HOST_LOCK_PATH = path.join(os.homedir(), '.cache', 'agent-device', 'validation.lock');
 
 export type ValidationLock = {
@@ -29,15 +31,16 @@ export async function acquireValidationLock(
   signal: AbortSignal,
   lockDirPath = HOST_LOCK_PATH,
   report: (message: string) => void = (message) => process.stderr.write(`${message}\n`),
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ValidationLock> {
   if (process.platform !== 'darwin' && process.platform !== 'linux') {
     throw new Error(
       'Serialized validation requires macOS or Linux. Use plan mode or focused checks on this host.',
     );
   }
-  if (process.env[VALIDATION_PARENT_ENV]) {
+  if (env[VALIDATION_PARENT_ENV]) {
     throw new Error(
-      `Nested validation is not allowed. Parent receipt: ${process.env[VALIDATION_PARENT_ENV]}`,
+      `Nested validation is not allowed. Parent receipt: ${env[VALIDATION_PARENT_ENV]}`,
     );
   }
   const owner = { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() };
@@ -67,6 +70,49 @@ export async function acquireValidationLock(
       nextReport = Date.now() + 15_000;
     }
     await setTimeout(500, undefined, { signal });
+  }
+}
+
+// Owns the order orphan reclaim depends on: publish ownership, activate the command, then finish.
+export async function runLockedCommand(
+  lock: ValidationLock,
+  receipt: string,
+  command: readonly string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    signal: AbortSignal;
+    onStdoutChunk: (chunk: string) => void;
+    onStderrChunk: (chunk: string) => void;
+  },
+): Promise<number> {
+  const [executable, ...args] = command as [string, ...string[]];
+  let commandPid: number | undefined;
+  try {
+    lock.recordCommand(receipt, null);
+    const output = await runCmdStreaming(
+      process.execPath,
+      ['--experimental-strip-types', COMMAND_RUNNER, executable, ...args],
+      {
+        cwd: options.cwd,
+        allowFailure: true,
+        captureOutput: false,
+        detached: true,
+        kill: { signal: 'SIGTERM', graceMs: 5000 },
+        signal: options.signal,
+        stdin: 'run\n',
+        onSpawn: (child) => {
+          commandPid = child.pid;
+          if (commandPid) lock.recordCommand(receipt, commandPid);
+        },
+        env: { ...options.env, [VALIDATION_PARENT_ENV]: receipt },
+        onStdoutChunk: options.onStdoutChunk,
+        onStderrChunk: options.onStderrChunk,
+      },
+    );
+    return output.exitCode;
+  } finally {
+    await lock.finishCommand(commandPid);
   }
 }
 

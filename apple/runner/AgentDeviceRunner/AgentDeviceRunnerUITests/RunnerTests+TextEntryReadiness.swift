@@ -4,7 +4,8 @@ extension RunnerTests {
   func focusedTextInput(app: XCUIApplication) -> XCUIElement? {
 #if os(iOS)
     // iOS focus predicates can return stale or misleading text-input matches
-    // under XCUITest, so text entry readiness is driven by tap/keyboard state.
+    // under XCUITest, so they never pick the text-entry target. Readiness corroborates the
+    // input a tap or coordinate already chose.
     return nil
 #else
     return safely("FOCUSED_INPUT_QUERY") {
@@ -31,7 +32,7 @@ extension RunnerTests {
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
   ) -> XCUIElement? {
 #if os(iOS)
-    let candidate = resolveTextEntryElement(app: app, target: target)
+    let candidate = resolveTextEntryInput(app: app, target: target)?.element
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -66,7 +67,7 @@ extension RunnerTests {
     }
     return candidate
 #else
-    return resolveTextEntryElement(app: app, target: target)
+    return resolveTextEntryInput(app: app, target: target)?.element
 #endif
   }
 
@@ -81,7 +82,7 @@ extension RunnerTests {
   /// the element has stopped answering its query; `didRecordXCTestFailure` turns that into
   /// `XCTEST_RECORDED_FAILURE` plus an invalidated target for a tap the dispatch had already landed.
   /// `snapshot()` answers the same question through the throwing channel and records nothing, which is why
-  /// `probeTextEntryInput` and `withElement` already read elements this way. It is read again after the
+  /// `ResolvedTextEntryInput` already reads elements this way. It is read again after the
   /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
   /// field is then, which is the moment the read it replaced ran at.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
@@ -128,13 +129,22 @@ extension RunnerTests {
   /// fallback at all.
   func keyboardFocusConfirmed(app: XCUIApplication, element: XCUIElement) -> Bool {
 #if os(iOS)
+    return ResolvedTextEntryInput(reading: element).map { keyboardFocusConfirmed(app: app, read: $0) } ?? false
+#else
+    return false
+#endif
+  }
+
+#if os(iOS)
+  /// `keyboardFocusConfirmed(app:element:)` against a read of the element already taken.
+  func keyboardFocusConfirmed(app: XCUIApplication, read: ResolvedTextEntryInput) -> Bool {
+    // An element that no longer resolves reads as identifier "" and frame `.zero`, which would
+    // match any focused element that also reports an empty frame. Require a real frame first,
+    // so a dead handle cannot corroborate anything.
+    guard let expected = read.snapshot, !expected.frame.isEmpty else {
+      return false
+    }
     return safely("TEXT_ENTRY_FOCUS_CONFIRMED", false) {
-      // An element that no longer resolves reads as identifier "" and frame `.zero`, which would
-      // match any focused element that also reports an empty frame. Require a real frame first,
-      // so a dead handle cannot corroborate anything.
-      guard element.exists, let expected = try? element.snapshot(), !expected.frame.isEmpty else {
-        return false
-      }
       let focused = app
         .descendants(matching: .any)
         .matching(NSPredicate(format: "hasKeyboardFocus == 1"))
@@ -144,10 +154,8 @@ extension RunnerTests {
       }
       return observed.identifier == expected.identifier && observed.frame == expected.frame
     }
-#else
-    return false
-#endif
   }
+#endif
 
   private func keyboardElementExists(app: XCUIApplication) -> Bool {
 #if os(iOS)
