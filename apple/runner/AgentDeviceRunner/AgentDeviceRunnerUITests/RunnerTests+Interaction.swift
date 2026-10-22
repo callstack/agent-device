@@ -352,7 +352,7 @@ extension RunnerTests {
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
-    let textInputCandidates = textInputCandidatesAt(app: app, point: point)
+    let textInputCandidates = textInputCandidatesAt(app: app, point: point).map(\.element)
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
         return text

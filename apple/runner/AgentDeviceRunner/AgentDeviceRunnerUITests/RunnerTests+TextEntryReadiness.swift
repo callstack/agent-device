@@ -31,7 +31,7 @@ extension RunnerTests {
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
   ) -> XCUIElement? {
 #if os(iOS)
-    let candidate = resolveTextEntryElement(app: app, target: target)
+    let candidate = resolveTextEntryInput(app: app, target: target)?.element
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -66,7 +66,7 @@ extension RunnerTests {
     }
     return candidate
 #else
-    return resolveTextEntryElement(app: app, target: target)
+    return resolveTextEntryInput(app: app, target: target)?.element
 #endif
   }
 
@@ -81,7 +81,7 @@ extension RunnerTests {
   /// the element has stopped answering its query; `didRecordXCTestFailure` turns that into
   /// `XCTEST_RECORDED_FAILURE` plus an invalidated target for a tap the dispatch had already landed.
   /// `snapshot()` answers the same question through the throwing channel and records nothing, which is why
-  /// `probeTextEntryInput` and `withElement` already read elements this way. It is read again after the
+  /// `ResolvedTextEntryInput` already reads elements this way. It is read again after the
   /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
   /// field is then, which is the moment the read it replaced ran at.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {

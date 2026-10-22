@@ -153,17 +153,17 @@ extension RunnerTests {
     guard let element else {
       return TextEntryTarget(element: nil, refreshPoint: requestedPoint, prefersFocusedElement: false)
     }
-    let snapshot = textEntrySnapshot(element)
+    let read = ResolvedTextEntryInput(reading: element)
     return TextEntryTarget(
       element: element,
-      refreshPoint: textEntryRefreshPoint(frame: snapshot?.frame, fallbackTo: requestedPoint),
+      refreshPoint: textEntryRefreshPoint(frame: read?.snapshot?.frame, fallbackTo: requestedPoint),
       prefersFocusedElement: false,
-      postFocusRead: snapshot.map { ResolvedTextEntryInput(element: element, snapshot: $0) }
+      postFocusRead: read?.snapshot == nil ? nil : read
     )
   }
 
   /// The field's current center for a refresh point that survives a focus move, or `requestedPoint`
-  /// when the field reads with an empty frame. Read through `textEntrySnapshot`, not
+  /// when the field reads with an empty frame. Read through a snapshot, not
   /// `element.frame`: this runs after the focus tap, and a field that stopped answering its
   /// resolving query on focus (#3060) turns that read into a recorded failure which ends the runner
   /// session for a focus the dispatch had already landed. When the read could not answer at all,

@@ -11,29 +11,26 @@ enum TextInputProbeFailure: String, Error {
 }
 
 enum TextInputProbeOutcome {
-  case matches([XCUIElement])
+  case matches([RunnerTests.ResolvedTextEntryInput])
   case absent
   case unavailable(TextInputProbeFailure)
 }
 
 extension RunnerTests {
-  /// The smallest text input at the point, with the snapshot its lookup read.
   func textInputAt(app: XCUIApplication, x: Double, y: Double) -> ResolvedTextEntryInput? {
-    safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: { false })
-    }.first
+    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y)).first
   }
 
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [XCUIElement] {
+  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [ResolvedTextEntryInput] {
     safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, shouldStop: { false }).map(\.element)
+      queryTextInputs(app: app, point: point, shouldStop: { false })
     }
   }
 
   func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
     switch probeTextInputs(app: app, point: CGPoint(x: x, y: y)) {
-    case .matches(let elements):
-      return elements.first
+    case .matches(let inputs):
+      return inputs.first?.element
     case .absent:
       return nil
     case .unavailable:
@@ -60,18 +57,13 @@ extension RunnerTests {
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
-      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first?.element
-      else {
+      guard let input = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first else {
         return .absent
       }
-      switch probeTextEntryInput(element) {
-      case .input(let identity):
-        return .input(TextInputAtPoint(element: element, identity: identity))
-      case .noMatch:
-        return .absent
-      case .unavailable:
+      guard let identity = input.identity else {
         return .unavailable
       }
+      return .input(TextInputAtPoint(element: input.element, identity: identity))
     }
     switch probed {
     case .success(let resolution):
@@ -81,16 +73,14 @@ extension RunnerTests {
     }
   }
 
-  /// The snapshot of `input`'s handle when it still resolves to the input it named when found, read
+  /// `input`'s handle, read again, when it still resolves to the input it named when found, read
   /// inside the same issue containment. A read that cannot answer counts as no.
-  func textInputSnapshotIfStillResolves(_ input: TextInputAtPoint) -> XCUIElementSnapshot? {
-    let probed = containingTextInputProbeIssues(fallback: nil as XCUIElementSnapshot?) { _ in
-      guard input.element.exists else { return nil }
-      let read = snapshotTextEntryInput(input.element)
-      return read.probe == .input(input.identity) ? read.snapshot : nil
+  func textInputIfStillResolves(_ input: TextInputAtPoint) -> ResolvedTextEntryInput? {
+    let probed = containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?) { _ in
+      ResolvedTextEntryInput(reading: input.element).flatMap { $0.identity == input.identity ? $0 : nil }
     }
-    guard case .success(let snapshot) = probed else { return nil }
-    return snapshot
+    guard case .success(let read) = probed else { return nil }
+    return read
   }
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
@@ -105,10 +95,10 @@ extension RunnerTests {
 
   func probeTextInputs(app: XCUIApplication, point: CGPoint) -> TextInputProbeOutcome {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
-      queryTextInputs(app: app, point: point, shouldStop: shouldStop).map(\.element)
+      queryTextInputs(app: app, point: point, shouldStop: shouldStop)
     }) {
-    case .success(let elements):
-      return elements.isEmpty ? .absent : .matches(elements)
+    case .success(let inputs):
+      return inputs.isEmpty ? .absent : .matches(inputs)
     case .failure(let failure):
       return .unavailable(failure)
     }
@@ -172,16 +162,11 @@ extension RunnerTests {
         record(issue)
       }
 #endif
-      // One snapshot per candidate answers enablement, frame, and the ordering below: each attribute
-      // read from the live element runs the candidate's query again. A candidate that cannot be
-      // snapshotted is read live, so its failure still reaches the caller's issue handling. A missing
-      // candidate's snapshot throws only after XCTest waits for a match, so existence is read only
-      // when the snapshot fails.
+      // One snapshot per candidate answers enablement, frame, and the ordering below. A candidate that
+      // cannot be snapshotted is read live, so its failure still reaches the caller's issue handling.
       for element in candidates {
         if shouldStop() { break }
-        let snapshot = try? element.snapshot()
-        guard snapshot != nil || element.exists else { continue }
-        let candidate = ResolvedTextEntryInput(element: element, snapshot: snapshot)
+        guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
         let attributes = candidate.attributes
         if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
           inputs.append(candidate)
