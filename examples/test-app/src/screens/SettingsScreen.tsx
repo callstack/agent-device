@@ -20,6 +20,7 @@ export interface SettingsScreenProps {
   onLoadDiagnostics: () => void;
   onOpenAccessorySetup: () => void;
   onOpenAutomationLab: () => void;
+  onOpenHeavyFeed: () => void;
   onOpenInertSurface: () => void;
   onOpenSnapshotDepth: () => void;
   onOpenWebViewLab: () => void;
@@ -202,6 +203,18 @@ export function SettingsScreen(props: SettingsScreenProps) {
             testID="reset-lab"
           />
         </View>
+      </SectionCard>
+
+      {/* Keep this card last: Maestro differential flows tap cards above it without scrolling (#1299). */}
+      <SectionCard
+        subtitle="Open a feed whose accessibility tree is too deep for XCTest."
+        title="Heavy feed"
+      >
+        <ActionButton
+          label="Open heavy feed"
+          onPress={props.onOpenHeavyFeed}
+          testID="open-heavy-feed"
+        />
       </SectionCard>
     </ScrollView>
   );

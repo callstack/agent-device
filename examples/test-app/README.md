@@ -19,6 +19,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 - `Perf lab`: seeded JavaScript render problems for `react-devtools profile`, one per scenario (see [Perf lab](#perf-lab))
+- `Heavy feed`: a Bluesky-shaped home feed whose accessibility tree is deeper than 65 levels (see [Heavy feed](#heavy-feed))
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
 
@@ -260,6 +261,23 @@ agent-device react-devtools profile stop
 | `eager-list` | 1,200 tiles mount in one commit instead of a virtualized list; every Run mounts them afresh | `eager-mount ProductTile` |
 
 `src/screens/PerfLabScreen.tsx` imports only React and React Native, so it can be copied into a bare React Native app to check the profiler on other React Native versions.
+
+## Heavy feed
+
+**Settings → Open heavy feed** (`open-heavy-feed`) opens a JavaScript-only reproduction of a heavy
+React Native home feed, shaped after Bluesky 1.136. Thirty nested containers stand in for its
+navigation and provider layers. Below them a virtualized list renders posts with avatar, text,
+image, link, quote, and quote-with-media embeds. Every level opts out of view flattening, so the
+native accessibility tree is deeper than 65 levels and holds about 300 raw nodes.
+
+On this screen the XCTest tree capture fails with `kAXErrorIllegalArgument` and recovers through
+private AX, while the simulator accessibility bridge still answers. Use it to reproduce deep-tree
+capture, recovery, and gesture-routing behavior without a third-party app. `wrappers` (default 30)
+and `posts` (default 60) route parameters change the shape.
+
+The stable ids are `heavy-feed-title`, `heavy-feed-liked-count`, `heavy-feed-last-action`, and per
+post `heavy-post-<n>`, `heavy-post-<n>-like`, `-reply`, `-repost`, and `-more`. A like press updates
+`Liked posts: <count>`, and a long press on a post sets `Last action: held post <n>`.
 
 ## Local Agent Device suites
 

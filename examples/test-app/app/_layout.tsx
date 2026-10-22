@@ -28,6 +28,7 @@ function RootLayoutContent() {
         <Stack.Screen name="inert" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="snapshot-depth" />
         <Stack.Screen name="deep-tree" />
+        <Stack.Screen name="heavy-feed" options={{ headerShown: true, title: 'Heavy feed' }} />
         <Stack.Screen name="ticker" />
         <Stack.Screen name="perf-lab" />
         <Stack.Screen name="product/[productId]" />
