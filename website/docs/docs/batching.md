@@ -22,8 +22,9 @@ longer sequences into separate requests.
 Some resource operations cannot run as bounded steps. The failed step returns
 `details.reason: bounded_composite_resource_unsupported`, `details.shape`,
 `details.dispatched: no`, and `details.standaloneCommandName` for a known public command. The name
-is not a complete command. Run the original step separately with its original arguments and
-options, the same `--session` value, and the same private CLI context. Inspect `details.partialResults` and
+is not a complete command. Affected commands include `perf`, `audio`, `record`, `trace`, and some
+`logs` operations. Run the original step separately with its original arguments and options, the
+same `--session` value, and the same private CLI context. Inspect `details.partialResults` and
 `details.dispatchedSteps` before retrying the batch: earlier steps may already have changed the app.
 The batch still authenticates and renews its own lease while it runs.
 
