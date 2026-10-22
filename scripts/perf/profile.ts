@@ -1,6 +1,11 @@
 import { EXEC_COMMAND_PHASE } from '@agent-device/host-kit/command';
 import { DIAGNOSTIC_STDERR_PREFIX } from '@agent-device/host-kit/diagnostics';
 import { RETRY_PHASE } from '@agent-device/host-kit/retry';
+import {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
+  ANDROID_TOUCH_HELPER_GESTURE_PHASE,
+} from '@agent-device/platform-android/mechanics';
 import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import { median } from './stats.ts';
 import type {
@@ -28,11 +33,8 @@ type DiagnosticEvent = {
 
 // Android: the snapshot helper answers through its persistent session, or through a one-shot
 // `am instrument` capture when the session is off or fails. Touch gestures run in the helper too.
-const ANDROID_SESSION_CAPTURE_PHASE = 'android_snapshot_helper_session_capture';
-const ANDROID_ONE_SHOT_CAPTURE_PHASE = 'android_snapshot_helper_capture';
 const ANDROID_SESSION_PRODUCER = 'android-helper/persistent-session';
 const ANDROID_ONE_SHOT_PRODUCER = 'android-helper/instrumentation';
-const ANDROID_GESTURE_PHASE = 'android_touch_helper_gesture';
 const STABILIZATION_PHASE = /settle|stabiliz/i;
 const FALLBACK_TEXT_LIMIT = 140;
 
@@ -111,13 +113,13 @@ export function profileRequestLog(ndjson: string): SampleProfile {
       addTiming(profile.runnerCommands, text(data.command) ?? 'unknown', duration);
     } else if (phase === SNAPSHOT_SOURCE_ACQUIRE_PHASE) {
       addSource(text(data.producer) ?? 'unknown', event);
-    } else if (phase === ANDROID_SESSION_CAPTURE_PHASE) {
+    } else if (phase === ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE) {
       sessionAnswered = addSource(ANDROID_SESSION_PRODUCER, event);
-    } else if (phase === ANDROID_ONE_SHOT_CAPTURE_PHASE) {
+    } else if (phase === ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE) {
       if (sessionAnswered) profile.snapshotSources[ANDROID_SESSION_PRODUCER]!.failures += 1;
       sessionAnswered = false;
       addSource(ANDROID_ONE_SHOT_PRODUCER, event);
-    } else if (phase === ANDROID_GESTURE_PHASE) {
+    } else if (phase === ANDROID_TOUCH_HELPER_GESTURE_PHASE) {
       addTiming(profile.runnerCommands, 'gesture', duration);
       if (event.level === 'error') fallbacks.add(`${phase}: ${text(data.error) ?? 'failed'}`);
     } else if (phase === SNAPSHOT_SOURCE_RECOVERY_PHASE && data.truncated === true) {

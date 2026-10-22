@@ -33,6 +33,8 @@ import {
 } from './snapshot-helper-types.ts';
 
 export const ANDROID_TOUCH_PLAN_PROTOCOL = 'android-touch-plan-v1';
+/** The diagnostic phase of one gesture that the snapshot helper injects. */
+export const ANDROID_TOUCH_HELPER_GESTURE_PHASE = 'android_touch_helper_gesture';
 const HELPER_GESTURE_TIMEOUT_MS = 45_000;
 const HELPER_GESTURE_TIMEOUT_OVERHEAD_MS = 15_000;
 const HELPER_VIEWPORT_TIMEOUT_MS = 45_000;
@@ -67,7 +69,7 @@ export async function executeAndroidTouchHelperPlan(
     JSON.stringify({ protocol: ANDROID_TOUCH_PLAN_PROTOCOL, ...request }),
   ).toString('base64');
   const output = await withDiagnosticTimer(
-    'android_touch_helper_gesture',
+    ANDROID_TOUCH_HELPER_GESTURE_PHASE,
     async () => {
       // A live snapshot session already owns UiAutomation; injecting through it avoids the
       // instrumentation stop/restart that previously taxed every gesture. Gesture session errors

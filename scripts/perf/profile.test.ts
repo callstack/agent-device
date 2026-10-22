@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { EXEC_COMMAND_PHASE } from '@agent-device/host-kit/command';
 import { DIAGNOSTIC_STDERR_PREFIX } from '@agent-device/host-kit/diagnostics';
 import { RETRY_PHASE } from '@agent-device/host-kit/retry';
+import {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
+  ANDROID_TOUCH_HELPER_GESTURE_PHASE,
+} from '@agent-device/platform-android/mechanics';
 import { test } from 'vitest';
 import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import {
@@ -123,7 +128,7 @@ test('reads the settle wait of a --settle response and nothing from other respon
 // Trimmed from Android heavy-feed request logs.
 const androidCapture = (session: Record<string, unknown>, oneShot = false) =>
   [
-    line({ phase: 'android_snapshot_helper_session_capture', ...session }),
+    line({ phase: ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE, ...session }),
     ...(oneShot
       ? [
           line({
@@ -132,7 +137,7 @@ const androidCapture = (session: Record<string, unknown>, oneShot = false) =>
             durationMs: 373,
             data: { command: 'adb', event: 'settled' },
           }),
-          line({ phase: 'android_snapshot_helper_capture', durationMs: 373 }),
+          line({ phase: ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE, durationMs: 373 }),
         ]
       : []),
     line({ phase: 'snapshot_capture', durationMs: 380, data: { backend: 'android' } }),
@@ -183,17 +188,17 @@ test('names the Android helper transport that answered each capture', () => {
 test('counts Android helper gestures as runner commands', () => {
   const profile = profileRequestLog(
     [
-      line({ phase: 'android_touch_helper_gesture', durationMs: 210 }),
+      line({ phase: ANDROID_TOUCH_HELPER_GESTURE_PHASE, durationMs: 210 }),
       line({
         level: 'error',
-        phase: 'android_touch_helper_gesture',
+        phase: ANDROID_TOUCH_HELPER_GESTURE_PHASE,
         durationMs: 30,
         data: { error: 'busy' },
       }),
     ].join('\n'),
   );
   assert.deepEqual(profile.runnerCommands, { gesture: { count: 2, totalMs: 240 } });
-  assert.deepEqual(profile.fallbacks, ['android_touch_helper_gesture: busy']);
+  assert.deepEqual(profile.fallbacks, [`${ANDROID_TOUCH_HELPER_GESTURE_PHASE}: busy`]);
 });
 
 test('reads the Android helper transport from a snapshot response', () => {

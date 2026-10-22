@@ -41,9 +41,9 @@ At the end, or on SIGINT or SIGTERM, the suite saves the logs to `raw/state/`, s
 
 ## Snapshot paths
 
-The heavy-feed scenario times the normal snapshot path and one forced path on each platform.
+Each platform times the normal snapshot path and one forced path.
 
-- iOS: the simulator accessibility bridge answers normal captures. `snapshot-raw-forced-tree` pins the XCTest tree backend through the SDK, because the CLI has no flag for it. On this screen, the tree backend must degrade to `sparse`.
+- iOS: the simulator accessibility bridge answers normal captures. `home-reads/snapshot-forced-tree` pins the XCTest tree backend through the SDK, because the CLI has no flag for it. Only a regular capture honors the pin; a raw capture runs its own backend ladder. The response must name the `tree` backend with the `requested-backend` reason code. The XCTest tree rejects the heavy feed, so the step runs on the home screen.
 - Android: the snapshot helper APK is the only snapshot engine (ADR 0002). Its persistent session answers normal captures. `snapshot-raw-one-shot` restarts the daemon with `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION=0`, so a one-shot `am instrument` capture answers. The harness restarts the daemon without the variable after the step. Both raw captures must reach depth 56. The forced capture must report the `instrumentation` transport.
 
 ## Platform parity
@@ -59,7 +59,7 @@ Some shared steps use other screen coordinates or waits on Android. The `on.andr
 | `hardware-button` | Not timed: the simulator refuses hardware-button presses. | lifecycle (`hardware-button wake`) |
 | `push` | Not timed: the fixture has no notification authorization. | lifecycle (adb broadcast) |
 | `telephony` | Not timed: the simulator refuses calls and SMS. | lifecycle (`telephony sms`) |
-| `snapshot` | heavy-feed: `snapshot-raw-forced-tree` | heavy-feed: `snapshot-raw-one-shot` |
+| `snapshot` | home-reads: `snapshot-forced-tree` | heavy-feed: `snapshot-raw-one-shot` |
 | `audio` | Not timed: hosted runners grant no macOS audio permission. | Not timed: the Linux runner has no ScreenCaptureKit. |
 | `fold` | Not timed: iPhone Duo only. | Not timed: foldable emulators only. |
 | `tv-remote` | Not timed: tvOS only. | Not timed: Android TV only. |

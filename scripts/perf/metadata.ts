@@ -39,8 +39,7 @@ function emulator(serial: string): RunMetadata['device'] {
 export function collectMetadata(cfg: PerfConfig): RunMetadata {
   const revision = readGitRevision(REPO_ROOT);
   const toolchain = readToolchain();
-  const target =
-    cfg.platform === 'ios' ? readTarget(cfg.udid!, cfg.appId, cfg.appPath) : undefined;
+  const target = cfg.platform === 'ios' ? readTarget(cfg.udid!, cfg.appId, cfg.appPath) : undefined;
   const cpus = os.cpus();
   return {
     commit: revision.commit,

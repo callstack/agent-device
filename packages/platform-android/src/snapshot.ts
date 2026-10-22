@@ -102,6 +102,12 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  * a busy screen run a snapshot past the daemon request envelope.
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
+/** The diagnostic phase of a capture through the snapshot helper's persistent session. */
+export const ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE =
+  'android_snapshot_helper_session_capture';
+/** The diagnostic phase of a one-shot `am instrument` snapshot helper capture. */
+export const ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE = 'android_snapshot_helper_capture';
+
 export type AndroidSnapshotOptions = SnapshotOptions & {
   idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
   appBundleId?: string;
@@ -465,7 +471,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   captureOptions.idleWait = params.idleWait;
   try {
     const sessionCapture = await withDiagnosticTimer(
-      'android_snapshot_helper_session_capture',
+      ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
       async () => await captureAndroidSnapshotWithHelperSession(captureOptions),
       {
         packageName: artifact.manifest.packageName,
@@ -487,7 +493,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName);
   }
   return await withDiagnosticTimer(
-    'android_snapshot_helper_capture',
+    ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
     async () => await captureAndroidSnapshotWithHelper(captureOptions),
     {
       packageName: artifact.manifest.packageName,
