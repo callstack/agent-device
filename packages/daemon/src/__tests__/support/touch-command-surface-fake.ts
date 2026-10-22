@@ -53,10 +53,10 @@ import {
  * session's stored snapshot, that a `matchSelector` rule names (by default one of its `||`
  * alternatives, each a conjunction of `key=value` terms). A target that does not resolve refuses
  * with the typed `ref_not_found` / `selector_not_found` reason and `dispatched: 'no'`. A selector
- * node outside the capture's root rect asks the backend's #1542 live read; a confirmed live rect
- * replaces the node's rect, and its point then has no observation. Promotion, occlusion, off-screen
- * refusals and bounds guards, label recovery, and `--verify` evidence are command-family behavior
- * and are asserted beside that code.
+ * node outside the capture's root rect dispatches only at a live rect the backend's #1542 read
+ * confirms, without a point observation; otherwise it refuses with `offscreen_selector`. Promotion,
+ * occlusion, the real visibility rule, bounds guards, label recovery, and `--verify` evidence are
+ * command-family behavior and are asserted beside that code.
  *
  * Values the fake supplies itself rather than reading from a backend: an `is` read always passes
  * (`pass: true`, `matches: 1`); selector reads (`get`, `is`) capture once with
@@ -378,7 +378,7 @@ async function resolveTarget(
       dispatched: 'no',
     });
   }
-  const liveRect = await readRescuedRect(config, tree.nodes, node, options);
+  const liveRect = await readRescuedRect(config, tree.nodes, node, target.selector, options);
   const dispatched = liveRect ? { ...node, rect: liveRect } : node;
   const observed = observedAt(tree);
   const resolved = {
@@ -397,11 +397,22 @@ async function readRescuedRect(
   config: AgentDeviceRuntimeConfig,
   nodes: SnapshotNode[],
   node: SnapshotNode,
+  selector: string,
   options: CommandOptions,
-): Promise<Rect | null | undefined> {
+): Promise<Rect | undefined> {
   const root = nodes[0]?.rect;
   if (!root || !node.rect || rectContains(root, node.rect)) return undefined;
-  return await config.backend.confirmOffscreenTargetVisible?.(context(config, options), node, root);
+  const liveRect = await config.backend.confirmOffscreenTargetVisible?.(
+    context(config, options),
+    node,
+    root,
+  );
+  if (liveRect) return liveRect;
+  throw new AppError('COMMAND_FAILED', `Selector ${selector} resolved to an off-screen element`, {
+    reason: 'offscreen_selector',
+    selector,
+    dispatched: 'no',
+  });
 }
 
 function chainAction(

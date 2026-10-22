@@ -132,9 +132,12 @@ test('a rescued selector point keeps probing although the capture placed an inpu
 
 test('a newer read-only observation keeps probing when the ref frame predates an input at the tap point', async () => {
   const { store, session } = setup();
-  const nodes = session.snapshot!.nodes.map((node) =>
-    node.type === 'TextField' ? { ...node, rect: { x: 10, y: 740, width: 100, height: 40 } } : node,
-  );
+  // The newer observation names a different element at @e2, so the tap keeps the frame's node.
+  const nodes = session.snapshot!.nodes.map((node) => {
+    if (node.type === 'TextField')
+      return { ...node, rect: { x: 10, y: 740, width: 100, height: 40 } };
+    return node.label === 'Home' ? { ...node, label: 'Profile' } : node;
+  });
   attachSnapshotTextInputGeometry(nodes, { rects: [{ x: 10, y: 740, width: 100, height: 40 }] });
   setSessionSnapshot(session, { ...session.snapshot!, nodes, createdAt: 2 });
   expect(refFrameState(session)).toBe('active');
