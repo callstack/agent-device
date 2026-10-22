@@ -64,14 +64,23 @@ function probe(
   return { observe, acquire, sleep, gate };
 }
 
-test('a launched app is observable as soon as the bridge publishes it', async () => {
-  const { observe, acquire, sleep } = probe([acquired()], { now: () => 0, sleep: async () => {} });
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
-    observation: 'observable',
-  });
-  expect(acquire).toHaveBeenCalledOnce();
-  expect(sleep).not.toHaveBeenCalled();
-});
+test.for([
+  ['an iPhone Simulator', simulator],
+  ['an iPad Simulator', { ...simulator, appleOs: 'ipados' as const, name: 'iPad' }],
+] as const)(
+  'a launched app on %s is observable as soon as the bridge publishes it',
+  async ([_name, device]) => {
+    const { observe, acquire, sleep } = probe([acquired()], {
+      now: () => 0,
+      sleep: async () => {},
+    });
+    await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toEqual({
+      observation: 'observable',
+    });
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  },
+);
 
 test('a missing AX server is re-read inside its window until it registers', async () => {
   let now = 0;
@@ -254,7 +263,9 @@ test.each([
 
 test.each([
   ['a physical iOS device', { ...simulator, kind: 'device' as const }],
+  ['a physical iPad', { ...simulator, appleOs: 'ipados' as const, kind: 'device' as const }],
   ['a tvOS Simulator', { ...simulator, appleOs: 'tvos' as const, target: 'tv' as const }],
+  ['a visionOS Simulator', { ...simulator, appleOs: 'visionos' as const }],
 ])('%s has no bridge and is not eligible', async (_name, device) => {
   const { observe, acquire, gate } = probe([acquired()], { now: () => 0, sleep: async () => {} });
   await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toEqual({

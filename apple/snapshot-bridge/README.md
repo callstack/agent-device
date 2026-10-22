@@ -4,7 +4,8 @@ This directory contains the small private accessibility reader used by the
 Apple platform acquisition facet. The framed server and request validation
 live in `SnapshotBridge.m`; private runtime binding lives in
 `SnapshotBridgeRuntime.m`. It is compiled for the iOS Simulator on first use
-and is never downloaded, pre-signed, or built by npm installation.
+and is never downloaded, pre-signed, or built by npm installation. It serves
+iPhone and iPad Simulators, which both run the iOS Simulator runtime (#3844).
 
 The guest process uses the `XCTAccessibilityFramework` remote-access client
 from the simulator runtime and the `userTestingSnapshotForElement:options:error:`
@@ -48,6 +49,17 @@ resolution. Secondary owners such as the return-to-app status-bar control do
 not replace the native primary owner. An ownership refusal is evidence about
 the screen, so the route sends only that capture to XCTest and keeps the app
 generation on the bridge.
+
+## Window placement
+
+The snapshot API reports the frames of an app that runs in an iPadOS window
+(Windowed Apps or Stage Manager) relative to that window, not to the screen.
+Before acquisition, the reader compares the AXRuntime frame of the primary app
+with the frame of the system app. Both frames use the native space of the
+screen, also in landscape. If they differ, the reader returns `app-window-not-full-screen` without
+the app tree. Like an ownership refusal, this is evidence about the screen, so
+the route sends only that capture to XCTest. If the runtime cannot report either
+frame, the reader keeps the capture.
 
 ## Remote content
 
