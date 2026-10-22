@@ -266,8 +266,12 @@ test('replay projects daemon perf positionals into public --kind form', async ()
       dispatchedSteps: 1,
       standaloneCommand:
         'agent-device perf cpu profile start --kind xctrace --session resource-session',
-      divergence: { step: { source: { path: script, line: 2 } } },
+      divergence: {
+        step: { index: 2, source: { path: script, line: 2 } },
+        resume: { allowed: true, from: 2 },
+      },
     });
+    expect(response.json.error.data.details.divergence.resume.planDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(world.native).not.toHaveBeenCalled();
   } finally {
     await world.daemon.close();
