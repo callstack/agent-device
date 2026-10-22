@@ -54,9 +54,9 @@ import {
  * alternatives, each a conjunction of `key=value` terms). A target that does not resolve refuses
  * with the typed `ref_not_found` / `selector_not_found` reason and `dispatched: 'no'`. A selector
  * node outside the capture's root rect dispatches only at a live rect the backend's #1542 read
- * confirms, without a point observation; otherwise it refuses with `offscreen_selector`. Promotion,
- * occlusion, the real visibility rule, bounds guards, label recovery, and `--verify` evidence are
- * command-family behavior and are asserted beside that code.
+ * confirms, as a patched copy that is not one of the capture's nodes; otherwise it refuses with
+ * `offscreen_selector`. Promotion, occlusion, the real visibility rule, bounds guards, label
+ * recovery, and `--verify` evidence are command-family behavior and are asserted beside that code.
  *
  * Values the fake supplies itself rather than reading from a backend: an `is` read always passes
  * (`pass: true`, `matches: 1`); selector reads (`get`, `is`) capture once with
@@ -380,14 +380,13 @@ async function resolveTarget(
   }
   const liveRect = await readRescuedRect(config, tree.nodes, node, target.selector, options);
   const dispatched = liveRect ? { ...node, rect: liveRect } : node;
-  const observed = observedAt(tree);
   const resolved = {
     kind: 'selector' as const,
     target: { kind: 'selector' as const, selector: target.selector },
     point: centerOf(dispatched) as Point,
     node: dispatched,
     selectorChain: selectorChainFor(config, node, tree.nodes, chainAction(nativeRefRoute)),
-    ...(liveRect ? { preAction: observed.preAction } : observed),
+    preAction: { nodes: tree.nodes },
   };
   resolvedTreeQuality.set(resolved, tree.snapshotQuality);
   return resolved;
@@ -447,16 +446,10 @@ function resolvedFromNode(
     point: centerOf(node),
     node,
     selectorChain: selectorChainFor(config, node, tree.nodes, action),
-    ...observedAt(tree),
+    preAction: { nodes: tree.nodes },
   };
   resolvedTreeQuality.set(resolved, tree.snapshotQuality);
   return resolved;
-}
-
-/** The tree a point was measured on: both its pre-action baseline and its point observation. */
-function observedAt(tree: Pick<SnapshotState, 'nodes'>) {
-  const observation = { nodes: tree.nodes };
-  return { preAction: observation, pointObservation: observation };
 }
 
 function refBody(ref: string): string {
@@ -532,7 +525,11 @@ async function dispatchTap(
   if (resolved.kind === 'ref' && !resolved.point && config.backend.tapTarget) {
     return await config.backend.tapTarget(context(config, options), resolved.target, tapOptions);
   }
-  const pointObservation = resolved.kind === 'point' ? undefined : resolved.pointObservation;
+  // tapCommand forwards the pre-action tree only when the dispatched node is one of its nodes.
+  const pointObservation =
+    resolved.kind !== 'point' && resolved.node && resolved.preAction?.nodes.includes(resolved.node)
+      ? resolved.preAction
+      : undefined;
   return await backendOperation(config.backend.tap?.bind(config.backend))(
     context(config, options),
     requirePointOf(resolved),

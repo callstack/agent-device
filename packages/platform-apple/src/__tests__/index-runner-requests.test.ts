@@ -62,7 +62,6 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     press({
       coordinateTapTextInputEvidence: {
-        source: 'selector-capture',
         targetBundleId: APP,
         point: { x: 10, y: 20 },
         textInputRects: [{ x: 0, y: 100, width: 200, height: 44 }],

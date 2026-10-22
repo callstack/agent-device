@@ -106,21 +106,6 @@ extension RunnerTests {
     XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true, evidence: nil, point: nil, targetBundleId: nil))
   }
 
-  func testCoordinateTapTextInputEvidenceSourceIsDiagnosticOnly() {
-    let evidence = CoordinateTapTextInputEvidence(
-      source: "unverified-daemon-tag",
-      targetBundleId: "com.example.app",
-      point: RunnerGesturePoint(x: 10, y: 20),
-      textInputRects: []
-    )
-    XCTAssertFalse(shouldProbeCoordinateTapTextInput(
-      xCTestChannelPenalized: false,
-      evidence: evidence,
-      point: CGPoint(x: 10, y: 20),
-      targetBundleId: "com.example.app"
-    ))
-  }
-
   func testOnlySynthesizedSequenceTapStepsTakeTheCoordinateTapPolicy() {
     XCTAssertEqual(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true)), .coordinateTap)
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: nil)))

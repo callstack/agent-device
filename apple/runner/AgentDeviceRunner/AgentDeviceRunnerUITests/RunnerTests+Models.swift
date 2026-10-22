@@ -214,7 +214,6 @@ extension Command {
 }
 
 struct CoordinateTapTextInputEvidence: Codable {
-  let source: String
   let targetBundleId: String
   let point: RunnerGesturePoint
   let textInputRects: [RunnerGestureViewport]

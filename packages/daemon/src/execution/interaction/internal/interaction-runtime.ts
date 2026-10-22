@@ -1,4 +1,3 @@
-import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
@@ -41,7 +40,6 @@ export async function createInteractionRuntimeForRoute(
     InteractionRouteInput & {
       captureSnapshotForSession: CaptureSnapshotForSession;
       pairedGestureViewport?: Rect;
-      tapTarget?: InteractionTarget;
       touchExecutor?: BoundTouchExecutor;
       gestures?: BoundGestureExecutor;
       /**
@@ -95,12 +93,7 @@ export async function createInteractionRuntimeForRoute(
       const latest = current.snapshot;
       if (!latest || latest.nodes !== pointObservation.nodes || isOutdatedObservation(latest))
         return undefined;
-      return buildCoordinateTapTextInputEvidence(
-        pointObservation,
-        point,
-        current.appBundleId,
-        params.tapTarget?.kind === 'ref' ? 'ref-frame' : 'selector-capture',
-      );
+      return buildCoordinateTapTextInputEvidence(pointObservation, point, current.appBundleId);
     },
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live

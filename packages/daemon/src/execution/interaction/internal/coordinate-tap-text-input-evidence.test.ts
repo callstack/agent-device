@@ -13,7 +13,6 @@ type Fixture = {
   nodes: Omit<RawSnapshotNode, 'index'>[];
   point: { x: number; y: number };
   appBundleId: string;
-  source?: CoordinateTapTextInputEvidence['source'];
   truncated?: boolean;
   expectedEvidence: CoordinateTapTextInputEvidence | null;
 };
@@ -54,23 +53,17 @@ test.each(cases)('$name preserves acquired input geometry through presentation',
     surfaceScopedNodes(snapshot),
     fixture.point,
     fixture.appBundleId,
-    fixture.source ?? 'selector-capture',
   );
   expect(result ?? null).toEqual(fixture.expectedEvidence);
 });
 
 test('an observation without acquisition geometry or a target bundle cannot establish exclusion', () => {
   const point = { x: 10, y: 20 };
-  expect(
-    buildCoordinateTapTextInputEvidence({ nodes: [] }, point, 'app', 'selector-capture'),
-  ).toBeUndefined();
+  expect(buildCoordinateTapTextInputEvidence({ nodes: [] }, point, 'app')).toBeUndefined();
   const measured = { nodes: [{ index: 0, type: 'Button' }] };
   attachSnapshotTextInputGeometry(measured.nodes, { rects: [] });
-  expect(
-    buildCoordinateTapTextInputEvidence(measured, point, undefined, 'selector-capture'),
-  ).toBeUndefined();
-  expect(buildCoordinateTapTextInputEvidence(measured, point, 'app', 'selector-capture')).toEqual({
-    source: 'selector-capture',
+  expect(buildCoordinateTapTextInputEvidence(measured, point, undefined)).toBeUndefined();
+  expect(buildCoordinateTapTextInputEvidence(measured, point, 'app')).toEqual({
     targetBundleId: 'app',
     point,
     textInputRects: [],

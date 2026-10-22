@@ -110,7 +110,7 @@ extension RunnerTests {
     let frame = button.frame
     textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "excluded point must not query text inputs")
     let tap = try runnerCommandFixture(
-      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-excluded-point","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"source":"ref-frame","targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(fieldFrame.minX),"y":\#(fieldFrame.minY),"width":\#(fieldFrame.width),"height":\#(fieldFrame.height)}]}}"#
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-excluded-point","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(fieldFrame.minX),"y":\#(fieldFrame.minY),"width":\#(fieldFrame.width),"height":\#(fieldFrame.height)}]}}"#
     )
     let response = try execute(command: tap)
     XCTAssertTrue(response.ok, String(describing: response.error))
@@ -142,7 +142,7 @@ extension RunnerTests {
     mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
     clearSnapshotXCTestChannelPenalty(reason: "fresh-runner")
     let tap = try runnerCommandFixture(
-      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-input-evidence","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"source":"selector-capture","targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(frame.minX),"y":\#(frame.minY),"width":\#(frame.width),"height":\#(frame.height)}]}}"#
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-input-evidence","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(frame.minX),"y":\#(frame.minY),"width":\#(frame.width),"height":\#(frame.height)}]}}"#
     )
     XCTAssertTrue(try execute(command: tap).ok)
     XCTAssertNotNil(textEntryTapWitness)

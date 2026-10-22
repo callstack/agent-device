@@ -28,7 +28,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -76,7 +75,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -124,7 +122,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -172,7 +169,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -220,7 +216,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -269,7 +264,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -306,7 +300,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -343,7 +336,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -373,7 +365,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -449,7 +440,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.apple.SafariViewService",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -479,7 +469,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -492,44 +481,6 @@
       "x": 61,
       "y": 40
     }
-  },
-  {
-    "name": "ref-frame-away-from-input",
-    "nodes": [
-      {
-        "type": "TextField",
-        "rect": {
-          "x": 10,
-          "y": 120,
-          "width": 100,
-          "height": 40
-        }
-      }
-    ],
-    "point": {
-      "x": 60,
-      "y": 40
-    },
-    "appBundleId": "com.example.app",
-    "activeBundleId": "com.example.app",
-    "expectedEvidence": {
-      "source": "ref-frame",
-      "targetBundleId": "com.example.app",
-      "point": {
-        "x": 60,
-        "y": 40
-      },
-      "textInputRects": [
-        {
-          "x": 10,
-          "y": 120,
-          "width": 100,
-          "height": 40
-        }
-      ]
-    },
-    "probe": false,
-    "source": "ref-frame"
   },
   {
     "name": "UITextField-without-automation-type",
@@ -551,7 +502,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -588,7 +538,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -625,7 +574,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -662,7 +610,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
@@ -699,7 +646,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 59,
@@ -736,7 +682,6 @@
     "appBundleId": "com.example.app",
     "activeBundleId": "com.example.app",
     "expectedEvidence": {
-      "source": "selector-capture",
       "targetBundleId": "com.example.app",
       "point": {
         "x": 57,

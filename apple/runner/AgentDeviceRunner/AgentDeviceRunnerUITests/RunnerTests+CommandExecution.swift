@@ -161,10 +161,9 @@ extension RunnerTests {
           // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.
           clearRememberedTextEntryTap()
           NSLog(
-            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@ reason=%@ source=%@",
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@ reason=%@",
             mainOwned.bundleId ?? "",
-            xCTestChannelPenalized ? "penalized-xctest-channel" : "evidence",
-            command.coordinateTapTextInputEvidence?.source ?? "none"
+            xCTestChannelPenalized ? "penalized-xctest-channel" : "evidence"
           )
         }
         var fallback: GestureFallback?

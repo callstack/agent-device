@@ -738,7 +738,6 @@ test('an iOS single point press carries request evidence into the native tap com
     process.env,
   );
   const evidence = {
-    source: 'ref-frame' as const,
     targetBundleId: 'com.example.App',
     point: { x: 100, y: 200 },
     textInputRects: [{ x: 0, y: 0, width: 30, height: 40 }],

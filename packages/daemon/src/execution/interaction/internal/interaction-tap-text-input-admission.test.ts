@@ -71,7 +71,6 @@ test('the active ref frame supplies input geometry before the side-effect seam e
       point: { x: 40, y: 760 },
       options: expect.objectContaining({
         coordinateTapTextInputEvidence: {
-          source: 'ref-frame',
           targetBundleId: session.appBundleId,
           point: { x: 40, y: 760 },
           textInputRects: [{ x: 10, y: 100, width: 300, height: 40 }],
@@ -96,7 +95,6 @@ test('a selector uses this request capture rather than the stored input geometry
   const result = await runInteraction(store, session.name, 'click', ['role=button label=Home']);
   expect(result?.ok).toBe(true);
   expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toEqual({
-    source: 'selector-capture',
     targetBundleId: session.appBundleId,
     point: { x: 40, y: 760 },
     textInputRects: [{ x: 200, y: 160, width: 100, height: 40 }],
