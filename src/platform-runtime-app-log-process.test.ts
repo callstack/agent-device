@@ -182,52 +182,40 @@ describe('managed app-log process host', () => {
   });
 
   test('terminate settles when an escaped descendant keeps the output pipes open', async () => {
+    const { runCmdBackground } = await vi.importActual<
+      typeof import('@agent-device/host-kit/command')
+    >('@agent-device/host-kit/command');
     const fixture = processFixture();
-    const events: string[] = [];
-    const child = Object.assign(new EventEmitter(), {
-      pid: 99,
-      exitCode: null,
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      kill: vi.fn((signal?: NodeJS.Signals | number) => {
-        events.push(String(signal));
-        child.emit('exit', null, signal);
-        return true;
-      }),
+    let launched: ReturnType<typeof runCmdBackground> | undefined;
+    exec.run.mockImplementation((...args: Parameters<typeof runCmdBackground>) => {
+      launched = runCmdBackground(...args);
+      return launched;
     });
-    // Like a Node child process, close needs the exit and both output pipes closed.
-    const wait = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
-      let exited = false;
-      let open = 2;
-      const close = () => {
-        if (exited && open === 0) resolve({ stdout: '', stderr: '', exitCode: 1 });
-      };
-      child.once('exit', () => {
-        exited = true;
-        close();
-      });
-      for (const stream of [child.stdout, child.stderr]) {
-        stream.on('close', () => {
-          events.push('pipe-closed');
-          open -= 1;
-          close();
-        });
-      }
+    // SIGINT reaches only the direct child; the background loop keeps the inherited pipes open,
+    // like a log process that simctl launched inside the simulator.
+    let ticks = 0;
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start({
+      ...fixture.request,
+      output: { ...fixture.request.output, write: async () => void (ticks += 1) },
+      command: {
+        kind: 'host',
+        request: {
+          executable: 'sh',
+          args: ['-c', '(while echo tick; do sleep 0.1; done) & exec sleep 30'],
+          allowFailure: true,
+        },
+      },
     });
-    exec.run.mockReturnValue({ child, wait });
-    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
-      fixture.request,
-    );
+    await vi.waitFor(() => expect(ticks).toBeGreaterThan(0));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       let terminated = false;
       void running.terminate().then(() => (terminated = true));
+      await vi.waitFor(() => expect(launched?.child.signalCode).toBe('SIGINT'));
 
       await vi.advanceTimersByTimeAsync(4_000);
 
       await vi.waitFor(() => expect(terminated).toBe(true));
-      expect(events[0]).toBe('SIGINT');
-      expect(events.slice(-2)).toEqual(['pipe-closed', 'pipe-closed']);
       await expect(running.wait).resolves.toMatchObject({ exitCode: 1 });
       expect(fs.existsSync(fixture.markerPath)).toBe(false);
     } finally {

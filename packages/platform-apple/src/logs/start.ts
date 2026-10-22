@@ -245,7 +245,7 @@ async function waitForSimulatorStreamLaunch(
     if ((await Promise.race([launched, timedOut, aborted])) === 'timed-out') {
       throw new AppError(
         'COMMAND_FAILED',
-        `iOS simulator log stream did not start within ${SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS}ms`,
+        `Simulator log stream did not start within ${SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS}ms`,
         {
           reason: 'simulator-log-stream-launch-timeout',
           timeoutMs: SIMULATOR_STREAM_LAUNCH_TIMEOUT_MS,
