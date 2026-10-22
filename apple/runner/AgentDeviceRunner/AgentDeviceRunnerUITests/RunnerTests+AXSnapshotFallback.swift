@@ -132,7 +132,7 @@ extension RunnerTests {
     privateAXAcceptedDepthBundleId = bundleId
     privateAXAcceptedDepthProcessIdentifier = processIdentifier
     privateAXAcceptedDepth = depth
-    privateAXAcceptedDepthUntil = Date().addingTimeInterval(snapshotXCTestChannelPenaltyDuration)
+    privateAXAcceptedDepthUntil = Date().addingTimeInterval(SnapshotXCTestChannelPenalty.duration)
     privateAXAcceptedDepthLock.unlock()
     NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_DEPTH_REMEMBERED depth=%ld bundle=%@", depth, bundleId ?? "")
   }

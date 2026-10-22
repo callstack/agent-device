@@ -60,7 +60,10 @@ extension RunnerTests {
     )
   }
 
-  func testDeadlineExhaustedTreeAttemptArmsTheChannelPenaltyWithoutBeingSlow() {
+  /// A tier that stopped starting work at its own deadline is a timeout for the breaker even when it
+  /// answered fast and with a payload: the partial sweep must arm the penalty exactly as a slow tier
+  /// does, and a tier that finished fast must not (#2781).
+  func testDeadlineExhaustedTierAttemptArmsTheChannelPenaltyWithoutBeingSlow() {
     let capture = SnapshotBackendCapture(
       payload: DataPayload(nodes: [], truncated: true),
       effectiveDepth: nil
@@ -72,11 +75,11 @@ extension RunnerTests {
     )
     XCTAssertEqual(
       Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
+        kind: .querySweep,
         attempt: exhausted,
         slowThresholdMs: 3_000
       ),
-      "tree_backend_timeout"
+      "queries_backend_timeout"
     )
 
     let completed = SnapshotBackendAttempt(

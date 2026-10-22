@@ -123,7 +123,6 @@ extension RunnerTests {
     channelState: SnapshotXCTestChannelPlanState = .normal
   ) -> String? {
     guard channelState == .normal, kind.usesXCTestAccessibilityChannel else { return nil }
-    let isSlow = attempt.timing.acquisitionMs > slowThresholdMs
     if case let .failed(failure, phase: .acquisition) = attempt.outcome,
       failure.code == Self.xCTestSnapshotTimeoutCode
     {
@@ -132,7 +131,7 @@ extension RunnerTests {
     if attempt.tierOutcome == .deadlineExhausted {
       return "\(kind.rawValue)_backend_timeout"
     }
-    guard isSlow else { return nil }
+    guard attempt.timing.acquisitionMs > slowThresholdMs else { return nil }
     return "slow_\(kind.rawValue)_capture_\(Int(attempt.timing.acquisitionMs))ms"
   }
 

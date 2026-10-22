@@ -538,10 +538,7 @@ extension RunnerTests {
   }
 
   func testSnapshotXCTestChannelPenaltyMatchesBundleAndExpires() {
-    defer {
-      snapshotXCTestChannelPenaltyBundleId = nil
-      snapshotXCTestChannelPenaltyUntil = .distantPast
-    }
+    defer { snapshotXCTestChannelPenalty.clear() }
 
     penalizeSnapshotXCTestChannel(bundleId: "xyz.blueskyweb.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "xyz.blueskyweb.app"))
@@ -552,7 +549,9 @@ extension RunnerTests {
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
 
     // Expired penalties stop applying.
-    snapshotXCTestChannelPenaltyUntil = Date(timeIntervalSinceNow: -1)
+    snapshotXCTestChannelPenalty.arm(
+      bundleId: nil, at: Date(timeIntervalSinceNow: -SnapshotXCTestChannelPenalty.duration - 1)
+    )
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
   }
 
@@ -655,42 +654,70 @@ extension RunnerTests {
       kind: .recursiveTree, attempt: fast, channelState: .normal
     ))
   }
-  func testScheduledRecoveryProbeRequiresDueIndependentRegularPlanAndIdleBudget() {
-    let now = Date(timeIntervalSinceReferenceDate: 100)
-    let deferred = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, xCTestChannelPenalized: true)
-    func schedules(
-      _ effective: EffectiveSnapshotCapturePlan,
-      backend: SnapshotBackendKind = .privateAX,
-      next: Date = now,
-      remaining: TimeInterval = 1,
-      abandoned: Bool = false
-    ) -> Bool {
-      Self.shouldScheduleSnapshotXCTestRecoveryProbe(
-        effective: effective, acceptedBackend: backend, now: now, nextProbeAt: next,
-        deadline: now.addingTimeInterval(remaining), hasAbandonedWork: abandoned
-      )
-    }
-    XCTAssertTrue(schedules(deferred))
-    XCTAssertFalse(schedules(deferred, next: now.addingTimeInterval(0.001)))
-    XCTAssertFalse(schedules(deferred, remaining: 0.999))
-    XCTAssertFalse(schedules(deferred, abandoned: true))
-    XCTAssertFalse(schedules(deferred, backend: .recursiveTree))
-    XCTAssertFalse(schedules(deferred, backend: .querySweep))
-    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
-      Self.regularVisiblePlan, xCTestChannelPenalized: false
-    )))
-    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
-      Self.rawDiagnosticPlan, xCTestChannelPenalized: true
-    )))
-    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
-      Self.regularVisiblePlan, xCTestChannelPenalized: true,
+
+  func testDueRecoveryProbeLeadsOnlyTheDeferredRegularPlanAndNeverAddsTheSweep() {
+    let due = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true
+    )
+    XCTAssertEqual(due.plan, [.recursiveTree, .privateAX])
+    XCTAssertEqual(due.xCTestChannelState, .deferredToIndependentBackend)
+    XCTAssertEqual(due.treeCaptureSliceBudgetOverride, Self.penalizedXCTestProbeTreeSliceBudget)
+    XCTAssertTrue(due.leadsWithXCTestRecoveryProbe)
+
+    let notDue = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, xCTestChannelPenalized: true)
+    XCTAssertEqual(notDue.plan, [.privateAX, .recursiveTree])
+    XCTAssertFalse(notDue.leadsWithXCTestRecoveryProbe)
+
+    let physicalDevice = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true,
       availableBackends: [.recursiveTree, .querySweep]
-    )))
-    XCTAssertFalse(schedules(Self.effectiveSnapshotCapturePlan(
-      Self.regularVisiblePlan, xCTestChannelPenalized: true, preferredBackend: "private-ax"
-    )))
-    XCTAssertEqual(Self.snapshotXCTestRecoveryProbeInterval, 30)
+    )
+    XCTAssertEqual(physicalDevice.plan, [.recursiveTree, .querySweep])
+    XCTAssertFalse(physicalDevice.leadsWithXCTestRecoveryProbe, "the bounded plan probes on every capture")
+    for pinned in ["private-ax", "tree"] {
+      let plan = Self.effectiveSnapshotCapturePlan(
+        Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true,
+        preferredBackend: pinned
+      )
+      XCTAssertEqual(plan.plan.count, 1)
+      XCTAssertFalse(plan.leadsWithXCTestRecoveryProbe)
+    }
+    let raw = Self.effectiveSnapshotCapturePlan(
+      Self.rawDiagnosticPlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true
+    )
+    XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
+    XCTAssertFalse(raw.leadsWithXCTestRecoveryProbe)
   }
 
+  func testChannelPenaltyProbeIsDueEachIntervalUntilItExpiresOrClears() {
+    let armedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+    var penalty = SnapshotXCTestChannelPenalty()
+    XCTAssertFalse(penalty.isActive(for: "app", at: armedAt))
+    XCTAssertFalse(penalty.isProbeDue(for: "app", at: armedAt))
+
+    penalty.arm(bundleId: "app", at: armedAt)
+    XCTAssertTrue(penalty.isActive(for: "app", at: armedAt))
+    XCTAssertFalse(penalty.isActive(for: "other", at: armedAt))
+    XCTAssertFalse(penalty.isProbeDue(for: "app", at: armedAt.addingTimeInterval(29.9)))
+    XCTAssertTrue(penalty.isProbeDue(for: "app", at: armedAt.addingTimeInterval(30)))
+    XCTAssertFalse(penalty.isProbeDue(for: "other", at: armedAt.addingTimeInterval(30)))
+
+    let probedAt = armedAt.addingTimeInterval(45)
+    penalty.claimProbe(at: probedAt)
+    XCTAssertTrue(penalty.isActive(for: "app", at: probedAt))
+    XCTAssertFalse(penalty.isProbeDue(for: "app", at: probedAt.addingTimeInterval(29.9)))
+    XCTAssertTrue(penalty.isProbeDue(for: "app", at: probedAt.addingTimeInterval(30)))
+    XCTAssertFalse(
+      penalty.isProbeDue(for: "app", at: armedAt.addingTimeInterval(SnapshotXCTestChannelPenalty.duration)),
+      "an expired penalty has no probe to run"
+    )
+
+    penalty.clear()
+    XCTAssertFalse(penalty.isActive(for: "app", at: probedAt))
+    XCTAssertFalse(penalty.isProbeDue(for: "app", at: .distantFuture))
+
+    penalty.arm(bundleId: nil, at: armedAt)
+    XCTAssertTrue(penalty.isActive(for: "any", at: armedAt), "a bundle-less penalty applies to any target")
+  }
 }
 #endif
