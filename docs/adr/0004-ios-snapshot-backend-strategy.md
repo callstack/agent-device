@@ -660,8 +660,9 @@ Translation is the one rule that reads an origin, so it is the only place the fi
 Capture is half of the promise; dispatch is the other half.
 The measured dispatch spaces for a placed window are both screen-anchored: the synthesized path lands a point at its screen position, and XCTest's own `XCUICoordinate` on the app anchors at the screen's origin too.
 `interactionCoordinate` therefore passes the caller's screen point through, and `resolveRunnerWindow` keeps naming the window a foldable's tap resolves its display on (ADR 0025).
-The live `XCUIElement.frame` reads that the tap path already compares — the selector match, the input probe, the tree's sweep candidates — report screen space on a placed window, as the ref-tap path proved on the device.
-Only the snapshot channel arrives window-relative, and only that channel converts.
+The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (641,321) for a window at (324,307).
+The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
+So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the two live boxes (`app.frame` against the resolved window's frame); every other live read needs no conversion.
 
 ## Amendment: modal containment in the presentation cut
 

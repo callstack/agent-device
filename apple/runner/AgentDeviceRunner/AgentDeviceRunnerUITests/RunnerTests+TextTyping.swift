@@ -16,7 +16,13 @@ extension RunnerTests {
   ) -> TextEntryResult {
     let totalStartedAt = Date()
     let resolve = { (target: TextEntryTarget) in self.resolveTextEntryInput(app: app, target: target) }
-    var reader = TextEntryReader(target: target, resolve: resolve)
+    // Reads inside the typing loop answer from snapshots, which report a placed window's content in
+    // the window's own space; the reader's refresh points are screen points (#3899).
+    var reader = TextEntryReader(
+      target: target,
+      translation: liveContentTranslation(app: app),
+      resolve: resolve
+    )
     guard !text.isEmpty else {
       // Replacing a field WITH the empty string is the clear-field primitive (#2063): the typing
       // is vacuous but the clear is not. Returning here unconditionally left the old value in
@@ -74,7 +80,11 @@ extension RunnerTests {
       case .completed(let result):
         return result
       case .fallback(let fallbackTarget):
-        reader = TextEntryReader(target: fallbackTarget, resolve: resolve)
+        reader = TextEntryReader(
+          target: fallbackTarget,
+          translation: liveContentTranslation(app: app),
+          resolve: resolve
+        )
       }
     }
     let shouldUseSynthesizedFirstResponderType = Self.shouldUseSynthesizedFirstResponderType(

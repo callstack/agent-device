@@ -182,11 +182,18 @@ extension RunnerTests {
 
     /// The target moved to the input a resolution read: its element, a refresh point at its center,
     /// and its identity while the target is unbound.
-    func withResolvedInput(_ input: ResolvedTextEntryInput?) -> TextEntryTarget {
+    ///
+    /// `translation` is the live snapshot-frame vector for the reading session (#3899): the snapshot
+    /// frame of a placed window's input names the window's content space, while a refresh point is
+    /// compared against screen-space probes, so the center enters the target translated.
+    func withResolvedInput(
+      _ input: ResolvedTextEntryInput?,
+      translation: CGSize? = nil
+    ) -> TextEntryTarget {
       guard let input else {
         return self
       }
-      let frame = input.snapshot?.frame ?? .zero
+      let frame = snapshotFrameOnScreen(input.snapshot?.frame ?? .zero, translation: translation)
       return TextEntryTarget(
         element: input.element,
         refreshPoint: frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY),
@@ -259,9 +266,15 @@ extension RunnerTests {
     private(set) var target: TextEntryTarget
     private var lastRead: ResolvedTextEntryInput?
     private let resolve: (TextEntryTarget) -> ResolvedTextEntryInput?
+    private let translation: CGSize?
 
-    init(target: TextEntryTarget, resolve: @escaping (TextEntryTarget) -> ResolvedTextEntryInput?) {
-      self.target = target.withResolvedInput(target.postFocusRead)
+    init(
+      target: TextEntryTarget,
+      translation: CGSize? = nil,
+      resolve: @escaping (TextEntryTarget) -> ResolvedTextEntryInput?
+    ) {
+      self.translation = translation
+      self.target = target.withResolvedInput(target.postFocusRead, translation: translation)
       lastRead = target.postFocusRead
       self.resolve = resolve
     }
@@ -271,7 +284,7 @@ extension RunnerTests {
         return lastRead
       }
       let read = resolve(target)
-      target = target.withResolvedInput(read)
+      target = target.withResolvedInput(read, translation: translation)
       lastRead = read
       return read
     }

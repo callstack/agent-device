@@ -134,7 +134,10 @@ extension RunnerTests {
     let input = textInputAt(app: app, x: x, y: y)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
-    if let frame = input?.attributes.frame, !frame.isEmpty {
+    // The input's frame arrives from a snapshot, which reports a placed window's content in the
+    // window's own space; the tap below is a screen point (#3899).
+    if let read = input, !read.attributes.frame.isEmpty {
+      let frame = snapshotFrameOnScreen(read.attributes.frame, translation: liveContentTranslation(app: app))
       _ = tapAt(app: app, x: frame.midX, y: frame.midY)
     } else {
       _ = tapAt(app: app, x: x, y: y)

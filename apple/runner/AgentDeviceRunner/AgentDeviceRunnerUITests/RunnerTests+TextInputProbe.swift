@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 final class TextInputProbeIssues {
   let thread = Thread.current
@@ -153,6 +154,7 @@ extension RunnerTests {
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
+    let translation = liveContentTranslation(app: app)
     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
       if shouldStop() { break }
       let candidates = query.allElementsBoundByIndex
@@ -168,7 +170,8 @@ extension RunnerTests {
         if shouldStop() { break }
         guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
         let attributes = candidate.attributes
-        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
+        let frame = snapshotFrameOnScreen(attributes.frame, translation: translation)
+        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: frame, point: point) {
           inputs.append(candidate)
         }
       }
@@ -176,4 +179,27 @@ extension RunnerTests {
     guard !shouldStop() else { return [] }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
+
+  /// The vector that carries this session's snapshot-read app-content frames to their place on the
+  /// screen, or nil when the app fills the screen (#3899).
+  ///
+  /// The live `XCUIElement.frame` property already reports a placed window's content in screen space,
+  /// but `XCUIElementSnapshot.frame` reports it in the window's own content space, so the same probe
+  /// sees two spaces on an iPad Windowed Apps window. The signature and the vector are the capture's
+  /// rule (`SnapshotContentTranslation`, ADR 0004) read from the two live boxes that name it: the
+  /// application's `frame` is a `(0,0)`-anchored copy of the box the resolved window reports at its
+  /// place on the screen. Any other pair of boxes declares no vector, so full-screen, iPhone, and
+  /// each foldable panel keep their frames exactly as read.
+  func liveContentTranslation(app: XCUIApplication) -> CGSize? {
+    safely("LIVE_CONTENT_TRANSLATION", nil) {
+      guard let resolved = resolveRunnerWindowElement(app: app) else { return nil }
+      return SnapshotContentTranslation.offset(reportedBox: app.frame, viewportBox: resolved.frame)
+    }
+  }
+}
+
+/// `frame` as the screen names it, given `liveContentTranslation`'s vector.
+func snapshotFrameOnScreen(_ frame: CGRect, translation: CGSize?) -> CGRect {
+  guard let translation else { return frame }
+  return frame.offsetBy(dx: translation.width, dy: translation.height)
 }
