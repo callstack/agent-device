@@ -172,17 +172,26 @@ function runCleanXcuitest(
   const lastArg = args.at(-1);
   const options = typeof lastArg === 'object' ? lastArg : {};
   const platforms = (options === lastArg ? args.slice(0, -1) : args) as string[];
-  return runCmdSync(process.execPath, [scriptPath, ...platforms], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: undefined,
-      HOME: homeDir,
-      ...options?.env,
+  return runCmdSync(
+    process.execPath,
+    [
+      '--experimental-strip-types',
+      '--disable-warning=ExperimentalWarning',
+      scriptPath,
+      ...platforms,
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: undefined,
+        HOME: homeDir,
+        ...options?.env,
+      },
+      allowFailure: options?.allowFailure,
+      timeoutMs: 30_000,
     },
-    allowFailure: options?.allowFailure,
-    timeoutMs: 30_000,
-  });
+  );
 }
 
 function escapeRegExp(value: string) {

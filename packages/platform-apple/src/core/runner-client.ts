@@ -47,6 +47,7 @@ export {
   resolveRunnerBundleBuildSettings,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
+  resolveRunnerScriptDefaultDerivedPath,
   resolveRunnerSigningBuildSettings,
 } from '../runner/runner-cache-metadata.ts';
 export {

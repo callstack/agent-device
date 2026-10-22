@@ -98,7 +98,7 @@ resolve_default_derived_path() {
 }
 
 resolve_clean_path() {
-  if [ -n "${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-}" ]; then
+  if [ -n "$DERIVED_OVERRIDE" ]; then
     printf '%s\n' "$DERIVED_PATH"
     return
   fi
@@ -118,7 +118,9 @@ resolve_clean_path() {
 }
 
 DESTINATION="${AGENT_DEVICE_XCUITEST_DESTINATION:-$(resolve_default_destination)}"
-DERIVED_PATH="${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-$(resolve_default_derived_path)}"
+# Trimmed like resolveRunnerDerivedOverride, so a blank value means "not set" everywhere.
+DERIVED_OVERRIDE="$(printf '%s' "${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+DERIVED_PATH="${DERIVED_OVERRIDE:-$(resolve_default_derived_path)}"
 CLEAN_PATH="$(resolve_clean_path)"
 
 if is_truthy "${AGENT_DEVICE_IOS_CLEAN_DERIVED:-}"; then

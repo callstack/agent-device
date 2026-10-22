@@ -20,6 +20,7 @@ export {
   resolveRunnerSandboxBuildArgs,
   isRunnerXcuitestScriptPlatform,
   resolveRunnerDerivedOverride,
+  resolveRunnerScriptDefaultDerivedPath,
   resolveRunnerScriptDevice,
   resolveRunnerSigningBuildSettings,
   requireCertifiedRunnerCacheArtifacts,
