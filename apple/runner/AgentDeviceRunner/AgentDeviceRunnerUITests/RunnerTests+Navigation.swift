@@ -179,19 +179,15 @@ extension RunnerTests {
     return candidate.midY >= window.minY && candidate.midY <= maxY
   }
 
-  static func topLeadingNavigationFallbackPoint(
-    in frame: CGRect,
-    windowResolved: Bool = true
-  ) -> CGPoint? {
+  static func topLeadingNavigationFallbackPoint(in frame: CGRect) -> CGPoint? {
     guard SnapshotGeometry.isPositiveFinite(frame) else {
       return nil
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.
     let xOffset = min(max(frame.width * 0.08, 28), 44)
-    // Sit below the status/dynamic-island region and inside common custom RN search headers.
-    let yOffset = windowResolved
-      ? min(max(frame.height * 0.155, 56), 132)
-      : min(max(frame.height * 0.1, 56), 96)
+    // Sit below the status/dynamic-island region, inside the bar's leading control: on a 402x874
+    // iPhone the bar spans y 62-116 and its back control 62-106.
+    let yOffset = min(max(frame.height * 0.1, 56), 96)
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
   }
 
@@ -205,10 +201,7 @@ extension RunnerTests {
       app: app,
       policy: synthesizedGesturePolicy(.coordinateTap),
       windowQueryRejected: windowQueryRejected
-    ), let point = Self.topLeadingNavigationFallbackPoint(
-      in: context.referenceFrame,
-      windowResolved: context.resolvedWindow != nil
-    ) else {
+    ), let point = Self.topLeadingNavigationFallbackPoint(in: context.referenceFrame) else {
       return .unavailable
     }
     let before = captureNavigationFallbackVisualState(app: app, context: context)
