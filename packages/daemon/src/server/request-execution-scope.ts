@@ -394,8 +394,6 @@ export async function createRequestExecutionScope(params: {
                   throw new AppError(code, message, details);
                 }
               },
-              inspectSessionTeardownResources: async (current) =>
-                await scope.platformServices.inspectSessionTeardownResources(current.device),
               closeWouldReleaseProviderLease: () =>
                 Boolean(
                   session?.lease &&

@@ -34,10 +34,9 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
-function sessionResourceKinds(session: SessionState | undefined, platformOwned: readonly string[]) {
+function sessionResourceKinds(session: SessionState | undefined) {
   if (!session) return [];
   return [
-    ...platformOwned,
     ...(session.screenRecording ? ['screen-recording'] : []),
     ...(session.appLog ? ['app-log'] : []),
     ...(session.audioProbe ? ['audio-probe'] : []),
@@ -49,11 +48,10 @@ function sessionResourceKinds(session: SessionState | undefined, platformOwned: 
 function assertBoundedCompositeSessionDisposal(
   req: DaemonRequest,
   session: SessionState | undefined,
-  platformOwned: readonly string[],
   closeWouldReleaseProviderLease: boolean,
 ): void {
   const resources = [
-    ...sessionResourceKinds(session, platformOwned),
+    ...sessionResourceKinds(session),
     ...(closeWouldReleaseProviderLease ? ['provider-lease'] : []),
   ];
   if (resources.length > 0) {
@@ -69,7 +67,6 @@ export async function admitBoundedCompositeResourceRequest(params: {
   req: DaemonRequest;
   session: SessionState | undefined;
   validateSessionReopen: (session: SessionState) => Promise<void>;
-  inspectSessionTeardownResources: (session: SessionState) => Promise<readonly string[]>;
   closeWouldReleaseProviderLease: () => boolean;
   claimRecovery: {
     currentSessionExists: boolean;
@@ -110,15 +107,8 @@ async function admitSessionLifecycleRequest(
   // Maestro app-only close leaves the session and its durable resources owned.
   if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
   if (req.command === 'open' && session) await params.validateSessionReopen(session);
-  const platformOwned =
-    req.command === 'close' && session ? await params.inspectSessionTeardownResources(session) : [];
   if (req.command === 'close') {
-    assertBoundedCompositeSessionDisposal(
-      req,
-      session,
-      platformOwned,
-      params.closeWouldReleaseProviderLease(),
-    );
+    assertBoundedCompositeSessionDisposal(req, session, params.closeWouldReleaseProviderLease());
   }
   await assertBoundedClaimRecovery(req, params.claimRecovery);
 }

@@ -46,25 +46,6 @@ test.each(['perf-capture', 'trace-log'] as const)(
   },
 );
 
-test('bounded reopen keeps an owned IME and skips close teardown inspection', async () => {
-  const world = await resourceAdmissionWorld('capture', {
-    ime: { activate: async () => {}, restore: async () => {}, inspect: () => ['android-test-ime'] },
-  });
-  try {
-    assertRpcOk(
-      await world.call('batch', [], {
-        batchSteps: [
-          { command: 'open', positionals: ['com.android.settings'], flags: { relaunch: true } },
-        ],
-      }),
-    );
-    expect(world.inspectTeardown).not.toHaveBeenCalled();
-    expect(world.sessionStore.requireCurrent(world.ref).name).toBe('resource-session');
-  } finally {
-    await world.daemon.close();
-  }
-});
-
 test('invalid foreground reopen preserves the open validity error before runtime admission', async () => {
   const world = await resourceAdmissionWorld();
   try {

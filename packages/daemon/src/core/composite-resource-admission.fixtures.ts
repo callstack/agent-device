@@ -34,7 +34,6 @@ export async function resourceAdmissionWorld(
     ime?: {
       activate(stateDir: string): Promise<void>;
       restore(stateDir: string): Promise<void>;
-      inspect(device: DeviceInfo): readonly string[];
     };
   }> = {},
 ) {
@@ -73,7 +72,6 @@ export async function resourceAdmissionWorld(
     throw new Error('resource native effect reached');
   });
   const providerRelease = vi.fn(async () => ({}));
-  const inspectTeardown = vi.fn(async (target: DeviceInfo) => options.ime?.inspect(target) ?? []);
   const base = createUnavailableRuntimeFactsForTest(device, owner);
   const available = { available: true as const };
   const facts = {
@@ -205,10 +203,7 @@ export async function resourceAdmissionWorld(
           ...base.requestRouter,
           sessionStore,
           leaseRegistry,
-          platformServices: {
-            ...base.requestRouter.platformServices,
-            inspectSessionTeardownResources: inspectTeardown,
-          },
+          platformServices: base.requestRouter.platformServices,
           deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
             device,
           ]),
@@ -254,7 +249,6 @@ export async function resourceAdmissionWorld(
     forceCleanup,
     native,
     providerRelease,
-    inspectTeardown,
     bind,
     inspectFacts,
     sample,

@@ -111,7 +111,7 @@ export function reportSessionCleanupFailures(params: {
       reason: 'session_cleanup_incomplete',
       session: params.sessionName,
       failedSteps,
-      hint: 'Some session resources failed to release; inspect the session log for per-resource diagnostics. The session was still deleted, so retrying is safe.',
+      hint: 'Some session resources failed to release. The session was retired; inspect the session log, device state, and retained claims before recovery. Do not retry close on the retired session.',
     },
   );
 }
