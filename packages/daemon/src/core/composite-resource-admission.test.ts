@@ -55,7 +55,7 @@ test.each(unsupported)(
 );
 
 test('bounded replay preserves viewport dispatch through the descriptor guard', async () => {
-  const world = await resourceAdmissionWorld('capture', [], { device: WEB_DESKTOP_DEVICE });
+  const world = await resourceAdmissionWorld('capture', { device: WEB_DESKTOP_DEVICE });
   try {
     const script = path.join(world.daemon.stateDir, 'viewport.ad');
     const source = 'viewport 640 480\n';
@@ -120,7 +120,7 @@ test.each([
 );
 
 test('an iOS local log path remains admissible inside batch', async () => {
-  const world = await resourceAdmissionWorld('capture', [], { device: IOS_SIMULATOR });
+  const world = await resourceAdmissionWorld('capture', { device: IOS_SIMULATOR });
   try {
     assertRpcOk(
       await world.call('batch', [], {
@@ -594,7 +594,7 @@ test('record stop-live is refused before export or native stop', async () => {
 test.each(['frames', 'memory-sample'] as const)(
   'unproven provider-native perf %s refuses before binding',
   async (shape) => {
-    const world = await resourceAdmissionWorld('capture', [], { providerOwned: true });
+    const world = await resourceAdmissionWorld('capture', { providerOwned: true });
     try {
       const response = await world.call('batch', [], {
         batchSteps: [
@@ -614,7 +614,7 @@ test.each(['frames', 'memory-sample'] as const)(
 );
 
 test('web audio query is assessed separately from capture and refuses before binding', async () => {
-  const world = await resourceAdmissionWorld('query', [], { device: WEB_DESKTOP_DEVICE });
+  const world = await resourceAdmissionWorld('query', { device: WEB_DESKTOP_DEVICE });
   try {
     const response = await world.call('batch', [], {
       batchSteps: [{ command: 'audio', positionals: ['probe', 'status'] }],

@@ -98,7 +98,7 @@ afterEach(() => resetAndroidTestImeActivationCacheForTests());
 
 test('nested Android test restores its activated helper after primary resource refusal', async () => {
   const helper = androidHelperWorld();
-  const world = await resourceAdmissionWorld('capture', [], { ime: helper.ime });
+  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
   try {
     world.sessionStore.retire(world.ref);
     const script = path.join(world.daemon.stateDir, 'android-ime-resource.ad');
