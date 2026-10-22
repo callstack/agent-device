@@ -45,7 +45,11 @@ const input = { options: { appBundleId: 'com.example.app' } } as const;
 /** A proven-present surface as the probe reports it: the matched host travels with the verdict. */
 const presentSurface = { kind: 'present', host: IOS_SYSTEM_SURFACE_HOSTS[0]! } as const;
 
-test('eligible simulator capture publishes bridge acquisition without touching XCTest', async () => {
+test.for([
+  ['an iPhone Simulator', 'simulator-ax-bridge', ios],
+  ['an iPad Simulator', 'simulator-ax-bridge', { ...ios, appleOs: 'ipados', name: 'iPad' }],
+  ['a physical iPad', 'apple-runner', { ...ios, appleOs: 'ipados', kind: 'device' }],
+] as const)('a capture on %s is served by %s', async ([_name, producer, device]) => {
   const acquired = bridgeAcquisition();
   const source = sourceReturning(acquired);
   const presentIosAcquisition = vi.fn(async () => ({
@@ -53,7 +57,6 @@ test('eligible simulator capture publishes bridge acquisition without touching X
     producer: 'simulator-ax-bridge' as const,
     nodes: [{ index: 0, type: 'Application' }],
   }));
-  const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(
     {
       ...platformRuntimeHostFixture(),
@@ -62,11 +65,10 @@ test('eligible simulator capture publishes bridge acquisition without touching X
     { source, resolveTarget: vi.fn(async () => target) },
   );
 
-  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
-    producer: 'simulator-ax-bridge',
-  });
-  expect(presentIosAcquisition).toHaveBeenCalledWith(acquired, input.options);
-  expect(fallback).not.toHaveBeenCalled();
+  const captured = route.capture(device, input, signal(), async () => runnerResult());
+  await expect(captured).resolves.toMatchObject({ producer });
+  const presented = producer === 'apple-runner' ? [] : [[acquired, input.options]];
+  expect(presentIosAcquisition.mock.calls).toEqual(presented);
 });
 
 test.for([presentSurface, 'unknown'] as const)(
@@ -392,15 +394,23 @@ test('a bridge still being prepared sends only that capture to the runner', asyn
   expect(second.warnings).toEqual(pending);
 });
 
-test('a window in an unresolved coordinate space sends only that capture to the runner', async () => {
-  const source = sourceReturning({
-    stage: 'failed',
-    failure: {
-      kind: 'unsupported',
-      code: 'window-coordinate-space-unresolved',
-      details: { windows: 1 },
-    },
-  });
+// Each refusal below is evidence about the screen, not the app generation: a rotated system surface
+// (#2612), a permission alert over the app, or an app window that does not fill the screen (#3844).
+// It is gone after the next keystroke, tap, or resize, so retiring the generation would move every
+// later capture of a healthy app to the runner; it must cost only the captures it covers.
+test.for([
+  [
+    'window-coordinate-space-unresolved',
+    "which reports captured geometry in the app's own orientation space",
+  ],
+  ['foreground-owner-unverified', 'while another surface owned the foreground'],
+  ['foreground-owner-changed', 'while another surface owned the foreground'],
+  [
+    'app-window-not-full-screen',
+    'while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen',
+  ],
+] as const)('a %s refusal sends only that capture to the runner', async ([code, consequence]) => {
+  const source = sourceReturning({ stage: 'failed', failure: { kind: 'unsupported', code } });
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source,
@@ -410,44 +420,14 @@ test('a window in an unresolved coordinate space sends only that capture to the 
   const first = await route.capture(ios, input, signal(), fallback);
   const second = await route.capture(ios, input, signal(), fallback);
 
-  // A rotated system surface is on screen now and gone after the next keystroke, so unlike a failed
-  // bridge this says nothing about the app generation: retiring it would move every later capture of a
-  // healthy app to the runner to work around one screen (#2612).
   expect(source.acquire).toHaveBeenCalledTimes(2);
   expect(fallback).toHaveBeenCalledTimes(2);
   const refused = [
-    "Simulator AX snapshot unavailable (window-coordinate-space-unresolved); used XCTest for this capture, which reports captured geometry in the app's own orientation space.",
+    `Simulator AX snapshot unavailable (${code}); used XCTest for this capture, ${consequence}.`,
   ];
   expect(first.warnings).toEqual(refused);
   expect(second.warnings).toEqual(refused);
 });
-
-// A permission alert over the app makes the reader refuse foreground ownership. The alert is gone after
-// one tap, so it must cost only the captures it covers, never the rest of the app generation.
-test.for(['foreground-owner-unverified', 'foreground-owner-changed'])(
-  'a %s refusal sends only that capture to the runner',
-  async (code) => {
-    const source = sourceReturning({
-      stage: 'failed',
-      failure: { kind: 'unsupported', code },
-    });
-    const fallback = vi.fn(async () => runnerResult());
-    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
-      source,
-      resolveTarget: vi.fn(async () => target),
-    });
-
-    const first = await route.capture(ios, input, signal(), fallback);
-    const second = await route.capture(ios, input, signal(), fallback);
-
-    expect(source.acquire).toHaveBeenCalledTimes(2);
-    const refused = [
-      `Simulator AX snapshot unavailable (${code}); used XCTest for this capture, while another surface owned the foreground.`,
-    ];
-    expect(first.warnings).toEqual(refused);
-    expect(second.warnings).toEqual(refused);
-  },
-);
 
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({

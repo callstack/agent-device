@@ -18,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.8.0";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.9.0";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -69,7 +69,9 @@ typedef bool (*AutomationEnabledFn)(void);
 
 @protocol AXForegroundElement <NSObject>
 + (nullable id<AXForegroundElement>)primaryApp;
++ (nullable id<AXForegroundElement>)systemApplication;
 - (pid_t)pid;
+- (CGRect)frame;
 @end
 
 static NSNumber *finiteNumber(double value)
@@ -185,6 +187,31 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
   id<AXForegroundElement> application = [elementClass primaryApp];
   return [application respondsToSelector:@selector(pid)] && [application pid] == pid;
+}
+
+// The snapshot API reports the frames of an app that runs in an iPadOS window relative to that
+// window, so its tree cannot be placed on the screen. AXRuntime reports the primary app's window and
+// the system app, which spans the screen, in one native space. A window that differs from the screen
+// is refused; a runtime that cannot report either frame keeps the capture.
+- (BOOL)primaryAppWindowDiffersFromScreen
+{
+  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  if (![elementClass respondsToSelector:@selector(primaryApp)] ||
+      ![elementClass respondsToSelector:@selector(systemApplication)]) {
+    return NO;
+  }
+  id<AXForegroundElement> application = [elementClass primaryApp];
+  id<AXForegroundElement> system = [elementClass systemApplication];
+  if (![application respondsToSelector:@selector(frame)] || ![system respondsToSelector:@selector(frame)]) {
+    return NO;
+  }
+  CGRect window = [application frame];
+  CGRect screen = [system frame];
+  if (CGRectIsEmpty(window) || CGRectIsEmpty(screen)) return NO;
+  return fabs(CGRectGetMinX(window) - CGRectGetMinX(screen)) > 0.5 ||
+      fabs(CGRectGetMinY(window) - CGRectGetMinY(screen)) > 0.5 ||
+      fabs(CGRectGetWidth(window) - CGRectGetWidth(screen)) > 0.5 ||
+      fabs(CGRectGetHeight(window) - CGRectGetHeight(screen)) > 0.5;
 }
 
 - (nullable id)jsonValue:(id)value name:(NSString *)name
@@ -380,6 +407,11 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   @try {
     if (![self isPrimaryForegroundProcess:pid]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-unverified", @"target app is not the primary foreground accessibility owner");
+      finishRequestWatchdog(watchdog, watchdogState);
+      return nil;
+    }
+    if ([self primaryAppWindowDiffersFromScreen]) {
+      if (error) *error = failureResponse(requestId, @"unsupported", @"app-window-not-full-screen", @"target app window does not fill the screen");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
