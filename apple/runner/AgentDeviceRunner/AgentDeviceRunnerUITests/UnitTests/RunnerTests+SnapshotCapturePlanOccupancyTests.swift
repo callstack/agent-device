@@ -509,7 +509,9 @@ extension RunnerTests {
   /// #758 signature ends sparse, and the verdict must name the rejection. Seeding the pin into the
   /// failure slot reported 'requested-backend' — the daemon and the caller read a hostile-screen
   /// failure as "nothing degraded, the pin was honored", and the host turned the same payload into
-  /// a viewport error that hid the typed reason.
+  /// a viewport error that hid the typed reason. The plan runs inline on main: the verdict-slot
+  /// decision is thread-independent and the stub answers at once, so no occupancy machinery is
+  /// part of what this classifies.
   @MainActor
   func testTreePinnedCaptureTheAxServerRejectsReportsTheRejection() throws {
     guard
@@ -535,8 +537,7 @@ extension RunnerTests {
     defer {
       method_setImplementation(snapshotMethod, originalImplementation)
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      clearPrivateAXAcceptedDepth(reason: "test-cleanup")
-      mainOwned.app = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
 
@@ -554,9 +555,6 @@ extension RunnerTests {
     )
 
     let quality = try XCTUnwrap(payload.snapshotQuality)
-    if quality.reasonCode == "budget" {
-      throw XCTSkip("abandoned work from a prior test kept the tree tier out of this capture")
-    }
     XCTAssertEqual(quality.state, .sparse)
     XCTAssertEqual(
       quality.reasonCode,
@@ -568,7 +566,8 @@ extension RunnerTests {
 
   /// The healthy side of the same pin: a tree that answers keeps reporting the pin itself as the
   /// verdict reason (the perf suite's `snapshot-forced-tree` step reads exactly that as proof the
-  /// pin was honored), so the rejection fix must not silence it.
+  /// pin was honored), so the rejection fix must not silence it. Runs inline on main like the
+  /// rejection test above.
   @MainActor
   func testTreePinnedCaptureThatServesTheScreenStillReportsThePin() throws {
     app.launchArguments = ["--agent-device-selector-read-regression"]
@@ -578,7 +577,7 @@ extension RunnerTests {
     mainOwned.bundleId = "com.callstack.agentdevice.runner.pinned-tree-healthy-test"
     defer {
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      mainOwned.app = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
 

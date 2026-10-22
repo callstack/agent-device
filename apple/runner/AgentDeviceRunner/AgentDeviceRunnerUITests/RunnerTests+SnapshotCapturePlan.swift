@@ -239,10 +239,10 @@ extension RunnerTests {
   /// cause that does not exist.
   ///
   /// The 'requested-backend' answer names a plan decision, not a failure, so the runner carries
-  /// it in its own slot (`preSelectionReason`) where a tier that actually failed replaces it as
-  /// the verdict reason. The breaker's 'deferred' and 'budget' answers stay first-failure seeds:
-  /// their established contract is that the pre-selection IS the reason a deferred plan answers
-  /// with, whatever the bounded probe's tier did on the way.
+  /// it in its own slot (`preSelectionReason`) and a tier that actually failed replaces it as the
+  /// verdict reason. The breaker's 'deferred' and 'budget' answers stay first-failure seeds: a
+  /// deferred plan reports the pre-selection until its bounded probe's tier runs; then the verdict
+  /// reports that probe's 'budget' constraint.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false,
@@ -404,16 +404,10 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
     let effectivePlan = effective.plan
-    // The pre-selection reason names why the plan was shaped this way, not what went wrong on
-    // this capture. The breaker's 'deferred' and probe 'budget' answers seed the first-failure
-    // slot and keep their established contract: a deferred plan reports the pre-selection
-    // whatever its bounded probe did. A 'requested-backend' answer (the request-pin) travels in
-    // its own slot instead, and is reported only where nothing failed on this capture — an
-    // accepted payload keeps it, a failing terminal reports the real reason. A pinned backend
-    // that rejected the screen must say so (#3885 follow-up): 'requested-backend' on a sparse
-    // terminal claimed nothing degraded while the pinned tier had just failed, and hid the
-    // typed reason the caller needs. Only a customActions-implied pin is request-pinned; the
-    // daemon's same-backend evidence probe pins for its own reasons and keeps 'deferred'.
+    // The pin seed must not occupy the failure slot: a tier that failed on this capture owns
+    // the verdict reason there, and the pre-selection is reported only when nothing failed
+    // (see xcTestChannelStateFirstFailure). Only a customActions-implied pin is request-pinned;
+    // the daemon's same-backend evidence probe pins for its own reasons and keeps 'deferred'.
     let preSelectionReason = Self.xcTestChannelStateFirstFailure(
       effective.xCTestChannelState,
       requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker,
