@@ -97,19 +97,10 @@ export async function buildReplayFailureDivergence(params: {
     signal,
   } = params;
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
-  const command = error.details?.standaloneCommand;
-  const scrubbedCommand = typeof command === 'string' && sanitize(command) !== command;
-
   const cause = {
     code: error.code,
     message: sanitize(error.message),
-    ...(error.hint
-      ? {
-          hint: scrubbedCommand
-            ? 'Run the refused operation directly with its original options and the same --session value.'
-            : sanitize(error.hint),
-        }
-      : {}),
+    ...(error.hint ? { hint: sanitize(error.hint) } : {}),
   };
 
   const refusedBeforeDispatch =
@@ -119,7 +110,7 @@ export async function buildReplayFailureDivergence(params: {
     ? ({
         state: 'unavailable',
         reason: 'bounded-composite-resource-unsupported',
-        hint: 'The operation was refused before dispatch. Run the standalone command in the same session.',
+        hint: 'The operation was refused before dispatch. Use its original input in the same session.',
       } satisfies DivergenceObservation)
     : session
       ? await captureDivergenceObservation({

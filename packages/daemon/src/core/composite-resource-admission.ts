@@ -2,13 +2,11 @@ import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCommandCompositeResourceTrait } from '@agent-device/command-registry/registry';
 import {
-  formatPerfRuntimeRequestArgs,
   parsePerfRuntimeRequest,
   resolvePerfRuntimePlan,
 } from '@agent-device/capture-kit/perf-runtime-plan';
 import { resolveLogsRuntimePlan } from '@agent-device/contracts/logs-runtime-plan';
 import {
-  formatAudioProbeRequestArgs,
   parseAudioProbeRequest,
   resolveAudioRuntimePlan,
 } from '@agent-device/contracts/audio-runtime-plan';
@@ -79,11 +77,7 @@ function admitPerfOperation(req: DaemonRequest): void {
     outPath: req.flags?.out,
   });
   const plan = resolvePerfRuntimePlan(request);
-  refuseBoundedCompositeResourceOperation(
-    req,
-    `perf:${plan.kind}`,
-    formatPerfRuntimeRequestArgs(request) ?? null,
-  );
+  refuseBoundedCompositeResourceOperation(req, `perf:${plan.kind}`);
 }
 
 function admitLogsOperation(req: DaemonRequest, session: SessionState | undefined): void {
@@ -107,17 +101,13 @@ function admitLogsOperation(req: DaemonRequest, session: SessionState | undefine
 
 function admitAudioOperation(req: DaemonRequest, session: SessionState | undefined): void {
   const request = parseAudioProbeRequest(req.positionals);
-  const publicForm = {
-    positionals: formatAudioProbeRequestArgs(request, req.positionals),
-    options: {},
-  };
   if (!session || isActiveProviderDevice(session.device)) {
-    refuseBoundedCompositeResourceOperation(req, 'audio:unverified-owner', publicForm);
+    refuseBoundedCompositeResourceOperation(req, 'audio:unverified-owner');
     return;
   }
   const mode = session.device.platform === 'web' ? 'query' : 'capture';
   const plan = resolveAudioRuntimePlan({ probeAction: request.probeAction, mode });
-  refuseBoundedCompositeResourceOperation(req, `audio:${plan.kind}`, publicForm);
+  refuseBoundedCompositeResourceOperation(req, `audio:${plan.kind}`);
 }
 
 async function admitBoundedTestRequest(req: DaemonRequest): Promise<void> {

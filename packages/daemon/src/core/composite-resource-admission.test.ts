@@ -41,8 +41,9 @@ test.each(unsupported)(
         shape,
         executed: 0,
         dispatched: 'no',
-        standaloneCommand: expect.stringContaining(`agent-device ${command}`),
+        standaloneCommandName: command,
       });
+      expect(response.json.error?.data?.hint).toContain('same --session value');
       expect(world.bind).not.toHaveBeenCalled();
       expect(world.inspectFacts).not.toHaveBeenCalled();
       expect(world.native).not.toHaveBeenCalled();
@@ -79,7 +80,7 @@ test('replay refuses an authored command without a resource classification befor
     expect(response.json.error?.data?.details).toMatchObject({
       reason: 'bounded_composite_resource_unsupported',
       shape: 'prepare:unclassified',
-      standaloneCommand: 'agent-device prepare --session resource-session',
+      standaloneCommandName: 'prepare',
       dispatched: 'no',
       divergence: { step: { source: { path: script, line: 1 } } },
     });
@@ -107,7 +108,7 @@ test.each([
         reason: 'bounded_composite_resource_unsupported',
         shape,
         dispatched: 'no',
-        standaloneCommand: `agent-device ${command} ${args.join(' ')} --session resource-session`,
+        standaloneCommandName: command,
         executed: 0,
       });
       expect(world.bind).not.toHaveBeenCalled();
@@ -203,7 +204,7 @@ test.each(['batch', 'replay'] as const)(
       expect(response.json.error?.data?.details).toMatchObject({
         reason: 'bounded_composite_resource_unsupported',
         shape: 'record:start',
-        standaloneCommand: 'agent-device record start --session resource-session',
+        standaloneCommandName: 'record',
         dispatched: 'no',
         dispatchedSteps: 1,
       });
@@ -224,7 +225,7 @@ test.each(['batch', 'replay'] as const)(
   },
 );
 
-test('a completed snapshot precedes a refused record step with its public options', async () => {
+test('a completed snapshot precedes a refused record step with original input guidance', async () => {
   const world = await resourceAdmissionWorld();
   try {
     const response = await world.call('batch', [], {
@@ -238,10 +239,11 @@ test('a completed snapshot precedes a refused record step with its public option
       shape: 'record:start',
       dispatched: 'no',
       executed: 1,
-      standaloneCommand:
-        "agent-device record start 'clips/record a.mp4' --fps 30 --session resource-session",
+      standaloneCommandName: 'record',
       partialResults: [{ command: 'snapshot', ok: true }],
     });
+    expect(response.json.error?.data?.hint).toContain('original arguments and options');
+    expect(response.json.error.data.details).not.toHaveProperty('standaloneCommand');
     expect(world.native).not.toHaveBeenCalled();
     expect(world.finish).not.toHaveBeenCalled();
   } finally {
@@ -249,7 +251,7 @@ test('a completed snapshot precedes a refused record step with its public option
   }
 });
 
-test('replay projects daemon perf positionals into public --kind form', async () => {
+test('replay refusal keeps failed-step recovery without reconstructing CLI arguments', async () => {
   const world = await resourceAdmissionWorld();
   try {
     const script = path.join(world.daemon.stateDir, 'profile.ad');
@@ -264,15 +266,55 @@ test('replay projects daemon perf positionals into public --kind form', async ()
       shape: 'perf:capture-start',
       dispatched: 'no',
       dispatchedSteps: 1,
-      standaloneCommand:
-        'agent-device perf cpu profile start --kind xctrace --session resource-session',
+      standaloneCommandName: 'perf',
       divergence: {
         step: { index: 2, source: { path: script, line: 2 } },
         resume: { allowed: true, from: 2 },
       },
     });
+    expect(response.json.error.data.details).not.toHaveProperty('standaloneCommand');
     expect(response.json.error.data.details.divergence.resume.planDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(world.native).not.toHaveBeenCalled();
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test('agent completes a refused replay step directly, then resumes without repeating the prefix', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const script = path.join(world.daemon.stateDir, 'resume-resource.ad');
+    const replayScriptSource = {
+      entry: script,
+      files: { [script]: 'home\nlogs start\nhome\n' },
+    };
+    const refused = await world.call('replay', [script], { replayScriptSource });
+    const details = refused.json.error?.data?.details;
+    expect(details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'logs:start',
+      dispatched: 'no',
+      standaloneCommandName: 'logs',
+      dispatchedSteps: 1,
+      divergence: {
+        step: { index: 2, source: { path: script, line: 2 } },
+        resume: { allowed: true, from: 2, alternateFrom: 3 },
+        screen: { state: 'unavailable', reason: 'bounded-composite-resource-unsupported' },
+      },
+    });
+    expect(world.home).toHaveBeenCalledOnce();
+    expect(world.sessionStore.requireCurrent(world.ref).appLog).toBeUndefined();
+    assertRpcOk(await world.call('logs', ['start']));
+    const log = world.sessionStore.requireCurrent(world.ref).appLog;
+    const resumed = await world.call('replay', [script], {
+      replayScriptSource,
+      replayFrom: details.divergence.resume.alternateFrom,
+      replayPlanDigest: details.divergence.resume.planDigest,
+    });
+    assertRpcOk(resumed);
+    expect(world.home).toHaveBeenCalledTimes(2);
+    expect(world.sessionStore.requireCurrent(world.ref).appLog).toBe(log);
+    expect(world.finish).not.toHaveBeenCalled();
   } finally {
     await world.daemon.close();
   }
@@ -338,12 +380,12 @@ test('nested bounded test refuses resource work while direct test retains native
       batchSteps: [{ command: 'test', positionals: [script], flags }],
     });
     expect(JSON.stringify(nested.json)).toContain('bounded_composite_resource_unsupported');
-    expect(JSON.stringify(nested.json)).toContain('agent-device test');
-    expect(JSON.stringify(nested.json)).toContain('--session resource-session');
     const nestedDetails = nested.json.result.data.results[0].data.failures[0].error.details;
-    expect(nestedDetails.standaloneCommand).toContain(`agent-device test ${script}`);
-    expect(nestedDetails.divergence.cause.hint).toContain('agent-device test');
-    expect(nestedDetails.divergence.cause.hint).not.toContain('agent-device perf');
+    expect(nestedDetails.standaloneCommandName).toBe('test');
+    expect(nestedDetails).not.toHaveProperty('standaloneCommand');
+    expect(nestedDetails.divergence.cause.hint).toContain('original test');
+    expect(nestedDetails.divergence.cause.hint).toContain('live outer session');
+    expect(nestedDetails.divergence.cause.hint).not.toContain('attempt-1');
     expect(world.native).not.toHaveBeenCalled();
     const direct = await world.call('test', [script], flags);
     expect(JSON.stringify(direct.json)).not.toContain('bounded_composite_resource_unsupported');
@@ -382,12 +424,12 @@ test('bounded test cleanup retires an attempt with another durable resource and 
     });
     expect(JSON.stringify(response.json)).toContain('bounded_composite_resource_unsupported');
     expect(JSON.stringify(response.json)).toContain('perf:memory-snapshot');
-    expect(JSON.stringify(response.json)).toContain('agent-device test');
-    expect(JSON.stringify(response.json)).toContain('--session resource-session');
     const details = response.json.result.data.results[0].data.failures[0].error.details;
-    expect(details.standaloneCommand).toContain(`agent-device test ${script}`);
-    expect(details.divergence.cause.hint).toContain('agent-device test');
-    expect(details.divergence.cause.hint).not.toContain('agent-device perf');
+    expect(details.standaloneCommandName).toBe('test');
+    expect(details).not.toHaveProperty('standaloneCommand');
+    expect(details.divergence.cause.hint).toContain('original test');
+    expect(details.divergence.cause.hint).toContain('live outer session');
+    expect(details.divergence.cause.hint).not.toContain('attempt-1');
     expect(adopted).toHaveLength(1);
     expect(adopted[0]!.finish).toHaveBeenCalled();
     expect(world.sessionStore.listRefs()).toHaveLength(0);

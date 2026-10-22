@@ -15,10 +15,6 @@
       "types": "./src/registry.ts",
       "default": "./src/registry.ts"
     },
-    "./standalone-command": {
-      "types": "./src/standalone-command.ts",
-      "default": "./src/standalone-command.ts"
-    },
     "./planned-operations": {
       "types": "./src/planned-operations.ts",
       "default": "./src/planned-operations.ts"

@@ -25,7 +25,6 @@ import {
   asAppError,
   BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
 } from '@agent-device/kernel/errors';
-import { projectStandaloneCommand } from '@agent-device/command-registry/standalone-command';
 import {
   emitRequestProgress,
   clearRequestCanceled,
@@ -274,15 +273,9 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         attempt.status === 'failed' &&
         attempt.error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON
       ) {
-        const {
-          standaloneCommand: _retired,
-          standaloneCommandOmitted: _omitted,
-          ...details
-        } = attempt.error.details;
-        const projection = projectStandaloneCommand(req);
-        const hint = projection.standaloneCommand
-          ? `Run ${projection.standaloneCommand} directly with the same private CLI context.`
-          : 'Run the original test directly with the same --session value and private CLI context.';
+        const details = attempt.error.details;
+        const hint =
+          'Run the original test directly with its original paths and options in the live outer session, using the same --session value and private CLI context.';
         const divergence = details.divergence;
         const cause =
           divergence && typeof divergence === 'object' && 'cause' in divergence
@@ -297,7 +290,11 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
           error: {
             ...attempt.error,
             hint,
-            details: { ...details, divergence: correctedDivergence, ...projection },
+            details: {
+              ...details,
+              divergence: correctedDivergence,
+              standaloneCommandName: 'test',
+            },
           },
         };
       }

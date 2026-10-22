@@ -113,12 +113,12 @@ test('nested Android test restores its activated helper after primary resource r
     });
     expect(JSON.stringify(nested.json)).toContain('bounded_composite_resource_unsupported');
     expect(JSON.stringify(nested.json)).toContain('perf:memory-snapshot');
-    expect(JSON.stringify(nested.json)).toContain('agent-device test');
-    expect(JSON.stringify(nested.json)).toContain('--session resource-session');
     const details = nested.json.result.data.results[0].data.failures[0].error.details;
-    expect(details.standaloneCommand).toContain(`agent-device test ${script}`);
-    expect(details.divergence.cause.hint).toContain('agent-device test');
-    expect(details.divergence.cause.hint).not.toContain('agent-device perf');
+    expect(details.standaloneCommandName).toBe('test');
+    expect(details).not.toHaveProperty('standaloneCommand');
+    expect(details.divergence.cause.hint).toContain('original test');
+    expect(details.divergence.cause.hint).toContain('live outer session');
+    expect(details.divergence.cause.hint).not.toContain('attempt-1');
     expect(helper.imeSelections()).toEqual([helperIme, originalIme]);
     expect(helper.currentIme()).toBe(originalIme);
     expect(helper.previousIme()).toBeUndefined();

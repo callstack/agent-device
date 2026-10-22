@@ -20,13 +20,15 @@ runs keep their own timeout behavior.
 
 If a resource step cannot run within replay's budget, the error includes
 `details.reason: bounded_composite_resource_unsupported`, `details.shape`,
-`details.dispatched: no` for that step. Run `details.standaloneCommand` with the same CLI context
-when present. If `details.standaloneCommandOmitted` is `secret-bearing` or
-`not-cli-representable`, use the original step input directly in the same session. Inspect completed steps and the
-reported script path and line before retrying; earlier steps may have changed the app. A nested
+`details.dispatched: no` for that step, and `details.standaloneCommandName` for a known public
+command. The name is not a complete command. Inspect the failed script path and line, then run
+that original operation separately with its original arguments and options, the same `--session`
+value, and the same private CLI context. Use the report's `resume.from` or `resume.alternateFrom`
+and `planDigest` after fixing or completing the refused step. Inspect completed steps before
+retrying; earlier steps may have changed the app. A nested
 `test` with an attempt timeout is refused before its first attempt. Direct `test` retains its own
 timeout behavior. An authored `.ad` command without a resource classification fails closed with
-`details.shape: <command>:unclassified` and the same standalone command guidance.
+`details.shape: <command>:unclassified` and the same original-input guidance.
 
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 

@@ -100,19 +100,6 @@ export function parseAudioProbeRequest(
   });
 }
 
-/** Converts the daemon's millisecond duration to the public audio CLI's seconds. */
-export function formatAudioProbeRequestArgs(
-  request: AudioProbeRequest,
-  daemonPositionals: readonly string[] | undefined,
-): readonly string[] {
-  return [
-    'probe',
-    request.probeAction,
-    ...(daemonPositionals?.[2] !== undefined ? [String(request.durationMs / 1000)] : []),
-    ...(daemonPositionals?.[3] !== undefined ? [String(request.bucketMs)] : []),
-  ];
-}
-
 function readBoundedInteger(
   value: string | undefined,
   params: Readonly<{ defaultValue: number; min: number; max: number; message: string }>,

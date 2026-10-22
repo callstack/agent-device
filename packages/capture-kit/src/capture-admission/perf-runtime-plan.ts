@@ -120,33 +120,6 @@ export function parsePerfRuntimeRequest(
   throw new AppError('INVALID_ARGS', 'perf requires frames, memory, cpu, or trace');
 }
 
-/** Public CLI form of the already parsed daemon perf request. */
-export function formatPerfRuntimeRequestArgs(request: PerfRuntimeRequest):
-  | Readonly<{
-      positionals: readonly string[];
-      options: Readonly<{ kind?: string; perfTemplate?: string; out?: string }>;
-    }>
-  | undefined {
-  if (request.area === 'cpu' && request.tracePath !== undefined) return undefined;
-  const positionals =
-    request.area === 'cpu'
-      ? ['cpu', 'profile', request.action]
-      : request.area === 'frames'
-        ? ['frames']
-        : [request.area, request.action];
-  if (request.area === 'frames') return { positionals, options: {} };
-  return {
-    positionals,
-    options: {
-      ...(request.kind !== undefined ? { kind: request.kind } : {}),
-      ...('template' in request && request.template !== undefined
-        ? { perfTemplate: request.template }
-        : {}),
-      ...(request.outPath !== undefined ? { out: request.outPath } : {}),
-    },
-  };
-}
-
 // This is the finite CLI grammar boundary; each branch rejects one unsupported surface form.
 // fallow-ignore-next-line complexity
 function parseMemoryRequest(

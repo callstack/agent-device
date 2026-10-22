@@ -21,10 +21,9 @@ longer sequences into separate requests.
 
 Some resource operations cannot run as bounded steps. The failed step returns
 `details.reason: bounded_composite_resource_unsupported`, `details.shape`,
-`details.dispatched: no`, and a runnable `details.standaloneCommand` when its public options are
-safe to show. Run that command with the same CLI context. If `details.standaloneCommandOmitted`
-is `secret-bearing` or `not-cli-representable`, use the original step input directly in the same
-session. Inspect `details.partialResults` and
+`details.dispatched: no`, and `details.standaloneCommandName` for a known public command. The name
+is not a complete command. Run the original step separately with its original arguments and
+options, the same `--session` value, and the same private CLI context. Inspect `details.partialResults` and
 `details.dispatchedSteps` before retrying the batch: earlier steps may already have changed the app.
 The batch still authenticates and renews its own lease while it runs.
 

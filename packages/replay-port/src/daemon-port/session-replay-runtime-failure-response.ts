@@ -111,11 +111,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
         `Replay failed at step ${step} (${actionLabel}): ${error.message}`,
         scrubVars,
       ),
-      hint: hasScrubbedStandaloneCommand(error.details, scrubVars)
-        ? 'Run the refused operation directly with its original options and the same --session value.'
-        : error.hint === undefined
-          ? undefined
-          : scrubReplayVarValues(error.hint, scrubVars),
+      hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
@@ -167,22 +163,9 @@ function pickSafeCauseDetails(
     if (details.dispatched === 'no') safe.dispatched = 'no';
     const shape = readStringDetail(details, 'shape');
     if (shape !== undefined) safe.shape = scrubReplayVarValues(shape, scrubVars);
-    if (hasScrubbedStandaloneCommand(details, scrubVars))
-      safe.standaloneCommandOmitted = 'secret-bearing';
-    else {
-      const command = readStringDetail(details, 'standaloneCommand');
-      if (command !== undefined) safe.standaloneCommand = command;
-      const omitted = readStringDetail(details, 'standaloneCommandOmitted');
-      if (omitted !== undefined) safe.standaloneCommandOmitted = omitted;
-    }
+    const commandName = readStringDetail(details, 'standaloneCommandName');
+    if (commandName !== undefined)
+      safe.standaloneCommandName = scrubReplayVarValues(commandName, scrubVars);
   }
   return safe;
-}
-
-function hasScrubbedStandaloneCommand(
-  details: Record<string, unknown> | undefined,
-  scrubVars: readonly ReplayVarScrubEntry[],
-): boolean {
-  const command = readStringDetail(details, 'standaloneCommand');
-  return command !== undefined && scrubReplayVarValues(command, scrubVars) !== command;
 }

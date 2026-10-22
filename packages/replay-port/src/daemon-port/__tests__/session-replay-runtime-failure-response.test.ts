@@ -53,15 +53,16 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
 });
 
-test('bounded resource refusal omits a command that replay scrubbing would break', () => {
+test('bounded resource refusal keeps the public name and scrubs secret replay context', () => {
   const response = buildReplayDivergenceFailureResponseFromDescriptor({
     error: {
       code: 'UNSUPPORTED_OPERATION',
       message: 'secret-value cannot run within a bounded composite',
+      hint: 'Use the original secret-value input in the same session.',
       details: {
         reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
         shape: 'resource:secret-value',
-        standaloneCommand: 'agent-device install-from-source secret-value',
+        standaloneCommandName: 'install-from-source',
         dispatched: 'no',
       },
     },
@@ -78,11 +79,12 @@ test('bounded resource refusal omits a command that replay scrubbing would break
   expect(response.error.details).toMatchObject({
     reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
     shape: 'resource:<var:SOURCE>',
-    standaloneCommandOmitted: 'secret-bearing',
+    standaloneCommandName: 'install-from-source',
     dispatched: 'no',
     replayPath: '/tmp/flows/install.ad',
   });
   expect(response.error.details).not.toHaveProperty('standaloneCommand');
+  expect(response.error.hint).toContain('<var:SOURCE>');
   expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 
