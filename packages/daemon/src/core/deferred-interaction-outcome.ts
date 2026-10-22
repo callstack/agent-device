@@ -132,8 +132,8 @@ function markSurfaceStabilization(
   // never stored: "no usable baseline" has exactly one
   // representation (absent), so no consumer has to tell `undefined` from `[]`
   // — and the loop cannot rebase a baseline that was never really there.
-  // Constructing the baseline here is also the whole distrust authorization: the
-  // loop is never separately told a platform boolean that could disagree.
+  // Constructing the baseline here is the whole distrust authorization. The loop is
+  // not given a second platform flag that could disagree with it.
   const baselineSignature = requiresPostGestureBaselineDistrust(session.device)
     ? buildInteractionSurfaceSignature(session.snapshot?.nodes ?? [])
     : undefined;

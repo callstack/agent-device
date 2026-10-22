@@ -8,6 +8,7 @@ import {
 import {
   decidePostGestureStabilityVerdict as decideWithHooks,
   type PostGestureBaseline,
+  type PostGesturePreActionBaseline,
 } from '@agent-device/capture-kit/post-gesture-stability';
 import {
   applicationRootNode,
@@ -27,7 +28,7 @@ const decidePostGestureStabilityVerdict = (params: {
 
 function preActionBaseline(
   signature: InteractionSurfaceSignature,
-): PostGestureBaseline<InteractionSurfaceSignature> {
+): PostGesturePreActionBaseline<InteractionSurfaceSignature> {
   return { provenance: 'pre-action', signature, comparisonKey: 'runner|app' };
 }
 
@@ -52,6 +53,17 @@ test('decidePostGestureStabilityVerdict trusts immediately when no baseline was 
   assert.deepEqual(
     decidePostGestureStabilityVerdict({
       baseline: undefined,
+      quietSignature: signature,
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'trust' },
+  );
+  // The writer never stores an empty signature, but a caller-constructed one is still no
+  // baseline: it must trust without ever consulting the classifier (#1542 base coverage).
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: { provenance: 'pre-action', signature: [], comparisonKey: 'runner|app' },
       quietSignature: signature,
       elapsedMs: 0,
       distrustCapMs: 3_500,

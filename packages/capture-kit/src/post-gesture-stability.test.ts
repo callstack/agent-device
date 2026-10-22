@@ -4,8 +4,11 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ObservationClock } from './observe-until.ts';
 import {
   runPostGestureStabilityLoop,
+  type PostGestureBaseline,
   type PostGesturePreActionBaseline,
+  type PostGestureStabilityDecision,
   type PostGestureStabilityHooks,
+  type PostGestureStabilityPending,
 } from './post-gesture-stability.ts';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
@@ -18,6 +21,40 @@ beforeEach(() => {
 });
 
 type Surface = Readonly<{ signature: readonly string[]; costMs: number; backend?: string }>;
+
+// The negative half of these lines is type-level: each @ts-expect-error fails `pnpm typecheck`
+// the moment the baseline union would accept a post-action reading as pre-action evidence again
+// (#3868). The pre-action-only slots are the pending record's baseline and the accept-stale
+// payload; only the writer may fill them.
+test('the baseline union rejects a post-action reading in every pre-action slot', () => {
+  const postAction: PostGestureBaseline<readonly string[]> = {
+    provenance: 'post-action',
+    signature: ['a'],
+    comparisonKey: 'key',
+  };
+  // @ts-expect-error a rebased baseline is not pre-action evidence for the pending record
+  const pendingBaseline: PostGesturePreActionBaseline<readonly string[]> = postAction;
+  const pending: PostGestureStabilityPending<readonly string[]> = {
+    action: 'scroll',
+    positionals: ['down'],
+    // @ts-expect-error a rebased baseline is not pre-action evidence for the pending record
+    baseline: postAction,
+  };
+  const decision = undefined as unknown as PostGestureStabilityDecision<readonly string[]>;
+  const consumeDistrust = () => {
+    if (decision.verdict === 'distrust') {
+      // @ts-expect-error a distrust decision exposes no pre-action baseline to consume
+      void decision.preActionBaseline;
+    }
+  };
+  // @ts-expect-error a baseline is constructed complete: the comparison key is not optional
+  const keyless: PostGesturePreActionBaseline<readonly string[]> = {
+    provenance: 'pre-action',
+    signature: ['a'],
+  };
+
+  void [pendingBaseline, pending, keyless, decision, consumeDistrust];
+});
 
 function fakeClock(): ObservationClock & { advance(ms: number): void } {
   let nowMs = 0;

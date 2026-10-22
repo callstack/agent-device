@@ -45,7 +45,8 @@ export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 /**
  * One surface reading that can stand as a comparison baseline. Signature and key travel together:
  * captures from different surfaces are not views of one screen (#1569, #2438). `comparisonKey` is
- * undefined for legacy observations that carry no key; absence is not proof of sameness.
+ * undefined for legacy observations that carry no key. A quiet pair with two absent keys does not
+ * rebase: absent keys never prove a surface change, and never prove sameness either.
  */
 export type PostGestureSurfaceReading<S> = Readonly<{
   signature: S;
@@ -149,7 +150,11 @@ export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(
   classifyBaselineEvidence: (baseline: S, quiet: S) => BaselineSurfaceEvidence;
 }): PostGestureStabilityDecision<S> {
   const { baseline, quietSignature, elapsedMs, distrustCapMs } = params;
-  if (baseline?.provenance !== 'pre-action') return { verdict: 'trust' };
+  // An empty baseline is no baseline: never classify against it, whatever the classifier does
+  // with empties. The writer normalizes `[]` away, so this guards a caller-constructed value.
+  if (baseline?.provenance !== 'pre-action' || baseline.signature.length === 0) {
+    return { verdict: 'trust' };
+  }
   if (params.classifyBaselineEvidence(baseline.signature, quietSignature) !== 'unchanged') {
     return { verdict: 'trust' };
   }
