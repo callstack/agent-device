@@ -1,6 +1,139 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+/// Stands in for XCTest on an app tree it cannot serialize (a React Native feed at accessibility
+/// depth 62 or more): the windows query finds no window and every element frame, the application's
+/// included, reads as null.
+private final class RunnerUnserializableTreeStub: NSObject {
+  /// Each element frame read costs XCTest's retries on such a tree, about 2 s each.
+  static var frameReads = 0
+  @objc var allElementsBoundByIndex: [XCUIElement] { [] }
+  @objc var frame: CGRect {
+    Self.frameReads += 1
+    return .null
+  }
+}
+
+/// Counts XCTest coordinate presses without performing them.
+private final class RunnerCoordinatePressCounter: NSObject {
+  static var presses = 0
+  @objc(pressForDuration:)
+  func press(forDuration duration: TimeInterval) {
+    Self.presses += 1
+  }
+}
+
+extension RunnerTests {
+  /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
+  private func simulateUnserializableAppTree() throws -> () -> Void {
+    let swaps: [(Method?, Method?)] = [
+      (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.allElementsBoundByIndex))),
+      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame))),
+      (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
+       class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
+    ]
+    let resolved = try swaps.map { (try XCTUnwrap($0.0), try XCTUnwrap($0.1)) }
+    let originals = resolved.map { target, stub in
+      (target, method_setImplementation(target, method_getImplementation(stub)))
+    }
+    RunnerCoordinatePressCounter.presses = 0
+    RunnerUnserializableTreeStub.frameReads = 0
+    return {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+    }
+  }
+
+  private var showsAppsOnlyFullScreen: Bool {
+    UIDevice.current.userInterfaceIdiom == .phone && XCUIScreen.screens.count == 1
+  }
+
+  /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
+  /// raises an exception that ends the runner test. A long press needs no tree: on an iPhone with one
+  /// screen it is synthesized on that screen, and anything else keeps the XCTest press.
+  @MainActor
+  func testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .healthy
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let longPress = try runnerCommandFixture(
+      #"{"command":"longPress","commandId":"unserializable-long-press","x":40,"y":40,"durationMs":600}"#
+    )
+    let pressSeries = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"unserializable-press-series","steps":[{"kind":"longPress","x":40,"y":40,"durationMs":600,"pauseMs":50},{"kind":"longPress","x":40,"y":40,"durationMs":600}]}"#
+    )
+
+    let longPressResponse = try executeOnMainPrepared(command: longPress, activeApp: app)
+    let longPressCoordinatePresses = RunnerCoordinatePressCounter.presses
+    let pressSeriesResponse = try executeOnMainPrepared(command: pressSeries, activeApp: app)
+
+    XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
+    XCTAssertEqual(longPressResponse.data?.message, "long pressed")
+    XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
+    if showsAppsOnlyFullScreen {
+      XCTAssertEqual(longPressCoordinatePresses, 0)
+      XCTAssertNil(longPressResponse.data?.gestureFallback)
+      XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+      XCTAssertEqual(RunnerUnserializableTreeStub.frameReads, 0)
+      let steps = pressSeriesResponse.data?.sequenceResults ?? []
+      XCTAssertEqual(steps.count, 2)
+      let holds = [(longPressResponse.data?.gestureStartUptimeMs, longPressResponse.data?.gestureEndUptimeMs)]
+        + steps.map { ($0.gestureStartUptimeMs, $0.gestureEndUptimeMs) }
+      for (start, end) in holds {
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(end) - XCTUnwrap(start), 600)
+      }
+    } else {
+      XCTAssertEqual(longPressCoordinatePresses, 1)
+      XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
+    }
+  }
+
+  /// A swipe asks for the gesture viewport before it plans its path. On a tree XCTest cannot
+  /// serialize, an iPhone with one screen answers with that screen, the frame the planned gesture's
+  /// record is routed to; anything else keeps requiring a window.
+  @MainActor
+  func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"gestureViewport","commandId":"unserializable-gesture-viewport"}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    if showsAppsOnlyFullScreen {
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      let screen = UIScreen.main.bounds
+      XCTAssertEqual(response.data?.x, 0)
+      XCTAssertEqual(response.data?.y, 0)
+      XCTAssertEqual(response.data?.x2, Double(screen.width))
+      XCTAssertEqual(response.data?.y2, Double(screen.height))
+    } else {
+      XCTAssertFalse(response.ok)
+      XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
+    }
+  }
+}
+#endif
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
   func testSoleScreenReferenceFrameLaysTheScreenInTheAppsOrientation() {

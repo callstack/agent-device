@@ -119,9 +119,10 @@ extension RunnerTests {
   static func snapshotXCTestPenaltyReason(
     kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
-    slowThresholdMs: Double
+    slowThresholdMs: Double,
+    channelState: SnapshotXCTestChannelPlanState = .normal
   ) -> String? {
-    guard kind.usesXCTestAccessibilityChannel else { return nil }
+    guard channelState == .normal, kind.usesXCTestAccessibilityChannel else { return nil }
     if case let .failed(failure, phase: .acquisition) = attempt.outcome,
       failure.code == Self.xCTestSnapshotTimeoutCode
     {
@@ -134,18 +135,46 @@ extension RunnerTests {
     return "slow_\(kind.rawValue)_capture_\(Int(attempt.timing.acquisitionMs))ms"
   }
 
+  /// Only an accepted, fast tree proves that a bounded recovery probe restored the channel.
+  static func snapshotXCTestRecoveryProbeSucceeded(
+    kind: SnapshotBackendKind,
+    attempt: SnapshotBackendAttempt,
+    channelState: SnapshotXCTestChannelPlanState
+  ) -> Bool {
+    guard channelState != .normal,
+      kind == .recursiveTree,
+      attempt.timing.acquisitionMs <= Self.penalizedXCTestProbeTreeSliceBudget * 1_000,
+      case let .captured(capture) = attempt.outcome
+    else { return false }
+    return Self.snapshotTierRejectionReason(
+      outcome: attempt.tierOutcome,
+      kind: kind,
+      payload: capture.qualityPayload ?? capture.payload
+    ) == nil
+  }
+
   func recordXCTestSnapshotBackendAttemptIfNeeded(
     _ kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
     bundleId: String?,
-    penaltySuppressed: Bool
+    penaltySuppressed: Bool,
+    channelState: SnapshotXCTestChannelPlanState
   ) {
     guard !penaltySuppressed else { return }
+    if Self.snapshotXCTestRecoveryProbeSucceeded(
+      kind: kind,
+      attempt: attempt,
+      channelState: channelState
+    ) {
+      clearSnapshotXCTestChannelPenalty(reason: "healthy_tree_recovery_probe")
+      return
+    }
     guard
       let reason = Self.snapshotXCTestPenaltyReason(
         kind: kind,
         attempt: attempt,
-        slowThresholdMs: snapshotXCTestSlowCaptureThreshold * 1_000
+        slowThresholdMs: snapshotXCTestSlowCaptureThreshold * 1_000,
+        channelState: channelState
       )
     else { return }
     penalizeSnapshotXCTestChannel(

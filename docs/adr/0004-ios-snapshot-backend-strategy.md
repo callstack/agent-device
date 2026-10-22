@@ -234,12 +234,28 @@ On heavy or animating screens, the recursive tree capture can work for many seco
 This pushes the chained plan past the runner's main-thread watchdog and fills the main queue with retries.
 The plan now carries its umbrella deadline into the query-sweep and private-AX tiers.
 When the budget is spent, later ladder rungs stop.
-A slow, timed-out, or watchdog-abandoned XCTest-backed capture penalizes the XCTest accessibility channel for that bundle for a bounded window.
+A slow XCTest acquisition, a timed-out XCTest tier, or watchdog-abandoned system-modal work penalizes the XCTest accessibility channel for that bundle for a bounded window.
 Subsequent regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
 If a runnable non-XCTest backend exists, they defer to that independent tier.
 If it does not exist, as on physical iOS devices today, they run a short XCTest probe instead of the full tree slice.
 Thus, healthy screens can recover without another long capture of the hostile screen.
 The raw diagnostic plan is exempt and keeps tree-first error propagation.
+
+Issue #3844 showed that the bounded recovery probe could renew its own penalty.
+A bounded recovery probe now leaves the penalty deadline unchanged when it fails.
+Its short slice tests recovery under a known penalty, so its timeout supplies no new evidence about the channel.
+A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
+Thirty seconds after the penalty is armed, and thirty seconds after each probe starts, a recovery probe is due.
+A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
+The runner starts no XCTest main-thread work after it answers a command.
+Probe work that outlives its slice is charged to the capture that started it, so that response reports the main thread as busy.
+Physical-device plans probe on every capture already. Explicit backend pins and the raw plan keep their order.
+After the iPad amendment below, a Simulator capture meets this policy only when the bridge sends it to XCTest, for example for a windowed app or a presented system surface.
+The interval limits hostile-screen probe cost while giving healthy screens a recovery opportunity before penalty expiry.
+A normal-plan query-sweep timeout rejects the partial capture and penalizes the channel.
+Its short slice is evidence of a hostile tree, and deferral prevents repeated slow sweeps on that tree.
+A normal-plan XCTest acquisition above the existing three-second threshold also remains penalty evidence.
+The plan deadline and abandoned-main-thread-work gate remain in force on every attempt, including physical-device probes (#1105, #1156, #2621).
 
 A third shape followed on the same app class after the plan recovered reliably.
 On that app class, each of the query-sweep tier's 19 `allElementsBoundByIndex` reads fails with `kAXErrorIllegalArgument`.

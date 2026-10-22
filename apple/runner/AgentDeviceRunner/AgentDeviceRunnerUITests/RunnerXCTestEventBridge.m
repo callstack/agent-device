@@ -219,6 +219,12 @@ BOOL RunnerResolveApplicationScreen(
 // its frame is read before its screen, and a window that answers empty or raises fails closed with
 // the same reasons the application walk gives.
 NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID) {
+  id screen = nil;
+  return RunnerResolveSoleScreen(&screen, displayID);
+}
+
+NSString * _Nullable RunnerResolveSoleScreen(id _Nullable *screen, NSUInteger *displayID) {
+  *screen = nil;
 #if TARGET_OS_IOS
   // Only an iPhone keeps every app full-screen; an iPad can show one in part of its only screen.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
@@ -229,6 +235,7 @@ NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID) {
 #endif
   __block NSUInteger screenCount = 0;
   __block NSUInteger readDisplayID = 0;
+  __block XCUIScreen *soleScreen = nil;
   NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
     NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
     screenCount = screens.count;
@@ -236,6 +243,7 @@ NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID) {
     NSNumber *identifier = [screens.firstObject valueForKey:@"displayID"];
     if ([identifier isKindOfClass:NSNumber.class]) {
       readDisplayID = identifier.unsignedIntegerValue;
+      soleScreen = screens.firstObject;
     }
   }];
   if (exception != nil || screenCount != 1 || readDisplayID == 0) {
@@ -246,6 +254,7 @@ NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID) {
     );
     return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
   }
+  *screen = soleScreen;
   *displayID = readDisplayID;
   return nil;
 }

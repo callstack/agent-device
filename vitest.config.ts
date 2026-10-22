@@ -159,6 +159,7 @@ export default defineConfig({
             'scripts/__tests__/xctest-declarations.test.ts',
             'scripts/__tests__/xctest-selection.test.ts',
             'scripts/__tests__/apple-ci-impact.test.ts',
+            'scripts/__tests__/device-lane-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',

@@ -118,6 +118,7 @@ iOS Simulator launch behavior:
 Back, orientation, and hardware buttons:
 
 - `back` uses app-owned back navigation: visible in-app back UI on Apple targets, and the back keyevent on Android. `--in-app` names this default explicitly.
+- On a single-screen iPhone, `back` can use a top-leading tap when the app tree is unreadable. It compares the screen before and after the tap. If the screen cannot be captured, the command reports an unknown outcome; inspect the screen before you retry.
 - `back --system` sends system back input: the Android back keyevent, the iOS back gesture, or the tvOS Siri Remote Menu button. macOS has no system back, so it reports unavailable.
 - `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only. On ADB-backed Android it turns auto-rotate off, and the lock persists after the session ends until something turns it back on.
 - `orientation auto` hands rotation back to the sensor on ADB-backed Android, local or Limrun (`accelerometer_rotation=1`, `user_rotation` untouched), and reports `orientation: "auto"`. It does not wait for the display to rotate, because there is no target rotation: the sensor decides, and an emulator usually settles on portrait. Every other backend refuses `auto` with `UNSUPPORTED_OPERATION`.

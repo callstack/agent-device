@@ -223,15 +223,41 @@ extension RunnerTests {
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "longPress requires x and y"))
       }
-      let duration = (command.durationMs ?? 800) / 1000.0
+      let durationMs = command.durationMs ?? 800
+      let fallback: GestureFallback?
+#if os(iOS)
+      let policyKind = SynthesizedGesturePolicyKind.coordinateLongPress
+      let context = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(policyKind)
+      )
+      switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
+        synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
+      }) {
+      case .performed(let timing):
+        let touchFrame = context.map { touchVisualizationFrame(x: x, y: y, context: $0) }
+        return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
+      case .xctestFallback(let message, let hint):
+        fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
+      case .refused(_, let message, let hint):
+        return unsupportedResponse(message: message, hint: hint)
+      }
+#else
+      fallback = nil
+#endif
       let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
       let (timing, outcome) = performGesture(activeApp) {
-        longPressAt(app: activeApp, x: x, y: y, duration: duration)
+        longPressAt(app: activeApp, x: x, y: y, duration: durationMs / 1000.0)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
       }
-      return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
+      return gestureResponse(
+        message: "long pressed",
+        timing: timing,
+        frame: .touch(touchFrame),
+        fallback: fallback
+      )
     case .drag:
       guard let x = command.x, let y = command.y, let x2 = command.x2, let y2 = command.y2 else {
         return Response(ok: false, error: ErrorPayload(message: "drag requires x, y, x2, and y2"))
@@ -644,7 +670,7 @@ extension RunnerTests {
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
     case .gestureViewport:
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
+      let frame = gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }

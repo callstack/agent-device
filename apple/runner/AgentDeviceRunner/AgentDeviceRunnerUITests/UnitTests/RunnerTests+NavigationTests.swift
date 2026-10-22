@@ -18,6 +18,124 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+
+    guard showsAppsOnlyFullScreen else {
+      guard case .unavailable = outcome else {
+        return XCTFail("without a window or a sole screen there is no route to tap")
+      }
+      return
+    }
+    guard case .performed = outcome else {
+      return XCTFail("a window-less back must synthesize and verify against the sole display")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// The sole-screen route compares real captures: a tap that lands on nothing leaves the screen
+  /// unchanged, so back is unavailable rather than performed.
+  @MainActor
+  func testInAppBackOnTheSoleScreenReportsATapThatChangedNothingAsUnavailable() throws {
+    _ = try launchBackFixture([])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+
+    guard case .unavailable = outcome else {
+      return XCTFail("a top-leading tap on an app without a back control must not read as performed")
+    }
+  }
+
+  /// Only an iPhone with one screen can skip the windows query after the tree rejected one; anywhere
+  /// else the windows query is still asked, and its window carries the tap.
+  @MainActor
+  func testInAppBackStillAsksForWindowsWhereNoSoleScreenAnswers() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
+      tapInAppBackControl(app: app)
+    }
+
+    guard case .performed = outcome else {
+      return XCTFail("back must reach the fixture's top-leading control through a window or the sole screen")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  private var showsAppsOnlyFullScreen: Bool {
+    UIDevice.current.userInterfaceIdiom == .phone && XCUIScreen.screens.count == 1
+  }
+
+  /// Launches the runner app; with `--agent-device-back-regression` it shows a top-leading back
+  /// control whose press sets the returned status to "Back performed", and without it nothing there.
+  @MainActor
+  private func launchBackFixture(_ arguments: [String]) throws -> XCUIElement {
+    app.launchArguments = arguments
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
+    let status = arguments.contains("--agent-device-back-regression")
+      ? app.staticTexts["agent-device-back-status"]
+      : app.staticTexts.element(matching: NSPredicate(format: "label == %@", "Agent Device Runner"))
+    XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
+    return status
+  }
+
+  @MainActor
+  private func endBackFixture() {
+    invalidateCachedTarget(reason: "unit_test_cleanup")
+    app.terminate()
+  }
+
+  /// Stands in for XCTest on a tree it cannot serialize while `body` runs: the first `rejections`
+  /// queries record the rejection the runner suppresses and find nothing, and unless
+  /// `framesReadable`, every element frame reads empty.
+  @MainActor
+  private func withRejectedAppTree<T>(
+    framesReadable: Bool,
+    rejections: Int = .max,
+    _ body: () -> T
+  ) throws -> T {
+    var restorations: [() -> Void] = []
+    defer { restorations.reversed().forEach { $0() } }
+    let selector = NSSelectorFromString("allElementsBoundByIndex")
+    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, selector))
+    let originalQuery = method_getImplementation(query)
+    var remainingRejections = rejections
+    let rejectedQuery = imp_implementationWithBlock({ (target: AnyObject) -> NSArray in
+      guard remainingRejections > 0 else {
+        typealias Query = @convention(c) (AnyObject, Selector) -> NSArray
+        return unsafeBitCast(originalQuery, to: Query.self)(target, selector)
+      }
+      remainingRejections -= 1
+      self.record(XCTIssue(type: .assertionFailure, compactDescription: "Failed to resolve query: kAXErrorIllegalArgument"))
+      return []
+    } as @convention(block) (AnyObject) -> NSArray)
+    method_setImplementation(query, rejectedQuery)
+    restorations.append {
+      method_setImplementation(query, originalQuery)
+      imp_removeBlock(rejectedQuery)
+    }
+    if !framesReadable {
+      let frame = try XCTUnwrap(class_getInstanceMethod(XCUIElement.self, NSSelectorFromString("frame")))
+      let originalFrame = method_getImplementation(frame)
+      let unavailableFrame = imp_implementationWithBlock({ (_: AnyObject) -> CGRect in .zero } as @convention(block) (AnyObject) -> CGRect)
+      method_setImplementation(frame, unavailableFrame)
+      restorations.append {
+        method_setImplementation(frame, originalFrame)
+        imp_removeBlock(unavailableFrame)
+      }
+    }
+    return body()
+  }
+
+  @MainActor
   private func assertInAppBackDispatch(navigationBar: Bool) throws {
     app.launchArguments = ["--agent-device-back-regression"] + (navigationBar ? ["--navigation-bar"] : [])
     app.launch()
@@ -62,15 +180,16 @@ extension RunnerTests {
   }
 #endif
 
+  /// A 402x874 iPhone's navigation bar spans y 62-116 and its back control 62-106.
   func testTopLeadingNavigationFallbackPointTargetsHeaderControlBand() throws {
     let point = try XCTUnwrap(
       Self.topLeadingNavigationFallbackPoint(
-        in: CGRect(x: 0, y: 0, width: 430, height: 932)
+        in: CGRect(x: 0, y: 0, width: 402, height: 874)
       )
     )
 
-    XCTAssertEqual(point.x, 34.4, accuracy: 0.01)
-    XCTAssertEqual(point.y, 132, accuracy: 0.01)
+    XCTAssertEqual(point.x, 32.16, accuracy: 0.01)
+    XCTAssertEqual(point.y, 87.4, accuracy: 0.01)
   }
 
   func testTopLeadingNavigationFallbackPointRejectsInvalidFrame() {

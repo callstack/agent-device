@@ -14,6 +14,7 @@ public final class AccessibilityReadBatchTest {
     releasesUnreadResultsAfterFailure();
     waitsForReadersBeforeReleasingTheParent();
     preservesInterruptionDuringCleanup();
+    readsAChildThatVanishedMidReadAsGone();
   }
 
   private static void queuesConcurrentReadsAndPreservesOrder() throws Exception {
@@ -131,6 +132,41 @@ public final class AccessibilityReadBatchTest {
     }
     if (!recycled.equals(Arrays.asList(0, 1))) {
       throw new AssertionError("Interruption must not leak child nodes");
+    }
+  }
+
+  private static void readsAChildThatVanishedMidReadAsGone() {
+    List<Integer> recycled = new ArrayList<>();
+    try (AccessibilityReadBatch<Integer> batch =
+        new AccessibilityReadBatch<>(
+            0, 3,
+            index ->
+                AccessibilityNodeReads.nullIfGone(
+                    () -> {
+                      if (index == 1) {
+                        throw new NullPointerException("window closed");
+                      }
+                      if (index == 2) {
+                        throw new IllegalStateException("not a vanished child");
+                      }
+                      return index;
+                    }),
+            recycled::add)) {
+      if (batch.get(0) != 0) {
+        throw new AssertionError("Expected the first child");
+      }
+      if (batch.get(1) != null) {
+        throw new AssertionError("A child that vanished mid-read must read as gone");
+      }
+      try {
+        batch.get(2);
+        throw new AssertionError("Other read failures must propagate");
+      } catch (IllegalStateException expected) {
+        // Only the vanished-window throw means a gone child.
+      }
+    }
+    if (!recycled.equals(Arrays.asList(0))) {
+      throw new AssertionError("Only the present child must be released: " + recycled);
     }
   }
 

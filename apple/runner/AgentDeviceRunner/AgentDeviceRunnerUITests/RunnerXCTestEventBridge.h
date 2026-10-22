@@ -84,6 +84,12 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowDisplayID(
 // screen, and only a window can say which panel lights a foldable's app.
 FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID);
 
+// Resolves the screen and display identity under the same sole-screen rule used by synthesis.
+FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
+  id _Nullable *screen,
+  NSUInteger *displayID
+);
+
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
   Class cls,
   NSString *className,

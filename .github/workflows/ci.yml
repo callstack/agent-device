@@ -395,21 +395,35 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: fixture-cache }
 
+      - name: Fetch the PR base for web smoke selection
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; web smoke selection will fail open."
+
+      - name: Select web smoke tests
+        id: web-impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node --experimental-strip-types scripts/device-lane-impact.ts web-smoke
+
       # Shares this job's ubuntu toolchain. AGENT_DEVICE_WEB_E2E is step-scoped
       # so it cannot leak into the node/provider suites above.
       - name: Run live web smoke
+        if: steps.web-impact.outputs.run != 'false'
         env:
           AGENT_DEVICE_WEB_E2E: '1'
         run: pnpm clean:daemon
 
       - name: Execute live web smoke
+        if: steps.web-impact.outputs.run != 'false'
         env:
           AGENT_DEVICE_WEB_E2E: '1'
         uses: ./.github/actions/run-gate
         with: { gate: web-smoke }
 
       - name: Upload web smoke artifacts
-        if: always()
+        if: always() && steps.web-impact.outputs.run != 'false'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-smoke-artifacts

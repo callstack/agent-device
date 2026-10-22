@@ -287,7 +287,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
 const appStateCommandDescription =
   'Show foreground app/activity (Android and HarmonyOS; iOS and macOS answer per session)';
 const backCommandDescription =
-  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
+  'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required. On a single-screen iPhone, an unreadable app tree can use a top-leading tap with before/after visual verification. A capture failure reports an unknown outcome.';
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription =
