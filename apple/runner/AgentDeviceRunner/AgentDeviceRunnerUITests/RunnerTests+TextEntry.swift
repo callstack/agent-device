@@ -226,9 +226,28 @@ extension RunnerTests {
     boundIdentity?.isDistinguishable ?? true
   }
 
+  /// What confirmed that a focus tap's input took focus.
+  enum TextEntryFocusEvidence: String {
+    /// tvOS moves focus with the focus engine, so there is nothing to wait for.
+    case focusEngine = "focus-engine"
+    /// The app-wide focus query named a text input (not iOS).
+    case focusedInput = "focused-input"
+    /// The tapped input's own snapshot reports keyboard focus.
+    case inputReportsKeyboardFocus = "input-reports-keyboard-focus"
+    /// A software keyboard appeared after the tap, so some input took focus.
+    case keyboardAppeared = "keyboard-appeared"
+    /// The app-wide keyboard-focus query answered with the tapped input.
+    case focusQueryMatchesInput = "focus-query-matches-input"
+  }
+
   struct TextEntryStabilization {
     let element: XCUIElement?
-    let focusConfirmed: Bool
+    /// Nil when nothing confirmed focus before the focus timeout.
+    let evidence: TextEntryFocusEvidence?
+    /// `element`'s frame from the read that confirmed focus, when the input's own read did.
+    var inputFrame: CGRect? = nil
+
+    var focusConfirmed: Bool { evidence != nil }
   }
 
   struct TextEntryTapWitness {

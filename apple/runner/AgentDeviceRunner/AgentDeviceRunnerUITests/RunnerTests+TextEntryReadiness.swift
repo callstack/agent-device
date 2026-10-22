@@ -4,7 +4,8 @@ extension RunnerTests {
   func focusedTextInput(app: XCUIApplication) -> XCUIElement? {
 #if os(iOS)
     // iOS focus predicates can return stale or misleading text-input matches
-    // under XCUITest, so text entry readiness is driven by tap/keyboard state.
+    // under XCUITest, so they never pick the text-entry target. Readiness corroborates the
+    // input a tap or coordinate already chose.
     return nil
 #else
     return safely("FOCUSED_INPUT_QUERY") {
@@ -146,6 +147,22 @@ extension RunnerTests {
     }
 #else
     return false
+#endif
+  }
+
+  /// `element`'s frame when its own snapshot reports keyboard focus, or nil. Read through
+  /// `snapshot()`, which records nothing, after `exists`, so a field that stopped answering its query
+  /// on focus (#3060) neither records an XCTest failure nor pays the snapshot's wait for a match.
+  func keyboardFocusedInputFrame(_ element: XCUIElement) -> CGRect? {
+#if os(iOS)
+    return safely("TEXT_ENTRY_INPUT_FOCUS") {
+      guard element.exists, let snapshot = try? element.snapshot(), snapshotHasKeyboardFocus(snapshot) else {
+        return nil
+      }
+      return snapshot.frame
+    }
+#else
+    return nil
 #endif
   }
 
