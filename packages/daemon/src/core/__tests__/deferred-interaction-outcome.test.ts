@@ -107,7 +107,7 @@ test('an Apple open that could not observe its app marks stabilization without a
 
   assert.equal(isPostGestureStabilizationPending(session), true);
   assert.equal(pendingSurfaceStabilization(session)?.action, 'open');
-  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 });
 
 test('every open verdict other than observable marks stabilization', () => {

@@ -5,7 +5,10 @@ import {
   classifyBaselineSurfaceEvidence,
   type InteractionSurfaceSignature,
 } from '../interaction-surface-signature.ts';
-import { decidePostGestureStabilityVerdict as decideWithHooks } from '@agent-device/capture-kit/post-gesture-stability';
+import {
+  decidePostGestureStabilityVerdict as decideWithHooks,
+  type PostGestureBaseline,
+} from '@agent-device/capture-kit/post-gesture-stability';
 import {
   applicationRootNode,
   keyboardWindowNodes,
@@ -16,12 +19,17 @@ import {
 // wires the real classifier, so this file keeps testing the same
 // classify-then-decide composition shipping callers run.
 const decidePostGestureStabilityVerdict = (params: {
-  needsBaselineDistrust: boolean;
-  baselineSignature: InteractionSurfaceSignature | undefined;
+  baseline: PostGestureBaseline<InteractionSurfaceSignature> | undefined;
   quietSignature: InteractionSurfaceSignature;
   elapsedMs: number;
   distrustCapMs: number;
 }) => decideWithHooks({ ...params, classifyBaselineEvidence: classifyBaselineSurfaceEvidence });
+
+function preActionBaseline(
+  signature: InteractionSurfaceSignature,
+): PostGestureBaseline<InteractionSurfaceSignature> {
+  return { provenance: 'pre-action', signature, comparisonKey: 'runner|app' };
+}
 
 // ---------------------------------------------------------------------------
 // #1542 defect 2: baseline-comparison distrust.
@@ -38,99 +46,87 @@ const decidePostGestureStabilityVerdict = (params: {
 // module — see post-gesture-stabilization-fixtures.ts).
 // ---------------------------------------------------------------------------
 
-test('decidePostGestureStabilityVerdict trusts immediately when the platform does not need baseline distrust', () => {
+test('decidePostGestureStabilityVerdict trusts immediately when no baseline was authorized', () => {
   const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: false,
-      baselineSignature: signature,
+      baseline: undefined,
       quietSignature: signature,
       elapsedMs: 0,
       distrustCapMs: 3_500,
     }),
-    'trust',
+    { verdict: 'trust' },
   );
 });
 
-test('decidePostGestureStabilityVerdict trusts when there is no usable baseline', () => {
+test('decidePostGestureStabilityVerdict trusts a post-action baseline match at any elapsed time', () => {
+  // The #3868 class: a baseline adopted mid-loop was read AFTER the gesture, so matching it is
+  // what a surface at rest does. It can neither distrust nor reach the stale accept that authorizes
+  // a no-effect claim — the decision has no pre-action payload to hand out.
   const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: undefined,
+      baseline: { provenance: 'post-action', signature, comparisonKey: 'runner|app' },
       quietSignature: signature,
-      elapsedMs: 0,
+      elapsedMs: 9_000,
       distrustCapMs: 3_500,
     }),
-    'trust',
-  );
-  assert.equal(
-    decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: [],
-      quietSignature: signature,
-      elapsedMs: 0,
-      distrustCapMs: 3_500,
-    }),
-    'trust',
+    { verdict: 'trust' },
   );
 });
 
 test('decidePostGestureStabilityVerdict trusts a quiet signature that differs from the baseline', () => {
-  const baseline = buildInteractionSurfaceSignature(pickupSnapshot(500).nodes);
+  const baseline = preActionBaseline(buildInteractionSurfaceSignature(pickupSnapshot(500).nodes));
   const moved = buildInteractionSurfaceSignature(pickupSnapshot(120).nodes);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: baseline,
+      baseline,
       quietSignature: moved,
       elapsedMs: 0,
       distrustCapMs: 3_500,
     }),
-    'trust',
+    { verdict: 'trust' },
   );
 });
 
 test('decidePostGestureStabilityVerdict distrusts a quiet signature matching the baseline before the cap', () => {
   const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
+      baseline: preActionBaseline(signature),
       quietSignature: signature,
       elapsedMs: 3_499,
       distrustCapMs: 3_500,
     }),
-    'distrust',
+    { verdict: 'distrust' },
   );
 });
 
 test('decidePostGestureStabilityVerdict accepts a baseline-matching signature once the cap expires', () => {
   const signature = buildInteractionSurfaceSignature(pickupSnapshot().nodes);
+  const baseline = preActionBaseline(signature);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
+      baseline,
       quietSignature: signature,
       elapsedMs: 3_500,
       distrustCapMs: 3_500,
     }),
-    'accept-stale',
+    { verdict: 'accept-stale', preActionBaseline: baseline },
   );
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: signature,
+      baseline,
       quietSignature: signature,
       elapsedMs: 9_000,
       distrustCapMs: 3_500,
     }),
-    'accept-stale',
+    { verdict: 'accept-stale', preActionBaseline: baseline },
   );
 });
 
@@ -162,15 +158,14 @@ test('decidePostGestureStabilityVerdict trusts immediately when a real scroll le
     },
   ]);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: baseline,
+      baseline: preActionBaseline(baseline),
       quietSignature: quiet,
       elapsedMs: 0, // first quiet match, well before any cap
       distrustCapMs: 3_500,
     }),
-    'trust',
+    { verdict: 'trust' },
   );
 });
 
@@ -209,14 +204,13 @@ test('decidePostGestureStabilityVerdict trusts immediately when the overlap is o
     ...keyboardWindowNodes(), // identical: the keyboard itself never moves
   ]);
 
-  assert.equal(
+  assert.deepEqual(
     decidePostGestureStabilityVerdict({
-      needsBaselineDistrust: true,
-      baselineSignature: baseline,
+      baseline: preActionBaseline(baseline),
       quietSignature: quiet,
       elapsedMs: 0, // first quiet match, well before any cap
       distrustCapMs: 3_500,
     }),
-    'trust',
+    { verdict: 'trust' },
   );
 });

@@ -4,6 +4,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { ObservationClock } from './observe-until.ts';
 import {
   runPostGestureStabilityLoop,
+  type PostGesturePreActionBaseline,
   type PostGestureStabilityHooks,
 } from './post-gesture-stability.ts';
 
@@ -46,7 +47,10 @@ function hooksFor(
       clock.advance(surface.costMs);
       return surface;
     },
-    readSurface: (value) => ({ signature: value.signature, backend: value.backend ?? 'xctest' }),
+    readSurface: (value) => ({
+      signature: value.signature,
+      comparisonKey: value.backend ?? 'xctest',
+    }),
     signaturesStable: same,
     classifyBaselineEvidence: (baseline, quiet) =>
       same(baseline, quiet) ? 'unchanged' : 'changed',
@@ -56,6 +60,13 @@ function hooksFor(
 }
 
 const PENDING = { action: 'scroll', positionals: ['down'] };
+
+function preActionBaseline(
+  signature: readonly string[],
+  comparisonKey: string,
+): PostGesturePreActionBaseline<readonly string[]> {
+  return { provenance: 'pre-action', signature, comparisonKey };
+}
 
 function diagnostics(phase: string): unknown[] {
   return vi.mocked(emitDiagnostic).mock.calls.filter(([event]) => event.phase === phase);
@@ -71,7 +82,6 @@ test('a capture that runs past the remaining budget is judged and ends unsettled
 
   const outcome = await runPostGestureStabilityLoop({
     pending: PENDING,
-    needsBaselineDistrust: false,
     hooks: hooksFor(clock, [{ signature: ['a'], costMs: 0 }, late]),
     clock,
   });
@@ -90,7 +100,6 @@ test('a first capture slower than the whole budget still forms a quiet pair', as
 
   const outcome = await runPostGestureStabilityLoop({
     pending: PENDING,
-    needsBaselineDistrust: false,
     hooks: hooksFor(clock, [{ signature: ['a'], costMs: 2_000 }, quiet]),
     clock,
   });
@@ -108,7 +117,6 @@ test('a capture error ends the loop by rethrowing that error', async () => {
   await assert.rejects(
     runPostGestureStabilityLoop({
       pending: PENDING,
-      needsBaselineDistrust: false,
       hooks: {
         ...hooks,
         capture: async () => {
@@ -126,8 +134,7 @@ test('a quiet pair on a rebased baseline settles instead of distrusting it to th
   const atRest: Surface = { signature: ['moved'], costMs: 0, backend: 'bridge' };
 
   const outcome = await runPostGestureStabilityLoop({
-    pending: { ...PENDING, baselineSignature: ['moved'], baselineBackend: 'runner' },
-    needsBaselineDistrust: true,
+    pending: { ...PENDING, baseline: preActionBaseline(['moved'], 'runner') },
     hooks: hooksFor(clock, [atRest, atRest, atRest]),
     clock,
   });
@@ -144,8 +151,7 @@ test('a quiet pair matching a same-backend baseline is still distrusted to the c
   const unchanged: Surface = { signature: ['before'], costMs: 0, backend: 'bridge' };
 
   await runPostGestureStabilityLoop({
-    pending: { ...PENDING, baselineSignature: ['before'], baselineBackend: 'bridge' },
-    needsBaselineDistrust: true,
+    pending: { ...PENDING, baseline: preActionBaseline(['before'], 'bridge') },
     hooks: hooksFor(
       clock,
       Array.from({ length: 40 }, () => unchanged),
@@ -165,8 +171,7 @@ test('an effect that lands after a rebase keeps the loop polling until the moved
   const moved: Surface = { signature: ['moved'], costMs: 0, backend: 'bridge' };
 
   const outcome = await runPostGestureStabilityLoop({
-    pending: { ...PENDING, baselineSignature: ['before'], baselineBackend: 'runner' },
-    needsBaselineDistrust: true,
+    pending: { ...PENDING, baseline: preActionBaseline(['before'], 'runner') },
     hooks: hooksFor(clock, [rebasedRead, rebasedRead, moving, moved, moved]),
     clock,
   });
