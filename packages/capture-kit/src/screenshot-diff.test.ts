@@ -12,7 +12,13 @@ function tmpDir(): string {
   return mkdtempForTestSync('agent-device-screenshot-diff-');
 }
 
-/** Create a solid-color PNG and write it to disk. */
+/**
+ * Create a solid-color PNG and write it to disk. `filterType: 0` skips the
+ * per-scanline deflate filters: for a solid image they only make the encoder
+ * slower (the full-resolution cases spent ~0.8s encoding under coverage).
+ * Filtering is a lossless transform the decoder inverts, so the decoded
+ * pixels — everything these tests compare — are unchanged.
+ */
 function writeSolidPng(
   filePath: string,
   width: number,
@@ -26,7 +32,7 @@ function writeSolidPng(
     png.data[i + 2] = color.b;
     png.data[i + 3] = 255;
   }
-  fs.writeFileSync(filePath, PNG.sync.write(png));
+  fs.writeFileSync(filePath, PNG.sync.write(png, { filterType: 0 }));
 }
 
 /** Encode a solid-color JPEG, so a test can hand the comparison a lossy container. */
