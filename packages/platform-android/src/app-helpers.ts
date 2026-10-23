@@ -5,9 +5,7 @@ import {
   parseAndroidUserInstalledPackages,
 } from './app-parsers.ts';
 import { inferAndroidAppName } from './app-deployment-resolution.ts';
-
-const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
-const ANDROID_LEANBACK_CATEGORY = 'android.intent.category.LEANBACK_LAUNCHER';
+import { androidLauncherCategories } from './launcher-categories.ts';
 
 export type AndroidAppListFilter = AppsFilter;
 export type AndroidAppListTarget = 'mobile' | 'tv' | 'auto';
@@ -38,26 +36,17 @@ async function listAndroidLaunchablePackagesWithAdb(
 ): Promise<Set<string>> {
   const discoveredPackages = (
     await Promise.all(
-      resolveAndroidLaunchCategoriesForAdb(target).map(async (category) => {
-        const result = await runAdbShell(adb, buildAndroidQueryActivitiesArgs(category), {
-          allowFailure: true,
-        });
-        return result.exitCode === 0 ? parseAndroidLaunchablePackageOutput(result.stdout) : [];
-      }),
+      androidLauncherCategories(target, { includeFallbackCategories: true }).map(
+        async (category) => {
+          const result = await runAdbShell(adb, buildAndroidQueryActivitiesArgs(category), {
+            allowFailure: true,
+          });
+          return result.exitCode === 0 ? parseAndroidLaunchablePackageOutput(result.stdout) : [];
+        },
+      ),
     )
   ).flat();
   return new Set(discoveredPackages);
-}
-
-function resolveAndroidLaunchCategoriesForAdb(target: AndroidAppListTarget): string[] {
-  switch (target) {
-    case 'mobile':
-      return [ANDROID_LAUNCHER_CATEGORY];
-    case 'tv':
-      return [ANDROID_LEANBACK_CATEGORY];
-    default:
-      return [ANDROID_LAUNCHER_CATEGORY, ANDROID_LEANBACK_CATEGORY];
-  }
 }
 
 function buildAndroidQueryActivitiesArgs(category: string): string[] {

@@ -196,10 +196,11 @@ Recording:
   },
   gestures: gestureHelpTopic,
   tv: {
-    summary: 'Android TV, tvOS, and Vega VVD focus-first remote navigation',
+    summary:
+      'Android TV (incl. Fire TV on Fire OS), tvOS, and Vega VVD focus-first remote navigation',
     body: `agent-device help tv
 
-Use this when the target is Android TV, Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
+Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
 
 Core loop:
   agent-device open Settings --platform android --target tv --session tv
@@ -211,7 +212,7 @@ Core loop:
 
 Vega OS:
   Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
-  Initial support is VVD-only. Physical Fire TV devices remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
+  Initial support is VVD-only. Physical devices that run Vega OS remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
   Use --platform vega --target tv for the running Vega Virtual Device.
   vega virtual-device start
   agent-device devices --platform vega --target tv
@@ -238,6 +239,7 @@ Buttons:
 Android TV:
   Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
+  Fire TV devices and emulators running Fire OS (Android-based) connect as Android TV devices over ADB: enable ADB debugging, run adb connect <ip>:5555, and use --platform android --target tv. Discovery reads the amazon.hardware.fire_tv system feature, so a Fire TV that declares no leanback feature is still a tv target.
 
 tvOS:
   tvOS is driven by the Siri Remote focus engine, not coordinate taps.

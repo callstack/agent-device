@@ -23,10 +23,9 @@ import {
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
 } from './app-parsers.ts';
+import { androidLaunchCategory, androidLauncherCategories } from './launcher-categories.ts';
 import { getAndroidAppState, getAndroidResumedActivity } from './window-state.ts';
 
-const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
-const ANDROID_LEANBACK_CATEGORY = 'android.intent.category.LEANBACK_LAUNCHER';
 const ANDROID_DEFAULT_CATEGORY = 'android.intent.category.DEFAULT';
 const ANDROID_LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 /** Owns localhost URL reverses, so a teardown that removes only owned mappings removes them too. */
@@ -53,8 +52,8 @@ export async function listAndroidApps(
 
 async function listAndroidLaunchablePackages(device: DeviceInfo): Promise<Set<string>> {
   const packages = new Set<string>();
-  for (const category of resolveAndroidLaunchCategories(device, {
-    includeFallbackWhenUnknown: true,
+  for (const category of androidLauncherCategories(device.target, {
+    includeFallbackCategories: true,
   })) {
     const result = await runAndroidShell(
       device,
@@ -78,26 +77,6 @@ async function listAndroidLaunchablePackages(device: DeviceInfo): Promise<Set<st
     }
   }
   return packages;
-}
-
-function resolveAndroidLauncherCategory(device: DeviceInfo): string {
-  return resolveAndroidLaunchCategories(device)[0] ?? ANDROID_LAUNCHER_CATEGORY;
-}
-
-function resolveAndroidLaunchCategories(
-  device: DeviceInfo,
-  options: { includeFallbackWhenUnknown?: boolean } = {},
-): string[] {
-  if (device.target === 'tv') {
-    return [ANDROID_LEANBACK_CATEGORY];
-  }
-  if (device.target === 'mobile') {
-    return [ANDROID_LAUNCHER_CATEGORY];
-  }
-  if (options.includeFallbackWhenUnknown) {
-    return [ANDROID_LAUNCHER_CATEGORY, ANDROID_LEANBACK_CATEGORY];
-  }
-  return [ANDROID_LAUNCHER_CATEGORY];
 }
 
 async function listAndroidUserInstalledPackages(device: DeviceInfo): Promise<string[]> {
@@ -225,7 +204,7 @@ async function startAndroidApp(
   const helperLaunch = await tryAndroidHelperLaunch(device, app, options);
   if (helperLaunch) return helperLaunch;
   const resolved = await resolveAndroidApp(device, app);
-  const launchCategory = resolveAndroidLauncherCategory(device);
+  const launchCategory = androidLaunchCategory(device.target);
   if (resolved.type === 'intent') {
     return await openAndroidIntent(device, resolved.value, options);
   }
@@ -405,16 +384,22 @@ async function openAndroidPackage(
   if (primaryResult.exitCode === 0 && !isAmStartError(primaryResult.stdout, primaryResult.stderr)) {
     return primaryResult;
   }
-  const component = await resolveAndroidLaunchComponent(device, packageName);
-  if (!component) {
+  const resolvedComponent = await resolveAndroidLaunchComponent(device, packageName);
+  if (!resolvedComponent) {
     if (!(await isAndroidPackageInstalled(device, packageName))) {
       throw buildAndroidPackageNotInstalledError(packageName);
     }
     throw androidAdbResultError(`Failed to launch ${packageName}`, primaryResult);
   }
+  // The fallback launches under the category the component actually resolved under, which on a TV
+  // target can be LAUNCHER for an app that declares no LEANBACK_LAUNCHER activity.
   return await runAndroidShell(
     device,
-    buildAndroidActivityLaunchArgs(component, launchCategory, options),
+    buildAndroidActivityLaunchArgs(
+      resolvedComponent.component,
+      resolvedComponent.category,
+      options,
+    ),
   );
 }
 
@@ -516,10 +501,10 @@ function looksLikeMissingAndroidPackageOutput(output: string): boolean {
 async function resolveAndroidLaunchComponent(
   device: DeviceInfo,
   packageName: string,
-): Promise<string | null> {
-  const categories = Array.from(
-    new Set(resolveAndroidLaunchCategories(device, { includeFallbackWhenUnknown: true })),
-  );
+): Promise<{ component: string; category: string } | null> {
+  const categories = androidLauncherCategories(device.target, {
+    includeFallbackCategories: true,
+  });
   for (const category of categories) {
     const result = await runAndroidShell(
       device,
@@ -540,7 +525,7 @@ async function resolveAndroidLaunchComponent(
       continue;
     }
     const component = parseAndroidLaunchComponent(result.stdout);
-    if (component) return component;
+    if (component) return { component, category };
   }
   return null;
 }
