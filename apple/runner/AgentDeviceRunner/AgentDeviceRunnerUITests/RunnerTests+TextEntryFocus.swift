@@ -185,7 +185,8 @@ extension RunnerTests {
     let readyTarget = TextEntryTarget(
       element: stabilized.element ?? target,
       refreshPoint: requestedPoint,
-      prefersFocusedElement: false
+      prefersFocusedElement: false,
+      contentTranslation: contentTranslation
     )
     let element = stabilized.focusConfirmed
       ? readyTarget.element

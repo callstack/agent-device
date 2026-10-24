@@ -768,10 +768,9 @@ If the frames differ, the guest refuses the capture (`app-window-not-full-screen
 This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
 If the runtime cannot report either frame, the guest keeps the capture.
 
-The XCTest fallback is not correct for a windowed app either.
-The runner clips window-relative element frames against the screen-relative app frame.
-That is a runner gap.
-It is not a reason to publish a bridge tree that is known to be wrong.
+The XCTest fallback is the correct capture for a windowed app, after the amendment above.
+Before it, the runner clipped window-relative element frames against the screen-relative app frame, and that gap is what made this refusal protect a real failure.
+The refusal stays: this channel reports window-relative frames and no channel here converts them.
 
 Rejected alternatives:
 
