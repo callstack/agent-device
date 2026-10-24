@@ -755,7 +755,12 @@ test('Limrun keeps session tracked when release fails so release can be retried'
     limrunMockState.androidDelete.mockRejectedValueOnce(new Error('temporary delete failure'));
 
     await assert.rejects(() => releaseLease(lease), /temporary delete failure/);
-    assert.deepEqual(await releaseLease(lease), { limrunInstanceId: 'android-instance-1' });
+    assert.deepEqual(await releaseLease(lease), {
+      limrunInstanceId: 'android-instance-1',
+      // The instance id doubles as the provider session id, so a released session's
+      // artifacts stay listable by that id.
+      providerSessionId: 'android-instance-1',
+    });
   } finally {
     await runtime.shutdown();
   }

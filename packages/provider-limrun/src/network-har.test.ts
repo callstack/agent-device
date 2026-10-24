@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { DestinationTunnelInspectionEvent } from '@limrun/api/destination-tunnel-inspection';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { DEFAULT_LIMRUN_HAR_SELECTORS, startLimrunHarCapture } from './network-har.ts';
 
 function harEntry(url: string): DestinationTunnelInspectionEvent {
@@ -65,7 +65,7 @@ function fakeTunnelClient() {
 }
 
 function tempHarPath(): string {
-  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'limrun-har-')), 'session', 'har.har');
+  return path.join(mkdtempForTestSync('limrun-har-'), 'session', 'har.har');
 }
 
 test('the default capture selectors carry the public wildcards and the Metro route', () => {
