@@ -539,14 +539,16 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
   // An auto-submitting one-time-code field: the last digit navigates away, to a screen whose own
   // input takes the code field's place or to one without an input. `replace-after-input` is the
-  // same navigation landing before the code is complete.
+  // same navigation landing before the code is complete, and `populated-successor` the same on any
+  // edit, clearing included, to a screen whose input already holds a value.
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   BOOL codeComplete = textField.text.length >= AgentDeviceTextEntryAutoSubmitLength;
   if (textField.superview == nil) {
     return;
   }
   if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
-      (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
+      (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"]) ||
+      [arguments containsObject:@"--agent-device-text-entry-populated-successor"]) {
     [self replaceTextEntryFieldWithNextScreenInput:textField];
   } else if (codeComplete &&
              [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
@@ -558,6 +560,9 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
   if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
     nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+  }
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-populated-successor"]) {
+    nextScreenField.text = @"next screen value";
   }
   nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
   [textField.superview addSubview:nextScreenField];
@@ -761,6 +766,10 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
     if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
       textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-long-prefill"]) {
+      // Longer than one clear burst and far wider than the field, so its end is scrolled out of view.
+      textField.text = [@"" stringByPaddingToLength:300 withString:@"stale long value " startingAtIndex:0];
     }
     textField.borderStyle = UITextBorderStyleRoundedRect;
     // An empty input view keeps the software keyboard down, which is the hardware-keyboard responder

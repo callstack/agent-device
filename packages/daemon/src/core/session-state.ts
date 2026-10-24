@@ -15,6 +15,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { PostGesturePreActionBaseline } from '@agent-device/capture-kit/post-gesture-stability';
 import type { SnapshotFreshnessWindow } from '@agent-device/capture-kit/snapshot-freshness';
 import type { RefFrame } from './ref-frame-slot.ts';
 import type { SessionScriptPublicationState } from './session-script-publication-state.ts';
@@ -97,24 +98,15 @@ export type DeferredSurface =
       positionals: string[];
       markedAt: number;
       /**
-       * Pre-gesture interaction-surface signature, captured from the session's
-       * last-known snapshot before the gesture dispatched (no extra capture — see
-       * `markSurfaceStabilization`). Populated only when
-       * `requiresPostGestureBaselineDistrust` is true for the session's device
-       * (Apple mobile only, #1542 defect 2): a post-gesture quiet-poll match that
-       * still equals this baseline is a stale-but-internally-consistent AX read,
-       * not proof the screen settled. Android's persistent helper clears its a11y
-       * cache before every capture (#1254/#1259) and needs no baseline check.
+       * The pre-gesture surface this gesture must be judged against, bundled so a signature can
+       * never travel without the key of the surface that produced it (#1569, #2438). Populated
+       * only where the writer decides baseline distrust applies — Apple mobile with a non-empty
+       * signature (#1542 defect 2): a post-gesture quiet-poll match that still equals this surface
+       * is a stale-but-internally-consistent AX read, not proof the screen settled. Android's
+       * persistent helper clears its a11y cache before every capture (#1254/#1259), so an Android
+       * marker carries no baseline at all.
        */
-      baselineSignature?: InteractionSurfaceEntry[];
-      /**
-       * Snapshot backend that produced `baselineSignature`. Backends do not return
-       * comparable views of one screen — on the same iOS screen private AX returns
-       * the scrolled-away content the tree backend prunes — so a quiet capture from
-       * a different backend can only be re-baselined against, never concluded from
-       * (#1569).
-       */
-      baselineBackend?: string;
+      baseline?: PostGesturePreActionBaseline<InteractionSurfaceEntry[]>;
     }
   | {
       kind: 'recheck';

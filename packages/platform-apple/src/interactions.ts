@@ -3,6 +3,7 @@ import type { BackMode } from '@agent-device/contracts/back-mode';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
+  type CoordinateTapTextInputEvidence,
   type Interactor,
   type PressPointOptions,
   type RunnerCallOptions,
@@ -314,7 +315,7 @@ async function runSingleApplePress(
   }
   return await runAppleRunnerCommand(
     device,
-    iosTapCommand(device, context, point.x, point.y),
+    iosTapCommand(device, context, point.x, point.y, options.coordinateTapTextInputEvidence),
     runnerOpts,
   );
 }
@@ -412,11 +413,15 @@ function iosTapCommand(
   ctx: RunnerContext,
   x: number,
   y: number,
+  coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence,
 ): RunnerCommand {
   return {
     command: 'tap',
     x,
     y,
+    ...(runnerSynthesizesTap(device) && coordinateTapTextInputEvidence
+      ? { coordinateTapTextInputEvidence }
+      : {}),
     ...(runnerSynthesizesTap(device) ? { synthesized: true } : {}),
     appBundleId: ctx.appBundleId,
   };

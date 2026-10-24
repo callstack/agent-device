@@ -18,6 +18,27 @@ cancellation beyond the remaining 30 seconds, the client may report a transport 
 daemon that does not respond, the client's existing liveness check can reset it. Direct `test`
 runs keep their own timeout behavior.
 
+If a resource step cannot run within replay's budget, the error includes
+`details.reason: bounded_composite_resource_unsupported`, `details.shape`,
+`details.dispatched: no` for that step, and `details.standaloneCommandName` for a known public
+command. This can affect `perf`, `audio`, `record`, `trace`, and some `logs` operations. It also
+affects `close` when it would dispose owned resources or release a provider lease, and acquisition
+that would recover another session's durable resources. Opening another app in the same session
+keeps its owned resource handles. An Android test IME alone is restored by authored `close`, even
+when restoration settles after the remaining replay time. A failed restore retires the session and
+retains the device claim for recovery; inspect both before acting. The name is not a complete command. Inspect the failed
+script path and line, then run that original operation separately with its original arguments and
+options, the same `--session` value, and the same private CLI context. If steps remain and the
+report offers `resume.alternateFrom`, use it with `planDigest` after completing the refused step directly.
+`resume.from` retries the same bounded step and refuses it again. A final
+unrecorded `logs` or `audio` step leaves no replay tail to resume. Inspect completed steps before
+retrying; earlier steps may have changed the app. A nested `test` with an attempt timeout or
+`--record-video` is refused before its first attempt. Direct `test` retains its own timeout
+behavior. If a nested test reaches a bounded resource refusal, it stops after that attempt even
+when you configured retries. Other test failures can still retry. An authored `.ad` command
+without a resource classification fails closed with `details.shape: <command>:unclassified`
+and the same original-input guidance.
+
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 
 ## How it works

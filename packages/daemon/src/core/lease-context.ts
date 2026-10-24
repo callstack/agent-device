@@ -1,4 +1,10 @@
 import type { DaemonRequest } from './daemon-request.ts';
+import { getRequestExecutionDeadlineMs } from '@agent-device/host-kit/request';
+import {
+  AppError,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+} from '@agent-device/kernel/errors';
+import { resolveCommandStandaloneProjection } from '@agent-device/command-registry/registry';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
@@ -12,6 +18,21 @@ import {
 
 export { findMissingProxyLeaseFields, isProxyLeaseScope };
 export type { LeaseScope };
+
+export function refuseBoundedCompositeResourceOperation(req: DaemonRequest, shape: string): never {
+  const commandName = resolveCommandStandaloneProjection(req.command)?.command;
+  throw new AppError('UNSUPPORTED_OPERATION', `${shape} cannot run within a bounded composite`, {
+    reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+    shape,
+    ...(commandName ? { standaloneCommandName: commandName } : {}),
+    hint: `Run the original ${commandName ?? 'refused'} operation separately with its original arguments and options, the same --session value, and the same private CLI context. Inspect completed steps before retrying the batch or replay.`,
+    dispatched: 'no',
+  });
+}
+
+export function isBoundedCompositeRequest(req: DaemonRequest): boolean {
+  return getRequestExecutionDeadlineMs(req.meta?.requestId) !== undefined;
+}
 
 export type SessionLease = {
   tenantId: string;

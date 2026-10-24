@@ -1,6 +1,6 @@
 import { MIN_MEASURED_ROUNDS } from './config.ts';
 import { median, scaledMad } from './stats.ts';
-import type { Measurement, PerfSummary, Stat } from './types.ts';
+import type { Measurement, PerfSummary, Platform, Stat } from './types.ts';
 
 export type ComparisonThresholds = {
   // A change must exceed every one of these to be flagged.
@@ -78,6 +78,7 @@ const COMPARISON_SCHEMA = 'agent-device-perf-comparison/v1';
 
 export type Comparison = {
   schema: typeof COMPARISON_SCHEMA;
+  platform: Platform;
   target: RunRef;
   baseline: RunRef[];
   thresholds: ComparisonThresholds;
@@ -216,13 +217,21 @@ function environmentWarnings(target: PerfSummary, baseline: PerfSummary[]): stri
  * median of its nightly medians, and its noise is the scaled MAD of those medians. A step is flagged
  * only when its change exceeds the relative floor, the night-to-night spread, tonight's own
  * sampling error, and an absolute floor together. Tonight and every night that counts need
- * `minSamples` successful samples. Failures are judged apart from timing.
+ * `minSamples` successful samples. Failures are judged apart from timing. Every baseline run must
+ * come from the platform of the target.
  */
 export function compareRuns(
   target: { summary: PerfSummary; label: string },
   baseline: { summary: PerfSummary; label: string }[],
   thresholds: ComparisonThresholds = DEFAULT_THRESHOLDS,
 ): Comparison {
+  const platform = target.summary.platform;
+  const foreign = baseline.filter((b) => b.summary.platform !== platform);
+  if (foreign.length > 0) {
+    throw new Error(
+      `An ${platform} run cannot be compared with ${foreign.map((b) => `${b.label} (${b.summary.platform})`).join(', ')}.`,
+    );
+  }
   const targetById = new Map(target.summary.measurements.map((m) => [m.id, m]));
   const ids = [
     ...target.summary.measurements.map((m) => m.id),
@@ -243,6 +252,7 @@ export function compareRuns(
   }
   return {
     schema: COMPARISON_SCHEMA,
+    platform,
     target: describeRun(target.summary, target.label),
     baseline: baseline.map((b) => describeRun(b.summary, b.label)),
     thresholds,
@@ -297,7 +307,7 @@ export function renderComparison(comparison: Comparison): string {
     .filter((row) => flagRank(row) >= 0)
     .sort((a, b) => flagRank(a) - flagRank(b));
   const lines = [
-    `## agent-device perf comparison`,
+    `## agent-device perf comparison — ${comparison.platform}`,
     '',
     `- **Tonight**: ${comparison.target.label} · ${comparison.target.commit.slice(0, 12)} · ${comparison.target.startedAt} · ${comparison.target.device}`,
     `- **Baseline**: ${comparison.baseline.length === 0 ? 'none' : comparison.baseline.map((b) => `${b.label} (${b.commit.slice(0, 7)})`).join(', ')}`,

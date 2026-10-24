@@ -1,5 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -116,7 +117,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
       ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
-        ...pickSafeCauseDetails(error.details),
+        ...pickSafeCauseDetails(error.details, scrubVars),
         replayPath,
         step,
         action,
@@ -151,11 +152,28 @@ const SAFE_CAUSE_DETAIL_KEYS = [
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
+  scrubVars: readonly ReplayVarScrubEntry[],
 ): Record<string, unknown> {
   if (!details) return {};
   const safe: Record<string, unknown> = {};
   for (const key of SAFE_CAUSE_DETAIL_KEYS) {
     if (details[key] !== undefined) safe[key] = details[key];
+  }
+  if (
+    details.reason === 'session_cleanup_incomplete' &&
+    Array.isArray(details.failedSteps) &&
+    details.failedSteps.every((step) => typeof step === 'string')
+  ) {
+    safe.failedSteps = details.failedSteps.map((step: string) =>
+      scrubReplayVarValues(step, scrubVars),
+    );
+  }
+  if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
+    if (details.dispatched === 'no') safe.dispatched = 'no';
+    const shape = readStringDetail(details, 'shape');
+    if (shape !== undefined) safe.shape = shape;
+    const commandName = readStringDetail(details, 'standaloneCommandName');
+    if (commandName !== undefined) safe.standaloneCommandName = commandName;
   }
   return safe;
 }

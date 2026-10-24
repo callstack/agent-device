@@ -12,7 +12,10 @@ import {
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
-import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
+import type {
+  CoordinateTapTextInputEvidence,
+  ElementSelectorKey,
+} from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
@@ -54,6 +57,7 @@ export const RUNNER_WEDGED_RUNNER_CODE = 'RUNNER_WEDGED';
 const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
 
 export type RunnerCommand = {
+  coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence;
   command:
     | 'tap'
     | 'mouseClick'

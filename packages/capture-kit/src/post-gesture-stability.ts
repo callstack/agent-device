@@ -42,19 +42,53 @@ const STABILIZATION_DISTRUST_DEADLINE_MS = POST_GESTURE_STABILITY_SCHEDULE.budge
 
 export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 
-export type PostGestureStabilityVerdict = 'trust' | 'distrust' | 'accept-stale';
+/**
+ * One surface reading that can stand as a comparison baseline. Signature and key travel together:
+ * captures from different surfaces are not views of one screen (#1569, #2438). `comparisonKey` is
+ * undefined for legacy observations that carry no key. A quiet pair with two absent keys does not
+ * rebase: absent keys never prove a surface change, and never prove sameness either.
+ */
+export type PostGestureSurfaceReading<S> = Readonly<{
+  signature: S;
+  comparisonKey: string | undefined;
+}>;
+
+/**
+ * What the loop compares a quiet pair against, tagged by provenance. Only `pre-action` — read
+ * before the gesture dispatched — can show a stale read or prove no effect; a `post-action`
+ * baseline was adopted mid-loop after the gesture, and matching it is what a surface at rest does
+ * (#3868).
+ */
+export type PostGestureBaseline<S> =
+  | (PostGestureSurfaceReading<S> & Readonly<{ provenance: 'pre-action' }>)
+  | (PostGestureSurfaceReading<S> & Readonly<{ provenance: 'post-action' }>);
+
+export type PostGesturePreActionBaseline<S> = Extract<
+  PostGestureBaseline<S>,
+  Readonly<{ provenance: 'pre-action' }>
+>;
+
+/**
+ * The quiet-pair verdict. `accept-stale` carries the pre-action reading that authorized it as its
+ * payload, so the no-effect proof consumes exactly that evidence; a post-action baseline has no
+ * route to this verdict.
+ */
+export type PostGestureStabilityDecision<S extends readonly unknown[]> =
+  | Readonly<{ verdict: 'trust' }>
+  | Readonly<{ verdict: 'distrust' }>
+  | Readonly<{ verdict: 'accept-stale'; preActionBaseline: PostGesturePreActionBaseline<S> }>;
 
 export type PostGestureStabilityPending<S> = {
   action: string;
   positionals: string[];
-  baselineSignature?: S;
-  baselineBackend?: string;
+  /** Absent when the writer stored no baseline (non-Apple, or nothing usable pre-gesture). */
+  baseline?: PostGesturePreActionBaseline<S>;
 };
 
 export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
   capture: () => Promise<T>;
-  /** Signature + capture backend of one attempt, for quiet-window comparison. */
-  readSurface: (value: T) => { signature: S; backend: string | undefined };
+  /** One attempt's signature plus the surface that served it, for quiet-window comparison. */
+  readSurface: (value: T) => PostGestureSurfaceReading<S>;
   /** Two consecutive polls agree — the quiet-window test. */
   signaturesStable: (previous: S, current: S) => boolean;
   /** Subset-tolerant baseline comparison feeding the distrust verdict. */
@@ -101,26 +135,32 @@ function postGestureOutcome(
 }
 
 /**
- * Verdict for a quiet match that has already been observed. `'ambiguous'`
- * baseline evidence (no comparable content) falls through to `trust`, same as
- * `'changed'` — only a genuine "still equals the pre-gesture baseline" read
- * keeps the loop distrustful, and only until the bounded cap expires.
+ * Verdict for a quiet match that has already been observed. Only a `pre-action` baseline can
+ * distrust or accept stale: a `post-action` baseline was read after the gesture, and distrusting
+ * it would hold the loop to the cap on every backend switch (#3868). A missing baseline trusts
+ * outright. `'ambiguous'` evidence (no comparable content) falls through to `trust`, same as
+ * `'changed'` — only a genuine "still equals the pre-gesture baseline" read keeps the loop
+ * distrustful, and only until the bounded cap expires.
  */
 export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(params: {
-  needsBaselineDistrust: boolean;
-  baselineSignature: S | undefined;
+  baseline: PostGestureBaseline<S> | undefined;
   quietSignature: S;
   elapsedMs: number;
   distrustCapMs: number;
   classifyBaselineEvidence: (baseline: S, quiet: S) => BaselineSurfaceEvidence;
-}): PostGestureStabilityVerdict {
-  const { needsBaselineDistrust, baselineSignature, quietSignature, elapsedMs, distrustCapMs } =
-    params;
-  if (!needsBaselineDistrust || !baselineSignature?.length) return 'trust';
-  if (params.classifyBaselineEvidence(baselineSignature, quietSignature) !== 'unchanged') {
-    return 'trust';
+}): PostGestureStabilityDecision<S> {
+  const { baseline, quietSignature, elapsedMs, distrustCapMs } = params;
+  // An empty baseline is no baseline: never classify against it, whatever the classifier does
+  // with empties. The writer normalizes `[]` away, so this guards a caller-constructed value.
+  if (baseline?.provenance !== 'pre-action' || baseline.signature.length === 0) {
+    return { verdict: 'trust' };
   }
-  return elapsedMs < distrustCapMs ? 'distrust' : 'accept-stale';
+  if (params.classifyBaselineEvidence(baseline.signature, quietSignature) !== 'unchanged') {
+    return { verdict: 'trust' };
+  }
+  return elapsedMs < distrustCapMs
+    ? { verdict: 'distrust' }
+    : { verdict: 'accept-stale', preActionBaseline: baseline };
 }
 
 /**
@@ -132,18 +172,15 @@ export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(
  */
 export async function runPostGestureStabilityLoop<T, S extends readonly unknown[]>(params: {
   pending: PostGestureStabilityPending<S>;
-  needsBaselineDistrust: boolean;
   initial?: T;
   hooks: PostGestureStabilityHooks<T, S>;
   clock?: ObservationClock;
 }): Promise<PostGestureStabilityOutcome<T>> {
-  const { pending, needsBaselineDistrust, hooks, clock } = params;
+  const { pending, hooks, clock } = params;
   const now = () => clock?.now() ?? Date.now();
   const startedAt = now();
   let attempts = 0;
-  let baselineSignature = pending.baselineSignature;
-  let baselineBackend = pending.baselineBackend;
-  let baselineRebased = false;
+  let baseline: PostGestureBaseline<S> | undefined = pending.baseline;
   // A rebase or a distrust verdict keeps polling on a pair that DID agree, so
   // the budget can expire on a surface that is already at rest.
   let lastPairAgreed = false;
@@ -170,40 +207,43 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
       if (!lastPairAgreed) return { kind: 'continue' };
 
       const elapsedMs = now() - startedAt;
-      // A capture plan may fall back or be pre-empted by the XCTest-channel
-      // penalty at any time, so the backend can change mid-poll. Backends do
-      // not agree on which nodes exist, so this pair says nothing about the
-      // gesture: adopt it as the baseline and keep going rather than concluding
-      // from it (#1569).
-      if (baselineSignature && baselineBackend !== current.backend) {
+      // A capture plan may fall back or be pre-empted by the XCTest-channel penalty at any time,
+      // so the serving surface can change mid-poll. This quiet pair says nothing about the
+      // gesture: adopt it as a post-action baseline and keep going (#1569). The pair that rebases
+      // cannot also settle the loop.
+      if (baseline && baseline.comparisonKey !== current.comparisonKey) {
         emitDiagnostic({
           level: 'debug',
           phase: 'post_gesture_snapshot_baseline_rebased',
-          data: { action: pending.action, from: baselineBackend, to: current.backend, attempts },
+          data: {
+            action: pending.action,
+            from: baseline.comparisonKey,
+            to: current.comparisonKey,
+            attempts,
+          },
         });
-        baselineSignature = current.signature;
-        baselineBackend = current.backend;
-        baselineRebased = true;
+        // The adopted reading carries the new key: a further key change rebases again.
+        baseline = {
+          provenance: 'post-action',
+          signature: current.signature,
+          comparisonKey: current.comparisonKey,
+        };
         return { kind: 'continue' };
       }
-      const verdict = decidePostGestureStabilityVerdict({
-        // A rebased baseline was read after the gesture. Matching it is what a surface at rest does,
-        // so it is no evidence of a stale read, and distrusting it would hold the loop to the
-        // distrust cap on every backend switch.
-        needsBaselineDistrust: needsBaselineDistrust && !baselineRebased,
-        baselineSignature,
+      const decision = decidePostGestureStabilityVerdict({
+        baseline,
         quietSignature: current.signature,
         elapsedMs,
         distrustCapMs: STABILIZATION_DISTRUST_DEADLINE_MS,
         classifyBaselineEvidence: hooks.classifyBaselineEvidence,
       });
-      if (verdict === 'distrust') {
+      if (decision.verdict === 'distrust') {
         return { kind: 'continue', budgetMs: STABILIZATION_DISTRUST_DEADLINE_MS };
       }
-      emitSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
+      emitSettleDiagnostic(decision.verdict, pending.action, attempts, elapsedMs);
       return {
         kind: 'done',
-        result: buildAcceptedOutcome(verdict, pending, current, hooks),
+        result: buildAcceptedOutcome(decision, pending, current, hooks),
       };
     },
   });
@@ -227,10 +267,8 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
 }
 
-type CapturedSurface<T, S> = {
+type CapturedSurface<T, S> = PostGestureSurfaceReading<S> & {
   value: T;
-  signature: S;
-  backend: string | undefined;
 };
 
 function emitSettleDiagnostic(
@@ -256,9 +294,9 @@ function emitSettleDiagnostic(
 
 /**
  * The no-effect claim needs BOTH the accept-stale verdict AND full-surface
- * corroboration (`surfacesIdentical`) against the ORIGINAL pre-gesture
- * baseline. The verdict alone is subset-tolerant (#1601 review P1). A rebased
- * loop never reaches accept-stale, so a backend flip cannot launder a
+ * corroboration (`surfacesIdentical`) against the pre-action baseline the verdict carries — never a
+ * lookup back into the pending record. The verdict alone is subset-tolerant (#1601 review P1), and
+ * a rebased baseline cannot produce accept-stale at all, so a backend flip cannot launder a
  * cross-backend pair into a no-effect claim.
  *
  * A veto here is invisible from the outside: the response looks exactly like
@@ -267,17 +305,14 @@ function emitSettleDiagnostic(
  * equality.
  */
 function buildAcceptedOutcome<T, S extends readonly unknown[]>(
-  verdict: 'trust' | 'accept-stale',
+  decision: PostGestureStabilityDecision<S>,
   pending: PostGestureStabilityPending<S>,
   current: CapturedSurface<T, S>,
   hooks: PostGestureStabilityHooks<T, S>,
 ): PostGestureStabilityOutcome<T> {
-  if (verdict !== 'accept-stale') return { value: current.value };
-  const baselineSignature = pending.baselineSignature;
-  if (
-    baselineSignature !== undefined &&
-    hooks.surfacesIdentical(baselineSignature, current.signature)
-  ) {
+  if (decision.verdict !== 'accept-stale') return { value: current.value };
+  const baseline = decision.preActionBaseline;
+  if (hooks.surfacesIdentical(baseline.signature, current.signature)) {
     return { value: current.value, postGestureOutcome: postGestureOutcome('no-effect', pending) };
   }
   emitDiagnostic({
@@ -285,11 +320,9 @@ function buildAcceptedOutcome<T, S extends readonly unknown[]>(
     phase: 'post_gesture_no_effect_vetoed',
     data: {
       action: pending.action,
-      backend: current.backend,
+      backend: current.comparisonKey,
       reason: 'surface_divergence',
-      ...(baselineSignature === undefined
-        ? {}
-        : hooks.summarizeDivergence(baselineSignature, current.signature)),
+      ...hooks.summarizeDivergence(baseline.signature, current.signature),
     },
   });
   return { value: current.value };

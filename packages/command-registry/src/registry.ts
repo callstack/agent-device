@@ -96,6 +96,7 @@ import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-r
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
+  CompositeResourceTrait,
   CommandFrameworkTier,
   DeviceClaimPolicy,
   RecordingEffect,
@@ -1988,9 +1989,22 @@ export function listRuntimeFactCommands(): string[] {
     .sort();
 }
 
-const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<string, CommandDescriptor> = new Map(
-  commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
-);
+const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<
+  string,
+  CommandDescriptor & { standaloneCommandProjection: StandaloneCommandProjection | undefined }
+> = new Map(commandDescriptors.map((descriptor) => [descriptor.name, descriptor]));
+
+export function resolveCommandCompositeResourceTrait(
+  command: string,
+): CompositeResourceTrait | undefined {
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.compositeResource;
+}
+
+export function resolveCommandStandaloneProjection(
+  command: string,
+): StandaloneCommandProjection | undefined {
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.standaloneCommandProjection;
+}
 
 function isCliCommandName(command: string): command is DescriptorCliCommandName {
   return CLI_COMMAND_NAMES.has(command);

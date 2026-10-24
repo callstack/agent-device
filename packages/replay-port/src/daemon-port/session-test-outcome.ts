@@ -1,5 +1,6 @@
 import { readSnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts';
 import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-device/replay-test';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
@@ -21,6 +22,9 @@ export function toReplayTestAttemptOutcome(response: DaemonResponse): ReplayTest
       artifactPaths: readArtifactPaths(response.error.details?.artifactPaths),
       warnings: readResponseWarnings(response.error.details),
       infrastructure: isReplayInfrastructureFailure(response),
+      ...(response.error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON
+        ? { stopRetries: true as const }
+        : {}),
       ...snapshotDiagnostics(response.error.details?.snapshotDiagnostics),
     };
   }

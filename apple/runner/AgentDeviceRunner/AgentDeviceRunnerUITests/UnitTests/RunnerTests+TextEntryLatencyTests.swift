@@ -1,3 +1,4 @@
+import OSLog
 import XCTest
 
 extension RunnerTests {
@@ -119,8 +120,11 @@ extension RunnerTests {
   /// A fill whose focus tap raises the software keyboard hands the read that confirmed focus to the
   /// entry as its first read. The fixture counts queries as in
   /// `testFillReadsEachResolvedFieldThroughOneSnapshot`: this fill made 17, and 19 when the focus step
-  /// or the entry read the input again. The one read of headroom covers a keyboard that arrives
-  /// before the field reports focus.
+  /// or the entry read the input again. A read costs two queries. A keyboard that arrives before the
+  /// field reports focus ends the poll without handing its read on, so the entry reads the input
+  /// again and the fill makes 19 by design, and each poll before the last adds two more queries. The
+  /// test skips unless the focus step's log line records `input-reports-keyboard-focus` on its first
+  /// poll, so its budget holds only for the route it is about.
   @MainActor
   func testFillThatRaisesTheSoftwareKeyboardReusesTheReadThatConfirmedFocus() throws {
     app.launchArguments = [
@@ -141,6 +145,7 @@ extension RunnerTests {
     )
 
     let readsBefore = try XCTUnwrap(Int(valueReads.label))
+    let fillStartedAt = Date()
     let response = executeTypeCommand(activeApp: app, command: fill)
     let readsAfter = try XCTUnwrap(Int(valueReads.label))
 
@@ -151,7 +156,27 @@ extension RunnerTests {
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertEqual(response.data?.textEntryRoute, "xctest-element")
     XCTAssertEqual(valueReads.value as? String, "hello")
-    XCTAssertLessThanOrEqual(readsAfter - readsBefore, 18)
+    let focus = try XCTUnwrap(loggedTextEntryFocus(since: fillStartedAt), "the focus step logged no evidence line")
+    try XCTSkipUnless(
+      focus.evidence == TextEntryFocusEvidence.inputReportsKeyboardFocusName && focus.polls == 1,
+      "focus was confirmed by \(focus.evidence) after \(focus.polls) polls, which reads the input more than once by design"
+    )
+    XCTAssertLessThanOrEqual(readsAfter - readsBefore, 17)
+  }
+
+  /// The last evidence line the focus step logged after `start`, read from this process's unified log.
+  private func loggedTextEntryFocus(since start: Date) throws -> (evidence: String, polls: Int)? {
+    let store = try OSLogStore(scope: .currentProcessIdentifier)
+    let marker = TextEntryFocusEvidence.logMarker
+    return try store.getEntries(at: store.position(date: start))
+      .compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+      .compactMap { message -> (evidence: String, polls: Int)? in
+        guard let range = message.range(of: marker) else { return nil }
+        let fields = message[range.upperBound...].components(separatedBy: " polls=")
+        guard fields.count == 2, let polls = Int(fields[1]) else { return nil }
+        return (fields[0], polls)
+      }
+      .last
   }
 #endif
 }

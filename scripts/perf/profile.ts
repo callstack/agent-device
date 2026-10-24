@@ -1,6 +1,11 @@
 import { EXEC_COMMAND_PHASE } from '@agent-device/host-kit/command';
 import { DIAGNOSTIC_STDERR_PREFIX } from '@agent-device/host-kit/diagnostics';
 import { RETRY_PHASE } from '@agent-device/host-kit/retry';
+import {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
+  ANDROID_TOUCH_HELPER_GESTURE_PHASE,
+} from '@agent-device/platform-android/mechanics';
 import { median } from './stats.ts';
 import type {
   MeasurementProfile,
@@ -49,8 +54,10 @@ function eventDuration(event: DiagnosticEvent): number | undefined {
 
 /**
  * Reads one daemon request log (`--debug` ndjson). Process spawns count once, at their `settled`
- * event. Fallbacks name every degraded path the request took: snapshot-source errors, truncated
- * recovery, and warn- or error-level phases.
+ * event. Runner commands are XCTest runner commands on iOS and helper gestures on Android. Snapshot
+ * sources are the iOS accessibility producers and the Android helper transports. Fallbacks name
+ * every degraded path the request took: snapshot-source errors, truncated recovery, and warn- or
+ * error-level phases.
  */
 export function profileRequestLog(ndjson: string): SampleProfile {
   const profile: SampleProfile = {
@@ -63,6 +70,15 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     fallbacks: [],
   };
   const fallbacks = new Set<string>();
+  const addSource = (producer: string, event: DiagnosticEvent, answered = true): void => {
+    const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
+    entry.count += 1;
+    entry.totalMs += eventDuration(event) ?? 0;
+    const error = text(event.data?.error);
+    const failed = error !== undefined || event.level === 'error';
+    if (failed || !answered) entry.failures += 1;
+    if (failed) fallbacks.add(`${producer}: ${error ?? 'failed'}`);
+  };
   let firstTs: number | undefined;
   let lastTs: number | undefined;
   for (const line of ndjson.split('\n')) {
@@ -88,15 +104,19 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     } else if (phase === RUNNER_COMMAND_SEND_PHASE) {
       addTiming(profile.runnerCommands, text(data.command) ?? 'unknown', duration);
     } else if (phase === SNAPSHOT_SOURCE_ACQUIRE_PHASE) {
-      const producer = text(data.producer) ?? 'unknown';
-      const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
-      entry.count += 1;
-      entry.totalMs += duration ?? 0;
-      const error = text(data.error);
-      if (error || event.level === 'error') {
-        entry.failures += 1;
-        fallbacks.add(`${producer}: ${error ?? 'failed'}`);
-      }
+      addSource(text(data.producer) ?? 'unknown', event);
+    } else if (
+      phase === ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE ||
+      phase === ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE
+    ) {
+      addSource(
+        `android-helper/${text(data.transport) ?? 'unknown'}`,
+        event,
+        data.answered !== false,
+      );
+    } else if (phase === ANDROID_TOUCH_HELPER_GESTURE_PHASE) {
+      addTiming(profile.runnerCommands, 'gesture', duration);
+      if (event.level === 'error') fallbacks.add(`${phase}: ${text(data.error) ?? 'failed'}`);
     } else if (phase === SNAPSHOT_SOURCE_RECOVERY_PHASE && data.truncated === true) {
       fallbacks.add(
         `${text(data.producer) ?? 'unknown'}: truncated at ${String(data.acceptedLevels)} levels`,
@@ -157,8 +177,10 @@ export function readSnapshotFacts(json: unknown): SnapshotFacts | undefined {
   const nodes = data.nodes as { depth?: unknown }[];
   const quality = (data.snapshotQuality ?? {}) as Record<string, unknown>;
   const depths = nodes.map((node) => (typeof node.depth === 'number' ? node.depth : 0));
+  const android = (data.androidSnapshot ?? {}) as Record<string, unknown>;
   return {
     backend: text(quality.backend),
+    transport: text(android.helperTransport),
     state: text(quality.state),
     reasonCode: text(quality.reasonCode),
     nodeCount: nodes.length,

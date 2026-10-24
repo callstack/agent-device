@@ -104,10 +104,10 @@ test('markPostGestureStabilization captures the pre-gesture baseline signature o
   markPostGestureStabilization(session, 'scroll');
 
   assert.deepEqual(
-    pendingSurfaceStabilization(session)?.baselineSignature,
+    pendingSurfaceStabilization(session)?.baseline?.signature,
     buildInteractionSurfaceSignature(session.snapshot.nodes),
   );
-  assert.ok((pendingSurfaceStabilization(session)?.baselineSignature?.length ?? 0) > 0);
+  assert.ok((pendingSurfaceStabilization(session)?.baseline?.signature?.length ?? 0) > 0);
 });
 
 test('markPostGestureStabilization does not compute a baseline signature on Android', () => {
@@ -123,7 +123,7 @@ test('markPostGestureStabilization does not compute a baseline signature on Andr
 
   markPostGestureStabilization(session, 'scroll');
 
-  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 });
 
 test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on iOS', () => {
@@ -134,7 +134,7 @@ test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on i
   // "No usable baseline" has exactly one representation: the field is absent,
   // so nothing downstream ever has to distinguish `undefined` from `[]` — and
   // the loop cannot rebase a baseline that was never really there.
-  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -260,7 +260,7 @@ test('capturePostGestureStabilizedResult trusts an Android baseline match immedi
   const session = makeSession('android');
   session.snapshot = pickupSnapshot(500);
   markPostGestureStabilization(session, 'scroll');
-  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 
   const capture = vi.fn(async () => pickupSnapshot(500)); // identical throughout, like the iOS stale case
 
@@ -380,7 +380,7 @@ test('capturePostGestureStabilizedResult catches a frozen target even when the b
   session.snapshot = pickupSnapshotWithExtraText(500);
   markPostGestureStabilization(session, 'scroll');
   assert.ok(
-    (pendingSurfaceStabilization(session)?.baselineSignature?.length ?? 0) >
+    (pendingSurfaceStabilization(session)?.baseline?.signature?.length ?? 0) >
       buildInteractionSurfaceSignature(pickupSnapshot(500).nodes).length,
     'the baseline must carry the extra text entry the post-gesture reads never see',
   );

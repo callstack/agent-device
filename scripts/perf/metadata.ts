@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { readGitRevision, readTarget, readToolchain } from '../lib/bench-host.ts';
 import { REPO_ROOT, type PerfConfig } from './config.ts';
 import type { RunMetadata } from './types.ts';
@@ -14,8 +15,28 @@ function readVersion(): string {
   }
 }
 
+function adb(serial: string, args: string[]): string | undefined {
+  try {
+    const result = runCmdSync('adb', ['-s', serial, ...args], { allowFailure: true });
+    return result.exitCode === 0 ? result.stdout.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function emulator(serial: string): RunMetadata['device'] {
+  const name = adb(serial, ['emu', 'avd', 'name'])?.split('\n')[0]?.trim();
+  const release = adb(serial, ['shell', 'getprop', 'ro.build.version.release']);
+  const sdk = adb(serial, ['shell', 'getprop', 'ro.build.version.sdk']);
+  return {
+    name: name || serial,
+    serial,
+    runtime: release ? `Android ${release}${sdk ? ` (API ${sdk})` : ''}` : undefined,
+  };
+}
+
 /** Records what the numbers depend on: source, toolchain, host, and device. */
-export function collectMetadata(cfg: PerfConfig, deviceName: string): RunMetadata {
+export function collectMetadata(cfg: PerfConfig): RunMetadata {
   const revision = readGitRevision(REPO_ROOT);
   const toolchain = readToolchain();
   const target = cfg.platform === 'ios' ? readTarget(cfg.udid!, cfg.appId, cfg.appPath) : undefined;
@@ -38,7 +59,7 @@ export function collectMetadata(cfg: PerfConfig, deviceName: string): RunMetadat
     node: toolchain.node,
     device: target
       ? { name: target.name, udid: target.udid, runtime: target.runtime.split('.').pop() }
-      : { name: deviceName, serial: cfg.serial },
-    fixture: target ? { appId: target.appId, appPath: target.appPath } : undefined,
+      : emulator(cfg.serial!),
+    fixture: { appId: cfg.appId, appPath: cfg.appPath },
   };
 }

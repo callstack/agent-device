@@ -317,7 +317,7 @@ export const testCommandFacet = defineCommandFacet({
   text: {
     summary: 'Run replay test suites',
     cliDetail:
-      "Relative globs are expanded on the caller from its working directory, whose name is treated literally. Quote glob inputs to defer expansion to test. Copied diagnostic artifacts receive numbered filenames when needed to preserve other artifacts, replay sources, timing traces, and attempt manifests. JUnit reports (--reporter junit:<path>) replace characters forbidden by XML 1.0 with U+FFFD and preserve legal Unicode and whitespace. JSON and other reporters retain the original suite values. Custom reporter getExitCode hooks must return an integer from 0 to 255 or undefined; the highest valid code wins and cannot lower a failing suite's exit code.",
+      "Relative globs are expanded on the caller from its working directory, whose name is treated literally. Quote glob inputs to defer expansion to test. Copied diagnostic artifacts receive numbered filenames when needed to preserve other artifacts, replay sources, timing traces, and attempt manifests. JUnit reports (--reporter junit:<path>) replace characters forbidden by XML 1.0 with U+FFFD and preserve legal Unicode and whitespace. JSON and other reporters retain the original suite values. Custom reporter getExitCode hooks must return an integer from 0 to 255 or undefined; the highest valid code wins and cannot lower a failing suite's exit code. A nested test stops after a bounded resource refusal even with --retries; other failures keep their configured retries.",
   },
   metadata: testCommandMetadata,
   run: (client, input) => client.replay.test(withCommandRuntimeHints(input)),

@@ -267,6 +267,16 @@ export class LeaseRegistry {
     return { ...lease };
   }
 
+  /** Mirrors close ownership and expiry checks without consuming any lease. */
+  inspectLeaseForClose(request: ReleaseLeaseRequest): DeviceLease | undefined {
+    const leaseId = normalizeRequiredLeaseId(request.leaseId);
+    const lease = this.leases.get(leaseId);
+    if (!lease || this.wouldConsumeExpiredLease(lease, this.now())) return undefined;
+    assertLeaseOwnerScope(lease, request);
+    assertLeaseScopeMatch(lease, request);
+    return { ...lease };
+  }
+
   assertLeaseAdmission(request: AdmissionRequest): void {
     const scope = normalizeLeaseAdmissionRequest(request);
     this.cleanupExpiredLeases();

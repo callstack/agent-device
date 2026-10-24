@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 
 /**
  * Capture-local clickability facts for consumers that reproduce Maestro's private
@@ -28,7 +28,11 @@ export type SnapshotOcclusionContextEvidence = {
   androidSiblingOrderByNodeIndex?: ReadonlyMap<number, AndroidSiblingOrderEvidence>;
 };
 
+/** Complete text-input geometry measured before iOS semantic projection; absent means unknown. */
+export type SnapshotTextInputGeometry = Readonly<{ rects: readonly Rect[] }>;
+
 type SnapshotPrivateEvidence = {
+  textInputGeometry?: SnapshotTextInputGeometry;
   clickability?: SnapshotClickabilityEvidence;
   occlusionContext?: SnapshotOcclusionContextEvidence;
 };
@@ -78,4 +82,17 @@ export function readSnapshotOcclusionContextEvidence(
   owner: object | null | undefined,
 ): SnapshotOcclusionContextEvidence | undefined {
   return owner ? privateEvidenceBySnapshotObject.get(owner)?.occlusionContext : undefined;
+}
+
+export function attachSnapshotTextInputGeometry<T extends object>(
+  owner: T,
+  geometry: SnapshotTextInputGeometry,
+): T {
+  return attachSnapshotPrivateEvidence(owner, { textInputGeometry: geometry });
+}
+
+export function readSnapshotTextInputGeometry(
+  owner: object | null | undefined,
+): SnapshotTextInputGeometry | undefined {
+  return owner ? privateEvidenceBySnapshotObject.get(owner)?.textInputGeometry : undefined;
 }

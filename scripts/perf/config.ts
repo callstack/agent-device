@@ -11,33 +11,26 @@ export type PerfConfig = {
   platform: Platform;
   rounds: number; // measured rounds (samples per command)
   warmup: number; // leading rounds dropped from stats
-  keepArtifacts: boolean; // keep temp state dir + leave device booted
+  keepArtifacts: boolean; // keep the temporary state dir
   outDir: string;
   udid?: string; // iOS simulator UDID (required for iOS)
-  device?: string; // Android AVD name for boot
-  serial?: string; // Android device override
-  appId: string; // iOS fixture bundle id
-  appPath?: string; // iOS fixture bundle path, recorded in the run metadata
-  scenarios?: string[]; // iOS scenario ids; all when omitted
+  serial?: string; // Android emulator serial (required for Android)
+  appId: string; // fixture bundle id or package name
+  appPath?: string; // fixture .app or .apk path, recorded in the run metadata
+  scenarios?: string[]; // scenario ids; all when omitted
 };
 
-export const DEFAULT_IOS_APP_ID = 'com.callstack.agentdevicelab';
+export const DEFAULT_APP_ID = 'com.callstack.agentdevicelab';
 
 /** The fewest measured rounds that a run accepts; a comparison needs as many successful samples. */
 export const MIN_MEASURED_ROUNDS = 3;
 
 // How to invoke the CLI. Defaults to the built dist binary (bin/agent-device.mjs).
-// Set AGENT_DEVICE_PERF_CLI to run from source instead, e.g. on CI:
-//   AGENT_DEVICE_PERF_CLI="--experimental-strip-types src/bin.ts"
-// (matches the device workflows, which run from source and skip the dist build).
+// AGENT_DEVICE_PERF_CLI replaces it, for example with a fake CLI in tests.
 export function resolveCliArgv(): string[] {
   const override = process.env.AGENT_DEVICE_PERF_CLI?.trim();
   if (override) return override.split(/\s+/);
   return [CLI_BIN];
-}
-
-export function usesSourceCli(): boolean {
-  return Boolean(process.env.AGENT_DEVICE_PERF_CLI?.trim());
 }
 
 function readValue(argv: string[], i: number, flag: string): string {
@@ -62,7 +55,7 @@ export function parseConfig(argv: string[]): PerfConfig {
     warmup: 1,
     keepArtifacts: false,
     outDir: path.join(DEFAULT_OUT_DIR, new Date().toISOString().replaceAll(/[:.]/g, '-')),
-    appId: DEFAULT_IOS_APP_ID,
+    appId: DEFAULT_APP_ID,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -73,7 +66,6 @@ export function parseConfig(argv: string[]): PerfConfig {
         cfg.platform = v;
         break;
       }
-      case '--n':
       case '--rounds':
         cfg.rounds = readIntValue(argv, i++, a, MIN_MEASURED_ROUNDS);
         break;
@@ -88,9 +80,6 @@ export function parseConfig(argv: string[]): PerfConfig {
         break;
       case '--udid':
         cfg.udid = readValue(argv, i++, a);
-        break;
-      case '--device':
-        cfg.device = readValue(argv, i++, a);
         break;
       case '--serial':
         cfg.serial = readValue(argv, i++, a);
@@ -112,5 +101,7 @@ export function parseConfig(argv: string[]): PerfConfig {
     }
   }
   if (cfg.platform === 'ios' && !cfg.udid) throw new Error('--udid is required for --platform ios');
+  if (cfg.platform === 'android' && !cfg.serial)
+    throw new Error('--serial is required for --platform android');
   return cfg;
 }

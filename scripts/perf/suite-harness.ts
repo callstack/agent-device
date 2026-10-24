@@ -7,7 +7,7 @@ import {
 import { invokeCli } from './cli.ts';
 import type { PerfConfig } from './config.ts';
 import { captureWithForcedBackend } from './forced-backend.ts';
-import { expectationViolation, type SuiteScenario, type SuiteStep } from './ios-suite.ts';
+import { expectationViolation, type PlatformStep, type SuiteScenario } from './suite.ts';
 import { buildMeasurement } from './measurement.ts';
 import {
   profileRequestLog,
@@ -15,39 +15,54 @@ import {
   readSettleFacts,
   readSnapshotFacts,
 } from './profile.ts';
-import type { CliResult, Measurement, Sample } from './types.ts';
+import type { CliResult, Measurement, Platform, Sample } from './types.ts';
 
 const SESSION = 'perf';
 
-export type IosSuiteContext = {
+export type SuiteContext = {
+  platform: Platform;
   stateDir: string;
-  udid: string;
+  // The iOS simulator UDID or the Android emulator serial.
+  device: string;
   appId: string;
   artifactsDir: string;
   rawDir: string;
   // Set when a request outlived the client timeout. That request still holds the session, so
   // the suite restarts the daemon before the next scenario.
   daemonStuck?: boolean;
+  // Variables that the running daemon was started with, set by a step with `daemonEnv`.
+  daemonEnv?: Readonly<Record<string, string>>;
+  // Set when the daemon restart after a `daemonEnv` step could not reopen the session. The rest
+  // of the scenario is skipped, and the next scenario reopens the session.
+  restoreFailed?: string;
 };
 
 function log(msg: string): void {
   process.stderr.write(`[perf] ${msg}\n`);
 }
 
-function baseFlags(ctx: IosSuiteContext): string[] {
-  return ['--state-dir', ctx.stateDir, '--session', SESSION, '--platform', 'ios'];
+function baseFlags(ctx: SuiteContext): string[] {
+  return ['--state-dir', ctx.stateDir, '--session', SESSION, '--platform', ctx.platform];
 }
 
-function run(ctx: IosSuiteContext, args: readonly string[]): CliResult {
-  return watch(ctx, invokeCli(expandStatic(args, ctx), baseFlags(ctx)));
+function deviceFlags(ctx: SuiteContext): string[] {
+  return ctx.platform === 'ios' ? ['--udid', ctx.device] : ['--serial', ctx.device];
 }
 
-function watch(ctx: IosSuiteContext, result: CliResult): CliResult {
+function cli(ctx: SuiteContext, args: string[]): CliResult {
+  return watch(ctx, invokeCli(args, baseFlags(ctx), { env: ctx.daemonEnv }));
+}
+
+function run(ctx: SuiteContext, args: readonly string[]): CliResult {
+  return cli(ctx, expandStatic(args, ctx));
+}
+
+function watch(ctx: SuiteContext, result: CliResult): CliResult {
   if (daemonTimedOut(result)) ctx.daemonStuck = true;
   return result;
 }
 
-function expandStatic(args: readonly string[], ctx: IosSuiteContext): string[] {
+function expandStatic(args: readonly string[], ctx: SuiteContext): string[] {
   return args.map((arg) =>
     arg === '{app}'
       ? ctx.appId
@@ -64,7 +79,7 @@ type SnapshotNode = {
 const TARGET_TOKEN = /^\{(ref|point):(.+)\}$/;
 
 /** Expands `{ref:id}` and `{point:id}` from one untimed interactive snapshot. */
-function resolveTargets(args: string[], ctx: IosSuiteContext): string[] | { error: string } {
+function resolveTargets(args: string[], ctx: SuiteContext): string[] | { error: string } {
   if (!args.some((arg) => TARGET_TOKEN.test(arg))) return args;
   const snapshot = run(ctx, ['snapshot', '-i']);
   const nodes = ((snapshot.json as { data?: { nodes?: SnapshotNode[] } })?.data?.nodes ??
@@ -92,7 +107,7 @@ function resolveTargets(args: string[], ctx: IosSuiteContext): string[] | { erro
 
 /** Runs untimed calls in order and describes the first failure. */
 function untimed(
-  ctx: IosSuiteContext,
+  ctx: SuiteContext,
   calls: readonly (readonly string[])[] = [],
 ): string | undefined {
   for (const args of calls) {
@@ -117,14 +132,14 @@ function errorOf(result: CliResult): Pick<Sample, 'errorCode' | 'errorMessage'> 
   };
 }
 
-function readProfile(ctx: IosSuiteContext, requestId: string | undefined) {
+function readProfile(ctx: SuiteContext, requestId: string | undefined) {
   if (!requestId) return undefined;
   const sessionDir = resolveSessionDir(path.join(ctx.stateDir, 'sessions'), SESSION);
   const logPath = resolveSessionRequestLogPath(sessionDir, requestId);
   return fs.existsSync(logPath) ? profileRequestLog(fs.readFileSync(logPath, 'utf8')) : undefined;
 }
 
-function recordFailure(ctx: IosSuiteContext, id: string, round: number, detail: unknown): void {
+function recordFailure(ctx: SuiteContext, id: string, round: number, detail: unknown): void {
   const dir = path.join(ctx.rawDir, 'failures');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
@@ -133,15 +148,37 @@ function recordFailure(ctx: IosSuiteContext, id: string, round: number, detail: 
   );
 }
 
+/**
+ * Restarts the daemon with `env` and reopens the session on the current screen. A daemon reads
+ * its host environment once, at start.
+ */
+function restartDaemon(
+  ctx: SuiteContext,
+  env: Readonly<Record<string, string>> | undefined,
+): string | undefined {
+  const stop = invokeCli(['daemon', 'stop'], ['--state-dir', ctx.stateDir]);
+  if (!stop.ok) return `daemon stop: ${errorOf(stop).errorMessage}`;
+  ctx.daemonEnv = env;
+  const failure = sessionError(openSession(ctx, { relaunch: false }));
+  // A fresh daemon holds no request from before the restart.
+  if (!failure) ctx.daemonStuck = false;
+  return failure;
+}
+
 async function runTimedStep(
   scenario: SuiteScenario,
-  step: SuiteStep,
-  ctx: IosSuiteContext,
+  step: PlatformStep,
+  ctx: SuiteContext,
   round: number,
 ): Promise<Sample> {
   const id = `${scenario.id}/${step.id}`;
-  const before = untimed(ctx, step.before);
+  const restoreDaemon = (): void => {
+    if (step.daemonEnv) ctx.restoreFailed = restartDaemon(ctx, undefined);
+  };
+  const before =
+    (step.daemonEnv ? restartDaemon(ctx, step.daemonEnv) : undefined) ?? untimed(ctx, step.before);
   if (before) {
+    restoreDaemon();
     log(`  ✗ ${id} (before_failed: ${before})`);
     return { round, ok: false, wallClockMs: 0, errorCode: 'before_failed', errorMessage: before };
   }
@@ -150,7 +187,7 @@ async function runTimedStep(
     const { result: forced, requestId } = await captureWithForcedBackend({
       stateDir: ctx.stateDir,
       session: SESSION,
-      udid: ctx.udid,
+      udid: ctx.device,
       backend: 'tree',
     });
     const result = watch(ctx, forced);
@@ -176,7 +213,7 @@ async function runTimedStep(
         errorMessage: args.error,
       };
     } else {
-      const result = watch(ctx, invokeCli([...args, '--debug'], baseFlags(ctx)));
+      const result = cli(ctx, [...args, '--debug']);
       const diagnostics = readClientDiagnostics(result.stderr);
       sample = {
         round,
@@ -201,6 +238,7 @@ async function runTimedStep(
   const violation = sample.ok ? expectationViolation(step.expect, sample.snapshot) : undefined;
   if (violation)
     Object.assign(sample, { ok: false, errorCode: 'expectation_failed', errorMessage: violation });
+  restoreDaemon();
   const after = untimed(ctx, step.after);
   if (after) log(`  ! ${id} after: ${after}`);
   if (!sample.ok) log(`  ✗ ${id} (${sample.errorCode}: ${sample.errorMessage})`);
@@ -214,23 +252,31 @@ function sessionError(result: CliResult): string | undefined {
   return message;
 }
 
-function stopStuckDaemon(ctx: IosSuiteContext): void {
-  log(' ! a request outlived its timeout; restarting the daemon');
+function stopStuckDaemon(ctx: SuiteContext): void {
+  log(
+    ctx.restoreFailed
+      ? ` ! the daemon restore failed (${ctx.restoreFailed}); restarting the daemon`
+      : ' ! a request outlived its timeout; restarting the daemon',
+  );
   invokeCli(['daemon', 'stop', '--clean'], ['--state-dir', ctx.stateDir]);
   ctx.daemonStuck = false;
+  ctx.daemonEnv = undefined;
+  ctx.restoreFailed = undefined;
 }
 
 /** Opens the session with device selectors; later calls address it by session name alone. */
-function establishSession(ctx: IosSuiteContext): CliResult {
-  if (ctx.daemonStuck) stopStuckDaemon(ctx);
-  return watch(
-    ctx,
-    invokeCli(['open', ctx.appId, '--relaunch', '--udid', ctx.udid], baseFlags(ctx)),
-  );
+function openSession(ctx: SuiteContext, options: { relaunch: boolean }): CliResult {
+  const relaunch = options.relaunch ? ['--relaunch'] : [];
+  return cli(ctx, ['open', ctx.appId, ...relaunch, ...deviceFlags(ctx)]);
 }
 
-export async function runIosSuite(
-  ctx: IosSuiteContext,
+function establishSession(ctx: SuiteContext): CliResult {
+  if (ctx.daemonStuck || ctx.restoreFailed) stopStuckDaemon(ctx);
+  return openSession(ctx, { relaunch: true });
+}
+
+export async function runSuite(
+  ctx: SuiteContext,
   cfg: PerfConfig,
   scenarios: readonly SuiteScenario[],
 ): Promise<Measurement[]> {
@@ -241,8 +287,10 @@ export async function runIosSuite(
     log(`round ${round + 1}/${totalRounds}${measured ? '' : ' (warmup, dropped)'}`);
     let sessionFailure = sessionError(establishSession(ctx));
     for (const scenario of scenarios) {
-      // A request that outlived its timeout still holds the session; reopen before the next scenario.
-      if (ctx.daemonStuck) sessionFailure = sessionError(establishSession(ctx));
+      // A request that outlived its timeout still holds the session, and a failed daemon restore
+      // lost it; reopen before the next scenario.
+      if (ctx.daemonStuck || ctx.restoreFailed)
+        sessionFailure = sessionError(establishSession(ctx));
       log(` scenario ${scenario.id}`);
       const setupFailure = sessionFailure ?? untimed(ctx, scenario.setup);
       if (setupFailure) log(`  ✗ setup failed: ${setupFailure}`);
@@ -252,12 +300,14 @@ export async function runIosSuite(
         const id = `${scenario.id}/${step.id}`;
         const skipped = setupFailure
           ? { errorCode: 'setup_failed', errorMessage: setupFailure }
-          : ctx.daemonStuck
-            ? {
-                errorCode: 'daemon_stuck',
-                errorMessage: 'an earlier request still holds the session',
-              }
-            : undefined;
+          : ctx.restoreFailed
+            ? { errorCode: 'restore_failed', errorMessage: ctx.restoreFailed }
+            : ctx.daemonStuck
+              ? {
+                  errorCode: 'daemon_stuck',
+                  errorMessage: 'an earlier request still holds the session',
+                }
+              : undefined;
         const sample: Sample = skipped
           ? { round, ok: false, wallClockMs: 0, ...skipped }
           : await runTimedStep(scenario, step, ctx, round);
@@ -273,7 +323,7 @@ export async function runIosSuite(
         label: step.args.join(' '),
         command: step.command,
         args: [...step.args],
-        platform: 'ios',
+        platform: ctx.platform,
         execMode: step.via === 'sdk-forced-tree' ? 'sdk' : 'standalone',
         samples: samples.get(`${scenario.id}/${step.id}`) ?? [],
         warmupDropped: cfg.warmup,
@@ -290,7 +340,7 @@ const TEARDOWN_TIMEOUT_MS = 60_000;
  * the logs again with the teardown, and remove the state directory unless it is kept. It runs once,
  * so the interrupt handler and the normal finish can both call it.
  */
-export function iosRunFinalizer(ctx: IosSuiteContext, keepArtifacts: boolean): () => void {
+export function runFinalizer(ctx: SuiteContext, keepArtifacts: boolean): () => void {
   let finalized = false;
   const saveLogs = (): void => {
     try {
@@ -315,7 +365,7 @@ export function iosRunFinalizer(ctx: IosSuiteContext, keepArtifacts: boolean): (
 }
 
 /** Copies daemon and session logs into the raw artifact; the daemon token file stays behind. */
-function copyRawState(ctx: IosSuiteContext): void {
+function copyRawState(ctx: SuiteContext): void {
   const target = path.join(ctx.rawDir, 'state');
   fs.mkdirSync(target, { recursive: true });
   const daemonLog = path.join(ctx.stateDir, 'daemon.log');

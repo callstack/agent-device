@@ -5,6 +5,8 @@ import type {
 } from '@agent-device/contracts/android-observation';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
+import { Deadline } from '@agent-device/host-kit/retry';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -31,6 +33,8 @@ const PERMISSION_PACKAGES = new Set([
   'com.android.packageinstaller',
   'com.google.android.packageinstaller',
 ]);
+
+const DUMP_OBSERVATION_BUDGET_MS = 10_000;
 
 type Question = 'foreground' | 'blockingDialog';
 type DumpReader = (words: readonly string[]) => Promise<string>;
@@ -79,18 +83,37 @@ export function createAndroidObservationAdapter(
   });
 }
 
+/**
+ * Every variant one observation reads shares a single {@link DUMP_OBSERVATION_BUDGET_MS} budget,
+ * counted from its first dump read, so an observation costs at most one bound however many
+ * variants it walks. A read that times out or finds the budget spent is an unanswered read, like
+ * one that printed nothing: the observation reports `unknown` and never refuses the command.
+ */
 function createDumpReader(host: AndroidObservationHost, device: DeviceInfo): DumpReader {
   const dumps = new Map<string, Promise<string>>();
+  let deadline: Deadline | undefined;
   return (words) => {
     const key = words.join(' ');
-    const pending =
-      dumps.get(key) ??
-      host
-        .runAdb(device, deviceShellArgv('adb', 'shell', words), { allowFailure: true })
-        .then((result) => {
+    const cached = dumps.get(key);
+    if (cached) return cached;
+    deadline ??= Deadline.fromTimeoutMs(DUMP_OBSERVATION_BUDGET_MS);
+    const remainingMs = deadline.remainingMs();
+    if (remainingMs <= 0) return Promise.resolve('');
+    const pending = host
+      .runAdb(device, deviceShellArgv('adb', 'shell', words), {
+        allowFailure: true,
+        timeoutMs: remainingMs,
+      })
+      .then(
+        (result) => {
           recordSections(device, key, result.stdout);
           return result.stdout;
-        });
+        },
+        (error: unknown) => {
+          if (!isCommandTimeoutError(error)) throw error;
+          return '';
+        },
+      );
     dumps.set(key, pending);
     return pending;
   };

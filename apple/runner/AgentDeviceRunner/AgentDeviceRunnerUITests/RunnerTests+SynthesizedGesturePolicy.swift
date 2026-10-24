@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 // Runner-local policy for AX-free/private synthesized iOS gestures.
 //
@@ -113,8 +114,23 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
   }
 }
 
-func shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: Bool) -> Bool {
-  !xCTestChannelPenalized
+func shouldProbeCoordinateTapTextInput(
+  xCTestChannelPenalized: Bool,
+  evidence: CoordinateTapTextInputEvidence?,
+  point: CGPoint?,
+  targetBundleId: String?
+) -> Bool {
+  if xCTestChannelPenalized { return false }
+  guard let evidence, let point, point.x.isFinite, point.y.isFinite,
+    !evidence.targetBundleId.isEmpty, evidence.targetBundleId == targetBundleId,
+    evidence.point.x == point.x, evidence.point.y == point.y
+  else { return true }
+  for input in evidence.textInputRects {
+    let rect = CGRect(x: input.x, y: input.y, width: input.width, height: input.height)
+    guard SnapshotGeometry.isPositiveFinite(rect) else { return true }
+    if isCoordinateTextInputCandidate(enabled: true, frame: rect, point: point) { return true }
+  }
+  return false
 }
 
 /// A synthesized `tap` step in a `sequence` is a standalone coordinate tap and follows its policy. On

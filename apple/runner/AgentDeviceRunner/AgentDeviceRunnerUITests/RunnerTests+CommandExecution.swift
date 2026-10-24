@@ -6,6 +6,7 @@ extension RunnerTests {
   func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
+    activeAppBundleId: String? = nil,
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
@@ -147,17 +148,22 @@ extension RunnerTests {
           bundleId: mainOwned.bundleId
         )
         let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
-          xCTestChannelPenalized: xCTestChannelPenalized
+          xCTestChannelPenalized: xCTestChannelPenalized,
+          evidence: command.coordinateTapTextInputEvidence,
+          point: CGPoint(x: x, y: y),
+          targetBundleId: activeAppBundleId
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
           textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
-          // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil
+          // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.
+          clearRememberedTextEntryTap()
           NSLog(
-            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
-            mainOwned.bundleId ?? ""
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@ reason=%@",
+            mainOwned.bundleId ?? "",
+            xCTestChannelPenalized ? "penalized-xctest-channel" : "evidence"
           )
         }
         var fallback: GestureFallback?

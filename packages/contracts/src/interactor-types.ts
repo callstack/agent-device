@@ -89,6 +89,13 @@ export type ElementSelectorTapOptions = {
   expectedPoint?: Point;
 };
 
+/** Text-input geometry from the capture that measured the tap point; the native owner decides admission. */
+export type CoordinateTapTextInputEvidence = Readonly<{
+  targetBundleId: string;
+  point: Point;
+  textInputRects: readonly Rect[];
+}>;
+
 export type PressPointOptions = Readonly<{
   button: 'primary' | 'secondary' | 'middle';
   count: number;
@@ -97,6 +104,7 @@ export type PressPointOptions = Readonly<{
   jitterPx: number;
   doubleTap: boolean;
   surface?: SessionSurface;
+  coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence;
 }>;
 
 /**

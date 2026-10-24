@@ -26,6 +26,13 @@ const OVERLAY_KIND_FRAGMENTS = [
   'menu',
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+/**
+ * How far below the viewport top a full-viewport chrome container may start, before the 0.5pt rect
+ * tolerance. On iOS 27 an app that draws a 2pt bar at the top gets a `_UIFloatingBarContainerView`
+ * at y=2 (#3883). A container that starts below the status bar is tens of points down and gets no
+ * exemption from this check.
+ */
+const VIEWPORT_CHROME_TOP_INSET_PT = 4;
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
 const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
@@ -421,7 +428,7 @@ function isFullViewportChromeContainer(
   while (current && !visited.has(current.index)) {
     if (isViewportRootNode(current)) {
       const viewportRect = positiveRect(current.rect);
-      return Boolean(viewportRect && areRectsApproximatelyEqual(rect, viewportRect));
+      return Boolean(viewportRect && isViewportFootprint(rect, viewportRect));
     }
     visited.add(current.index);
     current =
@@ -530,4 +537,14 @@ function positiveRect(rect: RawSnapshotNode['rect']): Rect | null {
 
 function mergeCoveredHint(hints: string[] | undefined): string[] {
   return Array.from(new Set([...(hints ?? []), COVERED_PRESENTATION_HINT]));
+}
+
+/** The viewport's frame, or the viewport below a strip of at most `VIEWPORT_CHROME_TOP_INSET_PT`. */
+function isViewportFootprint(rect: Rect, viewport: Rect): boolean {
+  const topInset = Math.min(Math.max(rect.y - viewport.y, 0), VIEWPORT_CHROME_TOP_INSET_PT);
+  return areRectsApproximatelyEqual(rect, {
+    ...viewport,
+    y: viewport.y + topInset,
+    height: viewport.height - topInset,
+  });
 }

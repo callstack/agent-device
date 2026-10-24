@@ -24,7 +24,7 @@ export function buildMeasurement(input: MeasurementInput): Measurement {
     ...input,
     wallClock: summarize(ok.map((s) => s.wallClockMs)),
     daemon: summarize(numbers(ok.map((s) => s.daemonMs))),
-    elementCount: summarize(numbers(ok.map((s) => s.elementCount ?? s.snapshot?.nodeCount))),
+    elementCount: summarize(numbers(ok.map((s) => s.snapshot?.nodeCount))),
     profile: aggregateProfiles(input.samples),
     failures,
     notes,

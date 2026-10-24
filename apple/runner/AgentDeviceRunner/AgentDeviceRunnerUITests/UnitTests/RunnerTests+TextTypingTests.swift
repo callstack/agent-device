@@ -176,6 +176,57 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
   }
 
+  // A value longer than one clear burst and wider than its field (#3851): the caret edge-tap lands
+  // mid-text and a burst deletes at most 120 characters, so neither alone can reach all of it.
+  @MainActor
+  func testFillReplacesAValueLongerThanOneClearBurst() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-long-prefill")
+
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-long-prefill", text: "Ada Lovelace", at: textField)
+    )
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.textEntryRoute, "xctest-element")
+    XCTAssertEqual(editableTextValue(for: textField), "Ada Lovelace")
+  }
+
+  @MainActor
+  func testFillClearsAValueLongerThanOneClearBurst() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-long-prefill")
+
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "clear-long-prefill", text: "", at: textField)
+    )
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(editableTextValue(for: textField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // The clear's first delete navigates to a screen whose input, already holding a value, takes the
+  // cleared one's place under the same handle. The clear keeps going only on the input it started on.
+  @MainActor
+  func testFillClearDoesNotEraseTheInputThatReplacedItsTarget() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-long-prefill",
+      "--agent-device-text-entry-populated-successor"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    _ = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-clear-replaced-input", text: "", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField), "next screen value")
+  }
+
   // The reported shape: the last digit navigates to a screen without an input.
   @MainActor
   func testFillSucceedsWhenAppRemovesInputAfterLastCharacter() throws {

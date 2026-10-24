@@ -8,7 +8,7 @@ import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { BackMode } from './back-mode.ts';
 import type { ClickButton } from './click-button.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
-import type { RepeatedInput } from './interaction.ts';
+import type { RepeatedInput, SurfaceScopedNodes } from './interaction.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ResolvedScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -138,6 +138,12 @@ export type BackendAlertResult =
 
 export type BackendTapOptions = RepeatedInput & {
   button?: ClickButton;
+  /**
+   * The observation whose geometry produced the tap point. Absent for a raw coordinate and for a
+   * point read live after that observation placed the target off-screen (#1542). A backend may
+   * draw evidence about the tap point only from this observation.
+   */
+  pointObservation?: SurfaceScopedNodes;
 };
 
 export type BackendRefTarget = {

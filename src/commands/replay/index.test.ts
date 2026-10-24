@@ -190,6 +190,7 @@ describe('replay command interface', () => {
         maestro: true,
         metroHost: '127.0.0.1',
         metroPort: 8083,
+        retries: 2,
         reportJunit: './junit.xml',
       },
       { env: process.env, cwd: process.cwd() },
@@ -201,6 +202,7 @@ describe('replay command interface', () => {
         replayBackend: 'maestro',
         metroHost: '127.0.0.1',
         metroPort: 8083,
+        retries: 2,
       },
     });
     expect(testRequest.options).not.toHaveProperty('reportJunit');

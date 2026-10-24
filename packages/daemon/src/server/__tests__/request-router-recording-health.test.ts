@@ -118,6 +118,63 @@ test('router blocks non-record commands when recording was invalidated', async (
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
+test('bounded record refusal does not let the outer request invalidate recording health', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-recording-health-');
+  const session: SessionState = {
+    name: 'default',
+    createdAt: Date.now(),
+    actions: [],
+    appBundleId: 'com.apple.Preferences',
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      target: 'mobile',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    },
+  };
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    outPath: '/tmp/demo.mp4',
+    runnerSessionId: 'runner-before',
+  });
+  sessionStore.publish('default', session);
+  mockObserveRunnerSession.mockResolvedValue({ alive: false });
+  const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+    platformServices,
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: [{ command: 'record', positionals: ['stop'] }] },
+    meta: { requestId: 'req-bounded-recording-health' },
+  });
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.details).toMatchObject({
+    reason: 'bounded_composite_resource_unsupported',
+    shape: 'record:stop-live',
+    dispatched: 'no',
+  });
+  expect(mockObserveRunnerSession).not.toHaveBeenCalled();
+  expect(
+    sessionStore.get('default')?.screenRecording?.handle.inspect().invalidatedReason,
+  ).toBeUndefined();
+});
+
 test('router allows canonical iOS simulator gestures during overlay recording after runner restart', async () => {
   const sessionStore = makeSessionStore('agent-device-router-recording-health-');
   const session: SessionState = {

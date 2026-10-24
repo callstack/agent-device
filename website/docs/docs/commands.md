@@ -310,16 +310,17 @@ agent-device close com.example.app.main --session vega-tv
 vega virtual-device stop
 ```
 
-- TV targets include Apple TV and Android TV simulators, emulators, and connected devices. Vega OS support is limited to the Vega Virtual Device (VVD).
+- TV targets include Apple TV and Android TV simulators, emulators, and connected devices, plus Fire TV devices and emulators running Fire OS (Android-based). Vega OS support is limited to the Vega Virtual Device (VVD).
 - TV targets are focus-first: move focus with `tv-remote` before selecting a control. Don't use raw `adb shell input keyevent` in command plans.
 - `tv-remote` is TV-only. Android phones, iPhones, and WebDriver (Appium) sessions refuse it with `UNSUPPORTED_OPERATION`.
 - All three TV backends support `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`. Android TV also accepts `volume-up`, `volume-down`, `mute`, `power`, `sleep`, `wake`, `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, `media-fast-forward`, `channel-up`, `channel-down`, `last-channel`, `guide`, `info`, `captions`, `tv-input`, `color-red`, `color-green`, `color-yellow`, and `color-blue`. tvOS and Vega OS refuse the additional buttons before dispatch.
 - For an Android TV remote button without a name, use `android-keycode:<n>` with a decimal code from 1 to 2147483647. Other TV backends refuse raw Android codes. An unknown name or invalid code fails with `INVALID_ARGS`.
 - `power` and `sleep` can turn the screen off. A successful response confirms that the button was sent; it does not verify playback, volume, or display state, and it does not wait for the app to settle.
-- Android TV: app launch and app listing use `LEANBACK_LAUNCHER` activities. `tv-remote` sends ADB keyevents; `longpress <button>` selects the long-press preset, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
+- Android TV: app listing reads `LEANBACK_LAUNCHER` and `LAUNCHER` activities together; app launch prefers `LEANBACK_LAUNCHER` and falls back to `LAUNCHER` when the app declares no leanback activity. `tv-remote` sends ADB keyevents; `longpress <button>` selects the long-press preset, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
+- Fire TV: a Fire TV device or emulator running Fire OS connects as an Android TV device over ADB. On the device, enable ADB debugging in Settings > My Fire TV > Developer options, then `adb connect <device-ip>:5555` and use `--platform android --target tv`. Discovery reads the `amazon.hardware.fire_tv` system feature, so a Fire TV that declares no leanback feature is still detected as a TV target and runs the Android TV backend. The Android snapshot helper requires Android 6.0 (API 23) or newer.
 - tvOS supports the same runner-driven commands as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and selector flows). `back` is the Siri Remote Menu button, `home` is Home, and the app switcher is a double Home press; `--duration-ms` is an exact hold. Helpers that are simulator-only on iOS, such as `settings` and `push`, are simulator-only on tvOS too. tvOS refuses multi-touch gestures such as `gesture pinch`.
 - Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
-- Vega OS doesn't support physical Fire TV, app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, or performance; those report unsupported. Use the VVD display as visual truth.
+- Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device: app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance report unsupported for Vega targets, and physical Vega OS devices are not supported. Use the VVD display as visual truth.
 - On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
 
 ## Desktop targets
@@ -332,6 +333,7 @@ agent-device snapshot -i --platform apple --target desktop
 ```
 
 - `--platform macos`, or `--platform apple --target desktop`, selects the host Mac as a `desktop` target.
+- agent-device automates Electron and other Chromium-based macOS apps through the macOS accessibility tree. On the native backend, `snapshot` turns the app's Chromium accessibility tree on before reading it; once on, the tree stays on for the app's lifetime, so other surfaces see it too. See the Chromium note under the native backend below.
 - Use an `app` session for normal app control: `open`, `snapshot`, `click`, `fill`, `press`, `scroll`, `back`, `screenshot`, `record`. In app sessions, `screenshot` captures the app window, not the whole desktop.
 - Use the other surfaces to inspect desktop-wide UI before choosing an app, mainly with `snapshot`, `get`, `is`, and `wait`: `frontmost-app` is the focused app, `desktop` is the visible windows across the desktop, and `menubar` is the active app's menu bar and system menu extras. To click or fill inside one app afterwards, open it in an `app` session.
 - `open <app> --platform macos` attaches to a copy of the app that is already running, including one you started yourself from a script or supervisor. It opens that copy by its own app path, so another build registered for the same bundle ID, such as an earlier dev build at another path, does not start beside it. If that copy has not finished registering with macOS, the open waits briefly for it before handing the URL over, so a copy that registers within that window keeps the arguments it was started with; a copy still unregistered after the wait, or copies running from more than one path, get the plain `open -b`, which can start a second instance.
@@ -354,7 +356,7 @@ With the native backend, each app you open on the `app` surface is a device of i
 
 Copies of one app need distinct bundle ids. Screenshots run one at a time across the Mac. Use one agent-device version per claims directory.
 
-- `click`, `press`, and `fill` use accessibility actions on the element at the target point, which must be inside one of the app's on-screen windows, not its menu bar. `type` inserts at the focused control or falls back to key events. `scroll` moves the scroll bar under the front window's center. Chromium-based apps expose their full tree. `screenshot` captures only the app's front window, even when it is covered. The front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, and a sheet is captured as its own window. If that window cannot be captured, `screenshot` fails; it never captures another window.
+- `click`, `press`, and `fill` use accessibility actions on the element at the target point, which must be inside one of the app's on-screen windows, not its menu bar. `type` inserts at the focused control or falls back to key events. `scroll` moves the scroll bar under the front window's center. Electron and other Chromium-based desktop apps expose their web content in the snapshot: the first `snapshot` turns the app's Chromium accessibility tree on, and a snapshot warns when that tree did not populate. `screenshot` captures only the app's front window, even when it is covered. The front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, and a sheet is captured as its own window. If that window cannot be captured, `screenshot` fails; it never captures another window.
 - `record`, `prepare`, `back`, `longpress`, `--hold-ms`, `--double-tap`, `--button secondary`, gestures, and clicks on an element with no accessibility action fail with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-backend`). Use the default XCTest backend for those.
 
 ```bash
@@ -535,11 +537,24 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 
 When a command fails, read `error.details.dispatched` before you retry:
 
-- `no`: the action never reached the device. Retry it as it is.
+- `no`: the action never reached the device. Check `details.reason` before retrying; a bounded
+  resource refusal must run as a separate command.
 - `unknown`: the action may have landed. Take a snapshot before you retry; a blind retry can tap, type, or navigate twice.
 - Missing: no guarantee. Treat it as `unknown`.
 
-Read-only commands such as `get`, `snapshot`, and `wait` report `no`, and so do `record`, `trace`, and `perf`, whose controls the device refuses to repeat. On Android, dismissing a blocking system dialog or ANR prompt first does not count as a dispatched step. Once any step of a request reached the device, the failure is `unknown` and `error.details.dispatchedSteps` counts those steps; a `batch` or replay reports `no` only when none of its executed steps changed the app.
+For a failed `batch` or `replay`, inspect completed steps and `details.dispatchedSteps` first. A
+resource step refused with `details.reason: bounded_composite_resource_unsupported` has
+`details.dispatched: no` for that step. `details.standaloneCommandName` names a known public
+command; it is not a complete command. Run the original step separately with its original
+arguments and options, the same `--session` value, and the same private CLI context. Earlier
+steps may still have run.
+
+Read-only commands such as `get`, `snapshot`, and `wait` report `no`, and so do `record`, `trace`,
+and `perf`, whose controls the device refuses to repeat. On Android, dismissing a blocking system
+dialog or ANR prompt first does not count as a dispatched step. For other failures, once any step
+of a request reached the device, the failure is `unknown` and `error.details.dispatchedSteps`
+counts those steps. A bounded resource refusal reports `no` for its refused step even when earlier
+batch or replay steps changed the app; check `dispatchedSteps` before retrying.
 
 These refusals carry `dispatched: no` and a typed `error.details.reason`, so branch on the reason, not the message:
 

@@ -3,7 +3,11 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseTraceAction, type TraceCommandResult } from '@agent-device/contracts/recording';
+import {
+  parseTraceAction,
+  TRACE_ACTION_REQUIRED_MESSAGE,
+  type TraceCommandResult,
+} from '@agent-device/contracts/recording';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
@@ -17,7 +21,7 @@ export function handleTraceCommand(params: {
   sessionStore: SessionStore;
 }): DaemonResponse {
   const action = parseTraceAction(params.req.positionals);
-  if (!action) return errorResponse('INVALID_ARGS', 'trace requires start|stop');
+  if (!action) return errorResponse('INVALID_ARGS', TRACE_ACTION_REQUIRED_MESSAGE);
   const ref = params.sessionStore.lookup(params.sessionName);
   if (!ref) return errorResponse('SESSION_NOT_FOUND', 'No active session');
   return action === 'start'
