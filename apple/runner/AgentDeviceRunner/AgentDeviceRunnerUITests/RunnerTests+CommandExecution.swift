@@ -155,8 +155,7 @@ extension RunnerTests {
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
-          // The lookup compares the point, which is a screen point, with candidate frames; on a
-          // placed window the snapshot frames need the content vector (#3899).
+          // The lookup compares candidate frames with this screen point (#3899).
           textInput = coordinateTapTextInputAt(
             app: activeApp,
             x: x,

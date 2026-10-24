@@ -352,8 +352,7 @@ extension RunnerTests {
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
-    // The point is a screen point; candidate snapshot frames of a placed window need the content
-    // vector to be compared with it (#3899).
+    // The lookup compares candidate frames with this screen point (#3899).
     let textInputCandidates = textInputCandidatesAt(
       app: app,
       point: point,
@@ -623,15 +622,14 @@ extension RunnerTests {
 #if !os(tvOS)
   private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
 #if os(iOS)
-    // A caller's point is a screen point: coordinate taps, double taps, long presses, and drags
-    // anchor at the application's origin, not the resolved window, so the point is dispatched as
-    // given. That holds because `app.coordinate(withNormalizedOffset: .zero)` sits at the origin of
-    // the space `app.frame` names, and for a windowed app the measured `app.frame` starts at the
-    // screen's origin. The first qualifying window is not always the one under the finger — a
+    // A caller's point is a screen point: these gestures anchor at the app's origin, not the
+    // resolved window, so it is dispatched as given. The anchor sits at the origin of the space
+    // `app.frame` names, and for a windowed app the measured `app.frame` starts at the screen's
+    // origin (#3899). The first qualifying window is not always the one under the finger — a
     // SpringBoard `alert accept` can live in an alert window while the wallpaper or status-bar
     // window qualifies first, so a window-relative anchor misses the button. Reference frames and
     // the synthesized display ID still resolve through `resolveRunnerWindow`, so a foldable tap
-    // keeps its panel and stays on its display (#3899, ADR 0025).
+    // keeps its panel and stays on its display (ADR 0025).
     let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     return origin.withOffset(CGVector(dx: x, dy: y))
 #else

@@ -24,7 +24,8 @@ extension RunnerTests {
     y: Double,
     contentTranslation: CGSize?
   ) -> ResolvedTextEntryInput? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
+    let point = CGPoint(x: x, y: y)
+    return textInputCandidatesAt(app: app, point: point, contentTranslation: contentTranslation).first
   }
 
   func textInputCandidatesAt(
@@ -134,8 +135,7 @@ extension RunnerTests {
   }
 
   /// Runs an optional probe whose XCTest issues are contained instead of recorded: an issue makes
-  /// the probe unavailable rather than failing the command and invalidating the runner. Visible to
-  /// the readiness retap, whose window re-read needs the same containment (#3899).
+  /// the probe unavailable rather than failing the command and invalidating the runner.
   func containingTextInputProbeIssues<T>(
     fallback: T,
     _ probe: (_ shouldStop: () -> Bool) -> T
@@ -215,20 +215,15 @@ extension RunnerTests {
   }
 
   /// The vector that carries this session's snapshot-read app-content frames to their place on the
-  /// screen, or nil when the app fills the screen (#3899). Read once at the start of each command
-  /// that dispatches points derived from snapshot frames — the focus step, the coordinate fill route,
-  /// the readiness retap, a coordinate text read — and carried on the types the command builds from
-  /// it (`TextEntryTarget.contentTranslation`, `ResolvedTextEntryInput.contentTranslation`). No read
-  /// inside a loop re-reads it: the whole-app queries below cost about 90 ms each on heavy React
-  /// Native screens, and a per-read re-query would undo the fill-read work of #3881, #3906 and #3909.
+  /// screen, or nil when the app fills the screen (#3899). Each command that dispatches points from
+  /// snapshot frames reads it once, at its own start, and hands it down; a read inside a typing loop
+  /// never calls this, because the two live box reads below cost about 90 ms each on a heavy React
+  /// Native screen.
   ///
-  /// The live `XCUIElement.frame` property already reports a placed window's content in screen space,
-  /// but `XCUIElementSnapshot.frame` reports it in the window's own content space, so the same probe
-  /// sees two spaces on an iPad Windowed Apps window. The signature and the vector are the capture's
-  /// rule (`SnapshotContentTranslation`, ADR 0004) read from the two live boxes that name it: the
-  /// application's `frame` is a `(0,0)`-anchored copy of the box the resolved window reports at its
-  /// place on the screen. Any other pair of boxes declares no vector, so full-screen, iPhone, and
-  /// each foldable panel keep their frames exactly as read.
+  /// The signature and the vector are the capture's rule (`SnapshotContentTranslation`, ADR 0004)
+  /// read from the two live boxes that name it: the application's `frame` is a `(0,0)`-anchored copy
+  /// of the box the resolved window reports at its place on the screen. Any other pair of boxes
+  /// declares no vector, so full-screen, iPhone, and each foldable panel keep frames as read.
   func liveContentTranslation(app: XCUIApplication) -> CGSize? {
     // The window read is contained like the probe lookups it replaces: a transient window that
     // records an XCTest issue costs the vector, not the runner session.

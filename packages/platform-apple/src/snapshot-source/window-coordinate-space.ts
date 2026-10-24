@@ -23,7 +23,7 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * reported, that tree mixes two spaces, clips its own content, and moves every tap by the window
  * origin (#3899). That translation belongs to the capture that performs it — the runner's Swift
  * `SnapshotContentTranslation` — not to this decoder, because the guest refuses a windowed tree
- * before this file can read one; see the note at the foot of this file.
+ * before this file can read one.
  *
  * A rule that reads a box reads what the box can say. The quarter turn is a statement about which
  * axis a box runs along, so it compares side lengths and nothing else. A content translation is a
@@ -73,8 +73,3 @@ export function isQuarterTurnedWindowFrame(windowFrame: Rect, appFrame: Rect): b
     Math.abs(windowFrame.height - appFrame.width) <= WINDOW_QUARTER_TURN_TOLERANCE
   );
 }
-
-/*
- * The #3899 window-content translation belongs to the Swift capture's `SnapshotContentTranslation`,
- * replayed from `windowContentCases` there alone.
- */

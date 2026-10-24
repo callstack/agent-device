@@ -79,8 +79,7 @@ extension RunnerTests {
       // The tapped input's own read comes before the keyboard. While a software keyboard is
       // presented, the keyboard query blocks and then finds none. An input that reports keyboard
       // focus is stronger evidence than the keyboard's arrival, which shows only that some input
-      // took focus. The read carries the focus step's content vector (#3899): the hand-on read
-      // becomes the entry's first read, and its frames must enter screen space.
+      // took focus.
       let read = target.flatMap { ResolvedTextEntryInput(reading: $0, contentTranslation: contentTranslation) }
       if let read, let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
         return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read), polls: polls)
@@ -132,18 +131,15 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true)
     }
 
-    // The one content-vector read for this command (#3899): every target this focus step builds
-    // carries it, every read those targets produce converts through it, and the retap and reader
-    // downstream reuse it. On a device whose app fills the screen it is nil and every frame stays
-    // exactly as read.
+    // The one content-vector read for this command (#3899): every target built here carries it and
+    // every read those targets produce converts through it.
     let contentTranslation = liveContentTranslation(app: app)
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let input = textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
-    // The focus tap goes to the input's own center, and the input's frame arrives from a snapshot,
-    // which reports a placed window's content in the window's own space while `tapAt` dispatches a
-    // screen point (#3899). An input read live (no snapshot) already names screen space.
+    // The tap goes to the input's own center, and `tapAt` dispatches a screen point, so the point
+    // comes from `frameOnScreen` (#3899).
     let inputCenter = input.map { $0.frameOnScreen }.flatMap {
       $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY)
     }
@@ -205,8 +201,6 @@ extension RunnerTests {
     contentTranslation: CGSize?
   ) -> TextEntryTarget {
     guard let element else {
-      // No element: the target keeps its refresh point, and the reads a later resolve makes through
-      // that point carry this command's vector (#3899).
       return TextEntryTarget(
         element: nil,
         refreshPoint: requestedPoint,
@@ -249,22 +243,19 @@ extension RunnerTests {
   /// the target gets NO refresh point rather than the pre-focus one: this route's first resolve is
   /// not yet bound to an identity, and a field that went unqueryable on focus may have moved the
   /// layout so the old point names a different input, so fail closed with a typed reason instead of
-  /// typing into that other field. The frame is the read's snapshot frame plus its content vector
-  /// (#3899) — never the live `element.frame` fallback `frameOnScreen` uses for a snapshotless read.
+  /// typing into that other field. The frame is `read`'s snapshot frame plus its content vector,
+  /// never the live `element.frame` (#3899, #3060).
   private func textEntryRefreshPoint(
     read: ResolvedTextEntryInput?,
     fallbackTo requestedPoint: CGPoint
   ) -> CGPoint? {
-    guard let snapshot = read?.snapshot else {
+    guard let read, read.snapshot != nil else {
       return nil
     }
-    guard !snapshot.frame.isEmpty else {
+    let frame = read.frameOnScreen
+    guard !frame.isEmpty else {
       return requestedPoint
     }
-    let frame = snapshot.frame.offsetBy(
-      dx: read?.contentTranslation?.width ?? 0,
-      dy: read?.contentTranslation?.height ?? 0
-    )
     return CGPoint(x: frame.midX, y: frame.midY)
   }
 }

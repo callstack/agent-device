@@ -27,8 +27,7 @@ extension RunnerTests {
       hasY: command.y != nil,
       xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
-      // The one content-vector read for this command (#3899): the target built here carries it, and
-      // every read that target produces converts through it, as the focus route's targets do.
+      // The one content-vector read for this command (#3899); the target built here carries it.
       let contentTranslation = liveContentTranslation(app: activeApp)
       // Resolved before the tap: the focus it causes can move the field away from this point.
       // A replacement with no input at the point has nothing to bind to: its clear and its typed

@@ -651,7 +651,7 @@ Any other carrier box names no space, so the rule leaves its numbers alone: the 
 A full-screen window, an iPhone, and each foldable panel of ADR 0025 report origins at zero on both sides, so the rule reads no vector there and every rect is unchanged.
 `SnapshotContentTranslation.offset(reportedBox:viewportBox:)` is that rule, replayed from `contracts/fixtures/window-coordinate-space.json` in the capture's language alone: the host bridge refuses a windowed tree (`app-window-not-full-screen`) before its decoder can read one, so the translation has one producer-side owner and the host's parity replay covers only the rules that decoder reads.
 
-Rotation and translation stay separate rules, and the split is the point.
+Rotation and translation stay separate rules.
 `CoordinateSpaceRotation` turns a box's axes and never moves its origin: the digitizer's origin is the display's own, which is where a placed window's screen-space points are already measured from.
 Before this amendment, that function localized a non-zero frame origin away and never added it back.
 Every configuration measured before this one has its app frame at the screen origin, so the localization was dead code there and the dispatch bug here.

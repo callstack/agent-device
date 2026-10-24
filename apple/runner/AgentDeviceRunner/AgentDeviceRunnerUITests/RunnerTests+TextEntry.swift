@@ -149,10 +149,9 @@ extension RunnerTests {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
-    /// The live snapshot-frame vector for the reading session, read once when this target was built
-    /// (#3899). Every snapshot frame the target's reads produce is compared with screen points, so
-    /// every such read carries this vector (`ResolvedTextEntryInput.frameOnScreen`). Nil on a device
-    /// whose app fills the screen, where a snapshot frame is already a screen frame.
+    /// The content vector of a placed window, read once for the command that built this target and
+    /// handed to every read it produces, which turns its snapshot frames into screen points (#3899).
+    /// Nil when the app fills the screen.
     let contentTranslation: CGSize?
     let fromTapWitness: Bool
     /// The input the first resolved element was. Once bound, resolution refuses any other input.
@@ -187,25 +186,18 @@ extension RunnerTests {
       self.postFocusRead = postFocusRead
     }
 
-    /// The target moved to the input a resolution read: its element and identity, and — when the
-    /// read carries a snapshot — a refresh point at that frame's center on the screen (`frameOnScreen`
-    /// plus this target's content vector, #3899). A read with no snapshot keeps the old refresh
-    /// point: its center would come from the live `element.frame`, the read a post-focus handle
-    /// cannot answer without recording a failure (#3060).
+    /// The target moved to the input a resolution read: its element, a refresh point at its frame's
+    /// center on the screen, and its identity while the target is unbound. A read with no snapshot has
+    /// no frame here, so its center cannot come from the live `element.frame` — the read a post-focus
+    /// handle cannot answer without recording a failure (#3060).
     func withResolvedInput(_ input: ResolvedTextEntryInput?) -> TextEntryTarget {
       guard let input else {
         return self
       }
-      let nextRefreshPoint: CGPoint?
-      if let snapshot = input.snapshot {
-        let frame = input.frameOnScreen
-        nextRefreshPoint = frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY)
-      } else {
-        nextRefreshPoint = refreshPoint
-      }
+      let frame = input.snapshot == nil ? .zero : input.frameOnScreen
       return TextEntryTarget(
         element: input.element,
-        refreshPoint: nextRefreshPoint,
+        refreshPoint: frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: prefersFocusedElement,
         contentTranslation: contentTranslation,
         fromTapWitness: fromTapWitness,
@@ -222,18 +214,14 @@ extension RunnerTests {
   /// removed input or a focused Flutter password field (#3060), records an XCTest failure that ends
   /// the runner session, the snapshot only throws.
   ///
-  /// This type owns the probe-side space of #3899 (ADR 0004). `XCUIElementSnapshot.frame` reports a
-  /// placed window's content in the window's own space, while every point this read feeds — a refresh
-  /// point, a focus tap, a probe match, a readiness retap — is a screen point. So the read carries
-  /// the content vector it was taken under, and `frameOnScreen` is the only frame consumers use: a
-  /// snapshot frame plus the vector, or the live frame when there is no snapshot. Raw frames
-  /// (`snapshot.frame`) are compared only with each other.
+  /// This type owns the probe-side space of #3899 (ADR 0004): a snapshot frame names a placed
+  /// window's content space while every point this read feeds is a screen point, so consumers take
+  /// `frameOnScreen` and compare raw frames only with each other.
   struct ResolvedTextEntryInput {
     let element: XCUIElement
     /// Nil when the element exists but could not be snapshotted.
     let snapshot: XCUIElementSnapshot?
-    /// The live snapshot-frame vector read once for the command that made this read (#3899). Nil
-    /// when the app fills the screen, where a snapshot frame is already a screen frame.
+    /// The vector of the command that made this read (#3899); nil when the app fills the screen.
     let contentTranslation: CGSize?
 
     private init(element: XCUIElement, snapshot: XCUIElementSnapshot?, contentTranslation: CGSize?) {
@@ -278,9 +266,9 @@ extension RunnerTests {
       return element
     }
 
-    /// The input's box in screen space: the snapshot frame carried by `contentTranslation` to its
-    /// place on the screen, or the live frame when there is no snapshot — the live
-    /// `XCUIElement.frame` already reports a placed window's content in screen space (#3899).
+    /// The input's box in screen space: the snapshot frame plus `contentTranslation`, or the live
+    /// frame when there is no snapshot — that property already reports a placed window's content in
+    /// screen space (#3899).
     var frameOnScreen: CGRect {
       guard let snapshot else {
         return element.frame
@@ -296,8 +284,6 @@ extension RunnerTests {
   /// `dispatch` runs, and resolves the target again after that, so a bound target refuses an input
   /// that took its place. Each resolution moves the target to the input it read. Every post and every
   /// pause between reads goes through `dispatch`; the pause a typing plan takes itself follows a post.
-  /// The reader hands the target's content vector to every read it resolves, so one vector rules the
-  /// command (#3899).
   struct TextEntryReader {
     private(set) var target: TextEntryTarget
     private var lastRead: ResolvedTextEntryInput?
@@ -672,10 +658,8 @@ extension RunnerTests {
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    // The read's snapshot frame names the window's own content space on a placed window, so the
-    // point enters `tapAt` through `frameOnScreen`, which carries the read's content vector (#3899).
-    // A read with no snapshot gets no point at all: `frameOnScreen`'s fallback is the live
-    // `element.frame` read this function exists to avoid.
+    // A snapshotless read gets no point at all: `frameOnScreen`'s fallback is the live
+    // `element.frame` read this function exists to avoid (#3060).
     guard input.snapshot?.frame.isEmpty == false else {
       return
     }
