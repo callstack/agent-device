@@ -444,12 +444,13 @@ extension RunnerTests {
     XCTAssertEqual(forced.plan, [.recursiveTree])
     XCTAssertEqual(forced.xCTestChannelState, .normal)
     XCTAssertEqual(
-      Self.xcTestChannelStateFirstFailure(
+      Self.snapshotPlanPreSelectionReason(
         forced.xCTestChannelState,
         preferredBackend: forced.preferredBackend?.rawValue
       )?.code,
       "requested-backend"
     )
+    XCTAssertNil(Self.xcTestChannelStateFirstFailure(forced.xCTestChannelState))
   }
 
   /// Same-backend evidence probes: a daemon-pinned private-AX capture takes the
@@ -476,6 +477,18 @@ extension RunnerTests {
     )
     XCTAssertEqual(pinned.plan, [.privateAX])
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
+    // The requested-backend rule covers this pin too: it answers through the pre-selection
+    // slot and seeds no failure, so a failing private-AX tier owns the verdict reason.
+    XCTAssertEqual(
+      Self.snapshotPlanPreSelectionReason(
+        pinned.xCTestChannelState,
+        requestPinnedBackend: true,
+        preferredBackend: pinned.preferredBackend?.rawValue
+      )?.code,
+      "requested-backend"
+    )
+    XCTAssertNil(Self.xcTestChannelStateFirstFailure(
+      pinned.xCTestChannelState, requestPinnedBackend: true))
   }
 
   func testEffectiveSnapshotCapturePlanPutsXCTestBackedTiersBehindPrivateAXOnlyWhenPenalizedRegularPlan() {
@@ -509,17 +522,43 @@ extension RunnerTests {
     let deferred = Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)
     XCTAssertEqual(
       Self.planVerdictReason(
-        xCTestTierRan: true, state: .deferredToIndependentBackend, firstFailure: deferred
+        xCTestTierRan: true, state: .deferredToIndependentBackend,
+        firstFailure: deferred, preSelection: deferred
       )?.code,
       "budget"
     )
+  }
+
+  func testPlanVerdictReasonPrefersTheFirstFailureOverThePreSelection() {
+    let deferred = Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)
+    let pin = Self.snapshotPlanPreSelectionReason(
+      .normal, preferredBackend: SnapshotBackendKind.recursiveTree.rawValue)
+    XCTAssertEqual(pin?.code, "requested-backend")
+    // Nothing failed: the pre-selection owns the verdict.
     XCTAssertEqual(
       Self.planVerdictReason(
-        xCTestTierRan: false, state: .deferredToIndependentBackend, firstFailure: deferred
+        xCTestTierRan: false, state: .deferredToIndependentBackend,
+        firstFailure: nil, preSelection: deferred
       )?.code,
       "deferred"
     )
-    XCTAssertNil(Self.planVerdictReason(xCTestTierRan: true, state: .normal, firstFailure: nil))
+    XCTAssertEqual(
+      Self.planVerdictReason(
+        xCTestTierRan: true, state: .normal,
+        firstFailure: nil, preSelection: pin
+      )?.code,
+      "requested-backend"
+    )
+    // A tier failed: it owns the verdict, and a healthy plan with no seed stays silent.
+    XCTAssertEqual(
+      Self.planVerdictReason(
+        xCTestTierRan: true, state: .normal,
+        firstFailure: ("rejected", "ax-rejected"), preSelection: pin
+      )?.code,
+      "ax-rejected"
+    )
+    XCTAssertNil(Self.planVerdictReason(
+      xCTestTierRan: true, state: .normal, firstFailure: nil, preSelection: nil))
   }
 
   func testEffectiveSnapshotCapturePlanUsesBoundedXCTestProbeWhenNoIndependentBackendRuns() {
