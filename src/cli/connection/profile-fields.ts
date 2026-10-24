@@ -9,7 +9,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
  * re-signing). Read as a group because every hosted-provider profile carries the same set, and the
  * capability projection for them lives with the provider, not here.
  */
-export function readCloudDeviceFeatureProfileFields(
+function readCloudDeviceFeatureProfileFields(
   flags: CliFlags,
 ): Pick<
   CloudProviderProfileFields,
@@ -33,6 +33,24 @@ export function readCloudDeviceFeatureProfileFields(
     providerNetworkProfile: flags.providerNetworkProfile,
     providerCustomNetwork: flags.providerCustomNetwork,
     providerNoResignApp: flags.providerNoResignApp,
+  };
+}
+
+/** The hosted-provider device-feature fields and the AWS Device Farm fields a lease allocates with. */
+export function readHostedDeviceProfileFields(
+  flags: CliFlags,
+): ReturnType<typeof readCloudDeviceFeatureProfileFields> &
+  Pick<
+    CloudProviderProfileFields,
+    'awsProjectArn' | 'awsDeviceArn' | 'awsAppArn' | 'awsRegion' | 'awsInteractionMode'
+  > {
+  return {
+    ...readCloudDeviceFeatureProfileFields(flags),
+    awsProjectArn: flags.awsProjectArn,
+    awsDeviceArn: flags.awsDeviceArn,
+    awsAppArn: flags.awsAppArn,
+    awsRegion: flags.awsRegion,
+    awsInteractionMode: flags.awsInteractionMode,
   };
 }
 

@@ -189,3 +189,33 @@ test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   assert.equal(cause.code?.length, 400);
   assert.match(cause.code ?? '', /<truncated>$/);
 });
+
+test('lease allocation carries the device spec a proxy backend picks by', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'adc-proxy',
+      command: 'lease_allocate',
+      positionals: [],
+      flags: {
+        platform: 'android',
+        osVersion: '>=34',
+        imageTag: 'google_apis_playstore',
+        physical: true,
+      },
+      meta: { requestId: 'lease-req', tenantId: 'proxy', runId: 'proxy-run' },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.equal(payload.method, 'agent_device.lease.allocate');
+  assert.deepEqual(payload.params, {
+    session: 'adc-proxy',
+    tenantId: 'proxy',
+    runId: 'proxy-run',
+    platform: 'android',
+    osVersion: '>=34',
+    imageTag: 'google_apis_playstore',
+    physical: true,
+  });
+});

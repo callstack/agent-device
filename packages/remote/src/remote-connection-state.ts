@@ -17,6 +17,7 @@ import {
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import {
   leaseBackendForPlatform,
   platformForLeaseBackend,
@@ -50,6 +51,11 @@ export type RemoteConnectionState = {
   clientId?: string;
   platform?: CliFlags['platform'];
   target?: CliFlags['target'];
+  /**
+   * The device spec a proxy lease was allocated by and the device its backend granted. It describes
+   * only the lease `leaseId` names: once that lease ends or is replaced, it describes nothing.
+   */
+  leaseDeviceSpec?: { leaseId: string; spec: LeaseDeviceSpec; device?: LeaseDevice };
   runtime?: SessionRuntimeHints;
   metro?: {
     projectRoot: string;
@@ -498,8 +504,13 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
       'deviceKey',
       'clientId',
     ]) &&
-    isOptionalRemoteConnectionDaemonState(record.daemon)
+    isOptionalRemoteConnectionDaemonState(record.daemon) &&
+    isOptionalRecord(record.leaseDeviceSpec)
   );
+}
+
+function isOptionalRecord(value: unknown): boolean {
+  return value === undefined || (!!value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function hasStringFields(record: Record<string, unknown>, fields: string[]): boolean {

@@ -80,6 +80,8 @@ export type {
   HumanControlHoldScope,
   Lease,
   LeaseAllocateOptions,
+  LeaseDevice,
+  LeaseDeviceSpec,
   LeaseOptions,
   LeaseScopedOptions,
 } from '../client-lease.ts';

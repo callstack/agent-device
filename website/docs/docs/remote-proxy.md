@@ -57,6 +57,28 @@ Do not put the proxy endpoint, token, tenant, or provider fields in `./agent-dev
 configuration accepts only project-safe automation defaults. Set the endpoint and token with `connect proxy`, user
 config, an explicit `--config` file, or protected CI environment variables.
 
+## Lease by device spec
+
+A service in front of the daemon, such as simlock, can also pick the device by OS version, Android image tag, and physical or virtual class. Pass `--os <version|range>`, `--image-tag <tag>`, or `--physical` to `open`, `install`, `reinstall`, or `uninstall`, and the CLI sends them with `--platform`, `--target`, and `--device` on the lease request. `connect proxy` stores them as defaults like `--platform` and `--device`. agent-device does not check the values; the service does (for example, Android `--os` is an API level). `--target` stays the device class selector.
+
+```bash
+agent-device open MyApp --platform ios --device "iPhone 17 Pro" --os ">=26"
+agent-device open MyApp --platform android --os 34 --image-tag google_apis_playstore
+agent-device open MyApp --platform ios --physical --os 18.6.2
+```
+
+| Flag | Key on `agent_device.lease.allocate` | Type |
+| --- | --- | --- |
+| `--os <version\|range>` | `osVersion` | string |
+| `--image-tag <tag>` | `imageTag` | string |
+| `--physical` | `physical` | `true` |
+
+With `--physical`, the service leases one of the real phones enrolled with it instead of a simulator or emulator.
+
+A service that honours the spec returns the granted device on the lease as `lease.device`: `model`, `osVersion` (the exact OS granted), `imageTag` when one applies, and `physical`. `open --json` prints it under `lease.device`.
+
+The daemon itself cannot pick a device by these keys, so it refuses them instead of ignoring them. A local daemon, or one behind a plain `agent-device proxy`, fails the request with `UNSUPPORTED_OPERATION`, `details.reason: "device-spec-unsupported"`, and `details.keys` naming the keys it got, and records no lease. When a service returns a lease without `lease.device`, it did not understand the spec: the CLI releases that lease and fails with the same reason. While a lease is active, a later command that names a different value for any of the three keys fails with reason `CONNECTION_DEVICE_CONFLICT`; a key the command leaves out keeps the lease's value. Run `connect --force` to lease by another spec.
+
 ## Human takeover
 
 With a remote device already leased by `open`, pause mutations through the same connection:

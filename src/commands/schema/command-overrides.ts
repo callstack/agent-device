@@ -4,6 +4,7 @@ import type { LocalCliCommandName } from '@agent-device/command-registry/catalog
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
+  LEASE_DEVICE_SPEC_FLAGS,
   METRO_PREPARE_FLAGS,
 } from '@agent-device/command-registry/flag-groups';
 
@@ -111,6 +112,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'awsAppArn',
       'awsRegion',
       'awsInteractionMode',
+      ...LEASE_DEVICE_SPEC_FLAGS,
       'force',
       'noLogin',
     ],

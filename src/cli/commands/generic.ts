@@ -10,6 +10,9 @@ import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput, writeCliOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
+import type { CliOutput } from '../../commands/command-contract.ts';
+import type { LeaseDevice } from '@agent-device/contracts/client';
+import { isRecord } from '@agent-device/kernel/record';
 
 export async function runGenericClientBackedCommand({
   command,
@@ -20,8 +23,9 @@ export async function runGenericClientBackedCommand({
   debug,
   replayTestReporterRuntime,
   commandProgress,
+  leaseDevice,
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
-  const { result, cliOutput } = await runCliCommandWithOutput({
+  const { result, cliOutput: formatted } = await runCliCommandWithOutput({
     client,
     command: command as CommandName,
     positionals,
@@ -29,12 +33,20 @@ export async function runGenericClientBackedCommand({
     commandProgress,
     env: host.env,
   });
+  const cliOutput =
+    command === 'open' && formatted && leaseDevice
+      ? withLeaseDevice(formatted, leaseDevice)
+      : formatted;
   // A non-default responseLevel returns a leveled payload (e.g. the snapshot
   // digest { nodeCount, refs }) that the per-command CLI formatters assume away —
   // they serialize the default shape and drop the digest fields. Emit the leveled
   // payload verbatim instead.
   if (isNonDefaultResponseLevel(flags.responseLevel)) {
-    await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    const leveled =
+      command === 'open' && leaseDevice && isRecord(result)
+        ? { ...result, lease: { device: leaseDevice } }
+        : result;
+    await writeCommandOutput(flags, leveled, () => JSON.stringify(leveled, null, 2));
     return true;
   }
   if (cliOutput) {
@@ -82,4 +94,22 @@ async function writeGenericCliOutput(
     ),
   );
   return 0;
+}
+
+/** Adds the device a proxy backend granted for the lease's device spec to the `open` output. */
+function withLeaseDevice(output: CliOutput, device: LeaseDevice): CliOutput {
+  const lease = { lease: { device } };
+  const facts = [
+    device.model,
+    device.osVersion,
+    device.imageTag,
+    device.physical ? 'physical' : 'virtual',
+  ].filter((fact): fact is string => Boolean(fact));
+  const leasedLine = `Leased device: ${facts.join(', ')}`;
+  return {
+    ...output,
+    data: isRecord(output.data) ? { ...output.data, ...lease } : output.data,
+    ...(isRecord(output.jsonData) ? { jsonData: { ...output.jsonData, ...lease } } : {}),
+    text: output.text ? `${output.text}\n${leasedLine}` : leasedLine,
+  };
 }

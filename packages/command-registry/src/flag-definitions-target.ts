@@ -53,6 +53,42 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: true,
   },
   {
+    key: 'osVersion',
+    names: ['--os'],
+    type: 'string',
+    usageLabel: '--os <version|range>',
+    usageDescription:
+      'Proxy lease: OS version or range the backend picks the device by (Android: API level); refused without such a backend',
+    inputDescription:
+      'OS version or range for the device a proxy backend leases, for example 18.6.2 or ">=26" (Android: API level). Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'imageTag',
+    names: ['--image-tag'],
+    type: 'string',
+    usageLabel: '--image-tag <tag>',
+    usageDescription:
+      'Proxy lease: Android system image tag the backend picks the device by; refused without such a backend',
+    inputDescription:
+      'Android system image tag for the device a proxy backend leases, for example google_apis_playstore. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'physical',
+    names: ['--physical'],
+    type: 'boolean',
+    usageLabel: '--physical',
+    usageDescription:
+      'Proxy lease: ask the backend for a physical device instead of a simulator or emulator; refused without such a backend',
+    inputDescription:
+      'Ask a proxy backend to lease a physical device instead of a simulator or emulator. Only the CLI allocating a lease through connect proxy sends it to that backend; a daemon refuses every other request that names it, with reason device-spec-unsupported.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'stale',
     names: ['--stale'],
     type: 'boolean',

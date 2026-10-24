@@ -18,6 +18,7 @@ import type {
   DeviceCommandBaseOptions,
 } from './client-connection.ts';
 import type { AgentDeviceSessionDevice, StartupPerfSample } from './client-device-view.ts';
+import type { LeaseDeviceSpec } from './client-lease.ts';
 
 export type DeviceSelectionReason =
   | 'explicit-selector'
@@ -40,13 +41,15 @@ export type DeviceSelectionMetadata = {
 };
 
 export type AppInstallOptions = AgentDeviceRequestOverrides &
-  AgentDeviceSelectionOptions & {
+  AgentDeviceSelectionOptions &
+  LeaseDeviceSpec & {
     app?: string;
     appPath: string;
   };
 
 export type AppDeployOptions = AgentDeviceRequestOverrides &
-  AgentDeviceSelectionOptions & {
+  AgentDeviceSelectionOptions &
+  LeaseDeviceSpec & {
     app: string;
     appPath: string;
   };
@@ -62,7 +65,8 @@ export type AppDeployResult = {
 };
 
 export type AppOpenOptions = AgentDeviceRequestOverrides &
-  AgentDeviceSelectionOptions & {
+  AgentDeviceSelectionOptions &
+  LeaseDeviceSpec & {
     app?: string;
     url?: string;
     surface?: SessionSurface;
@@ -190,9 +194,10 @@ export type AppPushOptions = DeviceCommandBaseOptions & {
   payload: string | JsonObject;
 };
 
-export type AppUninstallOptions = DeviceCommandBaseOptions & {
-  app: string;
-};
+export type AppUninstallOptions = DeviceCommandBaseOptions &
+  LeaseDeviceSpec & {
+    app: string;
+  };
 
 export type AppTriggerEventOptions = DeviceCommandBaseOptions & {
   event: string;

@@ -567,6 +567,12 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device close
     agent-device disconnect
 
+Proxy lease by device spec:
+  Without --udid or --serial, open, install, reinstall, and uninstall through connect proxy send --platform, --target, and --device on the lease allocate, and the backend in front of the daemon picks the device. --os <version|range>, --image-tag <tag>, and --physical join them; the backend validates their values (for example, Android --os is an API level). connect proxy stores them as defaults like --platform and --device.
+    agent-device open MyApp --platform ios --device "iPhone 17 Pro" --os ">=26"
+    agent-device open MyApp --platform android --os 34 --image-tag google_apis_playstore
+  A backend that honours the spec returns the granted device as lease.device (model, osVersion, imageTag, physical); open --json prints it. A daemon, local or behind agent-device proxy, refuses the three keys with UNSUPPORTED_OPERATION, reason device-spec-unsupported, and details.keys, and records no lease. A lease returned without lease.device is released, and the command fails with the same reason. A live lease serves a later command only when every spec key the command names equals the one the lease was allocated by; otherwise the command fails with reason CONNECTION_DEVICE_CONFLICT. Run connect --force to lease by another spec.
+
 Human takeover of a leased remote device:
   Run agent-device takeover using the active remote connection and session. It pauses state-changing agent commands until Ctrl+C while snapshots and other read-only diagnostics remain available. Tenant requests can control only their admitted lease device. Local takeover without a remote device lease is not supported.
     agent-device takeover --session remote-session

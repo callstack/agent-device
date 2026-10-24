@@ -294,3 +294,21 @@ A daemon policy `leases.require` (ADR 0029) refuses requests that name no lease.
 The proxy token is one credential for every client.
 Thus, a host that serves several clients through one proxy authenticates each client.
 The host sets the tenant, session isolation, and lease of that client on every request that it forwards.
+
+## Device spec
+
+A proxy lease can name a device spec beside platform, target, and device: `osVersion`, `imageTag`, and `physical` on `agent_device.lease.allocate`.
+Only a backend in front of the daemon, such as simlock, can pick a device by these keys.
+A daemon cannot pick by them.
+If a daemon ignored them, a request would run on a device that it did not ask for.
+Thus, a daemon refuses every request that names any of the three keys, before admission and before a lease is recorded.
+The refusal is `UNSUPPORTED_OPERATION` with `details.reason: 'device-spec-unsupported'` and `details.keys`.
+This applies to a local daemon and to a daemon behind `agent-device proxy`.
+The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `physical`).
+`deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
+A backend older than the spec returns a lease without `lease.device`.
+The client then releases that lease and fails with the same reason.
+A live lease serves a later command only when every spec key that the command names equals the one the lease was allocated by; otherwise the command fails with `CONNECTION_DEVICE_CONFLICT`.
+The client never picks a device by spec from the daemon inventory.
+`--target` stays the only class selector.
+Rejected: partial honouring of the keys that a daemon understands, because a silent mismatch is worse than a refusal; a separate `--device-class` flag, because `--target` already names the class.

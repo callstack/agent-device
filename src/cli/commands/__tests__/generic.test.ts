@@ -112,3 +112,62 @@ test('the generic CLI path prints the response warnings', async () => {
 
   assert.equal(out, `Typed "hi"\nWarning: ${warning}\n`);
 });
+
+test('open --json prints the device a proxy backend granted under lease.device', async () => {
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    {
+      transport: async (req): Promise<DaemonResponse> => {
+        assert.equal(req.command, 'open');
+        return { ok: true, data: { session: 'qa', appName: 'MyApp' } };
+      },
+    },
+  );
+  const device = { model: 'Pixel 9', osVersion: '34', imageTag: 'google_apis', physical: false };
+
+  const json = await withCapturedStdoutAsync(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: 'open' as ClientBackedCliCommandName,
+      positionals: ['MyApp'],
+      flags: { json: true } as CliFlags,
+      client,
+      leaseDevice: device,
+    }),
+  );
+  const parsed = JSON.parse(json) as { data: Record<string, unknown> };
+  assert.deepEqual(parsed.data.lease, { device });
+  assert.equal(parsed.data.appName, 'MyApp');
+
+  const human = await withCapturedStdoutAsync(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: 'open' as ClientBackedCliCommandName,
+      positionals: ['MyApp'],
+      flags: {} as CliFlags,
+      client,
+      leaseDevice: device,
+    }),
+  );
+  assert.match(human, /Leased device: Pixel 9, 34, google_apis, virtual/);
+});
+
+test('open --json at a non-default response level still prints lease.device', async () => {
+  const client = createAgentDeviceClient(
+    { session: 'qa', responseLevel: 'digest' },
+    { transport: async (): Promise<DaemonResponse> => ({ ok: true, data: { session: 'qa' } }) },
+  );
+  const device = { model: 'iPhone 17 Pro', osVersion: '26.1', physical: true };
+
+  const json = await withCapturedStdoutAsync(() =>
+    runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
+      command: 'open' as ClientBackedCliCommandName,
+      positionals: ['MyApp'],
+      flags: { json: true, responseLevel: 'digest' } as CliFlags,
+      client,
+      leaseDevice: device,
+    }),
+  );
+  assert.deepEqual((JSON.parse(json) as { data: Record<string, unknown> }).data.lease, { device });
+});

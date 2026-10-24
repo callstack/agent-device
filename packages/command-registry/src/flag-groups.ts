@@ -1,3 +1,4 @@
+import { LEASE_DEVICE_SPEC_KEYS } from '@agent-device/contracts/lease-scope';
 import type { FlagKey } from './flag-types.ts';
 
 function flagKeys<const TKeys extends readonly FlagKey[]>(...keys: TKeys): TKeys {
@@ -33,6 +34,8 @@ export const METRO_PREPARE_FLAGS = flagKeys(
 );
 
 export const METRO_RELOAD_FLAGS = flagKeys('metroHost', 'metroPort', 'bundleUrl');
+// The device spec a proxy lease is allocated by; the commands that allocate a proxy lease take it.
+export const LEASE_DEVICE_SPEC_FLAGS = LEASE_DEVICE_SPEC_KEYS;
 export const REPEATED_TOUCH_FLAGS = flagKeys(
   'count',
   'intervalMs',

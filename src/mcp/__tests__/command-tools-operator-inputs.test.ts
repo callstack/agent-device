@@ -258,3 +258,15 @@ test('MCP neither advertises nor admits the CLI-only fill textStdin marker', asy
   assert.match(result.content[0]?.text ?? '', /textStdin is not accepted as a tool argument/);
   assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
 });
+
+// The proxy lease device spec is not operator infrastructure, so the schema offers it (issue #3864).
+test('MCP open, install, reinstall and uninstall advertise the proxy lease device spec', () => {
+  for (const name of ['open', 'install', 'reinstall', 'uninstall']) {
+    const tool = listCommandTools().find((candidate) => candidate.name === name);
+    assert.ok(tool, `expected an MCP tool named ${name}`);
+    const properties = tool.inputSchema.properties ?? {};
+    for (const key of ['osVersion', 'imageTag', 'physical']) {
+      assert.equal(key in properties, true, `${name} does not advertise ${key}`);
+    }
+  }
+});

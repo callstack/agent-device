@@ -2,6 +2,7 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-regist
 import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import { LEASE_DEVICE_SPEC_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseGitHubActionsArtifactInstallSourceSpec } from '@agent-device/provision-kit/install-source-config';
 import {
@@ -23,6 +24,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
+import { leaseDeviceSpecFields, leaseDeviceSpecInputFromFlags } from './lease-device-spec.ts';
 
 const installCommandMetadata = defineFieldCommandMetadata(
   'install',
@@ -30,6 +32,7 @@ const installCommandMetadata = defineFieldCommandMetadata(
   {
     app: stringField('Optional app identifier hint.'),
     appPath: requiredField(stringField('Path to app binary.')),
+    ...leaseDeviceSpecFields,
   },
 );
 
@@ -39,6 +42,7 @@ const reinstallCommandMetadata = defineFieldCommandMetadata(
   {
     app: requiredField(stringField()),
     appPath: requiredField(stringField('Path to app binary.')),
+    ...leaseDeviceSpecFields,
   },
 );
 
@@ -47,6 +51,7 @@ const uninstallCommandMetadata = defineFieldCommandMetadata(
   'Remove an installed app from the selected device. A package name or bundle id that is not installed succeeds with wasInstalled: false.',
   {
     app: requiredField(stringField('Package name, bundle id, or installed app name.')),
+    ...leaseDeviceSpecFields,
   },
 );
 
@@ -66,14 +71,17 @@ const installCliSchema = {
   usageOverride: 'install <path> | install <app> <path>',
   listUsageOverride: 'install <path>',
   positionalArgs: ['appOrPath', 'path?'],
+  allowedFlags: LEASE_DEVICE_SPEC_FLAGS,
 } as const satisfies CommandSchemaOverride;
 
 const reinstallCliSchema = {
   positionalArgs: ['app', 'path'],
+  allowedFlags: LEASE_DEVICE_SPEC_FLAGS,
 } as const satisfies CommandSchemaOverride;
 
 const uninstallCliSchema = {
   positionalArgs: ['app'],
+  allowedFlags: LEASE_DEVICE_SPEC_FLAGS,
 } as const satisfies CommandSchemaOverride;
 
 const installFromSourceCliSchema = {
@@ -93,6 +101,7 @@ const reinstallCliReader: CliReader = (positionals, flags) =>
 const uninstallCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   app: requiredString(positionals[0], 'uninstall requires app'),
+  ...leaseDeviceSpecInputFromFlags(flags),
 });
 
 const installFromSourceCliReader: CliReader = (positionals, flags) => ({
@@ -187,6 +196,7 @@ function installInputFromCli(positionals: string[], flags: CliFlags): Record<str
     ...commonInputFromFlags(flags),
     ...(hasExplicitApp ? { app: requiredString(first, 'install requires app') } : {}),
     appPath: requiredString(hasExplicitApp ? second : first, 'install requires path'),
+    ...leaseDeviceSpecInputFromFlags(flags),
   };
 }
 
@@ -195,6 +205,7 @@ function reinstallInputFromCli(positionals: string[], flags: CliFlags): Record<s
     ...commonInputFromFlags(flags),
     app: requiredString(positionals[0], 'reinstall requires app'),
     appPath: requiredString(positionals[1], 'reinstall requires path'),
+    ...leaseDeviceSpecInputFromFlags(flags),
   };
 }
 

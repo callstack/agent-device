@@ -20,7 +20,7 @@ import {
   sendToDaemon,
 } from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
-import type { BatchStep } from '@agent-device/contracts/client';
+import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import {
   createCommandProgressState,
@@ -338,6 +338,8 @@ type CliRunContext = {
   effectiveFlags: CliFlags;
   resolvedRuntime: SessionRuntimeHints | undefined;
   connectionMetadata: RemoteConnectionRequestMetadata | undefined;
+  /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
+  leaseDevice?: LeaseDevice;
   parsedBatchSteps: BatchStep[] | undefined;
 };
 
@@ -462,6 +464,7 @@ async function resolveRemoteContext(
     ctx.effectiveFlags = materialized.flags;
     ctx.resolvedRuntime = materialized.runtime;
     ctx.connectionMetadata = materialized.connection;
+    ctx.leaseDevice = materialized.leaseDevice;
   }
   if (
     shouldWarnOpenMayMissRemoteRuntime({
@@ -603,6 +606,7 @@ async function dispatchCliCommand(
       debug: ctx.debugOutputEnabled,
       replayTestReporterRuntime,
       commandProgress,
+      leaseDevice: ctx.leaseDevice,
     })
   ) {
     return;

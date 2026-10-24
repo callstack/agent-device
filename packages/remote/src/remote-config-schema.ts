@@ -47,6 +47,10 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'device', type: 'string' },
   { key: 'udid', type: 'string' },
   { key: 'serial', type: 'string' },
+  // The device spec only a proxy backend honours; no environment variable sets it.
+  { key: 'osVersion', type: 'string', env: false },
+  { key: 'imageTag', type: 'string', env: false },
+  { key: 'physical', type: 'boolean', env: false },
   {
     key: 'iosSimulatorDeviceSet',
     type: 'string',

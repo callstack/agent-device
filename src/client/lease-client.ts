@@ -3,6 +3,7 @@ import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';
+import { readLeaseDevice } from '@agent-device/contracts/lease-scope';
 import type { AgentDeviceClient } from './client-types.ts';
 import { readOptionalString, readRequiredString } from './client-normalizers.ts';
 
@@ -93,9 +94,14 @@ function normalizeLease(data: Record<string, unknown>): Lease {
     leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
     clientId: readOptionalString(rawLease, 'clientId'),
     deviceKey: readOptionalString(rawLease, 'deviceKey'),
+    ...withLeaseDevice(readLeaseDevice(rawLease.device)),
     ...(rawLease.retainOnClose === true ? { retainOnClose: true } : {}),
     createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,
     heartbeatAt: typeof rawLease.heartbeatAt === 'number' ? rawLease.heartbeatAt : undefined,
     expiresAt: typeof rawLease.expiresAt === 'number' ? rawLease.expiresAt : undefined,
   };
+}
+
+function withLeaseDevice(device: Lease['device']): Pick<Lease, 'device'> {
+  return device ? { device } : {};
 }

@@ -1,5 +1,6 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { LeaseDevice } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import type { CliCommandName } from '@agent-device/command-registry/catalog';
 import type { CommandProgressState } from '../../commands/command-progress.ts';
@@ -15,6 +16,8 @@ export type ClientCommandParams = {
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
   /** Progress this run's transport already rendered to stderr, read by the output formatters. */
   commandProgress?: CommandProgressState;
+  /** The device a proxy backend granted for the lease's device spec; `open` reports it. */
+  leaseDevice?: LeaseDevice;
 };
 
 /**

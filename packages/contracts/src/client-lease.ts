@@ -14,11 +14,39 @@ export type Lease = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
+  /**
+   * The device granted for a request that named a device spec, written by the backend that
+   * honoured the spec. A daemon refuses a spec instead, so only such a backend sets it.
+   */
+  device?: LeaseDevice;
   /** Present when the daemon keeps this lease through session `close`; an older daemon omits it. */
   retainOnClose?: true;
   createdAt?: number;
   heartbeatAt?: number;
   expiresAt?: number;
+};
+
+/**
+ * A device spec a lease request can name beside platform, target and device. Only a backend in
+ * front of the daemon honours it; a daemon refuses every request that names one, with
+ * `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
+ */
+export type LeaseDeviceSpec = {
+  /** OS version or range, opaque to agent-device; the backend validates it. */
+  osVersion?: string;
+  /** Android system image tag, for example `google_apis_playstore`. */
+  imageTag?: string;
+  /** `true` asks for a physical device instead of a simulator or emulator. */
+  physical?: boolean;
+};
+
+/** The device facts the backend granted for a {@link LeaseDeviceSpec}. */
+export type LeaseDevice = {
+  model: string;
+  /** The exact OS version granted. */
+  osVersion: string;
+  imageTag?: string;
+  physical: boolean;
 };
 
 /**
@@ -35,27 +63,28 @@ export type LeaseOptions = AgentDeviceRequestOverrides &
     ttlMs?: number;
   };
 
-export type LeaseAllocateOptions = LeaseOptions & {
-  tenant: string;
-  runId: string;
-  /**
-   * The id for the new lease (16-128 hex characters), refused when the daemon already issued it;
-   * the client's configured `leaseId` is never sent here. Use the returned lease's `leaseId`: a daemon that predates this field mints its own,
-   * and a run that already holds a lease gets that lease back.
-   */
-  leaseId?: string;
-  leaseBackend?: LeaseBackend;
-  leaseProvider?: string;
-  provider?: string;
-  deviceKey?: string;
-  clientId?: string;
-  /**
-   * Keeps the lease through session `close`; it then ends only through `leases.release`, expiry, or
-   * daemon shutdown. Asking for it on a lease the same client already holds for the run turns it on
-   * for that lease; the returned lease's `retainOnClose` says whether the daemon honored it.
-   */
-  retainOnClose?: boolean;
-};
+export type LeaseAllocateOptions = LeaseOptions &
+  LeaseDeviceSpec & {
+    tenant: string;
+    runId: string;
+    /**
+     * The id for the new lease (16-128 hex characters), refused when the daemon already issued it;
+     * the client's configured `leaseId` is never sent here. Use the returned lease's `leaseId`: a daemon that predates this field mints its own,
+     * and a run that already holds a lease gets that lease back.
+     */
+    leaseId?: string;
+    leaseBackend?: LeaseBackend;
+    leaseProvider?: string;
+    provider?: string;
+    deviceKey?: string;
+    clientId?: string;
+    /**
+     * Keeps the lease through session `close`; it then ends only through `leases.release`, expiry, or
+     * daemon shutdown. Asking for it on a lease the same client already holds for the run turns it on
+     * for that lease; the returned lease's `retainOnClose` says whether the daemon honored it.
+     */
+    retainOnClose?: boolean;
+  };
 
 export type LeaseScopedOptions = LeaseOptions & {
   tenant?: string;

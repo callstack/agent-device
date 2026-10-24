@@ -252,6 +252,12 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['force', 'noLogin', 'sessionLock'],
     },
     {
+      // The device spec is honoured by a backend in front of the daemon; the daemon only refuses it.
+      name: 'proxy lease device spec',
+      owner: 'proxy allocate-by-spec, request-router refusal, and lease-scope tests',
+      keys: ['osVersion', 'imageTag', 'physical'],
+    },
+    {
       name: 'cloud artifact provider lookup',
       owner:
         'cloud provider profile, artifact provider, CLI output, and cloud WebDriver provider scenario tests',
