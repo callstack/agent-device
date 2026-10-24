@@ -19,6 +19,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 - `Perf lab`: seeded JavaScript render problems for `react-devtools profile`, one per scenario (see [Perf lab](#perf-lab))
+- `Network lab`: deterministic `fetch` and `XMLHttpRequest` traffic for `network dump` verification (see [Network lab](#network-lab))
 - `Heavy feed`: a Bluesky-shaped home feed whose accessibility tree is deeper than 65 levels (see [Heavy feed](#heavy-feed))
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
@@ -53,6 +54,7 @@ These are the main case families this app can support without adding more screen
 - retryable error banners
 - cart counters and quantity changes
 - screenshot and recording proof capture
+- in-app `network dump` on real `fetch` and `XMLHttpRequest` traffic from the network lab
 
 ## Run locally
 
@@ -261,6 +263,20 @@ agent-device react-devtools profile stop
 | `eager-list` | 1,200 tiles mount in one commit instead of a virtualized list; every Run mounts them afresh | `eager-mount ProductTile` |
 
 `src/screens/PerfLabScreen.tsx` imports only React and React Native, so it can be copied into a bare React Native app to check the profiler on other React Native versions.
+
+## Network lab
+
+`agent-device-test-app://network-lab` fires one real request per press: **Run fetch** (`network-fetch`)
+GETs `httpbin.org/json`, **Run post** (`network-post`) POSTs a JSON body to `httpbin.org/post`, and
+**Run XHR** (`network-xhr`) GETs through `XMLHttpRequest`. `network-lab-status` reports
+`fetch:200:<bytes>` once a request settles. Use it to verify an in-app `network dump`:
+
+```bash
+agent-device open "agent-device-test-app://network-lab" --platform ios
+agent-device network dump          # first dump arms the in-app capture
+agent-device click 'id="network-fetch"'
+agent-device network dump --include all   # reports the GET with status, headers, bodies
+```
 
 ## Heavy feed
 

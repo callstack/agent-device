@@ -1,5 +1,10 @@
 import { expect, test, vi } from 'vitest';
-import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type {
+  NetworkDumpInput,
+  NetworkProviderDumpResult,
+  NetworkTransport,
+  NetworkTransportScope,
+} from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { dumpAppleNetworkTraffic } from './runtime.ts';
@@ -13,6 +18,134 @@ const simulator: DeviceInfo = {
   target: 'mobile',
   booted: true,
 };
+
+const providerResult: NetworkProviderDumpResult = {
+  backend: 'react-native-app',
+  entries: [
+    {
+      url: 'https://api.example.test/v1/items?page=2',
+      method: 'POST',
+      status: 201,
+      durationMs: 41,
+    },
+  ],
+};
+
+test('in-app capture answers with the full URL and status, and the app log is not read', async () => {
+  const readRecent = vi.fn(async () => {
+    throw new Error('the app log must not be read once the provider answered');
+  });
+  const runtimeHost = host({ runSimctl: vi.fn() });
+  const result = await dumpAppleNetworkTraffic(
+    {
+      ...runtimeHost,
+      appLogs: { ...runtimeHost.appLogs, readRecent },
+      networkTransports: {
+        resolve: async (_device, scope) => {
+          expect(scope).toMatchObject({
+            sessionId: 'one',
+            appBundleId: 'com.example.app',
+            maxPayloadChars: 2048,
+          });
+          return {
+            mode: 'transport-composed',
+            dump: async () => providerResult,
+          };
+        },
+      },
+    },
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+
+  expect(result).toEqual({ source: 'provider', ...providerResult });
+  expect(readRecent).not.toHaveBeenCalled();
+});
+
+test('the dump that only arms the in-app capture still reports the app log window', async () => {
+  const armingNote = 'In-app network capture was installed by this dump.';
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: '2026-08-10T10:00:00Z GET https://from-log.example.test status=200\n',
+      runSimctl: vi.fn(),
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => ({
+          backend: 'react-native-app',
+          entries: [],
+          armed: true,
+          notes: [armingNote],
+        }),
+      },
+    }),
+    simulator,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toEqual([
+    expect.objectContaining({ url: 'https://from-log.example.test' }),
+  ]);
+  expect(result.notes).toContain(armingNote);
+});
+
+test('an armed provider over an inactive log stream keeps the lifecycle guidance beside the arming note', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => ({
+          backend: 'react-native-app',
+          entries: [],
+          armed: true,
+          notes: ['In-app network capture was installed by this dump.'],
+        }),
+      },
+    }),
+    simulator,
+    input({ appLogSnapshot: { state: 'ended', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.notes).toContainEqual(
+    expect.stringContaining('Session app log stream is inactive'),
+  );
+  expect(result.notes).toContainEqual(
+    expect.stringContaining('In-app network capture was installed by this dump'),
+  );
+  expect(
+    result.notes!.indexOf(result.notes!.find((note) => note.includes('inactive'))!),
+  ).toBeLessThan(
+    result.notes!.indexOf(result.notes!.find((note) => note.includes('installed by this dump'))!),
+  );
+});
+
+test('an in-app capture that cannot answer falls back to the app log with its reason', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: '2026-08-10T10:00:00Z GET https://from-log.example.test status=200\n',
+      runSimctl: vi.fn(),
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => {
+          throw new Error('No React Native runtime is connected to the dev server.');
+        },
+      },
+    }),
+    simulator,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toHaveLength(1);
+  expect(result.notes[0]).toContain('In-app network capture could not answer');
+});
 
 test('recovers an empty iOS simulator dump from bounded simctl log history', async () => {
   const runSimctl = vi.fn(async () => ({
@@ -142,16 +275,98 @@ function input(overrides: Partial<NetworkDumpInput> = {}): NetworkDumpInput {
 function host(options: {
   text?: string;
   runSimctl: PlatformRuntimeHost['appleTools']['run'];
+  transport?: NetworkTransport;
+  /** Extra booted names in the session device's own set, besides the device itself. */
+  bootedNames?: readonly string[];
+  /** Booted names the OTHER reachable set reports (the default set for a tenant-set device). */
+  otherSetBootedNames?: readonly string[];
+  /** The session device lives in a tenant simulator set, not the default set. */
+  tenantDevice?: boolean;
+  /** devicectl answers with these connected physical device names; the default is a bare host. */
+  physicalNames?: readonly string[];
+  devicectlFails?: boolean;
+  env?: Record<string, string>;
+  scopes?: NetworkTransportScope[];
 }): PlatformRuntimeHost {
+  // The identity probe answers only when a test resolves the scope's identity. The harness answers
+  // it as a default-set host with one simulator named after the session device, unless a test
+  // names more booted devices, another set's booted devices, or physical devices.
+  const runSimctl: PlatformRuntimeHost['appleTools']['run'] = async (request, signal) => {
+    if (request.tool === 'devicectl') {
+      if (options.devicectlFails) {
+        return { stdout: '', stderr: 'devicectl failed', exitCode: 1 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    if (request.args.includes('booted')) {
+      const own = [
+        { udid: 'sim-1', name: 'iPhone', state: 'Booted' as const },
+        ...(options.bootedNames ?? []).map((name, index) => ({
+          udid: `other-${index}`,
+          name,
+          state: 'Booted' as const,
+        })),
+      ];
+      const other = (options.otherSetBootedNames ?? []).map((name, index) => ({
+        udid: `tenant-${index}`,
+        name,
+        state: 'Booted' as const,
+      }));
+      const scopedRequest = request.args.includes('--set');
+      const devices = options.tenantDevice
+        ? scopedRequest
+          ? own
+          : other
+        : scopedRequest
+          ? other
+          : own;
+      return {
+        stdout: JSON.stringify({
+          devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-27-0': devices },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    return options.runSimctl(request, signal);
+  };
+  const physicalNames = options.physicalNames ?? [];
   return {
     ...unusedAppLogHost(),
+    hostEnvironment: { env: options.env ?? {}, cwd: '/' },
+    temporaryFiles: {
+      create: async () => ({
+        path: '/tmp/devicectl.json',
+        readText: async () =>
+          JSON.stringify({
+            result: {
+              devices: [
+                // CoreDevice registers the booted session simulator itself as a connected device.
+                {
+                  name: 'iPhone',
+                  hardwareProperties: { platform: 'iOS', udid: 'sim-1', reality: 'simulated' },
+                  deviceProperties: { name: 'iPhone' },
+                  connectionProperties: { tunnelState: 'connected' },
+                },
+                ...physicalNames.map((name) => ({
+                  name,
+                  hardwareProperties: { platform: 'iOS', udid: `phys-${name}` },
+                  connectionProperties: { tunnelState: 'connected' },
+                })),
+              ],
+            },
+          }),
+        writeText: async () => {},
+        [Symbol.asyncDispose]: async () => {},
+      }),
+    },
     commands: {
       which: async () => undefined,
       run: async () => {
         throw new Error('generic command runner must not own Apple network recovery');
       },
     },
-    appleTools: { isXcrunAvailable: async () => true, run: options.runSimctl },
+    appleTools: { isXcrunAvailable: async () => true, run: runSimctl },
     appLogs: {
       readRecent: async () => ({
         path: '/sessions/one/app.log',
@@ -161,9 +376,125 @@ function host(options: {
       }),
       readProcessMarker: async () => ({ status: 'missing' }),
     },
-    networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    networkTransports: {
+      resolve: async (_device, scope) => {
+        options.scopes?.push(scope!);
+        return options.transport ?? { mode: 'local' };
+      },
+    },
   };
 }
+
+async function identityOf(scope: NetworkTransportScope | undefined): Promise<string | undefined> {
+  return await scope?.resolveMetroDeviceIdentity?.(new AbortController().signal);
+}
+
+test('a simulator whose display name another booted simulator shares gets no identity', async () => {
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      bootedNames: ['iPhone'],
+      scopes,
+    }),
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('a same-named booted simulator in another reachable set takes the identity away', async () => {
+  // The session device lives in a tenant set; the default set on the same host boots a
+  // same-named simulator that could attach to the same dev server, so the name is no identity.
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      tenantDevice: true,
+      otherSetBootedNames: ['iPhone'],
+      scopes,
+    }),
+    { ...simulator, simulatorSetPath: '/tenant/set' },
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('a connected physical device with the same name takes the identity away', async () => {
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      physicalNames: ['iPhone'],
+      scopes,
+    }),
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('a host whose physical devices cannot be listed gets no identity', async () => {
+  // Unknown physical devices fail the identity closed: one of them could report this name.
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      devicectlFails: true,
+      scopes,
+    }),
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('a host configured for a set this device does not belong to gets no identity', async () => {
+  // The daemon operator scoped the host to one set; this device lives elsewhere, so the host
+  // cannot state which sets are reachable and the identity fails closed.
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      env: { AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET: '/operator/set' },
+      scopes,
+    }),
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('one booted simulator gives the provider its display name as the identity', async () => {
+  const scopes: NetworkTransportScope[] = [];
+  await dumpAppleNetworkTraffic(
+    host({
+      text: '',
+      runSimctl: vi.fn(),
+      transport: { mode: 'transport-composed', dump: async () => providerResult },
+      scopes,
+    }),
+    simulator,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBe('iPhone');
+});
 
 function unusedAppLogHost(): Omit<
   PlatformRuntimeHost,

@@ -58,6 +58,7 @@ type NetworkCliEntry = (BackendNetworkEntry | NetworkEntry) & {
 
 type NetworkCliResult = {
   path?: string;
+  source?: string;
   active?: boolean;
   state?: string;
   backend?: string;
@@ -125,6 +126,7 @@ function networkCliOutput(data: NetworkCliResult): CliOutput {
     text: lines.join('\n'),
     stderr: joinDefinedLines([
       formatKeyValueFields(data, [
+        'source',
         'active',
         'state',
         'backend',

@@ -242,7 +242,11 @@ export function simctlListDevicesResult(
   devices: Array<{ name: string; udid: string; state?: string; isAvailable?: boolean }>,
 ): ExecResult | undefined {
   const listing = args.join(' ');
-  if (listing !== 'list devices -j' && listing !== 'list -j') {
+  if (
+    listing !== 'list devices -j' &&
+    listing !== 'list devices booted -j' &&
+    listing !== 'list -j'
+  ) {
     return undefined;
   }
   return simctlListDevicesJson(runtime, devices);

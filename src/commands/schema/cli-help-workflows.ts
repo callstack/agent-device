@@ -89,11 +89,12 @@ Events:
   Events preserve command names, status, durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and structural action details such as scroll distance/direction, safe refs, and coordinates. User-entered text, clipboard contents, push/event payloads, selector values, free-form flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free placeholders. --no-record suppresses action.recorded entries, but request start/finish entries still record command, status, and timing.
 
 Network:
-  Use network dump for recent session HTTP traffic parsed from app logs.
+  Use network dump for recent session HTTP traffic.
     agent-device network dump --include headers
     agent-device network dump 20 --include all
   Use this instead of logs path when the question is request/response metadata.
   network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
+  The response reports its source. source=provider means a capture inside the app answered the dump: on React Native sessions opened against a dev server, agent-device installs a fetch/XMLHttpRequest capture and reads method, full URL, status, duration, headers, and bodies from the app runtime. That capture starts at the first dump: the first dump arms it and answers from the app log (source=app-log, note says so), and every later dump returns the entries captured since the last one. source=app-log otherwise means traffic parsed from app logs, which depends on what the app logs.
 
 Audio:
   Use audio probe when the question is whether a browser page, macOS session, iOS simulator, or Android emulator produced audible output during a short observation window.

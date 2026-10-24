@@ -9,7 +9,7 @@ test('commands topic includes concise command catalog entries', async () => {
   assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers before automation/);
   assert.match(usageText, /metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);
-  assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic from session logs/);
+  assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic from the app or session logs/);
   assert.match(usageText, /clipboard read \| clipboard write <text>/);
   assert.match(usageText, /keyboard \[action\]/);
   assert.match(usageText, /trigger-app-event\s{2,}Invoke an app-defined automation event/);

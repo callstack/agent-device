@@ -4,6 +4,14 @@ const SECRET_TOKEN_RE =
   /\b(?:bearer\s+[a-z0-9._-]+|adc_(?:agent|live|refresh|cli)_[a-z0-9._-]+)\b/gi;
 const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+/**
+ * A JSON secret assignment, where the key is quoted: `"apiKey":"sk-live"`. The value keeps its
+ * quotes so the payload stays valid JSON. It runs first, so the whitespace-tolerant rule above
+ * never meets the quoted form, whose key `token` sits one character after a quote the `\b` of the
+ * earlier rule cannot match the same way.
+ */
+const SENSITIVE_JSON_ASSIGNMENT_RE =
+  /(["'][a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*["']\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'[^']*')/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;
@@ -11,6 +19,19 @@ const TRUNCATION_SUFFIX = '...<truncated>';
 
 export function redactDiagnosticData<T>(input: T): T {
   return redactValue(input, new WeakSet<object>()) as T;
+}
+
+/**
+ * Redacts one captured network payload (a body) with the same secret rules diagnostics use, then
+ * bounds it to `maxLength` characters. Captured HTTP payloads carry their own agreed budget, so
+ * this bound replaces the shorter diagnostic string bound.
+ */
+export function redactNetworkPayload(value: string, maxLength: number): string {
+  const redacted = maskSecrets(value);
+  if (redacted.length <= maxLength) return redacted;
+  // The truncation marker counts against the budget, like the diagnostic bound.
+  const kept = Math.max(0, maxLength - TRUNCATION_SUFFIX.length);
+  return `${redacted.slice(0, kept)}${TRUNCATION_SUFFIX}`;
 }
 
 /** Sanitizes an untrusted structured cause before it crosses a process or client boundary. */
@@ -50,11 +71,25 @@ function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): u
 }
 
 function redactString(value: string, keyHint?: string): string {
+  return boundRedactedString(maskSecrets(value, keyHint), keyHint);
+}
+
+/** Applies the secret-masking rules without any length bound; callers set their own budget. */
+function maskSecrets(value: string, keyHint?: string): string {
   const trimmed = value.trim();
-  if (!trimmed) return boundRedactedString(value, keyHint);
+  if (!trimmed) return value;
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
   let output = redactUrls(trimmed);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
+  output = output.replace(
+    SENSITIVE_JSON_ASSIGNMENT_RE,
+    (match, assignment: string, rawValue: string) => {
+      const quote = rawValue[0]!;
+      const inner = rawValue.slice(1, -1);
+      if (isDocumentedTokenPlaceholder(inner)) return match;
+      return `${assignment}${quote}[REDACTED]${quote}`;
+    },
+  );
   output = output.replace(
     SENSITIVE_ASSIGNMENT_RE,
     (match, key: string, separator: string, rawValue: string, offset: number, input: string) => {
@@ -63,7 +98,7 @@ function redactString(value: string, keyHint?: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
-  return boundRedactedString(output, keyHint);
+  return output;
 }
 
 function boundRedactedString(value: string, keyHint?: string): string {

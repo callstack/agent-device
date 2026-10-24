@@ -13,6 +13,28 @@ export type AndroidDeviceEntry = Readonly<{
   rawModel: string;
 }>;
 
+/** One listed row of `adb devices` output in any state (device, offline, unauthorized, ...). */
+export type AndroidListedDeviceEntry = Readonly<{
+  serial: string;
+  state: string;
+}>;
+
+/**
+ * Every serial `adb devices` (or `adb devices -l`) listed, with its state. The listing keeps
+ * offline and unauthorized serials, which a caller proving host-wide device counts must see.
+ */
+export function parseAndroidListedDeviceEntries(rawOutput: string): AndroidListedDeviceEntry[] {
+  const devices: AndroidListedDeviceEntry[] = [];
+  for (const rawLine of rawOutput.split('\n')) {
+    const parts = rawLine.trim().split(/\s+/);
+    const serial = parts[0];
+    const state = parts[1];
+    if (!serial || !state || serial === 'List' || serial.startsWith('*')) continue;
+    devices.push({ serial, state });
+  }
+  return devices;
+}
+
 export function parseAndroidDeviceEntries(rawOutput: string): AndroidDeviceEntry[] {
   const devices: AndroidDeviceEntry[] = [];
   for (const rawLine of rawOutput.split('\n')) {

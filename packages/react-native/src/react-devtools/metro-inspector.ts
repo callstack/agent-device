@@ -24,16 +24,24 @@ export function targetAppId(target: MetroInspectorTarget): string {
   return target.appId ?? target.description ?? target.title;
 }
 
-export async function listMetroInspectorTargets(serverUrl: URL): Promise<MetroInspectorTarget[]> {
+export async function listMetroInspectorTargets(
+  serverUrl: URL,
+  signal?: AbortSignal,
+): Promise<MetroInspectorTarget[]> {
   const listUrl = new URL('json/list', withTrailingSlash(serverUrl));
   let response: Response;
   try {
-    response = await fetch(listUrl, { signal: AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS) });
+    response = await fetch(listUrl, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS)])
+        : AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS),
+    });
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
       `Could not reach the React Native dev server at ${serverUrl.origin}.`,
       {
+        reason: 'metro-server-unreachable',
         hint: 'Start Metro (or Expo/Re.Pack) for the app, or pass --metro-port/--metro-host when it does not run on localhost:8081.',
       },
       error,
@@ -86,6 +94,13 @@ export type RuntimeTargetFilter = {
   appId?: string;
   /** Device name or logical device id, as the dev server reports it. */
   device?: string;
+  /**
+   * The dev server's device name of exactly one device attached to this host, composed by the
+   * platform package that owns the device inventory. A runtime is selected by it only when it
+   * reports that name verbatim; no candidate doing so fails closed. A name shared by several
+   * attached devices is not an identity, and the platform must not pass one.
+   */
+  metroDeviceIdentity?: string;
 };
 
 function isAppRuntime(target: MetroInspectorTarget): boolean {
@@ -151,14 +166,30 @@ function deviceSelectors(devices: MetroInspectorTarget[]): string[] {
 /**
  * Picks the one React Native runtime to profile. Pages without the `reactNative` field are not app
  * runtimes, and worklet runtimes render no React tree. Several apps or several devices fail
- * closed: the caller must narrow to exactly one runtime.
+ * closed: the caller must narrow to exactly one runtime. When `metroDeviceIdentity` is set, only a
+ * runtime reporting that name verbatim may be selected; none doing so fails closed, because
+ * selecting the same app id on another device would read and hook a runtime this session does not
+ * own. Two runtimes reporting the same shared device name both match and reach the several-devices
+ * guard: a name two devices share is not an identity, and the platform that owns the inventory
+ * must not pass one.
  */
 export function selectReactNativeTarget(
   targets: MetroInspectorTarget[],
   filter: RuntimeTargetFilter = {},
 ): MetroInspectorTarget {
   const runtimes = targets.filter(isAppRuntime);
-  const candidates = runtimes.filter((target) => matchesFilter(target, filter));
+  let candidates = runtimes.filter((target) => matchesFilter(target, filter));
+  if (filter.metroDeviceIdentity !== undefined && candidates.length > 0) {
+    const owned = candidates.filter((target) => target.deviceName === filter.metroDeviceIdentity);
+    if (owned.length === 0) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        "No React Native runtime connected to the dev server reports this session's device.",
+        { reason: 'metro-device-mismatch' },
+      );
+    }
+    candidates = owned;
+  }
   if (candidates.length === 0) throw noMatchingRuntime(runtimes, filter);
   const apps = new Set(candidates.map(targetAppId));
   if (apps.size > 1) {
@@ -211,12 +242,20 @@ export class InspectorSession {
     });
   }
 
-  static async connect(webSocketDebuggerUrl: string): Promise<InspectorSession> {
+  static async connect(
+    webSocketDebuggerUrl: string,
+    signal?: AbortSignal,
+  ): Promise<InspectorSession> {
+    signal?.throwIfAborted();
     const url = new URL(webSocketDebuggerUrl);
     // Metro refuses debugger upgrades without a loopback Origin, and Expo's dev server terminates
     // any whose Origin host differs from its own 127.0.0.1:<port> base URL.
     const origin = `http://127.0.0.1:${url.port || (url.protocol === 'wss:' ? '443' : '80')}`;
     const socket = new WebSocketWithHeaders(url, { headers: { origin } });
+    // A caller budget must end this connection, not merely stop waiting on it: an aborted signal
+    // closes the socket, so no CDP session outlives the request that opened it.
+    const closeOnAbort = () => socket.close();
+    signal?.addEventListener('abort', closeOnAbort, { once: true });
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         socket.close();
@@ -243,6 +282,17 @@ export class InspectorSession {
         },
         { once: true },
       );
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(new AppError('COMMAND_FAILED', 'Network capture was cancelled.'));
+        },
+        { once: true },
+      );
+    }).catch((error: unknown) => {
+      signal?.removeEventListener('abort', closeOnAbort);
+      throw error;
     });
     return new InspectorSession(socket);
   }

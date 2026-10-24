@@ -4,6 +4,8 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
 import type { PrepareMetroRuntimeOptions, ReloadMetroOptions } from './metro/client-metro.ts';
 import type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
+import type { NetworkProviderDumpResult } from '@agent-device/contracts/network-runtime';
+import type { ReactNativeNetworkDumpInput } from './network/network-capture-dump.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReactDevtoolsCommandOptions } from './react-devtools/react-devtools-connection.ts';
 import type { ReactDevtoolsOutput } from './react-devtools/react-devtools-output.ts';
@@ -94,6 +96,14 @@ export async function readMetroSessionRuntime(
 ): Promise<SessionRuntimeHints | undefined> {
   const session = await import('./metro/metro-session-hints.ts');
   return session.readMetroSessionRuntime(options);
+}
+
+export async function dumpReactNativeAppNetwork(
+  input: ReactNativeNetworkDumpInput,
+  signal?: AbortSignal,
+): Promise<NetworkProviderDumpResult> {
+  const capture = await import('./network/network-capture-dump.ts');
+  return await capture.dumpReactNativeAppNetwork(input, signal);
 }
 
 export async function clearMetroSessionHintsQuietly(options: MetroSessionOptions): Promise<void> {

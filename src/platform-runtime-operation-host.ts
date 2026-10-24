@@ -85,11 +85,16 @@ export function createPlatformRuntimeHost(options: {
   const network = createNetworkRuntimeHost({
     resolveSessionArtifacts: options.resolveSessionArtifacts,
     processes,
-    resolveTransport: async (device) => {
-      if (device.platform !== 'web') return Object.freeze({ mode: 'local' as const });
-      const { resolveWebNetworkTransport } =
-        await import('./platform-runtime-network-web-transport.ts');
-      return await resolveWebNetworkTransport(device, host);
+    resolveTransport: async (device, scope) => {
+      if (device.platform === 'web') {
+        const { resolveWebNetworkTransport } =
+          await import('./platform-runtime-network-web-transport.ts');
+        return await resolveWebNetworkTransport(device, host);
+      }
+      if (scope === undefined) return Object.freeze({ mode: 'local' as const });
+      const { resolveReactNativeNetworkTransport } =
+        await import('./platform-runtime-network-react-native-transport.ts');
+      return await resolveReactNativeNetworkTransport(device, scope, host);
     },
   });
   const appleApplications = createAppleApplicationTools(env);

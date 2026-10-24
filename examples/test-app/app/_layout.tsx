@@ -31,6 +31,7 @@ function RootLayoutContent() {
         <Stack.Screen name="heavy-feed" options={{ headerShown: true, title: 'Heavy feed' }} />
         <Stack.Screen name="ticker" />
         <Stack.Screen name="perf-lab" />
+        <Stack.Screen name="network-lab" options={{ headerShown: true, title: 'Network lab' }} />
         <Stack.Screen name="product/[productId]" />
         <Stack.Screen name="webview" />
       </Stack>

@@ -79,6 +79,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-host.ts',
     'src/platform-runtime-local-application-interactors.ts',
     'src/platform-runtime-network-host.ts',
+    'src/platform-runtime-network-react-native-transport.ts',
     'src/platform-runtime-network-web-transport.ts',
     'src/platform-runtime-operation-host.ts',
     'src/platform-runtime-perf-capture-host.ts',

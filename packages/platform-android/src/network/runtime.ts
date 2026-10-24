@@ -5,9 +5,17 @@ import type {
 import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { mergeNetworkScans, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
+import {
+  captureNetworkProviderTraffic,
+  scanNetworkAppLogFallback,
+} from '@agent-device/capture-kit/network-provider-capture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { assertAndroidLogPackageSafe } from '../logs/package-name.ts';
+import {
+  parseAndroidListedDeviceEntries,
+  type AndroidListedDeviceEntry,
+} from '../inventory-parsers.ts';
 
 type RecoveryContext = Readonly<{
   reason: 'inactive' | 'stale-active';
@@ -20,14 +28,27 @@ export async function dumpAndroidNetworkTraffic(
   input: NetworkDumpInput,
   signal: AbortSignal,
 ): Promise<NetworkDumpResult> {
-  const recent = await host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-  let scan = readRecentNetworkTrafficFromText(recent.text, {
-    ...input,
-    path: recent.path,
-    exists: recent.exists,
-    lineNumberOffset: recent.skippedLines,
-    backend: 'android',
-  });
+  // The identity probe costs adb calls, so it rides into the transport as a resolver and only a
+  // dump that reached a Metro binding pays for it.
+  const provider = await captureNetworkProviderTraffic(
+    host,
+    device,
+    input,
+    signal,
+    input.appBundleId === undefined
+      ? {}
+      : {
+          resolveMetroDeviceIdentity: (dumpSignal: AbortSignal) =>
+            metroDeviceIdentity(host, device, dumpSignal),
+        },
+  );
+  if (provider.status === 'captured') {
+    return Object.freeze({ source: 'provider', ...provider.result });
+  }
+  const fallback = await scanNetworkAppLogFallback(host, input, 'android');
+  let scan = fallback.scan;
+  // Lifecycle and scan notes describe the app-log source alone; provider notes join last, so an
+  // arming or unavailable note never hides the inactive-stream guidance.
   const notes: string[] = [];
   const context = await recoveryContext(host, device, input, signal);
   if (context && input.appBundleId) {
@@ -36,20 +57,117 @@ export async function dumpAndroidNetworkTraffic(
     if (recovered) {
       const recoveryScan = readRecentNetworkTrafficFromText(recovered.text, {
         ...input,
-        path: `${recent.path} (adb logcat recovery)`,
+        path: `${fallback.recent.path} (adb logcat recovery)`,
         exists: true,
         backend: 'android',
       });
       if (recoveryScan.dump.entries.length > 0) {
         scan = mergeNetworkScans(recoveryScan, scan, input.maxEntries);
-        notes.push(
-          context.reason === 'stale-active'
-            ? `Session app log stream was still bound to prior Android PID ${context.trackedPid}. Recovered recent Android HTTP entries from adb logcat for PID set ${recovered.pids.join(', ')}.`
-            : `Session app log stream was inactive. Recovered recent Android HTTP entries from adb logcat for PID set ${recovered.pids.join(', ')}.`,
-        );
+        notes.push(androidRecoveryNote(context, recovered.pids));
       }
     }
   }
+  appendLifecycleNote(notes, input);
+  if (scan.dump.entries.length === 0) {
+    notes.push('No HTTP(s) entries were found in recent session app logs.');
+  }
+  notes.push(...provider.notes);
+  return Object.freeze({
+    source: 'app-log',
+    backend: 'android',
+    dump: scan.dump,
+    notes: Object.freeze(notes),
+  });
+}
+
+function androidRecoveryNote(context: RecoveryContext, pids: readonly string[]): string {
+  return context.reason === 'stale-active'
+    ? `Session app log stream was still bound to prior Android PID ${context.trackedPid}. Recovered recent Android HTTP entries from adb logcat for PID set ${pids.join(', ')}.`
+    : `Session app log stream was inactive. Recovered recent Android HTTP entries from adb logcat for PID set ${pids.join(', ')}.`;
+}
+
+/**
+ * The dev server's device name of this one device, or nothing when another attached device would
+ * answer to it too. The dev server names an Android runtime `<Build.MODEL> - <release> - API
+ * <level>`; `ro.product.model` and `ro.build.version.release` compose the same string, and
+ * `ro.build.version.sdk` is the API level. Two devices of one system image share all three, so the
+ * model joins only when the whole name is unique across attached devices; otherwise the provider
+ * fails closed instead of reading and draining another device's runtime.
+ */
+async function metroDeviceIdentity(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  const own = await readDeviceNameParts(host, device.id, signal);
+  if (own === undefined) return undefined;
+  const listed = await listAttachedDevices(host, signal);
+  // The listing must state this session's own serial: a listing that omits an attached device is
+  // an untrustworthy host view (a resetting adb server, a half-written listing), and one cannot
+  // prove collisions against devices it hides.
+  if (listed === undefined || !listed.some((entry) => entry.serial === device.id)) return undefined;
+  for (const entry of listed) {
+    if (entry.serial === device.id) continue;
+    // Every other serial adb lists — offline or unauthorized included — must answer with its own
+    // model. An unreadable serial is an unknown device, and an unknown device could share the
+    // name, so the whole identity is withheld.
+    const other = await readDeviceNameParts(host, entry.serial, signal);
+    if (other === undefined || other.joined === own.joined) return undefined;
+  }
+  return own.joined;
+}
+
+const IDENTITY_PROBE_TIMEOUT_MS = 4_000;
+
+async function readDeviceNameParts(
+  host: PlatformRuntimeHost,
+  serial: string,
+  signal: AbortSignal,
+): Promise<{ joined: string } | undefined> {
+  const result = await runOptionalRecoveryCommand(
+    host,
+    {
+      executable: 'adb',
+      args: deviceShellArgv(
+        'adb',
+        'shell',
+        [
+          'sh',
+          '-c',
+          'getprop ro.product.model; getprop ro.build.version.release; getprop ro.build.version.sdk',
+        ],
+        ['-s', serial],
+      ),
+      allowFailure: true,
+      timeoutMs: IDENTITY_PROBE_TIMEOUT_MS,
+    },
+    signal,
+  );
+  if (!result || result.exitCode !== 0) return undefined;
+  const [model, release, sdk] = result.stdout.split('\n').map((line) => line.trim());
+  if (!model || !release || !sdk) return undefined;
+  return { joined: `${model} - ${release} - API ${sdk}` };
+}
+
+async function listAttachedDevices(
+  host: PlatformRuntimeHost,
+  signal: AbortSignal,
+): Promise<readonly AndroidListedDeviceEntry[] | undefined> {
+  const result = await runOptionalRecoveryCommand(
+    host,
+    {
+      executable: 'adb',
+      args: ['devices'],
+      allowFailure: true,
+      timeoutMs: IDENTITY_PROBE_TIMEOUT_MS,
+    },
+    signal,
+  );
+  if (!result || result.exitCode !== 0) return undefined;
+  return parseAndroidListedDeviceEntries(result.stdout);
+}
+
+function appendLifecycleNote(notes: string[], input: NetworkDumpInput): void {
   if (!input.appLogSnapshot) {
     notes.push(
       'Capture uses the session app log file. For fresh traffic, run logs clear --restart before reproducing requests.',
@@ -59,15 +177,6 @@ export async function dumpAndroidNetworkTraffic(
       'Session app log stream is inactive. Run logs clear --restart, reproduce the request window again, then rerun network dump.',
     );
   }
-  if (scan.dump.entries.length === 0) {
-    notes.push('No HTTP(s) entries were found in recent session app logs.');
-  }
-  return Object.freeze({
-    source: 'app-log',
-    backend: 'android',
-    dump: scan.dump,
-    notes: Object.freeze(notes),
-  });
 }
 
 async function runOptionalRecoveryCommand(

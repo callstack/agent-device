@@ -73,12 +73,31 @@ export function runSimctlForDevice(
   return runXcrun(buildSimctlArgsForDevice(device, args), options);
 }
 
-type SimctlListedDevice = { udid?: string; state?: string };
+type SimctlListedDevice = { udid?: string; state?: string; name?: string };
 
 /** The runtime-keyed device lists of `simctl list devices -j` output; throws unless it is a JSON object. */
 export function readSimctlDevicesByRuntime(stdout: string): Record<string, SimctlListedDevice[]> {
   const payload = JSON.parse(stdout) as { devices?: Record<string, SimctlListedDevice[]> };
   return payload.devices ?? {};
+}
+
+/**
+ * `simctl list devices booted -j` scoped to one simulator set; `undefined` lists the default set.
+ * A caller proving a name is unique across the sets it can see runs this per set.
+ */
+export function simctlListBootedArgsForSet(simulatorSetPath: string | undefined): ScopedSimctlArgs {
+  return scopeSimctlArgs(simulatorSetPath, ['list', 'devices', 'booted', '-j']);
+}
+
+/**
+ * The booted simulator display names of one `simctl list devices booted -j` payload; throws when
+ * the stdout is not the listing JSON, so a caller can tell an unreadable listing from an empty one.
+ */
+export function readSimctlBootedNames(stdout: string): string[] {
+  return Object.values(readSimctlDevicesByRuntime(stdout))
+    .flat()
+    .filter((entry) => entry.state === 'Booted')
+    .map((entry) => entry.name ?? '');
 }
 
 /** The listed state of one simulator; null when the listing is unreadable or omits the device. */

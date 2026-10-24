@@ -1,4 +1,8 @@
 {
+  "selection.network.digest.json": {
+    "bytes": 1614,
+    "reason": "network dump now names the capture source that answered (`source: \"provider\" | \"app-log\"`), so a caller never mistakes an armed in-app capture or a provider fallback for an empty traffic window (+20 bytes for one short field)."
+  },
   "snapshot.digest.json": {
     "bytes": 214,
     "reason": "The public daemon route now supplies the live response-view input. Its production six-digit refsGeneration is four bytes larger than the old two-digit static fixture, matching the generation seed that prevents common cross-lifetime ref collisions."

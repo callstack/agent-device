@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./network-provider-capture": {
+      "types": "./src/network-provider-capture.ts",
+      "default": "./src/network-provider-capture.ts"
+    },
     "./android-replacement-surface-occlusion": {
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"

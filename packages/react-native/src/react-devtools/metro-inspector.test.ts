@@ -96,6 +96,65 @@ test('devices without a logical id are told apart by their target ids, not their
   assert.equal(selectReactNativeTarget(targets, { device: 'sim-a' }).id, 'sim-a-1');
 });
 
+test('the Metro device identity selects only the runtime that reports it verbatim', () => {
+  const targets = [
+    target('sim-a-1', { appId: 'com.app', deviceName: 'rn-net ios' }),
+    target('pixel-1', { appId: 'com.app', deviceName: 'sdk_gphone64_arm64 - 15 - API 35' }),
+  ];
+  assert.equal(
+    selectReactNativeTarget(targets, {
+      appId: 'com.app',
+      metroDeviceIdentity: 'sdk_gphone64_arm64 - 15 - API 35',
+    }).id,
+    'pixel-1',
+  );
+  assert.equal(
+    selectReactNativeTarget(targets, { appId: 'com.app', metroDeviceIdentity: 'rn-net ios' }).id,
+    'sim-a-1',
+  );
+});
+
+test('a model-prefix or partial name is not an identity and fails closed', () => {
+  const targets = [target('pixel-1', { appId: 'com.app', deviceName: 'Pixel 9' })];
+  // The platform owns the composed name; the matcher never widens it.
+  assert.throws(
+    () => selectReactNativeTarget(targets, { appId: 'com.app', metroDeviceIdentity: 'Pixel' }),
+    (error: { code: string; details: { reason: string } }) => {
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details.reason, 'metro-device-mismatch');
+      return true;
+    },
+  );
+  assert.throws(
+    () =>
+      selectReactNativeTarget(targets, {
+        appId: 'com.app',
+        metroDeviceIdentity: 'Pixel 9 - 15 - API 35',
+      }),
+    (error: { details: { reason: string } }) => error.details.reason === 'metro-device-mismatch',
+  );
+  // Without an identity the filter keeps the plain app/device selection.
+  assert.equal(selectReactNativeTarget(targets, { appId: 'com.app' }).id, 'pixel-1');
+});
+
+test('a shared device name among connected runtimes reaches the several-devices guard', () => {
+  // Two emulators of one system image report one name. Selection matches it verbatim on both
+  // targets, so neither is silently chosen; the platform that owns the inventory must not pass a
+  // name shared by attached devices in the first place, and the dump fails closed without one.
+  const targets = [
+    target('emu-b-1', { appId: 'com.app', deviceName: 'sdk_gphone64_arm64 - 15 - API 35' }),
+    target('emu-a-1', { appId: 'com.app', deviceName: 'sdk_gphone64_arm64 - 15 - API 35' }),
+  ];
+  assert.throws(
+    () =>
+      selectReactNativeTarget(targets, {
+        appId: 'com.app',
+        metroDeviceIdentity: 'sdk_gphone64_arm64 - 15 - API 35',
+      }),
+    /several devices/,
+  );
+});
+
 test('distinct apps need --app; older dev servers report the app id as the description', () => {
   const targets = [
     target('a-1', { appId: 'com.one' }),

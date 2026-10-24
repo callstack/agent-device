@@ -7,6 +7,7 @@ import type {
   NetworkAppLogRead,
   NetworkRuntimeHost,
   NetworkTransport,
+  NetworkTransportScope,
 } from '@agent-device/contracts/network-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
@@ -19,7 +20,7 @@ export function createNetworkRuntimeHost(
   options: Readonly<{
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     processes: ProcessMarkerReader;
-    resolveTransport(device: DeviceInfo): Promise<NetworkTransport>;
+    resolveTransport(device: DeviceInfo, scope?: NetworkTransportScope): Promise<NetworkTransport>;
   }>,
 ): Pick<NetworkRuntimeHost, 'appLogs' | 'networkTransports'> {
   return Object.freeze({

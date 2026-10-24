@@ -96,6 +96,7 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     expect(runtime.networkDump).toHaveBeenCalledWith({
       sessionId: sessionName,
       appBundleId: 'com.example.app',
+      stateDir: sessionStore.resolveDaemonStateDir(),
       appLogSnapshot: { state: 'active', startedAt: 123 },
       maxEntries: 7,
       include,

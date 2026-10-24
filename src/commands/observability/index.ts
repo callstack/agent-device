@@ -35,7 +35,8 @@ const logsCommandDescription =
   'Session app log info, start/stop streaming, diagnostics, and markers';
 const eventsCommandDescription =
   'Read the daemon-owned session event timeline as paged JSON-friendly entries';
-const networkCommandDescription = 'Dump recent HTTP(s) traffic parsed from the session app log';
+const networkCommandDescription =
+  'Dump recent HTTP(s) traffic: in-app capture for React Native sessions, otherwise the session app log';
 const audioCommandDescription =
   'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.';
 
@@ -183,7 +184,7 @@ export const eventsCommandFacet = defineCommandFacet({
 export const networkCommandFacet = defineCommandFacet({
   name: NETWORK_COMMAND_NAME,
   text: {
-    summary: 'Inspect HTTP(S) traffic from session logs',
+    summary: 'Inspect HTTP(S) traffic from the app or session logs',
   },
   metadata: networkCommandMetadata,
   run: (client, input) => client.observability.network(input),

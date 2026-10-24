@@ -1,6 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import type { HostCommandRequest } from '@agent-device/contracts/platform-runtime-host';
-import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type {
+  NetworkDumpInput,
+  NetworkProviderDumpResult,
+  NetworkTransport,
+  NetworkTransportScope,
+} from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { dumpAndroidNetworkTraffic } from './runtime.ts';
@@ -13,6 +18,203 @@ const device: DeviceInfo = {
   target: 'mobile',
   booted: true,
 };
+
+const providerResult: NetworkProviderDumpResult = {
+  backend: 'react-native-app',
+  entries: [
+    {
+      url: 'https://api.example.test/v1/items?page=2',
+      method: 'POST',
+      status: 201,
+      durationMs: 41,
+    },
+  ],
+};
+
+test('in-app capture answers with the full URL and status, and the app log is not read', async () => {
+  const runtimeHost = host({
+    marker: { status: 'missing' },
+    command: () => {
+      throw new Error('an in-app capture answer must not run adb');
+    },
+    logcat: '',
+    transport: {
+      mode: 'transport-composed',
+      dump: async (dumpInput) => {
+        expect(dumpInput).toEqual({ maxEntries: 25, include: 'summary' });
+        return providerResult;
+      },
+    },
+  });
+  const readRecent = vi.fn(runtimeHost.appLogs.readRecent);
+  const result = await dumpAndroidNetworkTraffic(
+    { ...runtimeHost, appLogs: { ...runtimeHost.appLogs, readRecent } },
+    device,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+
+  expect(result).toEqual({ source: 'provider', ...providerResult });
+  expect(readRecent).not.toHaveBeenCalled();
+});
+
+async function identityOf(scope: NetworkTransportScope | undefined): Promise<string | undefined> {
+  return await scope?.resolveMetroDeviceIdentity?.(new AbortController().signal);
+}
+
+test('a second attached emulator of the same model takes the identity away from the provider', async () => {
+  // Two emulators of one system image report one `ro.product.model`; naming either one could hook
+  // and drain the other's runtime, so the platform passes no identity and the dump fails closed.
+  const scopes: NetworkTransportScope[] = [];
+  const runtimeHost = host({
+    marker: { status: 'missing' },
+    command: () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    logcat: '',
+    appLogText: '',
+    attached: 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\n',
+    transport: { mode: 'transport-composed', dump: async () => providerResult },
+    scopes,
+  });
+  await dumpAndroidNetworkTraffic(
+    runtimeHost,
+    device,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('a listed serial whose properties cannot be read takes the identity away from the provider', async () => {
+  // An offline or unauthorized serial cannot answer getprop. It is an unknown device that could
+  // share the model, so the fail-closed rule withholds the identity for the whole host.
+  const scopes: NetworkTransportScope[] = [];
+  const runtimeHost = host({
+    marker: { status: 'missing' },
+    command: () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    logcat: '',
+    appLogText: '',
+    attached: 'List of devices attached\nemulator-5554\tdevice\nZY22\toffline\n',
+    getpropFailures: new Set(['ZY22']),
+    transport: { mode: 'transport-composed', dump: async () => providerResult },
+    scopes,
+  });
+  await dumpAndroidNetworkTraffic(
+    runtimeHost,
+    device,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBeUndefined();
+});
+
+test('one attached device gives the provider the composed dev-server name as its identity', async () => {
+  const scopes: NetworkTransportScope[] = [];
+  const runtimeHost = host({
+    marker: { status: 'missing' },
+    command: () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    logcat: '',
+    appLogText: '',
+    transport: { mode: 'transport-composed', dump: async () => providerResult },
+    scopes,
+  });
+  await dumpAndroidNetworkTraffic(
+    runtimeHost,
+    device,
+    input({ stateDir: '/state' }),
+    new AbortController().signal,
+  );
+  expect(await identityOf(scopes[0])).toBe('sdk_gphone64_arm64 - 15 - API 35');
+});
+
+test('the dump that only arms the in-app capture still reports the app log window', async () => {
+  const armingNote = 'In-app network capture was installed by this dump.';
+  const result = await dumpAndroidNetworkTraffic(
+    host({
+      marker: { status: 'missing' },
+      command: () => {
+        throw new Error('an in-app capture answer must not run adb');
+      },
+      appLogText: '01-01 00:00:00.000 D/App (222): GET https://from-log.example.test status=200',
+      logcat: '',
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => ({
+          backend: 'react-native-app',
+          entries: [],
+          armed: true,
+          notes: [armingNote],
+        }),
+      },
+    }),
+    device,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toEqual([
+    expect.objectContaining({ url: 'https://from-log.example.test' }),
+  ]);
+  expect(result.notes).toContain(armingNote);
+});
+
+test('an armed provider over an inactive log stream keeps the lifecycle guidance beside the arming note', async () => {
+  const result = await dumpAndroidNetworkTraffic(
+    host({
+      marker: { status: 'missing' },
+      command: () => {
+        throw new Error('an in-app capture answer must not run adb');
+      },
+      appLogText: '',
+      logcat: '',
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => ({
+          backend: 'react-native-app',
+          entries: [],
+          armed: true,
+          notes: ['In-app network capture was installed by this dump.'],
+        }),
+      },
+    }),
+    device,
+    input({ appLogSnapshot: { state: 'ended', startedAt: 1 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  const inactiveIndex = result.notes!.findIndex((note) => note.includes('inactive'));
+  const armingIndex = result.notes!.findIndex((note) => note.includes('installed by this dump'));
+  expect(inactiveIndex).toBeGreaterThanOrEqual(0);
+  expect(armingIndex).toBeGreaterThanOrEqual(0);
+  expect(inactiveIndex).toBeLessThan(armingIndex);
+});
+
+test('an in-app capture that cannot answer falls back to the app log with its reason', async () => {
+  const result = await dumpAndroidNetworkTraffic(
+    host({
+      marker: { status: 'missing' },
+      command: () => {
+        throw new Error('an in-app capture answer must not run adb');
+      },
+      appLogText: '01-01 00:00:00.000 D/App (222): GET https://from-log.example.test status=200',
+      logcat: '',
+      transport: {
+        mode: 'transport-composed',
+        dump: async () => {
+          throw new Error('No React Native runtime is connected to the dev server.');
+        },
+      },
+    }),
+    device,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toHaveLength(1);
+  expect(result.notes[0]).toContain('In-app network capture could not answer');
+});
 
 test('recovers inactive Android traffic for current and previous package pids before stale entries', async () => {
   const result = await dumpAndroidNetworkTraffic(
@@ -122,12 +324,36 @@ function host(options: {
   command(request: HostCommandRequest): { stdout: string; stderr: string; exitCode: number };
   appLogText?: string;
   logcat: string | Error;
+  transport?: NetworkTransport;
+  attached?: string;
+  getpropFailures?: ReadonlySet<string>;
+  scopes?: NetworkTransportScope[];
 }): PlatformRuntimeHost {
   return {
     ...unusedAppLogHost(),
     commands: {
       which: async () => undefined,
       run: async (request) => {
+        // The identity probe answers only when a test resolves the scope's identity; the harness
+        // answers it as a host with exactly these listed devices under one unique name.
+        if (request.args.includes('devices')) {
+          return {
+            stdout: options.attached ?? 'List of devices attached\nemulator-5554\tdevice\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (request.args.some((arg) => arg.includes('getprop ro.product.model'))) {
+          const serial = request.args[request.args.indexOf('-s') + 1];
+          if (serial !== undefined && options.getpropFailures?.has(serial)) {
+            return { stdout: '', stderr: 'device offline', exitCode: 1 };
+          }
+          return {
+            stdout: 'sdk_gphone64_arm64\n15\n35\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        }
         if (!request.args.includes('logcat')) return options.command(request);
         options.command(request);
         if (options.logcat instanceof Error) throw options.logcat;
@@ -149,7 +375,12 @@ function host(options: {
       }),
       readProcessMarker: async () => options.marker,
     },
-    networkTransports: { resolve: async () => ({ mode: 'local' }) },
+    networkTransports: {
+      resolve: async (_device, scope) => {
+        options.scopes?.push(scope!);
+        return options.transport ?? { mode: 'local' };
+      },
+    },
   };
 }
 

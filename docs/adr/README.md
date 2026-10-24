@@ -38,6 +38,7 @@
 | [0034 Provider plugin registry](0034-provider-plugin-registry.md) | provider plugins, the `agent-device/plugins` contract, plugin sources and order, duplicate provider ids, plugin failure isolation, the daemon plugin inventory and `daemon status` |
 | [0035 macOS App Devices](0035-macos-app-devices.md) | native macOS apps as devices of their own, the host/app-device overlap rule, concurrent app sessions, and `macos-app` lease claims |
 | [0036 Bounded Composite Resource Admission](0036-bounded-composite-resource-admission.md) | resource operations, nested tests, session disposal, and claim recovery inside bounded batch/replay steps |
+| [0038 Network Dump Source Selection](0038-network-dump-source-selection.md) | the `network dump` source owner and enum, the lazy-arming rule, and the Metro device-identity gate |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.

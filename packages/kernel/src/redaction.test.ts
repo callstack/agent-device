@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { redactDiagnosticData } from './redaction.ts';
+import { redactDiagnosticData, redactNetworkPayload } from './redaction.ts';
 
 test('stderr retains nested command failure details beyond 400 characters', () => {
   const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: device locked`;
@@ -45,4 +45,49 @@ test('other diagnostic strings retain the 400-character limit', () => {
   assert.equal(result.stdout.length, 400);
   assert.ok(result.message.endsWith('...<truncated>'));
   assert.ok(result.stdout.endsWith('...<truncated>'));
+});
+
+test('a network payload keeps its own budget instead of the diagnostic limit', () => {
+  const payload = 'p'.repeat(5000);
+  // The truncation marker counts against the budget, like the diagnostic bound.
+  assert.equal(redactNetworkPayload(payload, 2048).length, 2048);
+  assert.ok(redactNetworkPayload(payload, 2048).endsWith('...<truncated>'));
+  assert.equal(redactNetworkPayload('p'.repeat(100), 2048), 'p'.repeat(100));
+});
+
+test('a network payload masks secrets in each field syntax it can hold', () => {
+  assert.equal(
+    redactNetworkPayload('{"apiKey":"sk-live-1","user":"bob"}', 2048),
+    '{"apiKey":"[REDACTED]","user":"bob"}',
+  );
+  assert.equal(redactNetworkPayload('token=head-secret', 2048), 'token=[REDACTED]');
+  assert.equal(redactNetworkPayload('bearer abc.def', 2048), '[REDACTED]');
+  assert.equal(
+    redactNetworkPayload('{"token":"adc_agent_..."}', 2048),
+    '{"token":"adc_agent_..."}',
+  );
+  assert.equal(
+    redactNetworkPayload("curl --header 'api_key=sk-live-9999'", 2048),
+    "curl --header 'api_key=[REDACTED]",
+  );
+  assert.equal(
+    redactNetworkPayload(String.raw`{"apiKey":"ab\"cd-secret"}`, 2048),
+    '{"apiKey":"[REDACTED]"}',
+  );
+});
+
+test('a network payload truncation stays inside its budget', () => {
+  const redacted = redactNetworkPayload(`${'x'.repeat(3000)}token=abc123secret`, 2048);
+  assert.equal(redacted.length, 2048);
+  assert.ok(redacted.includes('truncated'));
+});
+
+test('a header with a sensitive name is replaced and its peers keep their text', () => {
+  assert.deepEqual(
+    redactDiagnosticData({ authorization: 'Bearer abc123', 'x-request-id': 'r-1' }),
+    {
+      authorization: '[REDACTED]',
+      'x-request-id': 'r-1',
+    },
+  );
 });
