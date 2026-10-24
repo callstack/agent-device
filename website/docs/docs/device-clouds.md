@@ -21,8 +21,9 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 | Credentials | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY` | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY` | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance |
 | Device allocated on | `open` | `open` | `open` | First device command, such as `install` or `open` |
 | App source | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset |
-| Artifacts after `close` | Video, Appium and device logs, dashboard and public links | Video and log files, once AWS finalizes them | Video, Appium, device, network, and command logs, screenshots, dashboard link | None |
+| Artifacts after `close` | Video, Appium and device logs, dashboard and public links, and a traffic HAR with `--provider-network-logs` | Video and log files, once AWS finalizes them | Video, Appium, device, command, and traffic logs, screenshots, dashboard link | None |
 | Port reverse | No; use BrowserStack Local | No | No | Android over ADB; not on iOS |
+| Live `network dump` | No; the provider publishes a HAR after `close` | No | No; the provider publishes a HAR after `close` | Yes |
 
 ## Shared workflow
 
@@ -61,4 +62,4 @@ After `close`, run `agent-device artifacts --json` to check for the artifacts yo
 agent-device artifacts <provider-session-id> --provider <provider> --json
 ```
 
-Providers finalize video and log URLs after the session ends. If the lookup reports artifacts as pending right after `close`, retry it a little later.
+Video and log URLs are already available while the session runs. A traffic HAR appears only after the hosted provider session ends, which happens at `disconnect`, not at `close`. If a lookup reports artifacts as pending right after `disconnect`, retry it a little later.

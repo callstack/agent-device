@@ -1,5 +1,6 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
@@ -14,6 +15,7 @@ import {
   appendUrlPath,
   appFileUploadForm,
   createHubUploadApp,
+  fetchProviderResponseStatus,
   fetchProviderSessionDetails,
   postHubAppUpload,
   requireEnv,
@@ -39,6 +41,7 @@ export const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'consumed',
     providerCustomNetwork: 'consumed',
     providerNoResignApp: 'consumed',
+    providerNetworkLogs: 'consumed',
     awsProjectArn: 'refused',
     awsDeviceArn: 'refused',
     awsAppArn: 'refused',
@@ -63,6 +66,12 @@ export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/upload';
 const BROWSERSTACK_SESSION_DETAILS_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/sessions';
+/**
+ * Measured on a live session: the HAR is absent for 20 s after the session ends and present at 30 s.
+ * The window stays well inside the `lease_release` envelope, which is what runs this listing.
+ */
+const BROWSERSTACK_NETWORK_LOG_WAIT_MS = 30_000;
+const NETWORK_LOG_POLL_INTERVAL_MS = 5_000;
 export const BROWSERSTACK_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
@@ -100,11 +109,28 @@ export type BrowserStackSessionDetailsOptions = {
 export async function listBrowserStackCloudArtifacts(
   provider: string,
   providerSessionId: string | undefined,
-  options: BrowserStackSessionDetailsOptions,
+  options: BrowserStackSessionDetailsOptions & {
+    /** Requested with `--provider-network-logs`: also look for the post-session HAR. */
+    networkLogs?: boolean;
+    /** The session is closed, so the HAR may still be publishing: wait briefly for it. */
+    sessionEnded?: boolean;
+    /** Overrides the publication wait; the default is the measured BrowserStack window. */
+    networkLogRetry?: Readonly<{ waitMs: number; pollMs: number }>;
+  },
 ): Promise<CloudArtifactsResult | undefined> {
   if (!providerSessionId) return undefined;
   const details = await fetchBrowserStackSessionDetails(providerSessionId, options);
   const artifacts = mapBrowserStackArtifacts(provider, providerSessionId, details);
+  if (options.networkLogs && options.sessionEnded) {
+    const har = await fetchBrowserStackNetworkLogArtifact(provider, providerSessionId, details, {
+      ...options,
+      networkLogRetry: options.networkLogRetry ?? {
+        waitMs: BROWSERSTACK_NETWORK_LOG_WAIT_MS,
+        pollMs: NETWORK_LOG_POLL_INTERVAL_MS,
+      },
+    });
+    if (har) artifacts.push(har);
+  }
   return cloudArtifactsReadyOrPending({
     provider,
     providerSessionId,
@@ -209,6 +235,34 @@ export function buildBrowserStackCapabilities(
   };
 }
 
+/**
+ * The HAR endpoint sits under `builds/<build>/sessions/`, while the details endpoint the profile
+ * configures is `.../app-automate/sessions`. Both share one API origin, so the HAR path is rebuilt
+ * from that origin and an endpoint override keeps pointing at the same API.
+ */
+function networkLogsEndpoint(
+  endpoint: string | URL | undefined,
+  buildId: string,
+  providerSessionId: string,
+): string {
+  const apiOrigin = new URL(appendUrlPath(endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT, ''))
+    .origin;
+  return appendUrlPath(
+    `${apiOrigin}/app-automate/builds`,
+    `${encodeURIComponent(buildId)}/sessions/${encodeURIComponent(providerSessionId)}/networklogs`,
+  ).toString();
+}
+
+async function readNetworkLogsStatus(
+  endpoint: string,
+  options: BrowserStackSessionDetailsOptions,
+): Promise<number> {
+  return await fetchProviderResponseStatus(endpoint, {
+    clientVersion: options.clientVersion,
+    auth: options,
+  });
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -229,6 +283,65 @@ async function fetchBrowserStackSessionDetails(
     service: 'BrowserStack',
   });
   return asRecord(json.automation_session ?? json);
+}
+
+/**
+ * Reads the post-session HAR through its API path.
+ *
+ * The API answers 404 while the HAR is still being published, so only that status waits. A 400
+ * reports a standing property of the session: BrowserStack's capture is a proxy the app must trust,
+ * so an app without the mitmproxy CA in its trust store is never captured. That case is an
+ * unavailable artifact with the reason, not a failed lookup.
+ */
+async function fetchBrowserStackNetworkLogArtifact(
+  provider: string,
+  providerSessionId: string,
+  details: Record<string, unknown>,
+  options: BrowserStackSessionDetailsOptions & {
+    networkLogRetry: Readonly<{ waitMs: number; pollMs: number }>;
+  },
+): Promise<CloudArtifact | undefined> {
+  const buildId = details.build_hashed_id;
+  if (typeof buildId !== 'string' || buildId.length === 0) return undefined;
+  const endpoint = networkLogsEndpoint(options.endpoint, buildId, providerSessionId);
+  const deadline = Date.now() + options.networkLogRetry.waitMs;
+  for (;;) {
+    const status = await readNetworkLogsStatus(endpoint, options);
+    if (status === 200) {
+      return {
+        provider,
+        providerSessionId,
+        kind: 'network',
+        name: 'Network traffic (HAR)',
+        url: endpoint,
+        extension: 'har',
+        availability: 'ready',
+      };
+    }
+    if (status === 400) {
+      return {
+        provider,
+        providerSessionId,
+        kind: 'network',
+        name: 'Network traffic (HAR)',
+        extension: 'har',
+        availability: 'unavailable',
+        metadata: {
+          reason: 'network-logs-not-captured',
+          hint: 'BrowserStack captures traffic through a proxy the app must trust. Add the mitmproxy CA to a debuggable app, or exclude pinned hosts.',
+        },
+      };
+    }
+    if (status !== 404) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `BrowserStack network log lookup failed with status ${String(status)}.`,
+        { providerSessionId, hint: 'Retry artifacts for this session, then check the dashboard.' },
+      );
+    }
+    if (Date.now() >= deadline) return undefined;
+    await sleep(options.networkLogRetry.pollMs);
+  }
 }
 
 function mapBrowserStackArtifacts(

@@ -267,7 +267,8 @@ function mapTestMuArtifacts(
       ['video_url', 'video', 'Session video'],
       ['appium_logs_url', 'appium-log', 'Appium logs'],
       [deviceLogField, 'device-log', 'Device logs'],
-      ['network_logs_url', 'raw', 'Network logs'],
+      // Populated only for a session started with --provider-network-logs; it is the HAR itself.
+      ['network_logs_url', 'network', 'Network traffic (HAR)'],
       ['command_logs_url', 'automation-log', 'Command logs'],
       ['screenshot_url', 'raw', 'Screenshots'],
     ] as const

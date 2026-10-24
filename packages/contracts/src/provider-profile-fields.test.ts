@@ -27,6 +27,7 @@ const DECLARATION: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'consumed',
     providerCustomNetwork: 'consumed',
     providerNoResignApp: 'refused',
+    providerNetworkLogs: 'consumed',
     awsProjectArn: 'consumed',
     awsDeviceArn: 'consumed',
     awsAppArn: 'consumed',

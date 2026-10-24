@@ -15,7 +15,7 @@ import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
 import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 import { snapshotBackendForPlatform } from './runtime-helpers.ts';
-import { releaseOnFailure } from './webdriver-utils.ts';
+import { releaseOnFailure, readBooleanFlag } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
   CloudWebDriverPreparedSession,
@@ -32,6 +32,8 @@ export type WebDriverProviderSession = Readonly<{
   capabilities: CloudWebDriverProviderCapabilities;
   webDriverSessionId: string;
   providerSessionId: string;
+  /** `--provider-network-logs` on the allocation; selects the post-session HAR artifact. */
+  networkLogs: boolean;
 }>;
 
 type CloudWebDriverReleaseWarning = Readonly<{
@@ -51,7 +53,10 @@ type LeaseResult = Record<string, unknown> | undefined;
 export class WebDriverSessionManager {
   private readonly sessionsByLeaseId = new Map<string, WebDriverProviderSession>();
   private readonly ownedDeviceIds = new Set<string>();
-  private readonly releasedProviderSessionIdsByLeaseId = new Map<string, string>();
+  private readonly releasedSessionsByLeaseId = new Map<
+    string,
+    Readonly<{ providerSessionId: string; networkLogs: boolean }>
+  >();
   private readonly options: CloudWebDriverRuntimeOptions;
 
   constructor(options: CloudWebDriverRuntimeOptions) {
@@ -114,6 +119,7 @@ export class WebDriverSessionManager {
         capabilities,
         webDriverSessionId: session.sessionId,
         providerSessionId,
+        networkLogs: readBooleanFlag(req?.flags, 'providerNetworkLogs'),
         interactor: createWebDriverInteractor({
           client,
           backend: snapshotBackendForPlatform(prepared.platform),
@@ -138,9 +144,17 @@ export class WebDriverSessionManager {
     const session = this.sessionsByLeaseId.get(lease.leaseId);
     if (!session) return undefined;
     this.sessionsByLeaseId.delete(lease.leaseId);
-    this.releasedProviderSessionIdsByLeaseId.set(lease.leaseId, session.providerSessionId);
+    this.releasedSessionsByLeaseId.set(
+      lease.leaseId,
+      Object.freeze({
+        providerSessionId: session.providerSessionId,
+        networkLogs: session.networkLogs,
+      }),
+    );
     const close = await this.closeSession(session);
-    const artifacts = await this.safeListArtifacts(session);
+    // After the close: a provider that delivers traffic as a HAR publishes it only once its session
+    // has ended, so this is the one listing allowed to wait briefly for that artifact.
+    const artifacts = await this.safeListArtifacts(session, { sessionEnded: true });
     return {
       provider: this.options.provider,
       providerSessionId: session.providerSessionId,
@@ -168,12 +182,17 @@ export class WebDriverSessionManager {
   private async listReleasedCloudArtifacts(
     query: CloudArtifactsQuery,
   ): Promise<CloudArtifactsResult | undefined> {
-    const providerSessionId = this.releasedProviderSessionIdsByLeaseId.get(query.leaseId ?? '');
-    if (!providerSessionId || !this.options.listArtifacts) return undefined;
-    if (query.providerSessionId && query.providerSessionId !== providerSessionId) return undefined;
+    const released = this.releasedSessionsByLeaseId.get(query.leaseId ?? '');
+    if (!released || !this.options.listArtifacts) return undefined;
+    if (query.providerSessionId && query.providerSessionId !== released.providerSessionId) {
+      return undefined;
+    }
+    // The session already ended, so this listing may wait for a HAR still being published.
     return await this.options.listArtifacts({
       provider: this.options.provider,
-      providerSessionId,
+      providerSessionId: released.providerSessionId,
+      networkLogs: released.networkLogs,
+      sessionEnded: true,
     });
   }
 
@@ -272,6 +291,7 @@ export class WebDriverSessionManager {
 
   private async safeListArtifacts(
     session: WebDriverProviderSession,
+    listing: Readonly<{ sessionEnded: boolean }> = { sessionEnded: false },
   ): Promise<CloudArtifactsResult | undefined> {
     const listArtifacts = session.prepared.listArtifacts ?? this.options.listArtifacts;
     if (!listArtifacts) return undefined;
@@ -282,6 +302,8 @@ export class WebDriverSessionManager {
         device: session.device,
         webDriverSessionId: session.webDriverSessionId,
         providerSessionId: session.providerSessionId,
+        networkLogs: session.networkLogs,
+        ...listing,
       });
     } catch (error) {
       return unavailableCloudArtifactsResult({

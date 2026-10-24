@@ -48,11 +48,13 @@ function createBrowserStackProvider(
     deviceName: 'BrowserStack device',
     endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
     capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
-    listArtifacts: async ({ provider, providerSessionId }) =>
+    listArtifacts: async ({ provider, providerSessionId, networkLogs, sessionEnded }) =>
       await listBrowserStackCloudArtifacts(provider, providerSessionId, {
         clientVersion,
         ...requireBrowserStackCredentials(env, 'BrowserStack artifact lookup'),
         endpoint: env.BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
+        networkLogs,
+        sessionEnded,
       }),
     prepareSession: async ({ req, lease, base }) => {
       const request = requireRequest(req, SERVICE);

@@ -20,6 +20,7 @@ const DEVICE_FEATURE_FIELDS = [
   'providerNetworkProfile',
   'providerCustomNetwork',
   'providerNoResignApp',
+  'providerNetworkLogs',
 ] as const;
 
 test('every device-feature field maps to exactly one capability spec', () => {
@@ -59,6 +60,30 @@ test('configured device features project onto BrowserStack vendor capability key
 
 test('unset device features emit no capability keys', () => {
   assert.deepEqual(buildBrowserStackDeviceFeatureCapabilities({}, 'android'), {});
+});
+
+test('the network-logs opt-in asks BrowserStack for the capture and its response bodies', () => {
+  const capabilities = buildBrowserStackDeviceFeatureCapabilities(
+    { providerNetworkLogs: true },
+    'android',
+  );
+  assert.deepEqual(capabilities, {
+    networkLogs: true,
+    // Metadata alone is the BrowserStack default, so the opt-in asks for payloads too.
+    networkLogsOptions: { captureContent: true },
+  });
+});
+
+test('a network-logs flag read off a daemon request is the only boolean that reaches the capture row', () => {
+  assert.deepEqual(
+    readBrowserStackDeviceFeatureFields({
+      providerNetworkLogs: true,
+      providerNoResignApp: true,
+    }),
+    { providerNetworkLogs: true, providerNoResignApp: true },
+  );
+  // A string value is the parser's "unset", the same rule every other boolean row follows.
+  assert.deepEqual(readBrowserStackDeviceFeatureFields({ providerNetworkLogs: 'yes' }), {});
 });
 
 test('app re-signing opt-out is rejected on Android with a recovery hint', () => {

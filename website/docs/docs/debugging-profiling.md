@@ -223,6 +223,7 @@ agent-device network dump 25 --include all
 - On iOS, `network dump` can return zero entries for real traffic when the app does not log request metadata to Unified Logging. The response notes tell an empty repro window apart from a log window with no network lines.
 - On iOS, the system logs a request URL only when it opens a connection. Requests that reuse a keep-alive connection are reported against that connection's origin with `pathUnavailable: true`, their status, and timing. Requests whose connection opened before the scanned window are only counted in `unnamedRequests`. Treat an endpoint missing from an iOS dump as unproven, not as never called.
 - On web, request and response bodies are not available; use `agent-browser` HAR capture directly when you need them.
+- On the BrowserStack and TestMu AI providers, `network dump` reports `network-capture-post-session` and refuses: those providers capture traffic through their own proxy and publish a HAR only after their session ends, which `disconnect` does and `close` alone does not. Start the session with `--provider-network-logs` and read the HAR from `artifacts` after `disconnect`. See [BrowserStack](/docs/browserstack) and [TestMu AI](/docs/testmu).
 - For the alias and scan limits, see [Media and logs](/docs/commands#media-and-logs).
 
 ### Audio probes

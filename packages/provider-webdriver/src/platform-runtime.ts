@@ -67,7 +67,7 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { type WebDriverDeploymentRuntime, webDriverInactiveSession } from './runtime-deployment.ts';
@@ -86,6 +86,27 @@ type WebDriverPlatformDeploymentRuntime = Pick<
 
 const available = Object.freeze({ available: true } as const);
 const appLogUnavailable = unavailableFact('unsupported-provider-mode');
+/** The hint a provider that publishes a post-session HAR gives in place of a live dump. */
+const postSessionNetworkCaptureHint =
+  'Request --provider-network-logs when the session starts, then read the HAR with artifacts after disconnect ends the provider session.';
+/**
+ * A live `network dump` needs a source the session can read. These providers capture traffic through
+ * their own proxy and publish it as a HAR only once the session ends, so nothing is readable live.
+ *
+ * A provider that refuses the opt-in publishes no HAR either, so its refusal must not point at a
+ * flag it rejects. The provider's own profile declaration decides the wording.
+ */
+function networkCaptureFact(
+  profileFields: ProviderProfileFieldDeclaration,
+): RuntimeOperationUnavailability {
+  if (profileFields.fields.providerNetworkLogs === 'consumed') {
+    return unavailableFact('network-capture-post-session', postSessionNetworkCaptureHint);
+  }
+  return unavailableFact(
+    'network-capture-post-session',
+    `${profileFields.label} publishes no network capture for a session, live or after it ends.`,
+  );
+}
 const recordingUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'WebDriver provider runtimes do not expose screen recording.',
@@ -327,6 +348,8 @@ export type WebDriverPlatformRuntimeOptions = Readonly<{
    * (ADR 0019 §2: no stubs that throw `unsupported` after binding).
    */
   capabilities: CloudWebDriverProviderCapabilities;
+  /** What this provider does with each profile field; the network-capture refusal reads it. */
+  profileFields: ProviderProfileFieldDeclaration;
   screenshotAvailable?: boolean;
   snapshotAvailable?: boolean;
   getInteractor?(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
@@ -405,7 +428,6 @@ function bindWebDriverPlatformRuntime(
   device: DeviceInfo,
   signal: AbortSignal,
 ): DeviceBinding<PlatformRuntimeOperations> {
-  const backend = device.platform === 'apple' ? 'ios-device' : 'android';
   const facts = webDriverFacts(options, device);
   const deploy = facts.operations.deployApp;
   const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = Object.freeze({
@@ -420,26 +442,6 @@ function bindWebDriverPlatformRuntime(
       facts.operations,
     ),
     ...webDriverInteractionOperations(options, device, signal, facts),
-    networkDump: async (input) => {
-      const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
-        ...input,
-        path: recent.path,
-        exists: recent.exists,
-        lineNumberOffset: recent.skippedLines,
-        backend,
-      });
-      return Object.freeze({
-        source: 'app-log' as const,
-        backend,
-        dump,
-        notes: Object.freeze(
-          dump.entries.length === 0
-            ? ['No HTTP(s) entries were found in recent session app logs.']
-            : [],
-        ),
-      });
-    },
     ...(deploy.available && options.deployment
       ? {
           deployApp: async (input: AppDeploymentInput) =>
@@ -508,7 +510,7 @@ function webDriverFacts(
   const unavailable = createUnavailablePlatformRuntimeFacts(device, options.owner, {
     appLog: appLogUnavailable,
     appDeployment: deploymentUnavailable,
-    network: appLogUnavailable,
+    network: networkCaptureFact(options.profileFields),
     screenRecording: recordingUnavailable,
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
@@ -564,7 +566,6 @@ function webDriverFacts(
       deployMaterializedApp: deployment,
       sendPushNotification: pushUnavailable,
       appState: appStateUnavailable,
-      networkDump: available,
       ...snapshotRuntimeOperationFacts({
         capture: snapshotCell,
         customActions: snapshotCustomActionsUnavailable,

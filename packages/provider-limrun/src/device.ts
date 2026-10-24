@@ -27,6 +27,7 @@ export const LIMRUN_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'refused',
     providerCustomNetwork: 'refused',
     providerNoResignApp: 'refused',
+    providerNetworkLogs: 'refused',
     awsProjectArn: 'refused',
     awsDeviceArn: 'refused',
     awsAppArn: 'refused',

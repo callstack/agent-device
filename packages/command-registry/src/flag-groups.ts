@@ -91,6 +91,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'providerNetworkProfile',
   'providerCustomNetwork',
   'providerNoResignApp',
+  'providerNetworkLogs',
   'awsProjectArn',
   'awsDeviceArn',
   'awsAppArn',

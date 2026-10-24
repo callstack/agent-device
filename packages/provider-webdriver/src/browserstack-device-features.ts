@@ -28,6 +28,7 @@ export type BrowserStackDeviceFeatureFields = Pick<
   | 'providerNetworkProfile'
   | 'providerCustomNetwork'
   | 'providerNoResignApp'
+  | 'providerNetworkLogs'
 >;
 
 type BrowserStackDeviceFeatureSpec = {
@@ -40,8 +41,12 @@ type BrowserStackDeviceFeatureSpec = {
   /**
    * `negated-boolean` is a flag whose presence means "turn the capability off" — BrowserStack
    * defaults `resignApp` to true, so the only useful instruction is the opt-out.
+   * `capture-boolean` is a flag whose presence turns a capture on and also asks for the payloads:
+   * BrowserStack reports HAR metadata unless `networkLogsOptions.captureContent` says otherwise.
    */
-  type: 'string' | 'enum' | 'negated-boolean';
+  type: 'string' | 'enum' | 'negated-boolean' | 'capture-boolean';
+  /** For `capture-boolean`: the options key that carries the capture's own settings. */
+  optionsCapability?: string;
   enumValues?: readonly string[];
   /** Platform the capability applies to; absent means both. */
   platform?: CloudWebDriverPlatform;
@@ -99,6 +104,14 @@ const BROWSERSTACK_DEVICE_FEATURE_ROWS: readonly Omit<BrowserStackDeviceFeatureS
     type: 'negated-boolean',
     platform: 'ios',
   },
+  {
+    // BrowserStack captures session traffic through its own proxy and publishes it as a HAR once the
+    // session ends, so this opts into a post-session artifact rather than a live source.
+    field: 'providerNetworkLogs',
+    capability: 'networkLogs',
+    optionsCapability: 'networkLogsOptions',
+    type: 'capture-boolean',
+  },
 ];
 
 export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatureSpec[] =
@@ -123,7 +136,14 @@ export function buildBrowserStackDeviceFeatureCapabilities(
     const value = fields[spec.field];
     if (value === undefined || value === false || value === '') continue;
     requireSupportedPlatform(spec, platform);
-    capabilities[spec.capability] = spec.type === 'negated-boolean' ? false : value;
+    if (spec.type === 'negated-boolean') {
+      capabilities[spec.capability] = false;
+      continue;
+    }
+    capabilities[spec.capability] = value;
+    if (spec.type === 'capture-boolean' && spec.optionsCapability) {
+      capabilities[spec.optionsCapability] = { captureContent: true };
+    }
   }
   return capabilities;
 }
@@ -141,14 +161,25 @@ export function readBrowserStackDeviceFeatureFields(
   const fields: BrowserStackDeviceFeatureFields = {};
   for (const spec of BROWSERSTACK_DEVICE_FEATURE_SPECS) {
     const value = flags?.[spec.field];
-    if (spec.type === 'negated-boolean') {
-      if (value === true) fields.providerNoResignApp = true;
+    if (spec.type === 'negated-boolean' || spec.type === 'capture-boolean') {
+      if (value === true) assignBooleanField(fields, spec);
       continue;
     }
     if (typeof value !== 'string' || value.length === 0) continue;
     assignStringField(fields, spec, value);
   }
   return fields;
+}
+
+function assignBooleanField(
+  fields: BrowserStackDeviceFeatureFields,
+  spec: BrowserStackDeviceFeatureSpec,
+): void {
+  if (spec.field === 'providerNoResignApp') {
+    fields.providerNoResignApp = true;
+    return;
+  }
+  if (spec.field === 'providerNetworkLogs') fields.providerNetworkLogs = true;
 }
 
 function assignStringField(
@@ -160,7 +191,7 @@ function assignStringField(
     fields.providerDeviceOrientation = requireProviderDeviceOrientation(spec, value);
     return;
   }
-  if (spec.field === 'providerNoResignApp') return;
+  if (spec.field === 'providerNoResignApp' || spec.field === 'providerNetworkLogs') return;
   fields[spec.field] = value;
 }
 
