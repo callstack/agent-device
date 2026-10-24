@@ -8,6 +8,7 @@ export function applicationLifecycleExecutionFromRequest(
   req: DaemonRequest,
   logPath: string,
   traceLogPath?: string,
+  networkCapturePath?: string,
 ): ApplicationLifecycleExecution {
   return {
     requestId: req.meta?.requestId,
@@ -16,6 +17,7 @@ export function applicationLifecycleExecutionFromRequest(
     verbose: req.flags?.verbose,
     activity: req.flags?.activity,
     launchConsole: req.flags?.launchConsole,
+    networkCapturePath,
     launchArgs: req.flags?.launchArgs,
     clearAppState: req.flags?.clearAppState,
     iosXctestrunFile: req.flags?.iosXctestrunFile,

@@ -60,6 +60,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     surface: options.surface,
     activity: options.activity,
     launchConsole: options.launchConsole,
+    captureNetwork: options.captureNetwork,
     launchArgs: options.launchArgs,
     relaunch: options.relaunch,
     shutdown: options.shutdown,

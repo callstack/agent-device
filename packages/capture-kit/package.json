@@ -58,6 +58,10 @@
       "types": "./src/durable-capture/index.ts",
       "default": "./src/durable-capture/index.ts"
     },
+    "./network-probe-traffic": {
+      "types": "./src/network-probe-traffic.ts",
+      "default": "./src/network-probe-traffic.ts"
+    },
     "./durable-capture-admission-ledger": {
       "types": "./src/capture-admission/durable-capture-admission-ledger.ts",
       "default": "./src/capture-admission/durable-capture-admission-ledger.ts"

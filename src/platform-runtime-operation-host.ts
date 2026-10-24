@@ -83,6 +83,8 @@ export function createPlatformRuntimeHost(options: {
     },
   });
   const network = createNetworkRuntimeHost({
+    sessionsDir: options.sessionsDir,
+    env,
     resolveSessionArtifacts: options.resolveSessionArtifacts,
     processes,
     resolveTransport: async (device) => {

@@ -60,6 +60,7 @@ type NetworkCliResult = {
   path?: string;
   active?: boolean;
   state?: string;
+  source?: string;
   backend?: string;
   include?: NetworkIncludeMode;
   scannedLines?: number;
@@ -127,6 +128,7 @@ function networkCliOutput(data: NetworkCliResult): CliOutput {
       formatKeyValueFields(data, [
         'active',
         'state',
+        'source',
         'backend',
         'include',
         'scannedLines',

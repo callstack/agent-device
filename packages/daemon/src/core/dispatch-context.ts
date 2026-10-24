@@ -29,6 +29,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 export const DISPATCH_CONTEXT_FLAG_KEYS = [
   'activity',
   'launchConsole',
+  'captureNetwork',
   'launchArgs',
   'clearAppState',
   'verbose',

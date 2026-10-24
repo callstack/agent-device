@@ -47,6 +47,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
     launchConsole: stringField(
       'File path on the daemon host for the stdout and stderr of the initial app launch. iOS simulator direct app launches only; not for URL opens.',
     ),
+    captureNetwork: booleanField(
+      'Inject the iOS simulator network capture probe into this launch so network dump reports every URLSession request with its own full URL, status, and duration. The app is relaunched under the probe; other platforms refuse the option.',
+    ),
     launchArgs: stringArrayField(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
@@ -118,6 +121,7 @@ const openCliSchema = {
   allowedFlags: [
     'activity',
     'launchConsole',
+    'captureNetwork',
     'launchArgs',
     'testIme',
     'saveScript',
@@ -150,6 +154,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   surface: flags.surface,
   activity: flags.activity,
   launchConsole: flags.launchConsole,
+  captureNetwork: flags.captureNetwork,
   launchArgs: flags.launchArgs,
   relaunch: flags.relaunch,
   foreground: flags.foreground,

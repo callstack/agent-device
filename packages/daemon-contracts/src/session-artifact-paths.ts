@@ -76,6 +76,15 @@ export function resolveSessionAppLogPidPath(sessionsDir: string, address: string
   return path.join(resolveSessionDir(sessionsDir, address), 'app-log.pid');
 }
 
+/**
+ * Where the injected iOS simulator network capture probe writes its JSON lines for one session
+ * (ADR 0037). The probe creates this file from inside the app process, on a path the launch handed
+ * it through the environment.
+ */
+export function resolveSessionNetworkCapturePath(sessionsDir: string, address: string): string {
+  return path.join(resolveSessionDir(sessionsDir, address), 'network.jsonl');
+}
+
 type ManagedSessionArtifactPath = Readonly<{
   sessionsDir: string;
   pathname: string;

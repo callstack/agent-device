@@ -65,6 +65,7 @@ const HOST_INPUT_KEYS = [
   'sessionSaveScript',
   'baseline',
   'launchConsole',
+  'captureNetwork',
   'launchArgs',
   'launchUrl',
   'bundleUrl',

@@ -113,6 +113,9 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   // #2833: the request path reports session activity through `SessionStore.noteSessionActivity`, so
   // the only writer of this field is the store that owns the record.
   'lastActivityAtMs',
+  // ADR 0037: an open records or clears the session's network capture window through
+  // `SessionStore.setNetworkCapture`, so the only writer is the store that owns the record.
+  'networkCapture',
   'name',
   'recordOnlySession',
   'sessionScope',

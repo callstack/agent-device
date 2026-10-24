@@ -74,6 +74,7 @@ export function createAppleInteractor(
       openIosApp(device, app, {
         appBundleId: options?.appBundleId,
         launchConsole: options?.launchConsole,
+        networkCapturePath: options?.networkCapturePath,
         launchArgs: options?.launchArgs,
         terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,

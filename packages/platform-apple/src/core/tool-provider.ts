@@ -156,6 +156,24 @@ export async function runXcrun(
   return await runAppleToolCommand('xcrun', [...args], options);
 }
 
+/**
+ * Runs one scoped simctl command whose child must start from the host environment plus
+ * `envOverrides`, rather than from a bare override map. A command that names its own `env`
+ * replaces the host environment at the spawn, so a launcher that only adds variables (for example
+ * the `SIMCTL_CHILD_*` pair of a network-capture launch) still needs PATH and the toolchain
+ * selection carried along. This is that merge, kept at the spawn boundary.
+ */
+export async function runScopedSimctlCommandWithHostEnv(
+  command: ScopedSimctlCommand,
+  envOverrides: Readonly<Record<string, string>>,
+  options?: ExecOptions,
+): Promise<ExecResult> {
+  return await runXcrun(command, {
+    ...options,
+    env: { ...commandHostEnvironment().env, ...envOverrides },
+  });
+}
+
 export async function readApplePlistJson(
   plistPath: string,
   signal?: AbortSignal,

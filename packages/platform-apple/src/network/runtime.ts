@@ -6,6 +6,7 @@ import {
   readRecentNetworkTrafficFromText,
   type NetworkScan,
 } from '@agent-device/capture-kit';
+import { readNetworkProbeTrafficFromText } from '@agent-device/capture-kit/network-probe-traffic';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { backendForAppleDevice } from '../logs/backend.ts';
@@ -17,6 +18,8 @@ export async function dumpAppleNetworkTraffic(
   signal: AbortSignal,
 ): Promise<NetworkDumpResult> {
   const backend = backendForAppleDevice(device);
+  const probe = await dumpCapturedProbeTraffic(host, device, input, backend);
+  if (probe) return probe;
   const recent = await host.appLogs.readRecent(input.sessionId, input.maxScanLines);
   let scan = readRecentNetworkTrafficFromText(recent.text, {
     ...input,
@@ -37,6 +40,48 @@ export async function dumpAppleNetworkTraffic(
     source: 'app-log',
     backend,
     dump: scan.dump,
+    notes: Object.freeze(notes),
+  });
+}
+
+/**
+ * The capture-probe mode of an iOS simulator dump (ADR 0037): when the session's app was launched
+ * under the probe, the probe's file is the session's traffic record and this dump reports it whole.
+ * The app-log parser is not consulted — that is the other mode, not a fallback.
+ */
+async function dumpCapturedProbeTraffic(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+  input: NetworkDumpInput,
+  backend: ReturnType<typeof backendForAppleDevice>,
+): Promise<NetworkDumpResult | undefined> {
+  if (input.networkCapture !== true || !isIosFamily(device) || device.kind !== 'simulator')
+    return undefined;
+  const recent = await host.captureProbe.readRecent(input.sessionId, input.maxScanLines);
+  const { dump } = readNetworkProbeTrafficFromText(recent.text, {
+    ...input,
+    path: recent.path,
+    exists: recent.exists,
+    lineNumberOffset: recent.skippedLines,
+  });
+  const notes: string[] = [];
+  if (!recent.exists) {
+    notes.push(
+      'The capture probe has written no file for this session yet. Open the app with --capture-network, reproduce the requests, then rerun network dump.',
+    );
+  } else if (recent.atSizeCap) {
+    notes.push(
+      'The capture probe reached its 32 MB file cap and stopped recording, so these entries are the newest window it wrote, not current traffic. Reopen with --capture-network to capture again.',
+    );
+  } else if (dump.entries.length === 0) {
+    notes.push(
+      'The capture probe recorded no completed URLSession requests in this window. It captures URLSession traffic only; a Flutter dart:io or other non-URLSession stack is not covered.',
+    );
+  }
+  return Object.freeze({
+    source: 'probe' as const,
+    backend,
+    dump,
     notes: Object.freeze(notes),
   });
 }

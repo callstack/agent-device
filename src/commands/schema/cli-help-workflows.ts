@@ -89,11 +89,12 @@ Events:
   Events preserve command names, status, durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and structural action details such as scroll distance/direction, safe refs, and coordinates. User-entered text, clipboard contents, push/event payloads, selector values, free-form flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free placeholders. --no-record suppresses action.recorded entries, but request start/finish entries still record command, status, and timing.
 
 Network:
-  Use network dump for recent session HTTP traffic parsed from app logs.
+  Use network dump for recent session HTTP traffic. It reports its source: the session app log, or the capture probe when the session was opened with open --capture-network.
     agent-device network dump --include headers
     agent-device network dump 20 --include all
   Use this instead of logs path when the question is request/response metadata.
   network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
+  On an iOS simulator, open <app> --capture-network injects a probe so network dump lists every URLSession request with its own full URL, status, and duration, also on reused keep-alive connections. No proxy and no app changes are needed. URLSession only: a Flutter dart:io stack is not covered.
 
 Audio:
   Use audio probe when the question is whether a browser page, macOS session, iOS simulator, or Android emulator produced audible output during a short observation window.

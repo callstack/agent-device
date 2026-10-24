@@ -125,6 +125,7 @@ export type CliFlags = CloudProviderProfileFields &
     pattern?: SwipePattern;
     activity?: string;
     launchConsole?: string;
+    captureNetwork?: boolean;
     launchArgs?: string[];
     header?: string[];
     githubActionsArtifact?: string;

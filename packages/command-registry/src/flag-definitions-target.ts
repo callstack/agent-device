@@ -368,6 +368,16 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'captureNetwork',
+    names: ['--capture-network'],
+    type: 'boolean',
+    usageLabel: '--capture-network',
+    usageDescription:
+      'open: on a local iOS simulator, inject the network capture probe so network dump lists every URLSession request with its own full URL, status, and duration. Requires the session app to be relaunched by this open. No other platform or provider-backed device accepts it.',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'launchArgs',
     names: ['--launch-args'],
     type: 'string',

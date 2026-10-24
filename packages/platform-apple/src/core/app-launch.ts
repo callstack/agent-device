@@ -7,10 +7,11 @@ import { ensureHostDirectory, writeHostTextFile } from '@agent-device/host-kit/h
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import {
+  CAPTURE_NETWORK_DIRECT_APP_ONLY_MESSAGE,
+  CAPTURE_NETWORK_IOS_SIMULATOR_ONLY_MESSAGE,
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
 } from '@agent-device/contracts/observability';
-
 import {
   isDeepLinkTarget,
   isWebUrl,
@@ -18,6 +19,7 @@ import {
 } from '@agent-device/contracts/command';
 import {
   IOS_APP_LAUNCH_TIMEOUT_MS,
+  IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
   IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
   IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
 } from './config.ts';
@@ -31,13 +33,16 @@ import {
   launchFailureHint,
 } from './launch-diagnostics.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { runXcrun, type ScopedSimctlCommand } from './tool-provider.ts';
+import {
+  runXcrun,
+  runScopedSimctlCommandWithHostEnv,
+  type ScopedSimctlCommand,
+} from './tool-provider.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { closeMacOsApp, openMacOsApp } from '../os/macos/apps.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 
-const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
 const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
   '--launch-args is not supported with iOS simulator URL opens (simctl openurl ignores launch args). Launch the app first with --launch-args, then issue the URL open in a separate call.';
 
@@ -58,6 +63,7 @@ export async function openIosApp(
   options?: {
     appBundleId?: string;
     launchConsole?: string;
+    networkCapturePath?: string;
     launchArgs?: string[];
     terminateRunningApp?: boolean;
     url?: string;
@@ -65,9 +71,13 @@ export async function openIosApp(
   },
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
+  const networkCapturePath = options?.networkCapturePath?.trim();
   const launchArgs = options?.launchArgs;
   if (launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
+  }
+  if (networkCapturePath && (!isIosFamily(device) || device.kind !== 'simulator')) {
+    throw new AppError('UNSUPPORTED_OPERATION', CAPTURE_NETWORK_IOS_SIMULATOR_ONLY_MESSAGE);
   }
   if (isMacOs(device)) {
     if (launchArgs && launchArgs.length > 0) {
@@ -83,6 +93,9 @@ export async function openIosApp(
   if (explicitUrl) {
     if (launchConsole) {
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
+    }
+    if (networkCapturePath) {
+      throw new AppError('INVALID_ARGS', CAPTURE_NETWORK_DIRECT_APP_ONLY_MESSAGE);
     }
     if (!isDeepLinkTarget(explicitUrl)) {
       throw new AppError('INVALID_ARGS', 'open <app> <url> requires a valid URL target');
@@ -124,6 +137,9 @@ export async function openIosApp(
     if (launchConsole) {
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
     }
+    if (networkCapturePath) {
+      throw new AppError('INVALID_ARGS', CAPTURE_NETWORK_DIRECT_APP_ONLY_MESSAGE);
+    }
     if (device.kind === 'simulator') {
       await openIosSimulatorUrl(device, deepLinkTarget, launchArgs, options?.runnerOptions);
       return;
@@ -147,6 +163,7 @@ export async function openIosApp(
   if (device.kind === 'simulator') {
     await launchIosSimulatorApp(device, bundleId, {
       ...(launchConsole ? { launchConsole } : {}),
+      ...(networkCapturePath ? { networkCapturePath } : {}),
       ...(launchArgs ? { launchArgs } : {}),
       ...(options?.terminateRunningApp ? { terminateRunningApp: true } : {}),
     });
@@ -263,10 +280,25 @@ async function terminateIosSimulatorApp(device: DeviceInfo, bundleId: string): P
 async function launchIosSimulatorApp(
   device: DeviceInfo,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
+  options?: {
+    launchConsole?: string;
+    networkCapturePath?: string;
+    launchArgs?: string[];
+    terminateRunningApp?: boolean;
+  },
 ): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
+  // A probe this launch cannot build fails the open here: an open that asked for capture never
+  // silently launches without it. Behind await import, and only on a capture launch: every other
+  // launch never loads the probe-build machinery.
+  const launchEnv = options?.networkCapturePath
+    ? await (
+        await import('../network/launch-env.ts')
+      ).buildNetworkCaptureLaunchEnv({
+        capturePath: options.networkCapturePath,
+      })
+    : undefined;
 
   let consecutiveFBSFailures = 0;
   const MAX_CONSECUTIVE_FBS_FAILURES = 3;
@@ -286,10 +318,8 @@ async function launchIosSimulatorApp(
           buildIosSimulatorLaunchArgs(device.id, bundleId, options),
         );
         const result = options?.launchConsole
-          ? await runIosSimulatorConsoleLaunch(launchArgs, options.launchConsole)
-          : await runXcrun(launchArgs, {
-              allowFailure: true,
-            });
+          ? await runIosSimulatorConsoleLaunch(launchArgs, options.launchConsole, launchEnv)
+          : await runSimulatorLaunch(launchArgs, launchEnv ? { env: launchEnv } : {});
         if (result.exitCode === 0) return;
 
         throw new AppError(
@@ -325,7 +355,12 @@ async function launchIosSimulatorApp(
 function buildIosSimulatorLaunchArgs(
   deviceId: string,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
+  options?: {
+    launchConsole?: string;
+    networkCapturePath?: string;
+    launchArgs?: string[];
+    terminateRunningApp?: boolean;
+  },
 ): string[] {
   const args = ['launch'];
   // `--console-pty` is the console mode this path needs: simctl writes the app's bytes to its own
@@ -333,7 +368,11 @@ function buildIosSimulatorLaunchArgs(
   // cannot substitute, because they resolve the given path inside the device's data container
   // rather than on the host. Verified on Xcode 27.1.
   if (options?.launchConsole) args.push('--console-pty');
-  if (options?.terminateRunningApp) args.push('--terminate-running-process');
+  // A capture launch must produce a new process: dyld injection happens only at exec, so an app
+  // already running would be activated without the probe. --terminate-running-process covers the
+  // instance this open did not ask to relaunch.
+  if (options?.terminateRunningApp || options?.networkCapturePath)
+    args.push('--terminate-running-process');
   args.push(deviceId, bundleId);
   if (options?.launchArgs && options.launchArgs.length > 0) {
     args.push(...options.launchArgs);
@@ -341,15 +380,37 @@ function buildIosSimulatorLaunchArgs(
   return args;
 }
 
+type SimulatorLaunchOptions = Readonly<{
+  /** Spawn env overrides merged over the host environment, from a capture launch. */
+  env?: Record<string, string>;
+  /** Upper bound on the spawn itself, e.g. the console capture window. */
+  timeoutMs?: number;
+}>;
+
+async function runSimulatorLaunch(
+  launchArgs: ScopedSimctlCommand,
+  options: SimulatorLaunchOptions = {},
+): Promise<Awaited<ReturnType<typeof runXcrun>>> {
+  const execOptions = {
+    allowFailure: true,
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+  };
+  if (options.env) {
+    return await runScopedSimctlCommandWithHostEnv(launchArgs, options.env, execOptions);
+  }
+  return await runXcrun(launchArgs, execOptions);
+}
+
 async function runIosSimulatorConsoleLaunch(
   launchArgs: ScopedSimctlCommand,
   logPath: string,
+  launchEnv?: Record<string, string>,
 ): Promise<Awaited<ReturnType<typeof runXcrun>>> {
   await ensureHostDirectory(path.dirname(logPath));
   try {
-    const result = await runXcrun(launchArgs, {
-      allowFailure: true,
+    const result = await runSimulatorLaunch(launchArgs, {
       timeoutMs: IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
+      ...(launchEnv ? { env: launchEnv } : {}),
     });
     await writeIosSimulatorConsoleLog(logPath, result.stdout, result.stderr);
     return result;

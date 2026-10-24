@@ -81,3 +81,66 @@ test('network validates the legacy limit after runtime-fact admission', async ()
   expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'] }]);
   expect(runtime.networkDump).not.toHaveBeenCalled();
 });
+
+test('a session opened with network capture gets the probe file and reports the probe source', async () => {
+  const sessionStore = makeSessionStore();
+  const session = makeSession('ios-network-probe', {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'sim-1',
+    name: 'iPhone',
+    kind: 'simulator',
+  });
+  sessionStore.setNetworkCapture(session, true);
+  sessionStore.publish(session.name, session);
+  const runtime = createNetworkRuntime(session.device, async (input) => ({
+    source: 'probe',
+    backend: 'ios-simulator',
+    dump: {
+      path: '/sessions/one/network.jsonl',
+      exists: true,
+      scannedLines: 1,
+      matchedLines: 1,
+      entries: [{ url: 'https://api.example.test/v1/a', status: 200, raw: '', line: 1 }],
+      include: input.include,
+      limits: {
+        maxEntries: input.maxEntries,
+        maxPayloadChars: input.maxPayloadChars,
+        maxScanLines: input.maxScanLines,
+      },
+    },
+    notes: [],
+  }));
+
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: session.name,
+      command: 'network',
+      positionals: ['dump'],
+      flags: {},
+    },
+    sessionName: session.name,
+    logPath: path.join(sessionStore.resolveSessionDir(session.name), 'daemon.log'),
+    sessionStore,
+    bindDevice: runtime.bindDevice,
+    invoke: noopInvoke,
+  });
+
+  expect(runtime.networkDump).toHaveBeenCalledWith(
+    expect.objectContaining({
+      networkCapture: true,
+    }),
+  );
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      source: 'probe',
+      backend: 'ios-simulator',
+      entries: [{ url: 'https://api.example.test/v1/a', status: 200 }],
+    },
+  });
+});

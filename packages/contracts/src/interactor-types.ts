@@ -321,6 +321,13 @@ export type Interactor = {
       activity?: string;
       appBundleId?: string;
       launchConsole?: string;
+      /**
+       * Session file the injected iOS simulator network capture probe writes to for this launch
+       * (ADR 0037). The Apple owner injects the probe and terminates a running instance so the app
+       * process really is a new one. An open carrying it reaches only owners that declare the
+       * capture capability; the shared dispatch refuses any owner that could not honor it.
+       */
+      networkCapturePath?: string;
       launchArgs?: string[];
       terminateRunningApp?: boolean;
       url?: string;

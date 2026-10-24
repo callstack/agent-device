@@ -22,6 +22,9 @@ export const IOS_SIMULATOR_TERMINATE_TIMEOUT_MS = 15_000;
  */
 export const IOS_SIMULATOR_OPENURL_TIMEOUT_MS = 20_000;
 
+/** Bound on one `simctl launch --console-pty` read; a console launch is kept alive past this with a diagnostic. */
+export const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
+
 export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 
 // The CoreDevice panel probe runs on the same request budget as the capture it

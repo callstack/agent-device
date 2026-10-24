@@ -161,6 +161,11 @@ function host(options: {
       }),
       readProcessMarker: async () => ({ status: 'missing' }),
     },
+    captureProbe: {
+      readRecent: async () => {
+        throw new Error('a dump without capture must not read the probe file');
+      },
+    },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
   };
 }
@@ -368,4 +373,104 @@ test('a response bounded to one entry still reports every unnamed request, witho
   // where their number is bounded by the scan window rather than by maxEntries.
   expect(result.dump).not.toHaveProperty('unnamedRequestIds');
   expect(result.notes[0]).toContain('5 requests reused a keep-alive connection');
+});
+
+function probeHost(lines: string | undefined, atSizeCap = false): PlatformRuntimeHost {
+  const base = host({ text: '', runSimctl: vi.fn() });
+  return {
+    ...base,
+    captureProbe: {
+      readRecent: async () => ({
+        path: '/sessions/one/network.jsonl',
+        exists: lines !== undefined,
+        text: lines ?? '',
+        skippedLines: 0,
+        atSizeCap,
+      }),
+    },
+  };
+}
+
+test('a capture session reports the probe file with each request named in full', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    probeHost(
+      [
+        JSON.stringify({
+          method: 'GET',
+          url: 'https://api.example.test/v1/a',
+          status: 200,
+          duration_ms: 4,
+        }),
+        JSON.stringify({
+          method: 'POST',
+          url: 'https://api.example.test/v1/b',
+          status: 201,
+          duration_ms: 6,
+        }),
+      ].join('\n') + '\n',
+    ),
+    simulator,
+    input({ networkCapture: true }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'probe') throw new Error('expected probe result');
+  expect(result.dump.entries.map((entry) => entry.url)).toEqual([
+    'https://api.example.test/v1/b',
+    'https://api.example.test/v1/a',
+  ]);
+  expect(result.notes).toEqual([]);
+});
+
+test('a capture session with no probe file yet reports the probe source and guidance', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    probeHost(undefined),
+    simulator,
+    input({ networkCapture: true }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'probe') throw new Error('expected probe result');
+  expect(result.dump.exists).toBe(false);
+  expect(result.notes[0]).toContain('--capture-network');
+});
+
+test('a probe file at its size cap says the reported window is frozen', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    probeHost(
+      JSON.stringify({
+        method: 'GET',
+        url: 'https://api.example.test/v1/last',
+        status: 200,
+        duration_ms: 4,
+      }) + '\n',
+      true,
+    ),
+    simulator,
+    input({ networkCapture: true }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'probe') throw new Error('expected probe result');
+  expect(result.dump.entries).toHaveLength(1);
+  expect(result.notes.join(' ')).toContain('stopped recording');
+});
+
+test('a dump without capture never reads the probe file', async () => {
+  const base = host({
+    text: 'GET https://api.example.test/v1/a status=200\n',
+    runSimctl: vi.fn(),
+  });
+  const readProbe = vi.fn(async () => {
+    throw new Error('an uncaptured dump must not read the probe file');
+  });
+  const result = await dumpAppleNetworkTraffic(
+    { ...base, captureProbe: { readRecent: readProbe } },
+    simulator,
+    input(),
+    new AbortController().signal,
+  );
+
+  expect(result.source).toBe('app-log');
+  expect(readProbe).not.toHaveBeenCalled();
 });

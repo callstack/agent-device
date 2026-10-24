@@ -20,9 +20,12 @@ export type {
 } from '../debug-symbols.ts';
 export type { DoctorCheck, DoctorCommandResult, DoctorKind, DoctorStatus } from '../doctor.ts';
 export {
+  CAPTURE_NETWORK_DIRECT_APP_ONLY_MESSAGE,
+  CAPTURE_NETWORK_IOS_SIMULATOR_ONLY_MESSAGE,
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
 } from '../launch-console.ts';
+
 export { LOG_ACTION_VALUES } from '../logs.ts';
 export type { LogAction, LogBackend } from '../logs.ts';
 export type { NetworkEntry } from '../network-log.ts';

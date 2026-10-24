@@ -60,6 +60,7 @@ export async function handleNetworkCommand(params: NetworkHandlerParams): Promis
       sessionId: params.sessionName,
       appBundleId: session.appBundleId,
       ...(appLog ? { appLogSnapshot: { state: appLog.state, startedAt: appLog.startedAt } } : {}),
+      ...(session.networkCapture ? { networkCapture: true } : {}),
       maxEntries: request.maxEntries,
       include: plan.include,
       maxPayloadChars: NETWORK_MAX_PAYLOAD_CHARS,
@@ -150,13 +151,14 @@ function networkDumpResponse(
   active: boolean,
   state: 'active' | 'recovering' | 'ended' | 'failed' | undefined,
 ): DaemonResponse {
-  if (result.source === 'app-log') {
+  if (result.source === 'app-log' || result.source === 'probe') {
     return {
       ok: true,
       data: {
         ...result.dump,
         active,
         state: state ?? 'inactive',
+        source: result.source,
         backend: result.backend,
         notes: result.notes,
       },

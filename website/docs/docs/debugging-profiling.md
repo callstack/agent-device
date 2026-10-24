@@ -222,6 +222,14 @@ agent-device network dump 25 --include all
 - On iOS simulators, logs stream from inside the simulator, and `network dump` reads recent simulator log history when the live window is sparse.
 - On iOS, `network dump` can return zero entries for real traffic when the app does not log request metadata to Unified Logging. The response notes tell an empty repro window apart from a log window with no network lines.
 - On iOS, the system logs a request URL only when it opens a connection. Requests that reuse a keep-alive connection are reported against that connection's origin with `pathUnavailable: true`, their status, and timing. Requests whose connection opened before the scanned window are only counted in `unnamedRequests`. Treat an endpoint missing from an iOS dump as unproven, not as never called.
+- On an iOS simulator, open the app with `--capture-network` to capture every URLSession request exactly:
+
+  ```bash
+  agent-device open com.example.app --capture-network
+  agent-device network dump 50
+  ```
+
+  The response reports `source: probe`, and each entry carries the request's own full URL, method, status, and duration, also for requests that reused a keep-alive connection. No proxy and no app changes are needed. The open relaunches the app under the probe and refuses the flag on every other platform. Capture covers URLSession only: a Flutter dart:io stack is not covered.
 - On web, request and response bodies are not available; use `agent-browser` HAR capture directly when you need them.
 - For the alias and scan limits, see [Media and logs](/docs/commands#media-and-logs).
 

@@ -68,6 +68,7 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     surface?: SessionSurface;
     activity?: string;
     launchConsole?: string;
+    captureNetwork?: boolean;
     launchArgs?: string[];
     relaunch?: boolean;
     shutdown?: boolean;

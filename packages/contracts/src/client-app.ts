@@ -68,6 +68,12 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     surface?: SessionSurface;
     activity?: string;
     launchConsole?: string;
+    /**
+     * On an iOS simulator, inject the network capture probe into the app launch so `network dump`
+     * lists every URLSession request with its own full URL, status, and duration. The session app
+     * must be (re)launched by this open. Refused on every other platform.
+     */
+    captureNetwork?: boolean;
     launchArgs?: string[];
     relaunch?: boolean;
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */

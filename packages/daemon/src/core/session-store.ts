@@ -2,6 +2,7 @@ import {
   resolveSessionDir,
   resolveSessionAppLogPath,
   resolveSessionAppLogPidPath,
+  resolveSessionNetworkCapturePath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -139,6 +140,15 @@ export class SessionStore {
     const next = { ...current, ...changes };
     entry.current = next;
     return next;
+  }
+
+  /**
+   * Records or clears the session's network capture window (ADR 0037). The store owns the record,
+   * so this is the only writer of the field; the open that launched the app under the probe sets
+   * it, and any other open clears the window a previous open left.
+   */
+  setNetworkCapture(session: SessionState, capture: true | undefined): void {
+    session.networkCapture = capture;
   }
 
   retire(ref: SessionRef): boolean {
@@ -474,6 +484,14 @@ export class SessionStore {
 
   resolveAppLogPidPath(sessionName: string): string {
     return resolveSessionAppLogPidPath(this.sessionsDir, sessionName);
+  }
+
+  /**
+   * Path the injected iOS simulator network capture probe writes this session's captured requests to
+   * (ADR 0037). One file per session; the probe replaces it on every probe-injected launch.
+   */
+  resolveNetworkCapturePath(sessionName: string): string {
+    return resolveSessionNetworkCapturePath(this.sessionsDir, sessionName);
   }
 
   resolveEventLogPath(sessionName: string): string {

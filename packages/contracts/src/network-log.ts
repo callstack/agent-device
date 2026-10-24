@@ -18,6 +18,12 @@ export type NetworkEntry = {
    * the connection it reused. Absent means `url` is the request URL as logged.
    */
   pathUnavailable?: boolean;
+  /**
+   * Why the request did not produce a response, as the app reported it. Absent means the request
+   * was not observed failing; a missing `status` with no `error` means the reader simply never saw
+   * a response for it.
+   */
+  error?: string;
   raw: string;
   line: number;
 };

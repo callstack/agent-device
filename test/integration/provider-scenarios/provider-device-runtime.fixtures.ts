@@ -18,6 +18,7 @@ import {
   type ApplicationLifecycleRuntimeOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
+  assertOpenAdmitted,
   bindProviderApplicationLifecycleInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
@@ -208,6 +209,7 @@ function providerScenarioApplicationLifecycle(
     }),
     prepareApplicationOpen: async () => undefined,
     openApplication: async (input) => {
+      assertOpenAdmitted(binding, input.execution, input.positionals);
       if (input.relaunch && input.target) {
         await invokeApplicationClose({
           device,

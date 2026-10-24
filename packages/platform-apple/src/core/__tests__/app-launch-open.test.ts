@@ -1,9 +1,8 @@
-import { beforeEach, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
-
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
@@ -12,6 +11,15 @@ vi.mock('../simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../simulator.ts')>();
   return { ...actual, ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator) };
 });
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn() };
+});
+// The probe build a capture launch triggers belongs to launch-env.test.ts and the provider
+// scenario; here the cache answers with a fixed path so no test in this file reaches clang.
+vi.mock('../../network/probe-cache.ts', () => ({
+  ensureNetworkCaptureProbe: vi.fn(),
+}));
 
 const execActual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
   '@agent-device/host-kit/command',
@@ -20,9 +28,12 @@ const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>(
 
 import { openIosApp } from '../app-launch.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { IOS_SIMULATOR_OPENURL_TIMEOUT_MS } from '../config.ts';
+import { ensureNetworkCaptureProbe } from '../../network/probe-cache.ts';
+import { IOS_SIMULATOR_CONSOLE_CAPTURE_MS, IOS_SIMULATOR_OPENURL_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runCmd } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
 import {
@@ -33,6 +44,17 @@ import {
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
+const mockEnsureNetworkCaptureProbe = vi.mocked(ensureNetworkCaptureProbe);
+const mockEmitDiagnostic = vi.mocked(emitDiagnostic);
+
+/** The one diagnostic this file's timeout branches emit, by phase. */
+function findDiagnostic(phase: string): { level: string; data: Record<string, unknown> } {
+  const event = mockEmitDiagnostic.mock.calls
+    .map(([event]) => event)
+    .find((event) => event.phase === phase);
+  assert.ok(event, `expected a diagnostic for phase ${phase}`);
+  return event as unknown as { level: string; data: Record<string, unknown> };
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -126,17 +148,202 @@ test('openIosApp captures iOS simulator launch console output when requested', a
       }
       return '';
     },
-    async ({ calls }) => {
+    async ({ calls, execOptions }) => {
       await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
         appBundleId: 'com.example.app',
         launchConsole: launchConsolePath,
       });
       assert.deepEqual(calls, [['simctl', 'launch', '--console-pty', 'sim-1', 'com.example.app']]);
+      // The closest negative to the capture launch: with no capture requested the console
+      // launch spawns through the bare seam and no environment reaches it.
+      assert.equal(execOptions[0]?.env, undefined);
       assert.equal(
         await fs.readFile(launchConsolePath, 'utf8'),
         'console stdout\nconsole stderr\n',
       );
     },
+  );
+});
+
+test('openIosApp with a console and a network capture spawns the merged host environment', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-capture-test-');
+  const launchConsolePath = path.join(tmpDir, 'console.log');
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockEnsureNetworkCaptureProbe.mockResolvedValue({ path: '/cache/ADNetworkCapture.dylib' });
+
+  await withCommandHost(
+    { host: { env: { PATH: '/usr/bin' }, cwd: tmpDir }, requestEnv: undefined },
+    async () =>
+      await withFakeAppleTool(
+        () => ({ stdout: 'captured stdout', stderr: '' }),
+        async ({ calls, execOptions }) => {
+          await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+            appBundleId: 'com.example.app',
+            launchConsole: launchConsolePath,
+            networkCapturePath: '/sessions/one/network.jsonl',
+          });
+          assert.deepEqual(calls, [
+            [
+              'simctl',
+              'launch',
+              '--console-pty',
+              '--terminate-running-process',
+              'sim-1',
+              'com.example.app',
+            ],
+          ]);
+          // A capture launch crosses the host-env spawn boundary even for the console variant:
+          // the host environment carries along and the two SIMCTL_CHILD overrides land on top.
+          assert.equal(execOptions[0]?.timeoutMs, IOS_SIMULATOR_CONSOLE_CAPTURE_MS);
+          assert.equal(execOptions[0]?.env?.PATH, '/usr/bin');
+          assert.equal(
+            execOptions[0]?.env?.SIMCTL_CHILD_DYLD_INSERT_LIBRARIES,
+            '/cache/ADNetworkCapture.dylib',
+          );
+          assert.equal(
+            execOptions[0]?.env?.SIMCTL_CHILD_AGENT_DEVICE_NETWORK_CAPTURE_PATH,
+            '/sessions/one/network.jsonl',
+          );
+          assert.equal(await fs.readFile(launchConsolePath, 'utf8'), 'captured stdout');
+        },
+      ),
+  );
+});
+
+test('openIosApp with a network capture and no console spawns the plain launch with that environment', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockEnsureNetworkCaptureProbe.mockResolvedValue({ path: '/cache/ADNetworkCapture.dylib' });
+
+  await withCommandHost(
+    {
+      host: { env: { PATH: '/usr/bin' }, cwd: process.cwd() },
+      requestEnv: undefined,
+    },
+    async () =>
+      await withFakeAppleTool(
+        () => '',
+        async ({ calls, execOptions }) => {
+          await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+            appBundleId: 'com.example.app',
+            networkCapturePath: '/sessions/one/network.jsonl',
+          });
+          // Capture forces a fresh process but does not ask for the console pipe.
+          assert.deepEqual(calls, [
+            ['simctl', 'launch', '--terminate-running-process', 'sim-1', 'com.example.app'],
+          ]);
+          assert.equal(
+            execOptions[0]?.env?.SIMCTL_CHILD_DYLD_INSERT_LIBRARIES,
+            '/cache/ADNetworkCapture.dylib',
+          );
+          assert.equal(execOptions[0]?.env?.PATH, '/usr/bin');
+        },
+      ),
+  );
+});
+
+test('openIosApp keeps the open alive when the console capture bound fires and logs what was printed', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-timeout-test-');
+  const launchConsolePath = path.join(tmpDir, 'console.log');
+  mockEnsureBootedSimulator.mockResolvedValue();
+
+  await withFakeAppleTool(
+    (args) => {
+      if (args[0] === 'simctl' && args[1] === 'launch') {
+        throw new AppError('COMMAND_FAILED', 'xcrun timed out after 25000ms', {
+          stdout: 'partial output',
+          stderr: 'truncated stderr',
+          exitCode: 124,
+          timeoutMs: IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
+        });
+      }
+      return '';
+    },
+    async () => {
+      // The bound on the console pipe is a capture budget, not a launch failure: the open
+      // resolves, the bytes killed with the child land in the log, and the diagnostic tells.
+      await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+        appBundleId: 'com.example.app',
+        launchConsole: launchConsolePath,
+      });
+      assert.equal(
+        await fs.readFile(launchConsolePath, 'utf8'),
+        'partial output\ntruncated stderr',
+      );
+      const diagnostic = findDiagnostic('ios_simulator_launch_console_capture_timeout');
+      expect(diagnostic).toMatchObject({
+        level: 'warn',
+        data: {
+          timeoutMs: IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
+          logPath: launchConsolePath,
+          stdoutBytes: 14,
+          stderrBytes: 16,
+        },
+      });
+    },
+  );
+});
+
+test('openIosApp logs an empty console when the capture-bound error carries no output at all', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-timeout-empty-test-');
+  const launchConsolePath = path.join(tmpDir, 'console.log');
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockEnsureNetworkCaptureProbe.mockResolvedValue({ path: '/cache/ADNetworkCapture.dylib' });
+
+  await withCommandHost(
+    { host: { env: { PATH: '/usr/bin' }, cwd: tmpDir }, requestEnv: undefined },
+    async () =>
+      await withFakeAppleTool(
+        (args) => {
+          if (args[0] === 'simctl' && args[1] === 'launch') {
+            throw new AppError('COMMAND_FAILED', 'xcrun timed out after 25000ms', {
+              timeoutMs: IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
+            });
+          }
+          return '';
+        },
+        async ({ execOptions }) => {
+          await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+            appBundleId: 'com.example.app',
+            launchConsole: launchConsolePath,
+            networkCapturePath: '/sessions/one/network.jsonl',
+          });
+          // The timeout branch reads missing stdout/stderr as empty and still writes the log,
+          // on the capture spawn variant.
+          assert.equal(
+            execOptions[0]?.env?.SIMCTL_CHILD_DYLD_INSERT_LIBRARIES,
+            '/cache/ADNetworkCapture.dylib',
+          );
+          assert.equal(await fs.readFile(launchConsolePath, 'utf8'), '');
+          const diagnostic = findDiagnostic('ios_simulator_launch_console_capture_timeout');
+          expect(diagnostic).toMatchObject({
+            data: { stdoutBytes: 0, stderrBytes: 0 },
+          });
+        },
+      ),
+  );
+});
+
+test('openIosApp rethrows a console launch failure that is not the capture bound', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-error-test-');
+  const launchConsolePath = path.join(tmpDir, 'console.log');
+  mockEnsureBootedSimulator.mockResolvedValue();
+
+  await assert.rejects(
+    withFakeAppleTool(
+      (args) => {
+        if (args[0] === 'simctl' && args[1] === 'launch') {
+          throw new Error('console pipe exploded');
+        }
+        return '';
+      },
+      async () => {
+        await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+          appBundleId: 'com.example.app',
+          launchConsole: launchConsolePath,
+        });
+      },
+    ),
+    /console pipe exploded/,
   );
 });
 

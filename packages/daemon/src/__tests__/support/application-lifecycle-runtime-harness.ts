@@ -1,4 +1,5 @@
 import {
+  assertOpenAdmitted,
   bindProviderApplicationLifecycleInteractor,
   invokeApplicationClose,
   invokeApplicationOpen,
@@ -144,6 +145,7 @@ function applicationLifecycleRuntimeFixtureProviderOperations(
     }),
     prepareApplicationOpen: async () => undefined,
     openApplication: async (input) => {
+      assertOpenAdmitted(binding, input.execution, input.positionals);
       await invokeApplicationOpen({
         device,
         interactor: await binding.resolveInteractor(input.execution, input.appBundleId),

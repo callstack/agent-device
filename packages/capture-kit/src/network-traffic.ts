@@ -96,10 +96,8 @@ export function readRecentNetworkTrafficFromText(
   content: string,
   options: NetworkDumpParserOptions,
 ): NetworkScan {
-  const maxEntries = clampInt(options.maxEntries, 25, 1, 200);
-  const include = options.include ?? 'summary';
-  const maxPayloadChars = clampInt(options.maxPayloadChars, 2048, 64, 16_384);
-  const maxScanLines = clampInt(options.maxScanLines, 4000, 100, 20_000);
+  const { include, limits } = resolveNetworkDumpLimits(options);
+  const { maxEntries, maxScanLines, maxPayloadChars } = limits;
   const lineNumberOffset = requireLineNumberOffset(options.lineNumberOffset);
   if (!options.exists) {
     return Object.freeze({
@@ -111,7 +109,7 @@ export function readRecentNetworkTrafficFromText(
         entries: Object.freeze([]),
         unnamedRequests: 0,
         include,
-        limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+        limits,
       }),
       unnamedRequestIds: Object.freeze([]),
     });
@@ -148,7 +146,7 @@ export function readRecentNetworkTrafficFromText(
       entries: Object.freeze(entries),
       unnamedRequests: unnamedRequestIds.length,
       include,
-      limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+      limits,
     }),
     unnamedRequestIds: Object.freeze(unnamedRequestIds),
   });
@@ -269,7 +267,7 @@ function createNetworkEntry(
     timestamp: parseNetworkTimestamp(line),
     packetId: identity.packetId ?? parseAndroidPacketId(line) ?? undefined,
     durationMs: identity.durationMs ?? parseAndroidDurationMs(line) ?? undefined,
-    raw: truncate(line, maxPayloadChars),
+    raw: truncateNetworkText(line, maxPayloadChars),
     line: lineNumber,
   };
 }
@@ -283,7 +281,7 @@ function applyNetworkProjection(
 ): void {
   if (includesHeaders(include)) {
     const headers = readNetworkHeaders(line, maybeJson);
-    if (headers) result.headers = truncate(headers, maxPayloadChars);
+    if (headers) result.headers = truncateNetworkText(headers, maxPayloadChars);
   }
   if (includesBody(include)) {
     const requestBody = readNetworkBody(line, maybeJson, [
@@ -293,8 +291,8 @@ function applyNetworkProjection(
       'request',
     ]);
     const responseBody = readNetworkBody(line, maybeJson, ['responseBody', 'response']);
-    if (requestBody) result.requestBody = truncate(requestBody, maxPayloadChars);
-    if (responseBody) result.responseBody = truncate(responseBody, maxPayloadChars);
+    if (requestBody) result.requestBody = truncateNetworkText(requestBody, maxPayloadChars);
+    if (responseBody) result.responseBody = truncateNetworkText(responseBody, maxPayloadChars);
   }
 }
 
@@ -310,14 +308,38 @@ function networkEntryKey(entry: NetworkEntry): string {
   return `${entry.timestamp ?? ''}|${entry.method ?? ''}|${entry.url}|${entry.status ?? ''}|${entry.raw}`;
 }
 
-function truncate(value: string, max: number): string {
+/** Bounds one response field's text; shared by every network dump reader in this package. */
+export function truncateNetworkText(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max)}...<truncated>`;
 }
 
-function clampInt(value: number | undefined, fallback: number, min: number, max: number): number {
+/** Resolves one dump limit against its default and bounds; shared by every dump reader. */
+function clampNetworkDumpInt(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   return value === undefined || !Number.isInteger(value)
     ? fallback
     : Math.max(min, Math.min(max, value));
+}
+
+/**
+ * The one resolution of dump parser options (include mode plus the bounded limits) every network
+ * dump reader in this package — app-log or capture probe — reports in its `limits`.
+ */
+export function resolveNetworkDumpLimits(options: NetworkDumpParserOptions): Readonly<{
+  include: NonNullable<NetworkDumpParserOptions['include']>;
+  limits: NetworkDump['limits'];
+}> {
+  const maxEntries = clampNetworkDumpInt(options.maxEntries, 25, 1, 200);
+  const maxPayloadChars = clampNetworkDumpInt(options.maxPayloadChars, 2048, 64, 16_384);
+  const maxScanLines = clampNetworkDumpInt(options.maxScanLines, 4000, 100, 20_000);
+  return Object.freeze({
+    include: options.include ?? 'summary',
+    limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+  });
 }
 
 /**

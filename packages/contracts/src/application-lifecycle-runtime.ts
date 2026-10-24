@@ -40,6 +40,13 @@ export type ApplicationLifecycleExecution = Readonly<{
   activity?: string;
   launchConsole?: string;
   launchArgs?: readonly string[];
+  /**
+   * Where a launch should write the session's captured network lines (ADR 0037), from
+   * `open --capture-network`. Its presence is the whole capture request; the owner that injects the
+   * probe writes the app to this file. An open carrying it is admitted only by an owner that
+   * declares the capture capability, so no owner can silently ignore the request.
+   */
+  networkCapturePath?: string;
   clearAppState?: boolean;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
