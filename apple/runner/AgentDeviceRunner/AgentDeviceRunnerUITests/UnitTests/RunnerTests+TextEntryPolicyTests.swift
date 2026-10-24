@@ -123,6 +123,24 @@ extension RunnerTests {
     }
   }
 
+  // A clear burst covers a short value whole and caps a long one, which the clear then
+  // finishes in more bursts (#3851).
+  func testTextClearBurstCoversShortValuesAndCapsLongOnes() {
+    XCTAssertEqual(Self.textClearBurst(valueLength: 0), 24)
+    XCTAssertEqual(Self.textClearBurst(valueLength: 10), 24)
+    XCTAssertEqual(Self.textClearBurst(valueLength: 100), 108)
+    XCTAssertEqual(Self.textClearBurst(valueLength: 501), 120)
+  }
+
+  // A clear goes on only while each burst shortens the value, so a field that ignores deletes or
+  // rewrites its value cannot keep it looping.
+  func testTextClearContinuesOnlyWhileTheValueShortens() {
+    XCTAssertTrue(Self.textClearContinues(clearedLength: 501, remainingLength: 381))
+    XCTAssertFalse(Self.textClearContinues(clearedLength: 501, remainingLength: 0))
+    XCTAssertFalse(Self.textClearContinues(clearedLength: 501, remainingLength: 501))
+    XCTAssertFalse(Self.textClearContinues(clearedLength: 501, remainingLength: 640))
+  }
+
   // One read owns readability for every route: a secure field is unreadable whatever it reports,
   // a plain field is unreadable only while its value is a mask, and anything that is not a text
   // input has no text to read.
@@ -156,7 +174,7 @@ extension RunnerTests {
   // ending the clear as a field that could not be read.
   func testSynthesizedClearLeavesAMaskedFieldUnverified() {
     var passes = 0
-    let outcome = Self.clearForSynthesizedReplacement(
+    let outcome = Self.clearUntilEmpty(
       clearOnce: {
         passes += 1
         return .posted
@@ -459,7 +477,7 @@ extension RunnerTests {
     for testCase in cases {
       var passes = 0
       var reads = testCase.reads[...]
-      let outcome = Self.clearForSynthesizedReplacement(
+      let outcome = Self.clearUntilEmpty(
         clearOnce: {
           passes += 1
           return .posted
@@ -470,7 +488,7 @@ extension RunnerTests {
       XCTAssertEqual(passes, testCase.passes, "\(testCase.reads)")
     }
     XCTAssertEqual(
-      Self.clearForSynthesizedReplacement(clearOnce: { .stop }, read: { .text("") }),
+      Self.clearUntilEmpty(clearOnce: { .stop }, read: { .text("") }),
       .stopped
     )
   }

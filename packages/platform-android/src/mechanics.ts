@@ -165,7 +165,6 @@ export {
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
   isAndroidTestImeActive,
-  inspectAndroidSessionTeardownResources,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from './ime-lifecycle.ts';

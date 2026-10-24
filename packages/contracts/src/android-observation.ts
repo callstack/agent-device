@@ -27,7 +27,7 @@ export type AndroidObservationHost = Readonly<{
   runAdb(
     device: DeviceInfo,
     args: readonly string[],
-    options?: Readonly<{ allowFailure?: boolean }>,
+    options?: Readonly<{ allowFailure?: boolean; timeoutMs?: number }>,
   ): Promise<AndroidObservationCommandResult>;
   readSnapshotNodes(device: DeviceInfo): Promise<SnapshotNode[]>;
   openApp(device: DeviceInfo, appBundleId: string): Promise<void>;

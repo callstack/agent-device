@@ -178,7 +178,7 @@ Reusable open-to-destination scripts:
 
 Replay divergence and repair:
   A failing replay/test step returns REPLAY_DIVERGENCE with a bounded report (screen digest, ranked selector suggestions, resume). Fix app state, then resume with replay --from <n> --plan-digest <sha256> (both from the report's resume field) to continue without re-running earlier steps; resume never re-executes skipped steps, so app state there is the caller's responsibility. --from is replay-only; test rejects it. The digest binds the script, includes, effective --platform/--target, and per-action runtime/identity; native .ad interpolation is late-bound so changing only its values keeps the digest, while Maestro environment substitution can change it.
-  A resource step that cannot run in bounded batch/replay returns details.reason bounded_composite_resource_unsupported, details.shape, and dispatched: no for that step. Affected commands include perf, audio, record, trace, and some logs operations. details.standaloneCommandName names the public command when known; it is not a complete command. Run the original step separately with its original arguments and options, the same --session value, and the same private CLI context. For replay, inspect the failed source line. After completing the step directly, use resume.alternateFrom with planDigest if offered and steps remain; resume.from retries the same bounded step and refuses it again. An authored .ad command without a resource classification fails closed with shape <command>:unclassified. Inspect completed steps before retrying the composite; earlier steps may have changed the app. A nested test with an attempt timeout or --record-video is refused before its first attempt; direct test keeps its own timeout behavior. Session lifecycle disposal and foreign-claim recovery retain their prior admission behavior.
+  A resource step that cannot run in bounded batch/replay returns details.reason bounded_composite_resource_unsupported, details.shape, and dispatched: no for that step. Affected commands include perf, audio, record, trace, some logs operations, close when it would dispose an owned capture or release a provider lease, and acquisition that would recover another session's durable resources. Existing-session open preserves its owned resource handles. An Android test IME alone is restored by ordinary close, including a bounded step; restoration may settle after the remaining composite time. If restore fails, close retires the session but retains its device claim: inspect the device and claim before recovery, rather than retrying close on the retired session. details.standaloneCommandName names the public command when known; it is not a complete command. Run the original refused step separately with its original arguments and options, the same --session value, and the same private CLI context. For replay, inspect the failed source line. After completing the step directly, use resume.alternateFrom with planDigest if offered and steps remain; resume.from retries the same bounded step and refuses it again. An authored .ad command without a resource classification fails closed with shape <command>:unclassified. Inspect completed steps before retrying the composite; earlier steps may have changed the app. A nested test with an attempt timeout or --record-video is refused before its first attempt; direct test keeps its own timeout behavior.
   Native .ad session takeover: replay <file>.ad --keep-session suppresses exactly an authored terminal close and returns the surviving session for continued commands. --update/-u is a no-op (ADR 0012); every divergence already carries the same ranked suggestions.
   Agent-supervised repair: arm replay <file>.ad --save-script[=<out>] before step 1 (armed once; --from continuations do not need it again). Every divergence carries a repairHint: record-and-heal means press the correct control via a blessed @ref from the divergence's screen.refs, recorded, then replay --from <n+1> --plan-digest <sha256>; state-repair means the script is correct but app state is not -- fix state with --no-record actions, then replay --from <n> to re-run the unchanged step; caution means a blind re-press may repeat the mistake; manual means no safe automated repair could be proven. Read-only inspection you run to locate the repair target (snapshot -i, get attrs, find, is) is excluded from the healed script by default; pass --record on a read step you want kept. End the repair with close --save-script[=<out>] (default <stem>.healed.ad); review its diff before promoting it over the original. Running close --save-script before a required resume aborts the repair with no script written.
 
@@ -196,10 +196,11 @@ Recording:
   },
   gestures: gestureHelpTopic,
   tv: {
-    summary: 'Android TV, tvOS, and Vega VVD focus-first remote navigation',
+    summary:
+      'Android TV (incl. Fire TV on Fire OS), tvOS, and Vega VVD focus-first remote navigation',
     body: `agent-device help tv
 
-Use this when the target is Android TV, Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
+Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
 
 Core loop:
   agent-device open Settings --platform android --target tv --session tv
@@ -211,7 +212,7 @@ Core loop:
 
 Vega OS:
   Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB.
-  Initial support is VVD-only. Physical Fire TV devices remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
+  Initial support is VVD-only. Physical devices that run Vega OS remain unsupported until their discovery, lifecycle, and remote controls have durable hardware evidence.
   Use --platform vega --target tv for the running Vega Virtual Device.
   vega virtual-device start
   agent-device devices --platform vega --target tv
@@ -238,6 +239,7 @@ Buttons:
 Android TV:
   Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
+  Fire TV devices and emulators running Fire OS (Android-based) connect as Android TV devices over ADB: enable ADB debugging, run adb connect <ip>:5555, and use --platform android --target tv. Discovery reads the amazon.hardware.fire_tv system feature, so a Fire TV that declares no leanback feature is still a tv target.
 
 tvOS:
   tvOS is driven by the Siri Remote focus engine, not coordinate taps.

@@ -19,6 +19,7 @@ import {
 } from '@agent-device/test-kit';
 import {
   localRuntimeOwner,
+  providerRuntimeOwner,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -29,20 +30,23 @@ export async function resourceAdmissionWorld(
   options: Readonly<{
     device?: DeviceInfo;
     providerOwned?: boolean;
+    withLifecycleProvider?: boolean;
     ime?: {
       activate(stateDir: string): Promise<void>;
       restore(stateDir: string): Promise<void>;
-      inspect(device: DeviceInfo): readonly string[];
     };
   }> = {},
 ) {
   const device = options.device ?? ANDROID_EMULATOR;
+  let now = 1_000;
   const leaseRegistry = new LeaseRegistry({
     defaultLeaseTtlMs: 10,
     minLeaseTtlMs: 1,
-    now: () => 1_000,
+    now: () => now,
   });
-  const owner = localRuntimeOwner(device.platform);
+  const owner = options.providerOwned
+    ? providerRuntimeOwner('fixture', 'lease-a')
+    : localRuntimeOwner(device.platform);
   const sessionStore = new SessionStore(
     path.join(mkdtempForTestSync('composite-resources-'), 'sessions'),
     createLiveTestHostEnvironment(),
@@ -67,7 +71,7 @@ export async function resourceAdmissionWorld(
   const native = vi.fn(async () => {
     throw new Error('resource native effect reached');
   });
-  const inspectTeardown = vi.fn(async (target: DeviceInfo) => options.ime?.inspect(target) ?? []);
+  const providerRelease = vi.fn(async () => ({}));
   const base = createUnavailableRuntimeFactsForTest(device, owner);
   const available = { available: true as const };
   const facts = {
@@ -187,6 +191,9 @@ export async function resourceAdmissionWorld(
       const base = await daemonRuntimeDepsFixture()(input);
       return {
         ...base,
+        ...((options.withLifecycleProvider ?? options.providerOwned)
+          ? { leaseLifecycleProvider: { release: providerRelease } }
+          : {}),
         providerDeviceAdmission: Object.freeze({ isActive: () => options.providerOwned === true }),
         deviceRuntimeGateway: {
           ...gateway,
@@ -196,10 +203,7 @@ export async function resourceAdmissionWorld(
           ...base.requestRouter,
           sessionStore,
           leaseRegistry,
-          platformServices: {
-            ...base.requestRouter.platformServices,
-            inspectSessionTeardownResources: inspectTeardown,
-          },
+          platformServices: base.requestRouter.platformServices,
           deviceInventoryGateways: createTestDeviceInventoryGatewaysFromProvider(async () => [
             device,
           ]),
@@ -244,12 +248,16 @@ export async function resourceAdmissionWorld(
     finish,
     forceCleanup,
     native,
+    providerRelease,
     bind,
     inspectFacts,
     sample,
     home,
     setViewport,
     leaseRegistry,
+    expireLease: () => {
+      now = 1_011;
+    },
   };
 }
 

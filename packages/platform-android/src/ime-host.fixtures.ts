@@ -1,6 +1,6 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
 
-export function bindAndroidImeTestHost(): void {
+export function bindAndroidImeTestHost(): (stateDir: string) => string[] {
   const markers = new Map<string, Set<string>>();
   const markerSet = (stateDir: string) => {
     const entries = markers.get(stateDir) ?? new Set<string>();
@@ -76,4 +76,5 @@ export function bindAndroidImeTestHost(): void {
       throw new Error('provider artifact expected');
     },
   } satisfies AndroidAdbHost);
+  return (stateDir) => [...markerSet(stateDir)];
 }

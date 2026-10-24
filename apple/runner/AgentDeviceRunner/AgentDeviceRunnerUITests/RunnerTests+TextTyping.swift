@@ -23,7 +23,7 @@ extension RunnerTests {
       // place while the response reported "typed". Append (`type`) and unrepaired entry stay
       // no-ops, which is what an empty payload means for them.
       if repairMode == .replacement {
-        guard let clearTarget = reader.input() else {
+        guard reader.input() != nil else {
           // No resolvable input means no clear happened — including the synthesized
           // first-responder route, whose target carries no element. Success here would claim a
           // clear the runner never performed.
@@ -36,7 +36,7 @@ extension RunnerTests {
             failure: .notFocused
           )
         }
-        reader.dispatch { clearTextInput(app: app, clearTarget) }
+        clearTextInput(app: app, reader: &reader)
         // nil means the value is unreadable (secure fields), not "not empty": leave `verified`
         // nil there rather than reporting a mismatch the runner cannot actually observe.
         let observed = editableTextValue(for: reader.input()?.attributes, treatingPlaceholderAsEmpty: true)
@@ -119,13 +119,13 @@ extension RunnerTests {
 
     var entryBaseline: TextEntryObservation?
     if repairMode == .replacement {
-      guard let replacementTarget = initialTarget else {
+      guard initialTarget != nil else {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
         return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
       }
       if currentText == nil || currentText?.isEmpty == false {
         let clearStartedAt = Date()
-        reader.dispatch { clearTextInput(app: app, replacementTarget) }
+        clearTextInput(app: app, reader: &reader)
         logTextEntryPhase(
           commandId: commandId,
           phase: "clear",
@@ -477,10 +477,18 @@ extension RunnerTests {
       expectedText.count,
       observedText.count
     )
-    reader.dispatch {
-      clearTextInput(app: app, repairTarget)
-      repairTarget.element.typeText(expectedText)
+    clearTextInput(app: app, reader: &reader)
+    // An input the clear removed or let another take the place of has nowhere for the repair to go.
+    guard let input = reader.input() else {
+      return TextEntryResult(
+        verified: nil,
+        repaired: false,
+        expectedText: expectedText,
+        observedText: nil,
+        failure: .commitNotObserved
+      )
     }
+    reader.dispatch { input.element.typeText(expectedText) }
     return verifyTextEntry(
       reader: &reader,
       expectedText: expectedText,

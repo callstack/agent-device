@@ -1,4 +1,7 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
+import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -9,7 +12,7 @@ import {
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 import {
   emitDiagnostic,
@@ -35,6 +38,7 @@ import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
   endLeasedSession,
+  inspectSessionProviderReleaseOnClose,
   type LeaseEndReason,
   type SessionTeardown,
 } from '../sessions/lease-lifecycle.ts';
@@ -100,10 +104,55 @@ import {
   assertDaemonPolicyAdmitsRequest,
 } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { deviceClaimConflictError } from '../resources/device/device-claim-conflict.ts';
 import {
   requestDispatchLedger,
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
+
+async function resolveFreshBoundedOpenDevice(req: DaemonRequest, env: EnvMap): Promise<DeviceInfo> {
+  const { resolveForegroundOpenRequest } =
+    await import('../sessions/session-lifecycle/internal/session-open.ts');
+  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: false });
+  if (foreground.type === 'response') {
+    if (!foreground.response.ok) {
+      const { code, message, details } = foreground.response.error;
+      throw new AppError(code, message, details);
+    }
+    throw new AppError('INVALID_ARGS', 'Invalid open target');
+  }
+  const openReq = foreground.type === 'resolved' ? foreground.req : req;
+  return (
+    await resolveTargetDeviceSelection(
+      openReq.flags ?? {},
+      buildOpenTargetDeviceResolutionOptions(openReq.positionals?.[0], env, openReq.flags?.surface),
+    )
+  ).device;
+}
+
+async function resolveBoundedClaimDevice(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+  env: EnvMap,
+  platformServices: DaemonPlatformServices,
+): Promise<DeviceInfo> {
+  const { resolveCommandDevice, resolvePowerCommandDevice, requireSessionOrExplicitSelector } =
+    await import('../resources/session-device-resolution.ts');
+  if (req.command !== 'open') {
+    const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
+    if (guard && !guard.ok) {
+      const { code, message, details } = guard.error;
+      throw new AppError(code, message, details);
+    }
+  }
+  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
+  if (req.command === 'install_source' && session) return session.device;
+  const resolve =
+    req.command === 'boot' || req.command === 'shutdown'
+      ? resolvePowerCommandDevice
+      : resolveCommandDevice;
+  return await resolve({ session, flags: req.flags, env, platformServices });
+}
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -176,6 +225,7 @@ export async function createRequestExecutionScope(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
@@ -266,6 +316,7 @@ export async function createRequestExecutionScope(params: {
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       env: params.host.env,
+      req: scopedReq,
       command,
       sessionName,
       dispatchLedger,
@@ -330,6 +381,53 @@ export async function createRequestExecutionScope(params: {
             await boundedResources.admitBoundedCompositeResourceRequest({
               req: scopedReq,
               session,
+              validateSessionReopen: async (current) => {
+                const { resolveExistingOpenRequest } =
+                  await import('../sessions/session-lifecycle/internal/session-open.ts');
+                const resolution = await resolveExistingOpenRequest({
+                  req: scopedReq,
+                  session: current,
+                  platformServices: scope.platformServices,
+                });
+                if (resolution.type === 'response' && !resolution.response.ok) {
+                  const { code, message, details } = resolution.response.error;
+                  throw new AppError(code, message, details);
+                }
+              },
+              closeWouldReleaseProviderLease: () =>
+                Boolean(
+                  session?.lease &&
+                  inspectSessionProviderReleaseOnClose({
+                    session,
+                    leaseRegistry,
+                    leaseLifecycleProvider: params.leaseLifecycleProvider,
+                  }),
+                ),
+              claimRecovery: {
+                currentSessionExists: Boolean(session),
+                resolveDevice: async () => {
+                  const selected = await resolveBoundedClaimDevice(
+                    prepareLockedRequestBinding({ req: scopedReq, existingRef }).req,
+                    session,
+                    params.host.env,
+                    scope.platformServices,
+                  );
+                  await scopedReq.internal?.retainDeviceExecutionLock?.(selected.id);
+                  return selected;
+                },
+                hasInMemorySessionOwner: (device) =>
+                  sessionStore.findByDevice(device.id) !== undefined,
+                session: sessionName,
+                workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+                stateDir: sessionStore.resolveDaemonStateDir(),
+                env: params.host.env,
+                observeDeviceBoot: scope.platformServices.deviceBootObservation,
+                claimConflictError: deviceClaimConflictError,
+                coveredClaimIsOwnedByRequest: (claim) => {
+                  const root = resolveCallerScopeRoot(scopedReq.meta?.cwd);
+                  return !root || resolveCallerScopeRoot(claim.workspace) === root;
+                },
+              },
             });
           }
           throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -338,6 +436,14 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             sessionStore,
             leaseRegistry,
+            assertTeardownAllowed: () => {
+              if (command === 'batch' || command === 'replay' || boundedStep) {
+                throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+                  reason: 'LEASE_NOT_FOUND',
+                  dispatched: 'no',
+                });
+              }
+            },
             teardownSession: async (ref) =>
               await teardownExpiredSession({
                 ref,
@@ -441,6 +547,7 @@ export async function createRequestExecutionScope(params: {
  */
 function createRequestDeviceAccess(params: {
   env: EnvMap;
+  req: DaemonRequest;
   command: string;
   sessionName: string;
   dispatchLedger: RequestDispatchLedger;
@@ -470,6 +577,11 @@ function createRequestDeviceAccess(params: {
     env: params.env,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
+      beforeGateway: async (claim) => {
+        const { createBoundedClaimRecoveryBeforeGateway } =
+          await import('../core/composite-resource-admission.ts');
+        return createBoundedClaimRecoveryBeforeGateway(params.req)(claim);
+      },
       composeGateway: params.claimRecoveryGateway,
     }),
   });

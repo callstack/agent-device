@@ -2,13 +2,15 @@
 
 ## Status
 
-Accepted for issue #3325 operation and nested-test admission. Session lifecycle disposal and claim recovery remain for the final layer.
+Accepted for issue #3325 bounded composite resource admission.
 
 ## Decision
 
 For a bounded `batch` or `replay`, classify each step by the command descriptor's resource trait. `packages/daemon/src/core/composite-resource-admission.ts` owns the admission decision under the existing session and device locks. It reads existing resource owners and operation plans. A resource shape that cannot finish within the composite budget is refused before that step's lease admission, binding, cleanup, or native effect. Unknown shapes fail closed. The typed refusal names the shape and public command name while retaining completed progress and replay source.
 
-The outer composite still authenticates, renews its lease, protects in-flight work, and reports activity. It does not refresh recording health because that read can invalidate a durable recording; an admitted step owns its own refresh. Session lifecycle steps retain their prior admission behavior in this layer. Direct commands and unbounded tests keep their existing behavior.
+The same boundary inspects session disposal for `close`. It uses stored resource handles and the daemon's actual provider release decision. An owned Android test IME alone is ordinary close cleanup: once close starts, restoration settles through the existing teardown path, which may exceed the remaining composite time. A failed restore retires the session and retains its device claim for recovery. Existing-session `open` preserves resource handles, even when it relaunches the app; it does not run session resource teardown or provider release. The boundary still validates an existing-session `open` before admission. Maestro app-only stop leaves its session and resources intact. For claim acquisition, a read-only preview uses the actual acquisition decisions and refuses durable recovery before a stable step reaches binding. Root and transient recovery gateways repeat the check when the claim changes after preview. A cross-daemon change after preview can already have reached facts or binding before the gateway backstop stops recovery.
+
+The outer composite still authenticates, renews its lease, protects in-flight work, and reports activity. It does not refresh recording health because that read can invalidate a durable recording; an admitted step owns its own refresh. Direct commands and unbounded tests keep their existing behavior.
 
 ## Reason and alternatives
 
@@ -16,6 +18,6 @@ The daemon deadline bounds the composite but cannot prove that a resource operat
 
 ## Consequences
 
-Callers inspect completed steps before retrying and run a refused shape separately with its original arguments, options, session, and private CLI context. `standaloneCommandName` is a public name, not a copy-paste command. Replay keeps the failed step, source, `repairHint`, and digest-bound resume metadata; it skips post-refusal capture. Ordinary replay failure capture and recovery remain unchanged. The final layer must add session disposal and foreign-claim recovery without weakening this step admission boundary. A cross-daemon change after preview cannot promise universal zero binding.
+Callers inspect completed steps before retrying and run a refused shape separately with its original arguments, options, session, and private CLI context. `standaloneCommandName` is a public name, not a copy-paste command. Replay keeps the failed step, source, `repairHint`, and digest-bound resume metadata; it skips post-refusal capture. Ordinary replay failure capture and recovery remain unchanged. Expired own leases retain `LEASE_NOT_FOUND` without inline teardown by a composite request or its bounded step.
 
 A bounded resource refusal inside a nested test ends that test's attempts after cleanup. It remains the reported test failure, distinct from infrastructure failure. Unrelated failures retain their configured retries.

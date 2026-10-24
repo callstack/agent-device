@@ -277,6 +277,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               req,
               sessionStore,
               leaseRegistry,
+              leaseLifecycleProvider,
               deviceRuntimeGateway,
               platformServices,
               claimRecoveryGateway,
@@ -405,6 +406,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       bindExactDevice: lockedScope.bindExactDevice,
       reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
         scope: requestScope,
+        beforeGateway: async (claim) => {
+          const { createBoundedClaimRecoveryBeforeGateway } =
+            await import('../core/composite-resource-admission.ts');
+          return createBoundedClaimRecoveryBeforeGateway(lockedScope.req)(claim);
+        },
         composeGateway: claimRecoveryGateway,
       }),
       appLogAdmissionLedger,
@@ -448,6 +454,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           req: scopedReq,
           sessionStore,
           leaseRegistry,
+          leaseLifecycleProvider,
           deviceRuntimeGateway,
           platformServices,
           claimRecoveryGateway,

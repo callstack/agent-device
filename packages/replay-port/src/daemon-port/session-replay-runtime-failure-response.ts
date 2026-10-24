@@ -117,7 +117,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
       ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
       ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
-        ...pickSafeCauseDetails(error.details),
+        ...pickSafeCauseDetails(error.details, scrubVars),
         replayPath,
         step,
         action,
@@ -152,11 +152,21 @@ const SAFE_CAUSE_DETAIL_KEYS = [
 
 function pickSafeCauseDetails(
   details: Record<string, unknown> | undefined,
+  scrubVars: readonly ReplayVarScrubEntry[],
 ): Record<string, unknown> {
   if (!details) return {};
   const safe: Record<string, unknown> = {};
   for (const key of SAFE_CAUSE_DETAIL_KEYS) {
     if (details[key] !== undefined) safe[key] = details[key];
+  }
+  if (
+    details.reason === 'session_cleanup_incomplete' &&
+    Array.isArray(details.failedSteps) &&
+    details.failedSteps.every((step) => typeof step === 'string')
+  ) {
+    safe.failedSteps = details.failedSteps.map((step: string) =>
+      scrubReplayVarValues(step, scrubVars),
+    );
   }
   if (details.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON) {
     if (details.dispatched === 'no') safe.dispatched = 'no';

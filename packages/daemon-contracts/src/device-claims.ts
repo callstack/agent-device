@@ -37,6 +37,7 @@ import {
   isAbandonedDeviceClaim,
   isAbandonedClaimOfThisDaemon,
   isClaimOwnedByThisDaemon,
+  inspectExistingClaimSettlement,
   resolveExistingClaim,
   settleVerifiedOrphanedClaim,
   type DeviceClaimAcquirerKind,
@@ -80,6 +81,103 @@ export type DeviceClaimAcquireResult =
 export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
+
+type ClaimAcquisitionInspectionParams = {
+  device: DeviceInfo;
+  command: string;
+  session: string;
+  workspace: string;
+  stateDir: string;
+  env: EnvMap;
+  coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
+  observeDeviceBoot?: DeviceBootObservationService;
+};
+
+function inspectTransientExactClaim(
+  params: ClaimAcquisitionInspectionParams,
+  deviceKey: string,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): InspectedClaimSettlement | undefined {
+  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
+  const local =
+    existing &&
+    inspectTransientLocalClaim(existing, { ...params, coveredBySession: params.session }, owner);
+  if (local === 'covered' && existing?.claim) return { status: 'held', claim: existing.claim };
+  if (local === 'conflict' && existing) return { status: 'conflict', conflict: existing };
+  return undefined;
+}
+
+async function inspectExactClaimSettlement(
+  params: ClaimAcquisitionInspectionParams,
+  device: DeviceInfo,
+  deviceKey: string,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+  allowTransientCoverage = true,
+): Promise<InspectedClaimSettlement> {
+  const transient = params.command !== 'open';
+  if (transient && allowTransientCoverage) {
+    const local = inspectTransientExactClaim(params, deviceKey, owner);
+    if (local) return local;
+  }
+  const acquirer = {
+    ...params,
+    session: transient ? transientDeviceClaimSession(params.command) : params.session,
+    claimOwnerKind: transient ? ('transient-command' as const) : ('open-session' as const),
+    ...(transient ? { transientCommand: params.command, observeDeviceBoot: undefined } : {}),
+  };
+  return await inspectExistingClaimSettlement({ ...acquirer, device, deviceKey, owner });
+}
+
+function inspectOverlappingMacAppClaims(
+  params: ClaimAcquisitionInspectionParams,
+  identity: DeviceIdentity,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): InspectedClaimSettlement[] {
+  const prefix = canonicalLocalDeviceKey({ ...identity, id: hostDeviceIdPrefix(identity.id) });
+  const settlements: InspectedClaimSettlement[] = [];
+  for (const entry of inspectDeviceClaims({}, params.env)) {
+    if (!entry.claim) {
+      settlements.push({ status: 'conflict', conflict: entry });
+      continue;
+    }
+    if (!entry.claim.deviceKey.startsWith(prefix)) continue;
+    const current = inspectDeviceClaimFile(
+      resolveDeviceClaimPath(entry.claim.deviceKey, params.env),
+    );
+    if (current) settlements.push(inspectOverlappingAppClaim(current, params.stateDir, owner));
+  }
+  return settlements;
+}
+
+/** Inspect every claim an acquisition could settle, without taking its locks or changing a claim. */
+export async function inspectDeviceClaimAcquisition(
+  params: ClaimAcquisitionInspectionParams,
+): Promise<InspectedClaimSettlement[]> {
+  const identity = deviceClaimIdentity(params.device);
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  const owner = readCurrentOwnerIdentity();
+  if (params.command !== 'open' && !params.device.hostApp && canHostAppDevices(params.device)) {
+    const local = inspectTransientExactClaim(params, deviceKey, owner);
+    if (local) return [local];
+  }
+  const settlements: InspectedClaimSettlement[] = [];
+  const hostDeviceId = params.device.hostApp?.hostDeviceId;
+  if (hostDeviceId !== undefined) {
+    const host: DeviceInfo = { ...params.device, id: hostDeviceId, hostApp: undefined };
+    const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
+    const hostSettlement = await inspectExactClaimSettlement(params, host, hostKey, owner, false);
+    if (hostSettlement.status === 'held') {
+      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
+      if (held) settlements.push({ status: 'conflict', conflict: held });
+    } else {
+      settlements.push(hostSettlement);
+    }
+  } else if (canHostAppDevices(params.device)) {
+    settlements.push(...inspectOverlappingMacAppClaims(params, identity, owner));
+  }
+  settlements.push(await inspectExactClaimSettlement(params, params.device, deviceKey, owner));
+  return settlements;
+}
 
 export async function acquireDeviceClaim(params: {
   device: DeviceInfo;
@@ -207,30 +305,10 @@ export async function acquireTransientDeviceClaim(params: {
   };
   return await withAcquisitionLocks(lockParams, deviceKey, async () => {
     const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
-    if (
-      existing?.claim &&
-      !isAbandonedDeviceClaim(existing.claim) &&
-      isClaimOwnedByThisDaemon(existing.claim, params.stateDir, readCurrentOwnerIdentity())
-    ) {
-      const claimKind = existing.claim.claimOwnerKind;
-      if (
-        claimKind === 'open-session' &&
-        existing.claim.session === params.coveredBySession &&
-        params.coveredClaimIsOwnedByRequest(existing.claim)
-      ) {
-        return { status: 'covered-by-owned-claim' };
-      }
-      // Only a record that states its kind can take part in a kind decision. A migrated record
-      // states none, and `isClaimOwnedByThisDaemon` matches pid plus start time — which two
-      // processes can share once a start time is unreadable — so coverage has to refuse rather
-      // than assume an old record was not some other owner's command claim (#3345). A live claim
-      // of any other kind — another session's or a command's, including one labeled exactly like
-      // this command — refuses here, because renewing it would hand this request a token it
-      // never took.
-      if (claimKind !== 'open-session') {
-        return { status: 'conflict', conflict: existing };
-      }
-    }
+    const local =
+      existing && inspectTransientLocalClaim(existing, params, readCurrentOwnerIdentity());
+    if (local === 'covered') return { status: 'covered-by-owned-claim' };
+    if (local === 'conflict') return { status: 'conflict', conflict: existing! };
     return await claimHeldDevice({
       device: params.device,
       deviceKey,
@@ -243,6 +321,31 @@ export async function acquireTransientDeviceClaim(params: {
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });
   });
+}
+
+function inspectTransientLocalClaim(
+  existing: InspectedDeviceClaim,
+  params: {
+    coveredBySession: string;
+    coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
+    stateDir: string;
+  },
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): 'covered' | 'conflict' | undefined {
+  const claim = existing.claim;
+  if (
+    !claim ||
+    isAbandonedDeviceClaim(claim) ||
+    !isClaimOwnedByThisDaemon(claim, params.stateDir, owner)
+  ) {
+    return undefined;
+  }
+  if (claim.claimOwnerKind === 'open-session') {
+    return claim.session === params.coveredBySession && params.coveredClaimIsOwnedByRequest(claim)
+      ? 'covered'
+      : undefined;
+  }
+  return 'conflict';
 }
 
 /** Acquisition body shared by session and transient claims; the caller holds the claim lock. */
