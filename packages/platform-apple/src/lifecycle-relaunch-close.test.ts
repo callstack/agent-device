@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { device, openInput, simulator } from './lifecycle.fixtures.ts';
@@ -174,6 +175,27 @@ test('a physical iOS relaunch without an existing session closes then opens the 
     'prewarm',
     'reset-runner-target',
   ]);
+  expect(appleApplications.stopRunnerSession).not.toHaveBeenCalled();
+});
+
+test('a physical iOS relaunch refuses the launch console before its close, runner steps, and open run', async () => {
+  // `--relaunch --launch-console` on a physical device: the local Apple binding admits the launch
+  // console only for a simulator it controls, so the open must refuse with the typed reason
+  // before the relaunch close, any runner stop, and the launch dispatch.
+  const events: string[] = [];
+  const { host, appleApplications } = lifecycleHost({ events });
+
+  const refusal = await bind(host, device)
+    .openApplication({ ...openInput(), execution: { launchConsole: '/tmp/launch-console.log' } })
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+  expect(refusal).toBeInstanceOf(AppError);
+  expect((refusal as AppError).code).toBe('UNSUPPORTED_OPERATION');
+  expect((refusal as AppError).details?.reason).toBe('launch-console-owner-unadmitted');
+  expect(events).toEqual([]);
   expect(appleApplications.stopRunnerSession).not.toHaveBeenCalled();
 });
 

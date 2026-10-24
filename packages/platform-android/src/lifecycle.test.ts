@@ -229,6 +229,31 @@ test('an Android open leaves the real keyboard in place when test IME activation
   expect(calls).not.toContain('activate-test-ime');
 });
 
+test('an Android relaunch refuses the launch console before its close, hints, or dispatch run', async () => {
+  // `--relaunch --launch-console` on a non-iOS-simulator device: the open must refuse with the
+  // typed reason before the relaunch close, the runtime-hint write, and the launch dispatch, so
+  // a refusal never leaves the running app closed.
+  const { calls, lifecycle } = createLifecycle();
+
+  const refusal = await lifecycle
+    .openApplication(
+      openInput({
+        relaunch: true,
+        runtimeHints: { metroPort: '8081' },
+        execution: { launchConsole: '/tmp/launch-console.log' },
+      }),
+    )
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+  expect(refusal).toBeInstanceOf(AppError);
+  expect((refusal as AppError).code).toBe('UNSUPPORTED_OPERATION');
+  expect((refusal as AppError).details?.reason).toBe('launch-console-owner-unadmitted');
+  expect(calls).toEqual([]);
+});
+
 test('an Android app open returns only after the launched app observation settles', async () => {
   let finishCapture: () => void = () => {};
   const { calls, lifecycle } = createLifecycle({

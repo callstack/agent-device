@@ -148,7 +148,7 @@ On iOS simulators, `logs` scope by bundle id and the resolved app executable. Fo
 agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
 ```
 
-`--launch-console` is only for direct iOS simulator app launches, not URL opens.
+`--launch-console` is only for direct iOS simulator app launches, not URL opens. The session must own the simulator locally, so a provider-owned cloud device refuses the flag before the open reaches the device.
 
 ## Crash symbolication
 
