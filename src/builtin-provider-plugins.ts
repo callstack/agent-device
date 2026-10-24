@@ -6,6 +6,7 @@ import {
 } from '@agent-device/provider-webdriver/providers';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import path from 'node:path';
 import {
   limrunCredentialDeclaration,
   readLimrunCredentials,
@@ -86,7 +87,13 @@ function limrunCandidate(host: HostEnvironment): PluginCandidate {
           import('./sdk/limrun-runtime-dependencies.ts'),
         ]);
         return runtime.createLimrunRuntime(
-          limrun,
+          {
+            ...limrun,
+            // The daemon exports its resolved state dir; HAR captures land beside the session files.
+            networkHarDir: host.env.AGENT_DEVICE_STATE_DIR
+              ? path.join(host.env.AGENT_DEVICE_STATE_DIR, 'network-har')
+              : undefined,
+          },
           dependencies.createLimrunRuntimeDependencies(host),
           {
             includePlatformModule: true,

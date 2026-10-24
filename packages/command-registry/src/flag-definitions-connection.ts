@@ -304,6 +304,26 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'providerNetworkLogs',
+    names: ['--provider-network-logs'],
+    type: 'boolean',
+    usageLabel: '--provider-network-logs',
+    usageDescription:
+      'Limrun: capture session network traffic through the provider tunnel and write it as a live HAR file under the session artifacts; print the path at disconnect. Certificate-pinned hosts fail and DNS-over-HTTPS bypasses the capture',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'providerNetworkHosts',
+    names: ['--provider-network-hosts'],
+    type: 'string',
+    usageLabel: '--provider-network-hosts <list>',
+    usageDescription:
+      'With --provider-network-logs: comma-separated tunnel selectors (exact hosts, wildcards like api.example.com or *.example.com, or localhost:<port> routes) that replace the default public-domain capture',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'awsProjectArn',
     names: ['--aws-project-arn'],
     type: 'string',

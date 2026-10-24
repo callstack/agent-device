@@ -39,6 +39,8 @@ export const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'consumed',
     providerCustomNetwork: 'consumed',
     providerNoResignApp: 'consumed',
+    providerNetworkLogs: 'refused',
+    providerNetworkHosts: 'refused',
     awsProjectArn: 'refused',
     awsDeviceArn: 'refused',
     awsAppArn: 'refused',

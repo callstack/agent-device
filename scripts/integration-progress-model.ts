@@ -279,6 +279,8 @@ function summarizeProviderScenarioFlagExclusions() {
         'providerNetworkProfile',
         'providerCustomNetwork',
         'providerNoResignApp',
+        'providerNetworkLogs',
+        'providerNetworkHosts',
         'awsProjectArn',
         'awsDeviceArn',
         'awsAppArn',

@@ -7,6 +7,8 @@ export type LimrunCredentials = Readonly<{
   region?: string;
   keepAlive?: boolean;
   instances?: LimrunInstanceAccess;
+  /** Directory the `--provider-network-logs` HAR files are written under. */
+  networkHarDir?: string;
 }>;
 
 const ACCOUNT_VARS = { apiKey: 'LIMRUN_API_KEY', region: 'LIMRUN_REGION' } as const;

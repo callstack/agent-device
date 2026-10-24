@@ -69,7 +69,7 @@ agent-device disconnect
 
 On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use the Android snapshot helper, installs upload the app through Limrun asset storage, and port reverse runs over ADB, including the usual reverse setup for a local Metro server.
 
-On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, app installation, and system alerts. `alert get/wait/accept/dismiss` read the alert from the same element tree as snapshots and dispatch the selected button; a choice is pressed only when its English label states the asked-for action (`Allow`, `Don't Allow`, `Ask App Not to Track`, and similar), so a localized alert is reported but never pressed. For an alert it recognizes, Limrun uses the same English button preferences as local Apple XCTest: `Allow While Using App` outranks `Allow Once`; `Open`, `Done`, and `Confirm…` accept; `Keep Browsing`, `Deny`, and `Skip` dismiss. Equal-ranked choices and unknown labels refuse. Limrun needs at least two actionable buttons to recognize an alert. App-owned dialogs are not system alerts there, so use `snapshot -i` and then `press @ref` or a label selector for the visible control. `open --launch-args` relaunches the app with those arguments through simctl. iOS cannot reverse a remote device port to a local host port, so for Metro use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, app installation, and system alerts. `alert get/wait/accept/dismiss` read the alert from the same element tree as snapshots and dispatch the selected button; a choice is pressed only when its English label states the asked-for action (`Allow`, `Don't Allow`, `Ask App Not to Track`, and similar), so a localized alert is reported but never pressed. For an alert it recognizes, Limrun uses the same English button preferences as local Apple XCTest: `Allow While Using App` outranks `Allow Once`; `Open`, `Done`, and `Confirm…` accept; `Keep Browsing`, `Deny`, and `Skip` dismiss. Equal-ranked choices and unknown labels refuse. Limrun needs at least two actionable buttons to recognize an alert. App-owned dialogs are not system alerts there, so use `snapshot -i` and then `press @ref` or a label selector for the visible control. `open --launch-args` relaunches the app with those arguments through simctl. iOS has no `port reverse`: that command is Android-only, because it runs over ADB. iOS still reaches a local Metro. The instance client's destination tunnel routes device `localhost` connections back to this machine, so while that tunnel is open the app reaches a Metro listening on the host. `agent-device connect limrun --provider-network-logs` opens that tunnel for the session and keeps it; see the next section. Otherwise give the app a publicly reachable HTTPS Metro endpoint.
 
 On an iPhone, Limrun reports a native tab bar as one empty group. `snapshot` then hit-tests points across the bar and lists the tabs it finds under it, with their labels, frames, and selected state, so you can press a tab by label. If a hit-test fails, takes longer than 1.5 seconds, or the 24 hit-tests a snapshot allows run out before the bar is found, `snapshot` lists the bar without tabs and returns a warning.
 
@@ -77,7 +77,21 @@ On iOS, `settings` supports `appearance`, `permission`, `location`, and `clear-a
 
 On iOS, `fill` taps the target, waits for that field to take text-entry focus, and only then types. Apps that never report a globally focused element, such as Flutter forms, still fill and report `textEntryReadiness: "focused-element"`. If the tap does not focus a field, `fill` fails with `text_entry_focus_not_observed` instead of typing into an unknown field. Use `type` to send text to whichever field already has focus.
 
-To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). Limrun returns no provider artifacts, so `artifacts` has nothing to fetch.
+To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). Limrun returns no provider artifacts, so `artifacts` has nothing to fetch, apart from the HAR file below.
+
+## Capture session network traffic
+
+To debug network remotely, connect with `--provider-network-logs`, open the app after connecting, then read the HAR artifact with `jq`. The flag asks Limrun's own tunnel inspection to record every completed request, and agent-device rewrites the HAR file after each one, so the file is valid while the session runs:
+
+```bash
+agent-device connect limrun --platform ios --provider-network-logs
+agent-device open com.example.app
+agent-device close
+agent-device disconnect   # prints the HAR path
+jq '.log.entries | length' <printed-path>
+```
+
+The path is `<state-dir>/network-har/<instance-id>.har`. `agent-device artifacts` lists it during the session and after `disconnect`, while the daemon still knows the session. The file holds raw traffic, including headers and bodies. By default the capture covers the public TLD wildcards plus the `localhost:8081` Metro route; `--provider-network-logs --provider-network-hosts "api.example.com,*.example.net,localhost:19000"` replaces that list with your own exact hosts, wildcards, or `localhost:<port>` routes. Note: certificate-pinned hosts fail, and DNS-over-HTTPS bypasses capture.
 
 ## Embed the Node.js runtime
 
@@ -131,4 +145,4 @@ After allocating a lease, call `runtime.getDeviceSession(device)` to get the all
 
 ## Get artifacts and troubleshoot
 
-`agent-device artifacts` does not return provider artifacts for Limrun. If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.
+`agent-device artifacts` does not return provider artifacts for Limrun, apart from the `--provider-network-logs` HAR file described above. If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.

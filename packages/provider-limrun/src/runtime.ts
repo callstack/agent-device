@@ -51,6 +51,14 @@ import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
+import type {
+  CloudArtifactProvider,
+  CloudArtifactsQuery,
+  CloudArtifactsResult,
+} from '@agent-device/contracts/observability';
+import type { LimrunHarCapture } from './network-har.ts';
+import path from 'node:path';
+import os from 'node:os';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
@@ -64,6 +72,11 @@ export type LimrunRuntimeOptions = {
   keepAlive?: boolean;
   runtimeInstance?: string;
   instances?: LimrunInstanceAccess;
+  /**
+   * Where `--provider-network-logs` writes each session's live HAR file. The composition root
+   * resolves it under the daemon state dir; without it the opt-in reports a typed refusal.
+   */
+  networkHarDir?: string;
 };
 
 export type LimrunRuntime = ProviderDeviceRuntime & {
@@ -108,6 +121,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
   private readonly sessions = new Map<string, LimrunRuntimeSession>();
   private readonly keepAliveTimers = new Map<string, NodeJS.Timeout>();
+  /** Live `--provider-network-logs` captures, and the HAR path each released session left behind. */
+  private readonly networkCaptures = new Map<string, LimrunHarCapture>();
+  private readonly releasedNetworkHarPaths = new Map<
+    string,
+    Readonly<{ harPath: string; instanceId?: string }>
+  >();
   private readonly appAliases = new Map<
     string,
     Readonly<{ assetName: string; installedAppId: string }>
@@ -263,7 +282,16 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       (await this.createSession(platform, lease, context));
     this.sessions.set(lease.leaseId, session);
     if (this.options.keepAlive) this.startKeepAlive(lease.leaseId, session);
-    return { limrunInstanceId: session.instanceId, device: session.device };
+    const networkHar =
+      context?.flags?.providerNetworkLogs === true
+        ? await this.startNetworkCapture(lease, session, context)
+        : undefined;
+    return {
+      limrunInstanceId: session.instanceId,
+      providerSessionId: session.instanceId,
+      device: session.device,
+      ...(networkHar ? { networkHar } : {}),
+    };
   }
 
   private async attachSession(
@@ -350,11 +378,74 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     const session = this.sessions.get(lease.leaseId);
     if (!session) return await this.releaseRecoveredSession(lease);
+    const networkHar = await this.stopNetworkCapture(lease.leaseId);
     await this.terminateSession(session);
     this.sessions.delete(lease.leaseId);
     this.appAliases.delete(lease.leaseId);
-    return { limrunInstanceId: session.instanceId };
+    return {
+      limrunInstanceId: session.instanceId,
+      providerSessionId: session.instanceId,
+      ...(networkHar ? { networkHar } : {}),
+      ...(networkHar
+        ? { cloudArtifacts: harArtifacts(session.instanceId, networkHar.harPath) }
+        : {}),
+    };
   }
+
+  /**
+   * `--provider-network-logs`: opens the instance's one destination tunnel with inspection and
+   * keeps a live HAR file under the state dir. The Metro/companion route rides this tunnel.
+   */
+  private async startNetworkCapture(
+    lease: DeviceLease,
+    session: LimrunRuntimeSession,
+    context?: LeaseLifecycleContext,
+  ): Promise<Record<string, unknown> | undefined> {
+    const harDir = this.options.networkHarDir ?? path.join(os.tmpdir(), 'agent-device-network-har');
+    const harPath = path.join(harDir, `${session.instanceId}.har`);
+    const selectors = readProviderNetworkHosts(context?.flags?.providerNetworkHosts);
+    const { startLimrunHarCapture } = await import('./network-har.ts');
+    const result = await startLimrunHarCapture(session.client, { harPath, selectors });
+    if (!result.ok) {
+      return {
+        status: 'unavailable',
+        reason: result.reason,
+        message: result.message,
+        harPath,
+      };
+    }
+    this.networkCaptures.set(lease.leaseId, result.capture);
+    return { status: 'capturing', harPath };
+  }
+
+  private async stopNetworkCapture(
+    leaseId: string,
+  ): Promise<Readonly<{ harPath: string }> | undefined> {
+    const capture = this.networkCaptures.get(leaseId);
+    if (!capture) return undefined;
+    this.networkCaptures.delete(leaseId);
+    capture.close();
+    this.releasedNetworkHarPaths.set(leaseId, {
+      harPath: capture.harPath,
+      instanceId: this.sessions.get(leaseId)?.instanceId,
+    });
+    return { harPath: capture.harPath };
+  }
+
+  readonly cloudArtifacts: CloudArtifactProvider = {
+    listCloudArtifacts: async (
+      query: CloudArtifactsQuery,
+    ): Promise<CloudArtifactsResult | undefined> => {
+      if (!query.leaseId) return undefined;
+      const capture = this.networkCaptures.get(query.leaseId);
+      if (capture) {
+        return harArtifacts(this.sessions.get(query.leaseId)?.instanceId, capture.harPath);
+      }
+      const released = this.releasedNetworkHarPaths.get(query.leaseId);
+      if (released) return harArtifacts(released.instanceId, released.harPath);
+      return undefined;
+    },
+  };
 
   private async releaseRecoveredSession(
     lease: DeviceLease,
@@ -395,6 +486,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const leaseId = session.lease.leaseId;
     clearInterval(this.keepAliveTimers.get(leaseId));
     this.keepAliveTimers.delete(leaseId);
+    // A capture rides the instance's one tunnel; close it before the client disconnects.
+    this.networkCaptures.get(leaseId)?.close();
+    this.networkCaptures.delete(leaseId);
     session.client.disconnect();
     if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
     if (session.ownership === 'attached') return;
@@ -544,4 +638,36 @@ function portReverseResult(options: ProviderPortReverseOptions): Record<string, 
 
 function unsupported(command: string, message: string): never {
   throw new AppError('UNSUPPORTED_OPERATION', message, { command });
+}
+
+/** The `--provider-network-hosts` comma list, or undefined to keep the default selectors. */
+function readProviderNetworkHosts(value: unknown): readonly string[] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const hosts = value
+    .split(',')
+    .map((host) => host.trim())
+    .filter((host) => host.length > 0);
+  return hosts.length > 0 ? hosts : undefined;
+}
+
+/** One finished HAR file, stated as a provider artifact whose `url` is its path on this host. */ function harArtifacts(
+  providerSessionId: string | undefined,
+  harPath: string,
+): CloudArtifactsResult {
+  return {
+    provider: LIMRUN_PROVIDER,
+    status: 'ready',
+    ...(providerSessionId ? { providerSessionId } : {}),
+    cloudArtifacts: [
+      {
+        provider: LIMRUN_PROVIDER,
+        kind: 'network',
+        name: 'Network traffic (HAR, live file on the daemon host)',
+        url: harPath,
+        extension: 'har',
+        contentType: 'application/json',
+        availability: 'ready',
+      },
+    ],
+  };
 }

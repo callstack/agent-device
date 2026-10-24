@@ -66,6 +66,9 @@ function buildLimrunRemoteProfile(options: {
     platform: flags.platform,
     target: 'mobile',
     session: flags.session,
+    // The capture opt-in is read at lease allocation, so it must survive into later commands.
+    providerNetworkLogs: flags.providerNetworkLogs,
+    providerNetworkHosts: flags.providerNetworkHosts,
     ...readMetroProfileFields(flags),
   };
 }

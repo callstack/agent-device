@@ -515,6 +515,8 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     providerNetworkProfile: currentFlags.providerNetworkProfile,
     providerCustomNetwork: currentFlags.providerCustomNetwork,
     providerNoResignApp: currentFlags.providerNoResignApp,
+    providerNetworkLogs: currentFlags.providerNetworkLogs,
+    providerNetworkHosts: currentFlags.providerNetworkHosts,
     awsProjectArn: currentFlags.awsProjectArn,
     awsDeviceArn: currentFlags.awsDeviceArn,
     awsAppArn: currentFlags.awsAppArn,

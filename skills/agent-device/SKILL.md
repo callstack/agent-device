@@ -20,3 +20,5 @@ Reaching an off-screen target is one command, not a scroll-and-check loop: `scro
 Copy refs byte-for-byte: `@e12`, `@e12~s4` — keep the `@` and any `~sN`. Prefer current refs, then `id`/`label`/`role` selectors; coordinates are a last resort. If snapshot reports sparse/AX-unavailable, its refs and selectors are invalid: run `agent-device screenshot`, inspect the image, use coordinates, then retry `snapshot -i` after navigating. Otherwise run `snapshot -i` only when the diff lacks the next target.
 
 Error output includes corrective hints; follow them instead of re-planning. Only when the task is specialized (for example gestures, scripting, TV, macOS, remote, or debugging) or a command shape is unclear, run `agent-device help <topic>`. `agent-device --help` lists topics, but is not a startup step.
+
+To debug network traffic on a remote Limrun session, connect with `--provider-network-logs`, open the app after connecting, then read the printed HAR artifact with `jq`. Certificate-pinned hosts fail and DNS-over-HTTPS bypasses the capture.

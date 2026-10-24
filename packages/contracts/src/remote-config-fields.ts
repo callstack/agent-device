@@ -41,6 +41,13 @@ export type CloudProviderProfileFields = {
   providerNetworkProfile?: string;
   providerCustomNetwork?: string;
   providerNoResignApp?: boolean;
+  /**
+   * Asks a provider that supports it to capture session network traffic and deliver it as a HAR
+   * artifact. On Limrun the HAR is a live file the session writes while it runs.
+   */
+  providerNetworkLogs?: boolean;
+  /** With `providerNetworkLogs`: comma-separated tunnel selectors replacing the default capture list. */
+  providerNetworkHosts?: string;
   awsProjectArn?: string;
   awsDeviceArn?: string;
   awsAppArn?: string;
@@ -67,6 +74,8 @@ export const PROVIDER_PROFILE_FIELD_FLAGS: Readonly<
   providerNetworkProfile: '--provider-network-profile',
   providerCustomNetwork: '--provider-custom-network',
   providerNoResignApp: '--provider-no-resign-app',
+  providerNetworkLogs: '--provider-network-logs',
+  providerNetworkHosts: '--provider-network-hosts',
   awsProjectArn: '--aws-project-arn',
   awsDeviceArn: '--aws-device-arn',
   awsAppArn: '--aws-app-arn',

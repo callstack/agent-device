@@ -103,6 +103,8 @@ const CONSUMED_PROFILE_FIELDS: Record<ProviderProfileField, 'consumed'> = {
   providerNetworkProfile: 'consumed',
   providerCustomNetwork: 'consumed',
   providerNoResignApp: 'consumed',
+  providerNetworkLogs: 'consumed',
+  providerNetworkHosts: 'consumed',
   awsProjectArn: 'consumed',
   awsDeviceArn: 'consumed',
   awsAppArn: 'consumed',
