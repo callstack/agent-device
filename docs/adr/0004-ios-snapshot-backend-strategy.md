@@ -660,9 +660,11 @@ Translation is the one rule that reads an origin, so it is the only place the fi
 Capture is half of the promise; dispatch is the other half.
 The measured dispatch spaces for a placed window are both screen-anchored: the synthesized path lands a point at its screen position, and XCTest's own `XCUICoordinate` on the app anchors at the screen's origin too.
 `interactionCoordinate` therefore passes the caller's screen point through, and `resolveRunnerWindow` keeps naming the window a foldable's tap resolves its display on (ADR 0025).
-The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (641,321) for a window at (324,307).
+The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (659,321) for a window at (324,307).
 The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
 So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the two live boxes (`app.frame` against the resolved window's frame); every other live read needs no conversion.
+The probe-side owner is `ResolvedTextEntryInput.frameOnScreen`.
+The vector is read once per command and stored on the target and each read the target produces, so the probe matching, the focus tap, the refresh point, the caret tap, and the readiness retap all dispatch through that one property.
 Where a probe read has no snapshot and falls back to the live element, its frame is already screen space and is not translated.
 `app.frame` unions transformed subtrees, so content pushed off a placed window (a closed drawer at negative x) can stop the two live boxes matching and read no vector; the capture still converts from the snapshot root box, so a probe may then read window-local frames where the capture published screen space. A mid-command window move has the same effect on a vector read at command start.
 Both are reads of a moving target, not a second space: a re-opened command reads the current vector.

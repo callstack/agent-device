@@ -218,7 +218,7 @@
       "offset": null
     },
     {
-      "name": "a half-tolerance origin miss is float representation, not a different placement",
+      "name": "a half-tolerance side-length miss is float representation, not a different box",
       "reportedBox": { "x": 0, "y": 0, "width": 385.5, "height": 682 },
       "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
       "offset": { "width": 224, "height": 207 }

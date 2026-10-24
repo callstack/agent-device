@@ -16,13 +16,7 @@ extension RunnerTests {
   ) -> TextEntryResult {
     let totalStartedAt = Date()
     let resolve = { (target: TextEntryTarget) in self.resolveTextEntryInput(app: app, target: target) }
-    // Reads inside the typing loop answer from snapshots, which report a placed window's content in
-    // the window's own space; the reader's refresh points are screen points (#3899).
-    var reader = TextEntryReader(
-      target: target,
-      translation: liveContentTranslation(app: app),
-      resolve: resolve
-    )
+    var reader = TextEntryReader(target: target, resolve: resolve)
     guard !text.isEmpty else {
       // Replacing a field WITH the empty string is the clear-field primitive (#2063): the typing
       // is vacuous but the clear is not. Returning here unconditionally left the old value in
@@ -80,27 +74,14 @@ extension RunnerTests {
       case .completed(let result):
         return result
       case .fallback(let fallbackTarget):
-        reader = TextEntryReader(
-          target: fallbackTarget,
-          translation: liveContentTranslation(app: app),
-          resolve: resolve
-        )
+        reader = TextEntryReader(target: fallbackTarget, resolve: resolve)
       }
     }
-    // The keyboard evidence is decided once, at the command's start. Measured on iPad Pro 11-inch
-    // (M5, iOS 27.0) with Windowed Apps (#3899): `app.keyboards` answered `false` 50 ms after
-    // answering `true` for the same on-screen keyboard, while the app's own AX reads kept failing
-    // with `kAXErrorServerNotFound` under a synthesized post burst. A per-post re-query therefore
-    // refused a receiver mid-burst and reported `TEXT_INPUT_NOT_FOCUSED` for a focused field, one
-    // character per call. An app that loses the keyboard mid-command keeps the start-of-command
-    // answer: the extra posts land on the digitizer and do nothing, the outcome a tap into empty
-    // space already has.
-    let softwareKeyboardVisibleAtStart = isKeyboardVisible(app: app)
     let shouldUseSynthesizedFirstResponderType = Self.shouldUseSynthesizedFirstResponderType(
       repairMode: repairMode,
       text: text,
       fromTapWitness: reader.target.fromTapWitness,
-      softwareKeyboardVisible: softwareKeyboardVisibleAtStart
+      softwareKeyboardVisible: isKeyboardVisible(app: app)
     )
     let initialResolveStartedAt = Date()
     let initialTarget = reader.input()
@@ -119,7 +100,7 @@ extension RunnerTests {
     // Dispatching text through XCTest without a resolved target or evidence of a focused
     // responder records a test failure. That tears down the long-lived runner and turns a
     // single invalid request into a restart cascade, so fail before entering that channel.
-    guard initialTarget != nil || (reader.target.prefersFocusedElement && softwareKeyboardVisibleAtStart) else {
+    guard initialTarget != nil || (reader.target.prefersFocusedElement && isKeyboardVisible(app: app)) else {
       logTextEntryPhase(
         commandId: commandId,
         phase: "total",
@@ -214,8 +195,7 @@ extension RunnerTests {
         textEntryRoute = "xctest-element"
         reader.dispatch { currentTarget.element.typeText(value) }
         return nil
-      } else if reader.target.boundIdentity == nil && reader.target.prefersFocusedElement
-        && softwareKeyboardVisibleAtStart {
+      } else if reader.target.boundIdentity == nil && reader.target.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         // Two ways this post leaves the synthesized channel, and both hand the text to
         // application-wide typing: the command's own budget refused it, or XCTest's private synthesis

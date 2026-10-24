@@ -200,6 +200,11 @@ public enum SnapshotGeometrySpace: Equatable {
     ) {
       return .windowContent(offset: offset)
     }
+    // A host that declares no space of its own publishes what the platform reported. A system
+    // surface under a placed window — the keyboard at (0,925,834,282), a SpringBoard overlay at
+    // (0,0,834,1210) — reports the screen's own box and is already in screen space; the two
+    // `windowContentCases` rows for those windows pin that inheriting the carrier's vector would
+    // move every key by the window origin (#3899's own failure shape).
     return .appOrientation
   }
 

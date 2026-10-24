@@ -616,6 +616,9 @@ final class CoordinateSpaceTests: XCTestCase {
   /// The dispatch direction for a windowed app: the caller's point is the point touched, so
   /// `native(point:)` turns a screen-space point's axes without moving it toward the window origin
   /// (#3899). Under portrait — the only orientation measured for a windowed app — it is the identity.
+  /// The landscape rows for a placed window stay the documented unmeasured gap (ADR 0004): the turn
+  /// here is asserted about the window's side lengths, while the digitizer turns about the screen's,
+  /// and no windowed landscape capture has been measured to say which basis is right.
   func testNativePointForAWindowedAppKeepsTheCallersScreenPoint() {
     let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
     for orientation in [
@@ -631,15 +634,6 @@ final class CoordinateSpaceTests: XCTestCase {
         "interfaceOrientation \(orientation)"
       )
     }
-    // A turn moves axes only: the same point under a landscape window keeps its own origin story.
-    XCTAssertEqual(
-      CoordinateSpaceRotation.native(
-        point: CGPoint(x: 578, y: 239),
-        in: windowOnScreen,
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
-      ),
-      CGPoint(x: 682 - 239, y: 578)
-    )
   }
 
   func testNormalizedOfAnEmptyArrayIsEmpty() {

@@ -75,12 +75,6 @@ export function isQuarterTurnedWindowFrame(windowFrame: Rect, appFrame: Rect): b
 }
 
 /*
- * A window that does not fill the screen (#3899) is translated by the capture that owns it, and this
- * file is not that capture. The bridge guest refuses a windowed tree (`app-window-not-full-screen`)
- * before this decoder ever sees one, so no host tree arrives in the window's content space and there
- * is nothing here to translate. The rule lives with the producer that converts —
- * `SnapshotContentTranslation` beside the Swift capture — and `windowContentCases` in
- * `contracts/fixtures/window-coordinate-space.json` is replayed there alone. The quarter-turn
- * detection above stays in both languages because this decoder does read it: it is what refuses a
- * turned tree the reader cannot resolve.
+ * The #3899 window-content translation belongs to the Swift capture's `SnapshotContentTranslation`,
+ * replayed from `windowContentCases` there alone.
  */
