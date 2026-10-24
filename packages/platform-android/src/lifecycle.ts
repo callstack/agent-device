@@ -7,6 +7,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  assertOpenAdmitted,
   bindLocalApplicationLifecycleInteractor,
   followUpRuntimeLaunchUrl,
   invokeApplicationClose,
@@ -108,6 +109,7 @@ async function openAndroidApplication(
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
+  assertOpenAdmitted(binding, input.execution, input.positionals);
   const relaunching = input.relaunch && Boolean(input.target);
   const relaunchOwner = relaunching ? input.appBundleId : undefined;
   if (relaunchOwner) {
