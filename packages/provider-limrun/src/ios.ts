@@ -277,7 +277,7 @@ class LimrunIosInteractor implements Interactor {
     await this.enterText(text, delayMs);
   }
 
-  async fill(x: number, y: number, text: string, delayMs?: number): Promise<FillBackendResult> {
+  async fill(x: number, y: number, text: string, _delayMs?: number): Promise<FillBackendResult> {
     // Loaded on the fill path to keep this provider's declared import-time closure budget.
     const { awaitLimrunTextEntryFocus, readLimrunUnambiguousTapTargets, readLimrunTextEntryFocus } =
       await import('./text-entry-focus.ts');
@@ -295,14 +295,11 @@ class LimrunIosInteractor implements Interactor {
       x,
       y,
     });
-    // Select first: iOS replaces a selection on the next key, so `fill` replaces and
-    // an empty fill clears.
-    await this.session.client.pressKey('a', ['command']);
-    if (text.length === 0) {
-      await this.session.client.pressKey('delete');
-      return { textEntryReadiness };
-    }
-    await this.enterText(text, delayMs);
+    // One value write on the focused element. The SDK omits the selector so the
+    // server resolves focus, and the whole string is the value, including an empty
+    // clear and characters that have no key code. A supplied delay stays on this
+    // signature for callers; per-character timing stays on `type`.
+    await this.session.client.setElementValue(text);
     return { textEntryReadiness };
   }
 
