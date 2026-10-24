@@ -11,17 +11,12 @@
 #endif
 
 // AGENT_DEVICE_FULL_SCREEN_RULE_BEGIN
-// One rule, two targets, one block. The Simulator snapshot bridge refuses a capture whose app
-// window does not fill the screen (`app-window-not-full-screen`, #3844), and the runner refuses to
-// route a window-less gesture onto a screen it cannot prove the app fills. Both read the same two
-// frames from the same private AX runtime in one native space. The two binaries build from
-// disjoint source roots in the checkout and in a packaged install, so no include path reaches both
-// builds; `test/repo-guards/full-screen-rule-parity.test.ts` pins the two copies of this block
-// byte-identical. Each caller keeps its own policy for what a missing read proves; this block
-// states only what the runtime reports.
-
-// The AXRuntime class both targets reach without walking the app's accessibility tree, so both
-// answer on a tree XCTest cannot serialize.
+// One rule, two targets. The Simulator snapshot bridge refuses a capture whose app window does not
+// fill the screen (`app-window-not-full-screen`, #3844), and the runner refuses to route a
+// window-less gesture onto a screen it cannot prove the app fills. The two builds read disjoint
+// source roots whose packaged layouts differ, so no include path reaches both; this block is
+// carried by both sources and pinned byte-identical by
+// `test/repo-guards/full-screen-rule-parity.test.ts`. Each caller keeps its own unknown policy.
 @protocol AgentDeviceForegroundElement <NSObject>
 + (nullable id<AgentDeviceForegroundElement>)primaryApp;
 + (nullable id<AgentDeviceForegroundElement>)systemApplication;
@@ -29,16 +24,14 @@
 - (CGRect)frame;
 @end
 
-// Whether the accessibility primary app is the process this capture or gesture belongs to. While a
-// system surface owns the foreground, no screen is the target app's to fill and no tree is the
-// target app's to capture (ADR 0004, foreground ownership).
+// While a system surface owns the foreground, no screen is the target app's to fill and no tree is
+// the target app's to capture (ADR 0004, foreground ownership).
 static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t targetProcessID) {
   return primaryProcessID == targetProcessID;
 }
 
-// How far apart two screen-native frames may be and still name the same rectangle. Sub-pixel
-// layout rounding is not a window; anything past this is a window that shows the app in part of
-// the screen (Windowed Apps or Stage Manager).
+// Sub-pixel layout rounding is not a window; anything past this is one that shows the app in part
+// of the screen (Windowed Apps or Stage Manager).
 static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
 
 static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {

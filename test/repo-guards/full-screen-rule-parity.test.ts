@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'path';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 
