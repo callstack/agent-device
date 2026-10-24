@@ -67,7 +67,6 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { type WebDriverDeploymentRuntime, webDriverInactiveSession } from './runtime-deployment.ts';
@@ -86,6 +85,16 @@ type WebDriverPlatformDeploymentRuntime = Pick<
 
 const available = Object.freeze({ available: true } as const);
 const appLogUnavailable = unavailableFact('unsupported-provider-mode');
+/**
+ * A live `network dump` needs a source the session can read. A hosted provider keeps traffic on its
+ * own side: whatever the provider captures at all, it publishes only once its session ends, through
+ * the provider's own dashboard or session records. Nothing is readable live, and the runtime must
+ * not answer with an empty dump that looks like "no traffic".
+ */
+const networkCaptureUnavailable = unavailableFact(
+  'network-capture-post-session',
+  'The provider publishes any network capture only after its session ends, on the provider dashboard.',
+);
 const recordingUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'WebDriver provider runtimes do not expose screen recording.',
@@ -405,7 +414,6 @@ function bindWebDriverPlatformRuntime(
   device: DeviceInfo,
   signal: AbortSignal,
 ): DeviceBinding<PlatformRuntimeOperations> {
-  const backend = device.platform === 'apple' ? 'ios-device' : 'android';
   const facts = webDriverFacts(options, device);
   const deploy = facts.operations.deployApp;
   const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = Object.freeze({
@@ -420,26 +428,6 @@ function bindWebDriverPlatformRuntime(
       facts.operations,
     ),
     ...webDriverInteractionOperations(options, device, signal, facts),
-    networkDump: async (input) => {
-      const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
-        ...input,
-        path: recent.path,
-        exists: recent.exists,
-        lineNumberOffset: recent.skippedLines,
-        backend,
-      });
-      return Object.freeze({
-        source: 'app-log' as const,
-        backend,
-        dump,
-        notes: Object.freeze(
-          dump.entries.length === 0
-            ? ['No HTTP(s) entries were found in recent session app logs.']
-            : [],
-        ),
-      });
-    },
     ...(deploy.available && options.deployment
       ? {
           deployApp: async (input: AppDeploymentInput) =>
@@ -508,7 +496,7 @@ function webDriverFacts(
   const unavailable = createUnavailablePlatformRuntimeFacts(device, options.owner, {
     appLog: appLogUnavailable,
     appDeployment: deploymentUnavailable,
-    network: appLogUnavailable,
+    network: networkCaptureUnavailable,
     screenRecording: recordingUnavailable,
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
@@ -564,7 +552,6 @@ function webDriverFacts(
       deployMaterializedApp: deployment,
       sendPushNotification: pushUnavailable,
       appState: appStateUnavailable,
-      networkDump: available,
       ...snapshotRuntimeOperationFacts({
         capture: snapshotCell,
         customActions: snapshotCustomActionsUnavailable,
