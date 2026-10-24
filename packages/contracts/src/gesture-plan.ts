@@ -10,6 +10,7 @@ import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
   DEFAULT_DRAG_SOURCE_HOLD_MS,
+  DEFAULT_PAN_DURATION_MS,
   DEFAULT_TAP_HOLD_MS,
   GESTURE_DURATION_MAX_MS,
   GESTURE_DURATION_MIN_MS,
@@ -37,7 +38,6 @@ const GESTURE_PINCH_INITIAL_SPAN_RATIO = 0.4;
 const GESTURE_HORIZONTAL_ANGLE_DEGREES = 0;
 const GESTURE_MINIMUM_RELIABLE_SPAN_PX = 48;
 const GESTURE_VIEWPORT_INSET_PX = 1;
-const DEFAULT_PAN_DURATION_MS = 500;
 export const GESTURE_FLING_DURATION_MS = 100;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
@@ -259,7 +259,7 @@ function buildPanPlan(
   if ((input.pointerCount ?? 1) === 1) {
     const start = finitePoint(input.origin, 'gesture pan origin');
     const delta = finitePoint(input.delta, 'gesture pan delta');
-    return buildSinglePointerPlan(
+    const move = buildSinglePointerPlan(
       'pan',
       start,
       addPoints(start, delta),
@@ -267,9 +267,21 @@ function buildPanPlan(
       viewport,
       input.executionProfile ?? 'timed-pan',
     );
+    if (input.holdMs === undefined) return move;
+    const holdMs = normalizePositiveDuration(input.holdMs, input.holdMs, 'gesture pan holdMs');
+    if (holdMs + durationMs > GESTURE_DURATION_MAX_MS) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `gesture pan holdMs plus durationMs must be at most ${GESTURE_DURATION_MAX_MS}`,
+      );
+    }
+    return withContactHolds(move, holdMs, 0);
   }
   if (input.pointerCount !== 2) {
     throw new AppError('INVALID_ARGS', 'gesture pan pointerCount must be 1 or 2');
+  }
+  if (input.holdMs !== undefined) {
+    throw new AppError('INVALID_ARGS', 'gesture pan holdMs requires a single pointer');
   }
   return buildTransformPlan(
     {

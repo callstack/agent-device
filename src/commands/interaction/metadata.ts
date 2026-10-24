@@ -234,10 +234,13 @@ const gestureFields = {
     min: GESTURE_TAP_MIN_CONTACTS,
     max: GESTURE_MAX_CONTACTS,
   }),
-  holdMs: integerField('Tap contact hold duration.', {
-    min: GESTURE_DURATION_MIN_MS,
-    max: GESTURE_DURATION_MAX_MS,
-  }),
+  holdMs: integerField(
+    'Tap contact hold duration, or for a single-pointer pan the hold at the origin before it moves.',
+    {
+      min: GESTURE_DURATION_MIN_MS,
+      max: GESTURE_DURATION_MAX_MS,
+    },
+  ),
   count: integerField('Tap repetitions; the same contacts run this many times.', {
     min: 1,
     max: SWIPE_REPETITION_MAX,

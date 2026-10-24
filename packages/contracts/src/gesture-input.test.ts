@@ -156,7 +156,6 @@ test('tap refuses pan-only and duration inputs', () => {
 test('tap-only inputs are refused on other gesture kinds', () => {
   for (const [field, value] of [
     ['points', TAP_POINTS],
-    ['holdMs', 50],
     ['count', 2],
     ['pauseMs', 10],
   ] as const) {
@@ -165,4 +164,30 @@ test('tap-only inputs are refused on other gesture kinds', () => {
       message: `${field} is supported only for gesture tap`,
     });
   }
+});
+
+test('holdMs is read on single-pointer pan and refused on other non-tap kinds', () => {
+  const pan = { kind: 'pan', origin: { x: 10, y: 20 }, delta: { x: 0, y: 200 } } as const;
+  assert.deepEqual(readGesturePayload({ ...pan, holdMs: 600, durationMs: 400 }), {
+    ...pan,
+    pointerCount: undefined,
+    durationMs: 400,
+    holdMs: 600,
+  });
+  assert.throws(() => readGesturePayload({ ...pan, holdMs: 0 }), {
+    code: 'INVALID_ARGS',
+    message: 'Expected holdMs to be at least 1.',
+  });
+  assert.throws(() => readGesturePayload({ ...pan, holdMs: 600, pointerCount: 2 }), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pan holdMs requires a single pointer',
+  });
+  assert.throws(() => readGesturePayload({ ...pan, holdMs: 9_600 }), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pan holdMs plus durationMs must be at most 10000',
+  });
+  assert.throws(() => readGesturePayload({ kind: 'pinch', scale: 1.5, holdMs: 50 }), {
+    code: 'INVALID_ARGS',
+    message: 'holdMs is supported only for gesture tap and gesture pan',
+  });
 });

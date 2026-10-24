@@ -35,7 +35,7 @@ const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
  * CLI would reject and have it silently dropped.
  */
 export const GESTURE_FLAGS_BY_KIND = {
-  pan: ['pointerCount'],
+  pan: ['pointerCount', 'holdMs'],
   tap: ['holdMs', 'count', 'pauseMs'],
   fling: [],
   swipe: [],
@@ -290,6 +290,7 @@ export function gesturePayloadFromPositionals(
         delta,
         pointerCount,
         durationMs: optionalPositionNumber(args[4]),
+        holdMs: flags.holdMs,
       });
     }
     case 'fling': {
@@ -447,6 +448,7 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           delta: input.delta,
           pointerCount: input.pointerCount,
           durationMs: input.durationMs,
+          ...(input.holdMs === undefined ? {} : { holdMs: input.holdMs }),
         },
       };
     case 'fling':

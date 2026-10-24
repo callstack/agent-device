@@ -14,6 +14,7 @@ import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
   DEFAULT_DRAG_SOURCE_HOLD_MS,
+  DEFAULT_PAN_DURATION_MS,
   DEFAULT_TAP_HOLD_MS,
   GESTURE_DURATION_MAX_MS,
   GESTURE_DURATION_MIN_MS,
@@ -48,6 +49,8 @@ export type PanGesturePayload = {
   delta: Point;
   pointerCount?: GesturePointerCount;
   durationMs?: number;
+  /** Single-pointer pan only: how long the pointer holds still at the origin before it moves. */
+  holdMs?: number;
 };
 
 export type FlingGesturePayload = {
@@ -107,7 +110,7 @@ export type GesturePayload =
  */
 const TAP_SERIES_OVERHEAD_ALLOWANCE_MS = 500;
 
-const TAP_ONLY_FIELDS = ['points', 'holdMs', 'count', 'pauseMs'] as const;
+const TAP_ONLY_FIELDS = ['points', 'count', 'pauseMs'] as const;
 
 export function readGesturePayload(input: unknown): GesturePayload {
   const record = readRecord(input);
@@ -117,15 +120,12 @@ export function readGesturePayload(input: unknown): GesturePayload {
   }
   assertNoTapOnlyFields(kind, record);
   if (kind === 'pan') {
-    return {
-      kind,
-      origin: readPoint(record, 'origin'),
-      delta: readPoint(record, 'delta'),
-      pointerCount: readOptionalInteger(record, 'pointerCount', { min: 1, max: 2 }) as
-        | GesturePointerCount
-        | undefined,
-      durationMs: readOptionalGestureDuration(record),
-    };
+    return readPanGesturePayload(record);
+  }
+  if (record.holdMs !== undefined) {
+    throw new AppError('INVALID_ARGS', 'holdMs is supported only for gesture tap and gesture pan', {
+      hint: `gesture ${kind} does not read holdMs.`,
+    });
   }
   if (kind === 'drag') {
     return readDragGesturePayload(record);
@@ -186,6 +186,36 @@ export function readGesturePayload(input: unknown): GesturePayload {
     scale: readNumber(record, 'scale'),
     degrees: readNumber(record, 'degrees'),
     durationMs: readOptionalGestureDuration(record),
+  };
+}
+
+function readPanGesturePayload(record: Record<string, unknown>): PanGesturePayload {
+  const pointerCount = readOptionalInteger(record, 'pointerCount', { min: 1, max: 2 }) as
+    | GesturePointerCount
+    | undefined;
+  const durationMs = readOptionalGestureDuration(record);
+  const holdMs = readOptionalInteger(record, 'holdMs', { min: 1, max: GESTURE_DURATION_MAX_MS });
+  if (holdMs !== undefined && pointerCount === 2) {
+    throw new AppError('INVALID_ARGS', 'gesture pan holdMs requires a single pointer', {
+      hint: 'Drop --pointer-count 2, or drop --hold-ms for a parallel two-finger pan.',
+    });
+  }
+  if (
+    holdMs !== undefined &&
+    holdMs + (durationMs ?? DEFAULT_PAN_DURATION_MS) > GESTURE_DURATION_MAX_MS
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `gesture pan holdMs plus durationMs must be at most ${GESTURE_DURATION_MAX_MS}`,
+    );
+  }
+  return {
+    kind: 'pan',
+    origin: readPoint(record, 'origin'),
+    delta: readPoint(record, 'delta'),
+    pointerCount,
+    durationMs,
+    ...(holdMs === undefined ? {} : { holdMs }),
   };
 }
 

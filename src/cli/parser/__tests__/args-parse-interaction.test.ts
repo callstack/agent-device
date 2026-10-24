@@ -412,12 +412,20 @@ test('parseArgs reads the tap series flags on gesture tap', () => {
   assert.equal(tap.flags.pauseMs, 100);
 });
 
+test('parseArgs reads --hold-ms on a single-pointer gesture pan', () => {
+  const pan = parseArgs(['gesture', 'pan', '200', '420', '0', '240', '600', '--hold-ms', '600'], {
+    strictFlags: true,
+  });
+  assert.deepEqual(pan.positionals, ['pan', '200', '420', '0', '240', '600']);
+  assert.equal(pan.flags.holdMs, 600);
+});
+
 test('parseArgs refuses a gesture option the chosen kind never reads', () => {
   const cases: Array<[string[], string]> = [
     [['gesture', 'pinch', '1.5', '--count', '2'], 'gesture pinch does not read --count'],
     [
-      ['gesture', 'pan', '200', '420', '0', '-80', '--hold-ms', '40'],
-      'gesture pan does not read --hold-ms',
+      ['gesture', 'fling', 'up', '200', '420', '--hold-ms', '40'],
+      'gesture fling does not read --hold-ms',
     ],
     [
       ['gesture', 'tap', '80', '300', '200', '450', '--pointer-count', '2'],
