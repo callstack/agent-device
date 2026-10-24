@@ -27,6 +27,7 @@ import {
   DEFAULT_TIMEOUT_POLICY,
   FOLD_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
+  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
   LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
@@ -260,8 +261,6 @@ const PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   onTimeout: 'preserve-daemon',
 };
 
-// Installs run long device subprocesses; their envelope stays above the longest
-// platform install subprocess timeout (see INSTALL_REQUEST_TIMEOUT_MS).
 const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
@@ -908,7 +907,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
-    timeoutPolicy: INSTALL_TIMEOUT_POLICY,
+    timeoutPolicy: { ...INSTALL_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
     batchable: false,
   },
   {
@@ -1617,7 +1616,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: { ...INSTALL_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
     batchable: true,
     compositeResource: 'none',
   },

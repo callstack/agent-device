@@ -44,9 +44,14 @@ export function createAndroidToolHost(): AndroidToolHost {
       const { resolveAndroidAdbProvider } = await loadAndroidMechanics();
       const provider = resolveAndroidAdbProvider(device);
       const result = provider.install
-        ? await provider.install(packagePath, { replace: options.replace, signal })
+        ? await provider.install(packagePath, {
+            replace: options.replace,
+            signal,
+            timeoutMs: options.timeoutMs,
+          })
         : await provider.exec(['install', ...(options.replace ? ['-r'] : []), packagePath], {
             signal,
+            timeoutMs: options.timeoutMs,
           });
       return {
         stdout: result.stdout,
@@ -54,11 +59,11 @@ export function createAndroidToolHost(): AndroidToolHost {
         exitCode: result.exitCode,
       };
     },
-    installBundle: async (device, bundlePath, mode, signal) => {
+    installBundle: async (device, bundlePath, mode, options, signal) => {
       const { resolveAndroidAdbProvider } = await loadAndroidMechanics();
       const installer = resolveAndroidAdbProvider(device).installBundle;
       if (!installer) return false;
-      await installer(bundlePath, { mode, signal });
+      await installer(bundlePath, { mode, signal, timeoutMs: options?.timeoutMs });
       return true;
     },
   });

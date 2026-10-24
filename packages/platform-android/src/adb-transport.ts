@@ -133,7 +133,7 @@ export type AndroidAdbInstaller = (
 
 export type AndroidBundleInstaller = (
   bundlePath: string,
-  options: Readonly<{ mode: string; signal?: AbortSignal }>,
+  options: Readonly<{ mode: string; signal?: AbortSignal; timeoutMs?: number }>,
 ) => Promise<void>;
 
 export type AndroidTextInputAction = 'type' | 'fill';

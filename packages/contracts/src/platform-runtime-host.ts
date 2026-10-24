@@ -101,7 +101,7 @@ export type AndroidToolHost = Readonly<{
   installPackage(
     device: DeviceInfo,
     packagePath: string,
-    options: Readonly<{ replace: boolean }>,
+    options: Readonly<{ replace: boolean; timeoutMs?: number }>,
     signal?: AbortSignal,
   ): Promise<HostCommandResult>;
   /** Returns false when the selected transport has no bundle installer. */
@@ -109,6 +109,7 @@ export type AndroidToolHost = Readonly<{
     device: DeviceInfo,
     bundlePath: string,
     mode: string,
+    options?: Readonly<{ timeoutMs?: number }>,
     signal?: AbortSignal,
   ): Promise<boolean>;
 }>;
