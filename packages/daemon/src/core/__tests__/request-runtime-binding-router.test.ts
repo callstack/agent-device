@@ -216,6 +216,12 @@ function makeGateway(disposeError?: Error) {
       },
       notes: [],
     }),
+    networkCaptureStart: async () => ({
+      started: false as const,
+      reason: 'unsupported-device' as const,
+      message: 'not used',
+    }),
+    networkCaptureStop: async () => ({ stopped: false }),
   };
   const bindingDispose = vi.fn(async () => {
     if (disposeError) throw disposeError;
@@ -233,6 +239,8 @@ function makeGateway(disposeError?: Error) {
         appLogCleanup: { available: true as const },
         appState: { available: false as const, reason: 'owner-capability-missing' as const },
         networkDump: { available: true as const },
+        networkCaptureStart: unavailableRecording,
+        networkCaptureStop: unavailableRecording,
         screenRecordingStart: unavailableRecording,
         screenRecordingReattach: unavailableRecording,
         screenRecordingCleanup: unavailableRecording,

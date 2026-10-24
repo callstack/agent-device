@@ -56,6 +56,8 @@ export const RUNTIME_OPERATION_NAMES = [
   'mediaPrevious',
   'mediaRewind',
   'mute',
+  'networkCaptureStart',
+  'networkCaptureStop',
   'networkDump',
   'openApplication',
   'perfFrames',

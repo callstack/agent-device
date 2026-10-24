@@ -123,6 +123,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     findFirst: options.findFirst,
     findLast: options.findLast,
     networkInclude: options.networkInclude,
+    networkHosts: options.hosts,
     batchOnError: options.batchOnError,
     batchMaxSteps: options.batchMaxSteps,
     batchSteps: options.batchSteps,

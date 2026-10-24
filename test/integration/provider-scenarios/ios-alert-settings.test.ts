@@ -355,6 +355,8 @@ function recordingRuntimeFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntime
       appLogCleanup: available,
       appState: { available: false, reason: 'unsupported-provider-mode' },
       networkDump: unavailableRecording,
+      networkCaptureStart: unavailableRecording,
+      networkCaptureStop: unavailableRecording,
       screenRecordingStart: unavailableRecording,
       screenRecordingReattach: unavailableRecording,
       screenRecordingCleanup: unavailableRecording,

@@ -60,12 +60,18 @@ type NetworkCliResult = {
   path?: string;
   active?: boolean;
   state?: string;
+  source?: string;
   backend?: string;
   include?: NetworkIncludeMode;
   scannedLines?: number;
   matchedLines?: number;
   entries?: readonly NetworkCliEntry[];
   notes?: readonly string[];
+  started?: boolean;
+  stopped?: boolean;
+  hosts?: readonly string[];
+  requiresRelaunch?: boolean;
+  capturingBodies?: boolean;
 };
 
 type AudioCliResult = {
@@ -110,6 +116,9 @@ function eventsCliOutput(data: EventsCliResult): CliOutput {
 }
 
 function networkCliOutput(data: NetworkCliResult): CliOutput {
+  if (data.started !== undefined || data.stopped !== undefined) {
+    return networkCaptureCliOutput(data);
+  }
   const lines: string[] = [];
   const entries = data.entries ?? [];
   if (data.path) lines.push(data.path);
@@ -127,12 +136,33 @@ function networkCliOutput(data: NetworkCliResult): CliOutput {
       formatKeyValueFields(data, [
         'active',
         'state',
+        'source',
         'backend',
         'include',
         'scannedLines',
         'matchedLines',
       ] as const),
       formatNotes(data.notes),
+    ]),
+  };
+}
+
+function networkCaptureCliOutput(data: NetworkCliResult): CliOutput {
+  const text =
+    data.started === true
+      ? `Network capture started from source "${String(data.source ?? 'provider')}".`
+      : data.stopped === true
+        ? 'Network capture stopped.'
+        : 'No network capture was running.';
+  return {
+    data,
+    text,
+    stderr: joinDefinedLines([
+      data.hosts?.length ? `hosts: ${data.hosts.join(', ')}` : undefined,
+      data.requiresRelaunch === true
+        ? 'The app launched before capture started; relaunch it for full coverage.'
+        : undefined,
+      data.capturingBodies === true ? 'Request and response bodies are captured.' : undefined,
     ]),
   };
 }

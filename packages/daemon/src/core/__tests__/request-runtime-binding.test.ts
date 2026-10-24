@@ -455,6 +455,12 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       },
       notes: [],
     })),
+    networkCaptureStart: vi.fn(async () => ({
+      started: false as const,
+      reason: 'unsupported-device' as const,
+      message: 'not used',
+    })),
+    networkCaptureStop: vi.fn(async () => ({ stopped: false })),
     screenRecordingStart: vi.fn(async () => {
       throw new Error('not used');
     }),
@@ -481,6 +487,8 @@ function makeGateway(options: { inspectAvailable?: boolean } = {}) {
       appLogReattach: { available: true } as const,
       appLogCleanup: { available: true } as const,
       networkDump: { available: true } as const,
+      networkCaptureStart: { available: false, reason: 'owner-capability-missing' } as const,
+      networkCaptureStop: { available: false, reason: 'owner-capability-missing' } as const,
       screenRecordingStart: { available: true } as const,
       screenRecordingReattach: { available: true } as const,
       screenRecordingCleanup: { available: true } as const,

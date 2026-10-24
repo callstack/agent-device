@@ -173,6 +173,23 @@ describe('observability command interface', () => {
     });
   });
 
+  test('reads and writes network capture start and stop', () => {
+    expect(networkCliReader(['start'], { networkHosts: ['api.example.com'] } as CliFlags)).toEqual({
+      action: 'start',
+      hosts: ['api.example.com'],
+    });
+    expect(networkCliReader(['stop'], NO_FLAGS)).toEqual({ action: 'stop' });
+    expect(networkDaemonWriter({ action: 'start', hosts: ['api.example.com'] })).toMatchObject({
+      command: 'network',
+      positionals: ['start'],
+      options: { networkHosts: ['api.example.com'] },
+    });
+    expect(networkDaemonWriter({ action: 'stop' })).toMatchObject({
+      command: 'network',
+      positionals: ['stop'],
+    });
+  });
+
   test('rejects invalid observability positionals', () => {
     expectInvalidArgs(() => logsCliReader(['explode'], NO_FLAGS), 'logs requires');
     expectInvalidArgs(() => networkCliReader(['explode'], NO_FLAGS), 'network requires');

@@ -74,7 +74,7 @@ export function createProviderAppLogOperations<
   Reader extends ProviderAppLogReader,
 >(
   options: ProviderAppLogOptions<Descriptor, Reader>,
-): AppLogRuntimeOperations & NetworkRuntimeOperations {
+): AppLogRuntimeOperations & Pick<NetworkRuntimeOperations, 'networkDump'> {
   const { host, signal } = options;
   const mismatch = `${options.provider} app-log descriptor does not match the bound device or owning session`;
   const ownsDescriptor = (descriptor: Descriptor, sessionId: string) =>

@@ -49,8 +49,59 @@ export type NetworkDumpResult =
     }>
   | (Readonly<{ source: 'provider' }> & NetworkProviderDumpResult);
 
+/**
+ * Starts one session's live capture source. `network dump` never installs a source: it reads only
+ * the source a prior `network start` selected (ADR 0037). A source is chosen at start and a dump
+ * never switches silently.
+ */
+export type NetworkCaptureStartInput = Readonly<{
+  sessionId: string;
+  /** App the session has open, when one is open; a source reports `requiresRelaunch` from it. */
+  appBundleId?: string;
+  /** Extra domain selectors the source accepts, beyond its own default list. */
+  hosts?: readonly string[];
+}>;
+
+/** Typed start refusals; a caller never matches on message text. */
+export type NetworkCaptureStartFailureReason =
+  | 'capture-already-started'
+  | 'tunnel-in-use'
+  | 'unsupported-device';
+
+export type NetworkCaptureStartResult =
+  | Readonly<{
+      started: true;
+      /** Name of the source now serving `network dump` for this session. */
+      source: string;
+      /** Domain selectors the source routes and inspects. */
+      hosts: readonly string[];
+      /**
+       * True when the app was launched before capture started, so its already-open connections
+       * are outside the capture window and the app must relaunch for full coverage.
+       */
+      requiresRelaunch: boolean;
+      /** True when start keeps request and response bodies for `network dump --include body|all`. */
+      capturingBodies: boolean;
+    }>
+  | Readonly<{ started: false; reason: NetworkCaptureStartFailureReason; message: string }>;
+
+export type NetworkCaptureStopInput = Readonly<{
+  sessionId: string;
+}>;
+
+export type NetworkCaptureStopResult = Readonly<{
+  /** Whether a capture was running and is now stopped; a later dump reads the app log again. */
+  stopped: boolean;
+}>;
+
 export type NetworkRuntimeOperations = Readonly<{
   networkDump(input: NetworkDumpInput): Promise<NetworkDumpResult>;
+  /**
+   * Live capture control. Owners without a capture source report both facts unavailable and bind
+   * neither; `network dump` then keeps answering from the session app log.
+   */
+  networkCaptureStart(input: NetworkCaptureStartInput): Promise<NetworkCaptureStartResult>;
+  networkCaptureStop(input: NetworkCaptureStopInput): Promise<NetworkCaptureStopResult>;
 }>;
 
 export type NetworkProviderDump = (

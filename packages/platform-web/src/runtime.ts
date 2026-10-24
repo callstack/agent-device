@@ -354,6 +354,8 @@ function webRuntimeFacts(
       appLogCleanup: appLogUnavailable,
       appState: appStateUnavailable,
       networkDump: webAvailableFact(Boolean(transport.dump), networkUnavailable),
+      networkCaptureStart: networkUnavailable,
+      networkCaptureStop: networkUnavailable,
       screenRecordingStart: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingReattach: webAvailableFact(recordingAvailable, recordingUnavailable),
       screenRecordingCleanup: webAvailableFact(recordingAvailable, recordingUnavailable),

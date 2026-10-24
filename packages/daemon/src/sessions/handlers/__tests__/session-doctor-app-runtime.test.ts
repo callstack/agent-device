@@ -100,6 +100,8 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
       appState: unavailable,
       listApps: available,
       networkDump: unavailable,
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,

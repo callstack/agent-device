@@ -453,6 +453,8 @@ function createRuntimeHarness(
           appLogCleanup: { available: true },
           appState: { available: false, reason: 'owner-capability-missing' },
           networkDump: { available: true },
+          networkCaptureStart: unavailableRecording,
+          networkCaptureStop: unavailableRecording,
           screenRecordingStart: unavailableRecording,
           screenRecordingReattach: unavailableRecording,
           screenRecordingCleanup: unavailableRecording,

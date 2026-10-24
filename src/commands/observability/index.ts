@@ -5,11 +5,16 @@ import type {
   NetworkOptions,
 } from '@agent-device/contracts/client';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
-import { AppError } from '@agent-device/kernel/errors';
 import { parseStringMember } from './string-enum.ts';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
+import {
+  booleanField,
+  enumField,
+  integerField,
+  stringArrayField,
+  stringField,
+} from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { LOG_ACTION_VALUES, type LogAction } from './log-command-contract.ts';
 import {
@@ -27,7 +32,7 @@ const LOGS_COMMAND_NAME = 'logs';
 const EVENTS_COMMAND_NAME = 'events';
 const NETWORK_COMMAND_NAME = 'network';
 const AUDIO_COMMAND_NAME = 'audio';
-const NETWORK_ACTION_VALUES = ['dump', 'log'] as const;
+const NETWORK_ACTION_VALUES = ['dump', 'log', 'start', 'stop'] as const;
 const AUDIO_ACTION_VALUES = ['probe'] as const;
 const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 
@@ -35,7 +40,8 @@ const logsCommandDescription =
   'Session app log info, start/stop streaming, diagnostics, and markers';
 const eventsCommandDescription =
   'Read the daemon-owned session event timeline as paged JSON-friendly entries';
-const networkCommandDescription = 'Dump recent HTTP(s) traffic parsed from the session app log';
+const networkCommandDescription =
+  'Dump recent HTTP(s) traffic, from a live capture source when started, otherwise the session app log';
 const audioCommandDescription =
   'Measure browser or host-rendered simulator/emulator audio as compact dBFS buckets. Start a probe before requesting its status or stopping it.';
 
@@ -65,6 +71,9 @@ export const networkCommandMetadata = defineFieldCommandMetadata(
     action: enumField(NETWORK_ACTION_VALUES),
     limit: integerField(),
     include: enumField(NETWORK_INCLUDE_MODES),
+    hosts: stringArrayField(
+      'network start: extra capture-host domain selectors beyond the source defaults.',
+    ),
   },
 );
 
@@ -96,11 +105,11 @@ const eventsCliSchema = {
 
 const networkCliSchema = {
   usageOverride:
-    'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]',
+    'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network start [--hosts <domain>] | network stop',
   usageFlags: [],
   listUsageOverride: 'network',
-  positionalArgs: ['dump|log', 'limit?', 'include?'],
-  allowedFlags: ['networkInclude'],
+  positionalArgs: ['dump|log|start|stop', 'limit?', 'include?'],
+  allowedFlags: ['networkInclude', 'networkHosts'],
 } as const satisfies CommandSchemaOverride;
 
 const audioCliSchema = {
@@ -128,6 +137,7 @@ export const networkCliReader: CliReader = (positionals, flags) => ({
   action: readNetworkAction(positionals[0]),
   limit: optionalCliNumber(positionals[1]),
   include: flags.networkInclude ?? readNetworkInclude(positionals[2]),
+  hosts: flags.networkHosts,
 });
 
 export const audioCliReader: CliReader = (positionals, flags) => ({
@@ -149,6 +159,7 @@ export const networkDaemonWriter: DaemonWriter = (input) =>
   request(NETWORK_COMMAND_NAME, networkPositionals(input as NetworkOptions), {
     ...input,
     networkInclude: input.include,
+    networkHosts: input.hosts,
   });
 
 export const audioDaemonWriter: DaemonWriter = (input) =>
@@ -240,10 +251,13 @@ function readLogsAction(value: string | undefined): LogAction | undefined {
   });
 }
 
-function readNetworkAction(value: string | undefined): 'dump' | 'log' | undefined {
+function readNetworkAction(
+  value: string | undefined,
+): (typeof NETWORK_ACTION_VALUES)[number] | undefined {
   if (value === undefined) return undefined;
-  if (value === 'dump' || value === 'log') return value;
-  throw new AppError('INVALID_ARGS', 'network requires dump or log');
+  return parseStringMember(NETWORK_ACTION_VALUES, value, {
+    message: 'network requires dump, log, start, or stop',
+  });
 }
 
 function readNetworkInclude(value: string | undefined): NetworkIncludeMode | undefined {

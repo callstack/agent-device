@@ -43,6 +43,8 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   appLogReattach: 'simulator',
   appLogCleanup: 'simulator',
   networkDump: 'simulator',
+  networkCaptureStart: 'simulator',
+  networkCaptureStop: 'simulator',
   audioProbeStart: 'simulator',
   audioProbeQuery: 'simulator',
   audioProbeReattach: 'simulator',

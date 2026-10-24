@@ -119,6 +119,8 @@ function makeRecordingGateway(firstStartBlocked: Promise<void>) {
         appLogCleanup: unavailable,
         appState: unavailable,
         networkDump: unavailable,
+        networkCaptureStart: unavailable,
+        networkCaptureStop: unavailable,
         screenRecordingStart: { available: true },
         screenRecordingReattach: { available: true },
         screenRecordingCleanup: { available: true },

@@ -1,6 +1,11 @@
 import { vi } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
-import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
+import type {
+  NetworkCaptureStartResult,
+  NetworkCaptureStopResult,
+  NetworkDumpInput,
+  NetworkDumpResult,
+} from '@agent-device/contracts/network-runtime';
 import {
   type RuntimeOperationFact,
   type RuntimeOwnerRef,
@@ -17,6 +22,9 @@ export function createNetworkRuntime(
   implementation: (input: NetworkDumpInput) => Promise<NetworkDumpResult>,
   networkFact: RuntimeOperationFact = { available: true },
   owner: RuntimeOwnerRef = localRuntimeOwner(device.platform),
+  captureFacts: RuntimeOperationFact | undefined = undefined,
+  captureImplementation?: () => Promise<NetworkCaptureStartResult>,
+  captureStopImplementation?: () => Promise<NetworkCaptureStopResult>,
 ) {
   const uses: Array<{
     required: readonly string[];
@@ -24,10 +32,25 @@ export function createNetworkRuntime(
     conditional?: readonly string[];
   }> = [];
   const networkDump = vi.fn(implementation);
+  const networkCaptureStart = vi.fn(
+    captureImplementation ??
+      (async (): Promise<NetworkCaptureStartResult> => ({
+        started: false,
+        reason: 'unsupported-device',
+        message: 'capture is not wired in this harness',
+      })),
+  );
+  const networkCaptureStop = vi.fn(
+    captureStopImplementation ??
+      (async (): Promise<NetworkCaptureStopResult> => ({
+        stopped: false,
+      })),
+  );
   const unavailable = {
     available: false,
     reason: 'owner-capability-missing',
   } as const;
+  const captureFact = captureFacts ?? unavailable;
   const bindDevice: BindDeviceRuntime = async (selected, use) => {
     uses.push({
       required: [...use.required],
@@ -57,6 +80,8 @@ export function createNetworkRuntime(
             appLogCleanup: unavailable,
             appState: unavailable,
             networkDump: networkFact,
+            networkCaptureStart: captureFact,
+            networkCaptureStop: captureFact,
             screenRecordingStart: unavailable,
             screenRecordingReattach: unavailable,
             screenRecordingCleanup: unavailable,
@@ -78,13 +103,16 @@ export function createNetworkRuntime(
             }),
           },
         },
-        operations: networkFact.available ? { networkDump } : {},
+        operations: {
+          ...(networkFact.available ? { networkDump } : {}),
+          ...(captureFact.available ? { networkCaptureStart, networkCaptureStop } : {}),
+        },
         [Symbol.asyncDispose]: async () => {},
       } satisfies import('@agent-device/contracts/platform-runtime').DeviceBinding<PlatformRuntimeOperations>,
       use,
     );
   };
-  return { bindDevice, networkDump, uses };
+  return { bindDevice, networkDump, networkCaptureStart, networkCaptureStop, uses };
 }
 
 export function emptyAppLogResult(

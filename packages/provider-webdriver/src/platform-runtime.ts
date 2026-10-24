@@ -552,6 +552,9 @@ function webDriverFacts(
       deployMaterializedApp: deployment,
       sendPushNotification: pushUnavailable,
       appState: appStateUnavailable,
+      networkDump: available,
+      networkCaptureStart: unavailableFact('owner-capability-missing'),
+      networkCaptureStop: unavailableFact('owner-capability-missing'),
       ...snapshotRuntimeOperationFacts({
         capture: snapshotCell,
         customActions: snapshotCustomActionsUnavailable,

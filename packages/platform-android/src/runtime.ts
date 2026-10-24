@@ -298,6 +298,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...deployment,
         appState: device.kind === 'simulator' ? appStateUnavailable : available,
         networkDump: available,
+        // Only the Limrun provider owns a live capture source today (ADR 0037).
+        networkCaptureStart: unavailableFact('owner-capability-missing'),
+        networkCaptureStop: unavailableFact('owner-capability-missing'),
         screenRecordingStart: available,
         screenRecordingReattach: available,
         screenRecordingCleanup: available,

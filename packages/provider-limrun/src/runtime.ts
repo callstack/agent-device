@@ -51,6 +51,7 @@ import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
 import type { LimrunInstanceAccess } from './instance-access.ts';
+import type { LimrunNetworkCapture } from './network-capture.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
@@ -112,6 +113,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     string,
     Readonly<{ assetName: string; installedAppId: string }>
   >();
+  private readonly networkCaptures = new Map<string, LimrunNetworkCapture>();
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
@@ -185,6 +187,23 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return session ? createLimrunDeviceSession(session) : undefined;
   }
 
+  /**
+   * The live HTTP(S) capture source for a live session: Limrun tunnel inspection on the session's
+   * own instance client. One source per device, created on first bind and kept until the session
+   * ends. The capture module loads on demand: it carries the Limrun tunnel SDK.
+   */
+  async networkCaptureFor(device: DeviceInfo): Promise<LimrunNetworkCapture | undefined> {
+    const session = this.getSessionForDevice(device);
+    if (!session) return undefined;
+    const leaseId = session.lease.leaseId;
+    const existing = this.networkCaptures.get(leaseId);
+    if (existing) return existing;
+    const { createLimrunNetworkCapture } = await import('./network-capture.ts');
+    const capture = createLimrunNetworkCapture(session.client);
+    this.networkCaptures.set(leaseId, capture);
+    return capture;
+  }
+
   async installApp(
     device: DeviceInfo,
     app: string,
@@ -238,6 +257,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   async shutdown(): Promise<void> {
+    const captures = [...this.networkCaptures.values()];
+    this.networkCaptures.clear();
+    await Promise.allSettled(captures.map(async (capture) => await capture.stop()));
     const sessions = [...this.sessions.values()];
     await Promise.allSettled(sessions.map(async (session) => await this.terminateSession(session)));
     this.sessions.clear();
@@ -350,6 +372,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     const session = this.sessions.get(lease.leaseId);
     if (!session) return await this.releaseRecoveredSession(lease);
+    await this.networkCaptures.get(lease.leaseId)?.stop();
+    this.networkCaptures.delete(lease.leaseId);
     await this.terminateSession(session);
     this.sessions.delete(lease.leaseId);
     this.appAliases.delete(lease.leaseId);
@@ -530,6 +554,7 @@ async function loadLimrunPlatformRuntime(
         operationDrain,
       ),
     configurePortReverse: async (options) => await runtime.configurePortReverse(options),
+    getNetworkCapture: async (device) => await runtime.networkCaptureFor(device),
   });
 }
 

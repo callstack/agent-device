@@ -74,6 +74,8 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     activity?: string;
     launchConsole?: string;
     launchArgs?: string[];
+    /** network start: capture-host selectors, projected onto the networkHosts request flag. */
+    hosts?: string[];
     relaunch?: boolean;
     shutdown?: boolean;
     saveScript?: boolean | string;

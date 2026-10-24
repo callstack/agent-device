@@ -206,6 +206,8 @@ export function createUnavailablePlatformRuntimeFacts(
       sendPushNotification: frozen.appDeployment,
       uninstallApp: frozen.appDeployment,
       appState: frozen.appState,
+      networkCaptureStart: frozen.network,
+      networkCaptureStop: frozen.network,
       networkDump: frozen.network,
       screenRecordingStart: frozen.screenRecording,
       screenRecordingReattach: frozen.screenRecording,

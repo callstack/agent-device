@@ -63,6 +63,8 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   mediaPrevious: 'mutates',
   mediaRewind: 'mutates',
   mute: 'mutates',
+  networkCaptureStart: 'repeatable',
+  networkCaptureStop: 'repeatable',
   networkDump: 'repeatable',
   openApplication: 'mutates',
   perfFrames: 'repeatable',
