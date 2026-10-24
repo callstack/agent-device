@@ -666,25 +666,15 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     self.navigationBackStatus = label;
     label.accessibilityIdentifier = @"agent-device-back-status";
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--navigation-bar"]) {
-      // Same band rule as the plain fixture below: the bar sits under the screen's own top inset,
-      // which differs by family (59 pt on an iPhone 17 Pro, 32 pt on an iPad Pro), so the bar
-      // anchors to the safe-area top instead of a hardcoded iPhone y.
-      UINavigationBar *bar = [[UINavigationBar alloc] init];
-      bar.translatesAutoresizingMaskIntoConstraints = NO;
+      UINavigationBar *bar = [[UINavigationBar alloc] initWithFrame:CGRectMake(0, 62, self.view.bounds.size.width, 44)];
       UINavigationItem *item = [[UINavigationItem alloc] initWithTitle:@"Thread"];
       item.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Go back" style:UIBarButtonItemStylePlain target:self action:@selector(navigationBackPressed)];
       bar.items = @[item];
       [self.view addSubview:bar];
-      [NSLayoutConstraint activateConstraints:@[
-        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [bar.heightAnchor constraintEqualToConstant:44],
-      ]];
     } else {
-      // The bar band sits under the screen's own top inset, which differs by family (59 pt on an
-      // iPhone 17 Pro, 32 pt on an iPad Pro). Pinning the control to the safe-area top keeps this
-      // fixture inside the band the fallback aims at, on either idiom.
+      // The control sits in the top bar band, whose height above the content differs by family
+      // (59 pt on an iPhone 17 Pro, 32 pt on an iPad Pro), so it anchors to the safe-area top
+      // instead of a hardcoded iPhone y.
       UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem];
       back.translatesAutoresizingMaskIntoConstraints = NO;
       [back setTitle:@"Go back" forState:UIControlStateNormal];

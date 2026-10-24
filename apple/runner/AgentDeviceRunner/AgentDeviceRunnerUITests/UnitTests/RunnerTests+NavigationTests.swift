@@ -50,13 +50,13 @@ extension RunnerTests {
     }
   }
 
-  /// Only an app that provably fills its sole screen can skip the windows query after the tree
-  /// rejected one; anywhere else the windows query is still asked, and its window carries the tap.
-  /// The runner host app fills its simulator's screen on both families, so this negative needs a
-  /// route the device cannot open: SpringBoard's app is not the accessibility primary app on an
-  /// iPad, and on an iPhone the idiom alone opens the route, where the expectation is the iPhone's.
+  /// After the tree rejects a query, `back` reaches the top-leading control through whichever route
+  /// is open: the sole screen where the app proves it fills it (both families here), the resolved
+  /// window everywhere else. The refusal half — a device where no route opens — is the negative in
+  /// `testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen`, which no simulator here can
+  /// reach because its foreground app always fills its screen.
   @MainActor
-  func testInAppBackStillAsksForWindowsWhereNoSoleScreenAnswers() throws {
+  func testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens() throws {
     let status = try launchBackFixture(["--agent-device-back-regression"])
     defer { endBackFixture() }
 
@@ -214,21 +214,13 @@ extension RunnerTests {
 
   /// A runtime that reports no inset proves nothing about the band, so the point stays inside the
   /// compact bar it used to target; a large inset (a surface that pushed the content down) must not
-  /// send the tap deep into the page. A window that starts below the screen's top (a resolvable
-  /// Stage Manager window) places its bar at its own top, so the screen's inset must not shift it
-  /// further down.
+  /// send the tap deep into the page.
   func testTopLeadingNavigationFallbackPointStaysBoundedForUnknownAndLargeInsets() throws {
     let frame = CGRect(x: 0, y: 0, width: 834, height: 1210)
     let noInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 0))
     XCTAssertEqual(noInset.y, 56, accuracy: 0.01, "the compact bar bound")
     let hugeInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 400))
     XCTAssertEqual(hugeInset.y, 96, accuracy: 0.01, "never leaves the header band")
-
-    let loweredWindow = CGRect(x: 120, y: 130, width: 600, height: 950)
-    let lowered = try XCTUnwrap(
-      Self.topLeadingNavigationFallbackPoint(in: loweredWindow, topSafeAreaInset: 32)
-    )
-    XCTAssertEqual(lowered.y, 152, accuracy: 0.01, "the bar's middle sits at the window's own top plus half a standard bar")
   }
 
   func testNavigationBackControlRankPrefersBackThenCloseThenCancel() {

@@ -157,9 +157,6 @@ extension RunnerTests {
   }
 
 #if os(iOS)
-  /// The sole-screen route is the boundary every window-less gesture crosses, so it decides the device
-  /// rule itself: an iPhone with one screen names that screen, and an iPad refuses, because it can show
-  /// the app in part of its screen. Run on both device families to cover both answers.
   /// The launched runner host app fills its simulator's only screen, so its window-less gestures
   /// route through that screen on either family. A windowed iPad app is refused the same route — that
   /// case needs an iPad set to Windowed Apps, which the nightly lane does not run; what the rule

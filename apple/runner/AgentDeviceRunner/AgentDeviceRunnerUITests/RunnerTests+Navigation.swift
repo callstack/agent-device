@@ -183,11 +183,8 @@ extension RunnerTests {
   /// directly under the top inset of the frame the tap lands in. A fraction of the frame height
   /// cannot serve both families — an iPhone 17 Pro measures a 59-pt inset with its bar at y 62-116,
   /// while an iPad Pro 11" measures 32 with its bar at y 32-86, where the iPhone's height-derived 96
-  /// lands below the bar. `22` is half of UIKit's standard 44-pt top bar. The screen's inset counts
-  /// only when the frame starts at the screen's own top (the sole-screen route and a maximized
-  /// window); a window that starts below the screen top places its bar at its own top instead. The
-  /// bounds keep a runtime that reports no inset inside a plausible bar, and a large inset from
-  /// leaving it.
+  /// lands below the bar. `22` is half of UIKit's standard 44-pt top bar. The bounds keep a runtime
+  /// that reports no inset inside a plausible bar, and a large inset from leaving it.
   static func topLeadingNavigationFallbackPoint(
     in frame: CGRect,
     topSafeAreaInset: CGFloat
@@ -197,11 +194,6 @@ extension RunnerTests {
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.
     let xOffset = min(max(frame.width * 0.08, 28), 44)
-    // A screen-top frame takes the screen's inset and the band bounds; a window that starts lower
-    // places its bar at its own top, so the point centers a standard bar there instead.
-    if frame.minY > 1 {
-      return CGPoint(x: frame.minX + xOffset, y: frame.minY + 22)
-    }
     let yOffset = min(max(topSafeAreaInset + 22, 56), 96)
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
   }

@@ -67,12 +67,44 @@ typedef bool (*AutomationEnabledFn)(void);
 + (nullable XCAccessibilityElement *)elementWithProcessIdentifier:(pid_t)pid;
 @end
 
-@protocol AXForegroundElement <NSObject>
-+ (nullable id<AXForegroundElement>)primaryApp;
-+ (nullable id<AXForegroundElement>)systemApplication;
+// AGENT_DEVICE_FULL_SCREEN_RULE_BEGIN
+// One rule, two targets, one block. The Simulator snapshot bridge refuses a capture whose app
+// window does not fill the screen (`app-window-not-full-screen`, #3844), and the runner refuses to
+// route a window-less gesture onto a screen it cannot prove the app fills. Both read the same two
+// frames from the same private AX runtime in one native space. The two binaries build from
+// disjoint source roots in the checkout and in a packaged install, so no include path reaches both
+// builds; `test/repo-guards/full-screen-rule-parity.test.ts` pins the two copies of this block
+// byte-identical. Each caller keeps its own policy for what a missing read proves; this block
+// states only what the runtime reports.
+
+// The AXRuntime class both targets reach without walking the app's accessibility tree, so both
+// answer on a tree XCTest cannot serialize.
+@protocol AgentDeviceForegroundElement <NSObject>
++ (nullable id<AgentDeviceForegroundElement>)primaryApp;
++ (nullable id<AgentDeviceForegroundElement>)systemApplication;
 - (pid_t)pid;
 - (CGRect)frame;
 @end
+
+// Whether the accessibility primary app is the process this capture or gesture belongs to. While a
+// system surface owns the foreground, no screen is the target app's to fill and no tree is the
+// target app's to capture (ADR 0004, foreground ownership).
+static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t targetProcessID) {
+  return primaryProcessID == targetProcessID;
+}
+
+// How far apart two screen-native frames may be and still name the same rectangle. Sub-pixel
+// layout rounding is not a window; anything past this is a window that shows the app in part of
+// the screen (Windowed Apps or Stage Manager).
+static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
+
+static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
+  return fabs(window.origin.x - screen.origin.x) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.origin.y - screen.origin.y) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.size.width - screen.size.width) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.size.height - screen.size.height) <= AgentDeviceFullScreenFrameTolerance;
+}
+// AGENT_DEVICE_FULL_SCREEN_RULE_END
 
 static NSNumber *finiteNumber(double value)
 {
@@ -183,10 +215,11 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 
 - (BOOL)isPrimaryForegroundProcess:(pid_t)pid
 {
-  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
   if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
-  id<AXForegroundElement> application = [elementClass primaryApp];
-  return [application respondsToSelector:@selector(pid)] && [application pid] == pid;
+  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
+  return [application respondsToSelector:@selector(pid)] &&
+      AgentDeviceForegroundOwnershipMatches([application pid], pid);
 }
 
 // The snapshot API reports the frames of an app that runs in an iPadOS window relative to that
@@ -195,23 +228,20 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 // is refused; a runtime that cannot report either frame keeps the capture.
 - (BOOL)primaryAppWindowDiffersFromScreen
 {
-  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
   if (![elementClass respondsToSelector:@selector(primaryApp)] ||
       ![elementClass respondsToSelector:@selector(systemApplication)]) {
     return NO;
   }
-  id<AXForegroundElement> application = [elementClass primaryApp];
-  id<AXForegroundElement> system = [elementClass systemApplication];
+  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
+  id<AgentDeviceForegroundElement> system = [elementClass systemApplication];
   if (![application respondsToSelector:@selector(frame)] || ![system respondsToSelector:@selector(frame)]) {
     return NO;
   }
   CGRect window = [application frame];
   CGRect screen = [system frame];
   if (CGRectIsEmpty(window) || CGRectIsEmpty(screen)) return NO;
-  return fabs(CGRectGetMinX(window) - CGRectGetMinX(screen)) > 0.5 ||
-      fabs(CGRectGetMinY(window) - CGRectGetMinY(screen)) > 0.5 ||
-      fabs(CGRectGetWidth(window) - CGRectGetWidth(screen)) > 0.5 ||
-      fabs(CGRectGetHeight(window) - CGRectGetHeight(screen)) > 0.5;
+  return !AgentDeviceForegroundWindowFillsScreen(window, screen);
 }
 
 - (nullable id)jsonValue:(id)value name:(NSString *)name

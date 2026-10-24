@@ -10,10 +10,44 @@
 #import <objc/runtime.h>
 #endif
 
-// How far apart two screen-native frames may be and still name the same rectangle. The Simulator
-// snapshot bridge refuses a windowed capture on the same tolerance (#3844). The two targets compile
-// independently; this constant's owner is the runner's synthesized-gesture route.
-static const CGFloat RunnerFullScreenFrameTolerance = 0.5;
+// AGENT_DEVICE_FULL_SCREEN_RULE_BEGIN
+// One rule, two targets, one block. The Simulator snapshot bridge refuses a capture whose app
+// window does not fill the screen (`app-window-not-full-screen`, #3844), and the runner refuses to
+// route a window-less gesture onto a screen it cannot prove the app fills. Both read the same two
+// frames from the same private AX runtime in one native space. The two binaries build from
+// disjoint source roots in the checkout and in a packaged install, so no include path reaches both
+// builds; `test/repo-guards/full-screen-rule-parity.test.ts` pins the two copies of this block
+// byte-identical. Each caller keeps its own policy for what a missing read proves; this block
+// states only what the runtime reports.
+
+// The AXRuntime class both targets reach without walking the app's accessibility tree, so both
+// answer on a tree XCTest cannot serialize.
+@protocol AgentDeviceForegroundElement <NSObject>
++ (nullable id<AgentDeviceForegroundElement>)primaryApp;
++ (nullable id<AgentDeviceForegroundElement>)systemApplication;
+- (pid_t)pid;
+- (CGRect)frame;
+@end
+
+// Whether the accessibility primary app is the process this capture or gesture belongs to. While a
+// system surface owns the foreground, no screen is the target app's to fill and no tree is the
+// target app's to capture (ADR 0004, foreground ownership).
+static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t targetProcessID) {
+  return primaryProcessID == targetProcessID;
+}
+
+// How far apart two screen-native frames may be and still name the same rectangle. Sub-pixel
+// layout rounding is not a window; anything past this is a window that shows the app in part of
+// the screen (Windowed Apps or Stage Manager).
+static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
+
+static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
+  return fabs(window.origin.x - screen.origin.x) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.origin.y - screen.origin.y) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.size.width - screen.size.width) <= AgentDeviceFullScreenFrameTolerance &&
+      fabs(window.size.height - screen.size.height) <= AgentDeviceFullScreenFrameTolerance;
+}
+// AGENT_DEVICE_FULL_SCREEN_RULE_END
 
 NSString * _Nullable RunnerResolveXCTestEventBridge(
   id application,
@@ -231,13 +265,6 @@ NSString * _Nullable RunnerResolveSoleScreenDisplayID(id application, NSUInteger
   return RunnerResolveSoleScreen(application, &screen, displayID);
 }
 
-static BOOL RunnerFramesAgree(CGRect window, CGRect screen) {
-  return fabs(window.origin.x - screen.origin.x) <= RunnerFullScreenFrameTolerance &&
-      fabs(window.origin.y - screen.origin.y) <= RunnerFullScreenFrameTolerance &&
-      fabs(window.size.width - screen.size.width) <= RunnerFullScreenFrameTolerance &&
-      fabs(window.size.height - screen.size.height) <= RunnerFullScreenFrameTolerance;
-}
-
 RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
   pid_t targetProcessID,
   pid_t primaryProcessID,
@@ -249,16 +276,14 @@ RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
   if (targetProcessID <= 0 || primaryProcessID <= 0) {
     return RunnerFullScreenEvidenceUnknown;
   }
-  // The screen to fill is the one the target app owns. A bridge capture is refused the same way when
-  // a system surface owns the foreground (ADR 0004, foreground ownership).
-  if (primaryProcessID != targetProcessID) {
+  if (!AgentDeviceForegroundOwnershipMatches(primaryProcessID, targetProcessID)) {
     return RunnerFullScreenEvidenceNotPrimaryApp;
   }
   if (CGRectIsNull(appFrame) || CGRectIsNull(screenFrame) ||
       CGRectIsEmpty(appFrame) || CGRectIsEmpty(screenFrame)) {
     return RunnerFullScreenEvidenceUnknown;
   }
-  return RunnerFramesAgree(appFrame, screenFrame)
+  return AgentDeviceForegroundWindowFillsScreen(appFrame, screenFrame)
     ? RunnerFullScreenEvidenceFillsScreen
     : RunnerFullScreenEvidenceWindowed;
 }
@@ -277,25 +302,17 @@ BOOL RunnerSoleScreenRouteOpensForEvidence(
 
 // The Simulator AX bridge guest loads these two private frameworks and reaches the primary app and
 // the system app through the AXElement class the first one defines. The runner reaches the same two
-// frames the same way. Neither read walks the app's accessibility tree, so both answer on a tree
-// XCTest cannot serialize.
+// frames the same way, through the protocol in the shared block above.
 static NSString *const RunnerAXRuntimePath =
   @"/System/Library/PrivateFrameworks/AXRuntime.framework/AXRuntime";
 static NSString *const RunnerXCTAutomationSupportPath =
   @"/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport";
 
-@protocol RunnerForegroundElement <NSObject>
-+ (nullable id<RunnerForegroundElement>)primaryApp;
-+ (nullable id<RunnerForegroundElement>)systemApplication;
-- (pid_t)pid;
-- (CGRect)frame;
-@end
-
-static Class<RunnerForegroundElement> _Nullable RunnerForegroundElementClass(void) {
+static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClass(void) {
   // Cache the answer including its absence: a runtime without the class would otherwise pay two
   // RTLD_NOW lookups per window-less gesture forever.
   static BOOL resolved = NO;
-  static Class<RunnerForegroundElement> _Nullable cached = Nil;
+  static Class<AgentDeviceForegroundElement> _Nullable cached = Nil;
   if (!resolved) {
     Class element = objc_lookUpClass("AXElement");
     if (element == Nil) {
@@ -304,27 +321,27 @@ static Class<RunnerForegroundElement> _Nullable RunnerForegroundElementClass(voi
       dlopen(RunnerXCTAutomationSupportPath.UTF8String, RTLD_NOW);
       element = objc_lookUpClass("AXElement");
     }
-    cached = (Class<RunnerForegroundElement>)element;
+    cached = (Class<AgentDeviceForegroundElement>)element;
     resolved = YES;
   }
   return cached;
 }
 
-static id<RunnerForegroundElement> _Nullable RunnerForegroundElement(
-  Class<RunnerForegroundElement> element,
+static id<AgentDeviceForegroundElement> _Nullable RunnerForegroundElement(
+  Class<AgentDeviceForegroundElement> element,
   SEL selector
 ) {
   if (![element respondsToSelector:selector]) {
     return nil;
   }
-  __block id<RunnerForegroundElement> value = nil;
+  __block id<AgentDeviceForegroundElement> value = nil;
   NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
     value = ((id (*)(id, SEL))objc_msgSend)(element, selector);
   }];
   return exception != nil ? nil : value;
 }
 
-static CGRect RunnerForegroundElementFrame(id<RunnerForegroundElement> element) {
+static CGRect RunnerForegroundElementFrame(id<AgentDeviceForegroundElement> element) {
   if (![element respondsToSelector:@selector(frame)]) {
     return CGRectNull;
   }
@@ -337,7 +354,7 @@ static CGRect RunnerForegroundElementFrame(id<RunnerForegroundElement> element) 
 
 // A pid that cannot be read ends as 0, which the decision seam already maps to Unknown: pid 0 is
 // never a real process.
-static pid_t RunnerForegroundElementPid(id<RunnerForegroundElement> element) {
+static pid_t RunnerForegroundElementPid(id<AgentDeviceForegroundElement> element) {
   if (![element respondsToSelector:@selector(pid)]) {
     return 0;
   }
@@ -352,13 +369,13 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
   if (application == nil) {
     return RunnerFullScreenEvidenceUnknown;
   }
-  Class<RunnerForegroundElement> element = RunnerForegroundElementClass();
+  Class<AgentDeviceForegroundElement> element = RunnerForegroundElementClass();
   if (element == Nil) {
     return RunnerFullScreenEvidenceUnknown;
   }
-  id<RunnerForegroundElement> primaryApp =
+  id<AgentDeviceForegroundElement> primaryApp =
     RunnerForegroundElement(element, @selector(primaryApp));
-  id<RunnerForegroundElement> systemApp =
+  id<AgentDeviceForegroundElement> systemApp =
     RunnerForegroundElement(element, @selector(systemApplication));
   if (primaryApp == nil || systemApp == nil) {
     return RunnerFullScreenEvidenceUnknown;
@@ -384,10 +401,15 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
     window,
     screen
   );
+  // The flag covers the fills-screen line only: the nightly iPad leg greps for it, so a first
+  // windowed or unknown answer must not spend the one-shot flag and hide a later fill. A refusal
+  // stays worth a line each time it routes a gesture away, so it logs every time.
   static BOOL loggedFills = NO;
-  if (evidence != RunnerFullScreenEvidenceFillsScreen || !loggedFills) {
-    loggedFills = YES;
-    NSLog(
+  if (evidence == RunnerFullScreenEvidenceFillsScreen && loggedFills) {
+    return evidence;
+  }
+  loggedFills = loggedFills || evidence == RunnerFullScreenEvidenceFillsScreen;
+  NSLog(
       @"AGENT_DEVICE_RUNNER_FULL_SCREEN_EVIDENCE result=%@ targetPid=%d primaryPid=%d window=(%g,%g %gx%g) screen=(%g,%g %gx%g)",
       evidence == RunnerFullScreenEvidenceFillsScreen ? @"fills-screen"
         : evidence == RunnerFullScreenEvidenceWindowed ? @"windowed"
@@ -396,7 +418,6 @@ static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application
       window.origin.x, window.origin.y, window.size.width, window.size.height,
       screen.origin.x, screen.origin.y, screen.size.width, screen.size.height
     );
-  }
   return evidence;
 }
 
@@ -409,15 +430,14 @@ NSString * _Nullable RunnerResolveSoleScreen(
 ) {
   *screen = nil;
 #if TARGET_OS_IOS
-  const BOOL isPhoneIdiom =
-    UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone;
-  // The probe walks the AX bridge; an iPhone's idiom already decides the rule, so it never pays
-  // for the read. Unknown on the phone side records "not probed", and the rule still opens.
-  const RunnerFullScreenEvidence evidence = isPhoneIdiom
-    ? RunnerFullScreenEvidenceUnknown
-    : RunnerProbeApplicationFillsScreen(application);
-  if (!RunnerSoleScreenRouteOpensForEvidence(isPhoneIdiom, evidence)) {
-    return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
+  // An iPhone keeps every app full-screen, so its idiom answers the rule and the route never pays
+  // for the probe; off the phone idiom the evidence seam decides. `RunnerProbeApplicationFillsScreen`
+  // therefore only ever reports what it proved or failed to prove, never "not probed".
+  if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
+    const RunnerFullScreenEvidence evidence = RunnerProbeApplicationFillsScreen(application);
+    if (!RunnerSoleScreenRouteOpensForEvidence(NO, evidence)) {
+      return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
+    }
   }
 #else
   return @"private XCTest event synthesis unavailable: no resolved application window";
