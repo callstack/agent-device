@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
     | undefined,
   disconnect: vi.fn(),
   tunnelClose: vi.fn(),
+  startTunnel: vi.fn(async (): Promise<{ close: () => void }> => ({ close: () => {} })),
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -61,6 +62,7 @@ vi.mock('@limrun/api/instance-client', () => ({
       address: { address: '127.0.0.1', port: 62_001 },
       close: state.tunnelClose,
     })),
+    startTunnel: state.startTunnel,
   })),
 }));
 
@@ -171,6 +173,37 @@ test('the platform module surfaces an aborted request inside the app-state reade
     );
   } finally {
     await registration.runtime.shutdown();
+  }
+});
+
+test('shutdown stops a live network capture and concurrent binds share one capture', async () => {
+  let tunnelCloseCount = 0;
+  state.startTunnel.mockImplementationOnce(async () => ({
+    close: () => {
+      tunnelCloseCount += 1;
+    },
+  }));
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  try {
+    const device = await allocateAndroidDevice(runtime, 'lease-capture');
+    // Two requests bound at once must share one capture, so one session opens at most one tunnel.
+    const [first, second] = await Promise.all([
+      runtime.networkCaptureFor(device),
+      runtime.networkCaptureFor(device),
+    ]);
+    assert.ok(first);
+    assert.equal(first, second);
+
+    const started = await first.start(undefined);
+    assert.equal(started.ok, true);
+    assert.equal(state.startTunnel.mock.calls.length, 1);
+
+    // Release owns the tunnel's lifecycle: shutdown must close it, never leave it live on the
+    // instance after the session ends.
+    await runtime.shutdown();
+    assert.equal(tunnelCloseCount, 1);
+  } finally {
+    await runtime.shutdown();
   }
 });
 

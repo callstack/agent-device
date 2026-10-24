@@ -70,6 +70,8 @@ export type LimrunRuntimeOptions = {
 export type LimrunRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
+  /** The live capture source for a live session's device, created on first bind. */
+  networkCaptureFor(device: DeviceInfo): Promise<LimrunNetworkCapture | undefined>;
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
@@ -114,6 +116,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     Readonly<{ assetName: string; installedAppId: string }>
   >();
   private readonly networkCaptures = new Map<string, LimrunNetworkCapture>();
+  private readonly pendingNetworkCaptures = new Map<string, Promise<LimrunNetworkCapture>>();
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
@@ -198,10 +201,20 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const leaseId = session.lease.leaseId;
     const existing = this.networkCaptures.get(leaseId);
     if (existing) return existing;
-    const { createLimrunNetworkCapture } = await import('./network-capture.ts');
-    const capture = createLimrunNetworkCapture(session.client);
-    this.networkCaptures.set(leaseId, capture);
-    return capture;
+    const pending = this.pendingNetworkCaptures.get(leaseId);
+    if (pending) return pending;
+    // Two bound requests can ask at once; memoize the creation so exactly one capture (and at most
+    // one tunnel) exists per session.
+    const creating = (async () => {
+      const { createLimrunNetworkCapture } = await import('./network-capture.ts');
+      const capture = createLimrunNetworkCapture(session.client);
+      this.networkCaptures.set(leaseId, capture);
+      return capture;
+    })().finally(() => {
+      this.pendingNetworkCaptures.delete(leaseId);
+    });
+    this.pendingNetworkCaptures.set(leaseId, creating);
+    return creating;
   }
 
   async installApp(
@@ -257,6 +270,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   async shutdown(): Promise<void> {
+    // Await a create that is still in flight first: its result would miss the capture clear below.
+    await Promise.allSettled(this.pendingNetworkCaptures.values());
+    this.pendingNetworkCaptures.clear();
     const captures = [...this.networkCaptures.values()];
     this.networkCaptures.clear();
     await Promise.allSettled(captures.map(async (capture) => await capture.stop()));
@@ -372,6 +388,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     const session = this.sessions.get(lease.leaseId);
     if (!session) return await this.releaseRecoveredSession(lease);
+    // Drain a create that is still in flight first: it would set the capture after the delete below
+    // and orphan its tunnel on an attached instance.
+    await this.pendingNetworkCaptures.get(lease.leaseId)?.catch(() => undefined);
     await this.networkCaptures.get(lease.leaseId)?.stop();
     this.networkCaptures.delete(lease.leaseId);
     await this.terminateSession(session);
@@ -481,7 +500,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (!session || session.platform === 'android') return session;
     throw unsupported(
       'port reverse',
-      'Direct Limrun iOS sessions cannot reach local host ports; use a bridge public URL.',
+      'Limrun iOS port reverse is unsupported; use a bridge public URL or the instance client reverse-tunnel ports described in the Limrun guide.',
     );
   }
 }

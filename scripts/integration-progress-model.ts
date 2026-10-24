@@ -184,6 +184,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['screenshotNoStabilize', 'screenshot stabilization opt-out', ['stabilize']],
     ['restart', 'logs clear --restart workflow'],
     ['networkInclude', 'network dump include modes', ['include']],
+    ['networkHosts', 'network start capture host selectors', ['hosts']],
     ['noRecord', 'action recording suppression'],
     ['record', 'repair-segment observation-only recording opt-in (ADR 0012)'],
     ['replayUpdate', 'retired --update no-op replays without rewriting (ADR 0012)', ['update']],

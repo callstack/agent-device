@@ -217,6 +217,52 @@ test('network start keeps a refused start out of the successful reply shape', as
   });
 });
 
+test('a capture dump reports the source payload cap, not the app-log constant', async () => {
+  const sessionStore = makeSessionStore();
+  const session = makeSession('limrun-network-dump', {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'limrun:ios:lease-d',
+    name: 'Limrun iOS',
+    kind: 'simulator',
+  });
+  sessionStore.publish(session.name, session);
+  const runtime = createNetworkRuntime(session.device, async () => ({
+    source: 'provider' as const,
+    backend: 'limrun-tunnel',
+    entries: [],
+    notes: [],
+    limits: { maxPayloadChars: 400 },
+  }));
+
+  const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: session.name,
+      command: 'network',
+      positionals: ['dump', '5'],
+      flags: {},
+    },
+    sessionName: session.name,
+    logPath: path.join(sessionStore.resolveSessionDir(session.name), 'daemon.log'),
+    sessionStore,
+    bindDevice: runtime.bindDevice,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      source: 'provider',
+      backend: 'limrun-tunnel',
+      limits: { maxPayloadChars: 400 },
+    },
+  });
+});
+
 test('network rejects a blank capture host before binding a runtime', async () => {
   const runtime = createNetworkRuntime(
     { platform: 'apple', appleOs: 'ios', id: 'limrun:ios:l', name: 'n', kind: 'simulator' },

@@ -77,6 +77,8 @@ describe('Limrun network operations', () => {
     expect(result.backend).toBe('limrun-tunnel');
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]).toMatchObject({ url: 'https://api.example.com/v1/orders' });
+    // The answer reports the redactor's real per-field bound, not the app-log parse's 2048.
+    expect(result.limits).toEqual({ maxPayloadChars: 400 });
     expect(result.notes?.join(' ')).toContain('pinned.example.com');
     expect(appLogDump).not.toHaveBeenCalled();
   });

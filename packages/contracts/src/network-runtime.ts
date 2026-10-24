@@ -38,6 +38,8 @@ export type NetworkProviderDumpResult = Readonly<{
   backend: string;
   entries: readonly NetworkProviderEntry[];
   notes?: readonly string[];
+  /** Per-field character bound this source actually enforces; the response's limits report it. */
+  limits?: Readonly<{ maxPayloadChars: number }>;
 }>;
 
 export type NetworkDumpResult =
@@ -64,8 +66,8 @@ export type NetworkCaptureStartInput = Readonly<{
 
 /** Typed start refusals; a caller never matches on message text. */
 export type NetworkCaptureStartFailureReason =
-  | 'capture-already-started'
   | 'tunnel-in-use'
+  | 'capture-stopped'
   | 'unsupported-device';
 
 export type NetworkCaptureStartResult =

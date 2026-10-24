@@ -63,7 +63,7 @@ export type LimrunCaptureHosts =
 
 /** A start refusal; the shared command maps these to its own response shape. */
 export type LimrunCaptureStartRefusal = Readonly<{
-  reason: 'tunnel-in-use' | 'unsupported-device';
+  reason: 'tunnel-in-use' | 'capture-stopped' | 'unsupported-device';
   message: string;
 }>;
 
@@ -91,15 +91,15 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
   const entries: NetworkEntry[] = [];
   const failedHosts = new Map<string, string>();
   let tunnel: DestinationTcpTunnel | undefined;
+  let starting: Promise<DestinationTcpTunnel> | undefined;
+  // One capture window has one generation. stop() advances it, so an inspection event already in
+  // flight when the tunnel closed is dropped instead of entering the next window's buffer.
+  let generation = 0;
 
-  const closeTunnel = () => {
-    tunnel?.close();
-    tunnel = undefined;
-  };
-
-  const createEventHandler = () => {
+  const createEventHandler = (window: number) => {
     const assembler = new DestinationTunnelHARAssembler(MAX_INSPECTED_BODY_BYTES);
     return (event: DestinationTunnelInspectionEvent) => {
+      if (window !== generation) return;
       if (event.type === 'gap') {
         failedHosts.set('inspection', 'inspection stream gap');
         return;
@@ -127,7 +127,7 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
       return tunnel !== undefined;
     },
     start: async (requestedHosts) => {
-      if (tunnel) {
+      if (tunnel || starting) {
         return {
           ok: false,
           reason: 'tunnel-in-use',
@@ -136,18 +136,28 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
       }
       const hosts = resolveHosts(requestedHosts);
       if (!hosts.ok) return hosts;
+      const window = ++generation;
+      entries.length = 0;
+      failedHosts.clear();
+      const opening = client.startTunnel({
+        selectors: [...hosts.hosts],
+        inspection: {
+          enabled: true,
+          captureBodies: true,
+          maxBodyBytes: MAX_INSPECTED_BODY_BYTES,
+        },
+        onInspectionEvent: createEventHandler(window),
+        // The error callback is window-tagged like the event handler: a late error from a closed
+        // window must not contaminate the next window's notes.
+        onInspectionError: (error) => {
+          if (window !== generation) return;
+          failedHosts.set('inspection', error.message.slice(0, 200));
+        },
+      });
+      starting = opening;
       let opened: DestinationTcpTunnel;
       try {
-        opened = await client.startTunnel({
-          selectors: [...hosts.hosts],
-          inspection: {
-            enabled: true,
-            captureBodies: true,
-            maxBodyBytes: MAX_INSPECTED_BODY_BYTES,
-          },
-          onInspectionEvent: createEventHandler(),
-          onInspectionError: (error) => failedHosts.set('inspection', error.message.slice(0, 200)),
-        });
+        opened = await opening;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
@@ -155,18 +165,37 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
           reason: classifyStartFailure(error),
           message: `Limrun tunnel inspection could not start: ${message.slice(0, 300)}`,
         };
+      } finally {
+        starting = undefined;
+      }
+      if (window !== generation) {
+        // The window closed while this tunnel was opening (a stop ran, or a restart advanced the
+        // generation): its traffic belongs to no live window, so close it rather than adopt it.
+        opened.close();
+        return {
+          ok: false,
+          reason: 'capture-stopped',
+          message: 'The capture stopped while the tunnel was opening.',
+        };
       }
       tunnel = opened;
       return { ok: true, hosts: hosts.hosts, capturingBodies: true };
     },
     stop: async () => {
+      // Make an open that is in flight stale before waiting for it: its window loses, start closes
+      // the late tunnel itself, and the capture ends stopped rather than re-armed.
+      ++generation;
+      await starting?.catch(() => undefined);
       if (!tunnel) return { stopped: false };
-      closeTunnel();
+      tunnel.close();
+      tunnel = undefined;
       entries.length = 0;
       failedHosts.clear();
       return { stopped: true };
     },
     readEntries: ({ maxEntries, include }) => {
+      // `line` names the display position in this read, not a source line: a provider capture has
+      // no log file, so each dump numbers its own newest-first window from 1.
       const limit = Math.max(0, Math.min(maxEntries, MAX_BUFFERED_ENTRIES));
       return entries
         .slice(0, limit)
@@ -174,16 +203,19 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
     },
     notes: () => {
       if (failedHosts.size === 0) return [];
-      const hosts = [...failedHosts.keys()].slice(0, 10);
+      const hosts = [...failedHosts.keys()];
+      // The inspection extension reports failures only as free text, so the pinned-class check and
+      // readErrorHost below read the message; no typed code exists to match.
       const pinned = hosts.filter((host) =>
         /tls|certificate|handshake|ssl/i.test(failedHosts.get(host) ?? ''),
       );
+      const visible = hosts.slice(0, 10);
       const notes = [
-        `Captured hosts with failed or rejected connections (a pinned host fails closed through the tunnel): ${hosts.join(', ')}`,
+        `Captured hosts with failed or rejected connections (a pinned host fails closed through the tunnel): ${visible.join(', ')}`,
       ];
       if (pinned.length > 0) {
         notes.push(
-          `Likely certificate-pinned hosts: ${pinned.join(', ')}. Stop the capture and relaunch for those hosts.`,
+          `Likely certificate-pinned hosts: ${pinned.slice(0, 10).join(', ')}. Stop the capture and relaunch for those hosts.`,
         );
       }
       return notes;
@@ -257,7 +289,7 @@ function mapHarEntry(entry: DestinationTunnelHAREntry, line: number): NetworkEnt
     ...(redacted.headers === undefined ? {} : { headers: redacted.headers }),
     ...(redacted.requestBody === undefined ? {} : { requestBody: redacted.requestBody }),
     ...(redacted.responseBody === undefined ? {} : { responseBody: redacted.responseBody }),
-    raw: `${entry.request.method} ${entry.request.url} ${entry.response.status}`,
+    raw: `${entry.request.method} ${redacted.url} ${entry.response.status}`,
     line,
   };
 }

@@ -110,6 +110,12 @@ const networkCliSchema = {
   listUsageOverride: 'network',
   positionalArgs: ['dump|log|start|stop', 'limit?', 'include?'],
   allowedFlags: ['networkInclude', 'networkHosts'],
+  flagsByAction: {
+    dump: ['networkInclude'],
+    log: ['networkInclude'],
+    start: ['networkHosts'],
+    stop: [],
+  },
 } as const satisfies CommandSchemaOverride;
 
 const audioCliSchema = {

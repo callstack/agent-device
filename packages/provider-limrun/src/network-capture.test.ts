@@ -230,6 +230,21 @@ describe('Limrun network capture entries', () => {
     expect(entry?.headers).toContain('[REDACTED]');
   });
 
+  test('the raw line carries the redacted url, never the query string', async () => {
+    let emit!: (event: DestinationTunnelInspectionEvent) => void;
+    const { client } = fakeTunnelClient((handler) => {
+      emit = handler;
+    });
+    const capture = createLimrunNetworkCapture(client);
+    await capture.start(undefined);
+    emit(completeEvent('https://api.example.com/v1/orders?token=abc123&user=7'));
+
+    const [entry] = capture.readEntries({ maxEntries: 10, include: 'summary' });
+
+    expect(entry?.url).toBe('https://api.example.com/v1/orders?REDACTED');
+    expect(entry?.raw).toBe('GET https://api.example.com/v1/orders?REDACTED 200');
+  });
+
   test('newest entries answer first and the buffer stays bounded', async () => {
     let emit!: (event: DestinationTunnelInspectionEvent) => void;
     const { client } = fakeTunnelClient((handler) => {
@@ -316,5 +331,49 @@ describe('Limrun network capture stop', () => {
 
     expect(await capture.start(['api.example.com'])).toMatchObject({ ok: true });
     expect(starts).toHaveLength(2);
+  });
+
+  test('a stop during an open closes the late tunnel and keeps the capture stopped', async () => {
+    let resolveOpen!: (tunnel: DestinationTcpTunnel) => void;
+    let closed = false;
+    const client: LimrunTunnelClient = {
+      startTunnel: () =>
+        new Promise<DestinationTcpTunnel>((resolve) => {
+          resolveOpen = (tunnel) => resolve(tunnel);
+        }),
+    };
+    const capture = createLimrunNetworkCapture(client);
+    const starting = capture.start(undefined);
+
+    const stopping = capture.stop();
+    resolveOpen({
+      close: () => {
+        closed = true;
+      },
+    } as unknown as DestinationTcpTunnel);
+
+    expect(await stopping).toEqual({ stopped: false });
+    // The window lost because a stop ran, not because the instance's tunnel is busy.
+    expect(await starting).toMatchObject({ ok: false, reason: 'capture-stopped' });
+    // The tunnel that finished opening after the stop must not survive it.
+    expect(closed).toBe(true);
+    expect(capture.running).toBe(false);
+  });
+
+  test('an event already in flight when stop ran cannot enter the next capture window', async () => {
+    let emit!: (event: DestinationTunnelInspectionEvent) => void;
+    const { client } = fakeTunnelClient((handler) => {
+      emit = handler;
+    });
+    const capture = createLimrunNetworkCapture(client);
+    await capture.start(undefined);
+    await capture.stop();
+
+    // The provider's transport can deliver a completed event after close(); the stale window's
+    // handler must drop it so the next window's buffer stays the next window's traffic.
+    emit(completeEvent('https://api.example.com/v1/stale'));
+    await capture.start(undefined);
+
+    expect(capture.readEntries({ maxEntries: 10, include: 'summary' })).toHaveLength(0);
   });
 });

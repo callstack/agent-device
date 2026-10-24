@@ -6,6 +6,7 @@ import type {
   NetworkDumpResult,
   NetworkRuntimeOperations,
 } from '@agent-device/contracts/network-runtime';
+import { REDACTED_STRING_MAX_LENGTH } from '@agent-device/kernel/redaction';
 import type { LimrunNetworkCapture } from './network-capture.ts';
 
 /**
@@ -15,11 +16,7 @@ import type { LimrunNetworkCapture } from './network-capture.ts';
  * started, otherwise the session app-log parse. The dump never installs instrumentation and never
  * switches source mid-session; only `start`/`stop` change it.
  */
-export type LimrunNetworkOperations = NetworkRuntimeOperations &
-  Readonly<{
-    /** The app-log parse, kept for the dump path when no capture was started. */
-    appLogNetworkDump(input: NetworkDumpInput): Promise<NetworkDumpResult>;
-  }>;
+export type LimrunNetworkOperations = NetworkRuntimeOperations;
 
 export function bindLimrunNetworkOperations(
   input: Readonly<{
@@ -40,9 +37,10 @@ export function bindLimrunNetworkOperations(
           include: dumpInput.include,
         }),
         notes: input.capture.notes(),
+        // The redactor bounds this source's fields; the response's limits report what it enforces.
+        limits: { maxPayloadChars: REDACTED_STRING_MAX_LENGTH },
       });
     },
-    appLogNetworkDump: (dumpInput) => input.appLogDump(dumpInput),
     networkCaptureStart: async (
       startInput: NetworkCaptureStartInput,
     ): Promise<NetworkCaptureStartResult> => {

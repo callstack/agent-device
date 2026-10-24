@@ -292,7 +292,7 @@ function networkDumpResponse(
       scannedLines: result.entries.length,
       limits: {
         maxEntries: request.maxEntries,
-        maxPayloadChars: NETWORK_MAX_PAYLOAD_CHARS,
+        maxPayloadChars: result.limits?.maxPayloadChars ?? NETWORK_MAX_PAYLOAD_CHARS,
         maxScanLines: result.entries.length,
       },
       notes: result.notes,
