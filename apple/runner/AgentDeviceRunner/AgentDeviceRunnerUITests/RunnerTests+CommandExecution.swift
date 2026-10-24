@@ -155,7 +155,13 @@ extension RunnerTests {
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
-          textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
+          // The lookup compares candidate frames with this screen point (#3899).
+          textInput = coordinateTapTextInputAt(
+            app: activeApp,
+            x: x,
+            y: y,
+            contentTranslation: liveContentTranslation(app: activeApp)
+          )
         } else {
           textInput = nil
           // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.

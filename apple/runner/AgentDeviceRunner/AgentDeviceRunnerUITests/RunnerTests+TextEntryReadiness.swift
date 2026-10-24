@@ -85,20 +85,45 @@ extension RunnerTests {
   /// `ResolvedTextEntryInput` already reads elements this way. It is read again after the
   /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
   /// field is then, which is the moment the read it replaced ran at.
+  ///
+  /// The re-read carries the live content vector, so the repeat taps a screen point (#3899). It is
+  /// read only on this branch: a tap that confirms focus dispatches no window lookup.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
 #if os(iOS)
     if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
     }
-    guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", { try? element.snapshot() }) else {
+    // Contained like the probe lookups: a transient window that records an XCTest issue costs the
+    // vector, not the command.
+    let settled: ResolvedTextEntryInput?
+    switch containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?, { _ in
+      ResolvedTextEntryInput(reading: element, contentTranslation: liveContentTranslation(app: app))
+    }) {
+    case .success(let read):
+      settled = read
+    case .failure:
+      settled = nil
+    }
+    guard let settled else {
       return
     }
-    let frame = settled.frame
-    if !frame.isEmpty {
-      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-      _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
-    }
+    retapAt(read: settled, app: app, element: element)
 #endif
+  }
+
+  /// The readiness retap, split out so the unit lane can drive it and assert where the point lands.
+  /// A read with no snapshot taps nothing: its `frameOnScreen` is the live `element.frame`, the read
+  /// a handle that stopped answering its query cannot make without recording a failure (#3060).
+  func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
+    guard read.snapshot != nil else {
+      return
+    }
+    let frame = read.frameOnScreen
+    guard !frame.isEmpty else {
+      return
+    }
+    _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+    _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
   }
 
   private func waitForTextEntryFocus(app: XCUIApplication, element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -129,6 +154,7 @@ extension RunnerTests {
   /// fallback at all.
   func keyboardFocusConfirmed(app: XCUIApplication, element: XCUIElement) -> Bool {
 #if os(iOS)
+    // No content vector: this corroborates raw frame against raw frame and dispatches no point.
     return ResolvedTextEntryInput(reading: element).map { keyboardFocusConfirmed(app: app, read: $0) } ?? false
 #else
     return false

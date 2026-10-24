@@ -38,10 +38,18 @@ type RotationCase = {
   oriented: FixtureFrame;
 };
 
+type WindowContentCase = {
+  name: string;
+  reportedBox: FixtureFrame;
+  viewportBox: FixtureFrame;
+  offset: { width: number; height: number } | null;
+};
+
 type Fixture = {
   constants: { quarterTurnTolerance: number };
   quarterTurnCases: QuarterTurnCase[];
   rotationCases: RotationCase[];
+  windowContentCases: WindowContentCase[];
 };
 
 const TABLE_PATH = path.resolve(
@@ -82,8 +90,11 @@ test('the quarter-turn window rule agrees with every golden parity table case', 
   const table = loadTable();
   assert.ok(table.quarterTurnCases.length > 0, 'parity table must not be empty');
   assert.ok(table.rotationCases.length > 0, 'parity table must not be empty');
+  assert.ok(table.windowContentCases.length > 0, 'parity table must not be empty');
   assertUniqueNames(
-    [...table.quarterTurnCases, ...table.rotationCases].map((fixture) => fixture.name),
+    [...table.quarterTurnCases, ...table.rotationCases, ...table.windowContentCases].map(
+      (fixture) => fixture.name,
+    ),
     'parity table',
   );
   for (const fixture of table.quarterTurnCases) {
@@ -95,6 +106,11 @@ test('the quarter-turn window rule agrees with every golden parity table case', 
   }
 });
 
+// `windowContentCases` is replayed in the Swift capture alone (CoordinateSpaceTests): this decoder
+// never receives a windowed tree — the bridge guest refuses it first (#3899) — so a second replay
+// here would pin arithmetic no production reader runs. The table still loads here, and its rows are
+// read for the name-uniqueness guard below.
+
 test('the quarter-turn tolerance belongs to the table, not this file', () => {
   assert.equal(loadTable().constants.quarterTurnTolerance, WINDOW_QUARTER_TURN_TOLERANCE);
 });
@@ -104,8 +120,12 @@ const LANDSCAPE_RIGHT = 3;
 const LANDSCAPE_LEFT = 4;
 
 /**
- * The dispatch direction — an app-space point in the native space a synthesized event is performed in
- * — as the runner's own `CoordinateSpaceRotation.native(point:in:interfaceOrientation:)` computes it.
+ * The dispatch direction — the point a caller passes, in the native space a synthesized event is
+ * performed in — as the runner's own `CoordinateSpaceRotation.native(point:in:interfaceOrientation:)`
+ * computes it.
+ *
+ * The turn moves a point's axes and never its origin (#3899): the digitizer's origin is the display's
+ * own, which is where a placed window's screen-space points are already measured from.
  *
  * The capture's inverse is NOT implemented here: it lives in Swift alone, and a TypeScript copy of it
  * would prove nothing about the code that runs. What this proves is that the table cannot be edited
@@ -115,17 +135,15 @@ const LANDSCAPE_LEFT = 4;
  * forward map it ships with.
  */
 function nativePoint(point: Point, app: Rect, interfaceOrientation: number): Point {
-  const localX = point.x - app.x;
-  const localY = point.y - app.y;
   switch (interfaceOrientation) {
     case LANDSCAPE_RIGHT:
-      return { x: app.height - localY, y: localX };
+      return { x: app.height - point.y, y: point.x };
     case LANDSCAPE_LEFT:
-      return { x: localY, y: app.width - localX };
+      return { x: point.y, y: app.width - point.x };
     case PORTRAIT_UPSIDE_DOWN:
-      return { x: app.width - localX, y: app.height - localY };
+      return { x: app.width - point.x, y: app.height - point.y };
     default:
-      return { x: localX, y: localY };
+      return { x: point.x, y: point.y };
   }
 }
 

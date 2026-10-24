@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 final class TextInputProbeIssues {
   let thread = Thread.current
@@ -17,18 +18,33 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> ResolvedTextEntryInput? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y)).first
+  func textInputAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    contentTranslation: CGSize?
+  ) -> ResolvedTextEntryInput? {
+    let point = CGPoint(x: x, y: y)
+    return textInputCandidatesAt(app: app, point: point, contentTranslation: contentTranslation).first
   }
 
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [ResolvedTextEntryInput] {
+  func textInputCandidatesAt(
+    app: XCUIApplication,
+    point: CGPoint,
+    contentTranslation: CGSize?
+  ) -> [ResolvedTextEntryInput] {
     safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, shouldStop: { false })
+      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: { false })
     }
   }
 
-  func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y)) {
+  func coordinateTapTextInputAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    contentTranslation: CGSize?
+  ) -> XCUIElement? {
+    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
     case .matches(let inputs):
       return inputs.first?.element
     case .absent:
@@ -53,11 +69,17 @@ extension RunnerTests {
   func coordinateTapTextInputIdentityAt(
     app: XCUIApplication,
     x: Double,
-    y: Double
+    y: Double,
+    contentTranslation: CGSize?
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
-      guard let input = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first else {
+      guard let input = queryTextInputs(
+        app: app,
+        point: CGPoint(x: x, y: y),
+        contentTranslation: contentTranslation,
+        shouldStop: shouldStop
+      ).first else {
         return .absent
       }
       guard let identity = input.identity else {
@@ -75,9 +97,13 @@ extension RunnerTests {
 
   /// `input`'s handle, read again, when it still resolves to the input it named when found, read
   /// inside the same issue containment. A read that cannot answer counts as no.
-  func textInputIfStillResolves(_ input: TextInputAtPoint) -> ResolvedTextEntryInput? {
+  func textInputIfStillResolves(
+    _ input: TextInputAtPoint,
+    contentTranslation: CGSize?
+  ) -> ResolvedTextEntryInput? {
     let probed = containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?) { _ in
-      ResolvedTextEntryInput(reading: input.element).flatMap { $0.identity == input.identity ? $0 : nil }
+      ResolvedTextEntryInput(reading: input.element, contentTranslation: contentTranslation)
+        .flatMap { $0.identity == input.identity ? $0 : nil }
     }
     guard case .success(let read) = probed else { return nil }
     return read
@@ -93,9 +119,13 @@ extension RunnerTests {
     return read
   }
 
-  func probeTextInputs(app: XCUIApplication, point: CGPoint) -> TextInputProbeOutcome {
+  func probeTextInputs(
+    app: XCUIApplication,
+    point: CGPoint,
+    contentTranslation: CGSize?
+  ) -> TextInputProbeOutcome {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
-      queryTextInputs(app: app, point: point, shouldStop: shouldStop)
+      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
     }) {
     case .success(let inputs):
       return inputs.isEmpty ? .absent : .matches(inputs)
@@ -106,7 +136,7 @@ extension RunnerTests {
 
   /// Runs an optional probe whose XCTest issues are contained instead of recorded: an issue makes
   /// the probe unavailable rather than failing the command and invalidating the runner.
-  private func containingTextInputProbeIssues<T>(
+  func containingTextInputProbeIssues<T>(
     fallback: T,
     _ probe: (_ shouldStop: () -> Bool) -> T
   ) -> Result<T, TextInputProbeFailure> {
@@ -150,6 +180,7 @@ extension RunnerTests {
   private func queryTextInputs(
     app: XCUIApplication,
     point: CGPoint,
+    contentTranslation: CGSize?,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
@@ -166,14 +197,45 @@ extension RunnerTests {
       // cannot be snapshotted is read live, so its failure still reaches the caller's issue handling.
       for element in candidates {
         if shouldStop() { break }
-        guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
-        let attributes = candidate.attributes
-        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
+        guard let candidate = ResolvedTextEntryInput(
+          readingListed: element,
+          contentTranslation: contentTranslation
+        ) else { continue }
+        if isCoordinateTextInputCandidate(
+          enabled: candidate.attributes.isEnabled,
+          frame: candidate.frameOnScreen,
+          point: point
+        ) {
           inputs.append(candidate)
         }
       }
     }
     guard !shouldStop() else { return [] }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+  }
+
+  /// The vector that carries this session's snapshot-read app-content frames to their place on the
+  /// screen, or nil when the app fills the screen (#3899). Each command that dispatches points from
+  /// snapshot frames reads it once, at its own start, and hands it down; a read inside a typing loop
+  /// never calls this, because the two live box reads below cost about 90 ms each on a heavy React
+  /// Native screen.
+  ///
+  /// The signature and the vector are the capture's rule (`SnapshotContentTranslation`, ADR 0004)
+  /// read from the two live boxes that name it: the application's `frame` is a `(0,0)`-anchored copy
+  /// of the box the resolved window reports at its place on the screen. Any other pair of boxes
+  /// declares no vector, so full-screen, iPhone, and each foldable panel keep frames as read.
+  func liveContentTranslation(app: XCUIApplication) -> CGSize? {
+    // The window read is contained like the probe lookups it replaces: a transient window that
+    // records an XCTest issue costs the vector, not the runner session.
+    let read = containingTextInputProbeIssues(fallback: nil as CGSize?) { _ in
+      guard let resolved = resolveRunnerWindowElement(app: app) else { return nil }
+      return SnapshotContentTranslation.offset(reportedBox: app.frame, viewportBox: resolved.frame)
+    }
+    switch read {
+    case .success(let translation):
+      return translation
+    case .failure:
+      return nil
+    }
   }
 }

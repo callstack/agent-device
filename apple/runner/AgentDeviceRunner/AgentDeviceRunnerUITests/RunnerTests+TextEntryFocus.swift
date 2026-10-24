@@ -61,7 +61,8 @@ extension RunnerTests {
   func stabilizeTextInputBeforeTyping(
     app: XCUIApplication,
     target: XCUIElement?,
-    keyboardVisibleBeforeTap: Bool? = nil
+    keyboardVisibleBeforeTap: Bool? = nil,
+    contentTranslation: CGSize? = nil
   ) -> TextEntryStabilization {
 #if os(tvOS)
     return TextEntryStabilization(element: target, evidence: .focusEngine, polls: 0)
@@ -79,7 +80,7 @@ extension RunnerTests {
       // presented, the keyboard query blocks and then finds none. An input that reports keyboard
       // focus is stronger evidence than the keyboard's arrival, which shows only that some input
       // took focus.
-      let read = target.flatMap(ResolvedTextEntryInput.init(reading:))
+      let read = target.flatMap { ResolvedTextEntryInput(reading: $0, contentTranslation: contentTranslation) }
       if let read, let snapshot = read.snapshot, snapshotHasKeyboardFocus(snapshot) {
         return TextEntryStabilization(element: read.element, evidence: .inputReportsKeyboardFocus(read), polls: polls)
       }
@@ -130,12 +131,20 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true)
     }
 
+    // The one content-vector read for this command (#3899): every target built here carries it and
+    // every read those targets produce converts through it.
+    let contentTranslation = liveContentTranslation(app: app)
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
-    let input = textInputAt(app: app, x: x, y: y)
+    let input = textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
-    if let frame = input?.attributes.frame, !frame.isEmpty {
-      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+    // The tap goes to the input's own center, and `tapAt` dispatches a screen point, so the point
+    // comes from `frameOnScreen` (#3899).
+    let inputCenter = input.map { $0.frameOnScreen }.flatMap {
+      $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY)
+    }
+    if let inputCenter {
+      _ = tapAt(app: app, x: inputCenter.x, y: inputCenter.y)
     } else {
       _ = tapAt(app: app, x: x, y: y)
     }
@@ -143,12 +152,17 @@ extension RunnerTests {
     // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
     // so after tapping it the iOS readiness timeout cannot prove anything stronger.
     if keyboardVisibleBeforeTap, let target {
-      return focusedTextEntryTarget(target, requestedPoint: requestedPoint)
+      return focusedTextEntryTarget(
+        target,
+        requestedPoint: requestedPoint,
+        contentTranslation: contentTranslation
+      )
     }
     let stabilized = stabilizeTextInputBeforeTyping(
       app: app,
       target: target,
-      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
+      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap,
+      contentTranslation: contentTranslation
     )
     NSLog(
       "%@%@ polls=%d",
@@ -157,37 +171,66 @@ extension RunnerTests {
       stabilized.polls
     )
     if case .inputReportsKeyboardFocus(let read) = stabilized.evidence {
-      return focusedTextEntryTarget(read.element, read: read, requestedPoint: requestedPoint)
+      return focusedTextEntryTarget(
+        read.element,
+        read: read,
+        requestedPoint: requestedPoint,
+        contentTranslation: contentTranslation
+      )
     }
     let readyTarget = TextEntryTarget(
       element: stabilized.element ?? target,
       refreshPoint: requestedPoint,
-      prefersFocusedElement: false
+      prefersFocusedElement: false,
+      contentTranslation: contentTranslation
     )
     let element = stabilized.focusConfirmed
       ? readyTarget.element
       : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
-    return focusedTextEntryTarget(element, requestedPoint: requestedPoint)
+    return focusedTextEntryTarget(
+      element,
+      requestedPoint: requestedPoint,
+      contentTranslation: contentTranslation
+    )
   }
 
   /// The target the focus step hands to text entry, with the read its refresh point came from.
-  private func focusedTextEntryTarget(_ element: XCUIElement?, requestedPoint: CGPoint) -> TextEntryTarget {
+  private func focusedTextEntryTarget(
+    _ element: XCUIElement?,
+    requestedPoint: CGPoint,
+    contentTranslation: CGSize?
+  ) -> TextEntryTarget {
     guard let element else {
-      return TextEntryTarget(element: nil, refreshPoint: requestedPoint, prefersFocusedElement: false)
+      return TextEntryTarget(
+        element: nil,
+        refreshPoint: requestedPoint,
+        prefersFocusedElement: false,
+        contentTranslation: contentTranslation
+      )
     }
-    return focusedTextEntryTarget(element, read: ResolvedTextEntryInput(reading: element), requestedPoint: requestedPoint)
+    return focusedTextEntryTarget(
+      element,
+      read: ResolvedTextEntryInput(reading: element, contentTranslation: contentTranslation),
+      requestedPoint: requestedPoint,
+      contentTranslation: contentTranslation
+    )
   }
 
   /// `read` is `element` read after the focus tap, or nil when the read found no element.
   private func focusedTextEntryTarget(
     _ element: XCUIElement,
     read: ResolvedTextEntryInput?,
-    requestedPoint: CGPoint
+    requestedPoint: CGPoint,
+    contentTranslation: CGSize?
   ) -> TextEntryTarget {
     return TextEntryTarget(
       element: element,
-      refreshPoint: textEntryRefreshPoint(frame: read?.snapshot?.frame, fallbackTo: requestedPoint),
+      refreshPoint: textEntryRefreshPoint(
+        read: read,
+        fallbackTo: requestedPoint
+      ),
       prefersFocusedElement: false,
+      contentTranslation: contentTranslation,
       postFocusRead: read?.snapshot == nil ? nil : read
     )
   }
@@ -200,14 +243,16 @@ extension RunnerTests {
   /// the target gets NO refresh point rather than the pre-focus one: this route's first resolve is
   /// not yet bound to an identity, and a field that went unqueryable on focus may have moved the
   /// layout so the old point names a different input, so fail closed with a typed reason instead of
-  /// typing into that other field.
+  /// typing into that other field. The frame is `read`'s snapshot frame plus its content vector,
+  /// never the live `element.frame` (#3899, #3060).
   private func textEntryRefreshPoint(
-    frame: CGRect?,
+    read: ResolvedTextEntryInput?,
     fallbackTo requestedPoint: CGPoint
   ) -> CGPoint? {
-    guard let frame else {
+    guard let read, read.snapshot != nil else {
       return nil
     }
+    let frame = read.frameOnScreen
     guard !frame.isEmpty else {
       return requestedPoint
     }

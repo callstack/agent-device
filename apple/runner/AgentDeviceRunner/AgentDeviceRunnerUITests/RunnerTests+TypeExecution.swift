@@ -27,12 +27,14 @@ extension RunnerTests {
       hasY: command.y != nil,
       xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
+      // The one content-vector read for this command (#3899); the target built here carries it.
+      let contentTranslation = liveContentTranslation(app: activeApp)
       // Resolved before the tap: the focus it causes can move the field away from this point.
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
       // text would reach the app-level first responder, so an empty point and a lookup that cannot
       // answer both refuse here, each under its own reason.
       let inputAtPoint: TextInputAtPoint
-      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y) {
+      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
       case .input(let input):
         inputAtPoint = input
       case .absent:
@@ -54,6 +56,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
+          contentTranslation: contentTranslation,
           inputAtRefreshPoint: inputAtPoint
         )
       case .xctestFallback:
