@@ -41,6 +41,11 @@ export type CloudProviderProfileFields = {
   providerNetworkProfile?: string;
   providerCustomNetwork?: string;
   providerNoResignApp?: boolean;
+  /**
+   * Asks the provider to capture session network traffic and deliver it as a post-session HAR
+   * artifact. It is not a live source: a live `network dump` stays unavailable on these providers.
+   */
+  providerNetworkLogs?: boolean;
   awsProjectArn?: string;
   awsDeviceArn?: string;
   awsAppArn?: string;
@@ -67,6 +72,7 @@ export const PROVIDER_PROFILE_FIELD_FLAGS: Readonly<
   providerNetworkProfile: '--provider-network-profile',
   providerCustomNetwork: '--provider-custom-network',
   providerNoResignApp: '--provider-no-resign-app',
+  providerNetworkLogs: '--provider-network-logs',
   awsProjectArn: '--aws-project-arn',
   awsDeviceArn: '--aws-device-arn',
   awsAppArn: '--aws-app-arn',

@@ -34,6 +34,7 @@ export const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'refused',
     providerCustomNetwork: 'refused',
     providerNoResignApp: 'refused',
+    providerNetworkLogs: 'refused',
     awsProjectArn: 'consumed',
     awsDeviceArn: 'consumed',
     awsAppArn: 'consumed',

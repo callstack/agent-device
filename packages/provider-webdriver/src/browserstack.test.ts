@@ -202,6 +202,166 @@ test('BrowserStack session details keep a query on the endpoint override', async
   assert.equal(result?.status, 'pending');
 });
 
+test('a requested HAR after the session ends is a ready artifact, fetched from the build-scoped path', async () => {
+  const calls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith('/SESSION1.json')) {
+      return new Response(
+        JSON.stringify({
+          automation_session: { video_url: 'https://video.example/v.mp4', build_hashed_id: 'B1' },
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ log: {} }), { status: 200 });
+  };
+
+  const result = await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    networkLogs: true,
+    sessionEnded: true,
+    networkLogRetry: { waitMs: 0, pollMs: 0 },
+  });
+
+  assert.deepEqual(calls, [
+    'https://api-cloud.browserstack.com/app-automate/sessions/SESSION1.json',
+    'https://api-cloud.browserstack.com/app-automate/builds/B1/sessions/SESSION1/networklogs',
+  ]);
+  assert.equal(result?.status, 'ready');
+  assert.deepEqual(
+    result?.cloudArtifacts.filter((a) => a.kind === 'network'),
+    [
+      {
+        provider: 'browserstack',
+        providerSessionId: 'SESSION1',
+        kind: 'network',
+        name: 'Network traffic (HAR)',
+        url: 'https://api-cloud.browserstack.com/app-automate/builds/B1/sessions/SESSION1/networklogs',
+        extension: 'har',
+        availability: 'ready',
+      },
+    ],
+  );
+});
+
+test('a HAR still being published retries on 404 and then reports pending without one', async () => {
+  let harReads = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input).endsWith('.json')) {
+      return new Response(JSON.stringify({ automation_session: { build_hashed_id: 'B1' } }), {
+        status: 200,
+      });
+    }
+    harReads += 1;
+    return new Response('<Error><Code>NoSuchKey</Code></Error>', { status: 404 });
+  };
+
+  const result = await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    networkLogs: true,
+    sessionEnded: true,
+    networkLogRetry: { waitMs: 20, pollMs: 5 },
+  });
+
+  assert.ok(harReads >= 2, `expected a retry on 404, saw ${String(harReads)} reads`);
+  assert.equal(result?.status, 'pending');
+  assert.deepEqual(
+    result?.cloudArtifacts.filter((a) => a.kind === 'network'),
+    [],
+  );
+});
+
+test('a HAR is looked up only for a session that requested it, and never during a live session', async () => {
+  const requests: string[] = [];
+  globalThis.fetch = async (input) => {
+    requests.push(String(input));
+    return new Response(
+      JSON.stringify({
+        automation_session: { video_url: 'https://video.example/v.mp4', build_hashed_id: 'B1' },
+      }),
+      { status: 200 },
+    );
+  };
+
+  await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', upload);
+  await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    networkLogs: true,
+    networkLogRetry: { waitMs: 0, pollMs: 0 },
+  });
+  await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    sessionEnded: true,
+    networkLogRetry: { waitMs: 0, pollMs: 0 },
+  });
+
+  assert.deepEqual(requests, [
+    'https://api-cloud.browserstack.com/app-automate/sessions/SESSION1.json',
+    'https://api-cloud.browserstack.com/app-automate/sessions/SESSION1.json',
+    'https://api-cloud.browserstack.com/app-automate/sessions/SESSION1.json',
+  ]);
+});
+
+test('an app BrowserStack never captured reports an unavailable HAR, not a failed lookup', async () => {
+  // The API answers 400 BROWSERSTACK_NETWORK_LOGS_NOT_CAPTURED for the life of the session record:
+  // the app did not trust the capture proxy. Waiting cannot change that verdict.
+  let harReads = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input).endsWith('.json')) {
+      return new Response(JSON.stringify({ automation_session: { build_hashed_id: 'B1' } }), {
+        status: 200,
+      });
+    }
+    harReads += 1;
+    return new Response('{"status":400,"message":"BROWSERSTACK_NETWORK_LOGS_NOT_CAPTURED"}', {
+      status: 400,
+    });
+  };
+
+  const result = await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    networkLogs: true,
+    sessionEnded: true,
+    networkLogRetry: { waitMs: 10_000, pollMs: 5 },
+  });
+
+  assert.equal(harReads, 1);
+  const har = result?.cloudArtifacts.find((a) => a.kind === 'network');
+  assert.ok(har);
+  assert.equal(har.availability, 'unavailable');
+  assert.equal(har.metadata?.reason, 'network-logs-not-captured');
+  assert.match(String(har.metadata?.hint), /mitmproxy CA/);
+});
+
+test('a HAR lookup that the API refuses is typed, not folded into a pending listing', async () => {
+  globalThis.fetch = async (input) => {
+    if (String(input).endsWith('.json')) {
+      return new Response(JSON.stringify({ automation_session: { build_hashed_id: 'B1' } }), {
+        status: 200,
+      });
+    }
+    return new Response('{"message":"forbidden"}', { status: 403 });
+  };
+
+  await assert.rejects(
+    listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+      ...upload,
+      networkLogs: true,
+      sessionEnded: true,
+      networkLogRetry: { waitMs: 0, pollMs: 0 },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'BrowserStack network log lookup failed with status 403.');
+      assert.equal(error.details?.providerSessionId, 'SESSION1');
+      return true;
+    },
+  );
+});
+
 test('BrowserStack canonicalizes the bs:// scheme and refuses an id outside its grammar or a directory', async () => {
   const tempDir = await mkdtempForTest('agent-device-browserstack-ref-');
   const fetched: string[] = [];

@@ -19,6 +19,7 @@ export type TestMuDeviceFeatureFields = Pick<
   | 'providerAppiumVersion'
   | 'providerLanguage'
   | 'providerLocale'
+  | 'providerNetworkLogs'
 >;
 
 type TestMuDeviceFeatureSpec = {
@@ -27,6 +28,10 @@ type TestMuDeviceFeatureSpec = {
   capability: string;
   /** Canonical CLI flag, so an error can name a recovery action. */
   flag: string;
+  /** Set on a boolean opt-in row: the flag's presence is the whole instruction. */
+  boolean?: true;
+  /** For a capture opt-in: the options key that carries the capture's own settings. */
+  optionsCapability?: string;
   /** Projects the validated flag value onto what the hub expects. */
   project?: (value: string) => unknown;
 };
@@ -48,6 +53,15 @@ export const TESTMU_DEVICE_FEATURE_SPECS: readonly TestMuDeviceFeatureSpec[] = [
   },
   { field: 'providerLanguage', capability: 'language', flag: '--provider-language' },
   { field: 'providerLocale', capability: 'locale', flag: '--provider-locale' },
+  {
+    // TestMu captures session traffic through its proxy and publishes the HAR on the session record
+    // once the session ends, so this opts into a post-session artifact rather than a live source.
+    field: 'providerNetworkLogs',
+    capability: 'network',
+    flag: '--provider-network-logs',
+    boolean: true,
+    optionsCapability: 'networkLogsOptions',
+  },
 ];
 
 /** Builds the `lt:options` fragment for the configured device features. */
@@ -56,11 +70,27 @@ export function buildTestMuDeviceFeatureCapabilities(
 ): Record<string, unknown> {
   const capabilities: Record<string, unknown> = {};
   for (const spec of TESTMU_DEVICE_FEATURE_SPECS) {
-    const value = fields[spec.field];
-    if (value === undefined || value === '') continue;
+    if (spec.boolean) {
+      if (fields[spec.field] !== true) continue;
+      capabilities[spec.capability] = true;
+      if (spec.optionsCapability) capabilities[spec.optionsCapability] = { captureContent: true };
+      continue;
+    }
+    const value = stringFeatureValue(fields, spec);
+    if (value === undefined) continue;
     capabilities[spec.capability] = spec.project ? spec.project(value) : value;
   }
   return capabilities;
+}
+
+/** The string-valued rows carry no boolean flag, so their field reads as a string or nothing. */
+function stringFeatureValue(
+  fields: TestMuDeviceFeatureFields,
+  spec: TestMuDeviceFeatureSpec,
+): string | undefined {
+  const value = fields[spec.field];
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  return value;
 }
 
 /**
@@ -73,14 +103,26 @@ export function readTestMuDeviceFeatureFields(
   const fields: TestMuDeviceFeatureFields = {};
   for (const spec of TESTMU_DEVICE_FEATURE_SPECS) {
     const value = flags?.[spec.field];
+    if (spec.boolean) {
+      if (value === true) assignBooleanFeatureField(fields, spec);
+      continue;
+    }
     if (typeof value !== 'string' || value.length === 0) continue;
     if (spec.field === 'providerDeviceOrientation') {
       fields.providerDeviceOrientation = requireProviderDeviceOrientation(spec, value);
       continue;
     }
+    if (spec.field === 'providerNetworkLogs') continue;
     fields[spec.field] = value;
   }
   return fields;
+}
+
+function assignBooleanFeatureField(
+  fields: TestMuDeviceFeatureFields,
+  spec: TestMuDeviceFeatureSpec,
+): void {
+  if (spec.field === 'providerNetworkLogs') fields.providerNetworkLogs = true;
 }
 
 /** Reads the TestMu device pool off an untyped flag bag; an unset value keeps the virtual pool. */

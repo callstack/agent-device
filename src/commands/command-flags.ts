@@ -41,6 +41,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     providerNetworkProfile: options.providerNetworkProfile,
     providerCustomNetwork: options.providerCustomNetwork,
     providerNoResignApp: options.providerNoResignApp,
+    providerNetworkLogs: options.providerNetworkLogs,
     awsProjectArn: options.awsProjectArn,
     awsDeviceArn: options.awsDeviceArn,
     awsAppArn: options.awsAppArn,

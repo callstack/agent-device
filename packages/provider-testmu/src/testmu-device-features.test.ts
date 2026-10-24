@@ -38,6 +38,20 @@ test('unset and empty device features emit nothing', () => {
   assert.deepEqual(buildTestMuDeviceFeatureCapabilities({ providerGeoLocation: '' }), {});
 });
 
+test('the network-logs opt-in asks TestMu for the capture and its response bodies', () => {
+  assert.deepEqual(buildTestMuDeviceFeatureCapabilities({ providerNetworkLogs: true }), {
+    network: true,
+    // Metadata alone is the TestMu default, so the opt-in asks for payloads too.
+    networkLogsOptions: { captureContent: true },
+  });
+  // Only the flag's own boolean counts; anything else reads as unset.
+  assert.deepEqual(buildTestMuDeviceFeatureCapabilities({}), {});
+  assert.deepEqual(readTestMuDeviceFeatureFields({ providerNetworkLogs: true }), {
+    providerNetworkLogs: true,
+  });
+  assert.deepEqual(readTestMuDeviceFeatureFields({ providerNetworkLogs: 'true' }), {});
+});
+
 test('daemon flag bags are read through the same table with orientation validated', () => {
   assert.deepEqual(
     readTestMuDeviceFeatureFields({

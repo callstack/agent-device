@@ -253,6 +253,28 @@ export async function fetchProviderVerificationJson(
 }
 
 /**
+ * A provider GET whose only answer this caller needs is the status code. A transport failure
+ * propagates; the status is the caller's business (an artifact may legitimately not exist yet).
+ */
+export async function fetchProviderResponseStatus(
+  endpoint: string | URL,
+  options: {
+    clientVersion: string;
+    auth: { username: string; accessKey: string };
+  },
+): Promise<number> {
+  const response = await fetch(endpoint, {
+    headers: {
+      ...agentDeviceRequestHeaders(options.clientVersion),
+      Authorization: basicAuthHeader(options.auth),
+    },
+    signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
+  });
+  await response.body?.cancel().catch(() => undefined);
+  return response.status;
+}
+
+/**
  * Fetches a provider's session-details JSON with basic auth under a deadline. A transport failure,
  * a non-2xx answer, or a body that is not a JSON object is `COMMAND_FAILED`.
  */
@@ -357,6 +379,14 @@ export function requireFlag(req: LeaseLifecycleContext, key: string, message: st
 export function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
   const value = req.flags?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** Reads a boolean request flag; an unset or false flag is absent, so an opt-in never defaults on. */
+export function readBooleanFlag(
+  flags: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): boolean {
+  return flags?.[key] === true;
 }
 
 /** A whitespace-only credential is missing, not one the provider should reject later. */

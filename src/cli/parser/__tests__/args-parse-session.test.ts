@@ -738,6 +738,7 @@ test('parseArgs recognizes connect device-feature flags and their short aliases'
       '--network-profile',
       '4g-lte-advanced-good',
       '--provider-no-resign-app',
+      '--provider-network-logs',
       '--appium-version',
       '3.2.0',
     ],
@@ -751,6 +752,7 @@ test('parseArgs recognizes connect device-feature flags and their short aliases'
   assert.equal(parsed.flags.providerLocale, 'Fr');
   assert.equal(parsed.flags.providerNetworkProfile, '4g-lte-advanced-good');
   assert.equal(parsed.flags.providerNoResignApp, true);
+  assert.equal(parsed.flags.providerNetworkLogs, true);
 });
 
 test('parseArgs rejects an orientation the provider cannot start a session in', () => {

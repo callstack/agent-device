@@ -76,6 +76,13 @@ export type CloudWebDriverListArtifacts = (params: {
   device?: DeviceInfo;
   webDriverSessionId?: string;
   providerSessionId?: string;
+  /**
+   * `--provider-network-logs` as the lease allocation carried it. Providers that capture traffic as a
+   * post-session HAR only look for that artifact when this is true; nothing captures it by default.
+   */
+  networkLogs?: boolean;
+  /** The provider session is already closed, so a post-session artifact may be waited for briefly. */
+  sessionEnded?: boolean;
 }) => Promise<CloudArtifactsResult | undefined>;
 
 export type CloudWebDriverPrepareSession = (params: {
@@ -122,6 +129,7 @@ class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {
   readonly deviceInventoryProvider: DeviceInventoryProvider;
   readonly capabilities: CloudWebDriverProviderCapabilities;
   readonly platformRuntimeModule: PlatformRuntimeProviderModule;
+  private readonly profileFields: ProviderProfileFieldDeclaration;
 
   private readonly sessions: WebDriverSessionManager;
   private readonly deployment: ReturnType<typeof createWebDriverDeploymentRuntime>;
@@ -129,6 +137,7 @@ class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {
   constructor(options: CloudWebDriverRuntimeOptions) {
     this.provider = options.provider;
     this.owner = providerRuntimeOwner(options.provider, options.platform);
+    this.profileFields = options.profileFields;
     this.capabilities = createCloudWebDriverCapabilities({
       provider: options.provider,
       platform: options.platform,
@@ -169,6 +178,7 @@ class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {
       isSessionActive: (device) => this.sessions.findSessionForDevice(device) !== undefined,
       deployment: this.deployment,
       capabilities: this.capabilities,
+      profileFields: this.profileFields,
       snapshotAvailable: this.capabilities.operations.snapshot.support !== 'unsupported',
       screenshotAvailable: this.capabilities.operations.screenshot.support !== 'unsupported',
       getInteractor: (device) => this.getInteractor(device),

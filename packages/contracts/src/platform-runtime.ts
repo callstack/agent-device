@@ -108,7 +108,12 @@ export type RuntimeOperationUnavailability = Readonly<{
     | 'unsupported-device-backend'
     | 'unsupported-device-scope'
     | 'unsupported-provider-mode'
-    | 'owner-capability-missing';
+    | 'owner-capability-missing'
+    /**
+     * The owner can deliver network capture only as an artifact finalized after the provider
+     * session ends (a post-session HAR), so a live `network dump` has no source to read.
+     */
+    | 'network-capture-post-session';
   hint?: string;
 }>;
 
@@ -346,7 +351,8 @@ function isRuntimeOperationUnavailabilityReason(
     value === 'unsupported-device-backend' ||
     value === 'unsupported-device-scope' ||
     value === 'unsupported-provider-mode' ||
-    value === 'owner-capability-missing'
+    value === 'owner-capability-missing' ||
+    value === 'network-capture-post-session'
   );
 }
 

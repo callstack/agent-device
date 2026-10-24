@@ -73,6 +73,7 @@ Optional device features:
 --provider-appium-version 2.16.2                             # (alias --appium-version)
 --provider-language fr                                       # (alias --language)
 --provider-locale fr_FR                                      # (alias --locale)
+--provider-network-logs                                      # capture session traffic as a HAR
 ```
 
 agent-device sends these values to TestMu AI as `lt:options` capabilities when it creates the
@@ -80,6 +81,12 @@ hosted session.
 
 - Without `--provider-appium-version`, TestMu AI starts its default Appium server for the device.
   Pin a version when your suite depends on one.
+- `--provider-network-logs` asks TestMu AI to capture session traffic through its proxy. It is not a
+  live source: `network dump` stays unavailable for the session. `disconnect` ends the TestMu AI
+  session, and `close` alone does not. After `disconnect`, `artifacts` lists the HAR as
+  `Network traffic (HAR)`. TestMu AI needs the app to trust its capture
+  proxy; an app that does not is not captured. TestMu AI documents this capture as a
+  Real Device Plus plan feature.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
   BrowserStack-only. `connect testmu` and TestMu AI session creation fail with the flag name
   instead of ignoring them.

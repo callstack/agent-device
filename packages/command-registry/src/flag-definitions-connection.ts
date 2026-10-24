@@ -304,6 +304,16 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'providerNetworkLogs',
+    names: ['--provider-network-logs'],
+    type: 'boolean',
+    usageLabel: '--provider-network-logs',
+    usageDescription:
+      'Hosted cloud providers that support it: capture session network traffic and deliver it as a HAR artifact after disconnect ends the provider session. Not a live source: network dump stays unavailable',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'awsProjectArn',
     names: ['--aws-project-arn'],
     type: 'string',

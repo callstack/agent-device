@@ -24,6 +24,7 @@ export function consumeAllProfileFields(provider: string): ProviderProfileFieldD
       providerNetworkProfile: 'consumed',
       providerCustomNetwork: 'consumed',
       providerNoResignApp: 'consumed',
+      providerNetworkLogs: 'consumed',
       awsProjectArn: 'consumed',
       awsDeviceArn: 'consumed',
       awsAppArn: 'consumed',

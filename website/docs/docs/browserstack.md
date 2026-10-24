@@ -52,6 +52,7 @@ Optional device features:
 --provider-network-profile 4g-lte-advanced-good              # (alias --network-profile)
 --provider-custom-network 1000                               # (alias --custom-network)
 --provider-no-resign-app                                     # iOS only
+--provider-network-logs                                      # capture session traffic as a HAR
 ```
 
 agent-device sends these values to BrowserStack as `bstack:options` capabilities when it creates the hosted session.
@@ -60,6 +61,9 @@ agent-device sends these values to BrowserStack as `bstack:options` capabilities
 - `--provider-appium-version` pins the Appium server BrowserStack runs for the session. Without it, BrowserStack runs its default Appium 1.x, and `mobile:` commands such as `deepLink` and `pressButton` need Appium 2.x or newer.
 - `--provider-network-profile` and `--provider-custom-network` are mutually exclusive.
 - `--provider-no-resign-app` applies to iOS only. BrowserStack re-signs uploaded iOS apps with its provisioning profile, which strips entitlements. Pass this flag when you test features that need entitlements, such as push notifications.
+- `--provider-network-logs` asks BrowserStack to capture session traffic through its mitmproxy. It is not a live source: `network dump` stays unavailable for the session. `disconnect` ends the BrowserStack session, and `close` alone does not. After `disconnect`, `artifacts` lists the HAR as `Network traffic (HAR)`; BrowserStack publishes it about half a minute later, so the listing can stay `pending` and the printed retry command fetches it then.
+
+  BrowserStack's capture is a proxy the app must trust, so an app that does not trust the mitmproxy CA is never captured and the artifact reports why. Android 7 and newer ignore user CAs unless a debug build's network security config trusts them, and an app that pins certificates excludes its own hosts from capture. BrowserStack requires a paid plan for this feature. See BrowserStack's [network logs guide](https://www.browserstack.com/docs/app-automate/appium/debug-failed-tests/network-logs) for the app-side setup.
 
 ## Run a session from the CLI
 

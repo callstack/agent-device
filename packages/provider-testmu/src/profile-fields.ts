@@ -19,6 +19,7 @@ export const TESTMU_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'refused',
     providerCustomNetwork: 'refused',
     providerNoResignApp: 'refused',
+    providerNetworkLogs: 'consumed',
     awsProjectArn: 'refused',
     awsDeviceArn: 'refused',
     awsAppArn: 'refused',

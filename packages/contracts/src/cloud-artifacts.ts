@@ -6,6 +6,7 @@ const CLOUD_ARTIFACT_KINDS = [
   'appium-log',
   'device-log',
   'automation-log',
+  'network',
   'provider-session',
   'raw',
 ] as const;
