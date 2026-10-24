@@ -672,11 +672,20 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       bar.items = @[item];
       [self.view addSubview:bar];
     } else {
+      // The control sits in the top bar band, whose height above the content differs by family
+      // (59 pt on an iPhone 17 Pro, 32 pt on an iPad Pro), so it anchors to the safe-area top
+      // instead of a hardcoded iPhone y.
       UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem];
-      back.frame = CGRectMake(12, 62, 88, 44);
+      back.translatesAutoresizingMaskIntoConstraints = NO;
       [back setTitle:@"Go back" forState:UIControlStateNormal];
       [back addTarget:self action:@selector(navigationBackPressed) forControlEvents:UIControlEventTouchUpInside];
       [self.view addSubview:back];
+      [NSLayoutConstraint activateConstraints:@[
+        [back.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12],
+        [back.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [back.widthAnchor constraintEqualToConstant:88],
+        [back.heightAnchor constraintEqualToConstant:44],
+      ]];
     }
   }
 

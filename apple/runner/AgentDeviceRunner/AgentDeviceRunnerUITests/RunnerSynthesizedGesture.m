@@ -333,7 +333,7 @@ static NSString * _Nullable RunnerCreateEventRecord(
   NSUInteger displayID = 0;
   // A nil window is the caller's sole-screen route: the app tree could not name its window.
   NSString *displayError = resolvedWindow == nil
-    ? RunnerResolveSoleScreenDisplayID(&displayID)
+    ? RunnerResolveSoleScreenDisplayID(application, &displayID)
     : RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
   if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =

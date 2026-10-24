@@ -342,8 +342,8 @@ extension RunnerTests {
   }
 
   /// The viewport the portable gesture planner lays pointer paths in: the frame of the synthesized
-  /// context its record is routed through, so a tree with no window on an iPhone with one screen
-  /// plans on that screen, the same route a synthesized tap or scroll takes.
+  /// context its record is routed through, so a tree with no window whose app provably fills its
+  /// sole screen plans on that screen, the same route a synthesized tap or scroll takes.
   @MainActor
   func gestureViewportFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
@@ -517,14 +517,18 @@ extension RunnerTests {
 
 
 #if os(iOS)
-  /// The reference frame of the sole-screen route, read without the app's accessibility tree: on an
-  /// iPhone with one screen a full-screen app's window is that screen. A deep app tree makes the
-  /// windows query fail with `kAXErrorIllegalArgument`, and without this route every synthesized
-  /// tap and scroll on such a screen failed even though synthesis itself needs no tree. Anything
-  /// that can show an app in part of a screen (iPad, more than one screen) keeps requiring a window.
+  /// The reference frame of the sole-screen route, read without the app's accessibility tree: when
+  /// the app provably fills the device's only screen, its window is that screen. A deep app tree
+  /// makes the windows query fail with `kAXErrorIllegalArgument`, and without this route every
+  /// synthesized tap and scroll on such a screen failed even though synthesis itself needs no tree.
+  /// `RunnerResolveSoleScreen` owns which devices prove that — an iPhone always, an iPad only while
+  /// the app fills the screen — so this reads the same answer the record's routing takes, and
+  /// anything else (a windowed iPad, a multi-screen foldable) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    guard UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 else {
+    var resolvedScreen: AnyObject?
+    var resolvedDisplayID: UInt = 0
+    guard RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil else {
       return nil
     }
     let screen = UIScreen.main

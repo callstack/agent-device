@@ -179,16 +179,42 @@ extension RunnerTests {
     return candidate.midY >= window.minY && candidate.midY <= maxY
   }
 
-  static func topLeadingNavigationFallbackPoint(in frame: CGRect) -> CGPoint? {
+  /// The point the top-leading `back` fallback aims at: the leading slot of the bar that sits
+  /// directly under the top inset of the frame the tap lands in. A fraction of the frame height
+  /// cannot serve both families — an iPhone 17 Pro measures a 59-pt inset with its bar at y 62-116,
+  /// while an iPad Pro 11" measures 32 with its bar at y 32-86, where the iPhone's height-derived 96
+  /// lands below the bar. `22` is half of UIKit's standard 44-pt top bar. The bounds keep a runtime
+  /// that reports no inset inside a plausible bar, and a large inset from leaving it.
+  static func topLeadingNavigationFallbackPoint(
+    in frame: CGRect,
+    topSafeAreaInset: CGFloat
+  ) -> CGPoint? {
     guard SnapshotGeometry.isPositiveFinite(frame) else {
       return nil
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.
     let xOffset = min(max(frame.width * 0.08, 28), 44)
-    // Sit below the status/dynamic-island region, inside the bar's leading control: on a 402x874
-    // iPhone the bar spans y 62-116 and its back control 62-106.
-    let yOffset = min(max(frame.height * 0.1, 56), 96)
+    let yOffset = min(max(topSafeAreaInset + 22, 56), 96)
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
+  }
+
+  /// The screen's top inset, read in-process from the runner's own window scene. The status-bar /
+  /// Dynamic Island band is a screen-level fact, so the runner's full-screen host window reports the
+  /// one the target app sees — and unlike any element frame it answers on a tree XCTest cannot
+  /// serialize. The largest top inset among the scene's windows wins: an alert or keyboard window
+  /// reports none, and the window that carries the band is the one to ask.
+  private func screenTopSafeAreaInset() -> CGFloat {
+    #if os(iOS)
+      let insets = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap(\.windows)
+        .map(\.safeAreaInsets.top)
+      let inset = insets.max() ?? 0
+      NSLog("AGENT_DEVICE_RUNNER_BACK_FALLBACK_TOP_INSET read=%.1f windows=%zd", inset, insets.count)
+      return inset
+    #else
+      return 0
+    #endif
   }
 
   @MainActor
@@ -201,7 +227,10 @@ extension RunnerTests {
       app: app,
       policy: synthesizedGesturePolicy(.coordinateTap),
       windowQueryRejected: windowQueryRejected
-    ), let point = Self.topLeadingNavigationFallbackPoint(in: context.referenceFrame) else {
+    ), let point = Self.topLeadingNavigationFallbackPoint(
+      in: context.referenceFrame,
+      topSafeAreaInset: screenTopSafeAreaInset()
+    ) else {
       return .unavailable
     }
     let before = captureNavigationFallbackVisualState(app: app, context: context)
@@ -238,7 +267,7 @@ extension RunnerTests {
     return Self.navigationFallbackSample(
       resolvingApp: {
         context.resolvedWindow == nil
-          ? self.captureSoleAppScreen()
+          ? self.captureSoleAppScreen(app: app)
           : self.captureResolvedAppScreen(app: app)
       },
       systemSurface: { self.captureResolvedAppScreen(app: self.springboard) },

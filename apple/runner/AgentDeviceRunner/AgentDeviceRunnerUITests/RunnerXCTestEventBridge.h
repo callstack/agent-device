@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -79,15 +80,55 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowDisplayID(
 
 // Reads the display ID of the device's only screen, for a gesture whose app window XCTest cannot
 // resolve because the app's accessibility tree is too deep to serialize. On an iPhone with exactly
-// one screen that screen hosts the full-screen app, so no window is needed to name it. Anywhere else
-// this returns a message and leaves `displayID` untouched: an iPad can show the app in part of its
-// screen, and only a window can say which panel lights a foldable's app.
-FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID);
+// one screen that screen hosts the full-screen app, so no window is needed to name it. On an iPad
+// the same route opens only while the app provably fills that screen, decided in-process by the
+// evidence seam below without the app's tree. Anywhere else this returns a message and leaves
+// `displayID` untouched: a windowed iPad app sits in part of its screen, and only a window can say
+// which panel lights a foldable's app.
+FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreenDisplayID(
+  id application,
+  NSUInteger *displayID
+);
 
 // Resolves the screen and display identity under the same sole-screen rule used by synthesis.
 FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
+  id application,
   id _Nullable *screen,
   NSUInteger *displayID
+);
+
+// What the full-screen proof concluded. The decision is a function of these values, so a test
+// supplies them directly instead of restating the device rule.
+typedef NS_ENUM(NSUInteger, RunnerFullScreenEvidence) {
+  // The target app is the accessibility primary app and its frame is the screen's frame.
+  RunnerFullScreenEvidenceFillsScreen,
+  // The target app is not the accessibility primary app, so no screen belongs to it to fill.
+  RunnerFullScreenEvidenceNotPrimaryApp,
+  // The primary app's frame differs from the system app's frame: an iPad window that shows the app
+  // in part of the screen (Windowed Apps or Stage Manager).
+  RunnerFullScreenEvidenceWindowed,
+  // The runtime, the app, or the system app would not report a usable frame, which proves nothing.
+  RunnerFullScreenEvidenceUnknown,
+};
+
+// Decides the evidence from the values the AXRuntime probe reads. AXRuntime reports the primary
+// app's window and the system app, which spans the screen, in one native space; this is the same
+// comparison the Simulator snapshot bridge refuses a capture on (`app-window-not-full-screen`,
+// ADR 0004). Neither read walks the app's tree, so the decision survives a tree XCTest cannot
+// serialize. A pid that cannot name a process (<= 0) or an unreadable frame answers Unknown, never
+// a guess.
+FOUNDATION_EXPORT RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
+  pid_t targetProcessID,
+  pid_t primaryProcessID,
+  CGRect appFrame,
+  CGRect screenFrame
+);
+
+// The sole-screen rule with one owner: an iPhone always routes through its only screen; any other
+// idiom routes only while the evidence proves the app fills that screen.
+FOUNDATION_EXPORT BOOL RunnerSoleScreenRouteOpensForEvidence(
+  BOOL isPhoneIdiom,
+  RunnerFullScreenEvidence evidence
 );
 
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
