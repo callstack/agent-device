@@ -35,7 +35,7 @@ export function resolveInteractionTouchPoint(
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
   const center = resolveRectCenter(targetRect ?? undefined);
-  if (!targetRect || !center) return { kind: 'invalid' };
+  if (!targetRect || !center || !hasArea(targetRect)) return { kind: 'invalid' };
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {
@@ -57,6 +57,10 @@ export function resolveInteractionTouchPoint(
     };
   }
   return { kind: 'resolved', point, strategy: 'parent-owned' };
+}
+
+function hasArea(rect: Rect): boolean {
+  return rect.width > 0 && rect.height > 0;
 }
 
 function collectInteractiveDescendantRects(

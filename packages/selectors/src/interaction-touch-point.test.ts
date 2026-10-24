@@ -115,6 +115,37 @@ test('keeps the exact center when there are no competing interactive descendants
   });
 });
 
+test.each<{ name: string; rect: Rect }>([
+  { name: 'zero width and height', rect: { x: 0, y: 0, width: 0, height: 0 } },
+  { name: 'zero width', rect: { x: 40, y: 120, width: 0, height: 60 } },
+  { name: 'zero height', rect: { x: 40, y: 120, width: 60, height: 0 } },
+])('refuses a $name target instead of resolving its origin', ({ rect }) => {
+  const nodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Icon', label: 'Clock', rect, hittable: false },
+  ]).nodes;
+
+  assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), { kind: 'invalid' });
+});
+
+test('still resolves the smallest positive-area target', () => {
+  const nodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Dot',
+      rect: { x: 40, y: 120, width: 1, height: 1 },
+      hittable: true,
+    },
+  ]).nodes;
+
+  assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
+    kind: 'resolved',
+    point: { x: 41, y: 121 },
+    strategy: 'center',
+  });
+});
+
 test('keeps a parent-owned center in a thin row when a child is safely off to the side', () => {
   const nodes = makeSnapshotState([
     {

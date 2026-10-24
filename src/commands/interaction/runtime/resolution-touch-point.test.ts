@@ -79,3 +79,45 @@ test('runtime ref and selector paths dispatch the same parent-owned post point',
   assert.ok(refCalls[0]!.y < 292);
   assert.notDeepEqual(refCalls[0], { x: 201, y: 440 });
 });
+
+test('runtime press refuses a selector match with a zero-area rect and dispatches no tap', async () => {
+  const taps: Point[] = [];
+  // SpringBoard page 2 keeps page-1 icons in the tree as 0x0 rects at the origin.
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'SpringBoard',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Icon',
+      label: 'Clock',
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      hittable: false,
+    },
+  ]);
+  const device = createInteractionDevice(snapshot, {
+    tap: async (_context, point) => {
+      taps.push(point);
+      return { ok: true };
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="Clock"'), { session: 'default' }),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.equal(details?.reason, 'target_bounds_invalid');
+      assert.equal(details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
