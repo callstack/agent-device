@@ -92,6 +92,33 @@ test('bounded resource refusal keeps canonical typed fields on a replay-variable
   expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 
+test('cleanup failed steps retain their type while replay variables are scrubbed', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Session cleanup failed',
+      details: {
+        reason: 'session_cleanup_incomplete',
+        failedSteps: ['application_lifecycle', 'secret-value'],
+      },
+    },
+    actionLabel: 'close',
+    action: 'close',
+    positionals: [],
+    step: 1,
+    replayPath: '/tmp/close.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [{ name: 'SECRET', value: 'secret-value' }],
+  });
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details).toMatchObject({
+    reason: 'session_cleanup_incomplete',
+    failedSteps: ['application_lifecycle', '<var:SECRET>'],
+  });
+  expect(JSON.stringify(response)).not.toContain('secret-value');
+});
+
 // #2997: the Android platform states `open --test-ime` because it sees one dispatched
 // session-open. On this surface that advice is unactionable — a flow caller never runs
 // `open` — so the cause's hint is replaced off the typed reason, never off the message.

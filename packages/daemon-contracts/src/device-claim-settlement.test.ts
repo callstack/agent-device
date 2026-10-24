@@ -9,6 +9,7 @@ import {
   acquireTransientDeviceClaim,
   canonicalLocalDeviceKey,
   inspectDeviceClaims,
+  inspectDeviceClaimAcquisition,
   renewDeviceClaim,
 } from './device-claims.ts';
 import { inspectExistingClaimSettlement } from './device-claim-settlement.ts';
@@ -471,6 +472,114 @@ function observesDeviceBootAt(bootedAtMs: number): DeviceBootObservationService 
 const UNOBSERVED_BOOT: DeviceBootObservationService = {
   observeBootTimeMs: async () => ({ observed: false, reason: 'unobserved' }),
 };
+
+test.each([
+  { command: 'open', scenario: 'own-held', expected: 'held', actual: 'acquired' },
+  {
+    command: 'install',
+    scenario: 'own-covered',
+    expected: 'held',
+    actual: 'covered-by-owned-claim',
+  },
+  { command: 'install', scenario: 'own-transient', expected: 'conflict', actual: 'conflict' },
+  { command: 'open', scenario: 'abandoned', expected: 'available', actual: 'acquired' },
+  { command: 'install', scenario: 'dead-foreign', expected: 'reconcile', actual: 'conflict' },
+  { command: 'open', scenario: 'rebooted-live-foreign', expected: 'reconcile', actual: 'conflict' },
+  {
+    command: 'install',
+    scenario: 'rebooted-live-foreign',
+    expected: 'conflict',
+    actual: 'conflict',
+  },
+] as const)(
+  'acquisition preview matches $command $scenario decision',
+  async ({ command, scenario, expected, actual }) => {
+    const root = useClaimsRoot();
+    const stateDir = path.join(root, 'acquirer');
+    fs.mkdirSync(stateDir);
+    const session = 'owner-session';
+    const workspace = '/worktrees/owner';
+    if (scenario === 'own-transient') {
+      const seeded = await acquireTransientDeviceClaim({
+        device,
+        command,
+        coveredBySession: session,
+        coveredClaimIsOwnedByRequest: () => false,
+        workspace,
+        stateDir,
+        env: process.env,
+        reconcileOrphanedDeviceClaim: reconciled,
+      });
+      assert.equal(seeded.status, 'acquired');
+    } else if (scenario === 'rebooted-live-foreign' || scenario === 'dead-foreign') {
+      await seedForeignLiveClaim(root, path.join(root, 'foreign'));
+      if (scenario === 'dead-foreign') rewriteClaimOwner(root, 999_999_999);
+      else
+        publishDaemonRegistration(path.join(root, 'foreign'), {
+          pid: process.ppid,
+          startTime: null,
+        });
+    } else {
+      const seeded = await acquireDeviceClaim({
+        device,
+        session,
+        workspace,
+        stateDir,
+        env: process.env,
+      });
+      assert.equal(seeded.status, 'acquired');
+      if (scenario === 'abandoned') {
+        const claim = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<
+          string,
+          unknown
+        >;
+        fs.writeFileSync(claimPath(root), JSON.stringify({ ...claim, abandonedAtMs: Date.now() }));
+      }
+    }
+    const before = fs.readFileSync(claimPath(root));
+    const observed =
+      scenario === 'rebooted-live-foreign'
+        ? observesDeviceBootAt(storedClaim().updatedAtMs + 1)
+        : undefined;
+    const preview = await inspectDeviceClaimAcquisition({
+      device,
+      command,
+      session,
+      workspace,
+      stateDir,
+      env: process.env,
+      coveredClaimIsOwnedByRequest: () => true,
+      observeDeviceBoot: observed,
+    });
+    assert.equal(preview.length, 1);
+    assert.equal(preview[0]?.status, expected);
+    assert.deepEqual(fs.readFileSync(claimPath(root)), before);
+    const reconcile = vi.fn(async () => ({ status: 'retained' as const, reason: 'test-retained' }));
+    const acquired =
+      command === 'open'
+        ? await acquireDeviceClaim({
+            device,
+            session,
+            workspace,
+            stateDir,
+            env: process.env,
+            observeDeviceBoot: observed,
+            reconcileOrphanedDeviceClaim: reconcile,
+          })
+        : await acquireTransientDeviceClaim({
+            device,
+            command,
+            coveredBySession: session,
+            coveredClaimIsOwnedByRequest: () => true,
+            workspace,
+            stateDir,
+            env: process.env,
+            reconcileOrphanedDeviceClaim: reconcile,
+          });
+    assert.equal(acquired.status, actual);
+    assert.equal(reconcile.mock.calls.length, expected === 'reconcile' ? 1 : 0);
+  },
+);
 
 test('a live foreign claim after reboot is inspectable without renewing or reconciling it', async () => {
   const root = useClaimsRoot();

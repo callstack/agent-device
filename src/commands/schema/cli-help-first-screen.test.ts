@@ -56,9 +56,9 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
   ],
   tv: [
-    'Use this when the target is Android TV, Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
+    'Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
     'Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB',
-    'Initial support is VVD-only. Physical Fire TV devices remain unsupported',
+    'Initial support is VVD-only. Physical devices that run Vega OS remain unsupported',
     'The VVD is never booted implicitly',
     'Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented',
   ],

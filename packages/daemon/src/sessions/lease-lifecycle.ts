@@ -60,11 +60,17 @@ export async function cleanupExpiredLeasedSession(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
+  assertTeardownAllowed?: (ref: SessionRef) => void;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
-  if (!params.leaseRegistry.consumeExpiredLease(lease.leaseId)) return false;
+  if (
+    !params.leaseRegistry.consumeExpiredLease(lease.leaseId, () =>
+      params.assertTeardownAllowed?.(ref),
+    )
+  )
+    return false;
   await endLeasedSession(
     ref,
     params.sessionStore,
@@ -163,6 +169,41 @@ export function resolveSessionLeaseForRequest(params: {
   );
 }
 
+function closeReleaseRequest(session: SessionState) {
+  const lease = session.lease!;
+  return leaseScopeToReleaseRequest({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.leaseBackend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  });
+}
+
+function closeLeaseDecision(
+  activeLease: DeviceLease | undefined,
+  provider: LeaseLifecycleProvider | undefined,
+): 'retained' | 'provider-release' | 'local-release' {
+  if (activeLease?.retainOnClose) return 'retained';
+  return activeLease && provider?.release ? 'provider-release' : 'local-release';
+}
+
+export function inspectSessionProviderReleaseOnClose(params: {
+  session: SessionState;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+}): boolean {
+  if (!params.session.lease) return false;
+  return (
+    closeLeaseDecision(
+      params.leaseRegistry.inspectLeaseForClose(closeReleaseRequest(params.session)),
+      params.leaseLifecycleProvider,
+    ) === 'provider-release'
+  );
+}
+
 /**
  * Releases the lease a closing session holds, unless its owner allocated it with `retainOnClose`.
  * `endedLeaseId` names the lease the close ended, including one that was already inactive.
@@ -174,17 +215,10 @@ export async function releaseSessionLease(params: {
 }): Promise<{ endedLeaseId?: string; providerData?: Record<string, unknown> }> {
   const lease = params.session.lease;
   if (!lease) return {};
-  const releaseRequest = leaseScopeToReleaseRequest({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.leaseBackend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
+  const releaseRequest = closeReleaseRequest(params.session);
   const activeLease = params.leaseRegistry.getLease(releaseRequest);
-  if (activeLease?.retainOnClose) {
+  const decision = closeLeaseDecision(activeLease, params.leaseLifecycleProvider);
+  if (decision === 'retained') {
     emitDiagnostic({
       level: 'info',
       phase: 'session_lease_released',
@@ -197,9 +231,10 @@ export async function releaseSessionLease(params: {
     });
     return {};
   }
-  const providerData = activeLease
-    ? await params.leaseLifecycleProvider?.release?.(activeLease)
-    : undefined;
+  const providerData =
+    decision === 'provider-release'
+      ? await params.leaseLifecycleProvider!.release!(activeLease!)
+      : undefined;
   const providerSessionId = providerSessionIdFromData(providerData);
   if (activeLease && providerSessionId) {
     params.leaseRegistry.recordProviderSession(activeLease, providerSessionId);

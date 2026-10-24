@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { getLeaseRegistryExecutionLocks } from '../server/request-execution-scope.ts';
+import { withRequestExecutionLockKeys } from '../server/request-execution-locks.ts';
 import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
 import fs from 'node:fs';
 import { IOS_SIMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
@@ -49,6 +51,187 @@ test.each(unsupported)(
       expect(world.native).not.toHaveBeenCalled();
       expect(world.finish).not.toHaveBeenCalled();
       expect(world.forceCleanup).not.toHaveBeenCalled();
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('bounded close preserves owned audio authority and manifest before binding', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const owned = seedExistingCapture(world, 'audio-probe');
+    const before = fs.readFileSync(owned.resourcePath, 'utf8');
+    const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:audio-probe',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(world.bind).not.toHaveBeenCalled();
+    expect(owned.finish).not.toHaveBeenCalled();
+    expect(owned.forceCleanup).not.toHaveBeenCalled();
+    expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+    expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test('bounded close preserves existing app log and its durable manifest', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    assertRpcOk(await world.call('logs', ['start']));
+    const log = world.sessionStore.requireCurrent(world.ref).appLog;
+    const dir = world.sessionStore.resolveSessionDir('resource-session');
+    const manifest = path.join(dir, 'app-log.resource.json');
+    const before = fs.readFileSync(manifest, 'utf8');
+    const bindings = world.bind.mock.calls.length;
+    const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:app-log',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(world.bind).toHaveBeenCalledTimes(bindings);
+    expect(world.finish).not.toHaveBeenCalled();
+    expect(world.forceCleanup).not.toHaveBeenCalled();
+    expect(world.sessionStore.requireCurrent(world.ref).appLog).toBe(log);
+    expect(fs.readFileSync(manifest, 'utf8')).toBe(before);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test.each(['audio-probe', 'screen-recording'] as const)(
+  'bounded close preserves %s after an earlier completed step',
+  async (kind) => {
+    const world = await resourceAdmissionWorld();
+    try {
+      const owned = seedExistingCapture(world, kind);
+      const before = fs.readFileSync(owned.resourcePath, 'utf8');
+      const response = await world.call('batch', [], {
+        batchSteps: [{ command: 'home' }, { command: 'close' }],
+      });
+      expect(response.json.error?.data?.details).toMatchObject({
+        reason: 'bounded_composite_resource_unsupported',
+        shape: `session-resource-disposal:${kind}`,
+        standaloneCommandName: 'close',
+        dispatched: 'no',
+        executed: 1,
+        partialResults: [{ command: 'home', ok: true }],
+      });
+      expect(world.bind).toHaveBeenCalledOnce();
+      expect(owned.finish).not.toHaveBeenCalled();
+      expect(owned.forceCleanup).not.toHaveBeenCalled();
+      expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+      expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('queued lifecycle sees a resource adopted by the preceding lock owner', async () => {
+  const world = await resourceAdmissionWorld();
+  const locks = getLeaseRegistryExecutionLocks(world.leaseRegistry);
+  let acquired!: () => void;
+  let adopt!: () => void;
+  let queued!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    acquired = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    adopt = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    queued = resolve;
+  });
+  const first = withRequestExecutionLockKeys(
+    locks,
+    ['session:resource-session', 'device:emulator-5554'],
+    async () => {
+      acquired();
+      await resume;
+      return seedExistingCapture(world, 'screen-recording');
+    },
+  );
+  await entered;
+  const set = locks.set.bind(locks);
+  const watch = vi.spyOn(locks, 'set').mockImplementation((key, value) => {
+    if (key === 'session:resource-session' && locks.has(key)) queued();
+    return set(key, value);
+  });
+  const pending = world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+  try {
+    await waiting;
+    adopt();
+    const owned = await first;
+    const response = await pending;
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:screen-recording',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+    });
+    expect(world.bind).not.toHaveBeenCalled();
+    expect(owned.finish).not.toHaveBeenCalled();
+  } finally {
+    watch.mockRestore();
+    adopt();
+    await Promise.allSettled([first, pending]);
+    await world.daemon.close();
+  }
+});
+
+test.each([
+  ['batch', false],
+  ['replay', false],
+  ['batch', true],
+  ['replay', true],
+] as const)(
+  '%s close uses actual daemon provider release decision, retain=%s',
+  async (composite, retainOnClose) => {
+    const world = await resourceAdmissionWorld('capture', { withLifecycleProvider: true });
+    try {
+      const lease = world.leaseRegistry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        retainOnClose,
+      });
+      world.sessionStore.update(world.ref, {
+        lease: {
+          leaseId: lease.leaseId,
+          tenantId: lease.tenantId,
+          runId: lease.runId,
+          leaseBackend: lease.backend,
+        },
+      });
+      const script = path.join(world.daemon.stateDir, 'provider-close.ad');
+      const response = await world.call(
+        composite,
+        composite === 'replay' ? [script] : [],
+        composite === 'replay'
+          ? { replayScriptSource: { entry: script, files: { [script]: 'close\n' } } }
+          : { batchSteps: [{ command: 'close' }] },
+      );
+      if (!retainOnClose) expect(response.json.error, JSON.stringify(response.json)).toBeDefined();
+      if (retainOnClose) assertRpcOk(response);
+      else
+        expect(response.json.error?.data?.details).toMatchObject({
+          reason: 'bounded_composite_resource_unsupported',
+          shape: 'session-resource-disposal:provider-lease',
+          standaloneCommandName: 'close',
+          dispatched: 'no',
+        });
+      expect(world.providerRelease).not.toHaveBeenCalled();
+      expect(Boolean(world.leaseRegistry.inspectLeaseForClose(lease)?.retainOnClose)).toBe(
+        retainOnClose,
+      );
     } finally {
       await world.daemon.close();
     }

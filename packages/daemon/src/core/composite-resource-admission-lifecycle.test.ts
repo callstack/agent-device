@@ -1,0 +1,146 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { expect, test } from 'vitest';
+import { canonicalLocalDeviceKey } from '@agent-device/daemon-contracts/device-claims';
+import { deviceIdentity } from '@agent-device/kernel/device';
+import { publishDaemonRegistration } from '@agent-device/test-kit';
+import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
+import { seedExistingCapture } from './composite-resource-existing.fixtures.ts';
+
+test.each(['perf-capture', 'trace-log'] as const)(
+  'bounded close preserves existing %s without binding',
+  async (kind) => {
+    const world = await resourceAdmissionWorld();
+    try {
+      const owned = kind === 'perf-capture' ? seedExistingCapture(world, kind) : undefined;
+      if (kind === 'trace-log') {
+        world.sessionStore.update(world.ref, {
+          trace: { outPath: '/tmp/owned.trace', startedAt: 1 },
+        });
+      }
+      const before = owned ? fs.readFileSync(owned.resourcePath, 'utf8') : undefined;
+      const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+      expect(response.json.error?.data?.details).toMatchObject({
+        reason: 'bounded_composite_resource_unsupported',
+        shape: `session-resource-disposal:${kind}`,
+        standaloneCommandName: 'close',
+        dispatched: 'no',
+        executed: 0,
+      });
+      expect(world.bind).not.toHaveBeenCalled();
+      expect(world.inspectFacts).not.toHaveBeenCalled();
+      if (owned) {
+        expect(owned.finish).not.toHaveBeenCalled();
+        expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+        expect(world.sessionStore.requireCurrent(world.ref)).toMatchObject(owned.patch);
+      } else {
+        expect(world.sessionStore.requireCurrent(world.ref).trace).toEqual({
+          outPath: '/tmp/owned.trace',
+          startedAt: 1,
+        });
+      }
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('invalid foreground reopen preserves the open validity error before runtime admission', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const owned = seedExistingCapture(world, 'audio-probe');
+    const before = fs.readFileSync(owned.resourcePath, 'utf8');
+    const response = await world.call('batch', [], {
+      batchSteps: [{ command: 'open', flags: { foreground: true } }],
+    });
+    expect(response.json.error?.data).toMatchObject({
+      code: 'INVALID_ARGS',
+      details: { executed: 0 },
+    });
+    expect(response.json.error?.data?.message).toContain('fresh session');
+    expect(world.bind).not.toHaveBeenCalled();
+    expect(world.inspectFacts).not.toHaveBeenCalled();
+    expect(owned.finish).not.toHaveBeenCalled();
+    expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test('bounded close may release a local lease when the daemon has no provider release', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const lease = world.leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
+    world.sessionStore.update(world.ref, {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+      },
+    });
+    assertRpcOk(await world.call('batch', [], { batchSteps: [{ command: 'close' }] }));
+    expect(world.providerRelease).not.toHaveBeenCalled();
+    expect(world.leaseRegistry.inspectLeaseForClose(lease)).toBeUndefined();
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test.each([true, false])(
+  'fresh bounded open with providerOwned=%s handles a foreign local claim',
+  async (providerOwned) => {
+    const world = await resourceAdmissionWorld('capture', { providerOwned });
+    try {
+      const device = world.sessionStore.requireCurrent(world.ref).device;
+      world.sessionStore.retire(world.ref);
+      const deviceKey = canonicalLocalDeviceKey(deviceIdentity(device));
+      const claimsDir = path.join(world.daemon.stateDir, 'claims');
+      const foreignStateDir = path.join(world.daemon.stateDir, 'foreign-owner');
+      fs.mkdirSync(foreignStateDir, { recursive: true });
+      publishDaemonRegistration(foreignStateDir, { pid: process.ppid, startTime: null });
+      fs.mkdirSync(claimsDir, { recursive: true });
+      const claimPath = path.join(
+        claimsDir,
+        `${crypto.createHash('sha256').update(deviceKey).digest('hex')}.json`,
+      );
+      fs.writeFileSync(
+        claimPath,
+        JSON.stringify({
+          schemaVersion: 3,
+          deviceKey,
+          device: { ...deviceIdentity(device), name: device.name },
+          session: 'foreign',
+          workspace: '/foreign',
+          stateDir: foreignStateDir,
+          ownerPid: process.ppid,
+          ownerStartTime: null,
+          ownerToken: 'foreign-token',
+          createdAtMs: 1,
+          updatedAtMs: 1,
+          claimOwnerKind: 'open-session',
+        }),
+      );
+      const before = fs.readFileSync(claimPath);
+      const response = await world.call('batch', [], {
+        batchSteps: [{ command: 'open', positionals: ['com.android.settings'] }],
+      });
+      if (providerOwned) {
+        assertRpcOk(response);
+        expect(world.sessionStore.lookup('resource-session')).toBeDefined();
+      } else {
+        expect(response.json.error?.data).toMatchObject({
+          code: 'DEVICE_IN_USE',
+          details: { reason: 'DEVICE_CLAIM_LIVE_OWNER' },
+        });
+        expect(world.sessionStore.lookup('resource-session')).toBeUndefined();
+        expect(world.inspectFacts).not.toHaveBeenCalled();
+        expect(world.bind).not.toHaveBeenCalled();
+      }
+      expect(fs.readFileSync(claimPath)).toEqual(before);
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);

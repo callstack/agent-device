@@ -7,6 +7,7 @@ import {
   abandonDeviceClaim,
   acquireDeviceClaim as acquireProductionDeviceClaim,
   acquireTransientDeviceClaim,
+  inspectDeviceClaimAcquisition,
   releaseProvenStaleDeviceClaims,
 } from './device-claims.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
@@ -153,6 +154,138 @@ async function seedForeignMacClaim(
   );
   return file;
 }
+
+test.each([
+  { owner: 'host', target: 'app', dead: false, expected: 'conflict' },
+  { owner: 'app', target: 'host', dead: true, expected: 'reconcile' },
+  { owner: 'app', target: 'host', dead: false, expected: 'conflict' },
+] as const)(
+  'Mac $target preview follows $owner acquisition',
+  async ({ owner, target, dead, expected }) => {
+    useClaimsRoot();
+    const file = await seedForeignMacClaim(process.env.AGENT_DEVICE_CLAIMS_DIR!, {
+      ...(owner === 'app' ? { bundleId: 'com.example.one' } : {}),
+      ...(dead ? { ownerPid: 999_999_999 } : {}),
+    });
+    const before = fs.readFileSync(file);
+    const selected = target === 'app' ? hostAppDevice(mac, 'com.example.one') : mac;
+    const params = {
+      device: selected,
+      command: 'open',
+      session: 'new-owner',
+      workspace: '/new-owner',
+      stateDir: process.env.AGENT_DEVICE_CLAIMS_DIR!,
+      env: process.env,
+      coveredClaimIsOwnedByRequest: () => false,
+    };
+    const preview = await inspectDeviceClaimAcquisition(params);
+    assert.equal(preview[0]?.status, expected);
+    assert.deepEqual(fs.readFileSync(file), before);
+    const reconcile = vi.fn(async () => ({ status: 'retained' as const, reason: 'test-retained' }));
+    const acquired = await acquireDeviceClaim({
+      device: selected,
+      session: params.session,
+      workspace: params.workspace,
+      stateDir: params.stateDir,
+      reconcileOrphanedDeviceClaim: reconcile,
+    });
+    assert.equal(acquired.status, 'conflict');
+    assert.equal(reconcile.mock.calls.length, dead ? 1 : 0);
+  },
+);
+
+test.each(['covered-session', 'active-transient'] as const)(
+  'whole-Mac transient %s settles exact claim before unrelated unreadable app inventory',
+  async (existingKind) => {
+    const root = useClaimsRoot();
+    const workspace = '/owner';
+    if (existingKind === 'covered-session') {
+      assert.equal(
+        (
+          await acquireDeviceClaim({
+            device: mac,
+            session: 'owner',
+            workspace,
+            stateDir: root,
+          })
+        ).status,
+        'acquired',
+      );
+    } else {
+      assert.equal(
+        (
+          await acquireTransientDeviceClaim({
+            device: mac,
+            command: 'install',
+            coveredBySession: 'owner',
+            coveredClaimIsOwnedByRequest: () => false,
+            workspace,
+            stateDir: root,
+            env: process.env,
+            reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+          })
+        ).status,
+        'acquired',
+      );
+    }
+    const unreadable = path.join(root, 'unrelated.json');
+    fs.writeFileSync(unreadable, '{');
+    const shared = {
+      device: mac,
+      command: 'install',
+      workspace,
+      stateDir: root,
+      env: process.env,
+      coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => claim.workspace === workspace,
+    };
+    const preview = await inspectDeviceClaimAcquisition({ ...shared, session: 'owner' });
+    const actual = await acquireTransientDeviceClaim({
+      ...shared,
+      coveredBySession: 'owner',
+      reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+    });
+    assert.equal(preview.length, 1);
+    assert.equal(preview[0]?.status, existingKind === 'covered-session' ? 'held' : 'conflict');
+    assert.equal(
+      actual.status,
+      existingKind === 'covered-session' ? 'covered-by-owned-claim' : 'conflict',
+    );
+    assert.equal(fs.readFileSync(unreadable, 'utf8'), '{');
+  },
+);
+
+test.each(['unreadable', 'mismatched-key'] as const)(
+  'whole-Mac preview retains an %s app claim as actual acquisition does',
+  async (condition) => {
+    const root = useClaimsRoot();
+    const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
+    if (condition === 'unreadable') {
+      fs.writeFileSync(file, '{');
+    } else {
+      const stored = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+      fs.writeFileSync(file, JSON.stringify({ ...stored, deviceKey: 'local:apple:macos:other' }));
+    }
+    const before = fs.readFileSync(file);
+    const preview = await inspectDeviceClaimAcquisition({
+      device: mac,
+      command: 'open',
+      session: 'whole',
+      workspace: '/whole',
+      stateDir: root,
+      env: process.env,
+      coveredClaimIsOwnedByRequest: () => false,
+    });
+    assert.equal(preview[0]?.status, 'conflict');
+    const acquired = await acquireDeviceClaim({
+      device: mac,
+      session: 'whole',
+      workspace: '/whole',
+      stateDir: root,
+    });
+    assert.equal(acquired.status, 'conflict');
+    assert.deepEqual(fs.readFileSync(file), before);
+  },
+);
 
 test('app device claims of different apps coexist and the same app stays exclusive', async () => {
   const root = useClaimsRoot();

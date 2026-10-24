@@ -374,9 +374,17 @@ extension RunnerTests {
     }
   }
 
-  /// Clears `input`, which must have been read with nothing dispatched since.
-  func clearTextInput(app: XCUIApplication, _ input: ResolvedTextEntryInput) {
-    // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
+  /// Clears the reader's input. Every post goes through `reader.dispatch` and every read back through
+  /// `reader.input()`, so a bound target's clear stops at an input that took its place. On iOS a
+  /// readable value is selected whole and deleted, wherever the caret is. Otherwise, or when text is
+  /// left, delete bursts run from the caret, and a value longer than one burst is read again after
+  /// each burst until it reads empty, stops shortening, or has had at least one burst more than it
+  /// needs.
+  func clearTextInput(app: XCUIApplication, reader: inout TextEntryReader) {
+    guard let input = reader.input() else {
+      return
+    }
+    // Skip the clear (edge-tap, select all, delete bursts) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
     // bottom->top and reveals a "Suggestions" list) — tapping there navigates away instead of
@@ -384,17 +392,91 @@ extension RunnerTests {
     // editableTextValue returns nil for secure (and unknown) fields, where we CANNOT confirm
     // emptiness — those must still be cleared, or replace would concatenate stale + new text.
     // So distinguish nil (clear) from "" (skip).
-    if let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true),
-       existing.isEmpty {
+    let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true)
+    if existing?.isEmpty == true {
       return
     }
     // Read before the caret tap, which dispatches to the app.
-    let count = estimatedDeleteCount(for: input.attributes)
+    var valueLength = normalizedElementText(input.attributes.value).count
+    // The tap also focuses the field, which a clear can reach with focus unconfirmed.
 #if !os(tvOS)
-    moveCaretToEnd(app: app, input: input)
+    reader.dispatch { moveCaretToEnd(app: app, input: input) }
 #endif
-    let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: count)
-    input.element.typeText(deletes)
+    // An input that stops answering once focused (#3060) cannot be read back, so it gets one burst.
+    guard reader.input() != nil else {
+      let burst = Self.textClearBurst(valueLength: valueLength)
+      reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+      return
+    }
+#if os(iOS)
+    // The tap aims at the end of what the field shows, which a long value has scrolled past, so
+    // bursts from there reach only what is before the caret (#3851). Select all reaches all of it, but
+    // only a read can show it took: a masked field can ignore it, so an unreadable value keeps the
+    // bursts alone.
+    if existing != nil {
+      var passes = 0
+      let outcome = Self.clearUntilEmpty(
+        clearOnce: {
+          guard let input = reader.input() else {
+            return .stop
+          }
+          passes += 1
+          reader.dispatch {
+            input.element.typeKey("a", modifierFlags: .command)
+            input.element.typeText(XCUIKeyboardKey.delete.rawValue)
+          }
+          return .posted
+        },
+        read: {
+          textValueRead(for: reader.input()?.attributes, treatingPlaceholderAsEmpty: true)
+        }
+      )
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=element passes=%d outcome=%@", passes, String(describing: outcome))
+      // Text left after every pass goes to the bursts; an input that no longer resolves is not typed into.
+      guard outcome == .notCleared,
+            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) })
+      else {
+        return
+      }
+      valueLength = remaining.count
+    }
+#endif
+    for _ in 0...(valueLength / Self.maxTextClearBurst + 1) {
+      guard let input = reader.input() else {
+        return
+      }
+      let burst = Self.textClearBurst(valueLength: valueLength)
+      reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+      // A burst that covers the value needs no read.
+      guard burst < valueLength + Self.textClearSlack,
+            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) }),
+            Self.textClearContinues(clearedLength: valueLength, remainingLength: remaining.count)
+      else {
+        return
+      }
+      valueLength = remaining.count
+    }
+  }
+
+  /// Extra deletes past a value's length, for whitespace its normalized read trimmed.
+  private static let textClearSlack = 8
+
+  /// The most deletes one clear burst sends. A longer value takes more bursts.
+  private static let maxTextClearBurst = 120
+
+  /// Deletes for one clear burst on a value of `valueLength` characters, at least 24 for a value
+  /// that reads empty but may not be.
+  static func textClearBurst(valueLength: Int) -> Int {
+    let base = valueLength == 0 ? 24 : valueLength + textClearSlack
+    return max(24, min(maxTextClearBurst, base))
+  }
+
+  /// Whether a clear sends another burst after one sized from `clearedLength` characters left
+  /// `remainingLength`. Each burst must shorten the value, so a field that ignores deletes or
+  /// rewrites its value ends the clear instead of looping; the fill's verification reports what
+  /// remains.
+  static func textClearContinues(clearedLength: Int, remainingLength: Int) -> Bool {
+    remainingLength > 0 && remainingLength < clearedLength
   }
 
   func isTextEntryElement(_ element: XCUIElement) -> Bool {
@@ -549,12 +631,6 @@ extension RunnerTests {
       y: frame.minY + max(2, frame.height / 2)
     )
 #endif
-  }
-
-  private func estimatedDeleteCount(for element: any XCUIElementAttributes) -> Int {
-    let valueText = normalizedElementText(element.value)
-    let base = valueText.isEmpty ? 24 : (valueText.count + 8)
-    return max(24, min(120, base))
   }
 
   private func normalizedElementText(_ value: Any?) -> String {

@@ -1,26 +1,246 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
+import { AppError } from '@agent-device/kernel/errors';
 import { bindAndroidImeTestHost } from '@agent-device/platform-android/snapshot-capture-fixtures';
 import {
   activateAndroidTestIme,
-  inspectAndroidSessionTeardownResources,
   isAndroidTestImeActive,
   resetAndroidTestImeActivationCacheForTests,
   restoreAndroidTestIme,
   withAndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
-import { resourceAdmissionWorld } from './composite-resource-admission.fixtures.ts';
+import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
 
 const originalIme = 'com.google.android.inputmethod.latin/.LatinIME';
 const helperIme = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 
-function androidHelperWorld() {
+function gate() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+test.each(['batch', 'replay'] as const)(
+  'bounded %s restores owned Android IME at authored close',
+  async (mode) => {
+    const helper = androidHelperWorld();
+    const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+    try {
+      world.sessionStore.retire(world.ref);
+      const script = path.join(world.daemon.stateDir, 'ime-open-close.ad');
+      const source = 'open com.android.settings\nhome\nclose\n';
+      if (mode === 'replay') fs.writeFileSync(script, source);
+      const response =
+        mode === 'batch'
+          ? await world.call('batch', [], {
+              batchSteps: [
+                {
+                  command: 'open',
+                  positionals: ['com.android.settings'],
+                  flags: { testIme: true },
+                },
+                { command: 'home' },
+                { command: 'close' },
+              ],
+            })
+          : await world.call('replay', [script], {
+              testIme: true,
+              replayScriptSource: { entry: script, files: { [script]: source } },
+            });
+      assertRpcOk(response);
+      expect(helper.imeSelections()).toEqual([helperIme, originalIme]);
+      expect(helper.currentIme()).toBe(originalIme);
+      expect(helper.previousIme()).toBeUndefined();
+      expect(helper.markers()).toEqual([]);
+      expect(isAndroidTestImeActive(ANDROID_EMULATOR)).toBe(false);
+      expect(world.sessionStore.listRefs()).toHaveLength(0);
+      expect(
+        inspectDeviceClaims(
+          { serial: ANDROID_EMULATOR.id },
+          { AGENT_DEVICE_CLAIMS_DIR: path.join(world.daemon.stateDir, 'claims') },
+        ),
+      ).toEqual([]);
+      expect(world.home).toHaveBeenCalledOnce();
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('Maestro stop keeps the IME and app log; capture still bars caller close', async () => {
+  const helper = androidHelperWorld();
+  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+  try {
+    assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+    assertRpcOk(await world.call('logs', ['start']));
+    const flow = path.join(world.daemon.stateDir, 'stop-app.yaml');
+    assertRpcOk(
+      await world.call('replay', [flow], {
+        replayBackend: 'maestro',
+        replayScriptSource: {
+          entry: flow,
+          files: { [flow]: 'appId: com.android.settings\n---\n- stopApp\n' },
+        },
+      }),
+    );
+    expect(helper.currentIme()).toBe(helperIme);
+    expect(world.sessionStore.listRefs()).toHaveLength(1);
+    assertRpcOk(
+      await world.call('batch', [], {
+        batchSteps: [
+          { command: 'open', positionals: ['com.android.settings'], flags: { relaunch: true } },
+        ],
+      }),
+    );
+    expect(helper.currentIme()).toBe(helperIme);
+    const binds = world.bind.mock.calls.length;
+    const facts = world.inspectFacts.mock.calls.length;
+    const refused = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(refused.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:app-log',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(world.bind).toHaveBeenCalledTimes(binds);
+    expect(world.inspectFacts).toHaveBeenCalledTimes(facts);
+    expect(world.finish).not.toHaveBeenCalled();
+    expect(world.native).not.toHaveBeenCalled();
+    expect(helper.currentIme()).toBe(helperIme);
+    assertRpcOk(await world.call('logs', ['stop']));
+    assertRpcOk(await world.call('batch', [], { batchSteps: [{ command: 'close' }] }));
+    expect(helper.currentIme()).toBe(originalIme);
+    expect(world.sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test.each(['batch', 'replay'] as const)(
+  'bounded %s reports failed IME restore and retains recovery ownership',
+  async (mode) => {
+    const helper = androidHelperWorld(true);
+    const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+    try {
+      world.sessionStore.retire(world.ref);
+      assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+      const script = path.join(world.daemon.stateDir, 'ime-failed-close.ad');
+      const source = 'home\nclose\n';
+      if (mode === 'replay') fs.writeFileSync(script, source);
+      const failed =
+        mode === 'batch'
+          ? await world.call('batch', [], {
+              batchSteps: [{ command: 'home' }, { command: 'close' }],
+            })
+          : await world.call('replay', [script], {
+              replayScriptSource: { entry: script, files: { [script]: source } },
+            });
+      expect(failed.json.error?.data?.details).toMatchObject({
+        reason: 'session_cleanup_incomplete',
+        failedSteps: ['application_lifecycle'],
+        dispatchedSteps: 1,
+      });
+      expect(world.home).toHaveBeenCalledOnce();
+      expect(helper.currentIme()).toBe(helperIme);
+      expect(helper.previousIme()).toBe(originalIme);
+      expect(helper.markers()).toEqual([ANDROID_EMULATOR.id]);
+      expect(world.sessionStore.listRefs()).toHaveLength(0);
+      const claims = inspectDeviceClaims(
+        { serial: ANDROID_EMULATOR.id },
+        { AGENT_DEVICE_CLAIMS_DIR: path.join(world.daemon.stateDir, 'claims') },
+      );
+      expect(claims[0]?.claim?.session).toBe('resource-session');
+      assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+      assertRpcOk(await world.call('close'));
+      expect(helper.currentIme()).toBe(originalIme);
+      expect(helper.previousIme()).toBeUndefined();
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('expired replay budget stops before IME close dispatch', async () => {
+  const helper = androidHelperWorld();
+  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+  try {
+    assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+    const started = gate();
+    const release = gate();
+    world.home.mockImplementationOnce(async () => {
+      started.release();
+      await release.promise;
+    });
+    const script = path.join(world.daemon.stateDir, 'ime-preclose-timeout.ad');
+    const source = 'home\nclose\n';
+    fs.writeFileSync(script, source);
+    vi.useFakeTimers();
+    const pending = world.call('replay', [script], {
+      timeoutMs: 1_000,
+      replayScriptSource: { entry: script, files: { [script]: source } },
+    });
+    await started.promise;
+    const binds = world.bind.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1_001);
+    release.release();
+    const result = await pending;
+    expect(result.json.error?.data?.details?.reason).toBe('daemon_request_timeout');
+    expect(world.bind).toHaveBeenCalledTimes(binds);
+    expect(helper.currentIme()).toBe(helperIme);
+    expect(world.sessionStore.listRefs()).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+    await world.daemon.close();
+  }
+});
+
+test('restore already started settles after replay budget expires', async () => {
+  const helper = androidHelperWorld();
+  const started = gate();
+  const release = gate();
+  const restore = helper.ime.restore;
+  helper.ime.restore = async (stateDir) => {
+    started.release();
+    await release.promise;
+    await restore(stateDir);
+  };
+  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+  try {
+    assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+    const script = path.join(world.daemon.stateDir, 'ime-midclose-timeout.ad');
+    const source = 'close\n';
+    fs.writeFileSync(script, source);
+    vi.useFakeTimers();
+    const pending = world.call('replay', [script], {
+      timeoutMs: 1_000,
+      replayScriptSource: { entry: script, files: { [script]: source } },
+    });
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(1_001);
+    release.release();
+    assertRpcOk(await pending);
+    expect(helper.currentIme()).toBe(originalIme);
+    expect(helper.markers()).toEqual([]);
+    expect(world.sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+    await world.daemon.close();
+  }
+});
+
+function androidHelperWorld(failRestoreOnce = false) {
   let currentIme = originalIme;
   let previousIme: string | undefined;
+  let failRestore = failRestoreOnce;
   const imeSelections: string[] = [];
-  bindAndroidImeTestHost();
+  const readMarkers = bindAndroidImeTestHost();
+  let imeStateDir: string | undefined;
   const settings = (command: readonly string[]): string => {
     switch (command[1]) {
       case 'get':
@@ -40,8 +260,10 @@ function androidHelperWorld() {
   };
   const ime = (command: readonly string[]): string => {
     if (command[1] === 'set') {
-      currentIme = command.at(-1)!;
-      imeSelections.push(currentIme);
+      const selected = command.at(-1)!;
+      if (selected === originalIme && failRestore) failRestore = false;
+      else currentIme = selected;
+      imeSelections.push(selected);
     } else if (command[1] !== 'enable')
       throw new Error(`Unexpected IME operation: ${command.join(' ')}`);
     return '';
@@ -75,21 +297,29 @@ function androidHelperWorld() {
   return {
     currentIme: () => currentIme,
     previousIme: () => previousIme,
+    markers: () => (imeStateDir ? readMarkers(imeStateDir) : []),
     imeSelections: () => [...imeSelections],
     ime: {
       activate: async (stateDir: string) => {
+        imeStateDir = stateDir;
         const result = await inProvider(
           async () => await activateAndroidTestIme(ANDROID_EMULATOR, { stateDir }),
         );
-        expect(result).toMatchObject({ outcome: 'settled', activated: true });
+        if (result.outcome !== 'settled') throw new Error(result.reason);
+        expect(result.activated || result.alreadyActive).toBe(true);
       },
       restore: async (stateDir: string) => {
         const result = await inProvider(
           async () => await restoreAndroidTestIme(ANDROID_EMULATOR, { stateDir }),
         );
+        if (result.reason === 'set-failed') {
+          throw new AppError('COMMAND_FAILED', 'Android test IME could not be restored.', {
+            reason: 'android_test_ime_restore_incomplete',
+            deviceId: ANDROID_EMULATOR.id,
+          });
+        }
         expect(result.reason).toBe('ok');
       },
-      inspect: inspectAndroidSessionTeardownResources,
     },
   };
 }
