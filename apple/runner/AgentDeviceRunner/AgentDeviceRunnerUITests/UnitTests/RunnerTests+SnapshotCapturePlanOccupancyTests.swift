@@ -562,6 +562,9 @@ extension RunnerTests {
       "the tier's own rejection must replace the pin seed: \(quality.reason ?? "nil")"
     )
     XCTAssertEqual(quality.backend, SnapshotBackendKind.recursiveTree.rawValue)
+    // The rejected verdict also declares the channel unavailable, which gates the
+    // synthesized-gesture probe and the XCTest coordinate fallback (#3885 follow-up).
+    XCTAssertEqual(mainOwned.accessibilityHealth, .unavailable)
   }
 
   /// The healthy side of the same pin: a tree that answers keeps reporting the pin itself as the

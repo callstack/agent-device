@@ -235,34 +235,19 @@ extension RunnerTests {
   ///
   /// `requestPinnedBackend` separates the two ways the plan can arrive at the same
   /// deferred shape. A capture that ASKED for a private-AX-only reading (custom
-  /// actions) degraded nothing, so reporting slow accessibility work would name a
-  /// cause that does not exist.
-  ///
-  /// The 'requested-backend' answer names a plan decision, not a failure, so the runner carries
-  /// it in its own slot (`preSelectionReason`) and a tier that actually failed replaces it as the
-  /// verdict reason. The breaker's 'deferred' and 'budget' answers stay first-failure seeds: a
-  /// deferred plan reports the pre-selection until its bounded probe's tier runs; then the verdict
-  /// reports that probe's 'budget' constraint.
+  /// actions) degraded nothing, so it seeds no failure at all — reporting slow
+  /// accessibility work would name a cause that does not exist. Its answer comes from
+  /// `snapshotPlanPreSelectionReason`.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
-    requestPinnedBackend: Bool = false,
-    preferredBackend: String? = nil
+    requestPinnedBackend: Bool = false
   ) -> (reason: String, code: String)? {
-    if state == .normal && preferredBackend == SnapshotBackendKind.recursiveTree.rawValue {
-      return (
-        "the recursive XCTest tree backend was explicitly selected for this capture",
-        "requested-backend"
-      )
-    }
     switch state {
     case .normal:
       return nil
     case .deferredToIndependentBackend:
       if requestPinnedBackend {
-        return (
-          "the private AX backend was selected because this capture asked for accessibility custom actions",
-          "requested-backend"
-        )
+        return nil
       }
       return (
         "XCTest-backed snapshot tiers were deferred after recent slow accessibility work on this screen",
@@ -276,16 +261,42 @@ extension RunnerTests {
     }
   }
 
-  /// The reason a capture's verdict carries. Once an XCTest-backed tier ran behind a deferred plan,
+  /// The 'requested-backend' answer for a plan the request itself pinned: the recursive tree the
+  /// caller asked for, or the private AX the custom-actions reading requires. A pin names a plan
+  /// decision, not a failure, so it never enters the failure slot; `planVerdictReason` reports it
+  /// only while no tier failed on this capture.
+  static func snapshotPlanPreSelectionReason(
+    _ state: SnapshotXCTestChannelPlanState,
+    requestPinnedBackend: Bool = false,
+    preferredBackend: String? = nil
+  ) -> (reason: String, code: String)? {
+    if state == .normal && preferredBackend == SnapshotBackendKind.recursiveTree.rawValue {
+      return (
+        "the recursive XCTest tree backend was explicitly selected for this capture",
+        "requested-backend"
+      )
+    }
+    if state == .deferredToIndependentBackend && requestPinnedBackend {
+      return (
+        "the private AX backend was selected because this capture asked for accessibility custom actions",
+        "requested-backend"
+      )
+    }
+    return nil
+  }
+
+  /// The reason a capture's verdict carries: the first tier failure when one exists, otherwise the
+  /// pre-selection the plan started with. Once an XCTest-backed tier ran behind a deferred plan,
   /// it ran on the bounded probe's short slice, so the capture reports that constraint ('budget')
   /// whether the tier recovered it or the plan ended sparse, rather than the pre-selection
   /// ('deferred') the plan was seeded with.
   static func planVerdictReason(
     xCTestTierRan: Bool,
     state: SnapshotXCTestChannelPlanState,
-    firstFailure: (reason: String, code: String)?
+    firstFailure: (reason: String, code: String)?,
+    preSelection: (reason: String, code: String)?
   ) -> (reason: String, code: String)? {
-    guard xCTestTierRan, state == .deferredToIndependentBackend else { return firstFailure }
+    guard xCTestTierRan, state == .deferredToIndependentBackend else { return firstFailure ?? preSelection }
     return xcTestChannelStateFirstFailure(.boundedXCTestProbe)
   }
 
@@ -404,18 +415,20 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
     let effectivePlan = effective.plan
-    // The pin seed must not occupy the failure slot: a tier that failed on this capture owns
-    // the verdict reason there, and the pre-selection is reported only when nothing failed
-    // (see xcTestChannelStateFirstFailure). Only a customActions-implied pin is request-pinned;
-    // the daemon's same-backend evidence probe pins for its own reasons and keeps 'deferred'.
-    let preSelectionReason = Self.xcTestChannelStateFirstFailure(
+    // A request pin answers through its own slot, never the failure slot: a tier that failed on
+    // this capture owns the verdict reason there, and planVerdictReason falls back to the pin only
+    // when nothing failed. Only a customActions-implied pin is request-pinned; the daemon's
+    // same-backend evidence probe pins for its own reasons and keeps its 'deferred' seed.
+    let requestPinnedBackend = options.customActions && !xCTestChannelPenalizedByBreaker
+    firstFailure = Self.xcTestChannelStateFirstFailure(
       effective.xCTestChannelState,
-      requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker,
+      requestPinnedBackend: requestPinnedBackend
+    )
+    let preSelectionReason = Self.snapshotPlanPreSelectionReason(
+      effective.xCTestChannelState,
+      requestPinnedBackend: requestPinnedBackend,
       preferredBackend: effective.preferredBackend?.rawValue
     )
-    if preSelectionReason?.code != "requested-backend" {
-      firstFailure = preSelectionReason
-    }
     switch effective.xCTestChannelState {
     case .normal:
       break
@@ -500,7 +513,8 @@ extension RunnerTests {
       let verdictReason = Self.planVerdictReason(
         xCTestTierRan: kind.usesXCTestAccessibilityChannel,
         state: effective.xCTestChannelState,
-        firstFailure: firstFailure ?? preSelectionReason
+        firstFailure: firstFailure,
+        preSelection: preSelectionReason
       )
       if recovered {
         NSLog(
@@ -539,7 +553,8 @@ extension RunnerTests {
     let terminalReason = Self.planVerdictReason(
       xCTestTierRan: xCTestTierRan,
       state: effective.xCTestChannelState,
-      firstFailure: firstFailure ?? preSelectionReason
+      firstFailure: firstFailure,
+      preSelection: preSelectionReason
     )
     let fallbackPayload =
       best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: .sparse, reason: terminalReason) }
