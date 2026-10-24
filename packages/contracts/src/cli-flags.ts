@@ -92,6 +92,8 @@ export type CliFlags = CloudProviderProfileFields &
     dsym?: string;
     searchPath?: string;
     networkInclude?: NetworkIncludeMode;
+    /** network start: extra capture-host selectors for the session's capture source. */
+    networkHosts?: string[];
     baseline?: string;
     threshold?: string;
     appsFilter?: 'user-installed' | 'all';

@@ -60,6 +60,8 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
       appState: unavailable,
       listApps: appsAvailable,
       networkDump: unavailable,
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,

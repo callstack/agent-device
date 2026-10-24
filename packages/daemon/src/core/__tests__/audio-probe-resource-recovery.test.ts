@@ -103,6 +103,8 @@ test('recovery never finalizes a running checkpoint from a dead helper as comple
         appLogCleanup: unavailable,
         appState: unavailable,
         networkDump: unavailable,
+        networkCaptureStart: unavailable,
+        networkCaptureStop: unavailable,
         screenRecordingStart: unavailable,
         screenRecordingReattach: unavailable,
         screenRecordingCleanup: unavailable,

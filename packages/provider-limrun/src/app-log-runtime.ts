@@ -46,6 +46,8 @@ import {
   limrunLifecycleFacts,
   liveSessionUnavailable,
 } from './facts-runtime.ts';
+import type { LimrunNetworkCapture } from './network-capture.ts';
+import { bindLimrunNetworkOperations } from './network-runtime.ts';
 
 export type LimrunAppLogReader = ProviderAppLogReader &
   Readonly<{
@@ -83,6 +85,8 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     configurePortReverse(
       options: ProviderPortReverseOptions,
     ): Promise<Record<string, unknown> | undefined>;
+    /** The live HTTP(S) capture source for a device with a live session, else undefined. */
+    getNetworkCapture(device: DeviceInfo): Promise<LimrunNetworkCapture | undefined>;
   }>;
 
 export function createLimrunPlatformRuntimeOwner(
@@ -151,7 +155,7 @@ export function createLimrunPlatformRuntimeOwner(
           { reason: 'provider-session-unavailable' },
         );
       }
-      return bindLimrunAppLogs(
+      return await bindLimrunAppLogs(
         options,
         owner,
         request.device,
@@ -163,13 +167,13 @@ export function createLimrunPlatformRuntimeOwner(
   });
 }
 
-function bindLimrunAppLogs(
+async function bindLimrunAppLogs(
   options: LimrunPlatformRuntimeOwnerOptions,
   owner: ReturnType<typeof providerRuntimeOwner>,
   device: DeviceInfo,
   signal: AbortSignal,
   recoveryOnly: boolean,
-): DeviceBinding<PlatformRuntimeOperations> {
+): Promise<DeviceBinding<PlatformRuntimeOperations>> {
   const runtimeFacts = recoveryOnly
     ? limrunAppLogRecoveryFacts(options, device)
     : limrunAppLogFacts(options, device);
@@ -198,8 +202,10 @@ function bindLimrunAppLogs(
     reconnect: async (descriptor, reconnectSignal) =>
       await options.reconnect(descriptor, reconnectSignal),
   });
+  const capture = await options.getNetworkCapture(device);
   const operations = {
     ...appLogs,
+    ...(capture ? bindLimrunNetworkOperations({ capture, appLogDump: appLogs.networkDump }) : {}),
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),

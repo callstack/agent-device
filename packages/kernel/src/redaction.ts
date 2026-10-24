@@ -5,7 +5,8 @@ const SECRET_TOKEN_RE =
 const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
-const REDACTED_STRING_MAX_LENGTH = 400;
+/** Bound one redacted string field carries; callers that surface redacted output report this. */
+export const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;
 const TRUNCATION_SUFFIX = '...<truncated>';
 

@@ -42,5 +42,9 @@
   "workflow.orient.mcp.json": {
     "bytes": 1239,
     "reason": "#2656: `kind` on every node in the orient step's snapshot payload (+66 bytes). See mcp.snapshot.default.json."
+  },
+  "selection.network.digest.json": {
+    "bytes": 1614,
+    "reason": "ADR 0037 source selection: every network dump answer names the source it read, so a caller never guesses whether the app-log parse or a live capture answered (+20 bytes for the source key and value)."
   }
 }

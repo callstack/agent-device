@@ -188,6 +188,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...deployment,
         appState: device.kind === 'simulator' ? appStateUnavailable : available,
         networkDump: unavailable,
+        networkCaptureStart: unavailable,
+        networkCaptureStop: unavailable,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,

@@ -289,6 +289,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...deployment,
         appState: appleAppStateFact(device),
         networkDump: available,
+        // The iOS Simulator probe source (ADR 0037) is owned by its own record; until it lands,
+        // only the Limrun provider answers a capture start.
+        networkCaptureStart: unavailableFact('owner-capability-missing'),
+        networkCaptureStop: unavailableFact('owner-capability-missing'),
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
         screenRecordingCleanup: recordingFacts,

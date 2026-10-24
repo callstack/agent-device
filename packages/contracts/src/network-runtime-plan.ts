@@ -4,6 +4,12 @@ import { defineUse } from './platform-runtime-operations.ts';
 
 export const networkDumpUse = defineUse({ required: ['networkDump'] });
 
+/** `network start` on a device whose owner has a live capture source; a typed refusal elsewhere. */
+export const networkCaptureStartUse = defineUse({ required: ['networkCaptureStart'] });
+
+/** `network stop`; available wherever a capture can be started. */
+export const networkCaptureStopUse = defineUse({ required: ['networkCaptureStop'] });
+
 /** Fact-only capability projection; it is not an execution-plan variant. */
 export const networkAdmissionUse = defineUse({
   required: [],

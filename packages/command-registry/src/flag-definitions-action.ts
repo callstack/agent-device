@@ -369,6 +369,17 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'networkHosts',
+    names: ['--hosts'],
+    type: 'string',
+    multiple: true,
+    usageLabel: '--hosts <domain>',
+    usageDescription:
+      'network start: repeatable domain selector the live capture source routes and inspects, beyond its defaults (exact host, subdomain, or wildcard domain).',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'shutdown',
     names: ['--shutdown'],
     type: 'boolean',

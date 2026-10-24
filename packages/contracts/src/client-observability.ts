@@ -30,9 +30,14 @@ export type EventsOptions = AgentDeviceRequestOverrides & {
 };
 
 export type NetworkOptions = DeviceCommandBaseOptions & {
-  action?: 'dump' | 'log';
+  action?: 'dump' | 'log' | 'start' | 'stop';
   limit?: number;
   include?: NetworkIncludeMode;
+  /**
+   * `start`: extra domain selectors for the live capture source, beyond its defaults. Exact
+   * hosts, subdomains, or wildcard domains; at most 64 selectors in total on a Limrun device.
+   */
+  hosts?: string[];
 };
 
 export type AudioOptions = DeviceCommandBaseOptions & {

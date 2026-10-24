@@ -94,6 +94,8 @@ function createAdmissionFacts(
       deployMaterializedApp: cell(options.sourceAvailable),
       sendPushNotification: cell(options.pushAvailable),
       networkDump: cell(options.networkAvailable),
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       ensureReady: options.readinessAvailable ? available : appsFact,
       listApps: appsFact,
     },

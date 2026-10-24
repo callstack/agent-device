@@ -650,7 +650,7 @@ Rules:
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack or TestMu AI access keys, or AWS credentials.
-  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro URL because it cannot reach local host ports directly.
+  Limrun Android supports direct ADB port reverse for local Metro. On Limrun iOS, port reverse is unsupported; publish the bundle through a public HTTPS endpoint or bridge URL, or reach the local Metro through the instance client's reverse-tunnel ports described in the Limrun guide.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; when a lease expires or is released, the daemon ends the session opened under it and frees its device; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.

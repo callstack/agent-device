@@ -76,6 +76,8 @@ function lifecycleFacts(
       appLogCleanup: unavailable,
       appState: unavailable,
       networkDump: unavailable,
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,

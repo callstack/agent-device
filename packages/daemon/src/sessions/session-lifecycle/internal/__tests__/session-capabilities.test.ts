@@ -683,6 +683,8 @@ function createAdmissionOperationFacts(
         ? { available: true as const }
         : unavailable,
     networkDump: options.networkAvailable ? { available: true as const } : unavailable,
+    networkCaptureStart: unavailable,
+    networkCaptureStop: unavailable,
     screenRecordingStart: unavailable,
     screenRecordingReattach: unavailable,
     screenRecordingCleanup: unavailable,

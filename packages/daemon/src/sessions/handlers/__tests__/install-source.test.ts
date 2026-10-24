@@ -482,6 +482,8 @@ function sourceRuntimeFacts(
       sendPushNotification: unavailable,
       uninstallApp: unavailable,
       networkDump: unavailable,
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,

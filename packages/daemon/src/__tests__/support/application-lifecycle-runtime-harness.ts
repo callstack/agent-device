@@ -52,6 +52,8 @@ export function lifecycleRuntimeFacts(device: DeviceInfo): RuntimeFacts<Platform
       appLogCleanup: unavailable,
       appState: unavailable,
       networkDump: unavailable,
+      networkCaptureStart: unavailable,
+      networkCaptureStop: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,
       screenRecordingCleanup: unavailable,

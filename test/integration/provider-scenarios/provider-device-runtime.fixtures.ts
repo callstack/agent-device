@@ -257,6 +257,8 @@ function providerScenarioRuntimeFacts(
       appLogCleanup: fakeProviderUnavailable,
       appState: fakeProviderUnavailable,
       networkDump: fakeProviderUnavailable,
+      networkCaptureStart: fakeProviderUnavailable,
+      networkCaptureStop: fakeProviderUnavailable,
       screenRecordingStart: fakeProviderUnavailable,
       screenRecordingReattach: fakeProviderUnavailable,
       screenRecordingCleanup: fakeProviderUnavailable,
