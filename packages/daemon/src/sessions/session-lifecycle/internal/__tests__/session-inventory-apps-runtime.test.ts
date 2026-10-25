@@ -68,7 +68,6 @@ function runtimeFacts(
       ensureReady: appsAvailable,
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,
-      ...overrides,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
@@ -81,11 +80,15 @@ function runtimeFacts(
         prepareAppleRunner: unavailable,
         configureProviderPortReverse: unavailable,
       }),
+      // Last, so a caller can override any cell above. Earlier it sat before the two fixed fact
+      // maps, which quietly dropped an override for a cell either map already stated.
+      ...overrides,
     },
   };
 }
 
 const inspectFactsImpl: InspectDeviceRuntimeFacts = async () => runtimeFacts();
+
 const inspectFacts = vi.fn(inspectFactsImpl);
 const ensureReady = vi.fn(async () => MACOS_DEVICE);
 const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
@@ -112,6 +115,13 @@ beforeEach(() => {
   ensureReady.mockClear();
   listApps.mockClear();
   bindCount = 0;
+});
+
+test('a runtimeFacts override reaches a cell the fixed fact maps state', () => {
+  // `unavailableDeploymentSnapshotAndShutdownOperationFacts` states findText. An override spread
+  // before that map was dropped, which is how the helper came to lie about its own parameter.
+  const overridden = { available: true } as const;
+  expect(runtimeFacts({ findText: overridden }).operations.findText).toBe(overridden);
 });
 
 test('macOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
