@@ -168,8 +168,10 @@ function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnanswere
   }
   return (
     'iOS shows an alert this open did not recognize (alert-unrecognized), so it left the launch ' +
-    'URL unconfirmed. Inspect the current alert with `alert get` before answering it with ' +
-    '`alert accept`.'
+    'URL unconfirmed. The alert can be the launch confirmation in another language, or an alert ' +
+    "of the app's own, such as a permission prompt. Read it with `alert get`. Answer with " +
+    '`alert accept` only when it is the launch confirmation; answer any other alert on its own ' +
+    'terms.'
   );
 }
 

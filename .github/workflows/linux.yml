@@ -129,7 +129,11 @@ jobs:
           # Drop archives for versions the index no longer offers so the cache cannot grow.
           sudo apt-get autoclean -q
           rm -f ~/apt-archives/*.deb
-          cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          # The compgen guard: an unmatched glob stays literal and fails cp under
+          # `set -e`, as it would when the runner image already has every package.
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          fi
 
       - name: Save Linux desktop package archives
         if: steps.impact.outputs.run != 'false' && steps.apt-archives.outputs.cache-hit != 'true'
