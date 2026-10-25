@@ -52,8 +52,7 @@ enum SnapshotTierOutcome: Equatable {
 }
 
 /// The plan one capture runs: ordered steps, the channel state the selection chose, and the pin —
-/// if any — that narrowed it. A pin shares the deferred ordering with a breaker deferral without
-/// arming the penalty, so the selection cause stays separate from each step's mode.
+/// if any — that narrowed it.
 struct EffectiveSnapshotCapturePlan {
   let steps: [SnapshotCaptureStep]
   let xCTestChannelState: SnapshotXCTestChannelPlanState
