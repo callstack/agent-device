@@ -6,11 +6,8 @@
 // one compilation, not a pinned copy. Each caller keeps its own unknown policy: the bridge keeps
 // a capture it cannot measure, the runner refuses authorization it cannot prove.
 //
-// Both consumers include this file by bare name, so it must sit on their header search path. The
-// Simulator snapshot bridge compiles it from its own directory. The runner's event bridge finds
-// it through the UITests target's HEADER_SEARCH_PATHS, whose entries resolve `apple/snapshot-bridge`
-// from the runner project in the checkout (`apple/runner/AgentDeviceRunner`) and in an installed
-// package (`dist/apple/runner/AgentDeviceRunner`, where the package root carries this directory).
+// Both consumers include this file by bare name: the snapshot bridge compiles it from its own
+// directory, the runner's UITests target finds it through HEADER_SEARCH_PATHS.
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>

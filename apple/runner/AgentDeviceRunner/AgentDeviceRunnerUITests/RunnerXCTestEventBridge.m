@@ -1,10 +1,7 @@
 #import "RunnerXCTestEventBridge.h"
 #import "RunnerObjCExceptionCatcher.h"
 #import "RunnerAXSnapshotBridge.h"
-// The same full-screen rule the Simulator snapshot bridge compiles. This relative path resolves to
-// the same file from the checkout (`apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`) and
-// from the packaged source (`dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`),
-// where the packager mirrors the header into `dist/apple/snapshot-bridge/`.
+// The shared full-screen rule, from the snapshot bridge; found via HEADER_SEARCH_PATHS.
 #import "ForegroundApplicationGeometry.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <XCTest/XCTest.h>

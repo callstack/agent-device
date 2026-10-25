@@ -163,7 +163,7 @@ function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string
   const srcRoot = path.join(packagedRoot, 'AgentDeviceRunner');
   const resolvesToHeader = searchPath
     .split(',')
-    .map((entry) => entry.trim().replace(/^"|"$/g, ''))
+    .map((entry) => entry.trim().replaceAll('"', ''))
     .filter((entry) => entry.startsWith('$(SRCROOT)/'))
     .some((entry) =>
       fs.existsSync(
