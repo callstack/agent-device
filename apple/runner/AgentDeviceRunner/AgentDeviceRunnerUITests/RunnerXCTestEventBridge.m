@@ -34,15 +34,11 @@ static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t 
 // of the screen (Windowed Apps or Stage Manager).
 static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
 
-// A frame that is null, empty, the infinite sentinel, or carries a non-finite component is not a
-// measurement at all. It proves neither the fill nor the window, so it must reach each caller's
-// unknown policy, never a comparison that reads as a difference (the bridge would refuse
-// `app-window-not-full-screen` on a runtime that said nothing). This is the whole usability test;
-// callers make one call, not two.
+// A null, empty, infinite-sentinel, or non-finite-component frame is not a measurement at all: it
+// proves neither the fill nor the window, so it must reach each caller's unknown policy, never a
+// comparison that reads as a difference. This is the whole usability test; callers make one call.
 static BOOL AgentDeviceForegroundFrameIsMeasurable(CGRect frame) {
-  if (CGRectIsNull(frame) || CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) {
-    return NO;
-  }
+  if (CGRectIsNull(frame) || CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) return NO;
   return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
       isfinite(frame.size.width) && isfinite(frame.size.height);
 }

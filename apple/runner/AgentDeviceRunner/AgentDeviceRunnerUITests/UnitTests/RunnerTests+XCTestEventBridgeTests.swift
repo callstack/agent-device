@@ -254,7 +254,7 @@ extension RunnerTests {
       RunnerFullScreenEvidenceFromForeground(100, 100, screen, .zero),
       .unknown
     )
-    // The infinite sentinel is the framework's own "no measurement" marker (CGRectInfinity's
+    // The infinite sentinel is the framework's own "no measurement" marker (CGRectInfinite's
     // components are finite extremes), so the predicate refuses it and the answer is Unknown.
     XCTAssertEqual(
       RunnerFullScreenEvidenceFromForeground(100, 100, .infinite, screen),
