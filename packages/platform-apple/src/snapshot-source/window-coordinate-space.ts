@@ -25,7 +25,9 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * `SnapshotGeometrySpace` in
  * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`. The table also
  * pins the way back (`CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`, Swift-only
- * today); change either rule only through that table.
+ * today); change either rule only through that table. A placed iPad window's content translation
+ * (#3899) is the Swift capture's alone (`SnapshotContentTranslation`): the guest refuses a windowed
+ * tree before this decoder can read one.
  *
  * Why this is a detector and not a repair: the bridge guest cannot read the app's interface
  * orientation. Measured in the #2659 spike (verdict on the issue, write-up in the diff of #2667):

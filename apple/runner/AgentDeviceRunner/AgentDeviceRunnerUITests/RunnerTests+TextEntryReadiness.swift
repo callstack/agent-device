@@ -90,15 +90,24 @@ extension RunnerTests {
     if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
     }
-    guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", { try? element.snapshot() }) else {
+    guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", {
+      ResolvedTextEntryInput(reading: element, contentTranslation: liveContentTranslation(app: app))
+    }) else {
       return
     }
-    let frame = settled.frame
-    if !frame.isEmpty {
-      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-      _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
-    }
+    retapAt(read: settled, app: app, element: element)
 #endif
+  }
+
+  /// The readiness repeat, at the read's screen box; a read that names none taps nothing (#3899).
+  func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
+    guard let frame = read.frameOnScreen, !frame.isEmpty else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=%@", read.frameOnScreen == nil ? "no-screen-frame" : "empty-frame")
+      return
+    }
+    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f", frame.midX, frame.midY)
+    _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+    _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
   }
 
   private func waitForTextEntryFocus(app: XCUIApplication, element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -129,7 +138,9 @@ extension RunnerTests {
   /// fallback at all.
   func keyboardFocusConfirmed(app: XCUIApplication, element: XCUIElement) -> Bool {
 #if os(iOS)
-    return ResolvedTextEntryInput(reading: element).map { keyboardFocusConfirmed(app: app, read: $0) } ?? false
+    // `.unknown`: this compares raw frames with each other and dispatches no point.
+    return ResolvedTextEntryInput(reading: element, contentTranslation: .unknown)
+      .map { keyboardFocusConfirmed(app: app, read: $0) } ?? false
 #else
     return false
 #endif

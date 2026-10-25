@@ -352,7 +352,8 @@ extension RunnerTests {
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
-    let textInputCandidates = textInputCandidatesAt(app: app, point: point).map(\.element)
+    let textInputCandidates = textInputCandidatesAt(app: app, point: point, contentTranslation: liveContentTranslation(app: app))
+      .map(\.element)
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
         return text
@@ -618,7 +619,8 @@ extension RunnerTests {
   private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
 #if os(iOS)
     // Coordinate taps, double taps, long presses, and drags anchor at the app origin, not the
-    // resolved window: on iOS the snapshot hands back app-space points, and the first qualifying
+    // resolved window: callers pass screen points, and `app.frame` starts at the screen origin even
+    // for a placed iPad window (#3899). The first qualifying
     // window is not always the one under the finger — a SpringBoard `alert accept` can live in an
     // alert window while the wallpaper or status-bar window qualifies first, so a window-relative
     // anchor misses the button. Reference frames and the synthesized display ID still resolve

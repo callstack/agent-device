@@ -448,7 +448,7 @@ extension RunnerTests {
     XCTAssertEqual(quality.backend, SnapshotBackendKind.recursiveTree.rawValue)
     XCTAssertGreaterThan(payload.nodes?.count ?? 0, 1, "the bounded tree answers with a real tree")
     let timing = try XCTUnwrap(quality.timing)
-    guard timing.acquisitionMs <= Self.penalizedXCTestProbeTreeSliceBudget * 1_000 else {
+    guard timing.acquisitionMs <= SnapshotCaptureStep.boundedTreeSliceBudget * 1_000 else {
       throw XCTSkip("the accepted tree's total acquisition exceeded the fast-probe threshold on this host")
     }
     XCTAssertFalse(

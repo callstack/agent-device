@@ -407,7 +407,7 @@ test.for([
   ['foreground-owner-changed', 'while another surface owned the foreground'],
   [
     'app-window-not-full-screen',
-    'while the app window did not fill the screen; XCTest geometry for a windowed app can also be offset from the screen',
+    'while the app window did not fill the screen; the runner republishes a windowed capture in screen space',
   ],
 ] as const)('a %s refusal sends only that capture to the runner', async ([code, consequence]) => {
   const source = sourceReturning({ stage: 'failed', failure: { kind: 'unsupported', code } });

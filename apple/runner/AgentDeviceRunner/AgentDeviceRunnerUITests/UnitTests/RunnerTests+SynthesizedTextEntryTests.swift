@@ -232,6 +232,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
           prefersFocusedElement: false,
+          contentTranslation: .none,
           inputAtRefreshPoint: found
         ),
         text: "fresh",
@@ -329,6 +330,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
           prefersFocusedElement: false,
+          contentTranslation: .none,
           inputAtRefreshPoint: inputAtRefreshPoint
         ),
         text: "",
@@ -361,6 +363,7 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
         prefersFocusedElement: false,
+        contentTranslation: .none,
         inputAtRefreshPoint: TextInputAtPoint(
           element: rebound,
           identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier)
@@ -395,6 +398,7 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
         prefersFocusedElement: false,
+        contentTranslation: .none,
         inputAtRefreshPoint: TextInputAtPoint(
           element: app.textFields.element,
           identity: TextEntryInputIdentity(elementType: .textField, identifier: "")

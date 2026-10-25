@@ -145,10 +145,21 @@ extension RunnerTests {
     let identity: TextEntryInputIdentity
   }
 
+  /// The vector from a snapshot frame to the screen (#3899, ADR 0004), read once per command by
+  /// `liveContentTranslation` and never defaulted: a vector nobody read must not pass for full screen.
+  enum TextEntryContentTranslation {
+    case known(CGSize)
+    /// The app fills the screen, so a snapshot frame is already a screen frame.
+    case none
+    /// The window read could not answer, so no snapshot frame names a screen box.
+    case unknown
+  }
+
   struct TextEntryTarget {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
+    let contentTranslation: TextEntryContentTranslation
     let fromTapWitness: Bool
     /// The input the first resolved element was. Once bound, resolution refuses any other input.
     let boundIdentity: TextEntryInputIdentity?
@@ -166,6 +177,7 @@ extension RunnerTests {
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
+      contentTranslation: TextEntryContentTranslation,
       fromTapWitness: Bool = false,
       boundIdentity: TextEntryInputIdentity? = nil,
       inputAtRefreshPoint: TextInputAtPoint? = nil,
@@ -174,6 +186,7 @@ extension RunnerTests {
       self.element = element
       self.refreshPoint = refreshPoint
       self.prefersFocusedElement = prefersFocusedElement
+      self.contentTranslation = contentTranslation
       self.fromTapWitness = fromTapWitness
       self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
       self.inputAtRefreshPoint = inputAtRefreshPoint
@@ -186,11 +199,12 @@ extension RunnerTests {
       guard let input else {
         return self
       }
-      let frame = input.snapshot?.frame ?? .zero
+      let frame = input.frameOnScreen ?? .zero
       return TextEntryTarget(
         element: input.element,
         refreshPoint: frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: prefersFocusedElement,
+        contentTranslation: contentTranslation,
         fromTapWitness: fromTapWitness,
         boundIdentity: boundIdentity ?? input.identity,
         inputAtRefreshPoint: inputAtRefreshPoint
@@ -208,16 +222,18 @@ extension RunnerTests {
     let element: XCUIElement
     /// Nil when the element exists but could not be snapshotted.
     let snapshot: XCUIElementSnapshot?
+    let contentTranslation: TextEntryContentTranslation
 
-    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?) {
+    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?, contentTranslation: TextEntryContentTranslation) {
       self.element = element
       self.snapshot = snapshot
+      self.contentTranslation = contentTranslation
     }
 
     /// Reads a handle that may name an input the app has removed; nil when it names none or the read
     /// raised. The snapshot of a missing element throws only after XCTest waits about two seconds for
     /// a match, so existence is read first.
-    init?(reading element: XCUIElement) {
+    init?(reading element: XCUIElement, contentTranslation: TextEntryContentTranslation) {
       var exists = false
       var snapshot: XCUIElementSnapshot?
       if let exception = RunnerObjCExceptionCatcher.catchException({
@@ -228,15 +244,15 @@ extension RunnerTests {
         return nil
       }
       guard exists else { return nil }
-      self.init(element: element, snapshot: snapshot)
+      self.init(element: element, snapshot: snapshot, contentTranslation: contentTranslation)
     }
 
     /// Reads a handle its query has just listed, inside the caller's exception containment, so the
     /// snapshot is read first and existence only when the snapshot fails; nil when it names no element.
-    init?(readingListed element: XCUIElement) {
+    init?(readingListed element: XCUIElement, contentTranslation: TextEntryContentTranslation) {
       let snapshot = try? element.snapshot()
       guard snapshot != nil || element.exists else { return nil }
-      self.init(element: element, snapshot: snapshot)
+      self.init(element: element, snapshot: snapshot, contentTranslation: contentTranslation)
     }
 
     var identity: TextEntryInputIdentity? {
@@ -248,6 +264,18 @@ extension RunnerTests {
         return snapshot
       }
       return element
+    }
+
+    /// The input's screen box. Nil without a snapshot, because the live `element.frame` of a handle
+    /// that stopped answering records a failure (#3060), and nil for an `.unknown` vector, because a
+    /// window-local point must not dispatch as a screen point (#3899). Point dispatch refuses nil.
+    var frameOnScreen: CGRect? {
+      guard let frame = snapshot?.frame else { return nil }
+      switch contentTranslation {
+      case .known(let offset): return frame.offsetBy(dx: offset.width, dy: offset.height)
+      case .none: return frame
+      case .unknown: return nil
+      }
     }
   }
 
@@ -494,7 +522,8 @@ extension RunnerTests {
       return resolveUnboundTextEntryInput(app: app, target: target)
     }
     func boundInput(_ candidate: XCUIElement) -> ResolvedTextEntryInput? {
-      guard let input = ResolvedTextEntryInput(reading: candidate), input.identity == boundIdentity else { return nil }
+      guard let input = ResolvedTextEntryInput(reading: candidate, contentTranslation: target.contentTranslation),
+        input.identity == boundIdentity else { return nil }
       return input
     }
     if target.prefersFocusedElement, let focused = focusedTextInput(app: app), let input = boundInput(focused) {
@@ -503,12 +532,13 @@ extension RunnerTests {
     if let element = target.element, let input = boundInput(element) {
       return input
     }
-    if let input = target.inputAtRefreshPoint, let read = textInputIfStillResolves(input) {
+    if let input = target.inputAtRefreshPoint,
+       let read = textInputIfStillResolves(input, contentTranslation: target.contentTranslation) {
       return read
     }
     if target.inputAtRefreshPoint == nil,
        let refreshPoint = target.refreshPoint,
-       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint),
+       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation),
        let match = candidates.first(where: { $0.identity == boundIdentity }) {
       return match
     }
@@ -543,7 +573,7 @@ extension RunnerTests {
     guard let refreshPoint = target.refreshPoint else {
       return true
     }
-    switch probeTextInputs(app: app, point: refreshPoint) {
+    switch probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) {
     case .absent:
       return true
     case .matches(let candidates):
@@ -577,17 +607,20 @@ extension RunnerTests {
 
   /// Resolution for a target not bound to an input yet: the first element that exists.
   private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
-    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:)) {
+    let read = { (element: XCUIElement) in
+      ResolvedTextEntryInput(reading: element, contentTranslation: target.contentTranslation)
+    }
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(read) {
       return focused
     }
-    if let element = target.element, let input = ResolvedTextEntryInput(reading: element) {
+    if let element = target.element, let input = read(element) {
       return input
     }
     if let refreshPoint = target.refreshPoint,
-       let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
+       let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y, contentTranslation: target.contentTranslation) {
       return refreshed
     }
-    return focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:))
+    return focusedTextInput(app: app).flatMap(read)
   }
 
   private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) {
@@ -606,7 +639,7 @@ extension RunnerTests {
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    guard let frame = input.snapshot?.frame, !frame.isEmpty else {
+    guard let frame = input.frameOnScreen, !frame.isEmpty else {
       return
     }
     _ = tapAt(

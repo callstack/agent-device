@@ -223,6 +223,7 @@ agent-device network dump 25 --include all
 - On iOS, `network dump` can return zero entries for real traffic when the app does not log request metadata to Unified Logging. The response notes tell an empty repro window apart from a log window with no network lines.
 - On iOS, the system logs a request URL only when it opens a connection. Requests that reuse a keep-alive connection are reported against that connection's origin with `pathUnavailable: true`, their status, and timing. Requests whose connection opened before the scanned window are only counted in `unnamedRequests`. Treat an endpoint missing from an iOS dump as unproven, not as never called.
 - On web, request and response bodies are not available; use `agent-browser` HAR capture directly when you need them.
+- On BrowserStack, AWS Device Farm, and TestMu AI sessions, `network dump` refuses with `UNSUPPORTED_OPERATION` and `details.reason: "network-capture-post-session"`. Those providers own the network path, so the session has no live source to read. Where the provider records traffic at all, it publishes the report on its own dashboard after its session ends. Limrun keeps live `network dump`. See [Device clouds](/docs/device-clouds).
 - For the alias and scan limits, see [Media and logs](/docs/commands#media-and-logs).
 
 ### Audio probes

@@ -108,6 +108,7 @@ extension RunnerTests {
         element: textField,
         refreshPoint: nil,
         prefersFocusedElement: false,
+        contentTranslation: .none,
         fromTapWitness: true
       ),
       text: "\n",
@@ -513,6 +514,7 @@ extension RunnerTests {
         element: nil,
         refreshPoint: nil,
         prefersFocusedElement: true,
+        contentTranslation: .none,
         fromTapWitness: true
       ),
       text: text,

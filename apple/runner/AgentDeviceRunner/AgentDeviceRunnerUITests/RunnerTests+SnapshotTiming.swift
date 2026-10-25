@@ -94,6 +94,7 @@ extension RunnerTests {
       case failed(SnapshotCaptureFailure, phase: SnapshotCapturePhase)
     }
 
+    let step: SnapshotCaptureStep
     /// The failure phase is part of the result, so penalty policy cannot infer it from duration
     /// or error text.
     let outcome: Outcome
@@ -104,77 +105,34 @@ extension RunnerTests {
     let tierOutcome: SnapshotTierOutcome
 
     init(
+      step: SnapshotCaptureStep,
       outcome: Outcome,
       timing: SnapshotCaptureTiming,
       tierOutcome: SnapshotTierOutcome = .completed
     ) {
+      self.step = step
       self.outcome = outcome
       self.timing = timing
       self.tierOutcome = tierOutcome
     }
   }
 
-  /// The penalty breaker observes only acquisition facts. Presentation is a separate phase and
-  /// cannot arm the breaker, even when it is slower than the acquisition that produced the tree.
-  static func snapshotXCTestPenaltyReason(
-    kind: SnapshotBackendKind,
-    attempt: SnapshotBackendAttempt,
-    slowThresholdMs: Double,
-    channelState: SnapshotXCTestChannelPlanState = .normal
-  ) -> String? {
-    guard channelState == .normal, kind.usesXCTestAccessibilityChannel else { return nil }
-    if case let .failed(failure, phase: .acquisition) = attempt.outcome,
-      failure.code == Self.xCTestSnapshotTimeoutCode
-    {
-      return "\(kind.rawValue)_backend_timeout"
-    }
-    if attempt.tierOutcome == .deadlineExhausted {
-      return "\(kind.rawValue)_backend_timeout"
-    }
-    guard attempt.timing.acquisitionMs > slowThresholdMs else { return nil }
-    return "slow_\(kind.rawValue)_capture_\(Int(attempt.timing.acquisitionMs))ms"
-  }
-
-  /// Only an accepted, fast tree proves that a bounded recovery probe restored the channel.
-  static func snapshotXCTestRecoveryProbeSucceeded(
-    kind: SnapshotBackendKind,
-    attempt: SnapshotBackendAttempt,
-    channelState: SnapshotXCTestChannelPlanState
-  ) -> Bool {
-    guard channelState != .normal,
-      kind == .recursiveTree,
-      attempt.timing.acquisitionMs <= Self.penalizedXCTestProbeTreeSliceBudget * 1_000,
-      case let .captured(capture) = attempt.outcome
-    else { return false }
-    return Self.snapshotTierRejectionReason(
-      outcome: attempt.tierOutcome,
-      kind: kind,
-      payload: capture.qualityPayload ?? capture.payload
-    ) == nil
-  }
-
+  /// The warmup exemption suppresses both the arming and the clearing branch on the first plan
+  /// against a fresh process.
   func recordXCTestSnapshotBackendAttemptIfNeeded(
-    _ kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
     bundleId: String?,
-    penaltySuppressed: Bool,
-    channelState: SnapshotXCTestChannelPlanState
+    penaltySuppressed: Bool
   ) {
     guard !penaltySuppressed else { return }
-    if Self.snapshotXCTestRecoveryProbeSucceeded(
-      kind: kind,
-      attempt: attempt,
-      channelState: channelState
-    ) {
+    if Self.snapshotBoundedRecoveryRestoredChannel(attempt) {
       clearSnapshotXCTestChannelPenalty(reason: "healthy_tree_recovery_probe")
       return
     }
     guard
       let reason = Self.snapshotXCTestPenaltyReason(
-        kind: kind,
-        attempt: attempt,
-        slowThresholdMs: snapshotXCTestSlowCaptureThreshold * 1_000,
-        channelState: channelState
+        for: attempt,
+        slowThresholdMs: snapshotXCTestSlowCaptureThreshold * 1_000
       )
     else { return }
     penalizeSnapshotXCTestChannel(

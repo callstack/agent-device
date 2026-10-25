@@ -626,6 +626,37 @@ The rule detects un-normalized arrival, not a standing fact about iOS.
 The producers that the earlier sections of this ADR describe do normalize.
 A band taller than it is wide is what the output of a producer that did not normalize looks like.
 
+## Amendment: a window that does not fill the screen (issue #3899)
+
+An iPad window that does not fill the screen (Windowed Apps; Stage Manager is unmeasured) reports its subtree from its own top-left.
+Measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window at screen `(224,207,386x682)`: the root reads `(0,0,386,682)` and `Add` reads `(335,14,37,36)` but draws at `(559,221)`.
+The runner's live window read, the keyboard window, and a SpringBoard overlay report screen boxes.
+Published as reported, the capture mixed two spaces: the fold clipped nodes (`regular-node-outside-cumulative-clip`), rects named no screenshot position, and taps landed at the point minus the window origin.
+
+Decision: a placed window publishes screen space in points, because its viewport, its screenshot, and the digitizer already use that space.
+`SnapshotContentTranslation.offset` is the one rule, applied in the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
+A carrier declares an offset only when its box is a `(0,0)`-anchored copy of the reported viewport box and the viewport starts elsewhere; the offset is the viewport origin.
+Any other carrier keeps its frames, so the screen-space system windows above do not move.
+A full-screen window, an iPhone, and each ADR 0025 foldable panel start at `(0,0)`, so they read no offset and publish unchanged.
+`contracts/fixtures/window-coordinate-space.json` replays the rule in Swift only, because the bridge guest refuses a windowed tree (`app-window-not-full-screen`) before the host decoder reads one.
+
+Rotation and translation stay separate.
+`CoordinateSpaceRotation` turns axes and never moves an origin: the old localization of a frame origin was dead code at every measured full-screen origin and the dispatch bug here.
+A synthesized turn swaps the sole display's side lengths, as the digitizer does, not a placed window's; a multi-screen host keeps the window box of its panel.
+
+Dispatch takes screen points.
+`XCUIElement.frame` and the app-anchored `XCUICoordinate` are screen space on a placed window; `XCUIElementSnapshot.frame` is window content space.
+The text-entry probe therefore owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
+A command reads the vector from the resolved window's box once, where it builds its target, and the readiness retap reads it again on its own branch.
+The vector is `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default, so a failed read never passes for full screen.
+The target and each read it produces carry that vector.
+`frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
+On nil, the focus tap dispatches the caller's own point, and the refresh point, the caret tap, and the readiness retap dispatch nothing.
+Probe matching then compares the live `element.frame`, because a comparison dispatches nothing.
+
+Open gaps: landscape under Windowed Apps (fixture arithmetic only), Stage Manager, and a window partly off screen are unmeasured.
+A window moved between the command's vector read and its dispatch drifts like any live read.
+
 ## Amendment: modal containment in the presentation cut
 
 The bridge reads one window and reports every container attached to it.
@@ -725,10 +756,7 @@ If the runtime cannot report either frame, the guest keeps the capture.
 The runner's synthesized-gesture route compares the same two frames for the same question (`RunnerFullScreenEvidenceFromForeground`).
 An iPad app that proves it fills its sole screen may use that screen as its gesture reference frame when XCTest cannot resolve its window; one that does not, keeps requiring a window.
 
-The XCTest fallback is not correct for a windowed app either.
-The runner clips window-relative element frames against the screen-relative app frame.
-That is a runner gap.
-It is not a reason to publish a bridge tree that is known to be wrong.
+The bridge still refuses and converts nothing; the XCTest fallback publishes a windowed app in screen space (#3899 amendment above).
 
 Rejected alternatives:
 

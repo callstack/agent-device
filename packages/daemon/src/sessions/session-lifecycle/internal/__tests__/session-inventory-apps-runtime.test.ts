@@ -42,7 +42,9 @@ const MACOS_DEVICE = {
 const appsAvailable = { available: true } as const;
 const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
 
-function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
+function runtimeFacts(
+  overrides: Partial<RuntimeFacts<PlatformRuntimeOperations>['operations']> = {},
+): RuntimeFacts<PlatformRuntimeOperations> {
   return {
     device: {
       family: 'apple',
@@ -66,6 +68,7 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
       ensureReady: appsAvailable,
       bootTarget: unavailable,
       bootTargetHeadless: unavailable,
+      ...overrides,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       ...applicationLifecycleOperationFacts({
         resolveOpenTarget: unavailable,
@@ -138,6 +141,49 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   expect(bindCount).toBe(1);
   expect(ensureReady).toHaveBeenCalledOnce();
   expect(listApps).toHaveBeenCalledOnce();
+});
+
+test('apps reports the refused operation fact typed reason on the wire', async () => {
+  const sessionName = 'macos-apps-unsupported';
+  const sessionStore = makeSessionStore();
+  sessionStore.publish(sessionName, makeSession(sessionName, MACOS_DEVICE));
+  inspectFacts.mockResolvedValueOnce(
+    runtimeFacts({
+      listApps: {
+        available: false,
+        reason: 'owner-capability-missing',
+        hint: 'WebDriver provider runtimes do not expose app inventory.',
+      },
+    }),
+  );
+
+  const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 'test-token',
+      session: sessionName,
+      command: 'apps',
+      positionals: [],
+      flags: { appsFilter: 'all' },
+    },
+    sessionName,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+  });
+
+  expect(response).toEqual({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'apps is not supported on this device',
+      hint: 'WebDriver provider runtimes do not expose app inventory.',
+      details: { reason: 'owner-capability-missing' },
+    },
+  });
+  expect(bindCount).toBe(0);
+  expect(listApps).not.toHaveBeenCalled();
 });
 
 test('deferred provider apps returns uploaded assets without resolving a device', async () => {

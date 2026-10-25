@@ -31,8 +31,9 @@ extension RunnerTests {
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
       // text would reach the app-level first responder, so an empty point and a lookup that cannot
       // answer both refuse here, each under its own reason.
+      let contentTranslation = liveContentTranslation(app: activeApp)
       let inputAtPoint: TextInputAtPoint
-      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y) {
+      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
       case .input(let input):
         inputAtPoint = input
       case .absent:
@@ -54,6 +55,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
+          contentTranslation: contentTranslation,
           inputAtRefreshPoint: inputAtPoint
         )
       case .xctestFallback:

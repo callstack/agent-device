@@ -144,6 +144,44 @@ test('network admission remains fail-closed before parsing invalid input', async
       code: 'UNSUPPORTED_OPERATION',
       message: 'network is not supported on this device',
       hint: 'Network capture is unavailable for this platform leaf.',
+      details: { reason: 'unsupported-platform-leaf' },
+    },
+  });
+  expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'] }]);
+  expect(runtime.networkDump).not.toHaveBeenCalled();
+});
+
+test('a provider whose capture is post-session reports that typed reason on the wire', async () => {
+  const sessionStore = makeSessionStore();
+  const session = makeSession('provider-post-session', {
+    platform: 'android',
+    id: 'browserstack-device',
+    name: 'BrowserStack device',
+    kind: 'device',
+  });
+  sessionStore.publish(session.name, session);
+  const runtime = createNetworkRuntime(
+    session.device,
+    // The answer the removed code produced: an empty dump that reads as "no traffic". The refusal
+    // must win before this is reached, so an ok response here fails the assertions below.
+    async () => emptyAppLogResult('android'),
+    {
+      available: false,
+      reason: 'network-capture-post-session',
+      hint: 'The provider publishes any network capture only after its session ends, on the provider dashboard.',
+    },
+    providerRuntimeOwner('browserstack', 'default'),
+  );
+
+  const response = await runNetwork(session.name, sessionStore, runtime.bindDevice);
+
+  expect(response).toEqual({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'network is not supported on this device',
+      hint: 'The provider publishes any network capture only after its session ends, on the provider dashboard.',
+      details: { reason: 'network-capture-post-session' },
     },
   });
   expect(runtime.uses).toEqual([{ required: [], preferred: ['networkDump'] }]);

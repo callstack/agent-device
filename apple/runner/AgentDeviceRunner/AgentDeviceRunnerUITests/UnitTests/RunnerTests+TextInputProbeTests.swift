@@ -15,7 +15,7 @@ extension RunnerTests {
     let completed = expectation(description: "optional probe completed inside runner wait")
     DispatchQueue.main.async {
       self.textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Optional probe issue during runner wait")
-      _ = self.probeTextInputs(app: self.app, point: point)
+      _ = self.probeTextInputs(app: self.app, point: point, contentTranslation: .none)
       completed.fulfill()
     }
     guard XCTWaiter.wait(for: [completed], timeout: 5) == .completed else {
@@ -174,8 +174,8 @@ extension RunnerTests {
     }
     XCTExpectFailure("Required read and later issue belong to their caller", options: options) {
       textInputProbeIssueForTesting = expected
-      _ = textInputAt(app: app, x: point.x, y: point.y)
-      _ = probeTextInputs(app: app, point: point)
+      _ = textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none)
+      _ = probeTextInputs(app: app, point: point, contentTranslation: .none)
       record(expected)
     }
     XCTAssertEqual(observed, 2)
@@ -192,7 +192,7 @@ extension RunnerTests {
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Failed to get matching snapshot: kAXErrorIllegalArgument")
-    let outcome = probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY))
+    let outcome = probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none)
     guard case .unavailable = outcome else {
       return XCTFail("A suppressed AX issue must discard the matching candidate")
     }
