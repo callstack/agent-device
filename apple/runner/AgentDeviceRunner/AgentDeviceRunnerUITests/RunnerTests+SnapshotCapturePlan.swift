@@ -52,9 +52,8 @@ enum SnapshotTierOutcome: Equatable {
 }
 
 /// The plan one capture runs: ordered steps, the channel state the selection chose, and the pin —
-/// if any — that narrowed it. The selection cause stays separate from the step's execution mode:
-/// an explicit pin, a custom-action pin, and a breaker deferral can share the deferred ordering
-/// while their verdict explanations differ, and a pin is never an armed penalty.
+/// if any — that narrowed it. A pin shares the deferred ordering with a breaker deferral without
+/// arming the penalty, so the selection cause stays separate from each step's mode.
 struct EffectiveSnapshotCapturePlan {
   let steps: [SnapshotCaptureStep]
   let xCTestChannelState: SnapshotXCTestChannelPlanState
@@ -151,12 +150,8 @@ extension RunnerTests {
     let suppressXCTestPenalty = snapshotXCTestPenaltyWarmupExemption.consume()
     var xCTestTierRan = false
 
-    // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
-    // the app remains visually responsive. Simulators can avoid that channel through private AX;
-    // physical devices have no independent semantic backend yet, so they use a bounded probe.
-    // A daemon-preferred private-AX capture (same-backend evidence probe) takes the exact
-    // penalized route: privateAX-first plan, 'deferred' verdict — the backend was pre-selected
-    // deliberately, so no degradation warning should render for it.
+    // Reorder is iOS-only: physical devices have no independent semantic backend, so a penalized
+    // channel there uses the bounded probe instead of deferral.
     var xCTestChannelPenalized = false
     var breakerPenalized = false
     var xCTestRecoveryProbeDue = false
@@ -219,8 +214,7 @@ extension RunnerTests {
         }
         continue
       }
-      // The claim is synchronous, before the work starts: a step that is skipped above starts
-      // nothing and must leave the due probe for the next plan.
+      // The claim is synchronous: a skipped step must leave the probe for the next plan.
       if step.claimsPeriodicRecoveryProbe {
         claimSnapshotXCTestRecoveryProbe(bundleId: target.bundleId)
       }

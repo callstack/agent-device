@@ -1,10 +1,6 @@
 import Foundation
 
 // MARK: - XCTest accessibility channel policy (ADR 0004, #1105/#1156/#3896)
-//
-// On some deep screens the XCTest bulk snapshot grinds for many seconds before failing; re-grinding
-// on every capture buries the main thread past the watchdog. After a slow, timed-out, or abandoned
-// XCTest-backed capture, later plans for the same bundle run bounded recovery tiers.
 
 /// One executed step of an effective plan. The mode decides which evidence the attempt may produce
 /// and travels with it, so evidence cannot reach the recorder detached from its authority (#3896).
@@ -31,7 +27,6 @@ enum SnapshotCaptureStep {
     return Self.boundedTreeSliceBudget
   }
 
-  /// Only the leading step of the deferred plan running the due probe claims it.
   var claimsPeriodicRecoveryProbe: Bool {
     if case let .boundedRecovery(_, claims) = self { return claims }
     return false
@@ -44,9 +39,10 @@ enum SnapshotXCTestChannelPlanState: Equatable {
   case boundedXCTestProbe
 }
 
-/// The channel penalty (#1105/#1156): regular plans defer XCTest tiers while it is active, and
-/// each recovery interval one deferred plan runs the bounded tree probe first, inside that capture,
-/// so a light screen clears the penalty early (#3844). It is the only expiry/due-time owner.
+/// The channel penalty (#1105/#1156): re-grinding a slow XCTest capture on every plan buries the
+/// main thread past the watchdog, so while it is active regular plans defer XCTest tiers, and each
+/// recovery interval one deferred plan runs the bounded tree probe first, inside that capture, so a
+/// light screen clears the penalty early (#3844). It is the only expiry/due-time owner.
 struct SnapshotXCTestChannelPenalty: Equatable {
   static let duration: TimeInterval = 120
   static let recoveryProbeInterval: TimeInterval = 30
@@ -124,8 +120,7 @@ extension RunnerTests {
   }
 
   /// Deferred uses the 'deferred' code, not a failure code: the daemon keys warning suppression
-  /// and the settle-budget reset off that distinction. The bounded probe keeps 'budget' because
-  /// its short slice genuinely constrained the capture.
+  /// and the settle-budget reset off that distinction. The bounded probe keeps 'budget'.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false
@@ -150,7 +145,7 @@ extension RunnerTests {
   }
 
   /// A pin names a plan decision, not a failure, so it reports through this slot and never
-  /// through the failure slot.
+  /// through the failure slot (`planVerdictReason`).
   static func snapshotPlanPreSelectionReason(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false,
@@ -203,69 +198,49 @@ extension RunnerTests {
     availableBackends: Set<SnapshotBackendKind> = Set(SnapshotBackendKind.allCases),
     preferredBackend: String? = nil
   ) -> EffectiveSnapshotCapturePlan {
+    var ordered = plan
+    var state: SnapshotXCTestChannelPlanState = .normal
+    var preferred: SnapshotBackendKind?
+    var probeLeads = false
     if
       plan == Self.regularVisiblePlan,
-      let preferred = preferredBackend.flatMap(SnapshotBackendKind.init(rawValue:)),
-      preferred.isForceable,
-      availableBackends.contains(preferred)
+      let candidate = preferredBackend.flatMap(SnapshotBackendKind.init(rawValue:)),
+      candidate.isForceable,
+      availableBackends.contains(candidate)
     {
-      let state: SnapshotXCTestChannelPlanState = preferred == .privateAX ? .deferredToIndependentBackend : .normal
-      return EffectiveSnapshotCapturePlan(
-        steps: Self.snapshotCaptureSteps(for: [preferred], state: state, probeLeads: false),
-        xCTestChannelState: state,
-        preferredBackend: preferred
-      )
+      ordered = [candidate]
+      preferred = candidate
+      state = candidate == .privateAX ? .deferredToIndependentBackend : .normal
+    } else if xCTestChannelPenalized, plan == Self.regularVisiblePlan {
+      let availablePlan = plan.filter { availableBackends.contains($0) }
+      let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
+      if !recoveryPlan.isEmpty {
+        // The independent backend reads only the app it matches as the active AX application, so an
+        // out-of-process surface leaves it empty for the whole penalty; the bounded tree stays
+        // behind it as the sparse fallback. The query sweep stays deferred: its grind is what the
+        // penalty keeps off the main thread.
+        let boundedTree = availablePlan.filter { $0 == .recursiveTree }
+        probeLeads = xCTestRecoveryProbeDue && !boundedTree.isEmpty
+        ordered = probeLeads ? boundedTree + recoveryPlan : recoveryPlan + boundedTree
+        state = .deferredToIndependentBackend
+      } else {
+        ordered = availablePlan.filter(\.usesXCTestAccessibilityChannel)
+        state = .boundedXCTestProbe
+      }
     }
-    guard xCTestChannelPenalized, plan == Self.regularVisiblePlan else {
-      return EffectiveSnapshotCapturePlan(
-        steps: Self.snapshotCaptureSteps(for: plan, state: .normal, probeLeads: false),
-        xCTestChannelState: .normal,
-        preferredBackend: nil
-      )
-    }
-    let availablePlan = plan.filter { availableBackends.contains($0) }
-    let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
-    if !recoveryPlan.isEmpty {
-      // The independent backend reads only the app it matches as the active AX application, so an
-      // out-of-process surface leaves it empty for the whole penalty; the bounded tree stays
-      // behind it as the sparse fallback. The query sweep stays deferred: its grind is what the
-      // penalty keeps off the main thread.
-      let boundedTree = availablePlan.filter { $0 == .recursiveTree }
-      let probeLeads = xCTestRecoveryProbeDue && !boundedTree.isEmpty
-      return EffectiveSnapshotCapturePlan(
-        steps: Self.snapshotCaptureSteps(
-          for: probeLeads ? boundedTree + recoveryPlan : recoveryPlan + boundedTree,
-          state: .deferredToIndependentBackend,
-          probeLeads: probeLeads
-        ),
-        xCTestChannelState: .deferredToIndependentBackend,
-        preferredBackend: nil
-      )
-    }
-    return EffectiveSnapshotCapturePlan(
-      steps: Self.snapshotCaptureSteps(
-        for: availablePlan.filter(\.usesXCTestAccessibilityChannel),
-        state: .boundedXCTestProbe,
-        probeLeads: false
-      ),
-      xCTestChannelState: .boundedXCTestProbe,
-      preferredBackend: nil
-    )
-  }
-
-  /// A penalized state runs every tier as bounded recovery, so no attempt from it can arm or
-  /// renew the penalty it is recovering from. Only the leading XCTest step of a probe-leading
-  /// deferred plan claims the probe.
-  static func snapshotCaptureSteps(
-    for plan: [SnapshotBackendKind],
-    state: SnapshotXCTestChannelPlanState,
-    probeLeads: Bool
-  ) -> [SnapshotCaptureStep] {
-    plan.enumerated().map { offset, kind in
+    // A penalized state runs every tier as bounded recovery, so no attempt from it can arm or
+    // renew the penalty it is recovering from. Only the leading XCTest step of a probe-leading
+    // deferred plan claims the probe.
+    let steps = ordered.enumerated().map { offset, kind -> SnapshotCaptureStep in
       guard state != .normal else { return .ordinary(kind) }
       let claims = probeLeads && offset == 0 && kind.usesXCTestAccessibilityChannel
       return .boundedRecovery(kind, claimsPeriodicProbe: claims)
     }
+    return EffectiveSnapshotCapturePlan(
+      steps: steps,
+      xCTestChannelState: state,
+      preferredBackend: preferred
+    )
   }
 
   /// A bounded recovery attempt has no arming branch at all: that gate is what stops a probe from

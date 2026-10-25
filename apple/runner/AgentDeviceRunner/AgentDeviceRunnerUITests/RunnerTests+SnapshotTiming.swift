@@ -87,8 +87,6 @@ final class SnapshotXCTestPenaltyWarmupExemption {
 }
 
 extension RunnerTests {
-  /// What one planned step did. The step travels with the attempt, so penalty policy reads the
-  /// authority the work ran under (`RunnerTests+SnapshotChannelPolicy.swift`).
   struct SnapshotBackendAttempt {
     enum Outcome {
       case noCapture
@@ -119,10 +117,8 @@ extension RunnerTests {
     }
   }
 
-  /// Records what one attempt shows about the XCTest channel, given the step that ran it. An
-  /// ordinary attempt is the only one with an arming branch; a bounded recovery attempt can only
-  /// clear the penalty by answering with an accepted fast tree. The warmup exemption suppresses
-  /// both branches on the first plan against a fresh process.
+  /// The warmup exemption suppresses both the arming and the clearing branch on the first plan
+  /// against a fresh process.
   func recordXCTestSnapshotBackendAttemptIfNeeded(
     attempt: SnapshotBackendAttempt,
     bundleId: String?,
