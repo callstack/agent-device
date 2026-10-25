@@ -3,10 +3,9 @@ import Foundation
 // MARK: - XCTest accessibility channel policy (ADR 0004, #1105/#1156/#3896)
 //
 // One owner for what a capture must know about the XCTest channel's health: the penalty value,
-// the plan-reorder rule, and the execution mode each plan step carries. A step is built by the
-// factory once and travels with the attempt it produces, so a bounded recovery attempt cannot
-// reach the penalty recorder looking like an ordinary one. The old interface accepted a defaulted
-// `.normal` channel state at evidence time, which is how #3896's self-renewal bug was reachable.
+// the plan-reorder rule, and the execution mode each plan step carries. The old interface accepted
+// a defaulted `.normal` channel state at evidence time, which is how #3896's self-renewal bug was
+// reachable.
 
 /// What the plan runner does with one backend on this capture. The penalty recorder reads this,
 /// never a re-derived plan position, to decide which evidence an attempt may produce.
@@ -300,7 +299,8 @@ extension RunnerTests {
   ) -> [SnapshotCaptureStep] {
     plan.enumerated().map { offset, kind in
       guard state != .normal else { return .ordinary(kind) }
-      return .boundedRecovery(kind, claimsPeriodicProbe: probeLeads && offset == 0)
+      let claims = probeLeads && offset == 0 && kind.usesXCTestAccessibilityChannel
+      return .boundedRecovery(kind, claimsPeriodicProbe: claims)
     }
   }
 

@@ -215,8 +215,6 @@ extension RunnerTests {
       }
       // While abandoned main-thread work is still grinding inside testmanagerd, XCTest-backed
       // tiers would queue behind it; only independent backends stay responsive (#1105).
-      // A skipped step starts nothing, so it does not consume the due probe either; the claim
-      // stays synchronous here in the loop, before the work starts, never after the reply.
       if shouldSkipSnapshotBackendForAbandonedMainThreadWork(kind) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TIER_SKIPPED_XCTEST_OCCUPIED tier=%@", kind.rawValue)
         if firstFailure == nil {
@@ -227,6 +225,8 @@ extension RunnerTests {
         }
         continue
       }
+      // The claim is synchronous, before the work starts: a step that is skipped above starts
+      // nothing and must leave the due probe for the next plan.
       if step.claimsPeriodicRecoveryProbe {
         claimSnapshotXCTestRecoveryProbe(bundleId: target.bundleId)
       }
