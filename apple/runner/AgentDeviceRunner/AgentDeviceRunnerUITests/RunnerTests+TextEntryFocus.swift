@@ -26,7 +26,9 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func rememberedTextEntryTarget() -> TextEntryTarget? {
+  private func rememberedTextEntryTarget(
+    contentTranslation: TextEntryContentTranslation
+  ) -> TextEntryTarget? {
     guard let witness = textEntryTapWitness else {
       return nil
     }
@@ -54,6 +56,7 @@ extension RunnerTests {
       element: element,
       refreshPoint: nil,
       prefersFocusedElement: false,
+      contentTranslation: contentTranslation,
       fromTapWitness: true
     )
   }
@@ -61,8 +64,8 @@ extension RunnerTests {
   func stabilizeTextInputBeforeTyping(
     app: XCUIApplication,
     target: XCUIElement?,
-    keyboardVisibleBeforeTap: Bool? = nil,
-    contentTranslation: CGSize? = nil
+    contentTranslation: TextEntryContentTranslation,
+    keyboardVisibleBeforeTap: Bool? = nil
   ) -> TextEntryStabilization {
 #if os(tvOS)
     return TextEntryStabilization(element: target, evidence: .focusEngine, polls: 0)
@@ -104,9 +107,14 @@ extension RunnerTests {
 
   @MainActor
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
+    // The one content-vector read for this command (#3899): every target built here carries it and
+    // every read those targets produce converts through it.
+    let contentTranslation = liveContentTranslation(app: app)
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)
-      if !softwareKeyboardVisible, let rememberedTarget = rememberedTextEntryTarget() {
+      if !softwareKeyboardVisible, let rememberedTarget = rememberedTextEntryTarget(
+        contentTranslation: contentTranslation
+      ) {
         return rememberedTarget
       }
       // Bare `type` targets the current first responder. On iOS we intentionally do not let the
@@ -117,7 +125,8 @@ extension RunnerTests {
         return TextEntryTarget(
           element: focusedTextInput(app: app),
           refreshPoint: nil,
-          prefersFocusedElement: true
+          prefersFocusedElement: true,
+          contentTranslation: contentTranslation
         )
       }
       let focused = waitForTextEntryReadiness(
@@ -125,22 +134,26 @@ extension RunnerTests {
         target: TextEntryTarget(
           element: focusedTextInput(app: app),
           refreshPoint: nil,
-          prefersFocusedElement: true
+          prefersFocusedElement: true,
+          contentTranslation: contentTranslation
         )
       )
-      return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true)
+      return TextEntryTarget(
+        element: focused,
+        refreshPoint: nil,
+        prefersFocusedElement: true,
+        contentTranslation: contentTranslation
+      )
     }
 
-    // The one content-vector read for this command (#3899): every target built here carries it and
-    // every read those targets produce converts through it.
-    let contentTranslation = liveContentTranslation(app: app)
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let input = textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
     // The tap goes to the input's own center, and `tapAt` dispatches a screen point, so the point
-    // comes from `frameOnScreen` (#3899).
-    let inputCenter = input.map { $0.frameOnScreen }.flatMap {
+    // comes from `frameOnScreen`; the live frame is the box left when the command's window read
+    // could not answer (#3899).
+    let inputCenter = (input?.frameOnScreen ?? input?.element.frame).flatMap {
       $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY)
     }
     if let inputCenter {
@@ -161,8 +174,8 @@ extension RunnerTests {
     let stabilized = stabilizeTextInputBeforeTyping(
       app: app,
       target: target,
-      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap,
-      contentTranslation: contentTranslation
+      contentTranslation: contentTranslation,
+      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
     )
     NSLog(
       "%@%@ polls=%d",
@@ -198,7 +211,7 @@ extension RunnerTests {
   private func focusedTextEntryTarget(
     _ element: XCUIElement?,
     requestedPoint: CGPoint,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> TextEntryTarget {
     guard let element else {
       return TextEntryTarget(
@@ -221,7 +234,7 @@ extension RunnerTests {
     _ element: XCUIElement,
     read: ResolvedTextEntryInput?,
     requestedPoint: CGPoint,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> TextEntryTarget {
     return TextEntryTarget(
       element: element,
@@ -244,15 +257,15 @@ extension RunnerTests {
   /// not yet bound to an identity, and a field that went unqueryable on focus may have moved the
   /// layout so the old point names a different input, so fail closed with a typed reason instead of
   /// typing into that other field. The frame is `read`'s snapshot frame plus its content vector,
-  /// never the live `element.frame` (#3899, #3060).
+  /// never the live `element.frame`, and `frameOnScreen` is nil for a read that cannot name a screen
+  /// box (#3899, #3060).
   private func textEntryRefreshPoint(
     read: ResolvedTextEntryInput?,
     fallbackTo requestedPoint: CGPoint
   ) -> CGPoint? {
-    guard let read, read.snapshot != nil else {
+    guard let frame = read?.frameOnScreen else {
       return nil
     }
-    let frame = read.frameOnScreen
     guard !frame.isEmpty else {
       return requestedPoint
     }

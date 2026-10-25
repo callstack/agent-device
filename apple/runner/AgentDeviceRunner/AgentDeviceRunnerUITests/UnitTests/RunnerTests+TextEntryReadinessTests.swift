@@ -30,9 +30,9 @@ extension RunnerTests {
     XCTAssertFalse(fieldFrame.isEmpty)
     XCTAssertFalse(witnessFrame.isEmpty)
 
-    // Closest negative: a read with no vector — a full-screen app — retaps the field's own center,
+    // Closest negative: a full-screen app — a vector of `.none` — retaps the field's own center,
     // which is not the button's point.
-    let untranslated = try XCTUnwrap(ResolvedTextEntryInput(reading: field, contentTranslation: nil))
+    let untranslated = try XCTUnwrap(ResolvedTextEntryInput(reading: field, contentTranslation: .none))
     retapAt(read: untranslated, app: app, element: field)
     XCTAssertEqual(presses.label, "presses=0", "a vectorless read dispatched a point off the field")
 
@@ -42,9 +42,9 @@ extension RunnerTests {
       width: witnessFrame.midX - fieldFrame.midX,
       height: witnessFrame.midY - fieldFrame.midY
     )
-    let translated = try XCTUnwrap(ResolvedTextEntryInput(reading: field, contentTranslation: vector))
-    XCTAssertEqual(translated.frameOnScreen.midX, witnessFrame.midX, accuracy: 0.5)
-    XCTAssertEqual(translated.frameOnScreen.midY, witnessFrame.midY, accuracy: 0.5)
+    let translated = try XCTUnwrap(ResolvedTextEntryInput(reading: field, contentTranslation: .known(vector)))
+    XCTAssertEqual(try XCTUnwrap(translated.frameOnScreen).midX, witnessFrame.midX, accuracy: 0.5)
+    XCTAssertEqual(try XCTUnwrap(translated.frameOnScreen).midY, witnessFrame.midY, accuracy: 0.5)
 
     retapAt(read: translated, app: app, element: field)
     XCTAssertEqual(
@@ -52,6 +52,26 @@ extension RunnerTests {
       "presses=1",
       "the retap dispatched the raw snapshot center, not the read's screen-space center (#3899)"
     )
+  }
+
+  /// A vector read that could not answer is `.unknown`, and `frameOnScreen` names no box through it:
+  /// a snapshot frame of a placed window is not known to be a screen box, so the readiness retap
+  /// dispatches nothing rather than a raw window-local point — the #3899 failure shape. A transient
+  /// window issue used to look like full screen here and move the retap outside the window.
+  @MainActor
+  func testReadinessRetapTapsNothingWhenTheContentSpaceIsUnknown() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-tap-witness"]
+    app.launch()
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let presses = app.staticTexts["agent-device-tap-witness-presses"]
+    XCTAssertTrue(presses.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let read = try XCTUnwrap(ResolvedTextEntryInput(reading: field, contentTranslation: .unknown))
+    XCTAssertNil(read.frameOnScreen)
+    retapAt(read: read, app: app, element: field)
+    XCTAssertEqual(presses.label, "presses=0", "an unknown content space dispatched a point (#3899)")
   }
 #endif
 }

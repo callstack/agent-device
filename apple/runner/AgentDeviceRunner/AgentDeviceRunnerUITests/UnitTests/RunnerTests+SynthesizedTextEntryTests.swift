@@ -232,6 +232,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
           prefersFocusedElement: false,
+        contentTranslation: .none,
           inputAtRefreshPoint: found
         ),
         text: "fresh",
@@ -315,10 +316,11 @@ extension RunnerTests {
     XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
     let neighbourFrame = neighbour.frame
     let found = [
-      "re-bound": TextInputAtPoint(element: rebound, identity: TextEntryInputIdentity(elementType: .textField, identifier: "")),
+      "re-bound": TextInputAtPoint(element: rebound, identity: TextEntryInputIdentity(elementType: .textField, identifier: ""), contentTranslation: .none),
       "missing": TextInputAtPoint(
         element: app.textFields["agent-device-gone"],
-        identity: TextEntryInputIdentity(elementType: .textField, identifier: "agent-device-gone")
+        identity: TextEntryInputIdentity(elementType: .textField, identifier: "agent-device-gone"),
+        contentTranslation: .none
       ),
     ]
 
@@ -329,6 +331,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
           prefersFocusedElement: false,
+        contentTranslation: .none,
           inputAtRefreshPoint: inputAtRefreshPoint
         ),
         text: "",
@@ -361,9 +364,11 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
         prefersFocusedElement: false,
+      contentTranslation: .none,
         inputAtRefreshPoint: TextInputAtPoint(
           element: rebound,
-          identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier)
+          identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier),
+          contentTranslation: .none
         )
       ),
       text: "",
@@ -395,9 +400,11 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
         prefersFocusedElement: false,
+      contentTranslation: .none,
         inputAtRefreshPoint: TextInputAtPoint(
           element: app.textFields.element,
-          identity: TextEntryInputIdentity(elementType: .textField, identifier: "")
+          identity: TextEntryInputIdentity(elementType: .textField, identifier: ""),
+          contentTranslation: .none
         )
       ),
       text: "",

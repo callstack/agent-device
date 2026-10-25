@@ -739,6 +739,7 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: false,
+        contentTranslation: .none,
         inputAtRefreshPoint: try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
       ),
       text: "abc",
@@ -785,7 +786,8 @@ extension RunnerTests {
       target: TextEntryTarget(
         element: nil,
         refreshPoint: CGPoint(x: 10, y: 20),
-        prefersFocusedElement: false
+        prefersFocusedElement: false,
+        contentTranslation: .none
       ),
       text: "abc",
       delaySeconds: 0,
@@ -810,7 +812,7 @@ extension RunnerTests {
   func testEmptyReplacementWithoutResolvableTargetFailsClosed() {
     let result = typeTextReliably(
       app: springboard,
-      target: TextEntryTarget(element: nil, refreshPoint: nil, prefersFocusedElement: false),
+      target: TextEntryTarget(element: nil, refreshPoint: nil, prefersFocusedElement: false, contentTranslation: .none),
       text: "",
       delaySeconds: 0,
       repairMode: .replacement,
@@ -830,7 +832,7 @@ extension RunnerTests {
       XCTAssertEqual(
         awaitSynthesizedReplacementCommit(
           app: XCUIApplication(),
-          target: TextEntryTarget(element: nil, refreshPoint: CGPoint(x: 10, y: 20), prefersFocusedElement: false),
+          target: TextEntryTarget(element: nil, refreshPoint: CGPoint(x: 10, y: 20), prefersFocusedElement: false, contentTranslation: .none),
           expectedText: expectedText
         ),
         .unobservable

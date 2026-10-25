@@ -81,9 +81,9 @@ extension RunnerTests {
       let value = body()
       return (value, try XCTUnwrap(Int(valueReads.label)) - before)
     }
-    let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false)
+    let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false, contentTranslation: .none)
 
-    let (lookup, lookupReads) = try countingReads { textInputAt(app: app, x: point.x, y: point.y, contentTranslation: nil) }
+    let (lookup, lookupReads) = try countingReads { textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none) }
     let (input, resolutionReads) = try countingReads { resolveTextEntryInput(app: app, target: target) }
 
     XCTAssertEqual(lookup?.snapshot?.identifier, "agent-device-hardware-keyboard-input")
@@ -112,8 +112,8 @@ extension RunnerTests {
     let stabilized = stabilizeTextInputBeforeTyping(
       app: app,
       target: field,
-      keyboardVisibleBeforeTap: false,
-      contentTranslation: nil
+      contentTranslation: .none,
+      keyboardVisibleBeforeTap: false
     )
 
     guard case .inputReportsKeyboardFocus(let read) = stabilized.evidence else {

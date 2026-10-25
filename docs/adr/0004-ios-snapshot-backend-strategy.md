@@ -664,8 +664,11 @@ The live `XCUIElement.frame` property reports screen space on a placed window, a
 The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
 So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the two live boxes (`app.frame` against the resolved window's frame); every other live read needs no conversion.
 The probe-side owner is `ResolvedTextEntryInput.frameOnScreen`.
-The vector is read once per command and stored on the target and each read the target produces, so the probe matching, the focus tap, the refresh point, the caret tap, and the readiness retap all dispatch through that one property.
-Where a probe read has no snapshot and falls back to the live element, its frame is already screen space and is not translated.
+The vector is read once per command as `TextEntryContentTranslation` — `known(offset)`, `none` for a full-screen app, or `unknown` when the window read could not answer — and it has no default anywhere it travels, so an omitted read can never read as full screen.
+It is stored on the target and each read the target produces, so the probe matching, the focus tap, the refresh point, the caret tap, and the readiness retap all dispatch through that one property.
+`frameOnScreen` is optional: it names no box when the read has no snapshot or the vector is `unknown`, and every dispatched-point consumer refuses a nil rather than re-adding its own snapshot guard.
+Probe matching and the focus tap compare `element.frame` when `frameOnScreen` is nil, the only box a read that cannot translate still has.
+The readiness retap taps nothing on `unknown`: dispatching a raw window-local point is the failure this amendment fixes, and skipping one retap costs the caller's next read, not the session.
 `app.frame` unions transformed subtrees, so content pushed off a placed window (a closed drawer at negative x) can stop the two live boxes matching and read no vector; the capture still converts from the snapshot root box, so a probe may then read window-local frames where the capture published screen space. A mid-command window move has the same effect on a vector read at command start.
 Both are reads of a moving target, not a second space: a re-opened command reads the current vector.
 The host bridge keeps refusing a windowed capture (`app-window-not-full-screen`) rather than converting one, so the TypeScript twin of the rule runs today only in the parity replay.

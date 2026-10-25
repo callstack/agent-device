@@ -22,7 +22,7 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> ResolvedTextEntryInput? {
     let point = CGPoint(x: x, y: y)
     return textInputCandidatesAt(app: app, point: point, contentTranslation: contentTranslation).first
@@ -31,7 +31,7 @@ extension RunnerTests {
   func textInputCandidatesAt(
     app: XCUIApplication,
     point: CGPoint,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> [ResolvedTextEntryInput] {
     safely("TEXT_INPUT_AT_POINT", []) {
       queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: { false })
@@ -42,7 +42,7 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> XCUIElement? {
     switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
     case .matches(let inputs):
@@ -70,7 +70,7 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
@@ -85,7 +85,11 @@ extension RunnerTests {
       guard let identity = input.identity else {
         return .unavailable
       }
-      return .input(TextInputAtPoint(element: input.element, identity: identity))
+      return .input(TextInputAtPoint(
+        element: input.element,
+        identity: identity,
+        contentTranslation: contentTranslation
+      ))
     }
     switch probed {
     case .success(let resolution):
@@ -96,13 +100,13 @@ extension RunnerTests {
   }
 
   /// `input`'s handle, read again, when it still resolves to the input it named when found, read
-  /// inside the same issue containment. A read that cannot answer counts as no.
+  /// inside the same issue containment, carrying the vector the finding command read. A read that
+  /// cannot answer counts as no.
   func textInputIfStillResolves(
-    _ input: TextInputAtPoint,
-    contentTranslation: CGSize?
+    _ input: TextInputAtPoint
   ) -> ResolvedTextEntryInput? {
     let probed = containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?) { _ in
-      ResolvedTextEntryInput(reading: input.element, contentTranslation: contentTranslation)
+      ResolvedTextEntryInput(reading: input.element, contentTranslation: input.contentTranslation)
         .flatMap { $0.identity == input.identity ? $0 : nil }
     }
     guard case .success(let read) = probed else { return nil }
@@ -122,7 +126,7 @@ extension RunnerTests {
   func probeTextInputs(
     app: XCUIApplication,
     point: CGPoint,
-    contentTranslation: CGSize?
+    contentTranslation: TextEntryContentTranslation
   ) -> TextInputProbeOutcome {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
       queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
@@ -180,7 +184,7 @@ extension RunnerTests {
   private func queryTextInputs(
     app: XCUIApplication,
     point: CGPoint,
-    contentTranslation: CGSize?,
+    contentTranslation: TextEntryContentTranslation,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
@@ -203,7 +207,10 @@ extension RunnerTests {
         ) else { continue }
         if isCoordinateTextInputCandidate(
           enabled: candidate.attributes.isEnabled,
-          frame: candidate.frameOnScreen,
+          // A candidate with no snapshot is matched on its live frame, which is already screen space
+          // and whose failure reaches the caller's issue handling. `frameOnScreen` is nil only when
+          // the command's window read could not answer, so the live frame is the only box left.
+          frame: candidate.frameOnScreen ?? candidate.element.frame,
           point: point
         ) {
           inputs.append(candidate)
@@ -214,28 +221,36 @@ extension RunnerTests {
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
 
-  /// The vector that carries this session's snapshot-read app-content frames to their place on the
-  /// screen, or nil when the app fills the screen (#3899). Each command that dispatches points from
-  /// snapshot frames reads it once, at its own start, and hands it down; a read inside a typing loop
-  /// never calls this, because the two live box reads below cost about 90 ms each on a heavy React
-  /// Native screen.
+  /// The vector state that carries this session's snapshot-read app-content frames to their place on
+  /// the screen (#3899). Each command that dispatches points from snapshot frames reads it once, at
+  /// its own start, and hands it down; a read inside a typing loop never calls this, because the two
+  /// live box reads below cost about 90 ms each on a heavy React Native screen.
   ///
   /// The signature and the vector are the capture's rule (`SnapshotContentTranslation`, ADR 0004)
   /// read from the two live boxes that name it: the application's `frame` is a `(0,0)`-anchored copy
   /// of the box the resolved window reports at its place on the screen. Any other pair of boxes
   /// declares no vector, so full-screen, iPhone, and each foldable panel keep frames as read.
-  func liveContentTranslation(app: XCUIApplication) -> CGSize? {
+  ///
+  /// A read that cannot answer returns `.unknown`, never `.none`: on a placed window, a failed read
+  /// that looked like full screen would dispatch raw window-local points as screen points — the
+  /// #3899 failure — so consumers refuse `.unknown` instead of guessing through it.
+  func liveContentTranslation(app: XCUIApplication) -> TextEntryContentTranslation {
     // The window read is contained like the probe lookups it replaces: a transient window that
     // records an XCTest issue costs the vector, not the runner session.
-    let read = containingTextInputProbeIssues(fallback: nil as CGSize?) { _ in
+    let read = containingTextInputProbeIssues(fallback: nil as TextEntryContentTranslation?) { _ in
       guard let resolved = resolveRunnerWindowElement(app: app) else { return nil }
-      return SnapshotContentTranslation.offset(reportedBox: app.frame, viewportBox: resolved.frame)
+      guard let translation = SnapshotContentTranslation.offset(reportedBox: app.frame, viewportBox: resolved.frame) else {
+        // Explicit type: `.none` alone means `Optional.none` to the compiler here.
+        return TextEntryContentTranslation.none
+      }
+      return .known(translation)
     }
     switch read {
-    case .success(let translation):
-      return translation
+    case .success(let state):
+      guard let state else { return .unknown }
+      return state
     case .failure:
-      return nil
+      return .unknown
     }
   }
 }
