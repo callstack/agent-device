@@ -248,11 +248,14 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          install-deps: 'false'
 
       # main must never carry a published version. Retried because merges can
       # land on main while the release runs.
+      #
+      # The capabilities page stamps the version it covers and the drift check
+      # compares that stamp to package.json, so the version bump restamps the
+      # page in the same commit. The collector reads runtime sources and needs
+      # no device.
       - name: Commit the next development version
         env:
           VERSION: ${{ needs.plan.outputs.version }}
@@ -264,6 +267,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             next="$(node scripts/release-version.mjs advance "$VERSION")"
+            pnpm generate:capabilities
             if git diff --quiet; then
               echo "main already builds towards $next."
               exit 0

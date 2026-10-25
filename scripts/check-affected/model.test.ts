@@ -224,6 +224,13 @@ test('user docs pages and README select the docs-links and docs-prose checks', (
     'docs-links',
     'docs-prose',
   ]);
+  // The capabilities page carries generated facts as well as prose, so it owns the
+  // drift gate on top of the prose and link gates.
+  assert.deepEqual(plan(['website/docs/docs/capabilities.md']).checks, [
+    'capabilities-matrix',
+    'docs-links',
+    'docs-prose',
+  ]);
   assert.deepEqual(plan(['website/docs/public/logo.svg']).checks, []);
 });
 

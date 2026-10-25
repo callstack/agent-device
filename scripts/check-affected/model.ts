@@ -75,6 +75,7 @@ export const ALL_CHECKS = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'capabilities-matrix',
   'docs-links',
   'docs-prose',
   'agent-guidance',
@@ -158,7 +159,7 @@ function isWorkflowTooling(file: string): boolean {
   );
 }
 
-export function isDocs(file: string): boolean {
+function isDocs(file: string): boolean {
   // skills/ Markdown is agent guidance prose with no owning suite (the
   // SkillGym harness was removed), so it classifies as docs like the rest.
   return (
@@ -550,6 +551,10 @@ function isAgentGuidance(file: string): boolean {
 // built site renders change.
 const SITE_BUILD_INPUTS = new Set(['website/package.json', 'website/rspress.config.ts']);
 
+// The generated capabilities page. Its cells are a read of the runtime facts, so the
+// page and the generator that renders it share one drift gate.
+const CAPABILITIES_PAGE = 'website/docs/docs/capabilities.md';
+
 function isUserDocPage(file: string): boolean {
   return file === 'README.md' || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
 }
@@ -573,6 +578,16 @@ const docsOwnership: OwnershipRule = ({ file }) => {
         file,
         'own:command-docs',
         'the command reference is asserted against the CLI in both directions',
+      ),
+    );
+  }
+  if (file === CAPABILITIES_PAGE) {
+    selections.push(
+      reason(
+        'capabilities-matrix',
+        file,
+        'own:capabilities-matrix',
+        'the capabilities page is generated from runtime facts and must match them',
       ),
     );
   }
