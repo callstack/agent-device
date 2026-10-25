@@ -2,7 +2,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
+import {
+  assertSnapshotBridgeAssets,
+  PACKAGED_RUNNER_SHARED_HEADER_PATH,
+  SNAPSHOT_BRIDGE_ASSET_PATHS,
+} from './size-report-package.mjs';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
@@ -51,6 +55,16 @@ export function assertInstalledSnapshotBridge(packageDir) {
     fs.existsSync(path.join(packageDir, assetPath)),
   );
   assertSnapshotBridgeAssets(present, 'Clean-installed snapshot bridge');
+  // The runner source and its shared-header mirror are packaged as a pair; require the mirror
+  // exactly when the installed tree carries the packaged runner.
+  if (
+    fs.existsSync(path.join(packageDir, 'dist', 'apple', 'runner')) &&
+    !fs.existsSync(path.join(packageDir, PACKAGED_RUNNER_SHARED_HEADER_PATH))
+  ) {
+    throw new Error(
+      `Clean-installed package ships the packaged runner but is missing: ${PACKAGED_RUNNER_SHARED_HEADER_PATH}`,
+    );
+  }
 }
 
 export function measureDirectory(root) {

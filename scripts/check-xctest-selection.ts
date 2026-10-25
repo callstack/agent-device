@@ -202,6 +202,13 @@ function identifiers(
 }
 
 /** What one lane reaches: its platform's compiled set, narrowed by its flags. */
+/** The lane's platform's compiled identifiers, narrowed by the lane's own flag list. */
+function compiledIdentifiersForLane(declaredTests: readonly DeclaredTest[], entry: Lane): string[] {
+  return declaredTests
+    .filter((test) => test.platforms.includes(entry.platform))
+    .map((test) => test.identifier);
+}
+
 function laneReach(
   entry: Lane,
   declaredTests: readonly DeclaredTest[],
@@ -210,22 +217,13 @@ function laneReach(
 ): Set<string> {
   if (entry.selection === 'platform-branch')
     return new Set(iosPrTestIdentifiers(declaredTests, sharedPlatformBranchIds));
+  const compiled = compiledIdentifiersForLane(declaredTests, entry);
   if (entry.selection === 'named-only') {
     const named = identifiers(flagged, entry.workflow, 'only-testing');
-    return new Set(
-      declaredTests
-        .filter((test) => test.platforms.includes(entry.platform))
-        .map((test) => test.identifier)
-        .filter((id) => named.has(id)),
-    );
+    return new Set(compiled.filter((id) => named.has(id)));
   }
   const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
-  return new Set(
-    declaredTests
-      .filter((test) => test.platforms.includes(entry.platform))
-      .map((test) => test.identifier)
-      .filter((id) => !skipped.has(id)),
-  );
+  return new Set(compiled.filter((id) => !skipped.has(id)));
 }
 
 export function iosPrTestIdentifiers(

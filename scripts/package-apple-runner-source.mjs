@@ -79,8 +79,8 @@ function packageAppleRunnerSource(options = {}) {
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
   });
-  packageSharedHeader(root, options, summary);
   packageSnapshotPresentationSource(root, options, summary);
+  packageSharedHeader(root, options, summary);
   return summary;
 }
 

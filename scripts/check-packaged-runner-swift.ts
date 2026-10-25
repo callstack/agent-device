@@ -151,7 +151,7 @@ function swiftParseFailures(
  * scratch packaging layout: a missing mirror means a user's `xcodebuild` of the installed
  * package cannot compile the runner, and nothing in this repo would notice otherwise.
  */
-export function sharedHeaderFailures(scratchRoot: string): string[] {
+function sharedHeaderFailures(scratchRoot: string): string[] {
   const bridgeSource = path.join(
     scratchRoot,
     PACKAGED_DIR,

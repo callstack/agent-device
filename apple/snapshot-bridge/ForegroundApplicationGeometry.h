@@ -6,9 +6,11 @@
 // one compilation, not a pinned copy. Each caller keeps its own unknown policy: the bridge keeps
 // a capture it cannot measure, the runner refuses authorization it cannot prove.
 //
-// The runner's copy ships at `dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h`; from
-// either consumer's source directory the include `../../../snapshot-bridge/...` resolves to this
-// file in the checkout and in the installed package alike.
+// The Simulator snapshot bridge includes this file directly; the runner's event bridge includes
+// it as `../../../snapshot-bridge/ForegroundApplicationGeometry.h`, which resolves to this file
+// from the checkout (`apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`) and, through the
+// mirror `scripts/package-apple-runner-source.mjs` writes, from the installed package
+// (`dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`) alike.
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>

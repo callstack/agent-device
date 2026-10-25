@@ -8,8 +8,17 @@ export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridgeCapture.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.m',
   'apple/snapshot-bridge/ForegroundApplicationGeometry.h',
-  'dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h',
 ]);
+
+/**
+ * The packaged runner's mirror of the shared header. It only exists when the pack was prepared
+ * through `scripts/package-apple-runner-source.mjs`, so it is required exactly when the package
+ * also carries that packager's runner output — never of a bare `pnpm build` pack, which ships no
+ * `dist/apple/runner` at all.
+ */
+export const PACKAGED_RUNNER_SHARED_HEADER_PATH =
+  'dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h';
+const PACKAGED_RUNNER_MARKER = 'dist/apple/runner/';
 
 export function assertSnapshotBridgeAssets(presentPaths, context) {
   const present = new Set(presentPaths);
@@ -69,6 +78,16 @@ export function assertPublishPackageContents(entries, options = {}) {
     assertSnapshotBridgeAssets(
       paths.filter((entryPath) => SNAPSHOT_BRIDGE_ASSET_PATHS.includes(entryPath)),
       'npm pack snapshot bridge',
+    );
+  }
+  // A package that ships the packaged runner must also ship the header mirror that the runner's
+  // relative include resolves to; without it the installed source does not compile.
+  if (
+    paths.some((entryPath) => entryPath.startsWith(PACKAGED_RUNNER_MARKER)) &&
+    !paths.includes(PACKAGED_RUNNER_SHARED_HEADER_PATH)
+  ) {
+    throw new Error(
+      `npm pack ships the packaged runner but is missing: ${PACKAGED_RUNNER_SHARED_HEADER_PATH}`,
     );
   }
   const missingAssets = requiredAssets.filter(

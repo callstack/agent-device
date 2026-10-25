@@ -158,7 +158,7 @@ function isWorkflowTooling(file: string): boolean {
   );
 }
 
-export function isDocs(file: string): boolean {
+function isDocs(file: string): boolean {
   // skills/ Markdown is agent guidance prose with no owning suite (the
   // SkillGym harness was removed), so it classifies as docs like the rest.
   return (

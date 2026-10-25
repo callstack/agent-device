@@ -59,6 +59,7 @@ test('clean-installed snapshot bridge validates all native assets when present',
     await writeFile(join(bridge, 'SnapshotBridgeRuntime.h'), 'native header');
     await writeFile(join(bridge, 'SnapshotBridgeCapture.h'), 'capture header');
     await writeFile(join(bridge, 'SnapshotBridgeCapture.m'), 'capture source');
+    await writeFile(join(bridge, 'ForegroundApplicationGeometry.h'), 'shared rule');
     assert.doesNotThrow(() => assertInstalledSnapshotBridge(root));
     await rm(join(bridge, 'SnapshotBridgeRuntime.h'));
     assert.throws(() => assertInstalledSnapshotBridge(root), /SnapshotBridgeRuntime\.h/);

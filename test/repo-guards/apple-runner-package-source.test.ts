@@ -141,6 +141,7 @@ test('package apple runner source skips the unit-test directory and the isolatio
   const root = mkdtempForTestSync('agent-device-runner-package-unit-tests-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
   const uitestsDir = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
   writeFixtureFile(
     root,
@@ -224,6 +225,7 @@ test('package apple runner source allows only the runner entrypoint test method'
   const root = mkdtempForTestSync('agent-device-runner-package-entry-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
 
   writeFixtureFile(
     root,
@@ -257,6 +259,7 @@ test('package apple runner source ships regex literals whole and refuses ambiguo
   const root = mkdtempForTestSync('agent-device-runner-package-regex-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
   const relativePath =
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift';
 
@@ -300,6 +303,7 @@ test('package apple runner source judges shipped test methods after comments are
   const root = mkdtempForTestSync('agent-device-runner-package-commented-test-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
   writeFixtureFile(
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
@@ -334,6 +338,7 @@ test('package apple runner source removes legacy dist/apple-runner output before
     '',
   );
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
   // Stale packaged trees left by builds/checkouts predating the apple-runner -> apple/runner
   // move. `dist` ships wholesale, so these must not survive packaging or they double-ship.
   writeFixtureFile(
@@ -369,6 +374,47 @@ test('package apple runner source requires the shared snapshot presentation sour
 
   assert.notEqual(result.exitCode, 0);
   assert.match(result.stderr, /snapshot presentation source not found/);
+});
+
+test('package apple runner source requires the shared foreground geometry header', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-missing-header-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /shared header not found/);
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/snapshot-bridge')), false);
+});
+
+test('package apple runner source mirrors the shared header next to the packaged runner', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-header-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  assert.deepEqual(
+    fs.readFileSync(
+      path.join(root, 'dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h'),
+      'utf8',
+    ),
+    '#pragma once\n',
+  );
 });
 
 test('snapshot presentation manifests keep their supported platform declarations in parity', () => {
@@ -438,6 +484,7 @@ function writeStripFixtureTree(root: string): void {
   );
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.swift', 'package\n');
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
   writeFixtureFile(
     root,
     'apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
