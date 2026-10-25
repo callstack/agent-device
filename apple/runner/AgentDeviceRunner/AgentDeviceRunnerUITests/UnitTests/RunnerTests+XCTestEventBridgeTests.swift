@@ -237,7 +237,7 @@ extension RunnerTests {
       // A non-finite frame component is a runtime that said nothing, not a window that differs:
       // the answer is Unknown, never the Windowed a comparison of the numbers would read as.
       ("NaN window origin", 100, 100, CGRect(x: CGFloat.nan, y: 0, width: 834, height: 1210), screen, .unknown),
-      ("infinite screen width", 100, 100, screen, CGRect(x: 0, y: 0, width: .infinity, height: 1210), .unknown),
+      ("infinite screen width", 100, 100, screen, CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 1210), .unknown),
     ]
     for (name, targetPid, primaryPid, window, screenFrame, expected) in cases {
       XCTAssertEqual(
