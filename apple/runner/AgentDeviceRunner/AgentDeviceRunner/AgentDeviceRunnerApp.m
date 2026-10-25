@@ -672,19 +672,22 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       bar.items = @[item];
       [self.view addSubview:bar];
     } else {
-      // The control sits in the top bar band, whose height above the content differs by family
-      // (59 pt on an iPhone 17 Pro, 32 pt on an iPad Pro), so it anchors to the safe-area top
-      // instead of a hardcoded iPhone y.
+      // The control must sit under the point the runner's top-leading fallback aims at, whose
+      // bounds are known: x lands at most 44 from the frame's leading edge, y at
+      // clamp(safeTopInset + 22, 56, 96). Anchoring to the view's leading (not the safe-area's)
+      // keeps the button under x=44 on a landscape iPhone, where the side inset would otherwise
+      // start a safe-area anchor past it; the safe-area top plus 12 with a 64-pt height spans the
+      // whole clamped y range for every inset an iPhone or iPad reports.
       UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem];
       back.translatesAutoresizingMaskIntoConstraints = NO;
       [back setTitle:@"Go back" forState:UIControlStateNormal];
       [back addTarget:self action:@selector(navigationBackPressed) forControlEvents:UIControlEventTouchUpInside];
       [self.view addSubview:back];
       [NSLayoutConstraint activateConstraints:@[
-        [back.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:12],
-        [back.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [back.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [back.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12],
         [back.widthAnchor constraintEqualToConstant:88],
-        [back.heightAnchor constraintEqualToConstant:44],
+        [back.heightAnchor constraintEqualToConstant:64],
       ]];
     }
   }

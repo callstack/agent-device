@@ -91,6 +91,16 @@ static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t 
 // of the screen (Windowed Apps or Stage Manager).
 static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
 
+// A frame with a non-finite component is not a measurement at all. It proves neither the fill nor
+// the window, so it must reach each caller's unknown policy, never a comparison that reads as a
+// difference (the bridge would refuse `app-window-not-full-screen` on a runtime that said nothing).
+static BOOL AgentDeviceForegroundFramesAreFinite(CGRect window, CGRect screen) {
+  return isfinite(window.origin.x) && isfinite(window.origin.y) &&
+      isfinite(window.size.width) && isfinite(window.size.height) &&
+      isfinite(screen.origin.x) && isfinite(screen.origin.y) &&
+      isfinite(screen.size.width) && isfinite(screen.size.height);
+}
+
 static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
   return fabs(window.origin.x - screen.origin.x) <= AgentDeviceFullScreenFrameTolerance &&
       fabs(window.origin.y - screen.origin.y) <= AgentDeviceFullScreenFrameTolerance &&
@@ -234,6 +244,9 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   CGRect window = [application frame];
   CGRect screen = [system frame];
   if (CGRectIsEmpty(window) || CGRectIsEmpty(screen)) return NO;
+  // The documented unknown-frame fallback: a frame with a non-finite component is a runtime that
+  // reported nothing, not a window that differs from the screen, so the capture is kept.
+  if (!AgentDeviceForegroundFramesAreFinite(window, screen)) return NO;
   return !AgentDeviceForegroundWindowFillsScreen(window, screen);
 }
 

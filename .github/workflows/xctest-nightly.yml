@@ -33,11 +33,16 @@ jobs:
           # of the rule — the route opens only while the in-process full-screen evidence proves
           # the app fills its screen — can execute nowhere else, and the evidence line that probe
           # prints is what turns a revert to idiom-only routing red instead of silently green.
+          # `name-prefix` is what each leg asserts the booted simulator's name starts with: the
+          # boot action falls back to any simulator when the preferred name is missing, so a
+          # renamed or absent device model must fail the leg that depends on its idiom.
           - name: iPhone full suite
             device-name: iPhone 17 Pro
+            name-prefix: iPhone
             lane: nightly
           - name: iPad sole-screen evidence
-            device-name: iPad Pro 11-inch (M4)
+            device-name: iPad Pro 11-inch (M5)
+            name-prefix: iPad
             lane: nightly-ipad
     env:
       # Must match apple.yml. The runtime version rides in the derived-data cache key, and
@@ -85,6 +90,30 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: ${{ matrix.leg.device-name }}
 
+      # The boot action falls back to any simulator when the preferred name is missing, so each
+      # leg proves it booted the family it claims: the full-suite leg's coverage is iPhone-only at
+      # the idiom, and the iPad leg's evidence line can only come from an iPad. A renamed or
+      # removed device model on the image fails here instead of quietly testing the wrong idiom.
+      - name: Assert the booted simulator's family
+        run: |
+          set -euo pipefail
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const [udid, prefix] = process.argv.slice(1);
+            const payload = JSON.parse(
+              execFileSync("xcrun", ["simctl", "list", "devices", "-j"], { maxBuffer: 64 * 1024 * 1024 }).toString(),
+            );
+            const device = Object.values(payload.devices ?? {})
+              .flat()
+              .find((entry) => entry.udid === udid);
+            if (!device?.name?.startsWith(prefix)) {
+              console.error(`Booted ${device?.name ?? udid}; this leg needs a simulator named "${prefix}…"`);
+              process.exit(1);
+            }
+            console.log(`Booted ${device.name}`);
+          ' '${{ steps.ios-simulator.outputs.simulator-udid }}' '${{ matrix.leg.name-prefix }}'
+        shell: bash
+
       # Same command as apple.yml's targeted step minus every `-only-testing:` flag, so the
       # xctestrun's own test plan decides what runs — with one exception.
       #
@@ -119,10 +148,11 @@ jobs:
             }
           '
 
-      # The iPad leg's liveness check is its own grep below: it runs a named selection, not the
-      # whole bundle, so the count assertion the full-suite leg makes does not apply to it. The
-      # boot action falls back to any simulator when the preferred name is missing, so this step
-      # proves it booted the iPad that leg claims — the evidence line can only come from one.
+      # The iPad leg's liveness checks are its own assertions below: it runs a named selection, not
+      # the whole bundle, so the count assertion the full-suite leg makes does not apply to it, and
+      # `xcodebuild` exits 0 when a selection matches nothing — a renamed test would shrink the run,
+      # not fail it. The step asserts the executed count equals the selection, then greps the probe
+      # line the iPad half of the rule prints.
       - name: Run the sole-screen tests on iPad
         if: matrix.leg.lane == 'nightly-ipad'
         run: |
@@ -131,18 +161,6 @@ jobs:
           # it must create it in its own leg before `tee` writes into it.
           mkdir -p .tmp/xctest-nightly
           UDID='${{ steps.ios-simulator.outputs.simulator-udid }}'
-          xcrun simctl list devices -j | node -e '
-            const fs = require("node:fs");
-            const udid = process.argv[1];
-            const payload = JSON.parse(fs.readFileSync(0, "utf8"));
-            const device = Object.values(payload.devices ?? {})
-              .flat()
-              .find((entry) => entry.udid === udid);
-            if (!device?.name?.startsWith("iPad")) {
-              console.error(`Booted ${device?.name ?? udid}; this leg needs an iPad simulator`);
-              process.exit(1);
-            }
-          ' "$UDID"
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
           xcodebuild test-without-building \
@@ -153,8 +171,25 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryOnAWindowedIpadTapsThroughTheWindow \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRankedInAppBackUsesSynthesisWithoutXCTestTap \
-            2>&1 | tee .tmp/xctest-nightly/runner.log
+            -resultBundlePath "$RESULT_BUNDLE_PATH" 2>&1 | tee .tmp/xctest-nightly/runner.log
+          # `xcodebuild` reports an unmatched selection by running fewer tests, not by failing, so
+          # the executed count from the result bundle is what proves this leg's whole selection ran.
+          node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            const summary = JSON.parse(execFileSync(
+              "xcrun", ["xcresulttool", "get", "test-results", "summary", "--path", process.env.RESULT_BUNDLE_PATH, "--compact"],
+              { maxBuffer: 64 * 1024 * 1024 },
+            ).toString());
+            const expected = 7;
+            if (summary.totalTestCount !== expected) {
+              throw new Error(
+                `The iPad sole-screen selection ran ${summary.totalTestCount} tests, expected ${expected}; ` +
+                "a selection stopped matching its test",
+              );
+            }
+          '
           # The probe prints this line only when a non-phone idiom asks it. Its absence means the
           # iPad never probed (a revert to idiom-only routing), not that a test failed.
           grep -q 'AGENT_DEVICE_RUNNER_FULL_SCREEN_EVIDENCE result=fills-screen' \

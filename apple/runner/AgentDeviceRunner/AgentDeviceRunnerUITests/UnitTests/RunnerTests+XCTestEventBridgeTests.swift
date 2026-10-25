@@ -226,9 +226,9 @@ extension RunnerTests {
       RunnerFullScreenEvidenceFromForeground(100, 100, screen.offsetBy(dx: 0.4, dy: -0.4), screen),
       .fillsScreen
     )
-    XCTAssertNotEqual(
+    XCTAssertEqual(
       RunnerFullScreenEvidenceFromForeground(100, 100, screen.offsetBy(dx: 1, dy: 0), screen),
-      .fillsScreen
+      .windowed
     )
 
     // A different app owns the foreground, so the screen is not this app's to fill.
@@ -252,6 +252,20 @@ extension RunnerTests {
     )
     XCTAssertEqual(
       RunnerFullScreenEvidenceFromForeground(100, 100, screen, .zero),
+      .unknown
+    )
+    // A non-finite frame component is a runtime that said nothing, not a window that differs:
+    // the answer is Unknown, never the Windowed a comparison of the numbers would read as.
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(
+        100, 100, CGRect(x: CGFloat.nan, y: 0, width: 834, height: 1210), screen
+      ),
+      .unknown
+    )
+    XCTAssertEqual(
+      RunnerFullScreenEvidenceFromForeground(
+        100, 100, screen, CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 1210)
+      ),
       .unknown
     )
   }

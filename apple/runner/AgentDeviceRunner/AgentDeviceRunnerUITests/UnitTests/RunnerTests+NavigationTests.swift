@@ -52,9 +52,9 @@ extension RunnerTests {
 
   /// After the tree rejects a query, `back` reaches the top-leading control through whichever route
   /// is open: the sole screen where the app proves it fills it (both families here), the resolved
-  /// window everywhere else. The refusal half — a device where no route opens — is the negative in
-  /// `testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen`, which no simulator here can
-  /// reach because its foreground app always fills its screen.
+  /// window everywhere else. The refusal half on a real device is
+  /// `testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen` and the windowed-iPad test
+  /// below, which stand where no simulator here can: its foreground app always fills its screen.
   @MainActor
   func testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens() throws {
     let status = try launchBackFixture(["--agent-device-back-regression"])
@@ -68,6 +68,57 @@ extension RunnerTests {
       return XCTFail("back must reach the fixture's top-leading control through a window or the sole screen")
     }
     XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// The window route the sole-screen rule leaves for an iPad whose app it cannot prove full: with
+  /// the probe's primary-app read stubbed to answer nothing (the evidence seam's `unknown`), the
+  /// route closes, and a rejected tree still dispatches `back` through the resolved window. An
+  /// iPhone keeps the sole-screen route by idiom — it answers before the probe is ever asked, so no
+  /// stub can close it there and the window route is the iPad half's own.
+  @MainActor
+  func testInAppBackAfterARejectedQueryOnAWindowedIpadTapsThroughTheWindow() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+    // Runs the real probe once, which is also what registers the AXRuntime class this seam stubs.
+    XCTAssertTrue(soleScreenRouteIsOpen(for: app))
+    guard UIDevice.current.userInterfaceIdiom != .phone else {
+      return
+    }
+    let restoreProbe = stubForegroundPrimaryAppAsUnprovable()
+    defer { restoreProbe() }
+    XCTAssertFalse(
+      soleScreenRouteIsOpen(for: app),
+      "an iPad whose app the probe cannot prove keeps requiring a resolved window"
+    )
+
+    let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
+      tapInAppBackControl(app: app)
+    }
+    guard case .performed = outcome else {
+      return XCTFail("a refused sole-screen route must still dispatch back through the resolved window")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// Stands in for a device showing the app in part of its screen as far as the probe can tell: the
+  /// probe's `primaryApp` read answers nothing, which the evidence seam reports as `unknown`. The
+  /// windowed geometry itself needs an iPad set to Windowed Apps, which no lane runs; `unknown`
+  /// closes the same route for the same reason — the fill is not proven.
+  private func stubForegroundPrimaryAppAsUnprovable() -> () -> Void {
+    let element = NSClassFromString("AXElement")
+    let method = element.flatMap { class_getClassMethod($0, NSSelectorFromString("primaryApp")) }
+    guard let method else {
+      preconditionFailure("AXRuntime did not register AXElement before the probe seam was stubbed")
+    }
+    let original = method_getImplementation(method)
+    let replacement = imp_implementationWithBlock(
+      { (_: AnyObject) -> AnyObject? in nil } as @convention(block) (AnyObject) -> AnyObject?
+    )
+    method_setImplementation(method, replacement)
+    return {
+      method_setImplementation(method, original)
+      imp_removeBlock(replacement)
+    }
   }
 
   private var showsAppsOnlyFullScreen: Bool {
