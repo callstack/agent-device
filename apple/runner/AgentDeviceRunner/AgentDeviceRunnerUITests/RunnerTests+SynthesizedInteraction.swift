@@ -31,14 +31,15 @@ extension RunnerTests {
       )
     }
     let frame = context.referenceFrame
+    let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation)
     let start = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: frame,
+      in: rotationFrame,
       interfaceOrientation: orientation
     )
     let end = CoordinateSpaceRotation.native(
       point: CGPoint(x: x2, y: y2),
-      in: frame,
+      in: rotationFrame,
       interfaceOrientation: orientation
     )
     logSynthesizedDispatch(
@@ -117,7 +118,11 @@ extension RunnerTests {
     }
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: context.referenceFrame,
+      in: synthesizedRotationFrame(
+        app: app,
+        fallback: context.referenceFrame,
+        interfaceOrientation: orientation
+      ),
       interfaceOrientation: orientation
     )
     logSynthesizedDispatch(
@@ -191,7 +196,11 @@ extension RunnerTests {
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: context.referenceFrame,
+      in: synthesizedRotationFrame(
+        app: app,
+        fallback: context.referenceFrame,
+        interfaceOrientation: orientation
+      ),
       interfaceOrientation: orientation
     )
     logSynthesizedDispatch(
@@ -543,6 +552,31 @@ extension RunnerTests {
     )
     return frame
   }
+
+  /// The box whose side lengths a dispatch turn swaps. The digitizer turns about the display's
+  /// own axes, so a screen-space point must turn about the display's side lengths even when the
+  /// app runs in a placed window, whose box is smaller (#3899). Landscape under Windowed Apps is
+  /// unmeasured (ADR 0004); the rule follows the digitizer there anyway. A multi-screen host — an
+  /// ADR 0025 foldable — resolves its window to the panel that hosts the app, so there the
+  /// caller's window box already names the display and stays the basis. A full-screen app's
+  /// window box is its display's box, so this changes no measured route.
+  func synthesizedRotationFrame(
+    app: XCUIApplication,
+    fallback: CGRect,
+    interfaceOrientation: Int
+  ) -> CGRect {
+    guard XCUIScreen.screens.count == 1 else { return fallback }
+    let screen = UIScreen.main
+    let scale = screen.nativeScale
+    guard scale > 0 else { return fallback }
+    return Self.soleScreenReferenceFrame(
+      nativePortraitSize: CGSize(
+        width: screen.nativeBounds.width / scale,
+        height: screen.nativeBounds.height / scale
+      ),
+      interfaceOrientation: interfaceOrientation
+    ) ?? fallback
+  }
 #endif
 
   /// The screen in the app's interface orientation, anchored at the origin like a window frame. An
@@ -736,7 +770,11 @@ extension RunnerTests {
       pointer.samples.map { sample in
         let point = CoordinateSpaceRotation.native(
           point: CGPoint(x: sample.point.x, y: sample.point.y),
-          in: frame,
+          in: synthesizedRotationFrame(
+            app: app,
+            fallback: frame,
+            interfaceOrientation: orientation
+          ),
           interfaceOrientation: orientation
         )
         return [

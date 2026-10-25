@@ -662,17 +662,18 @@ The measured dispatch spaces for a placed window are both screen-anchored: the s
 `interactionCoordinate` therefore passes the caller's screen point through, and `resolveRunnerWindow` keeps naming the window a foldable's tap resolves its display on (ADR 0025).
 The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (659,321) for a window at (324,307).
 The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
-So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the two live boxes (`app.frame` against the resolved window's frame); every other live read needs no conversion.
+So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the resolved window's live box (its origin, against a zero-origin box of its own size); every other live read needs no conversion.
 The probe-side owner is `ResolvedTextEntryInput.frameOnScreen`.
 The vector is read once per command as `TextEntryContentTranslation` — `known(offset)`, `none` for a full-screen app, or `unknown` when the window read could not answer — and it has no default anywhere it travels, so an omitted read can never read as full screen.
 It is stored on the target and each read the target produces, so the probe matching, the focus tap, the refresh point, the caret tap, and the readiness retap all dispatch through that one property.
-`frameOnScreen` is optional: it names no box when the read has no snapshot or the vector is `unknown`, and every dispatched-point consumer refuses a nil rather than re-adding its own snapshot guard.
-Probe matching and the focus tap compare `element.frame` when `frameOnScreen` is nil, the only box a read that cannot translate still has.
+`frameOnScreen` is optional: it names no box when the read has no snapshot or the vector is `unknown`.
+No point dispatch reads a live `element.frame`: the focus tap falls back to the caller's requested point, which is already a screen point, and the retap and the caret tap dispatch nothing on a nil.
+Probe matching compares `element.frame` when `frameOnScreen` is nil — a comparison needs the only box a read that cannot translate still has, and a comparison dispatches nothing.
 The readiness retap taps nothing on `unknown`: dispatching a raw window-local point is the failure this amendment fixes, and skipping one retap costs the caller's next read, not the session.
-`app.frame` unions transformed subtrees, so content pushed off a placed window (a closed drawer at negative x) can stop the two live boxes matching and read no vector; the capture still converts from the snapshot root box, so a probe may then read window-local frames where the capture published screen space. A mid-command window move has the same effect on a vector read at command start.
-Both are reads of a moving target, not a second space: a re-opened command reads the current vector.
-The host bridge keeps refusing a windowed capture (`app-window-not-full-screen`) rather than converting one, so the TypeScript twin of the rule runs today only in the parity replay.
-Portrait is the only orientation measured for a placed window; the quarter-turn table's windowed row pins the arithmetic (a frame origin never travels through the turn), not a device measurement, and landscape under Windowed Apps stays unverified until measured.
+The probe trusts that selector's naming — the same first non-empty window every synthesized dispatch already books as its reference box — and a window that is moved between the command's read and its dispatch drifts, like every live read: a re-opened command reads the current vector.
+The host bridge still refuses a windowed capture (`app-window-not-full-screen`) and converts nothing, while the XCTest runner — the fallback the bridge's refusal routes to — converts through the rule above, so the bridge's refusal stays the reason the TypeScript twin of the rule runs today only in the parity replay.
+Portrait is the only orientation measured for a placed window; the quarter-turn table's windowed row pins the arithmetic (a frame origin never travels through the turn), not a device measurement.
+Dispatch rotation turns about the display's side lengths, as the digitizer does, never about a placed window's smaller box; landscape under Windowed Apps stays unmeasured until measured, and the rotation basis follows the display there on the digitizer's rule, not on a measurement.
 
 ## Amendment: modal containment in the presentation cut
 

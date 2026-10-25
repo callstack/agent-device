@@ -232,7 +232,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
           prefersFocusedElement: false,
-        contentTranslation: .none,
+          contentTranslation: .none,
           inputAtRefreshPoint: found
         ),
         text: "fresh",
@@ -331,7 +331,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
           prefersFocusedElement: false,
-        contentTranslation: .none,
+          contentTranslation: .none,
           inputAtRefreshPoint: inputAtRefreshPoint
         ),
         text: "",

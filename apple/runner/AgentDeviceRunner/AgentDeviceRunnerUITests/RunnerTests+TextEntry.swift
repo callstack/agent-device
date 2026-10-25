@@ -137,9 +137,10 @@ extension RunnerTests {
     var isDistinguishable: Bool { !identifier.isEmpty }
   }
 
-  /// A text input found under a point, the identity it carried when found, and the content vector of
-  /// the command that found it. The element is an index-bound query handle: an input inserted or
-  /// reordered ahead of it later re-binds the handle to that input, and the identity is what notices.
+  /// A text input found under a point: the handle, the identity it carried when found, and the
+  /// vector that matched it — a later read of the handle must convert through the same vector the
+  /// lookup used. The element is an index-bound query handle: an input inserted or reordered ahead
+  /// of it later re-binds the handle to that input, and the identity is what notices.
   struct TextInputAtPoint {
     let element: XCUIElement
     let identity: TextEntryInputIdentity
@@ -148,15 +149,15 @@ extension RunnerTests {
 
   /// The vector that carries a snapshot-read frame to its place on the screen (#3899), read once per
   /// command by `liveContentTranslation`. Non-defaulted everywhere it travels: a vector nobody read
-  /// must never read as full screen, because on a placed window that silently dispatches window-local
-  /// points as screen points — the #3899 failure.
+  /// must never read as full screen, because on a placed window that dispatches window-local points
+  /// as screen points — the #3899 failure.
   enum TextEntryContentTranslation {
     /// The vector of a placed window: its content box's origin on the screen.
     case known(CGSize)
     /// The app fills the screen, so a snapshot frame is already a screen frame.
     case none
-    /// The window read could not answer, so the space of a snapshot frame is unknown. Consumers
-    /// refuse it as a screen frame: `frameOnScreen` reads nil and nothing dispatches a point from it.
+    /// The window read could not answer. `frameOnScreen` reads nil, so no point dispatches from a
+    /// snapshot frame.
     case unknown
   }
 

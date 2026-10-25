@@ -222,32 +222,31 @@ extension RunnerTests {
   }
 
   /// The vector state that carries this session's snapshot-read app-content frames to their place on
-  /// the screen (#3899). Each command that dispatches points from snapshot frames reads it once, at
-  /// its own start, and hands it down; a read inside a typing loop never calls this, because the two
-  /// live box reads below cost about 90 ms each on a heavy React Native screen.
-  ///
-  /// The signature and the vector are the capture's rule (`SnapshotContentTranslation`, ADR 0004)
-  /// read from the two live boxes that name it: the application's `frame` is a `(0,0)`-anchored copy
-  /// of the box the resolved window reports at its place on the screen. Any other pair of boxes
-  /// declares no vector, so full-screen, iPhone, and each foldable panel keep frames as read.
+  /// the screen (#3899), read once per command at its start. A placed window's snapshot frames are
+  /// content-local (ADR 0004), so the window's own origin on the screen is the vector; a window
+  /// anchored at the origin — full screen, iPhone, and each ADR 0025 foldable panel — declares none.
   ///
   /// A read that cannot answer returns `.unknown`, never `.none`: on a placed window, a failed read
   /// that looked like full screen would dispatch raw window-local points as screen points — the
   /// #3899 failure — so consumers refuse `.unknown` instead of guessing through it.
   func liveContentTranslation(app: XCUIApplication) -> TextEntryContentTranslation {
-    // The window read is contained like the probe lookups it replaces: a transient window that
-    // records an XCTest issue costs the vector, not the runner session.
-    let read = containingTextInputProbeIssues(fallback: nil as TextEntryContentTranslation?) { _ in
-      guard let resolved = resolveRunnerWindowElement(app: app) else { return nil }
-      guard let translation = SnapshotContentTranslation.offset(reportedBox: app.frame, viewportBox: resolved.frame) else {
+    // Contained like the probe lookups it wraps: a transient window that records an XCTest issue
+    // costs the vector, not the runner session. This is the one window query a command makes; the
+    // resolved window's box is enough because `SnapshotContentTranslation.offset` reads only the
+    // origins, and a placed window's size is its own.
+    let read = containingTextInputProbeIssues(fallback: TextEntryContentTranslation.unknown) { _ in
+      guard let resolved = resolveRunnerWindowElement(app: app) else { return .unknown }
+      guard let offset = SnapshotContentTranslation.offset(
+        reportedBox: CGRect(origin: .zero, size: resolved.frame.size),
+        viewportBox: resolved.frame
+      ) else {
         // Explicit type: `.none` alone means `Optional.none` to the compiler here.
         return TextEntryContentTranslation.none
       }
-      return .known(translation)
+      return .known(offset)
     }
     switch read {
     case .success(let state):
-      guard let state else { return .unknown }
       return state
     case .failure:
       return .unknown

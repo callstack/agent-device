@@ -616,9 +616,9 @@ final class CoordinateSpaceTests: XCTestCase {
   /// The dispatch direction for a windowed app: the caller's point is the point touched, so
   /// `native(point:)` turns a screen-space point's axes without moving it toward the window origin
   /// (#3899). Under portrait — the only orientation measured for a windowed app — it is the identity.
-  /// The landscape rows for a placed window stay the documented unmeasured gap (ADR 0004): the turn
-  /// here is asserted about the window's side lengths, while the digitizer turns about the screen's,
-  /// and no windowed landscape capture has been measured to say which basis is right.
+  /// The basis row below pins the rule the dispatch follows in landscape: the digitizer turns about
+  /// the display's side lengths, so a windowed app's point turns about the display's box, not the
+  /// placed window's. Landscape under Windowed Apps is an unmeasured gap (ADR 0004).
   func testNativePointForAWindowedAppKeepsTheCallersScreenPoint() {
     let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
     for orientation in [
@@ -634,6 +634,37 @@ final class CoordinateSpaceTests: XCTestCase {
         "interfaceOrientation \(orientation)"
       )
     }
+  }
+
+  /// A windowed landscape point turns about the display's box: the turn stays inside the display's
+  /// native portrait box, and a placed window's smaller box would move the point instead. The
+  /// runner passes the display's box as the basis (`synthesizedRotationFrame`).
+  func testNativePointInWindowedLandscapeTurnsAboutTheDisplayBox() {
+    let displayLandscapeBox = CGRect(x: 0, y: 0, width: 1210, height: 834)
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let screenPoint = CGPoint(x: 600, y: 300)
+    XCTAssertEqual(
+      CoordinateSpaceRotation.native(
+        point: screenPoint,
+        in: displayLandscapeBox,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      ),
+      CGPoint(x: 534, y: 600),
+      "the display basis lands inside the display's native portrait box (834 x 1210)"
+    )
+    XCTAssertNotEqual(
+      CoordinateSpaceRotation.native(
+        point: screenPoint,
+        in: windowOnScreen,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      ),
+      CoordinateSpaceRotation.native(
+        point: screenPoint,
+        in: displayLandscapeBox,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      ),
+      "the placed window's side lengths are not the digitizer's basis"
+    )
   }
 
   func testNormalizedOfAnEmptyArrayIsEmpty() {

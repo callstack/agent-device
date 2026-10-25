@@ -105,6 +105,15 @@ extension RunnerTests {
 #endif
   }
 
+  /// The point the initial focus tap dispatches: the center of the input's screen box when the
+  /// read can name one, and the caller's requested point otherwise. The requested point is
+  /// already a screen point, so the live `element.frame` is never dispatched: on `.unknown` it is
+  /// a window-local box, and on a missing snapshot it is the read #3060 forbids (#3899).
+  static func focusTapPoint(frameOnScreen: CGRect?, requestedPoint: CGPoint) -> CGPoint {
+    guard let frameOnScreen, !frameOnScreen.isEmpty else { return requestedPoint }
+    return .init(x: frameOnScreen.midX, y: frameOnScreen.midY)
+  }
+
   @MainActor
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
     // The one content-vector read for this command (#3899): every target built here carries it and
@@ -150,17 +159,8 @@ extension RunnerTests {
     let input = textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
-    // The tap goes to the input's own center, and `tapAt` dispatches a screen point, so the point
-    // comes from `frameOnScreen`; the live frame is the box left when the command's window read
-    // could not answer (#3899).
-    let inputCenter = (input?.frameOnScreen ?? input?.element.frame).flatMap {
-      $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY)
-    }
-    if let inputCenter {
-      _ = tapAt(app: app, x: inputCenter.x, y: inputCenter.y)
-    } else {
-      _ = tapAt(app: app, x: x, y: y)
-    }
+    let tapPoint = Self.focusTapPoint(frameOnScreen: input?.frameOnScreen, requestedPoint: requestedPoint)
+    _ = tapAt(app: app, x: tapPoint.x, y: tapPoint.y)
     // A visible keyboard is not enough evidence for app.typeText, because focus may still
     // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
     // so after tapping it the iOS readiness timeout cannot prove anything stronger.

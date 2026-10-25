@@ -6,7 +6,12 @@ extension RunnerTests {
   /// cannot answer. A fixture that does not expose its own field is a broken lane, not a refusal.
   @MainActor
   func requireTextInputAtPoint(app: XCUIApplication, x: Double, y: Double) throws -> TextInputAtPoint {
-    switch coordinateTapTextInputIdentityAt(app: app, x: x, y: y, contentTranslation: .none) {
+    switch coordinateTapTextInputIdentityAt(
+      app: app,
+      x: x,
+      y: y,
+      contentTranslation: liveContentTranslation(app: app)
+    ) {
     case .input(let input):
       return input
     case .absent:
@@ -109,6 +114,24 @@ extension RunnerTests {
       pressCount.label,
       "presses=0",
       "the refusal dispatched its focus tap: the point's control took the press"
+    )
+  }
+
+  /// The initial focus tap dispatches the input's screen box only when the read can name one.
+  /// With no box — `.unknown` or a missing snapshot — it dispatches the caller's requested point,
+  /// never a live `element.frame` center (#3899).
+  func testFocusTapPointNeverDispatchesALiveFrame() {
+    let requested = CGPoint(x: 120, y: 640)
+    XCTAssertEqual(
+      Self.focusTapPoint(frameOnScreen: CGRect(x: 300, y: 600, width: 200, height: 40), requestedPoint: requested),
+      CGPoint(x: 400, y: 620),
+      "a known screen box moves the tap to its center"
+    )
+    XCTAssertEqual(Self.focusTapPoint(frameOnScreen: nil, requestedPoint: requested), requested)
+    XCTAssertEqual(
+      Self.focusTapPoint(frameOnScreen: .null, requestedPoint: requested),
+      requested,
+      "an empty box names no center"
     )
   }
 #endif
