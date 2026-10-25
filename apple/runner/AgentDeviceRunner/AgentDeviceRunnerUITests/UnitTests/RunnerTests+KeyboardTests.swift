@@ -44,6 +44,32 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testCapturedKeyboardBandRejectsInvalidNativeGeometryBeforeRotation() {
+    let viewport = CGRect(x: 0, y: 0, width: 874, height: 402)
+    let native = CGRect(x: 0, y: 0, width: 402, height: 874)
+    let invalid = CGRect(x: 2, y: 75, width: -202, height: 724)
+    let badKeyboard = ElementAttributesFixture(.keyboard, invalid)
+    let host = ElementAttributesFixture(.other, native, children: [badKeyboard])
+    let window = ElementAttributesFixture(.window, native, children: [host])
+    let root = ElementAttributesFixture(.application, viewport, children: [window])
+    let reported = SnapshotViewport.reported(box: viewport, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: root, viewport: reported, deadline: .distantFuture),
+      .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+    )
+
+    let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 2, y: 75, width: 202, height: 724))
+    let badAssistant = ElementAttributesFixture(.other, invalid, identifier: "SystemInputAssistantView")
+    let validHost = ElementAttributesFixture(.other, native, children: [keyboard, badAssistant])
+    let validWindow = ElementAttributesFixture(.window, native, children: [validHost])
+    let validRoot = ElementAttributesFixture(.application, viewport, children: [validWindow])
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: validRoot, viewport: reported, deadline: .distantFuture),
+      .visible(CGRect(x: 75, y: 198, width: 724, height: 202))
+    )
+  }
+
+  @MainActor
   func testCapturedKeyboardBandRequiresAKeyboardAndPreservesGeometryValidation() {
     let frame = CGRect(x: 0, y: 0, width: 390, height: 844)
     let assistant = ElementAttributesFixture(

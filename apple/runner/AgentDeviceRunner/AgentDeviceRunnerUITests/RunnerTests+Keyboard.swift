@@ -1,6 +1,5 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
-import AgentDeviceSnapshotPresentation
 
 private enum KeyboardDismissObservationTiming {
   static let timeout: TimeInterval = 2
@@ -181,6 +180,9 @@ extension RunnerTests {
     var keyboardFrame: CGRect?
     var assistantFrame = CGRect.null
     while let (node, inheritedSpace, parentIsCarrier) = pending.popLast() {
+      guard node.elementType != .keyboard || runnerKeyboardFrameIsUsable(node.frame) else {
+        return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+      }
       let isCarrier = node.elementType == .application || node.elementType == .window
       let space = SnapshotGeometrySpace.space(
         reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(isWindow: isCarrier, parentIsWindow: parentIsCarrier),
@@ -191,7 +193,7 @@ extension RunnerTests {
       let frame = space.orientedFrame(of: node.frame)
       if node.elementType == .keyboard {
         keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
-      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(frame) {
+      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(node.frame), runnerKeyboardFrameIsUsable(frame) {
         assistantFrame = assistantFrame.union(frame)
       }
       pending.append(contentsOf: node.children.map { ($0, space, isCarrier) })
