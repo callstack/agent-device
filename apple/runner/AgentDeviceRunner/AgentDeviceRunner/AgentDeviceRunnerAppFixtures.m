@@ -12,7 +12,6 @@
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
 
-#if TARGET_OS_IOS
 // A plain text field whose accessibility value is the masked rendering of its text. This is how
 // a React Native `secureTextEntry` input reaches XCTest: `.textField`, not `.secureTextField`,
 // with a value of bullets (tester-army/e2e#872).
@@ -32,12 +31,10 @@
 }
 
 @end
-#endif
 
 @interface AgentDeviceRunnerFixtureViewController : AgentDeviceRunnerViewController
 @end
 
-#if TARGET_OS_IOS
 @interface AgentDeviceRunnerFixtureViewController () <UNUserNotificationCenterDelegate>
 // Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
 @property(nonatomic, strong) UIWindow *secondWindow;
@@ -233,12 +230,9 @@ static NSUInteger AgentDeviceDigitCount(NSString *text, NSUInteger limit) {
   return YES;
 }
 @end
-#endif
 
 @implementation AgentDeviceRunnerFixtureViewController
 
-
-#if TARGET_OS_IOS
 // An animation that never ends is what "busy" looks like to XCTest while it decides whether the app
 // may receive an event: the app keeps reporting work in flight, which is the state that cost an alert
 // command its whole deadline in #2546. It stops the moment an alert button is answered, since that
@@ -568,9 +562,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
   [self.view layoutIfNeeded];
 }
-#endif
 
-#if TARGET_OS_IOS
 - (void)agentDeviceMaskedToggleDidPress:(UIButton *)sender {
   (void)sender;
   self.maskedTogglePresses += 1;
@@ -592,7 +584,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   self.maskedToggleStatus.text =
       [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.maskedTogglePresses];
 }
-#endif
 
 - (void)navigationBackPressed {
   self.navigationBackStatus.text = @"Back performed";
@@ -620,7 +611,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   UILabel *label = self.label;
 
   // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged.
-#if TARGET_OS_IOS
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-regression"]) {
     self.navigationBackStatus = label;
     label.accessibilityIdentifier = @"agent-device-back-status";
@@ -999,7 +989,6 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [visibleButton.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
     ]];
   }
-#endif
 }
 
 @end

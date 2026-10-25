@@ -30,11 +30,21 @@ export const DOCUMENTED_PACK_STUBS: ReadonlySet<string> = new Set([
 ]);
 
 /** Packaged-source locations scanned for test code that survived stripping, by path segments. */
-const RUNNER_SOURCE_APP_TARGET = ['AgentDeviceRunner', 'AgentDeviceRunner'];
 const RUNNER_SOURCE_ROOT = ['dist', 'apple', 'runner'];
+const RUNNER_HOST_APP_TARGET = [
+  'dist',
+  'apple',
+  'runner',
+  'AgentDeviceRunner',
+  'AgentDeviceRunner',
+];
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
-/** The host app's fixture screens switch on these launch arguments; the shipped host must not carry one. */
+/**
+ * The host app's fixture screens switch on these launch arguments; the shipped host must not carry
+ * one. Owned here for the published package; scripts/package-apple-runner-source.mjs keeps the
+ * matching copy for the pre-pack check, and the two are kept identical on purpose.
+ */
 const FIXTURE_LAUNCH_ARGUMENT = /"--agent-device-[^"]*"/;
 
 /** One packed file: the `package.json`-relative path and the bytes the tarball carries. */
@@ -86,13 +96,7 @@ function isUnderRunnerSource(packedPath: string): boolean {
 
 function isRunnerHostAppSource(packedPath: string): boolean {
   const parts = segments(packedPath);
-  return (
-    isUnderRunnerSource(packedPath) &&
-    RUNNER_SOURCE_APP_TARGET.every(
-      (segment, index) => parts[RUNNER_SOURCE_ROOT.length + index] === segment,
-    ) &&
-    parts.length === RUNNER_SOURCE_ROOT.length + RUNNER_SOURCE_APP_TARGET.length + 1
-  );
+  return RUNNER_HOST_APP_TARGET.every((segment, index) => parts[index] === segment);
 }
 
 /**

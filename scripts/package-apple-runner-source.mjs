@@ -52,6 +52,8 @@ const TEST_METHOD_PATTERN = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:\w+\s+)*func\s+(te
 // on a fixture launch argument. AgentDeviceRunnerAppFixtures.m is dropped by skipFilePaths above;
 // this refuses the drop being widened or the fixtures returning under another name, and it is
 // what scripts/__tests__/packaged-runner-host-app.test.ts proves fires.
+// Kept identical to FIXTURE_LAUNCH_ARGUMENT in scripts/lib/shipped-test-code.ts, which applies the
+// same rule to the published package; this .mjs cannot import the .ts without a build step.
 const PACKAGED_HOST_APP_FIXTURE_ARGUMENT = /"--agent-device-[^"]*"/;
 const HOST_APP_TARGET_DIR = path.join('AgentDeviceRunner', 'AgentDeviceRunner');
 

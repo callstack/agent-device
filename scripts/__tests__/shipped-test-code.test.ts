@@ -83,6 +83,18 @@ test('testOnlyContentFailures rejects a --agent-device-* fixture argument in the
   assert.match(failures[0], /--agent-device-\* fixture/);
 });
 
+test('testOnlyContentFailures scans the packaged host app target at any depth', () => {
+  // The packager-side guard scans the host app target recursively; this must not be shallower, or
+  // a fixture screen under a subdirectory of the target ships while the re-check says nothing.
+  const failures = testOnlyContentFailures([
+    {
+      path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/Screens/AgentDeviceFixtures.m',
+      contents: '[arguments containsObject:@"--agent-device-crowded-screen"]',
+    },
+  ]);
+  assert.equal(failures.length, 1);
+});
+
 test('testOnlyContentFailures accepts the packaged host app and product daemon code that name test tokens', () => {
   assert.deepEqual(
     testOnlyContentFailures([
