@@ -72,8 +72,7 @@ extension RunnerTests {
       latest = observed
       let result = RunnerTests.replacementTextEntryResult(requested: requested, baseline: baseline, observed: observed)
       let settled = sampledAt.timeIntervalSince(stableSince) >= TextEntryTiming.verificationStabilityWindow
-      let moved = baseline.map { !observed.isSettled(with: $0) } ?? true
-      if settled && (moved || result.verified != false || sampledAt >= deadline) {
+      if settled && (result.verified != false || sampledAt >= deadline) {
         return result
       }
       if sampledAt >= deadline {

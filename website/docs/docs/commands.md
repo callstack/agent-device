@@ -502,7 +502,7 @@ Text-entry errors and what to do:
 - `TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED` (iOS `fill`): the text is too long to type in one runner command, and nothing was typed. Fill up to the character limit the hint names for your `--delay-ms`, then append the rest with `type`. `--delay-ms` lowers the limit; a longer timeout does not help.
 - `TEXT_ENTRY_MISMATCH` (iOS `fill`): the settled value contains only characters, in order, from the field's value after clearing plus your text. That covers dropped characters and an unchanged value. This can also reject legitimate filtering, trimming, or masks (`5` into `$0.00` may show `$0.05`). Inspect the field and retry `fill` only if it needs correction, using the `--delay-ms` value from the error hint.
 
-Except for `TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED`, where you append the rest with `type` after the shorter `fill`, recover from these with `fill`, never `type`, which appends to whatever the field already holds. iOS `fill` types the replacement once and does not clear and retype a mismatch on its own.
+Except for `TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED`, where you append the rest with `type` after the shorter `fill`, recover from these with `fill`, never `type`, which appends to whatever the field already holds. iOS `fill` types the replacement once and does not clear and retype a mismatch on its own. On the iOS accessibility route, nonempty fills wait until the confirmation deadline before reporting `TEXT_ENTRY_MISMATCH`.
 
 On iOS, a single-line `fill` ending in a submit key, or a field that became unreadable or disappeared after typing, succeeds without verification; assert the resulting screen.
 
