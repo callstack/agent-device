@@ -119,9 +119,19 @@ extension RunnerTests {
   /// a screen box, and a raw window-local point is exactly the #3899 failure. The probe-side rule
   /// `clearTextInput` and `moveCaretToEnd` settled on: skip the point, never guess through it.
   func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
-    guard let frame = read.frameOnScreen, !frame.isEmpty else {
+    guard let frame = read.frameOnScreen else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=no-screen-frame")
       return
     }
+    guard !frame.isEmpty else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=empty-frame")
+      return
+    }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f",
+      frame.midX,
+      frame.midY
+    )
     _ = tapAt(app: app, x: frame.midX, y: frame.midY)
     _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
   }
