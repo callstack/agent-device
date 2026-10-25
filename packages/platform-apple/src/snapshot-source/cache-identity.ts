@@ -17,6 +17,10 @@ export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridgeRuntime.h',
   'SnapshotBridgeCapture.h',
   'SnapshotBridgeCapture.m',
+  // Included by SnapshotBridgeRuntime.m and by the runner's event bridge; its bytes change both
+  // compiled binaries, so it must invalidate the bridge cache. Not a compile unit: the clang argv
+  // lists translation units only, and an included header belongs in the fingerprint, not argv.
+  'ForegroundApplicationGeometry.h',
 ] as const;
 export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridge.m',

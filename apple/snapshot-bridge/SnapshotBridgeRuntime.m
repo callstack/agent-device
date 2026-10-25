@@ -67,51 +67,7 @@ typedef bool (*AutomationEnabledFn)(void);
 + (nullable XCAccessibilityElement *)elementWithProcessIdentifier:(pid_t)pid;
 @end
 
-// AGENT_DEVICE_FULL_SCREEN_RULE_BEGIN
-// One rule, two targets. The Simulator snapshot bridge refuses a capture whose app window does not
-// fill the screen (`app-window-not-full-screen`, #3844), and the runner refuses to route a
-// window-less gesture onto a screen it cannot prove the app fills. The two builds read disjoint
-// source roots whose packaged layouts differ, so no include path reaches both; this block is
-// carried by both sources and pinned byte-identical by
-// `test/repo-guards/full-screen-rule-parity.test.ts`. Each caller keeps its own unknown policy.
-@protocol AgentDeviceForegroundElement <NSObject>
-+ (nullable id<AgentDeviceForegroundElement>)primaryApp;
-+ (nullable id<AgentDeviceForegroundElement>)systemApplication;
-- (pid_t)pid;
-- (CGRect)frame;
-@end
-
-// While a system surface owns the foreground, no screen is the target app's to fill and no tree is
-// the target app's to capture (ADR 0004, foreground ownership).
-static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t targetProcessID) {
-  return primaryProcessID == targetProcessID;
-}
-
-// Sub-pixel layout rounding is not a window; anything past this is one that shows the app in part
-// of the screen (Windowed Apps or Stage Manager).
-static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
-
-// A null, empty, infinite-sentinel, or non-finite-component frame is not a measurement at all: it
-// proves neither the fill nor the window, so it must reach each caller's unknown policy, never a
-// comparison that reads as a difference. This is the whole usability test; callers make one call.
-static BOOL AgentDeviceForegroundFrameIsMeasurable(CGRect frame) {
-  if (CGRectIsNull(frame) || CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) return NO;
-  return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
-      isfinite(frame.size.width) && isfinite(frame.size.height);
-}
-
-static BOOL AgentDeviceForegroundFramesAreMeasurable(CGRect window, CGRect screen) {
-  return AgentDeviceForegroundFrameIsMeasurable(window) &&
-      AgentDeviceForegroundFrameIsMeasurable(screen);
-}
-
-static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
-  return fabs(window.origin.x - screen.origin.x) <= AgentDeviceFullScreenFrameTolerance &&
-      fabs(window.origin.y - screen.origin.y) <= AgentDeviceFullScreenFrameTolerance &&
-      fabs(window.size.width - screen.size.width) <= AgentDeviceFullScreenFrameTolerance &&
-      fabs(window.size.height - screen.size.height) <= AgentDeviceFullScreenFrameTolerance;
-}
-// AGENT_DEVICE_FULL_SCREEN_RULE_END
+#import "ForegroundApplicationGeometry.h"
 
 static NSNumber *finiteNumber(double value)
 {

@@ -148,11 +148,12 @@ jobs:
             }
           '
 
-      # The iPad leg's liveness checks are its own assertions below: it runs a named selection, not
-      # the whole bundle, so the count assertion the full-suite leg makes does not apply to it, and
-      # `xcodebuild` exits 0 when a selection matches nothing — a renamed test would shrink the run,
-      # not fail it. The step asserts the executed count equals the selection, then greps the probe
-      # line the iPad half of the rule prints.
+      # The iPad leg runs a named selection: the smallest set that can execute the off-phone half of
+      # the sole-screen rule — the admission boundary itself, one hostile-tree command that must
+      # reach synthesis, and `back`'s route witness while the fallback's inset source is changing.
+      # Geometry and error cases live in the host-runnable evidence matrix instead. `xcodebuild`
+      # exits 0 when a selection matches nothing, so the reporter below asserts the executed count
+      # against this lane's reach (`XCTEST_LANE=nightly-ipad`, derived by check:xctest-selection).
       - name: Run the sole-screen tests on iPad
         if: matrix.leg.lane == 'nightly-ipad'
         run: |
@@ -166,35 +167,10 @@ jobs:
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=$UDID" \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testGestureViewportOnAnUnserializableTreeIsTheSoleScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryOnAWindowedIpadTapsThroughTheWindow \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRankedInAppBackUsesSynthesisWithoutXCTestTap \
             -resultBundlePath "$RESULT_BUNDLE_PATH" 2>&1 | tee .tmp/xctest-nightly/runner.log
-          # `xcodebuild` reports an unmatched selection by running fewer tests, not by failing, so
-          # the executed count from the result bundle is what proves this leg's whole selection ran.
-          node --input-type=module -e '
-            import { execFileSync } from "node:child_process";
-            const summary = JSON.parse(execFileSync(
-              "xcrun", ["xcresulttool", "get", "test-results", "summary", "--path", process.env.RESULT_BUNDLE_PATH, "--compact"],
-              { maxBuffer: 64 * 1024 * 1024 },
-            ).toString());
-            const expected = 7;
-            if (summary.totalTestCount !== expected) {
-              throw new Error(
-                `The iPad sole-screen selection ran ${summary.totalTestCount} tests, expected ${expected}; ` +
-                "a selection stopped matching its test",
-              );
-            }
-          '
-          # The probe prints this line only when a non-phone idiom asks it. Its absence means the
-          # iPad never probed (a revert to idiom-only routing), not that a test failed.
-          grep -q 'AGENT_DEVICE_RUNNER_FULL_SCREEN_EVIDENCE result=fills-screen' \
-            .tmp/xctest-nightly/runner.log \
-            || { echo 'The iPad sole-screen route never produced full-screen evidence.'; exit 1; }
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.
       # `--compact` first because a red night's summary is the large one, and the job summary
@@ -216,11 +192,12 @@ jobs:
       # build variant without the unit-test compile flag, an empty test plan, or a renamed
       # target would all read as a healthy night. The reporter asserts the executed count
       # equals what `pnpm check:xctest-selection` derives this lane reaches from the `#if`
-      # guards (XCTEST_LANE above), so a guard that compiles a file of tests out of iOS reads
-      # as red too. The failure list is capped so a badly red night cannot blow the 1 MiB
+      # guards and this workflow's own flags (XCTEST_LANE above), so a guard that compiles a
+      # file of tests out of iOS, or a selection whose name no longer matches, reads as red
+      # too. The failure list is capped so a badly red night cannot blow the 1 MiB
       # job-summary limit and lose the headline with it.
       - name: Report the run and assert the source-derived count
-        if: always() && matrix.leg.lane == 'nightly'
+        if: always()
         run: |
           set -euo pipefail
           if [ ! -s "$RESULT_SUMMARY_PATH" ]; then

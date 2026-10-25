@@ -136,6 +136,17 @@ test('the scripts that rewrite runner Swift select the packaged-source check', (
   assert.ok(ids(['apple/runner/Sources/Runner/Main.swift']).includes('packaged-runner-swift'));
 });
 
+test('the shared foreground geometry header selects the Apple runner builds', () => {
+  // The runner's event bridge includes this bridge header by relative path, so its bytes change
+  // the compiled runner on both platform lanes; a change nothing builds cannot be reviewed safely.
+  for (const check of ['swift-runner-ios', 'swift-runner-macos', 'packaged-runner-swift']) {
+    assert.ok(
+      ids(['apple/snapshot-bridge/ForegroundApplicationGeometry.h']).includes(check),
+      check,
+    );
+  }
+});
+
 test('Android helper change selects the android-helpers build', () => {
   assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), [
     'android-helpers',

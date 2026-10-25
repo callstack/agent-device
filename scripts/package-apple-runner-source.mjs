@@ -7,6 +7,20 @@ import { stripSwiftComments } from './strip-swift-comments.mjs';
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
 const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
+// The runner's UITests source includes the bridge's shared full-screen header through
+// `../../../snapshot-bridge/ForegroundApplicationGeometry.h`. That relative path must resolve in
+// the packaged layout too, so the one header is mirrored next to the packaged runner.
+const SHARED_HEADER_SOURCE = path.join(
+  'apple',
+  'snapshot-bridge',
+  'ForegroundApplicationGeometry.h',
+);
+const SHARED_HEADER_OUTPUT = path.join(
+  'dist',
+  'apple',
+  'snapshot-bridge',
+  'ForegroundApplicationGeometry.h',
+);
 const SNAPSHOT_PRESENTATION_SOURCE_DIR = path.join('apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_OUTPUT_DIR = path.join('dist', 'apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';
@@ -65,8 +79,24 @@ function packageAppleRunnerSource(options = {}) {
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
   });
+  packageSharedHeader(root, options, summary);
   packageSnapshotPresentationSource(root, options, summary);
   return summary;
+}
+
+// The include in RunnerXCTestEventBridge.m reaches this header by relative path, so packaging must
+// place it at the mirrored location or a user's `xcodebuild` of the packaged source fails to find
+// it. Check mode validates the source header exists; the copy mode validates the destination.
+function packageSharedHeader(root, options, summary) {
+  const sourcePath = path.join(root, SHARED_HEADER_SOURCE);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Apple runner shared header not found at ${sourcePath}`);
+  }
+  if (options.checkOnly) return;
+  const outputPath = path.join(root, SHARED_HEADER_OUTPUT);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.copyFileSync(sourcePath, outputPath);
+  summary.copiedFiles += 1;
 }
 
 function packageSnapshotPresentationSource(root, options, summary) {

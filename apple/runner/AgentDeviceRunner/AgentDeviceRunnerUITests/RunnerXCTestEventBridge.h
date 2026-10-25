@@ -124,13 +124,6 @@ FOUNDATION_EXPORT RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForegroun
   CGRect screenFrame
 );
 
-// The off-phone half of the sole-screen rule: the route opens only while the evidence proves the
-// app fills its screen. The phone idiom never reaches this decision — its caller short-circuits
-// before the probe, because an iPhone keeps every app full-screen.
-FOUNDATION_EXPORT BOOL RunnerSoleScreenRouteOpensForEvidence(
-  RunnerFullScreenEvidence evidence
-);
-
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
   Class cls,
   NSString *className,

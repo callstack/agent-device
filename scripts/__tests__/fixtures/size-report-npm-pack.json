@@ -38,6 +38,14 @@
       "size": 0
     },
     {
+      "path": "apple/snapshot-bridge/ForegroundApplicationGeometry.h",
+      "size": 0
+    },
+    {
+      "path": "dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h",
+      "size": 0
+    },
+    {
       "path": "apple/macos-helper/Package.swift",
       "size": 1057
     },

@@ -386,6 +386,7 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
 const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.startsWith('apple/runner/') ||
   file.startsWith('apple/snapshot-presentation/') ||
+  file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
   (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
   file.endsWith('.swift');
 
@@ -439,6 +440,7 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'packaged runner Swift must still parse and keep the checkout line numbering',
     owns: (file) =>
       file.startsWith('apple/runner/') ||
+      file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
       file === 'scripts/package-apple-runner-source.mjs' ||
       file === 'scripts/strip-swift-comments.mjs',
   },

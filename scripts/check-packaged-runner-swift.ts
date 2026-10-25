@@ -145,6 +145,52 @@ function swiftParseFailures(
   });
 }
 
+/**
+ * The packaged `RunnerXCTestEventBridge.m` includes the shared full-screen header by relative
+ * path (`../../../snapshot-bridge/ForegroundApplicationGeometry.h`). Resolve that include in the
+ * scratch packaging layout: a missing mirror means a user's `xcodebuild` of the installed
+ * package cannot compile the runner, and nothing in this repo would notice otherwise.
+ */
+export function sharedHeaderFailures(scratchRoot: string): string[] {
+  const bridgeSource = path.join(
+    scratchRoot,
+    PACKAGED_DIR,
+    'AgentDeviceRunner',
+    'AgentDeviceRunnerUITests',
+    'RunnerXCTestEventBridge.m',
+  );
+  const source = fs.readFileSync(bridgeSource, 'utf8');
+  const include = /^\s*#import\s+"(\.\.[^"]*ForegroundApplicationGeometry\.h)"/m.exec(source);
+  if (!include) {
+    return [
+      `${PACKAGED_DIR}: RunnerXCTestEventBridge.m no longer includes the shared full-screen ` +
+        'header by relative path; the packaging mirror and this check must match the include.',
+    ];
+  }
+  const resolved = path.resolve(path.dirname(bridgeSource), include[1]!);
+  if (!fs.existsSync(resolved)) {
+    return [
+      `Packaged source includes "${include[1]}" from RunnerXCTestEventBridge.m, which resolves ` +
+        `to ${resolved} — a path nothing packages.`,
+    ];
+  }
+  const checkout = path.resolve(
+    repoRoot,
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunnerUITests',
+    include[1]!,
+  );
+  if (!fs.existsSync(checkout)) {
+    return [`Checkout include "${include[1]}" does not resolve either: ${checkout}.`];
+  }
+  if (!fs.readFileSync(resolved).equals(fs.readFileSync(checkout))) {
+    return ['Packaged ForegroundApplicationGeometry.h differs from the checkout source.'];
+  }
+  return [];
+}
+
 function main(): number {
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-packaged-swift-'));
   try {
@@ -152,6 +198,7 @@ function main(): number {
     const relativePaths = swiftFilesUnder(packagedRoot);
     const swiftc = findSwiftc();
     const failures = [
+      ...sharedHeaderFailures(scratchRoot),
       ...lineParityFailures(packagedRoot, relativePaths),
       ...(swiftc === undefined
         ? []

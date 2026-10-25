@@ -26,6 +26,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header v1');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule v1');
 
   let builds = 0;
   let xcodeVersion = 'Xcode 16.4\nBuild version 16F6';
@@ -110,6 +111,21 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
     assert.notEqual(sourceChanged.sourceHash, first.sourceHash);
     assert.equal(builds, 3);
 
+    // The shared full-screen header is compiled into the bridge (SnapshotBridgeRuntime.m includes
+    // it), so changing only the header must bust the cache — a build kept across a rule edit would
+    // ship the old refusal from bytes the fingerprint never read.
+    await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule v2');
+    const headerChanged = await ensureSnapshotBridgeBinary({
+      host,
+      runtime: 'iOS 26.2',
+      limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
+      sourceRoot,
+      cacheRoot,
+    });
+    assert.notEqual(headerChanged.sourceHash, sourceChanged.sourceHash);
+    assert.equal(builds, 4);
+
     xcodeVersion = 'Xcode 16.5\nBuild version 16F5';
     const toolchainChanged = await ensureSnapshotBridgeBinary({
       host,
@@ -120,7 +136,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       cacheRoot,
     });
     assert.notEqual(toolchainChanged.cacheKey, sourceChanged.cacheKey);
-    assert.equal(builds, 4);
+    assert.equal(builds, 5);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -145,6 +161,7 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   let builds = 0;
   const host = createFakeBuildHost(async () => {
     builds += 1;
@@ -183,6 +200,7 @@ test('an aborted cache waiter does not cancel an independent preparation', async
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   let builds = 0;
   let buildStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -235,6 +253,7 @@ test('a bridge build that failed is reported over a cache lock that could not be
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const buildHost = createFakeBuildHost('unused');
   const host: SnapshotSourceHost = {
     ...buildHost,
@@ -287,6 +306,7 @@ test('a compile exec killed at its budget reports the bridge build, not the exec
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const buildHost = createFakeBuildHost('binary');
   let compileTimeoutMs = 0;
   const host: SnapshotSourceHost = {

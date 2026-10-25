@@ -42,7 +42,7 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'apple/snapshot-bridge/ForegroundApplicationGeometry.h') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner cache schema
