@@ -45,7 +45,10 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['packages/kernel/src/errors.ts'],
     owns: ['packages/kernel/src/errors.ts'],
-    shards: 5,
+    // errors.ts keeps growing (resource-ownership reasons landed ~400 mutants,
+    // and the slow-test region alone outran a 22-minute shard); eight slices
+    // hold every bin inside the lane's 30-minute job budget.
+    shards: 8,
   },
   {
     id: 'daemon-ref-frame',
