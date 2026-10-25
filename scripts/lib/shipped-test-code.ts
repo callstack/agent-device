@@ -52,7 +52,7 @@ function hasTestOnlyDirectory(packedPath: string): string | undefined {
 }
 
 /** A file whose own name marks it as test code: `foo.test.ts`, `bar.spec.mjs`, `BazForTesting.swift`. */
-export function isTestOnlyFileName(fileName: string): boolean {
+function isTestOnlyFileName(fileName: string): boolean {
   return TEST_ONLY_FILE_PATTERN.test(fileName) || fileName.includes(TEST_ONLY_FILE_SUFFIX);
 }
 
