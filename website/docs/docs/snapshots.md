@@ -333,6 +333,7 @@ keyboard band as unmeasurable rather than absent. An older helper omits it.
 The response-level `keyboard` field tells you what the capture observed:
 
 - `visible` carries a directly measured `frame` in the same coordinates as node bounds.
+  On iOS XCTest captures, the frame comes from that captured tree and includes its input assistant bar.
 - `derived` carries a `frame` inferred from a docked keyboard tree, with `derivation: "docked-tree"`.
 - `visibility-only` carries a boolean `visible` from a provider probe, without a frame.
 - `tree-rejected` means the full tree was checked with a usable viewport but could not establish a

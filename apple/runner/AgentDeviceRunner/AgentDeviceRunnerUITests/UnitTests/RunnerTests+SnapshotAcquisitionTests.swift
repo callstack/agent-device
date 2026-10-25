@@ -9,15 +9,16 @@ final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
   let frame: CGRect
   let label: String
   let children: [XCUIElementSnapshot]
+  let identifier: String
 
-  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", children: [XCUIElementSnapshot] = []) {
+  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", identifier: String = "", children: [XCUIElementSnapshot] = []) {
     self.elementType = elementType
     self.frame = frame
     self.label = label
     self.children = children
+    self.identifier = identifier
   }
 
-  var identifier: String { "" }
   var value: Any? { nil }
   var title: String { "" }
   var isEnabled: Bool { true }

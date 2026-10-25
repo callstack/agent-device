@@ -3,6 +3,50 @@ import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+#if os(iOS)
+  @MainActor
+  func testCapturedKeyboardBandIncludesTheInputAssistantOutsideTheKeyboard() {
+    let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
+    let assistant = ElementAttributesFixture(
+      .other, CGRect(x: 0, y: 556, width: 390, height: 44), identifier: "SystemInputAssistantView"
+    )
+    let window = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 390, height: 844), children: [assistant, keyboard])
+    let root = ElementAttributesFixture(.application, window.frame, children: [window])
+
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: root, deadline: .distantFuture),
+      .visible(CGRect(x: 0, y: 556, width: 390, height: 288))
+    )
+  }
+
+  @MainActor
+  func testCapturedKeyboardBandRequiresAKeyboardAndPreservesGeometryValidation() {
+    let frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let assistant = ElementAttributesFixture(
+      .other, CGRect(x: 0, y: 556, width: 390, height: 44), identifier: "SystemInputAssistantView"
+    )
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [assistant]), deadline: .distantFuture),
+      .absent
+    )
+    let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
+    let unrelated = ElementAttributesFixture(.other, CGRect(x: 0, y: 100, width: 390, height: 44), identifier: "other-toolbar")
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [unrelated, keyboard]), deadline: .distantFuture),
+      .visible(keyboard.frame)
+    )
+    let invalid = ElementAttributesFixture(.keyboard, .zero)
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid]), deadline: .distantFuture),
+      .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+    )
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid, assistant]), deadline: .distantFuture),
+      .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+    )
+  }
+#endif
+
   func testKeyboardBandFactReadFailureIsStatedAsUnmeasurableNotAbsence() {
     // Absence would let a consumer claim the screen is clear of a keyboard on the strength of a read
     // that never answered.

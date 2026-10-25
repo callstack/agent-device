@@ -131,18 +131,15 @@ func runnerKeyboardBandFact(
 private struct KeyboardBandProbeTimeout: Error {}
 
 extension RunnerTests {
-  /// The band the visible keyboard owns, read once per capture.
+  /// The band the visible keyboard owns in the captured tree.
   ///
   /// Returns nil only where there is no iOS keyboard to look for. Every other outcome is stated,
   /// including the ones where looking failed: a missing field would leave the daemon guessing which
   /// tier answered, while a published `unmeasurable` names the reason where the band would have been.
   ///
-  /// Its own main-thread hop with its own slice, taken after the tree so the fact is never older than
-  /// the tree it is compared against, and so a keyboard this capture cannot afford to measure costs the
-  /// capture nothing: a timeout abandons the fact and leaves the tree tier standing, the same trade
-  /// `boundedBlockingSystemAlertSnapshot` makes for the probe it bounds (#2660). The elapsed time rides
-  /// the stamp so the cost of the extra query stays checkable in the field.
-  func captureKeyboardBandFact(app: XCUIApplication, deadline: Date) -> RunnerKeyboardBandFact? {
+  /// The tree and keyboard band describe the same capture, even if the live keyboard disappears.
+  /// Its own bounded main-thread hop preserves the existing budget and timeout evidence.
+  func captureKeyboardBandFact(snapshot: XCUIElementSnapshot, deadline: Date) -> RunnerKeyboardBandFact? {
 #if os(iOS)
     let slice = min(Self.keyboardBandProbeBudget, max(0, deadline.timeIntervalSinceNow))
     guard slice > 0 else {
@@ -160,7 +157,7 @@ extension RunnerTests {
         timeout: slice,
         timeoutError: { KeyboardBandProbeTimeout() }
       ) {
-        self.keyboardBandFact(app: app)
+        self.keyboardBandFact(snapshot: snapshot)
       }
     } catch {
       fact = .unmeasurable(RunnerKeyboardBandReason.queryTimeout)
@@ -177,15 +174,28 @@ extension RunnerTests {
 #endif
   }
 
-  private func keyboardBandFact(app: XCUIApplication) -> RunnerKeyboardBandFact {
-    let read = safely("KEYBOARD_BAND_FACT") { () -> RunnerKeyboardBandFact? in
-      let keyboard = app.keyboards.firstMatch
-      guard keyboard.exists else {
-        return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+  private func keyboardBandFact(snapshot: XCUIElementSnapshot) -> RunnerKeyboardBandFact {
+    // A live exists/frame pair can race keyboard dismissal after the tree was captured.
+    var pending = [snapshot]
+    var keyboardFrame: CGRect?
+    var assistantFrame = CGRect.null
+    while let node = pending.popLast() {
+      if node.elementType == .keyboard {
+        keyboardFrame = keyboardFrame.map { $0.union(node.frame) } ?? node.frame
+      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(node.frame) {
+        assistantFrame = assistantFrame.union(node.frame)
       }
-      return runnerKeyboardBandFact(readSucceeded: true, exists: true, frame: keyboard.frame)
+      pending.append(contentsOf: node.children)
     }
-    return read ?? .unmeasurable(RunnerKeyboardBandReason.queryFailed)
+    guard let keyboardFrame else {
+      return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+    }
+    guard runnerKeyboardFrameIsUsable(keyboardFrame) else {
+      return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+    }
+    return runnerKeyboardBandFact(
+      readSucceeded: true, exists: true, frame: keyboardFrame.union(assistantFrame)
+    )
   }
 }
 
