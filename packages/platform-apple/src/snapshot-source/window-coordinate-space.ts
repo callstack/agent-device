@@ -15,31 +15,19 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * two spaces coincide and nothing is turned. Rules that read the reported numbers refused app content
  * the keyboard was nowhere near and let a tap through into a key (#2612).
  *
- * A window that does not fill the screen — iPad Windowed Apps or Stage Manager — declares the other
- * space. Measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window whose screen box is
- * `(224,207,386,682)`, the window itself reports that screen box while the subtree under it arrives
- * anchored at its own top-left: the application root reads `(0,0,386,682)` and its `Add` button
- * `(335,14,37,36)` — the button's screen position `(559,221)` minus the window origin. Published as
- * reported, that tree mixes two spaces, clips its own content, and moves every tap by the window
- * origin (#3899). That translation belongs to the capture that performs it — the runner's Swift
- * `SnapshotContentTranslation` — not to this decoder, because the guest refuses a windowed tree
- * before this file can read one.
+ * The box is the only evidence, so the rule reads side lengths and nothing else. Origins are not
+ * compared: a quarter turn says which axis a box runs along, not where it sits, and a window may
+ * legitimately be placed elsewhere. A square app frame cannot be told from its own quarter turn, so it
+ * is left alone rather than guessed at — rotating geometry that did not need it is the worse failure.
  *
- * A rule that reads a box reads what the box can say. The quarter turn is a statement about which
- * axis a box runs along, so it compares side lengths and nothing else. A content translation is a
- * statement about where a subtree starts, so it reads all four numbers of the carrier's box against
- * the viewport box the platform reported: the carrier must be the app's own window — a `(0,0)`-anchored
- * copy of the viewport's side lengths — and the viewport must start somewhere else on the screen.
- * A full-screen window, an iPhone, and each foldable panel report origins at zero on both sides, so
- * the rule reads no translation there and every published rect stays as the platform reported it.
- *
- * RULE 1 is enforced in both languages, because both channels read it. RULE 3 (the content
- * translation) and RULE 2 (the rotation back, `CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`)
- * live with the runner's capture alone. One table proves the shared rules are one rule:
- * `contracts/fixtures/window-coordinate-space.json` is replayed here and against
- * `SnapshotGeometrySpace`, `SnapshotContentTranslation`, and `CoordinateSpaceRotation` in
- * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`;
- * change any rule only through that table.
+ * The same rule is enforced in Swift for the capture that produces these trees, and one table proves
+ * they are one rule: `contracts/fixtures/window-coordinate-space.json` is replayed here and against
+ * `SnapshotGeometrySpace` in
+ * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`. The table also
+ * pins the way back (`CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`, Swift-only
+ * today); change either rule only through that table. A placed iPad window's content translation
+ * (#3899) is the Swift capture's alone (`SnapshotContentTranslation`): the guest refuses a windowed
+ * tree before this decoder can read one.
  *
  * Why this is a detector and not a repair: the bridge guest cannot read the app's interface
  * orientation. Measured in the #2659 spike (verdict on the issue, write-up in the diff of #2667):

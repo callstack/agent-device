@@ -109,12 +109,7 @@ extension RunnerTests {
       "software keyboard is down: this simulator cannot show the keyboard a focus tap raises"
     )
 
-    let stabilized = stabilizeTextInputBeforeTyping(
-      app: app,
-      target: field,
-      contentTranslation: .none,
-      keyboardVisibleBeforeTap: false
-    )
+    let stabilized = stabilizeTextInputBeforeTyping(app: app, target: field, contentTranslation: .none, keyboardVisibleBeforeTap: false)
 
     guard case .inputReportsKeyboardFocus(let read) = stabilized.evidence else {
       return XCTFail("focus confirmed by \(stabilized.evidence?.name ?? "nothing"), not by the tapped input")

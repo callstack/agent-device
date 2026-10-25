@@ -85,53 +85,24 @@ extension RunnerTests {
   /// `ResolvedTextEntryInput` already reads elements this way. It is read again after the
   /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
   /// field is then, which is the moment the read it replaced ran at.
-  ///
-  /// The re-read carries a fresh content-vector read, so the repeat taps a screen point (#3899). It
-  /// is read only on this branch: a tap that confirms focus dispatches no window lookup.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
 #if os(iOS)
     if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
     }
-    // Contained like the probe lookups: a transient window or a snapshot that records an XCTest
-    // issue costs the retap, not the command. A failed window read leaves the read's vector
-    // `.unknown`, which names no screen box, so `retapAt` taps nothing (#3899).
-    let settled: ResolvedTextEntryInput?
-    switch containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?, { _ in
+    guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", {
       ResolvedTextEntryInput(reading: element, contentTranslation: liveContentTranslation(app: app))
-    }) {
-    case .success(let read):
-      settled = read
-    case .failure:
-      settled = nil
-    }
-    guard let settled else {
+    }) else {
       return
     }
     retapAt(read: settled, app: app, element: element)
 #endif
   }
 
-  /// The readiness retap, split out so the unit lane can drive it and assert where the point lands.
-  /// The retap taps nothing when the read cannot name a screen box: with no snapshot that box is the
-  /// live `element.frame`, the read a handle that stopped answering its query cannot make without
-  /// recording a failure (#3060); with an unknown content space a snapshot frame is not known to be
-  /// a screen box, and a raw window-local point is exactly the #3899 failure. The probe-side rule
-  /// `clearTextInput` and `moveCaretToEnd` settled on: skip the point, never guess through it.
+  /// The readiness repeat, at the read's screen box; a read that names none taps nothing (#3899).
   func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
-    guard let frame = read.frameOnScreen else {
-      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=no-screen-frame")
-      return
-    }
-    guard !frame.isEmpty else {
-      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=empty-frame")
-      return
-    }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f",
-      frame.midX,
-      frame.midY
-    )
+    guard let frame = read.frameOnScreen, !frame.isEmpty else { return }
+    NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f", frame.midX, frame.midY)
     _ = tapAt(app: app, x: frame.midX, y: frame.midY)
     _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
   }
@@ -164,7 +135,7 @@ extension RunnerTests {
   /// fallback at all.
   func keyboardFocusConfirmed(app: XCUIApplication, element: XCUIElement) -> Bool {
 #if os(iOS)
-    // No content vector: this corroborates raw frame against raw frame and dispatches no point.
+    // `.unknown`: this compares raw frames with each other and dispatches no point.
     return ResolvedTextEntryInput(reading: element, contentTranslation: .unknown)
       .map { keyboardFocusConfirmed(app: app, read: $0) } ?? false
 #else

@@ -628,52 +628,28 @@ A band taller than it is wide is what the output of a producer that did not norm
 
 ## Amendment: a window that does not fill the screen (issue #3899)
 
-An iPad window that does not fill the screen splits a capture in two.
-The measurement used iPad Pro 11-inch (M5, iOS 27.0) with Windowed Apps on and a Calendar window at screen `(224,207,386x682)`:
+An iPad window that does not fill the screen (Windowed Apps, Stage Manager) reports its subtree from its own top-left.
+Measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window at screen `(224,207,386x682)`: the root reads `(0,0,386,682)` and `Add` reads `(335,14,37,36)` but draws at `(559,221)`.
+The runner's live window read, the keyboard window, and a SpringBoard overlay report screen boxes.
+Published as reported, the capture mixed two spaces: the fold clipped nodes (`regular-node-outside-cumulative-clip`), rects named no screenshot position, and taps landed at the point minus the window origin.
 
-- The app's root and its subtree report `(0,0)`-anchored frames. The window's `Add` button reads `(335,14,37,36)` and draws at screen `(559,221)`.
-- The runner's live `XCUIApplication.windows` read reports the window's screen box `(224,207,386,682)`.
-- A system window under the app root — the keyboard at `(0,925,834,282)`, a SpringBoard overlay at `(0,0,834,1210)` — reports the screen's own box.
+Decision. A placed window publishes screen space in points, because its viewport, its screenshot, and the digitizer already use that space.
+`SnapshotContentTranslation.offset` is the one rule, applied in the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
+A carrier declares an offset only when its box is a `(0,0)`-anchored copy of the reported viewport box and the viewport starts elsewhere; the offset is the viewport origin.
+Any other carrier keeps its frames, so the screen-space system windows above do not move.
+A full-screen window, an iPhone, and each ADR 0025 foldable panel start at `(0,0)`, so they read no offset and publish unchanged.
+`contracts/fixtures/window-coordinate-space.json` replays the rule in Swift only, because the bridge guest refuses a windowed tree (`app-window-not-full-screen`) before the host decoder reads one.
 
-The viewport is built from the live read, so the capture published a screen-space viewport around window-relative rects.
-That mix produced three failures from one cause: the fold clipped each node to `(w - x) x (h - y)` and the regular capture died with `regular-node-outside-cumulative-clip`; a published rect named no position in the screenshot; and a coordinate tap landed at the point minus the window origin.
-The same drift appears in any app the user has placed, so Stage Manager behaves the same way.
+Rotation and translation stay separate. `CoordinateSpaceRotation` turns axes and never moves an origin: the old localization of a frame origin was dead code at every measured full-screen origin and the dispatch bug here.
+A synthesized turn swaps the sole display's side lengths, as the digitizer does, not a placed window's; a multi-screen host keeps the window box of its panel.
 
-Decision. A window that does not fill the screen publishes screen space in points.
-One capture publishes one space, as the #2612 amendment decided, and the space a placed window names is the screen's — because that is the space its viewport, its screenshot, and its digitizer already use.
-The conversion runs where the platform's frame is still the platform's frame: inside the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
-No per-command patch reads a window origin.
+Dispatch takes screen points. `XCUIElement.frame` and the app-anchored `XCUICoordinate` are screen space on a placed window; `XCUIElementSnapshot.frame` is window content space.
+The text-entry probe therefore owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
+Each command reads the vector once from the resolved window's box as `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default, so a failed read never passes for full screen.
+The target and each read it produces carry that vector. `frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
+On nil, the focus tap dispatches the caller's point, the refresh point, the caret tap, and the readiness retap dispatch nothing, and probe matching compares the live `element.frame`, because a comparison dispatches nothing.
 
-A window declares its subtree's space from its own box, and this is the one rule in the table that reads an origin.
-The carrier's box must be a `(0,0)`-anchored copy of the viewport box the platform reported, and the viewport must start somewhere else on the screen.
-Then the subtree was reported in the carrier's content space, and the viewport's origin is the one vector that carries it to the screen.
-Any other carrier box names no space, so the rule leaves its numbers alone: the keyboard window and the SpringBoard overlay above report the screen's own box and are already in screen space.
-A full-screen window, an iPhone, and each foldable panel of ADR 0025 report origins at zero on both sides, so the rule reads no vector there and every rect is unchanged.
-`SnapshotContentTranslation.offset(reportedBox:viewportBox:)` is that rule, replayed from `contracts/fixtures/window-coordinate-space.json` in the capture's language alone: the host bridge refuses a windowed tree (`app-window-not-full-screen`) before its decoder can read one, so the translation has one producer-side owner and the host's parity replay covers only the rules that decoder reads.
-
-Rotation and translation stay separate rules.
-`CoordinateSpaceRotation` turns a box's axes and never moves its origin: the digitizer's origin is the display's own, which is where a placed window's screen-space points are already measured from.
-Before this amendment, that function localized a non-zero frame origin away and never added it back.
-Every configuration measured before this one has its app frame at the screen origin, so the localization was dead code there and the dispatch bug here.
-Translation is the one rule that reads an origin, so it is the only place the fix can live.
-
-Capture is half of the promise; dispatch is the other half.
-The measured dispatch spaces for a placed window are both screen-anchored: the synthesized path lands a point at its screen position, and XCTest's own `XCUICoordinate` on the app anchors at the screen's origin too.
-`interactionCoordinate` therefore passes the caller's screen point through, and `resolveRunnerWindow` keeps naming the window a foldable's tap resolves its display on (ADR 0025).
-The live `XCUIElement.frame` property reports screen space on a placed window, as the selector-tap path proved on the device: it measured the `Add` button at (659,321) for a window at (324,307).
-The one live read that does not is `XCUIElementSnapshot.frame`, which reports the window's content space like the capture channel does.
-So the snapshot capture converts in `SnapshotGeometrySpace.normalized`, and the text-input probe converts its snapshot reads through the same `SnapshotContentTranslation` rule read from the resolved window's live box (its origin, against a zero-origin box of its own size); every other live read needs no conversion.
-The probe-side owner is `ResolvedTextEntryInput.frameOnScreen`.
-The vector is read once per command as `TextEntryContentTranslation` — `known(offset)`, `none` for a full-screen app, or `unknown` when the window read could not answer — and it has no default anywhere it travels, so an omitted read can never read as full screen.
-It is stored on the target and each read the target produces, so the probe matching, the focus tap, the refresh point, the caret tap, and the readiness retap all dispatch through that one property.
-`frameOnScreen` is optional: it names no box when the read has no snapshot or the vector is `unknown`.
-No point dispatch reads a live `element.frame`: the focus tap falls back to the caller's requested point, which is already a screen point, and the retap and the caret tap dispatch nothing on a nil.
-Probe matching compares `element.frame` when `frameOnScreen` is nil — a comparison needs the only box a read that cannot translate still has, and a comparison dispatches nothing.
-The readiness retap taps nothing on `unknown`: dispatching a raw window-local point is the failure this amendment fixes, and skipping one retap costs the caller's next read, not the session.
-The probe trusts that selector's naming — the same first non-empty window every synthesized dispatch already books as its reference box — and a window that is moved between the command's read and its dispatch drifts, like every live read: a re-opened command reads the current vector.
-The host bridge still refuses a windowed capture (`app-window-not-full-screen`) and converts nothing, while the XCTest runner — the fallback the bridge's refusal routes to — converts through the rule above, so the bridge's refusal stays the reason the TypeScript twin of the rule runs today only in the parity replay.
-Portrait is the only orientation measured for a placed window; the quarter-turn table's windowed row pins the arithmetic (a frame origin never travels through the turn), not a device measurement.
-Dispatch rotation turns about the display's side lengths, as the digitizer does, never about a placed window's smaller box; landscape under Windowed Apps stays unmeasured until measured, and the rotation basis follows the display there on the digitizer's rule, not on a measurement.
+Open gaps: landscape under Windowed Apps, Stage Manager, and a window partly off screen are unmeasured; their rows pin arithmetic only. A window moved between the command's vector read and its dispatch drifts like any live read.
 
 ## Amendment: modal containment in the presentation cut
 
@@ -772,9 +748,7 @@ If the frames differ, the guest refuses the capture (`app-window-not-full-screen
 This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
 If the runtime cannot report either frame, the guest keeps the capture.
 
-The XCTest fallback is the correct capture for a windowed app, after the amendment above.
-Before it, the runner clipped window-relative element frames against the screen-relative app frame, and that gap is what made this refusal protect a real failure.
-The refusal stays: this channel reports window-relative frames and no channel here converts them.
+The bridge still refuses and converts nothing; the XCTest fallback publishes a windowed app in screen space (#3899 amendment above).
 
 Rejected alternatives:
 

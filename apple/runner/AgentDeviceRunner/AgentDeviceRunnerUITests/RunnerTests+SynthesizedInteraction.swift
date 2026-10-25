@@ -31,7 +31,7 @@ extension RunnerTests {
       )
     }
     let frame = context.referenceFrame
-    let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation)
+    let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation)
     let start = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
       in: rotationFrame,
@@ -118,11 +118,7 @@ extension RunnerTests {
     }
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: synthesizedRotationFrame(
-        app: app,
-        fallback: context.referenceFrame,
-        interfaceOrientation: orientation
-      ),
+      in: synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: orientation),
       interfaceOrientation: orientation
     )
     logSynthesizedDispatch(
@@ -196,11 +192,7 @@ extension RunnerTests {
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: synthesizedRotationFrame(
-        app: app,
-        fallback: context.referenceFrame,
-        interfaceOrientation: orientation
-      ),
+      in: synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: orientation),
       interfaceOrientation: orientation
     )
     logSynthesizedDispatch(
@@ -533,17 +525,10 @@ extension RunnerTests {
   /// that can show an app in part of a screen (iPad, more than one screen) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    guard UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 else {
+    guard UIDevice.current.userInterfaceIdiom == .phone else {
       return nil
     }
-    let screen = UIScreen.main
-    let scale = screen.nativeScale
-    guard scale > 0 else { return nil }
-    let frame = Self.soleScreenReferenceFrame(
-      nativePortraitSize: CGSize(
-        width: screen.nativeBounds.width / scale,
-        height: screen.nativeBounds.height / scale
-      ),
+    let frame = soleDisplayFrame(
       interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     )
     NSLog(
@@ -553,29 +538,25 @@ extension RunnerTests {
     return frame
   }
 
-  /// The box whose side lengths a dispatch turn swaps. The digitizer turns about the display's
-  /// own axes, so a screen-space point must turn about the display's side lengths even when the
-  /// app runs in a placed window, whose box is smaller (#3899). Landscape under Windowed Apps is
-  /// unmeasured (ADR 0004); the rule follows the digitizer there anyway. A multi-screen host — an
-  /// ADR 0025 foldable — resolves its window to the panel that hosts the app, so there the
-  /// caller's window box already names the display and stays the basis. A full-screen app's
-  /// window box is its display's box, so this changes no measured route.
-  func synthesizedRotationFrame(
-    app: XCUIApplication,
-    fallback: CGRect,
-    interfaceOrientation: Int
-  ) -> CGRect {
-    guard XCUIScreen.screens.count == 1 else { return fallback }
+  /// The box a synthesized turn swaps side lengths about. The digitizer turns about its display, so a
+  /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
+  /// resolved window, which names its panel (ADR 0025).
+  func synthesizedRotationFrame(fallback: CGRect, interfaceOrientation: Int) -> CGRect {
+    soleDisplayFrame(interfaceOrientation: interfaceOrientation) ?? fallback
+  }
+
+  private func soleDisplayFrame(interfaceOrientation: Int) -> CGRect? {
+    guard XCUIScreen.screens.count == 1 else { return nil }
     let screen = UIScreen.main
     let scale = screen.nativeScale
-    guard scale > 0 else { return fallback }
+    guard scale > 0 else { return nil }
     return Self.soleScreenReferenceFrame(
       nativePortraitSize: CGSize(
         width: screen.nativeBounds.width / scale,
         height: screen.nativeBounds.height / scale
       ),
       interfaceOrientation: interfaceOrientation
-    ) ?? fallback
+    )
   }
 #endif
 
@@ -766,15 +747,12 @@ extension RunnerTests {
       width: plan.viewport.width,
       height: plan.viewport.height
     )
+    let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation)
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
         let point = CoordinateSpaceRotation.native(
           point: CGPoint(x: sample.point.x, y: sample.point.y),
-          in: synthesizedRotationFrame(
-            app: app,
-            fallback: frame,
-            interfaceOrientation: orientation
-          ),
+          in: rotationFrame,
           interfaceOrientation: orientation
         )
         return [
