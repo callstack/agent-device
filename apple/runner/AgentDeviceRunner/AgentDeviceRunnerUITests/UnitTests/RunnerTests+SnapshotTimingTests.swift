@@ -5,25 +5,25 @@ import XCTest
 extension RunnerTests {
   func testXCTestPenaltyDecisionSeparatesAcquisitionAndPresentation() {
     let slowPresentation = SnapshotBackendAttempt(
+      step: .ordinary(.recursiveTree),
       outcome: .noCapture,
       timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 4_000)
     )
     XCTAssertNil(
       Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: slowPresentation,
+        for: slowPresentation,
         slowThresholdMs: 3_000
       )
     )
 
     let slowAcquisition = SnapshotBackendAttempt(
+      step: .ordinary(.recursiveTree),
       outcome: .noCapture,
       timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 100)
     )
     XCTAssertEqual(
       Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: slowAcquisition,
+        for: slowAcquisition,
         slowThresholdMs: 3_000
       ),
       "slow_tree_capture_3001ms"
@@ -35,26 +35,26 @@ extension RunnerTests {
       hint: "test"
     )
     let acquisitionFailure = SnapshotBackendAttempt(
+      step: .ordinary(.recursiveTree),
       outcome: .failed(timeout, phase: .acquisition),
       timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 100)
     )
     XCTAssertEqual(
       Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: acquisitionFailure,
+        for: acquisitionFailure,
         slowThresholdMs: 3_000
       ),
       "tree_backend_timeout"
     )
 
     let presentationFailure = SnapshotBackendAttempt(
+      step: .ordinary(.recursiveTree),
       outcome: .failed(timeout, phase: .presentation),
       timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 100)
     )
     XCTAssertNil(
       Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: presentationFailure,
+        for: presentationFailure,
         slowThresholdMs: 3_000
       )
     )
@@ -69,36 +69,41 @@ extension RunnerTests {
       effectiveDepth: nil
     )
     let exhausted = SnapshotBackendAttempt(
+      step: .ordinary(.querySweep),
       outcome: .captured(capture),
       timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
       tierOutcome: .deadlineExhausted
     )
     XCTAssertEqual(
       Self.snapshotXCTestPenaltyReason(
-        kind: .querySweep,
-        attempt: exhausted,
+        for: exhausted,
         slowThresholdMs: 3_000
       ),
       "queries_backend_timeout"
     )
 
     let completed = SnapshotBackendAttempt(
+      step: .ordinary(.querySweep),
       outcome: .captured(capture),
       timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
       tierOutcome: .completed
     )
     XCTAssertNil(
       Self.snapshotXCTestPenaltyReason(
-        kind: .querySweep,
-        attempt: completed,
+        for: completed,
         slowThresholdMs: 3_000
       )
     )
 
+    let unownedExhausted = SnapshotBackendAttempt(
+      step: .ordinary(.privateAX),
+      outcome: exhausted.outcome,
+      timing: exhausted.timing,
+      tierOutcome: exhausted.tierOutcome
+    )
     XCTAssertNil(
       Self.snapshotXCTestPenaltyReason(
-        kind: .privateAX,
-        attempt: exhausted,
+        for: unownedExhausted,
         slowThresholdMs: 3_000
       ),
       "a tier that owes nothing to the XCTest channel cannot penalize it"
@@ -128,68 +133,84 @@ extension RunnerTests {
       code: Self.xCTestSnapshotTimeoutCode, message: "same timeout text", hint: "test"
     )
     for outcome in [SnapshotBackendAttempt.Outcome.failed(timeout, phase: .acquisition), .noCapture] {
-      let short = SnapshotBackendAttempt(
-        outcome: outcome,
-        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
-        tierOutcome: .deadlineExhausted
-      )
+      let short = { (kind: SnapshotBackendKind) in
+        SnapshotBackendAttempt(
+          step: .ordinary(kind),
+          outcome: outcome,
+          timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
+          tierOutcome: .deadlineExhausted
+        )
+      }
       XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
-        kind: .querySweep, attempt: short, slowThresholdMs: 3_000
+        for: short(.querySweep), slowThresholdMs: 3_000
       ), "queries_backend_timeout")
       XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree, attempt: short, slowThresholdMs: 3_000
+        for: short(.recursiveTree), slowThresholdMs: 3_000
       ), "tree_backend_timeout")
-      let slow = SnapshotBackendAttempt(
-        outcome: outcome,
-        timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 10),
-        tierOutcome: .deadlineExhausted
-      )
+      let slow = { (kind: SnapshotBackendKind) in
+        SnapshotBackendAttempt(
+          step: .ordinary(kind),
+          outcome: outcome,
+          timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 10),
+          tierOutcome: .deadlineExhausted
+        )
+      }
       XCTAssertEqual(Self.snapshotXCTestPenaltyReason(
-        kind: .querySweep, attempt: slow, slowThresholdMs: 3_000
+        for: slow(.querySweep), slowThresholdMs: 3_000
       ), "queries_backend_timeout")
     }
     let untyped = SnapshotBackendAttempt(
+      step: .ordinary(.recursiveTree),
       outcome: .failed(SnapshotCaptureFailure(
         code: "OTHER_FAILURE", message: "same timeout text", hint: "test"
       ), phase: .acquisition),
       timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 0)
     )
     XCTAssertNil(Self.snapshotXCTestPenaltyReason(
-      kind: .recursiveTree, attempt: untyped, slowThresholdMs: 3_000
+      for: untyped, slowThresholdMs: 3_000
     ))
   }
 
+  /// The shape #3896 removed and this refactor makes unreachable: an attempt produced by a
+  /// bounded-recovery step — the leading probe or the trailing bounded tier, on either the
+  /// Simulator deferred plan or the physical-device bounded plan — has no arming branch at all,
+  /// whatever its timing or failure. The attempt carries its step, so there is no channel-state
+  /// argument left to forget. Ordinary tree attempts must still penalize on the same facts.
   func testBoundedRecoveryAttemptsCannotRenewPenaltyOnEitherPlatformPlan() {
     let timeout = SnapshotCaptureFailure(
       code: Self.xCTestSnapshotTimeoutCode, message: "test timeout", hint: "test"
     )
-    let attempts = [
-      SnapshotBackendAttempt(
-        outcome: .failed(timeout, phase: .acquisition),
-        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0)
-      ),
-      SnapshotBackendAttempt(
-        outcome: .noCapture,
-        timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0),
-        tierOutcome: .deadlineExhausted
-      ),
-      SnapshotBackendAttempt(
-        outcome: .noCapture,
-        timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 0)
-      ),
+    let attempts: [(
+      outcome: SnapshotBackendAttempt.Outcome, timing: SnapshotCaptureTiming, tier: SnapshotTierOutcome
+    )] = [
+      (.failed(timeout, phase: .acquisition), SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0), .completed),
+      (.noCapture, SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 0), .deadlineExhausted),
+      (.noCapture, SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 0), .completed),
     ]
-    for state in [SnapshotXCTestChannelPlanState.deferredToIndependentBackend, .boundedXCTestProbe] {
+    for claimsProbe in [true, false] {
       for kind in [SnapshotBackendKind.recursiveTree, .querySweep] {
         for attempt in attempts {
           XCTAssertNil(Self.snapshotXCTestPenaltyReason(
-            kind: kind, attempt: attempt, slowThresholdMs: 3_000, channelState: state
+            for: SnapshotBackendAttempt(
+              step: .boundedRecovery(kind, claimsPeriodicProbe: claimsProbe),
+              outcome: attempt.outcome,
+              timing: attempt.timing,
+              tierOutcome: attempt.tier
+            ),
+            slowThresholdMs: 3_000
           ))
         }
       }
     }
     for attempt in attempts {
       XCTAssertNotNil(Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree, attempt: attempt, slowThresholdMs: 3_000
+        for: SnapshotBackendAttempt(
+          step: .ordinary(.recursiveTree),
+          outcome: attempt.outcome,
+          timing: attempt.timing,
+          tierOutcome: attempt.tier
+        ),
+        slowThresholdMs: 3_000
       ), "ordinary tree timeouts and slow acquisitions must still penalize")
     }
   }
