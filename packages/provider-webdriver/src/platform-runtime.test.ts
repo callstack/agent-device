@@ -93,6 +93,32 @@ test('a provider with no capture of its own states the same refusal for a live d
   });
 });
 
+/**
+ * The `network` cell is also the fallback the shared hub gives every optional cell this owner leaves
+ * unclassified, `snapshot` among them, and `findText`/`querySelector` start from the snapshot cell.
+ * So the post-session reason must be stated on `networkDump` alone, or an unrelated read reports it.
+ */
+test('the post-session refusal stays on networkDump and does not leak into the text reads', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities(),
+  });
+
+  const facts = await owner.inspectFacts(device);
+
+  expect(facts.operations.networkDump).toMatchObject({
+    available: false,
+    reason: 'network-capture-post-session',
+  });
+  for (const operation of ['findText', 'querySelector'] as const) {
+    expect(facts.operations[operation].available).toBe(false);
+    if (facts.operations[operation].available) throw new Error(`${operation} admitted a live read`);
+    expect(facts.operations[operation].reason).toBe('unsupported-provider-mode');
+  }
+});
+
 test.each([
   ['Android', device],
   [

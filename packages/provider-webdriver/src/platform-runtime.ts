@@ -496,7 +496,7 @@ function webDriverFacts(
   const unavailable = createUnavailablePlatformRuntimeFacts(device, options.owner, {
     appLog: appLogUnavailable,
     appDeployment: deploymentUnavailable,
-    network: networkCaptureUnavailable,
+    network: appLogUnavailable,
     screenRecording: recordingUnavailable,
     screenshot: screenshotUnavailable,
     viewport: viewportUnavailable,
@@ -664,6 +664,10 @@ function webDriverFacts(
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
       listApps: appsUnavailable,
+      // Stated here rather than through the `network` cell: `network` is the fallback the shared
+      // hub gives every optional cell this owner leaves unclassified, so putting the network-capture
+      // reason there would report it for unrelated reads. Only this cell refuses post-session.
+      networkDump: networkCaptureUnavailable,
       shutdownTarget: unavailableFact(
         'unsupported-provider-mode',
         'WebDriver owns the target lifecycle for provider-owned devices.',
