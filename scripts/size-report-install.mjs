@@ -2,14 +2,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { assertPackagedRunnerSharedHeaderMirror } from './size-report-geometry.mjs';
 import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
-
-// The mirror path the packaged runner's relative include resolves to. Declared here rather than
-// imported: `.github/workflows/size.yml` mixes one commit's copy of each script, so an import of a
-// sibling's newer export would break the base measurement. The value is pinned by tests on both
-// consumers.
-const PACKAGED_RUNNER_SHARED_HEADER_PATH =
-  'dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
@@ -52,22 +46,15 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
 }
 
 export function assertInstalledSnapshotBridge(packageDir) {
+  // The runner include check reads the packaged runner itself, so it runs before the bridge
+  // directory guard: a package that ships the include without the bridge directory must still fail.
+  assertPackagedRunnerSharedHeaderMirror(packageDir);
   const bridgeRoot = path.join(packageDir, 'apple', 'snapshot-bridge');
   if (!fs.existsSync(bridgeRoot)) return;
   const present = SNAPSHOT_BRIDGE_ASSET_PATHS.filter((assetPath) =>
     fs.existsSync(path.join(packageDir, assetPath)),
   );
   assertSnapshotBridgeAssets(present, 'Clean-installed snapshot bridge');
-  // The runner source and its shared-header mirror are packaged as a pair; require the mirror
-  // exactly when the installed tree carries the packaged runner.
-  if (
-    fs.existsSync(path.join(packageDir, 'dist', 'apple', 'runner')) &&
-    !fs.existsSync(path.join(packageDir, PACKAGED_RUNNER_SHARED_HEADER_PATH))
-  ) {
-    throw new Error(
-      `Clean-installed package ships the packaged runner but is missing: ${PACKAGED_RUNNER_SHARED_HEADER_PATH}`,
-    );
-  }
 }
 
 export function measureDirectory(root) {

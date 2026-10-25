@@ -67,3 +67,61 @@ test('clean-installed snapshot bridge validates all native assets when present',
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('clean-installed package requires the shared header mirror only when the runner includes it', async () => {
+  const root = await mkdtempForTest('agent-device-size-header-');
+  const bridge = join(root, 'apple', 'snapshot-bridge');
+  const runner = join(
+    root,
+    'dist',
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunnerUITests',
+  );
+  const bridgeNames = [
+    'SnapshotBridge.m',
+    'SnapshotBridgeRuntime.m',
+    'SnapshotBridgeRuntime.h',
+    'SnapshotBridgeCapture.h',
+    'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
+  ];
+  const writeBridge = async () => {
+    await mkdir(bridge, { recursive: true });
+    for (const name of bridgeNames) {
+      await writeFile(join(bridge, name), 'native source');
+    }
+  };
+  try {
+    await writeBridge();
+    await mkdir(runner, { recursive: true });
+    // A packaged runner whose sources never include the shared header is a legacy package: the
+    // mirror is nobody's include target, so nothing is required.
+    await writeFile(join(runner, 'RunnerXCTestEventBridge.m'), '// predates the shared header\n');
+    assert.doesNotThrow(() => assertInstalledSnapshotBridge(root));
+
+    await writeFile(
+      join(runner, 'RunnerXCTestEventBridge.m'),
+      '#import "../../../snapshot-bridge/ForegroundApplicationGeometry.h"\n',
+    );
+    await rm(bridge, { recursive: true, force: true });
+    assert.throws(
+      () => assertInstalledSnapshotBridge(root),
+      /dist\/apple\/snapshot-bridge\/ForegroundApplicationGeometry\.h/,
+      'the runner include requires the mirror even without the apple/snapshot-bridge directory',
+    );
+    await writeBridge();
+    assert.throws(() => assertInstalledSnapshotBridge(root), /ForegroundApplicationGeometry\.h/);
+    await mkdir(join(root, 'dist', 'apple', 'snapshot-bridge'), { recursive: true });
+    await writeFile(join(root, 'dist', 'apple', 'snapshot-bridge', 'x.h'), '');
+    assert.throws(() => assertInstalledSnapshotBridge(root), /ForegroundApplicationGeometry\.h/);
+    await writeFile(
+      join(root, 'dist', 'apple', 'snapshot-bridge', 'ForegroundApplicationGeometry.h'),
+      '#pragma once\n',
+    );
+    assert.doesNotThrow(() => assertInstalledSnapshotBridge(root));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

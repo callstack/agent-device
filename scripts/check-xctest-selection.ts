@@ -201,14 +201,14 @@ function identifiers(
   );
 }
 
-/** What one lane reaches: its platform's compiled set, narrowed by its flags. */
-/** The lane's platform's compiled identifiers, narrowed by the lane's own flag list. */
+/** The lane's platform's compiled identifiers, before its flags narrow them. */
 function compiledIdentifiersForLane(declaredTests: readonly DeclaredTest[], entry: Lane): string[] {
   return declaredTests
     .filter((test) => test.platforms.includes(entry.platform))
     .map((test) => test.identifier);
 }
 
+/** What one lane reaches: its platform's compiled set, narrowed by its flags. */
 function laneReach(
   entry: Lane,
   declaredTests: readonly DeclaredTest[],
