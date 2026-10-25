@@ -189,6 +189,9 @@ export default defineConfig({
             // The publishing package guard's no-test-code predicates, over fixture paths and
             // bytes: the gate itself can only watch a healthy package pass.
             'scripts/__tests__/shipped-test-code.test.ts',
+            // The packager's own host-app guard, over a fixture runner tree: proves `--check`
+            // refuses a fixture screen compiled into the shipped host app.
+            'scripts/__tests__/packaged-runner-host-app.test.ts',
             'scripts/__tests__/packaged-runner-swift.test.ts',
             // The runner build's actor-isolation log scan, over synthetic logs and a fake
             // `xcodebuild` on PATH.

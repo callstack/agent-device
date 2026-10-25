@@ -13,6 +13,8 @@
  *  4. every `exports` subpath imports, and the `bin` runs, from outside the workspace.
  *  5. the installed tree carries no daemon source, which is what lets an installed
  *     client treat its version as the whole of its code identity (#2458).
+ *  6. the installed tree carries no test code, which the shipped Apple runner source makes a
+ *     real risk: the package ships the Xcode project a user compiles, test tree and all.
  *
  * Step 3 is the static half and step 4 the runtime half of the same question: nothing the package
  * imports may depend on workspace linking. Keep both — a specifier reachable only through a lazy
