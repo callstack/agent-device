@@ -370,6 +370,7 @@ test('package apple runner source requires the shared snapshot presentation sour
   assert.notEqual(result.exitCode, 0);
   assert.match(result.stderr, /snapshot presentation source not found/);
 });
+
 test('snapshot presentation manifests keep their supported platform declarations in parity', () => {
   const manifest = fs.readFileSync(
     path.join(repoRoot, 'apple/snapshot-presentation/Package.swift'),

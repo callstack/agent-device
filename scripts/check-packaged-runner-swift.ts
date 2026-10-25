@@ -150,6 +150,10 @@ function swiftParseFailures(
  * Resolve the packaged project's own search paths in the scratch packaging layout: the package
  * ships `apple/snapshot-bridge/` at its root, so at least one entry must land on that directory
  * and carry the header RunnerXCTestEventBridge.m includes by bare name.
+ *
+ * No other job would miss a broken search path: every xcodebuild lane (smoke-ios-run, smoke-macos,
+ * xctest-nightly) compiles the checkout tree, and check-package's clean install never builds the
+ * packaged runner — the first compile of that tree is a user's. This is that user's build test.
  */
 function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string[] {
   const project = fs.readFileSync(

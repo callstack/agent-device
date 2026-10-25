@@ -11,16 +11,20 @@ export type SnapshotSourceToolchainIdentity = HostToolchainIdentity &
     simulatorRuntime: string;
   }>;
 
+// The shared full-screen rule, included by SnapshotBridgeRuntime.m and by the runner's event
+// bridge; its bytes change both compiled binaries. Named here as the owner of the bridge source
+// set so the runner fingerprint and every package check read one spelling.
+export const SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME = 'ForegroundApplicationGeometry.h';
+
 export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridge.m',
   'SnapshotBridgeRuntime.m',
   'SnapshotBridgeRuntime.h',
   'SnapshotBridgeCapture.h',
   'SnapshotBridgeCapture.m',
-  // Included by SnapshotBridgeRuntime.m and by the runner's event bridge; its bytes change both
-  // compiled binaries, so it must invalidate the bridge cache. Not a compile unit: the clang argv
-  // lists translation units only, and an included header belongs in the fingerprint, not argv.
-  'ForegroundApplicationGeometry.h',
+  // Not a compile unit: the clang argv lists translation units only, and an included header
+  // belongs in the fingerprint, not argv.
+  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
 ] as const;
 export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridge.m',
