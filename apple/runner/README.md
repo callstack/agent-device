@@ -18,6 +18,19 @@ Protocol and maintenance references:
 - TypeScript client: [`../../packages/platform-apple/src/runner/runner-client.ts`](../../packages/platform-apple/src/runner/runner-client.ts)
 - Swift wire models: [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
+## Host App Files
+
+`AgentDeviceRunner/AgentDeviceRunner/` is the host app the runner's XCTest bundle launches.
+
+- `AgentDeviceRunnerApp.m`: the shipped host. The npm package ships it as build input, so it holds
+  no test code: the plain title screen, the scene delegate, and the two hooks below.
+  `+agentDeviceRootViewControllerClass` and `-agentDeviceWillAttachToWindow:` reach the fixture
+  host by class name, never by symbol, so the packaged project builds with the fixtures file absent.
+- `AgentDeviceRunnerAppFixtures.m`: the fixture host, `AgentDeviceRunnerFixtureViewController`.
+  Every `--agent-device-*` launch-argument screen the `UnitTests/` suites drive lives here. It
+  compiles only under `AGENT_DEVICE_RUNNER_UNIT_TESTS` and the npm packager drops it, so a user's
+  host app carries no fixture screen. A class rename must update the host's lookup.
+
 ## UITest Runner File Map
 
 `AgentDeviceRunnerUITests/RunnerTests` is split into focused files to reduce context size for contributors and LLM agents.

@@ -32,6 +32,11 @@ const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
 // the repo gates and the prebuilt release runner. Runners built from this package omit it.
 const SKIPPED_RUNNER_FILE_PATHS = new Set([
   path.join('AgentDeviceRunner', 'AgentDeviceRunnerUITests', 'RunnerIsolationCanary.swift'),
+  // The runner's host app ships without its fixture screens: this file is the `--agent-device-*`
+  // fixture host the UnitTests/ suites launch, compiled only under AGENT_DEVICE_RUNNER_UNIT_TESTS.
+  // It joins the UnitTests/ directory and the stripped Swift `#if` blocks as the same rule: test
+  // code never enters the package. scripts/check-package.ts fails if it ever does.
+  path.join('AgentDeviceRunner', 'AgentDeviceRunner', 'AgentDeviceRunnerAppFixtures.m'),
 ]);
 // XCTest discovers instance methods named test*; anything matching this that survives stripping
 // would ship to (and compile on) every user's machine. Only the runner's command-loop entrypoint

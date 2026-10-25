@@ -150,6 +150,7 @@ test('resolveRunnerSandboxBuildArgs includes Swift runner unit tests only when r
       '-IDEPackageSupportDisablePluginExecutionSandbox=1',
       'ENABLE_USER_SCRIPT_SANDBOXING=NO',
       'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      'OTHER_CFLAGS=$(inherited) -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
     ]);
   } finally {
     if (previous === undefined) {

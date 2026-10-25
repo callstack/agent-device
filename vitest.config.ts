@@ -186,6 +186,9 @@ export default defineConfig({
             'scripts/__tests__/strip-swift-comments.test.ts',
             // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
             // over two strings; the gate itself is what runs the packager and the Swift parse.
+            // The publishing package guard's no-test-code predicates, over fixture paths and
+            // bytes: the gate itself can only watch a healthy package pass.
+            'scripts/__tests__/shipped-test-code.test.ts',
             'scripts/__tests__/packaged-runner-swift.test.ts',
             // The runner build's actor-isolation log scan, over synthetic logs and a fake
             // `xcodebuild` on PATH.

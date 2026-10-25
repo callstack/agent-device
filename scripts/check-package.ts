@@ -29,6 +29,8 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
+import { walkFiles } from './lib/walk-files.ts';
+import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
 type PackedManifest = PackedDependencies & {
@@ -141,6 +143,32 @@ function assertInstalledTreeIsNotASourceCheckout(installedRoot: string): void {
   step('Confirmed the installed tree carries no daemon source, so its version pins its code.');
 }
 
+/**
+ * Test code must not reach a user's machine. The package ships build input, not only binaries —
+ * `dist/apple/runner/**` is the Xcode project a user's `xcodebuild` compiles — so the runner's
+ * fixture screens and unit-test sources sit one packager omission away from shipping. This is the
+ * re-check after the packager's stripping; scripts/lib/shipped-test-code.ts owns the rule, and
+ * scripts/__tests__/shipped-test-code.test.ts proves it rejects a test-laden tree.
+ */
+function assertInstalledTreeCarriesNoTestCode(installedRoot: string): void {
+  const packedPaths = walkFiles(installedRoot).map((file) => path.relative(installedRoot, file));
+  const failures = [
+    ...testOnlyPathFailures(packedPaths),
+    ...testOnlyContentFailures(
+      packedPaths
+        .filter((packedPath) => packedPath.startsWith('dist/apple/runner/'))
+        .map((packedPath) => ({
+          path: packedPath,
+          contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
+        })),
+    ),
+  ];
+  if (failures.length > 0) {
+    throw new Error(`The package ships test code:\n${failures.map((f) => `- ${f}`).join('\n')}`);
+  }
+  step(`Confirmed no test code in the ${packedPaths.length} packed files.`);
+}
+
 /** Imports every documented entry point in one process so a failure names the subpath that broke. */ function importEveryExport(
   manifest: PackedManifest,
 ): void {
@@ -203,6 +231,7 @@ try {
   const installedRoot = installIntoCleanConsumer(tarball);
   assertInstalledSnapshotBridge(installedRoot);
   assertInstalledTreeIsNotASourceCheckout(installedRoot);
+  assertInstalledTreeCarriesNoTestCode(installedRoot);
   if (verifySnapshotBridgePreparation) {
     if (process.platform !== 'darwin') {
       throw new Error('--verify-snapshot-bridge-preparation requires macOS and Xcode.');
