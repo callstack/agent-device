@@ -38,6 +38,11 @@
     "items": [
       {
         "type": "custom-link",
+        "label": "Capabilities",
+        "link": "/docs/capabilities"
+      },
+      {
+        "type": "custom-link",
         "label": "Commands",
         "link": "/docs/commands"
       },

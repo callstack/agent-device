@@ -157,7 +157,7 @@ The same session and evidence model works at every step: the agent explores the 
 
 `agent-device` keeps device state in sessions. It uses a local accessibility bridge for iOS Simulator snapshots and XCTest for iOS interactions, physical iOS, and tvOS; ADB and the snapshot helper on Android, Android TV, and Fire OS; HDC and ArkUI `uitest` on HarmonyOS; Vega CLI/VDA on the Vega Virtual Device; a local helper on macOS, including Electron and other Chromium-based apps through the accessibility tree; and AT-SPI on Linux.
 
-Support depth varies by target. Some backends, such as HarmonyOS and Vega OS, cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports.
+Support depth varies by target. Some backends, such as HarmonyOS and Vega OS, cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports. The [capabilities matrix](https://oss.callstack.com/agent-device/docs/capabilities) shows which commands each target, desktop, web, and cloud provider supports.
 
 Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. Run `agent-device device status` to inspect ownership without a daemon, and `agent-device device release --stale` to release claims whose owner is provably no longer running. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, TestMu AI, and Limrun](https://oss.callstack.com/agent-device/docs/device-clouds).
 
