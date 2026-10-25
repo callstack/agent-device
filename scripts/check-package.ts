@@ -31,7 +31,6 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
-import { walkFiles } from './lib/walk-files.ts';
 import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
@@ -87,8 +86,12 @@ function step(message: string): void {
   process.stdout.write(`${message}\n`);
 }
 
-/** Packs with `--ignore-scripts` so the pack cannot re-enter `prepack` and recurse. */
-function packTarball(): string {
+/**
+ * Packs with `--ignore-scripts` so the pack cannot re-enter `prepack` and recurse. The file list
+ * npm reports is the package's own declaration of what it ships, which is what the test-code guard
+ * reads — a clean-install tree would also hold the installed dependencies' files.
+ */
+function packTarball(): { tarball: string; packedPaths: string[] } {
   if (!fs.existsSync(path.join(repoRoot, 'dist', 'src'))) {
     throw new Error('No dist/src build found. Run `pnpm build` first.');
   }
@@ -99,8 +102,11 @@ function packTarball(): string {
       ['pack', '--ignore-scripts', '--json', '--pack-destination', packDestination],
       repoRoot,
     ),
-  ) as [{ filename: string }];
-  return path.join(packDestination, packed[0].filename);
+  ) as [{ filename: string; files: { path: string }[] }];
+  return {
+    tarball: path.join(packDestination, packed[0].filename),
+    packedPaths: packed[0].files.map((file) => file.path),
+  };
 }
 
 function lintTarball(tarball: string): void {
@@ -149,16 +155,19 @@ function assertInstalledTreeIsNotASourceCheckout(installedRoot: string): void {
  * Test code must not reach a user's machine. The package ships build input, not only binaries —
  * `dist/apple/runner/**` is the Xcode project a user's `xcodebuild` compiles — so the runner's
  * fixture screens and unit-test sources sit one packager omission away from shipping. This is the
- * re-check after the packager's stripping; scripts/lib/shipped-test-code.ts owns the rule, and
- * scripts/__tests__/shipped-test-code.test.ts proves it rejects a test-laden tree.
+ * re-check after the packager's stripping, over the paths the tarball itself declares.
+ * scripts/lib/shipped-test-code.ts owns the rule, and the tests it names prove it rejects a
+ * test-laden package.
  */
-function assertInstalledTreeCarriesNoTestCode(installedRoot: string): void {
-  const packedPaths = walkFiles(installedRoot).map((file) => path.relative(installedRoot, file));
+function assertPackedTreeCarriesNoTestCode(installedRoot: string, packedPaths: string[]): void {
   const failures = [
     ...testOnlyPathFailures(packedPaths),
     ...testOnlyContentFailures(
       packedPaths
         .filter((packedPath) => packedPath.startsWith('dist/apple/runner/'))
+        // npm install may drop a packed file (a .gitignore becomes .npmignore); a missing
+        // counterpart is not a test-code finding, and a path finding above already covers it.
+        .filter((packedPath) => fs.existsSync(path.join(installedRoot, packedPath)))
         .map((packedPath) => ({
           path: packedPath,
           contents: fs.readFileSync(path.join(installedRoot, packedPath), 'utf8'),
@@ -228,12 +237,12 @@ function smokeTestBin(installedRoot: string, manifest: PackedManifest): void {
 
 step(`Packing and verifying agent-device in ${workDir}`);
 try {
-  const tarball = packTarball();
+  const { tarball, packedPaths } = packTarball();
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
   assertInstalledSnapshotBridge(installedRoot);
   assertInstalledTreeIsNotASourceCheckout(installedRoot);
-  assertInstalledTreeCarriesNoTestCode(installedRoot);
+  assertPackedTreeCarriesNoTestCode(installedRoot, packedPaths);
   if (verifySnapshotBridgePreparation) {
     if (process.platform !== 'darwin') {
       throw new Error('--verify-snapshot-bridge-preparation requires macOS and Xcode.');
