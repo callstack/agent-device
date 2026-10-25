@@ -71,19 +71,15 @@ test('computeRunnerSourceFingerprint covers the shared foreground geometry heade
   assert.notEqual(computeRunnerSourceFingerprint(root), before);
 });
 
-test('computeRunnerSourceFingerprint covers the shared foreground geometry header in the packaged layout', () => {
+test('computeRunnerSourceFingerprint covers the shared header when the runner comes from the packaged layout', () => {
   const root = makeTempRoot();
   fs.mkdirSync(
     path.join(root, 'dist', 'apple', 'runner', 'AgentDeviceRunner', 'AgentDeviceRunner.xcodeproj'),
     { recursive: true },
   );
-  const header = path.join(
-    root,
-    'dist',
-    'apple',
-    'snapshot-bridge',
-    'ForegroundApplicationGeometry.h',
-  );
+  // An installed package keeps the header at the same root-relative path the checkout uses; only
+  // the runner source moves under dist/.
+  const header = path.join(root, 'apple', 'snapshot-bridge', 'ForegroundApplicationGeometry.h');
   fs.mkdirSync(path.dirname(header), { recursive: true });
   fs.writeFileSync(header, '#pragma once\n');
 

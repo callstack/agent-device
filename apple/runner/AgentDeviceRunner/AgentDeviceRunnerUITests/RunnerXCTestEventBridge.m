@@ -5,7 +5,7 @@
 // the same file from the checkout (`apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`) and
 // from the packaged source (`dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/`),
 // where the packager mirrors the header into `dist/apple/snapshot-bridge/`.
-#import "../../../snapshot-bridge/ForegroundApplicationGeometry.h"
+#import "ForegroundApplicationGeometry.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <XCTest/XCTest.h>
 #import <math.h>

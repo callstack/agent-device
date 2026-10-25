@@ -7,20 +7,9 @@ import { stripSwiftComments } from './strip-swift-comments.mjs';
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
 const OUTPUT_DIR = path.join('dist', 'apple', 'runner');
-// The runner's UITests source includes the bridge's shared full-screen header through
-// `../../../snapshot-bridge/ForegroundApplicationGeometry.h`. That relative path must resolve in
-// the packaged layout too, so the one header is mirrored next to the packaged runner.
-const SHARED_HEADER_SOURCE = path.join(
-  'apple',
-  'snapshot-bridge',
-  'ForegroundApplicationGeometry.h',
-);
-const SHARED_HEADER_OUTPUT = path.join(
-  'dist',
-  'apple',
-  'snapshot-bridge',
-  'ForegroundApplicationGeometry.h',
-);
+// The UITests target finds the bridge's shared full-screen header through HEADER_SEARCH_PATHS,
+// which resolves `apple/snapshot-bridge` from the runner project in both the checkout and the
+// installed package (the package ships that directory at its root). Nothing is mirrored.
 const SNAPSHOT_PRESENTATION_SOURCE_DIR = path.join('apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_OUTPUT_DIR = path.join('dist', 'apple', 'snapshot-presentation');
 const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';
@@ -39,6 +28,9 @@ const SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES = new Set([
 const LEGACY_OUTPUT_DIRS = [
   path.join('dist', 'apple-runner'),
   path.join('dist', 'apple', 'apple-runner'),
+  // A short-lived build mirrored the shared header beside the packaged runner; the UITests target
+  // finds it through HEADER_SEARCH_PATHS now, so a leftover copy must not double-ship.
+  path.join('dist', 'apple', 'snapshot-bridge'),
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
@@ -57,9 +49,6 @@ const SHIPPED_TEST_METHOD_ALLOWLIST = new Map([
   ],
 ]);
 const TEST_METHOD_PATTERN = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:\w+\s+)*func\s+(test\w*)\s*\(/;
-// A line-start `#import "…"` / `#include "…"`. Anchored to the directive so prose and comments
-// that merely quote a path are not reads as includes.
-const QUOTED_NATIVE_INCLUDE = /^[ \t]*#[ \t]*(?:import|include)[ \t]+"([^"]+)"[ \t]*$/;
 
 function packageAppleRunnerSource(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
@@ -77,69 +66,13 @@ function packageAppleRunnerSource(options = {}) {
     strippedBlocks: 0,
     strippedComments: 0,
     strippedCommentBytes: 0,
-    packagedNativeSourcePaths: [],
-    checkOnly: Boolean(options.checkOnly),
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
-    trackNativeSources: true,
   });
   packageSnapshotPresentationSource(root, options, summary);
-  packageSharedHeader(root, options, summary);
-  assertPackagedNativeIncludesResolve(root, summary);
   return summary;
-}
-
-// The include in RunnerXCTestEventBridge.m reaches this header by relative path, so packaging must
-// place it at the mirrored location or a user's `xcodebuild` of the packaged source fails to find
-// it. Check mode validates the source header exists; the copy mode validates the destination.
-function packageSharedHeader(root, options, summary) {
-  const sourcePath = path.join(root, SHARED_HEADER_SOURCE);
-  if (!fs.existsSync(sourcePath)) {
-    throw new Error(`Apple runner shared header not found at ${sourcePath}`);
-  }
-  if (options.checkOnly) return;
-  const outputPath = path.join(root, SHARED_HEADER_OUTPUT);
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.copyFileSync(sourcePath, outputPath);
-  summary.copiedFiles += 1;
-}
-
-// A relative quoted include resolves through the packaged directory tree, so it can point at a
-// file the package does not ship — the checkout builds while a user's `xcodebuild` dies. Every
-// such include in a packaged native source must resolve inside the package after packaging.
-function assertPackagedNativeIncludesResolve(root, summary) {
-  const packagedRoot = summary.checkOnly
-    ? path.join(root, SOURCE_DIR)
-    : path.join(root, OUTPUT_DIR);
-  const sharedTarget = path.resolve(
-    root,
-    summary.checkOnly ? SHARED_HEADER_SOURCE : SHARED_HEADER_OUTPUT,
-  );
-  for (const nativePath of summary.packagedNativeSourcePaths) {
-    for (const line of fs.readFileSync(nativePath, 'utf8').split('\n')) {
-      const target = QUOTED_NATIVE_INCLUDE.exec(line.trimEnd())?.[1];
-      if (target?.includes('/') && !path.isAbsolute(target)) {
-        assertPackagedIncludeResolves(root, nativePath, target, packagedRoot, sharedTarget);
-      }
-    }
-  }
-}
-
-function assertPackagedIncludeResolves(root, nativePath, target, packagedRoot, sharedTarget) {
-  const resolved = path.resolve(path.dirname(nativePath), target);
-  const label = path.relative(root, nativePath);
-  if (!resolved.startsWith(packagedRoot + path.sep) && resolved !== sharedTarget) {
-    throw new Error(
-      `Runner source ${label} includes "${target}", which resolves outside the packaged tree.`,
-    );
-  }
-  if (!fs.existsSync(resolved)) {
-    throw new Error(
-      `Runner source ${label} includes "${target}", which resolves to a file the package does not ship.`,
-    );
-  }
 }
 
 function packageSnapshotPresentationSource(root, options, summary) {

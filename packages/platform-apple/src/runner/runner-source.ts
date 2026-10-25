@@ -10,16 +10,12 @@ const PACKAGED_APPLE_SNAPSHOT_PRESENTATION_SOURCE_ROOT = path.join(
   'apple',
   'snapshot-presentation',
 );
-// RunnerXCTestEventBridge.m, in `AgentDeviceRunnerUITests/`, includes this header as
-// `../../../snapshot-bridge/ForegroundApplicationGeometry.h`. The two source roots below are
-// directories walked recursively; this is one exact file whose bytes change the compiled runner, so
-// it enters the fingerprint through the same relative path the compiler resolves, in whichever
-// layout (checkout or installed package) produced the selected source root.
-const RUNNER_SHARED_HEADER_RELATIVE_PATH = path.join(
-  'AgentDeviceRunnerUITests',
-  '..',
-  '..',
-  '..',
+// The UITests target compiles RunnerXCTestEventBridge.m against this header through
+// HEADER_SEARCH_PATHS. It is one exact file whose bytes change the compiled runner, and the
+// package ships it at the same root-relative path the checkout keeps it at, so the fingerprint
+// reads it from `projectRoot` in whichever layout produced it.
+const RUNNER_SHARED_HEADER_PATH = path.join(
+  'apple',
   'snapshot-bridge',
   'ForegroundApplicationGeometry.h',
 );
@@ -79,12 +75,9 @@ export function computeRunnerSourceFingerprint(projectRoot: string): string {
     },
   ];
   const files = collectRunnerSourceFiles(sourceRoots);
-  const sharedHeader = path.join(
-    resolveAppleRunnerSourceRoot(projectRoot),
-    RUNNER_SHARED_HEADER_RELATIVE_PATH,
-  );
+  const sharedHeader = path.join(projectRoot, RUNNER_SHARED_HEADER_PATH);
   if (fs.existsSync(sharedHeader)) {
-    files.push(path.normalize(sharedHeader));
+    files.push(sharedHeader);
   }
   files.sort((a, b) => a.localeCompare(b));
   const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(projectRoot, files);

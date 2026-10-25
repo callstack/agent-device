@@ -146,47 +146,35 @@ function swiftParseFailures(
 }
 
 /**
- * The packaged `RunnerXCTestEventBridge.m` includes the shared full-screen header by relative
- * path (`../../../snapshot-bridge/ForegroundApplicationGeometry.h`). Resolve that include in the
- * scratch packaging layout: a missing mirror means a user's `xcodebuild` of the installed
- * package cannot compile the runner, and nothing in this repo would notice otherwise.
+ * The packaged UITests target finds the shared full-screen header through HEADER_SEARCH_PATHS.
+ * Resolve the packaged project's own search paths in the scratch packaging layout: the package
+ * ships `apple/snapshot-bridge/` at its root, so at least one entry must land on that directory
+ * and carry the header RunnerXCTestEventBridge.m includes by bare name.
  */
-function sharedHeaderFailures(scratchRoot: string): string[] {
-  const bridgeSource = path.join(
-    scratchRoot,
-    PACKAGED_DIR,
-    'AgentDeviceRunner',
-    'AgentDeviceRunnerUITests',
-    'RunnerXCTestEventBridge.m',
+function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string[] {
+  const project = fs.readFileSync(
+    path.join(packagedRoot, 'AgentDeviceRunner', 'AgentDeviceRunner.xcodeproj', 'project.pbxproj'),
+    'utf8',
   );
-  const source = fs.readFileSync(bridgeSource, 'utf8');
-  const include = /^\s*#import\s+"(\.\.[^"]*ForegroundApplicationGeometry\.h)"/m.exec(source);
-  if (!include) {
+  const searchPath = /HEADER_SEARCH_PATHS = \(([\s\S]*?)\n\s*\);/.exec(project)?.[1];
+  if (searchPath === undefined) {
+    return [`${PACKAGED_DIR}: the packaged project declares no HEADER_SEARCH_PATHS.`];
+  }
+  const srcRoot = path.join(packagedRoot, 'AgentDeviceRunner');
+  const resolvesToHeader = searchPath
+    .split(',')
+    .map((entry) => entry.trim().replace(/^"|"$/g, ''))
+    .filter((entry) => entry.startsWith('$(SRCROOT)/'))
+    .some((entry) =>
+      fs.existsSync(
+        path.join(srcRoot, entry.replace('$(SRCROOT)', '.'), 'ForegroundApplicationGeometry.h'),
+      ),
+    );
+  if (!resolvesToHeader) {
     return [
-      `${PACKAGED_DIR}: RunnerXCTestEventBridge.m no longer includes the shared full-screen ` +
-        'header by relative path; the packaging mirror and this check must match the include.',
+      `${PACKAGED_DIR}: no HEADER_SEARCH_PATHS entry resolves to ForegroundApplicationGeometry.h ` +
+        `from ${path.join(PACKAGED_DIR, 'AgentDeviceRunner')} — a user's xcodebuild cannot compile the runner.`,
     ];
-  }
-  const resolved = path.resolve(path.dirname(bridgeSource), include[1]!);
-  if (!fs.existsSync(resolved)) {
-    return [
-      `Packaged source includes "${include[1]}" from RunnerXCTestEventBridge.m, which resolves ` +
-        `to ${resolved} — a path nothing packages.`,
-    ];
-  }
-  const checkout = path.resolve(
-    repoRoot,
-    'apple',
-    'runner',
-    'AgentDeviceRunner',
-    'AgentDeviceRunnerUITests',
-    include[1]!,
-  );
-  if (!fs.existsSync(checkout)) {
-    return [`Checkout include "${include[1]}" does not resolve either: ${checkout}.`];
-  }
-  if (!fs.readFileSync(resolved).equals(fs.readFileSync(checkout))) {
-    return ['Packaged ForegroundApplicationGeometry.h differs from the checkout source.'];
   }
   return [];
 }
@@ -198,7 +186,7 @@ function main(): number {
     const relativePaths = swiftFilesUnder(packagedRoot);
     const swiftc = findSwiftc();
     const failures = [
-      ...sharedHeaderFailures(scratchRoot),
+      ...sharedHeaderFailures(scratchRoot, packagedRoot),
       ...lineParityFailures(packagedRoot, relativePaths),
       ...(swiftc === undefined
         ? []
