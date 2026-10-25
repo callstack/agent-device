@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertPackagedRunnerSharedHeaderMirror } from './size-report-geometry.mjs';
 export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridge.m',
   'apple/snapshot-bridge/SnapshotBridgeRuntime.m',
@@ -40,10 +39,6 @@ export function collectNpmPack(root) {
   );
   const pack = parseNpmPackOutput(stdout);
   const entries = normalizeNpmPackEntries(pack);
-  const paths = entries.map((entry) => entry.path);
-  // The mirror is required exactly when the packaged runner includes the shared header; deriving
-  // it from the runner's sources lets a pack of an older tree validate too.
-  assertPackagedRunnerSharedHeaderMirror(root, paths);
   assertPublishPackageContents(entries, {
     repoRoot: root,
     requireSnapshotBridge: fs.existsSync(path.join(root, 'apple', 'snapshot-bridge')),

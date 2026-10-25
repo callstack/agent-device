@@ -57,6 +57,9 @@ const SHIPPED_TEST_METHOD_ALLOWLIST = new Map([
   ],
 ]);
 const TEST_METHOD_PATTERN = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:\w+\s+)*func\s+(test\w*)\s*\(/;
+// A line-start `#import "…"` / `#include "…"`. Anchored to the directive so prose and comments
+// that merely quote a path are not reads as includes.
+const QUOTED_NATIVE_INCLUDE = /^[ \t]*#[ \t]*(?:import|include)[ \t]+"([^"]+)"[ \t]*$/;
 
 function packageAppleRunnerSource(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
@@ -74,13 +77,17 @@ function packageAppleRunnerSource(options = {}) {
     strippedBlocks: 0,
     strippedComments: 0,
     strippedCommentBytes: 0,
+    packagedNativeSourcePaths: [],
+    checkOnly: Boolean(options.checkOnly),
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
     skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
+    trackNativeSources: true,
   });
   packageSnapshotPresentationSource(root, options, summary);
   packageSharedHeader(root, options, summary);
+  assertPackagedNativeIncludesResolve(root, summary);
   return summary;
 }
 
@@ -97,6 +104,42 @@ function packageSharedHeader(root, options, summary) {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.copyFileSync(sourcePath, outputPath);
   summary.copiedFiles += 1;
+}
+
+// A relative quoted include resolves through the packaged directory tree, so it can point at a
+// file the package does not ship — the checkout builds while a user's `xcodebuild` dies. Every
+// such include in a packaged native source must resolve inside the package after packaging.
+function assertPackagedNativeIncludesResolve(root, summary) {
+  const packagedRoot = summary.checkOnly
+    ? path.join(root, SOURCE_DIR)
+    : path.join(root, OUTPUT_DIR);
+  const sharedTarget = path.resolve(
+    root,
+    summary.checkOnly ? SHARED_HEADER_SOURCE : SHARED_HEADER_OUTPUT,
+  );
+  for (const nativePath of summary.packagedNativeSourcePaths) {
+    for (const line of fs.readFileSync(nativePath, 'utf8').split('\n')) {
+      const target = QUOTED_NATIVE_INCLUDE.exec(line.trimEnd())?.[1];
+      if (target?.includes('/') && !path.isAbsolute(target)) {
+        assertPackagedIncludeResolves(root, nativePath, target, packagedRoot, sharedTarget);
+      }
+    }
+  }
+}
+
+function assertPackagedIncludeResolves(root, nativePath, target, packagedRoot, sharedTarget) {
+  const resolved = path.resolve(path.dirname(nativePath), target);
+  const label = path.relative(root, nativePath);
+  if (!resolved.startsWith(packagedRoot + path.sep) && resolved !== sharedTarget) {
+    throw new Error(
+      `Runner source ${label} includes "${target}", which resolves outside the packaged tree.`,
+    );
+  }
+  if (!fs.existsSync(resolved)) {
+    throw new Error(
+      `Runner source ${label} includes "${target}", which resolves to a file the package does not ship.`,
+    );
+  }
 }
 
 function packageSnapshotPresentationSource(root, options, summary) {
@@ -226,6 +269,12 @@ function processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary
 }
 
 function processFile(sourcePath, outputPath, relativePath, summary, options) {
+  if (
+    options.trackNativeSources &&
+    (path.extname(sourcePath) === '.m' || path.extname(sourcePath) === '.h')
+  ) {
+    summary.packagedNativeSourcePaths.push(outputPath ?? sourcePath);
+  }
   if (outputPath) {
     copyFile(sourcePath, outputPath, relativePath, summary, options);
     return;
@@ -234,7 +283,8 @@ function processFile(sourcePath, outputPath, relativePath, summary, options) {
 }
 
 function copyFile(sourcePath, outputPath, relativePath, summary, options) {
-  if (path.extname(sourcePath) !== '.swift') {
+  const extension = path.extname(sourcePath);
+  if (extension !== '.swift') {
     fs.copyFileSync(sourcePath, outputPath);
     summary.copiedFiles += 1;
     return;

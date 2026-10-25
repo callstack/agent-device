@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assertPackagedRunnerSharedHeaderMirror } from './size-report-geometry.mjs';
 import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
@@ -46,9 +45,6 @@ export function measureCleanInstalledPackage(tarballPath, packageName) {
 }
 
 export function assertInstalledSnapshotBridge(packageDir) {
-  // The runner include check reads the packaged runner itself, so it runs before the bridge
-  // directory guard: a package that ships the include without the bridge directory must still fail.
-  assertPackagedRunnerSharedHeaderMirror(packageDir);
   const bridgeRoot = path.join(packageDir, 'apple', 'snapshot-bridge');
   if (!fs.existsSync(bridgeRoot)) return;
   const present = SNAPSHOT_BRIDGE_ASSET_PATHS.filter((assetPath) =>

@@ -405,6 +405,11 @@ test('package apple runner source mirrors the shared header next to the packaged
   );
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
   writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerXCTestEventBridge.m',
+    '#import "../../../snapshot-bridge/ForegroundApplicationGeometry.h"\n',
+  );
 
   await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 
@@ -415,6 +420,80 @@ test('package apple runner source mirrors the shared header next to the packaged
     ),
     '#pragma once\n',
   );
+});
+
+test('package apple runner source rejects a packaged include that ships no file', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-phantom-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerPhantom.m',
+    '#import "../../gone/Phantom.h"\n',
+  );
+
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /RunnerPhantom\.m includes "\.\.\/\.\.\/gone\/Phantom\.h"/);
+});
+
+test('package apple runner source rejects an include that resolves outside the packaged runner', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-checkout-only-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
+  // The target exists in the checkout and even somewhere under dist, so the checkout build works
+  // and a dist-only grep would pass; the include still escapes the packaged runner tree, where no
+  // user's xcodebuild would find it. Only the mirrored shared header may leave the tree.
+  writeFixtureFile(root, 'Outside/Outside.h', 'checkout sibling only\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerCheckoutOnly.m',
+    '#import "../../../../../Outside/Outside.h"\n',
+  );
+
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /resolves outside the packaged tree/);
+});
+
+test('package apple runner source ignores quoted paths that are not line-start includes', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-prose-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(root, 'apple/snapshot-bridge/ForegroundApplicationGeometry.h', '#pragma once\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerProse.m',
+    [
+      '// The flag reads "../../gone/Phantom.h" in documentation.',
+      'int RunnerProse(void) { return 0; }',
+    ].join('\n'),
+  );
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 });
 
 test('snapshot presentation manifests keep their supported platform declarations in parity', () => {
