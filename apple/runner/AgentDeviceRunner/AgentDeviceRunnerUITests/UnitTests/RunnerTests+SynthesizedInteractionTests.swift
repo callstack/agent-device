@@ -172,7 +172,7 @@ extension RunnerTests {
   func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let screen = UIScreen.main.bounds.size
+    let screen = UIScreen.main.fixedCoordinateSpace.bounds.size
     XCTAssertEqual(
       synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       CGRect(origin: .zero, size: screen)

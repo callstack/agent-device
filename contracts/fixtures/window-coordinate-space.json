@@ -198,6 +198,18 @@
       "reportedBox": { "x": 0, "y": 0, "width": 384, "height": 682 },
       "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
       "offset": null
+    },
+    {
+      "name": "an empty carrier names no box to translate",
+      "reportedBox": { "x": 0, "y": 0, "width": 0, "height": 0 },
+      "viewportBox": { "x": 224, "y": 207, "width": 0.5, "height": 0.5 },
+      "offset": null
+    },
+    {
+      "name": "an empty viewport names no screen box to translate toward",
+      "reportedBox": { "x": 0, "y": 0, "width": 0.5, "height": 0.5 },
+      "viewportBox": { "x": 224, "y": 207, "width": 0, "height": 0 },
+      "offset": null
     }
   ]
 }

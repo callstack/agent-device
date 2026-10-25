@@ -519,18 +519,20 @@ final class CoordinateSpaceTests: XCTestCase {
       coordinateNode(6, "Window", CGRect(x: 0, y: 0, width: 834, height: 1210), 0, 1, label: "springboard"),
       coordinateNode(7, "Alert", CGRect(x: 300, y: 500, width: 240, height: 160), 6, 2),
     ]
-    func normalizedRects(viewport: CGRect) -> [CGRect] {
+    func normalized(viewport: CGRect) -> [RawAXNode] {
       SnapshotGeometrySpace.normalized(
         nodes: acquired,
         viewport: .reported(box: viewport, interfaceOrientation: RunnerInterfaceOrientation.portrait)
-      ).map(\.rect.cgRect)
+      )
     }
     let reported = acquired.map(\.rect.cgRect)
-    let placed = normalizedRects(viewport: windowOnScreen)
+    let placedNodes = normalized(viewport: windowOnScreen)
+    let placed = placedNodes.map(\.rect.cgRect)
     XCTAssertEqual(Array(placed[0...2]), [windowOnScreen, windowOnScreen, windowOnScreen])
     XCTAssertEqual(placed[3], CGRect(x: 559, y: 221, width: 37, height: 36), "Add draws at (559,221)")
+    XCTAssertEqual(placedNodes[3].hittable, true, "hittability reads the translated frame")
     XCTAssertEqual(Array(placed[4...]), Array(reported[4...]), "system windows already report screen space")
-    XCTAssertEqual(normalizedRects(viewport: reportedRoot), reported, "a window at the screen origin is unchanged")
+    XCTAssertEqual(normalized(viewport: reportedRoot).map(\.rect.cgRect), reported, "a window at the screen origin is unchanged")
   }
 
   func testNormalizedOfAnEmptyArrayIsEmpty() {

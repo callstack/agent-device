@@ -628,28 +628,34 @@ A band taller than it is wide is what the output of a producer that did not norm
 
 ## Amendment: a window that does not fill the screen (issue #3899)
 
-An iPad window that does not fill the screen (Windowed Apps, Stage Manager) reports its subtree from its own top-left.
+An iPad window that does not fill the screen (Windowed Apps; Stage Manager is unmeasured) reports its subtree from its own top-left.
 Measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window at screen `(224,207,386x682)`: the root reads `(0,0,386,682)` and `Add` reads `(335,14,37,36)` but draws at `(559,221)`.
 The runner's live window read, the keyboard window, and a SpringBoard overlay report screen boxes.
 Published as reported, the capture mixed two spaces: the fold clipped nodes (`regular-node-outside-cumulative-clip`), rects named no screenshot position, and taps landed at the point minus the window origin.
 
-Decision. A placed window publishes screen space in points, because its viewport, its screenshot, and the digitizer already use that space.
+Decision: a placed window publishes screen space in points, because its viewport, its screenshot, and the digitizer already use that space.
 `SnapshotContentTranslation.offset` is the one rule, applied in the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
 A carrier declares an offset only when its box is a `(0,0)`-anchored copy of the reported viewport box and the viewport starts elsewhere; the offset is the viewport origin.
 Any other carrier keeps its frames, so the screen-space system windows above do not move.
 A full-screen window, an iPhone, and each ADR 0025 foldable panel start at `(0,0)`, so they read no offset and publish unchanged.
 `contracts/fixtures/window-coordinate-space.json` replays the rule in Swift only, because the bridge guest refuses a windowed tree (`app-window-not-full-screen`) before the host decoder reads one.
 
-Rotation and translation stay separate. `CoordinateSpaceRotation` turns axes and never moves an origin: the old localization of a frame origin was dead code at every measured full-screen origin and the dispatch bug here.
+Rotation and translation stay separate.
+`CoordinateSpaceRotation` turns axes and never moves an origin: the old localization of a frame origin was dead code at every measured full-screen origin and the dispatch bug here.
 A synthesized turn swaps the sole display's side lengths, as the digitizer does, not a placed window's; a multi-screen host keeps the window box of its panel.
 
-Dispatch takes screen points. `XCUIElement.frame` and the app-anchored `XCUICoordinate` are screen space on a placed window; `XCUIElementSnapshot.frame` is window content space.
+Dispatch takes screen points.
+`XCUIElement.frame` and the app-anchored `XCUICoordinate` are screen space on a placed window; `XCUIElementSnapshot.frame` is window content space.
 The text-entry probe therefore owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
-Each command reads the vector once from the resolved window's box as `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default, so a failed read never passes for full screen.
-The target and each read it produces carry that vector. `frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
-On nil, the focus tap dispatches the caller's point, the refresh point, the caret tap, and the readiness retap dispatch nothing, and probe matching compares the live `element.frame`, because a comparison dispatches nothing.
+A command reads the vector from the resolved window's box once, where it builds its target, and the readiness retap reads it again on its own branch.
+The vector is `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default, so a failed read never passes for full screen.
+The target and each read it produces carry that vector.
+`frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
+On nil, the focus tap dispatches the caller's own point, and the refresh point, the caret tap, and the readiness retap dispatch nothing.
+Probe matching then compares the live `element.frame`, because a comparison dispatches nothing.
 
-Open gaps: landscape under Windowed Apps, Stage Manager, and a window partly off screen are unmeasured; their rows pin arithmetic only. A window moved between the command's vector read and its dispatch drifts like any live read.
+Open gaps: landscape under Windowed Apps (fixture arithmetic only), Stage Manager, and a window partly off screen are unmeasured.
+A window moved between the command's vector read and its dispatch drifts like any live read.
 
 ## Amendment: modal containment in the presentation cut
 

@@ -42,6 +42,7 @@ type Fixture = {
   constants: { quarterTurnTolerance: number };
   quarterTurnCases: QuarterTurnCase[];
   rotationCases: RotationCase[];
+  windowContentCases: { name: string }[];
 };
 
 const TABLE_PATH = path.resolve(
@@ -83,7 +84,9 @@ test('the quarter-turn window rule agrees with every golden parity table case', 
   assert.ok(table.quarterTurnCases.length > 0, 'parity table must not be empty');
   assert.ok(table.rotationCases.length > 0, 'parity table must not be empty');
   assertUniqueNames(
-    [...table.quarterTurnCases, ...table.rotationCases].map((fixture) => fixture.name),
+    [...table.quarterTurnCases, ...table.rotationCases, ...table.windowContentCases].map(
+      (fixture) => fixture.name,
+    ),
     'parity table',
   );
   for (const fixture of table.quarterTurnCases) {
