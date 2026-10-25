@@ -34,14 +34,22 @@ static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t 
 // of the screen (Windowed Apps or Stage Manager).
 static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
 
-// A frame with a non-finite component is not a measurement at all. It proves neither the fill nor
-// the window, so it must reach each caller's unknown policy, never a comparison that reads as a
-// difference (the bridge would refuse `app-window-not-full-screen` on a runtime that said nothing).
-static BOOL AgentDeviceForegroundFramesAreFinite(CGRect window, CGRect screen) {
-  return isfinite(window.origin.x) && isfinite(window.origin.y) &&
-      isfinite(window.size.width) && isfinite(window.size.height) &&
-      isfinite(screen.origin.x) && isfinite(screen.origin.y) &&
-      isfinite(screen.size.width) && isfinite(screen.size.height);
+// A frame that is null, empty, the infinite sentinel, or carries a non-finite component is not a
+// measurement at all. It proves neither the fill nor the window, so it must reach each caller's
+// unknown policy, never a comparison that reads as a difference (the bridge would refuse
+// `app-window-not-full-screen` on a runtime that said nothing). This is the whole usability test;
+// callers make one call, not two.
+static BOOL AgentDeviceForegroundFrameIsMeasurable(CGRect frame) {
+  if (CGRectIsNull(frame) || CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) {
+    return NO;
+  }
+  return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
+      isfinite(frame.size.width) && isfinite(frame.size.height);
+}
+
+static BOOL AgentDeviceForegroundFramesAreMeasurable(CGRect window, CGRect screen) {
+  return AgentDeviceForegroundFrameIsMeasurable(window) &&
+      AgentDeviceForegroundFrameIsMeasurable(screen);
 }
 
 static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
@@ -140,14 +148,6 @@ NSString *RunnerFormatXCTestException(NSException *exception, NSString *fallback
   return [NSString stringWithFormat:@"%@: %@", name, reason];
 }
 
-static BOOL RunnerUsableWindowFrame(CGRect frame) {
-  if (CGRectIsEmpty(frame) || CGRectIsInfinite(frame) || CGRectIsNull(frame)) {
-    return NO;
-  }
-  return isfinite(frame.origin.x) && isfinite(frame.origin.y)
-    && isfinite(frame.size.width) && isfinite(frame.size.height);
-}
-
 static NSString *RunnerApplicationScreenFailureDescription(
   RunnerApplicationScreenFailure failure
 ) {
@@ -189,7 +189,7 @@ static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
     readWindow = candidate;
   }];
   *observedFrame = frame;
-  if (exception != nil || !resolved || !RunnerUsableWindowFrame(frame)) {
+  if (exception != nil || !resolved || !AgentDeviceForegroundFrameIsMeasurable(frame)) {
     NSLog(
       @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@ resolved=%@",
       frame.origin.x,
@@ -282,12 +282,9 @@ RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
   if (!AgentDeviceForegroundOwnershipMatches(primaryProcessID, targetProcessID)) {
     return RunnerFullScreenEvidenceNotPrimaryApp;
   }
-  if (CGRectIsNull(appFrame) || CGRectIsNull(screenFrame) ||
-      CGRectIsEmpty(appFrame) || CGRectIsEmpty(screenFrame)) {
-    return RunnerFullScreenEvidenceUnknown;
-  }
-  // A frame with a non-finite component is a runtime that said nothing, not a window that differs.
-  if (!AgentDeviceForegroundFramesAreFinite(appFrame, screenFrame)) {
+  // A frame that is not a usable measurement is a runtime that said nothing, not a window that
+  // differs, so the answer is Unknown, never the Windowed a comparison of the numbers would read as.
+  if (!AgentDeviceForegroundFramesAreMeasurable(appFrame, screenFrame)) {
     return RunnerFullScreenEvidenceUnknown;
   }
   return AgentDeviceForegroundWindowFillsScreen(appFrame, screenFrame)
@@ -480,7 +477,7 @@ NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *display
     NSValue *frameValue = [window valueForKey:@"frame"];
     [frameValue getValue:&frame size:sizeof(frame)];
   }];
-  if (frameException != nil || !RunnerUsableWindowFrame(frame)) {
+  if (frameException != nil || !AgentDeviceForegroundFrameIsMeasurable(frame)) {
     NSLog(
       @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@",
       frame.origin.x,

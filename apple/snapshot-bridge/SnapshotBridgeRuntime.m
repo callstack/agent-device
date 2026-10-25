@@ -91,14 +91,22 @@ static BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t 
 // of the screen (Windowed Apps or Stage Manager).
 static const CGFloat AgentDeviceFullScreenFrameTolerance = 0.5;
 
-// A frame with a non-finite component is not a measurement at all. It proves neither the fill nor
-// the window, so it must reach each caller's unknown policy, never a comparison that reads as a
-// difference (the bridge would refuse `app-window-not-full-screen` on a runtime that said nothing).
-static BOOL AgentDeviceForegroundFramesAreFinite(CGRect window, CGRect screen) {
-  return isfinite(window.origin.x) && isfinite(window.origin.y) &&
-      isfinite(window.size.width) && isfinite(window.size.height) &&
-      isfinite(screen.origin.x) && isfinite(screen.origin.y) &&
-      isfinite(screen.size.width) && isfinite(screen.size.height);
+// A frame that is null, empty, the infinite sentinel, or carries a non-finite component is not a
+// measurement at all. It proves neither the fill nor the window, so it must reach each caller's
+// unknown policy, never a comparison that reads as a difference (the bridge would refuse
+// `app-window-not-full-screen` on a runtime that said nothing). This is the whole usability test;
+// callers make one call, not two.
+static BOOL AgentDeviceForegroundFrameIsMeasurable(CGRect frame) {
+  if (CGRectIsNull(frame) || CGRectIsEmpty(frame) || CGRectIsInfinite(frame)) {
+    return NO;
+  }
+  return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
+      isfinite(frame.size.width) && isfinite(frame.size.height);
+}
+
+static BOOL AgentDeviceForegroundFramesAreMeasurable(CGRect window, CGRect screen) {
+  return AgentDeviceForegroundFrameIsMeasurable(window) &&
+      AgentDeviceForegroundFrameIsMeasurable(screen);
 }
 
 static BOOL AgentDeviceForegroundWindowFillsScreen(CGRect window, CGRect screen) {
@@ -243,10 +251,9 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   }
   CGRect window = [application frame];
   CGRect screen = [system frame];
-  if (CGRectIsEmpty(window) || CGRectIsEmpty(screen)) return NO;
-  // The documented unknown-frame fallback: a frame with a non-finite component is a runtime that
-  // reported nothing, not a window that differs from the screen, so the capture is kept.
-  if (!AgentDeviceForegroundFramesAreFinite(window, screen)) return NO;
+  // The documented unknown-frame fallback: a frame that is not a usable measurement is a runtime
+  // that reported nothing, not a window that differs from the screen, so the capture is kept.
+  if (!AgentDeviceForegroundFramesAreMeasurable(window, screen)) return NO;
   return !AgentDeviceForegroundWindowFillsScreen(window, screen);
 }
 
