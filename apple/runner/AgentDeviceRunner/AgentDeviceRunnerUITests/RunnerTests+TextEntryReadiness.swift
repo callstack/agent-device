@@ -101,7 +101,10 @@ extension RunnerTests {
 
   /// The readiness repeat, at the read's screen box; a read that names none taps nothing (#3899).
   func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
-    guard let frame = read.frameOnScreen, !frame.isEmpty else { return }
+    guard let frame = read.frameOnScreen, !frame.isEmpty else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=%@", read.frameOnScreen == nil ? "no-screen-frame" : "empty-frame")
+      return
+    }
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f", frame.midX, frame.midY)
     _ = tapAt(app: app, x: frame.midX, y: frame.midY)
     _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)

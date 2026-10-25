@@ -176,6 +176,24 @@
       "offset": { "width": 224, "height": 207 }
     },
     {
+      "name": "the same window moved elsewhere on the screen carries its subtree by the new origin",
+      "reportedBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "viewportBox": { "x": 120, "y": 90, "width": 386, "height": 682 },
+      "offset": { "width": 120, "height": 90 }
+    },
+    {
+      "name": "the keyboard window under a windowed app reports the screen's box and stays in screen space",
+      "reportedBox": { "x": 0, "y": 925, "width": 834, "height": 282 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a SpringBoard overlay under a windowed app reports the whole screen and translates nothing",
+      "reportedBox": { "x": 0, "y": 0, "width": 834, "height": 1210 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
       "name": "the app's own window box reports the screen box it is placed at and translates nothing",
       "reportedBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
       "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
