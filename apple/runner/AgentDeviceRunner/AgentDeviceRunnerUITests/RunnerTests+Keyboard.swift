@@ -1,5 +1,6 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
+import AgentDeviceSnapshotPresentation
 
 private enum KeyboardDismissObservationTiming {
   static let timeout: TimeInterval = 2
@@ -139,7 +140,7 @@ extension RunnerTests {
   ///
   /// The tree and keyboard band describe the same capture, even if the live keyboard disappears.
   /// Its own bounded main-thread hop preserves the existing budget and timeout evidence.
-  func captureKeyboardBandFact(snapshot: XCUIElementSnapshot, deadline: Date) -> RunnerKeyboardBandFact? {
+  func captureKeyboardBandFact(snapshot: XCUIElementSnapshot, viewport: SnapshotViewport, deadline: Date) -> RunnerKeyboardBandFact? {
 #if os(iOS)
     let slice = min(Self.keyboardBandProbeBudget, max(0, deadline.timeIntervalSinceNow))
     guard slice > 0 else {
@@ -157,7 +158,7 @@ extension RunnerTests {
         timeout: slice,
         timeoutError: { KeyboardBandProbeTimeout() }
       ) {
-        self.keyboardBandFact(snapshot: snapshot)
+        self.keyboardBandFact(snapshot: snapshot, viewport: viewport)
       }
     } catch {
       fact = .unmeasurable(RunnerKeyboardBandReason.queryTimeout)
@@ -174,18 +175,26 @@ extension RunnerTests {
 #endif
   }
 
-  private func keyboardBandFact(snapshot: XCUIElementSnapshot) -> RunnerKeyboardBandFact {
+  private func keyboardBandFact(snapshot: XCUIElementSnapshot, viewport: SnapshotViewport) -> RunnerKeyboardBandFact {
     // A live exists/frame pair can race keyboard dismissal after the tree was captured.
-    var pending = [snapshot]
+    var pending: [(XCUIElementSnapshot, SnapshotGeometrySpace, Bool)] = [(snapshot, .appOrientation, false)]
     var keyboardFrame: CGRect?
     var assistantFrame = CGRect.null
-    while let node = pending.popLast() {
+    while let (node, inheritedSpace, parentIsCarrier) = pending.popLast() {
+      let isCarrier = node.elementType == .application || node.elementType == .window
+      let space = SnapshotGeometrySpace.space(
+        reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(isWindow: isCarrier, parentIsWindow: parentIsCarrier),
+        reportedFrame: node.frame,
+        inheritedFrom: inheritedSpace,
+        viewport: viewport
+      )
+      let frame = space.orientedFrame(of: node.frame)
       if node.elementType == .keyboard {
-        keyboardFrame = keyboardFrame.map { $0.union(node.frame) } ?? node.frame
-      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(node.frame) {
-        assistantFrame = assistantFrame.union(node.frame)
+        keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
+      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(frame) {
+        assistantFrame = assistantFrame.union(frame)
       }
-      pending.append(contentsOf: node.children)
+      pending.append(contentsOf: node.children.map { ($0, space, isCarrier) })
     }
     guard let keyboardFrame else {
       return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)

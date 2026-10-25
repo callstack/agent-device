@@ -57,7 +57,7 @@ extension RunnerTests {
       self.safeSnapshotViewport(app: app, readingOrientation: true)
     }
     // Use the same tree for keyboard coverage so a later dismissal cannot invalidate the band.
-    let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, deadline: captureDeadline)
+    let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, viewport: viewport, deadline: captureDeadline)
 
     return SnapshotTraversalContext(
       queryRoot: app,

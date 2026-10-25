@@ -14,8 +14,32 @@ extension RunnerTests {
     let root = ElementAttributesFixture(.application, window.frame, children: [window])
 
     XCTAssertEqual(
-      captureKeyboardBandFact(snapshot: root, deadline: .distantFuture),
+      captureKeyboardBandFact(snapshot: root, viewport: .reported(box: window.frame), deadline: .distantFuture),
       .visible(CGRect(x: 0, y: 556, width: 390, height: 288))
+    )
+  }
+
+  @MainActor
+  func testCapturedKeyboardBandNormalizesKeyboardAndAssistantBeforeCombiningThem() {
+    let viewport = CGRect(x: 0, y: 0, width: 874, height: 402)
+    let native = CGRect(x: 0, y: 0, width: 402, height: 874)
+    let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 2, y: 75, width: 202, height: 724))
+    let keyboardHost = ElementAttributesFixture(.other, native, children: [keyboard])
+    let keyboardWindow = ElementAttributesFixture(.window, native, children: [keyboardHost])
+    let assistant = ElementAttributesFixture(
+      .other, CGRect(x: 75, y: 154, width: 724, height: 44), identifier: "SystemInputAssistantView"
+    )
+    let assistantHost = ElementAttributesFixture(.other, viewport, children: [assistant])
+    let assistantWindow = ElementAttributesFixture(.window, viewport, children: [assistantHost])
+    let root = ElementAttributesFixture(.application, viewport, children: [keyboardWindow, assistantWindow])
+
+    XCTAssertEqual(
+      captureKeyboardBandFact(
+        snapshot: root,
+        viewport: .reported(box: viewport, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight),
+        deadline: .distantFuture
+      ),
+      .visible(CGRect(x: 75, y: 154, width: 724, height: 246))
     )
   }
 
@@ -26,22 +50,22 @@ extension RunnerTests {
       .other, CGRect(x: 0, y: 556, width: 390, height: 44), identifier: "SystemInputAssistantView"
     )
     XCTAssertEqual(
-      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [assistant]), deadline: .distantFuture),
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [assistant]), viewport: .reported(box: frame), deadline: .distantFuture),
       .absent
     )
     let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
     let unrelated = ElementAttributesFixture(.other, CGRect(x: 0, y: 100, width: 390, height: 44), identifier: "other-toolbar")
     XCTAssertEqual(
-      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [unrelated, keyboard]), deadline: .distantFuture),
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [unrelated, keyboard]), viewport: .reported(box: frame), deadline: .distantFuture),
       .visible(keyboard.frame)
     )
     let invalid = ElementAttributesFixture(.keyboard, .zero)
     XCTAssertEqual(
-      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid]), deadline: .distantFuture),
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid]), viewport: .reported(box: frame), deadline: .distantFuture),
       .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
     )
     XCTAssertEqual(
-      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid, assistant]), deadline: .distantFuture),
+      captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [invalid, assistant]), viewport: .reported(box: frame), deadline: .distantFuture),
       .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
     )
   }
