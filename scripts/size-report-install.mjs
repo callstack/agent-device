@@ -2,11 +2,14 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  assertSnapshotBridgeAssets,
-  PACKAGED_RUNNER_SHARED_HEADER_PATH,
-  SNAPSHOT_BRIDGE_ASSET_PATHS,
-} from './size-report-package.mjs';
+import { assertSnapshotBridgeAssets, SNAPSHOT_BRIDGE_ASSET_PATHS } from './size-report-package.mjs';
+
+// The mirror path the packaged runner's relative include resolves to. Declared here rather than
+// imported: `.github/workflows/size.yml` mixes one commit's copy of each script, so an import of a
+// sibling's newer export would break the base measurement. The value is pinned by tests on both
+// consumers.
+const PACKAGED_RUNNER_SHARED_HEADER_PATH =
+  'dist/apple/snapshot-bridge/ForegroundApplicationGeometry.h';
 
 export function measureCleanInstalledPackage(tarballPath, packageName) {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-size-install-'));
