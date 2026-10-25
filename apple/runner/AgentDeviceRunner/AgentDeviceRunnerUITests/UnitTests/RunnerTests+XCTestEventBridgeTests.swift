@@ -256,29 +256,18 @@ extension RunnerTests {
     )
   }
 
-  /// The routing half of the rule: an iPhone always routes through its sole screen; anything else
-  /// routes only on the fills-screen proof.
+  /// The routing half of the rule off the phone idiom: anything but the phone idiom routes only on
+  /// the fills-screen proof. The phone half is the caller's idiom early return, so this seam never
+  /// sees a phone.
   func testSoleScreenRouteOpensOnlyOnProvedFullScreenOffThePhoneIdiom() {
-    for evidence: RunnerFullScreenEvidence in [
-      .fillsScreen,
-      .notPrimaryApp,
-      .windowed,
-      .unknown,
-    ] {
-      XCTAssertTrue(
-        RunnerSoleScreenRouteOpensForEvidence(true, evidence),
-        "an iPhone keeps every app full-screen whatever the probe reports"
-      )
-    }
-
-    XCTAssertTrue(RunnerSoleScreenRouteOpensForEvidence(false, .fillsScreen))
+    XCTAssertTrue(RunnerSoleScreenRouteOpensForEvidence(.fillsScreen))
     XCTAssertFalse(
-      RunnerSoleScreenRouteOpensForEvidence(false, .windowed),
+      RunnerSoleScreenRouteOpensForEvidence(.windowed),
       "a windowed iPad app must never book a gesture on the screen frame"
     )
-    XCTAssertFalse(RunnerSoleScreenRouteOpensForEvidence(false, .notPrimaryApp))
+    XCTAssertFalse(RunnerSoleScreenRouteOpensForEvidence(.notPrimaryApp))
     XCTAssertFalse(
-      RunnerSoleScreenRouteOpensForEvidence(false, .unknown),
+      RunnerSoleScreenRouteOpensForEvidence(.unknown),
       "a runtime that cannot prove the fill keeps requiring a window"
     )
   }

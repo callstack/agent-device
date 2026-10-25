@@ -282,13 +282,12 @@ RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
 }
 
 BOOL RunnerSoleScreenRouteOpensForEvidence(
-  BOOL isPhoneIdiom,
   RunnerFullScreenEvidence evidence
 ) {
-  // An iPhone keeps every app full-screen, so its sole screen is that app's frame whatever the
-  // probe reports. An iPad can show an app in part of its only screen, so the route opens only
-  // while the proof says fills-screen.
-  return isPhoneIdiom || evidence == RunnerFullScreenEvidenceFillsScreen;
+  // An iPad can show an app in part of its only screen, so the route opens only while the proof
+  // says fills-screen. The phone half of the rule lives in the caller's idiom early return: an
+  // iPhone keeps every app full-screen, so it never pays for the probe or reaches here.
+  return evidence == RunnerFullScreenEvidenceFillsScreen;
 }
 
 #if TARGET_OS_IOS
@@ -428,7 +427,7 @@ NSString * _Nullable RunnerResolveSoleScreen(
   // therefore only ever reports what it proved or failed to prove, never "not probed".
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
     const RunnerFullScreenEvidence evidence = RunnerProbeApplicationFillsScreen(application);
-    if (!RunnerSoleScreenRouteOpensForEvidence(NO, evidence)) {
+    if (!RunnerSoleScreenRouteOpensForEvidence(evidence)) {
       return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
     }
   }

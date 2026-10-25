@@ -127,6 +127,9 @@ jobs:
         if: matrix.leg.lane == 'nightly-ipad'
         run: |
           set -euo pipefail
+          # This leg skips the full-suite step that creates this directory for the iPhone leg, so
+          # it must create it in its own leg before `tee` writes into it.
+          mkdir -p .tmp/xctest-nightly
           UDID='${{ steps.ios-simulator.outputs.simulator-udid }}'
           xcrun simctl list devices -j | node -e '
             const fs = require("node:fs");

@@ -124,10 +124,10 @@ FOUNDATION_EXPORT RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForegroun
   CGRect screenFrame
 );
 
-// The sole-screen rule with one owner: an iPhone always routes through its only screen; any other
-// idiom routes only while the evidence proves the app fills that screen.
+// The off-phone half of the sole-screen rule: the route opens only while the evidence proves the
+// app fills its screen. The phone idiom never reaches this decision — its caller short-circuits
+// before the probe, because an iPhone keeps every app full-screen.
 FOUNDATION_EXPORT BOOL RunnerSoleScreenRouteOpensForEvidence(
-  BOOL isPhoneIdiom,
   RunnerFullScreenEvidence evidence
 );
 
