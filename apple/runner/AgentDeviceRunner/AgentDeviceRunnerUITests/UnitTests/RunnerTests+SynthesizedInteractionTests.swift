@@ -121,11 +121,17 @@ extension RunnerTests {
 
     if showsAppsOnlyFullScreen {
       XCTAssertTrue(response.ok, String(describing: response.error))
-      let screen = UIScreen.main.bounds
+      // The route answers the panel the XCTest screen object reports, not this
+      // process's UIScreen.main placeholder panel.
+      var pixelSize = CGSize.zero
+      var scale = CGFloat(0)
+      guard RunnerResolveSoleScreenPanelGeometry(&pixelSize, &scale) == nil, scale > 0 else {
+        return XCTFail("the sole screen did not report its panel geometry")
+      }
       XCTAssertEqual(response.data?.x, 0)
       XCTAssertEqual(response.data?.y, 0)
-      XCTAssertEqual(response.data?.x2, Double(screen.width))
-      XCTAssertEqual(response.data?.y2, Double(screen.height))
+      XCTAssertEqual(response.data?.x2, pixelSize.width / scale)
+      XCTAssertEqual(response.data?.y2, pixelSize.height / scale)
     } else {
       XCTAssertFalse(response.ok)
       XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
@@ -166,6 +172,26 @@ extension RunnerTests {
       XCTAssertNotNil(refusal)
       XCTAssertEqual(displayID, 0)
     }
+  }
+
+  /// The panel geometry is the number every window-less synthesized aim divides by, so it is pinned
+  /// against the one public panel answer in this process: a capture of the same screen, whose image
+  /// carries its point size and its scale. UIKit's UIScreen cannot arbitrate — in the runner process
+  /// it answers a placeholder panel — so a drift here aims every fallback tap at the wrong panel.
+  func testSoleScreenPanelGeometryMatchesTheCapturedPanel() throws {
+    var pixelSize = CGSize.zero
+    var scale = CGFloat(0)
+    if UIDevice.current.userInterfaceIdiom != .phone || XCUIScreen.screens.count != 1 {
+      XCTAssertNotNil(RunnerResolveSoleScreenPanelGeometry(&pixelSize, &scale))
+      return
+    }
+    XCTAssertNil(RunnerResolveSoleScreenPanelGeometry(&pixelSize, &scale))
+    guard scale > 0, pixelSize.width > 0, pixelSize.height > 0 else {
+      return XCTFail("the sole screen reported unusable panel geometry")
+    }
+    let captured = try XCTUnwrap(XCUIScreen.screens[0].screenshot().image)
+    XCTAssertEqual(pixelSize.width / scale, captured.size.width, accuracy: 1)
+    XCTAssertEqual(pixelSize.height / scale, captured.size.height, accuracy: 1)
   }
 #endif
 

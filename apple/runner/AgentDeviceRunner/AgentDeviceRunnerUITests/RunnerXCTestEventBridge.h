@@ -90,6 +90,17 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
   NSUInteger *displayID
 );
 
+// Reads the sole screen's panel size in pixels and its points-per-pixel scale, under the same
+// sole-screen rule the gesture route uses. The runner process hosts no scene, so UIKit's UIScreen
+// answers a placeholder panel (320x480 points on a 402x874 device) and a frame derived from it
+// aims synthesized gestures at the status bar (#3943); the XCTest screen object carries the real
+// panel. Private KVC raises rather than returns nil when XCTest has no such value, so both reads
+// are guarded here and surface as a message instead of an exception reaching the caller.
+FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreenPanelGeometry(
+  CGSize *pixelSize,
+  CGFloat *pointsPerPixelScale
+);
+
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
   Class cls,
   NSString *className,

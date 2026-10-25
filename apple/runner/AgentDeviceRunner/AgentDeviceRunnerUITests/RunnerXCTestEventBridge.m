@@ -259,6 +259,45 @@ NSString * _Nullable RunnerResolveSoleScreen(id _Nullable *screen, NSUInteger *d
   return nil;
 }
 
+NSString * _Nullable RunnerResolveSoleScreenPanelGeometry(
+  CGSize *pixelSize,
+  CGFloat *pointsPerPixelScale
+) {
+  *pixelSize = CGSizeZero;
+  *pointsPerPixelScale = 0;
+#if TARGET_OS_IOS
+  // Only an iPhone keeps every app full-screen; an iPad can show one in part of its only screen.
+  if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
+    return @"private XCTest event synthesis unavailable: no resolved application window, and only an iPhone routes to its sole screen";
+  }
+#else
+  return @"private XCTest event synthesis unavailable: no resolved application window";
+#endif
+  __block CGSize readSize = CGSizeZero;
+  __block CGFloat readScale = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
+    if (screens.count != 1) return;
+    CGRect bounds = CGRectZero;
+    [[screens.firstObject valueForKey:@"bounds"] getValue:&bounds size:sizeof(bounds)];
+    readSize = bounds.size;
+    readScale = [[screens.firstObject valueForKey:@"scale"] doubleValue];
+  }];
+  if (exception != nil || readScale <= 0 || readSize.width <= 0 || readSize.height <= 0) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen-geometry size=(%g,%g) scale=%g raised=%@",
+      readSize.width,
+      readSize.height,
+      readScale,
+      exception != nil ? @"yes" : @"no"
+    );
+    return @"private XCTest event synthesis unavailable: the sole screen did not report its panel geometry";
+  }
+  *pixelSize = readSize;
+  *pointsPerPixelScale = readScale;
+  return nil;
+}
+
 NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *displayID) {
   __block CGRect frame = CGRectNull;
   NSString *frameException = [RunnerObjCExceptionCatcher catchException:^{

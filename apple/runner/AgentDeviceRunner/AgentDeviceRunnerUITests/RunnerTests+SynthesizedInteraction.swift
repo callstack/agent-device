@@ -524,17 +524,19 @@ extension RunnerTests {
   /// that can show an app in part of a screen (iPad, more than one screen) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    guard UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 else {
+    guard UIDevice.current.userInterfaceIdiom == .phone else {
       return nil
     }
-    let screen = UIScreen.main
-    let scale = screen.nativeScale
-    guard scale > 0 else { return nil }
+    var pixelSize = CGSize.zero
+    var scale = CGFloat(0)
+    // UIKit's UIScreen answers this process's placeholder panel (320x480 points on a 402x874
+    // device) because the runner hosts no scene, so the frame is measured on the XCTest screen
+    // object the route gate trusts (#3943).
+    guard RunnerResolveSoleScreenPanelGeometry(&pixelSize, &scale) == nil, scale > 0 else {
+      return nil
+    }
     let frame = Self.soleScreenReferenceFrame(
-      nativePortraitSize: CGSize(
-        width: screen.nativeBounds.width / scale,
-        height: screen.nativeBounds.height / scale
-      ),
+      nativePortraitSize: CGSize(width: pixelSize.width / scale, height: pixelSize.height / scale),
       interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     )
     NSLog(
