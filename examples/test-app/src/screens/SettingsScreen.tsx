@@ -76,6 +76,21 @@ export function SettingsScreen(props: SettingsScreenProps) {
         />
       </SectionCard>
 
+      {/* The differential flows assert and tap this control straight after the
+          Settings tab, and their settle guard rejects any inserted scroll, so
+          this card stays the second section: every later section lands under
+          the fold's floating tab bar on a 402x874 phone. */}
+      <SectionCard
+        subtitle="Open a surface where a tap provably changes nothing on screen."
+        title="Inert surface"
+      >
+        <ActionButton
+          label="Open inert surface"
+          onPress={props.onOpenInertSurface}
+          testID="open-inert-surface"
+        />
+      </SectionCard>
+
       <SectionCard subtitle="Inspect visible and raw snapshot depth." title="Snapshot depth">
         <ActionButton
           label="Open snapshot depth lab"
@@ -92,17 +107,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open accessory setup lab"
           onPress={props.onOpenAccessorySetup}
           testID="open-accessory-setup-lab"
-        />
-      </SectionCard>
-
-      <SectionCard
-        subtitle="Open a surface where a tap provably changes nothing on screen."
-        title="Inert surface"
-      >
-        <ActionButton
-          label="Open inert surface"
-          onPress={props.onOpenInertSurface}
-          testID="open-inert-surface"
         />
       </SectionCard>
 
