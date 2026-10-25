@@ -33,6 +33,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
+import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { handleAudioCommand } from './session-audio.ts';
@@ -164,14 +165,7 @@ async function handleLogsCommand(params: ObservabilityInput): Promise<DaemonResp
     const admission = await logsParams.bindDevice(session.device, appLogAdmissionUse);
     const inspectFact = admission.facts.appLogInspect;
     if (!inspectFact.available) {
-      return {
-        ok: false,
-        error: {
-          code: 'UNSUPPORTED_OPERATION',
-          message: 'logs is not supported on this device',
-          hint: inspectFact.hint,
-        },
-      };
+      return unsupportedOperationResponse('logs', inspectFact);
     }
     const plan = resolveLogsRuntimePlan({
       action: req.positionals?.[0],

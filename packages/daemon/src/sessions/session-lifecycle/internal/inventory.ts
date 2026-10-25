@@ -13,6 +13,7 @@ import {
   type ProviderAppCatalogQuery,
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
+import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -466,16 +467,7 @@ async function resolveAppsRuntime(params: {
     (fact) => !fact.available,
   );
   if (unavailable && !unavailable.available) {
-    return {
-      response: {
-        ok: false,
-        error: {
-          code: 'UNSUPPORTED_OPERATION',
-          message: 'apps is not supported on this device',
-          ...(unavailable.hint ? { hint: unavailable.hint } : {}),
-        },
-      },
-    };
+    return { response: unsupportedOperationResponse('apps', unavailable) };
   }
   return { runtime: await requireRuntimeBinding(params.bindDevice)(params.device, appsRuntimeUse) };
 }
