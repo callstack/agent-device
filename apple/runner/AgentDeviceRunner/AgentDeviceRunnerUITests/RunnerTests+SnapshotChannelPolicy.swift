@@ -2,53 +2,38 @@ import Foundation
 
 // MARK: - XCTest accessibility channel policy (ADR 0004, #1105/#1156/#3896)
 //
-// One owner for what a capture must know about the XCTest channel's health: the penalty value,
-// the plan-reorder rule, and the execution mode each plan step carries. The old interface accepted
-// a defaulted `.normal` channel state at evidence time, which is how #3896's self-renewal bug was
-// reachable.
+// On some deep screens the XCTest bulk snapshot grinds for many seconds before failing; re-grinding
+// on every capture buries the main thread past the watchdog. After a slow, timed-out, or abandoned
+// XCTest-backed capture, later plans for the same bundle run bounded recovery tiers.
 
-/// What the plan runner does with one backend on this capture. The penalty recorder reads this,
-/// never a re-derived plan position, to decide which evidence an attempt may produce.
-enum SnapshotCaptureExecutionMode: Equatable {
+/// One executed step of an effective plan. The mode decides which evidence the attempt may produce
+/// and travels with it, so evidence cannot reach the recorder detached from its authority (#3896).
+enum SnapshotCaptureStep {
   /// A regular attempt: its acquisition facts may arm or renew the channel penalty.
-  case ordinary
+  case ordinary(SnapshotBackendKind)
   /// A bounded attempt inside a penalized plan: it may never arm or renew the penalty.
-  case boundedRecovery(claimsPeriodicProbe: Bool)
-}
+  case boundedRecovery(SnapshotBackendKind, claimsPeriodicProbe: Bool)
 
-/// One executed step of an effective plan: the backend together with its execution mode, built
-/// once by the plan factory. The tree tier's bounded slice and the probe claim derive from the
-/// mode, so no caller threads a plan-wide budget override or a positional rule beside the plan it
-/// already carries. The penalty recorder reads the mode: only an ordinary attempt may produce
-/// arming evidence.
-struct SnapshotCaptureStep {
-  /// The whole-slice budget a bounded tree attempt gets while the channel is penalized.
+  /// The slice budget a bounded tree attempt gets while the channel is penalized. The query
+  /// sweep's slice has its own owner (`querySweepSliceDeadline`), which the penalty does not
+  /// shorten.
   static let boundedTreeSliceBudget: TimeInterval = 1
 
-  let backend: SnapshotBackendKind
-  let execution: SnapshotCaptureExecutionMode
-
-  static func ordinary(_ backend: SnapshotBackendKind) -> SnapshotCaptureStep {
-    SnapshotCaptureStep(backend: backend, execution: .ordinary)
+  var backend: SnapshotBackendKind {
+    switch self {
+    case let .ordinary(kind): return kind
+    case let .boundedRecovery(kind, _): return kind
+    }
   }
 
-  static func boundedRecovery(
-    _ backend: SnapshotBackendKind,
-    claimsPeriodicProbe: Bool = false
-  ) -> SnapshotCaptureStep {
-    SnapshotCaptureStep(backend: backend, execution: .boundedRecovery(claimsPeriodicProbe: claimsPeriodicProbe))
-  }
-
-  /// The tree tier's bounded slice, from this step's own mode. The query sweep's slice has its own
-  /// owner (`querySweepSliceDeadline`), which the penalty does not shorten.
   var treeCaptureSliceBudgetOverride: TimeInterval? {
-    guard backend == .recursiveTree, execution != .ordinary else { return nil }
+    guard backend == .recursiveTree, case .boundedRecovery = self else { return nil }
     return Self.boundedTreeSliceBudget
   }
 
-  /// Only the leading step of the deferred plan that is running the due probe claims it.
+  /// Only the leading step of the deferred plan running the due probe claims it.
   var claimsPeriodicRecoveryProbe: Bool {
-    if case let .boundedRecovery(claims) = execution { return claims }
+    if case let .boundedRecovery(_, claims) = self { return claims }
     return false
   }
 }
@@ -59,10 +44,9 @@ enum SnapshotXCTestChannelPlanState: Equatable {
   case boundedXCTestProbe
 }
 
-/// The XCTest accessibility channel penalty (#1105/#1156). While it is active, regular plans for its
-/// bundle defer XCTest tiers. Each recovery interval, one deferred plan runs the bounded tree probe
-/// first, inside that capture, so a screen that is light again can clear the penalty before it
-/// expires (#3844). It is the only expiry/due-time owner: no schedule, queue, or cache runs beside it.
+/// The channel penalty (#1105/#1156): regular plans defer XCTest tiers while it is active, and
+/// each recovery interval one deferred plan runs the bounded tree probe first, inside that capture,
+/// so a light screen clears the penalty early (#3844). It is the only expiry/due-time owner.
 struct SnapshotXCTestChannelPenalty: Equatable {
   static let duration: TimeInterval = 120
   static let recoveryProbeInterval: TimeInterval = 30
@@ -139,17 +123,9 @@ extension RunnerTests {
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_RECOVERY_PROBE bundle=%@", bundleId ?? "")
   }
 
-  /// The pre-seeded first-failure a penalized plan stamps into its verdict. The deferred case
-  /// uses the dedicated 'deferred' code: the breaker pre-selected the backend, nothing new
-  /// degraded on this capture, and the daemon keys warning suppression and the settle budget
-  /// reset off exactly that distinction. The bounded probe keeps 'budget': its short XCTest
-  /// slice genuinely constrains what this capture could read.
-  ///
-  /// `requestPinnedBackend` separates the two ways the plan can arrive at the same
-  /// deferred shape. A capture that ASKED for a private-AX-only reading (custom
-  /// actions) degraded nothing, so it seeds no failure at all — reporting slow
-  /// accessibility work would name a cause that does not exist. Its answer comes from
-  /// `snapshotPlanPreSelectionReason`.
+  /// Deferred uses the 'deferred' code, not a failure code: the daemon keys warning suppression
+  /// and the settle-budget reset off that distinction. The bounded probe keeps 'budget' because
+  /// its short slice genuinely constrained the capture.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false
@@ -173,10 +149,8 @@ extension RunnerTests {
     }
   }
 
-  /// The 'requested-backend' answer for a plan the request itself pinned: the recursive tree the
-  /// caller asked for, or the private AX the custom-actions reading requires. A pin names a plan
-  /// decision, not a failure, so it never enters the failure slot; `planVerdictReason` reports it
-  /// only while no tier failed on this capture.
+  /// A pin names a plan decision, not a failure, so it reports through this slot and never
+  /// through the failure slot.
   static func snapshotPlanPreSelectionReason(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false,
@@ -197,11 +171,8 @@ extension RunnerTests {
     return nil
   }
 
-  /// The reason a capture's verdict carries: the first tier failure when one exists, otherwise the
-  /// pre-selection the plan started with. Once an XCTest-backed tier ran behind a deferred plan,
-  /// it ran on the bounded probe's short slice, so the capture reports that constraint ('budget')
-  /// whether the tier recovered it or the plan ended sparse, rather than the pre-selection
-  /// ('deferred') the plan was seeded with.
+  /// Once an XCTest tier ran behind a deferred plan, it ran on the probe's short slice, so the
+  /// capture reports 'budget' rather than the 'deferred' pre-selection it was seeded with.
   static func planVerdictReason(
     xCTestTierRan: Bool,
     state: SnapshotXCTestChannelPlanState,
@@ -212,10 +183,7 @@ extension RunnerTests {
     return xcTestChannelStateFirstFailure(.boundedXCTestProbe)
   }
 
-  /// Pure gate: a capture is planned as penalized when the channel penalty is
-  /// active OR the daemon pinned the private-AX backend (same-backend evidence
-  /// probe) — both mean "do not enter XCTest tree work first, and stamp the
-  /// pre-selection as 'deferred' rather than a degradation".
+  /// The daemon's private-AX pin takes the penalized route deliberately, not from degradation.
   static func snapshotXCTestChannelTreatedAsPenalized(
     penalized: Bool,
     preferredBackend: String?
@@ -223,13 +191,11 @@ extension RunnerTests {
     penalized || preferredBackend == SnapshotBackendKind.privateAX.rawValue
   }
 
-  /// Pure plan-reorder rule: an internal preferred backend pins the regular plan to that backend;
-  /// this is the only force seam used by same-backend evidence and conformance captures. A
-  /// penalized XCTest accessibility channel uses independent backends when the platform has one,
-  /// otherwise it keeps XCTest work on a short probe. A due recovery probe puts that short tree
-  /// ahead of the independent backend, and only that leading tree step claims the probe. The raw
-  /// diagnostic plan keeps tree-first errors, and unknown plans are left untouched. Each step
-  /// carries the execution mode this rule chose; nothing downstream re-derives it from position.
+  /// An internal preferred backend pins the regular plan. A penalized channel defers XCTest tiers
+  /// to independent backends where the platform has one (every step bounded recovery, so no
+  /// attempt can renew the penalty), otherwise it keeps XCTest work on a short probe. A due
+  /// recovery probe puts the bounded tree first, claiming the probe. Raw and unknown plans are
+  /// untouched.
   static func effectiveSnapshotCapturePlan(
     _ plan: [SnapshotBackendKind],
     xCTestChannelPenalized: Bool,
@@ -260,11 +226,10 @@ extension RunnerTests {
     let availablePlan = plan.filter { availableBackends.contains($0) }
     let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
     if !recoveryPlan.isEmpty {
-      // The independent backend reads only the app it can match as the active AX application, so
-      // an out-of-process surface over the app (the Save Password sheet) leaves it empty for the
-      // whole penalty. The tree, on the bounded probe's short slice, stays behind it, or leads when
-      // the recovery probe is due; the query sweep does not, since its grind is what the penalty
-      // keeps off the main thread.
+      // The independent backend reads only the app it matches as the active AX application, so an
+      // out-of-process surface leaves it empty for the whole penalty; the bounded tree stays
+      // behind it as the sparse fallback. The query sweep stays deferred: its grind is what the
+      // penalty keeps off the main thread.
       let boundedTree = availablePlan.filter { $0 == .recursiveTree }
       let probeLeads = xCTestRecoveryProbeDue && !boundedTree.isEmpty
       return EffectiveSnapshotCapturePlan(
@@ -288,10 +253,9 @@ extension RunnerTests {
     )
   }
 
-  /// Factory: one step per planned backend, each carrying the execution mode the penalized state
-  /// chose. A normal plan runs ordinary attempts; any penalized state runs every tier as bounded
-  /// recovery, so no attempt from it can arm or renew the penalty it is recovering from. Only the
-  /// leading XCTest step of the deferred plan that is running the due probe claims the probe.
+  /// A penalized state runs every tier as bounded recovery, so no attempt from it can arm or
+  /// renew the penalty it is recovering from. Only the leading XCTest step of a probe-leading
+  /// deferred plan claims the probe.
   static func snapshotCaptureSteps(
     for plan: [SnapshotBackendKind],
     state: SnapshotXCTestChannelPlanState,
@@ -304,18 +268,14 @@ extension RunnerTests {
     }
   }
 
-  /// Why an ordinary XCTest attempt shows a hostile channel, or nil. A bounded recovery attempt
-  /// has no arming branch here at all: forgetting that would let a probe renew its own penalty,
-  /// which is exactly the self-renewal #3896 removed at the recorder.
-  ///
-  /// The breaker observes acquisition facts only. Presentation is a separate phase and cannot arm
-  /// the breaker, even when it is slower than the acquisition that produced the tree.
+  /// A bounded recovery attempt has no arming branch at all: that gate is what stops a probe from
+  /// renewing its own penalty (#3896). The breaker observes acquisition facts only; presentation
+  /// is a separate phase and cannot arm it.
   static func snapshotXCTestPenaltyReason(
     for attempt: SnapshotBackendAttempt,
     slowThresholdMs: Double
   ) -> String? {
-    guard case .ordinary = attempt.step.execution else { return nil }
-    let kind = attempt.step.backend
+    guard case .ordinary(let kind) = attempt.step else { return nil }
     guard kind.usesXCTestAccessibilityChannel else { return nil }
     if case let .failed(failure, phase: .acquisition) = attempt.outcome,
       failure.code == Self.xCTestSnapshotTimeoutCode
@@ -329,17 +289,16 @@ extension RunnerTests {
     return "slow_\(kind.rawValue)_capture_\(Int(attempt.timing.acquisitionMs))ms"
   }
 
-  /// Only an accepted, fast tree from a bounded recovery attempt proves that the channel recovered
-  /// and clears the penalty early. An ordinary tree capture never clears it; it can only arm it.
+  /// Only an accepted, fast tree from a bounded recovery attempt clears the penalty early; an
+  /// ordinary tree capture can only arm it.
   static func snapshotBoundedRecoveryRestoredChannel(_ attempt: SnapshotBackendAttempt) -> Bool {
-    guard case .boundedRecovery = attempt.step.execution,
-      attempt.step.backend == .recursiveTree,
+    guard case .boundedRecovery(.recursiveTree, _) = attempt.step,
       attempt.timing.acquisitionMs <= SnapshotCaptureStep.boundedTreeSliceBudget * 1_000,
       case let .captured(capture) = attempt.outcome
     else { return false }
     return Self.snapshotTierRejectionReason(
       outcome: attempt.tierOutcome,
-      kind: attempt.step.backend,
+      kind: .recursiveTree,
       payload: capture.qualityPayload ?? capture.payload
     ) == nil
   }

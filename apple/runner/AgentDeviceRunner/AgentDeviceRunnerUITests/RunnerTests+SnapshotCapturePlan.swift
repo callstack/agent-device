@@ -52,21 +52,15 @@ enum SnapshotTierOutcome: Equatable {
 }
 
 /// The plan one capture runs: ordered steps, the channel state the selection chose, and the pin —
-/// if any — that narrowed it. Each step carries its own backend and execution mode, so the runner
-/// never infers recovery status from a position and the recorder never re-derives it from a
-/// parallel argument. The selection cause stays separate from the execution mode: an explicit pin,
-/// a custom-action pin, and a breaker deferral can share the deferred ordering while their verdict
-/// explanations differ, and a pin is never an armed penalty.
+/// if any — that narrowed it. The selection cause stays separate from the step's execution mode:
+/// an explicit pin, a custom-action pin, and a breaker deferral can share the deferred ordering
+/// while their verdict explanations differ, and a pin is never an armed penalty.
 struct EffectiveSnapshotCapturePlan {
   let steps: [SnapshotCaptureStep]
   let xCTestChannelState: SnapshotXCTestChannelPlanState
   /// Non-nil only when the plan was narrowed by an explicit internal backend preference. This
   /// keeps the quality marker tied to the plan decision rather than to an untrusted request field.
   let preferredBackend: SnapshotBackendKind?
-
-  var plan: [SnapshotBackendKind] {
-    steps.map(\.backend)
-  }
 }
 
 /// What the plan runner does when every backend failed or stayed sparse.
@@ -333,9 +327,6 @@ extension RunnerTests {
     return fallbackPayload
   }
 
-  /// Runs one planned step and returns the attempt carrying that same step, so the penalty
-  /// recorder sees the authority the work actually executed under. The tree tier's bounded slice
-  /// comes from the step; no caller passes a plan-wide budget override.
   private func captureWithBackend(
     _ step: SnapshotCaptureStep,
     target: SnapshotCaptureTarget,
@@ -343,7 +334,6 @@ extension RunnerTests {
     deadline: Date
   ) throws -> SnapshotBackendAttempt {
     let kind = step.backend
-    let treeCaptureSliceBudgetOverride = step.treeCaptureSliceBudgetOverride
     let app = target.app
     let hint = SnapshotPresentation.captureHint(for: options)
     var timer = SnapshotPhaseTimer()
@@ -361,7 +351,7 @@ extension RunnerTests {
               app: app,
               hint: hint,
               captureDeadline: deadline,
-              treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
+              treeCaptureSliceBudgetOverride: step.treeCaptureSliceBudgetOverride
             )
           else {
             return (nil, .completed)

@@ -416,7 +416,7 @@ extension RunnerTests {
       xCTestChannelPenalized: treated,
       preferredBackend: options.preferredBackend
     )
-    XCTAssertEqual(pinned.plan, [.privateAX])
+    XCTAssertEqual(pinned.steps.map(\.backend), [.privateAX])
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
 
     let raw = Self.effectiveSnapshotCapturePlan(
@@ -424,7 +424,7 @@ extension RunnerTests {
       xCTestChannelPenalized: treated,
       preferredBackend: options.preferredBackend
     )
-    XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
+    XCTAssertEqual(raw.steps.map(\.backend), Self.rawDiagnosticPlan)
 
     // A command without the field decodes to no pin and a normal plan.
     let bare = try JSONDecoder().decode(
@@ -441,7 +441,7 @@ extension RunnerTests {
       xCTestChannelPenalized: true,
       preferredBackend: SnapshotBackendKind.recursiveTree.rawValue
     )
-    XCTAssertEqual(forced.plan, [.recursiveTree])
+    XCTAssertEqual(forced.steps.map(\.backend), [.recursiveTree])
     XCTAssertEqual(forced.xCTestChannelState, .normal)
     XCTAssertEqual(
       Self.snapshotPlanPreSelectionReason(
@@ -475,7 +475,7 @@ extension RunnerTests {
       ),
       preferredBackend: "private-ax"
     )
-    XCTAssertEqual(pinned.plan, [.privateAX])
+    XCTAssertEqual(pinned.steps.map(\.backend), [.privateAX])
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
     // The requested-backend rule covers this pin too: it answers through the pre-selection
     // slot and seeds no failure, so a failing private-AX tier owns the verdict reason.
@@ -496,7 +496,7 @@ extension RunnerTests {
       Self.regularVisiblePlan,
       xCTestChannelPenalized: true
     )
-    XCTAssertEqual(regular.plan, [.privateAX, .recursiveTree])
+    XCTAssertEqual(regular.steps.map(\.backend), [.privateAX, .recursiveTree])
     XCTAssertEqual(regular.xCTestChannelState, .deferredToIndependentBackend)
     XCTAssertEqual(
       regular.steps.map(\.treeCaptureSliceBudgetOverride),
@@ -507,7 +507,7 @@ extension RunnerTests {
       Self.regularVisiblePlan,
       xCTestChannelPenalized: false
     )
-    XCTAssertEqual(unpenalized.plan, Self.regularVisiblePlan)
+    XCTAssertEqual(unpenalized.steps.map(\.backend), Self.regularVisiblePlan)
     XCTAssertEqual(unpenalized.xCTestChannelState, .normal)
     XCTAssertNil(unpenalized.steps.first?.treeCaptureSliceBudgetOverride)
 
@@ -516,7 +516,7 @@ extension RunnerTests {
       Self.rawDiagnosticPlan,
       xCTestChannelPenalized: true
     )
-    XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
+    XCTAssertEqual(raw.steps.map(\.backend), Self.rawDiagnosticPlan)
     XCTAssertEqual(raw.xCTestChannelState, .normal)
     XCTAssertNil(raw.steps.first?.treeCaptureSliceBudgetOverride)
   }
@@ -572,7 +572,7 @@ extension RunnerTests {
       availableBackends: [.recursiveTree, .querySweep]
     )
 
-    XCTAssertEqual(physicalDevicePlan.plan, [.recursiveTree, .querySweep])
+    XCTAssertEqual(physicalDevicePlan.steps.map(\.backend), [.recursiveTree, .querySweep])
     XCTAssertEqual(physicalDevicePlan.xCTestChannelState, .boundedXCTestProbe)
     XCTAssertEqual(
       physicalDevicePlan.steps.map(\.treeCaptureSliceBudgetOverride),
@@ -668,7 +668,7 @@ extension RunnerTests {
       tierOutcome: SnapshotTierOutcome = .completed
     ) -> SnapshotBackendAttempt {
       SnapshotBackendAttempt(
-        step: .boundedRecovery(kind),
+        step: .boundedRecovery(kind, claimsPeriodicProbe: false),
         outcome: outcome,
         timing: SnapshotCaptureTiming(acquisitionMs: acquisitionMs, presentationMs: 10),
         tierOutcome: tierOutcome
@@ -713,7 +713,7 @@ extension RunnerTests {
     let due = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true
     )
-    XCTAssertEqual(due.plan, [.recursiveTree, .privateAX])
+    XCTAssertEqual(due.steps.map(\.backend), [.recursiveTree, .privateAX])
     XCTAssertEqual(due.xCTestChannelState, .deferredToIndependentBackend)
     XCTAssertEqual(
       due.steps.map(\.treeCaptureSliceBudgetOverride),
@@ -722,14 +722,14 @@ extension RunnerTests {
     XCTAssertEqual(due.steps.map(\.claimsPeriodicRecoveryProbe), [true, false])
 
     let notDue = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, xCTestChannelPenalized: true)
-    XCTAssertEqual(notDue.plan, [.privateAX, .recursiveTree])
+    XCTAssertEqual(notDue.steps.map(\.backend), [.privateAX, .recursiveTree])
     XCTAssertEqual(notDue.steps.map(\.claimsPeriodicRecoveryProbe), [false, false])
 
     let physicalDevice = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true,
       availableBackends: [.recursiveTree, .querySweep]
     )
-    XCTAssertEqual(physicalDevice.plan, [.recursiveTree, .querySweep])
+    XCTAssertEqual(physicalDevice.steps.map(\.backend), [.recursiveTree, .querySweep])
     XCTAssertEqual(
       physicalDevice.steps.map(\.claimsPeriodicRecoveryProbe), [false, false],
       "the bounded plan probes on every capture"
@@ -739,13 +739,13 @@ extension RunnerTests {
         Self.regularVisiblePlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true,
         preferredBackend: pinned
       )
-      XCTAssertEqual(plan.plan.count, 1)
+      XCTAssertEqual(plan.steps.count, 1)
       XCTAssertEqual(plan.steps.map(\.claimsPeriodicRecoveryProbe), [false])
     }
     let raw = Self.effectiveSnapshotCapturePlan(
       Self.rawDiagnosticPlan, xCTestChannelPenalized: true, xCTestRecoveryProbeDue: true
     )
-    XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
+    XCTAssertEqual(raw.steps.map(\.backend), Self.rawDiagnosticPlan)
     XCTAssertEqual(raw.steps.map(\.claimsPeriodicRecoveryProbe), [false, false])
   }
 
