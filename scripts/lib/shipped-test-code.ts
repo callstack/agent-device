@@ -1,7 +1,7 @@
 /**
- * The rule that keeps test code out of the npm package, in one owner so the publishing gate
- * (`scripts/check-package.ts`, over the tree npm installs) and any later packager-side guard ask
- * the same question the same way.
+ * The rule that keeps test code out of the npm package, in one owner: scripts/check-package.ts
+ * applies it to every file `npm pack` declares, and its failure-direction tests live in
+ * scripts/__tests__/shipped-test-code.test.ts.
  *
  * The package ships build input, not just binaries: `dist/apple/runner/**` is the Xcode project a
  * user's `xcodebuild` compiles, so the runner's test tree reaches the tarball as source. The
@@ -15,8 +15,11 @@
 /** Test-only directory names. Any packed path carrying one of these segments is test code. */
 const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'fixtures', 'mocks']);
 
-/** A file name is test-only when its first dot starts `.test.` / `.spec.`, or it opts in by suffix. */
-const TEST_ONLY_FILE_PATTERN = /(^|[._])(test|spec)\.[^./]+$/;
+/**
+ * A file name is test-only when a dot or the start begins `.test.` / `.spec.`, with any number of
+ * trailing extensions (`runner.test.d.ts`), or it opts in by suffix.
+ */
+const TEST_ONLY_FILE_PATTERN = /(^|[._])(test|spec)\.[^/]+$/;
 const TEST_ONLY_FILE_SUFFIX = 'ForTesting';
 
 /**
@@ -41,9 +44,15 @@ const RUNNER_HOST_APP_TARGET = [
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 /**
+ * A unit-test compile guard on a preprocessor line. Matches both spellings the packager strips:
+ * Objective-C's `#if TARGET_OS_IOS && defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)` and Swift's
+ * `#if AGENT_DEVICE_RUNNER_UNIT_TESTS`. Comments that merely name the flag never match.
+ */
+const UNIT_TEST_GUARD_LINE = new RegExp(`^\\s*#\\s*if.*\\b${UNIT_TEST_CONDITION}\\b`, 'm');
+/**
  * The host app's fixture screens switch on these launch arguments; the shipped host must not carry
- * one. Owned here for the published package; scripts/package-apple-runner-source.mjs keeps the
- * matching copy for the pre-pack check, and the two are kept identical on purpose.
+ * one. This is also what catches the fixture file itself if its drop entry is ever removed: the
+ * file lives in the host app target and is full of these literals.
  */
 const FIXTURE_LAUNCH_ARGUMENT = /"--agent-device-[^"]*"/;
 
@@ -53,6 +62,7 @@ export type PackedFile = {
   readonly contents: string;
 };
 
+// `npm pack --json` declares paths with forward slashes on every platform, the only caller's input.
 function segments(packedPath: string): string[] {
   return packedPath.split('/');
 }
@@ -110,9 +120,9 @@ export function testOnlyContentFailures(files: Iterable<PackedFile>): string[] {
     if (!isUnderRunnerSource(file.path)) {
       continue;
     }
-    if (file.contents.includes(`#if ${UNIT_TEST_CONDITION}`)) {
+    if (UNIT_TEST_GUARD_LINE.test(file.contents)) {
       failures.push(
-        `${file.path}: a #if ${UNIT_TEST_CONDITION} block survived packaging; the packager strips unit-test source.`,
+        `${file.path}: a unit-test compile guard (#if ${UNIT_TEST_CONDITION}) survived packaging; the packager strips unit-test source.`,
       );
     }
     if (isRunnerHostAppSource(file.path) && FIXTURE_LAUNCH_ARGUMENT.test(file.contents)) {

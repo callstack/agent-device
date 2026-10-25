@@ -5,12 +5,16 @@
  * and the product code that merely names a test token must not.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import {
   DOCUMENTED_PACK_STUBS,
   testOnlyContentFailures,
   testOnlyPathFailures,
 } from '../lib/shipped-test-code.ts';
+
+const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 const RUNNER_HOST_APP =
   'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m';
@@ -31,12 +35,12 @@ test('testOnlyPathFailures rejects test-only file names in any shipped language'
   const failures = testOnlyPathFailures([
     'dist/src/session.test.js',
     'dist/src/router.spec.mjs',
+    'dist/src/runner.test.d.ts',
     'apple/snapshot-bridge/SnapshotBridgeForTesting.m',
-    'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerAppFixtures.m',
   ]);
-  // The fixture host is dropped by the packager's file list, not by its name; the guard's content
-  // pass owns it, so only the three test-named paths may report here.
-  assert.equal(failures.length, 3);
+  // The fixture host is dropped by the packager's file list, not by its name; the content pass
+  // owns it, so only the test-named paths may report here.
+  assert.equal(failures.length, 4);
 });
 
 test('testOnlyPathFailures exempts only the two documented PackStubs under Tests/', () => {
@@ -66,8 +70,13 @@ test('testOnlyContentFailures rejects unit-test source that survived the package
       path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift',
       contents: '#if AGENT_DEVICE_RUNNER_UNIT_TESTS\nfunc testAlerts() {}\n#endif\n',
     },
+    {
+      // The Objective-C spelling the fixtures file uses, where the flag sits inside defined().
+      path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/Sources/RunnerTests.m',
+      contents: '#if TARGET_OS_IOS && defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)\n@end\n',
+    },
   ]);
-  assert.equal(failures.length, 1);
+  assert.equal(failures.length, 2);
   assert.match(failures[0], /AGENT_DEVICE_RUNNER_UNIT_TESTS/);
 });
 
@@ -93,6 +102,24 @@ test('testOnlyContentFailures scans the packaged host app target at any depth', 
     },
   ]);
   assert.equal(failures.length, 1);
+});
+
+test("testOnlyContentFailures rejects the repo's real fixtures file, the leak the guard must catch", () => {
+  // The leak this PR fixes: the fixture screens lived in the shipped host app. If the packager's
+  // drop entry for AgentDeviceRunnerAppFixtures.m were ever removed, these exact bytes would ride
+  // into the tarball under the host app target; the content pass must reject them.
+  const fixturesPath = path.join(
+    repoRoot,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerAppFixtures.m',
+  );
+  const failures = testOnlyContentFailures([
+    {
+      path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerAppFixtures.m',
+      contents: fs.readFileSync(fixturesPath, 'utf8'),
+    },
+  ]);
+  // Both predicates fire on it: the unit-test compile guard and the fixture launch arguments.
+  assert.equal(failures.length, 2);
 });
 
 test('testOnlyContentFailures accepts the packaged host app and product daemon code that name test tokens', () => {

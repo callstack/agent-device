@@ -184,14 +184,11 @@ export default defineConfig({
             // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
             // to survive packaging before the npm package ships unbuildable Swift.
             'scripts/__tests__/strip-swift-comments.test.ts',
-            // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
-            // over two strings; the gate itself is what runs the packager and the Swift parse.
             // The publishing package guard's no-test-code predicates, over fixture paths and
             // bytes: the gate itself can only watch a healthy package pass.
             'scripts/__tests__/shipped-test-code.test.ts',
-            // The packager's own host-app guard, over a fixture runner tree: proves `--check`
-            // refuses a fixture screen compiled into the shipped host app.
-            'scripts/__tests__/packaged-runner-host-app.test.ts',
+            // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
+            // over two strings; the gate itself is what runs the packager and the Swift parse.
             'scripts/__tests__/packaged-runner-swift.test.ts',
             // The runner build's actor-isolation log scan, over synthetic logs and a fake
             // `xcodebuild` on PATH.

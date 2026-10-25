@@ -48,14 +48,6 @@ const SHIPPED_TEST_METHOD_ALLOWLIST = new Map([
   ],
 ]);
 const TEST_METHOD_PATTERN = /^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:\w+\s+)*func\s+(test\w*)\s*\(/;
-// The host app target is the shipped app a user builds, so no source that stays in it may switch
-// on a fixture launch argument. AgentDeviceRunnerAppFixtures.m is dropped by skipFilePaths above;
-// this refuses the drop being widened or the fixtures returning under another name, and it is
-// what scripts/__tests__/packaged-runner-host-app.test.ts proves fires.
-// Kept identical to FIXTURE_LAUNCH_ARGUMENT in scripts/lib/shipped-test-code.ts, which applies the
-// same rule to the published package; this .mjs cannot import the .ts without a build step.
-const PACKAGED_HOST_APP_FIXTURE_ARGUMENT = /"--agent-device-[^"]*"/;
-const HOST_APP_TARGET_DIR = path.join('AgentDeviceRunner', 'AgentDeviceRunner');
 
 function packageAppleRunnerSource(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
@@ -209,36 +201,11 @@ function processIncludedEntry(entry, sourceDir, outputDir, relativePath, summary
 }
 
 function processFile(sourcePath, outputPath, relativePath, summary, options) {
-  assertNoPackagedHostAppFixtureArguments(sourcePath, relativePath);
   if (outputPath) {
     copyFile(sourcePath, outputPath, relativePath, summary, options);
     return;
   }
   validateFile(sourcePath, relativePath, summary, options);
-}
-
-/**
- * The host app target the package ships must not switch on a fixture launch argument. A file
- * reaching here is one the package will carry: the fixture host is dropped by the skip list, so
- * widening that drop or returning fixture code under another name is what this refuses.
- */
-function assertNoPackagedHostAppFixtureArguments(sourcePath, relativePath) {
-  if (!isHostAppTargetSource(relativePath)) {
-    return;
-  }
-  if (PACKAGED_HOST_APP_FIXTURE_ARGUMENT.test(fs.readFileSync(sourcePath, 'utf8'))) {
-    throw new Error(
-      `${relativePath} switches on a --agent-device-* fixture launch argument and would ship in ` +
-        'the npm package. Fixture screens belong in a host-app source the packager drops.',
-    );
-  }
-}
-
-function isHostAppTargetSource(relativePath) {
-  return (
-    relativePath.startsWith(`${HOST_APP_TARGET_DIR}${path.sep}`) &&
-    ['.m', '.h', '.swift'].includes(path.extname(relativePath))
-  );
 }
 
 function copyFile(sourcePath, outputPath, relativePath, summary, options) {
