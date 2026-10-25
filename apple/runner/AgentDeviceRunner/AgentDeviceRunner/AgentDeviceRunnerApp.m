@@ -59,7 +59,7 @@ int main(int argc, const char *argv[]) {
 
 // The runner host app ships in the npm package and carries no fixture code. Every
 // `--agent-device-*` fixture screen lives in AgentDeviceRunnerAppFixtures.m, compiled
-// only under AGENT_DEVICE_RUNNER_UNIT_TESTS and dropped from the package by
+// only under the runner's unit-test macro and dropped from the package by
 // scripts/package-apple-runner-source.mjs. The host reaches that file through the two
 // hooks below, resolved by class name rather than by symbol, so a packaged build's
 // app target builds with the fixtures file absent and the unit-test build finds it.
@@ -71,7 +71,7 @@ int main(int argc, const char *argv[]) {
 
 // The view controller class the scene delegate roots the window at. The fixture host is
 // named here rather than referenced: AgentDeviceRunnerAppFixtures.m declares
-// AgentDeviceRunnerFixtureViewController only under AGENT_DEVICE_RUNNER_UNIT_TESTS, so
+// AgentDeviceRunnerFixtureViewController only under the runner's unit-test macro, so
 // a rename there must update this lookup.
 + (Class)agentDeviceRootViewControllerClass {
 #if TARGET_OS_IOS

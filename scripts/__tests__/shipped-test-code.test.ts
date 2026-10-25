@@ -75,8 +75,13 @@ test('testOnlyContentFailures rejects unit-test source that survived the package
       path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/Sources/RunnerTests.m',
       contents: '#if TARGET_OS_IOS && defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)\n@end\n',
     },
+    {
+      // A backslash-continued condition: the token is still a token, so the leak is caught.
+      path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/Sources/ContinuedTests.m',
+      contents: '#if TARGET_OS_IOS && \\\n    defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)\n@end\n',
+    },
   ]);
-  assert.equal(failures.length, 2);
+  assert.equal(failures.length, 3);
   assert.match(failures[0], /AGENT_DEVICE_RUNNER_UNIT_TESTS/);
 });
 
@@ -122,20 +127,19 @@ test("testOnlyContentFailures rejects the repo's real fixtures file, the leak th
   assert.equal(failures.length, 2);
 });
 
-test('testOnlyContentFailures accepts the packaged host app and product daemon code that name test tokens', () => {
+test('testOnlyContentFailures accepts the real shipped host app and product code that names test tokens', () => {
+  // The healthy side over real bytes: what the package ships today must report nothing, even
+  // though the host app discusses the fixtures file and the daemon constructs the unit-test flag.
+  const hostApp = fs.readFileSync(
+    path.join(repoRoot, 'apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m'),
+    'utf8',
+  );
   assert.deepEqual(
     testOnlyContentFailures([
-      {
-        path: RUNNER_HOST_APP,
-        contents: '@implementation AgentDeviceRunnerViewController\n@end\n',
-      },
+      { path: RUNNER_HOST_APP, contents: hostApp },
       {
         path: 'dist/src/runner.js',
         contents: 'const flag = "-D AGENT_DEVICE_RUNNER_UNIT_TESTS";\n',
-      },
-      {
-        path: 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner/Info.plist',
-        contents: '<string>AGENT_DEVICE_RUNNER_UNIT_TESTS</string>',
       },
     ]),
     [],

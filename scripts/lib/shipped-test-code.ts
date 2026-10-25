@@ -44,12 +44,6 @@ const RUNNER_HOST_APP_TARGET = [
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 /**
- * A unit-test compile guard on a preprocessor line. Matches both spellings the packager strips:
- * Objective-C's `#if TARGET_OS_IOS && defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)` and Swift's
- * `#if AGENT_DEVICE_RUNNER_UNIT_TESTS`. Comments that merely name the flag never match.
- */
-const UNIT_TEST_GUARD_LINE = new RegExp(`^\\s*#\\s*if.*\\b${UNIT_TEST_CONDITION}\\b`, 'm');
-/**
  * The host app's fixture screens switch on these launch arguments; the shipped host must not carry
  * one. This is also what catches the fixture file itself if its drop entry is ever removed: the
  * file lives in the host app target and is full of these literals.
@@ -113,6 +107,11 @@ function isRunnerHostAppSource(packedPath: string): boolean {
  * Test code that survived the packager's stripping, as `path: reason` lines. Content is read only
  * for the packaged runner source: the product bundle legitimately names the unit-test flag while
  * it constructs the build recipe, so a package-wide token scan would fail on its own daemon.
+ *
+ * The unit-test macro is a plain token match because the packager strips every block it guards:
+ * one occurrence left in a packaged runner source is a block that survived, whatever spelled it.
+ * Ship no mention of the macro in runner source for another reason — including in a comment — and
+ * the host app's comments say "the runner's unit-test macro" instead of naming it.
  */
 export function testOnlyContentFailures(files: Iterable<PackedFile>): string[] {
   const failures: string[] = [];
@@ -120,9 +119,9 @@ export function testOnlyContentFailures(files: Iterable<PackedFile>): string[] {
     if (!isUnderRunnerSource(file.path)) {
       continue;
     }
-    if (UNIT_TEST_GUARD_LINE.test(file.contents)) {
+    if (file.contents.includes(UNIT_TEST_CONDITION)) {
       failures.push(
-        `${file.path}: a unit-test compile guard (#if ${UNIT_TEST_CONDITION}) survived packaging; the packager strips unit-test source.`,
+        `${file.path}: names ${UNIT_TEST_CONDITION}, so unit-test source survived packaging; the packager strips it.`,
       );
     }
     if (isRunnerHostAppSource(file.path) && FIXTURE_LAUNCH_ARGUMENT.test(file.contents)) {
