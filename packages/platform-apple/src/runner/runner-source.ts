@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '../snapshot-source/cache-identity.ts';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from './apple-runner-platform.ts';
 
 const APPLE_RUNNER_SOURCE_ROOT = path.join('apple', 'runner', 'AgentDeviceRunner');
 const PACKAGED_APPLE_RUNNER_SOURCE_ROOT = path.join('dist', 'apple', 'runner', 'AgentDeviceRunner');

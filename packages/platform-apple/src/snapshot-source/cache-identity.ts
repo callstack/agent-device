@@ -2,6 +2,7 @@ import {
   readHostToolchainIdentity,
   type HostToolchainIdentity,
 } from '../native-build/toolchain-identity.ts';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '../runner/apple-runner-platform.ts';
 import { fromNativeBuildError, snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -10,11 +11,6 @@ export type SnapshotSourceToolchainIdentity = HostToolchainIdentity &
   Readonly<{
     simulatorRuntime: string;
   }>;
-
-// The shared full-screen rule, included by SnapshotBridgeRuntime.m and by the runner's event
-// bridge; its bytes change both compiled binaries. Named here as the owner of the bridge source
-// set so the runner fingerprint and every package check read one spelling.
-export const SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME = 'ForegroundApplicationGeometry.h';
 
 export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridge.m',

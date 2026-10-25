@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/platform-apple/runner';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');
@@ -171,12 +172,16 @@ function sharedHeaderFailures(scratchRoot: string, packagedRoot: string): string
     .filter((entry) => entry.startsWith('$(SRCROOT)/'))
     .some((entry) =>
       fs.existsSync(
-        path.join(srcRoot, entry.replace('$(SRCROOT)', '.'), 'ForegroundApplicationGeometry.h'),
+        path.join(
+          srcRoot,
+          entry.replace('$(SRCROOT)', '.'),
+          SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+        ),
       ),
     );
   if (!resolvesToHeader) {
     return [
-      `${PACKAGED_DIR}: no HEADER_SEARCH_PATHS entry resolves to ForegroundApplicationGeometry.h ` +
+      `${PACKAGED_DIR}: no HEADER_SEARCH_PATHS entry resolves to ${SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME} ` +
         `from ${path.join(PACKAGED_DIR, 'AgentDeviceRunner')} — a user's xcodebuild cannot compile the runner.`,
     ];
   }

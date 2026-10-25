@@ -23,6 +23,15 @@ import { readHostCpuArchSync } from './host.ts';
 export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
 
 /**
+ * The snapshot bridge's shared full-screen rule, named once. The bridge's runtime includes it and
+ * the runner's UITests target compiles against it through HEADER_SEARCH_PATHS, so its bytes change
+ * both compiled binaries. Beside the probe ceiling above so the constant sits with the constants
+ * this package shares: the bridge cache identity and the runner fingerprint both read it without
+ * either subtree entering the other's graph.
+ */
+export const SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME = 'ForegroundApplicationGeometry.h';
+
+/**
  * The symlink `xcode-select -s` writes and `xcode-select -p` reads back. Resolving it answers which
  * developer dir the host selects, without a subprocess, so the toolchain memo can key on that answer
  * on a hit as well as on a miss. Beside the probe ceiling above so the constant sits with the
