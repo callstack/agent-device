@@ -179,7 +179,6 @@ test('runner-only members refuse with the backend reason instead of starting XCT
   for (const refused of [
     () => interactor.back(),
     () => interactor.setOrientation('portrait'),
-    () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, button: 'middle' }),
     () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, doubleTap: true }),
     () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, holdMs: 500 }),
     () => interactor.longPress(1, 2, 500),

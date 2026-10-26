@@ -206,7 +206,6 @@ func fillInBackground(
     windowTitle: windowTitle(of: input))
 }
 
-/// An open menu's window level (`kCGPopUpMenuWindowLevel`).
 private let popUpMenuWindowLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
 /// An app that opens a menu tracks it until the menu closes and answers `AXShowMenu` only then,
 /// so the action's reply is abandoned after this long and the menu window decides the outcome.
@@ -257,7 +256,6 @@ func showMenuInBackground(
   )
 }
 
-/// The pid's open menu windows. A menu the app had open before the action is not evidence of it.
 func popUpMenuWindowNumbers(pid: pid_t, windowInfo: [[String: Any]]) -> Set<Int> {
   Set(
     windowInfo.compactMap { entry in
