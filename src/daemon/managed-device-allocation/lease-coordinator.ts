@@ -8,6 +8,7 @@ import type {
 import type { AllocationBinding } from '@agent-device/managed-allocation/decision';
 import {
   createAllocationOperationJournal,
+  holdsAllocationLane,
   type AllocationJournalResult,
   type AllocationOperationJournal,
 } from '@agent-device/managed-allocation/journal';
@@ -315,6 +316,7 @@ export async function createManagedLeaseCoordinator(options: {
         }
         continue;
       }
+      if (!holdsAllocationLane(entry.record)) continue;
       const { requesterId, attemptKey } = entry.record;
       let outcome: Readonly<{ status: string; message: string }>;
       try {

@@ -202,7 +202,7 @@ function sameRequest(
   );
 }
 
-function holdsAllocationLane(record: AllocationOperationRecord): boolean {
+export function holdsAllocationLane(record: AllocationOperationRecord): boolean {
   if (record.phase.status !== 'granted') {
     return (
       record.phase.status === 'unresolved' ||

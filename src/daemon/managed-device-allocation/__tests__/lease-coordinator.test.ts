@@ -107,7 +107,16 @@ async function setup(
       deadlineAtMs: overrides.deadlineAtMs ?? NOW + 60_000,
       ...(overrides.signal ? { signal: overrides.signal } : {}),
     });
-  return { allocator, coordinator, events, recordFor, acquire, loggedPhases, restart: start };
+  return {
+    allocator,
+    coordinator,
+    events,
+    recordFor,
+    acquire,
+    loggedPhases,
+    store,
+    restart: start,
+  };
 }
 
 async function fencedStatus(binding: ManagedLeaseBinding) {
@@ -361,17 +370,19 @@ test('a release the allocator cannot confirm on restart stays journaled and the 
   expect(loggedPhases()).toEqual(['managed_lease_recovery_uncertain']);
 });
 
-test('settled operations cost the allocator nothing on restart', async () => {
-  const { coordinator, acquire, restart } = await setup({
+test('settled operations are skipped on restart', async () => {
+  const { coordinator, acquire, store, restart } = await setup({
     requestLease: [granted()],
     releaseLease: [undefined],
   });
   expect((await acquire()).status).toBe('granted');
   await coordinator.release(OWNER);
+  const lanes = vi.spyOn(store, 'withLaneLock');
 
   const next = await restart({});
 
   expect(next.allocator.calls).toEqual([]);
+  expect(lanes).not.toHaveBeenCalled();
 });
 
 test('an operation left uncertain for the owner is given back before its next acquisition', async () => {
