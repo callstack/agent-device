@@ -30,9 +30,6 @@ const SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES = new Set([
 const LEGACY_OUTPUT_DIRS = [
   path.join('dist', 'apple-runner'),
   path.join('dist', 'apple', 'apple-runner'),
-  // A short-lived build mirrored the shared header beside the packaged runner; the UITests target
-  // finds it through HEADER_SEARCH_PATHS now, so a leftover copy must not double-ship.
-  path.join('dist', 'apple', 'snapshot-bridge'),
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);

@@ -31,8 +31,8 @@ jobs:
           # The full suite runs on an iPhone, where the sole-screen rule is decided by the idiom
           # alone. The iPad leg boots an iPad and runs only the sole-screen tests: the iPad half
           # of the rule — the route opens only while the in-process full-screen evidence proves
-          # the app fills its screen — can execute nowhere else, and the evidence line that probe
-          # prints is what turns a revert to idiom-only routing red instead of silently green.
+          # the app fills its screen — can execute nowhere else, so only its assertions can turn
+          # a revert to idiom-only routing red instead of silently green.
           # `name-prefix` is what each leg asserts the booted simulator's name starts with: the
           # boot action falls back to any simulator when the preferred name is missing, so a
           # renamed or absent device model must fail the leg that depends on its idiom.
@@ -92,8 +92,9 @@ jobs:
 
       # The boot action falls back to any simulator when the preferred name is missing, so each
       # leg proves it booted the family it claims: the full-suite leg's coverage is iPhone-only at
-      # the idiom, and the iPad leg's evidence line can only come from an iPad. A renamed or
-      # removed device model on the image fails here instead of quietly testing the wrong idiom.
+      # the idiom, and the iPad leg's sole-screen tests can only prove the rule on an iPad. A
+      # renamed or removed device model on the image fails here instead of quietly testing the
+      # wrong idiom.
       - name: Assert the booted simulator's family
         run: |
           set -euo pipefail
@@ -150,7 +151,7 @@ jobs:
 
       # The iPad leg runs a named selection: the smallest set that can execute the off-phone half of
       # the sole-screen rule — the admission boundary itself, one hostile-tree command that must
-      # reach synthesis, and `back`'s route witness while the fallback's inset source is changing.
+      # reach synthesis, and `back`'s route witness.
       # Geometry and error cases live in the host-runnable evidence matrix instead. `xcodebuild`
       # exits 0 when a selection matches nothing, so the reporter below asserts the executed count
       # against this lane's reach (`XCTEST_LANE=nightly-ipad`, derived by check:xctest-selection).

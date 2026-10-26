@@ -131,24 +131,21 @@ export function assertPublishPackageContents(entries, options = {}) {
         path.join(options.repoRoot ?? process.cwd(), 'apple/macos-helper/Package.swift'),
         'utf8',
       );
-    const testTargets = readMacosHelperTestTargets(manifestSource);
-    const missingStubs = testTargets.filter(
-      (target) => !paths.includes(`apple/macos-helper/Tests/${target}/PackStub.swift`),
+    const expectedStubs = new Set(
+      readMacosHelperTestTargets(manifestSource).map(
+        (target) => `apple/macos-helper/Tests/${target}/PackStub.swift`,
+      ),
     );
+    const missingStubs = [...expectedStubs].filter((stubPath) => !paths.includes(stubPath));
     if (missingStubs.length > 0) {
       throw new Error(
-        `npm pack is missing macOS helper test-target pack stubs: ${missingStubs
-          .map((target) => `apple/macos-helper/Tests/${target}/PackStub.swift`)
-          .join(', ')}`,
+        `npm pack is missing macOS helper test-target pack stubs: ${missingStubs.join(', ')}`,
       );
     }
     // The other direction: a declared stub whose target left the manifest stays exempt from the
     // path guard above, so compare against the manifest set here. A target removed or renamed
     // without retiring its package.json `files` entry and its DOCUMENTED_PACK_STUBS declaration
     // would otherwise ship a dead stub forever.
-    const expectedStubs = new Set(
-      testTargets.map((target) => `apple/macos-helper/Tests/${target}/PackStub.swift`),
-    );
     const staleStubs = [...documentedStubPaths].filter(
       (stubPath) => paths.includes(stubPath) && !expectedStubs.has(stubPath),
     );
