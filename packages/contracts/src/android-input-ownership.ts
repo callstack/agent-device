@@ -189,7 +189,7 @@ export const IOS_KEYBOARD_SUBTREE_CHROME_ROLES: ReadonlySet<string> = new Set([
 ]);
 
 /** Keyboard hosts the app can also fill: chrome itself, subtree left to the app. */
-export const IOS_KEYBOARD_CHROME_MARKER_ROLES: ReadonlySet<string> = new Set([
+const IOS_KEYBOARD_CHROME_MARKER_ROLES: ReadonlySet<string> = new Set([
   '_UIRemoteKeyboardPlaceholderView',
   'TUISystemInputAssistantView',
   'TUISystemInputAssistantPageView',
