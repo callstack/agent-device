@@ -32,6 +32,9 @@ const limrunMockState = vi.hoisted(() => {
     iosLaunchApp: vi.fn(async () => undefined),
     iosOpenUrl: vi.fn(async () => undefined),
     iosSetOrientation: vi.fn(async () => undefined),
+    iosElementTree: vi.fn(async () => [
+      { type: 'Application', frame: { x: 0, y: 0, width: 402, height: 874 } },
+    ]),
     iosListApps: vi.fn(async () => [
       { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
       { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
@@ -100,6 +103,7 @@ vi.mock('@limrun/api/ios-client', () => ({
     openUrl: limrunMockState.iosOpenUrl,
     setOrientation: limrunMockState.iosSetOrientation,
     listApps: limrunMockState.iosListApps,
+    elementTree: limrunMockState.iosElementTree,
     deviceInfo: {
       udid: 'ios-device',
       screenWidth: 402,
@@ -938,3 +942,35 @@ test('Limrun attaches an existing instance under a consumed field and refuses a 
     await runtime.shutdown();
   }
 });
+
+for (const attached of [false, true]) {
+  for (const source of [undefined, 'xcuitest'] as const) {
+    test(`Limrun ${attached ? 'attached' : 'created'} iOS runtime forwards ${source ?? 'default'} snapshot source`, async () => {
+      const runtime = new LimrunRuntime({
+        ...(attached
+          ? {
+              instances: {
+                ios: {
+                  apiUrl: 'https://eu.limrun.example/v1/ios_instances/ios-attached/api',
+                  token: 'instance-token',
+                },
+              },
+            }
+          : { apiKey: 'lim_test_key' }),
+        iosElementTreeSource: source,
+      });
+      try {
+        const device = await allocateLimrunDevice(runtime, iosLease('lease-tree-source'));
+        const interactor = runtime.getInteractor(device);
+        if (!interactor) throw new Error('Limrun runtime must return an interactor');
+        await interactor.snapshot();
+        assert.deepEqual(
+          limrunMockState.iosElementTree.mock.calls,
+          source ? [[undefined, { source }]] : [[]],
+        );
+      } finally {
+        await runtime.shutdown();
+      }
+    });
+  }
+}

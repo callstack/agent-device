@@ -619,6 +619,7 @@ Limrun direct-device flow:
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
   To drive an existing instance without the API key, set LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, from the instance status before connect. agent-device then never creates or deletes that instance; install, and apps before the first open, still need LIMRUN_API_KEY.
+  For native React Native testID views, set LIMRUN_IOS_ELEMENT_TREE_SOURCE=xcuitest before starting the daemon. The default is accessibility; XCTest snapshots omit separate-process web content. Restart the daemon after changing this setting.
   Set LIMRUN_KEEP_ALIVE=1 to ping the instance every 30 seconds while a session is open, so an idle session does not hit the Limrun inactivity timeout. It is off by default.
   agent-device apps
   agent-device open Example.apk

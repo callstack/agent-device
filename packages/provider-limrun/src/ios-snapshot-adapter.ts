@@ -9,9 +9,13 @@ import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-oc
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 export async function captureLimrunIosSnapshot(
-  session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
+  session: Pick<LimrunIosSession, 'client' | 'instanceId' | 'elementTreeSource'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
-  const tree = (await session.client.elementTree()) as IosTreeNode[];
+  const tree = (
+    session.elementTreeSource
+      ? await session.client.elementTree(undefined, { source: session.elementTreeSource })
+      : await session.client.elementTree()
+  ) as IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
   const nodes = flattenIosTree(tree).map((node) => interpretIosNode(node));
   return createIosSnapshotAcquisition({

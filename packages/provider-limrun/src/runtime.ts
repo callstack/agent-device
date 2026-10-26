@@ -62,6 +62,8 @@ export type LimrunRuntimeOptions = {
   region?: string;
   /** Pings each leased instance every 30 s so Limrun's inactivity timeout does not end idle sessions. */
   keepAlive?: boolean;
+  /** Opt in to XCTest snapshots for native testID views; defaults to accessibility. */
+  iosElementTreeSource?: 'accessibility' | 'xcuitest';
   runtimeInstance?: string;
   instances?: LimrunInstanceAccess;
 };
@@ -286,7 +288,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       );
     }
     return (
-      ios && (await createLimrunIosSession({ ...target(ios.apiUrl), ...ios }, this.dependencies))
+      ios &&
+      (await createLimrunIosSession(
+        { ...target(ios.apiUrl), ...ios, elementTreeSource: this.options.iosElementTreeSource },
+        this.dependencies,
+      ))
     );
   }
 
@@ -329,6 +335,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       lease,
       metadata: this.buildInstanceMetadata(lease),
       region: this.options.region,
+      iosElementTreeSource: this.options.iosElementTreeSource,
       app,
       dependencies: this.dependencies,
     };

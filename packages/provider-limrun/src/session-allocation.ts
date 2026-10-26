@@ -31,6 +31,7 @@ type SessionAllocationParams = Readonly<{
     labels: Readonly<Record<string, string>>;
   }>;
   region?: string;
+  iosElementTreeSource?: LimrunIosSession['elementTreeSource'];
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;
@@ -97,6 +98,7 @@ export async function allocateLimrunIosSession(
         instanceId: instance.metadata.id,
         ownership: 'created',
         device: buildLimrunDevice('ios', params.lease, instance.metadata.id),
+        elementTreeSource: params.iosElementTreeSource,
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,
       },
