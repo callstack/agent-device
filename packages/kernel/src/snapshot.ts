@@ -336,11 +336,8 @@ export type RawSnapshotNode = {
   appName?: string;
   windowTitle?: string;
   surface?: string;
-  /**
-   * Evaluated keyboard tap-surface membership, retained when ancestors are omitted.
-   * Includes app controls hosted by keyboard chrome; settle ownership is separate.
-   * Omission means unevaluated.
-   */
+  /** Keyboard tap-surface membership, including hosted app controls; independent of settle ownership.
+   * Omission means unevaluated. Survives ancestor removal. */
   keyboardOwned?: boolean;
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
@@ -381,14 +378,11 @@ export type HiddenContentHint = {
 };
 
 /**
- * Keyboard evidence observed during acquisition, in the capture's node coordinate space.
- * `visible` is a measured frame; `derived` is a frame established by the shared docked-tree
- * policy before projection; `visibility-only` is a boolean probe with no geometry;
- * `tree-rejected` records rejected geometry evaluated against a usable viewport, with optional
- * probe visibility; `unmeasurable` is unknown. `absent` requires an explicit absence observation.
- * On iOS XCTest, visible and absent come from a scan of the capture's complete pre-projection
- * root snapshot. A successful complete scan with no keyboard is the explicit absence observation.
- * Missing keyboard nodes in a projected or partial tree, or an omitted fact, never prove absence.
+ * Keyboard evidence in the node coordinate space: `visible` measured; `derived` from the shared
+ * docked-tree policy before projection; `visibility-only` boolean; `tree-rejected` rejected geometry
+ * against a usable viewport with optional visibility; `unmeasurable` unknown; `absent` explicit absence.
+ * On iOS XCTest, visible and absent come from the complete pre-projection root snapshot; a successful
+ * full scan with no keyboard proves absence. Missing partial/projected nodes or omitted facts never do.
  */
 export type SnapshotKeyboardBandFact =
   | { kind: 'visible'; frame: Rect }
