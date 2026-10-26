@@ -191,6 +191,16 @@ export function createSimlockManagedDeviceAllocator(options: {
       if (simlockErrorCode(error) !== 'UNKNOWN_LEASE') throw error;
     }
     leases.delete(leaseId);
+    for (const [key, attempt] of attempts) {
+      if (attempt.status.lease?.id === leaseId) attempts.delete(key);
+    }
+  };
+
+  /** An attempt that ended without a device has nothing left to look up or cancel. */
+  const settle = (ref: LeaseRequestRef, status: LeaseRequestStatus): LeaseRequestStatus => {
+    if (status.state === 'refused' || status.state === 'cancelled')
+      attempts.delete(attemptKey(ref));
+    return status;
   };
 
   return Object.freeze({
@@ -199,18 +209,20 @@ export function createSimlockManagedDeviceAllocator(options: {
       const attempt = attempts.get(attemptKey(input)) ?? start(input);
       if (!(await settledBefore(attempt.settled, input.signal))) return attempt.status;
       if (attempt.error !== undefined) throw attempt.error;
-      return attempt.status;
+      return settle(input, attempt.status);
     },
     getLeaseRequestStatus: async (ref) => await liveStatus(attemptFor(ref)),
     cancelLeaseRequest: async (ref) => {
       const attempt = attempts.get(attemptKey(ref));
-      if (!attempt || attempt.status.state === 'unknown') return await cancelByRequester(ref);
+      if (!attempt || attempt.status.state === 'unknown') {
+        return settle(ref, await cancelByRequester(ref));
+      }
       if (attempt.status.state === 'pending') {
         await client.cancelLease({ requesterId: simlockRequester(ref.requesterId) });
         // An uncancellable request is still provisioning; its grant is the caller's to release.
         await attempt.settled;
       }
-      return await liveStatus(attempt);
+      return settle(ref, await liveStatus(attempt));
     },
     renewLease: async ({ leaseId, ttlDeadline }) => {
       const known = leases.get(leaseId);

@@ -224,3 +224,26 @@ test("another allocator instance's lease for the same owner is not this attempt'
 
   expect(await allocator.cancelLeaseRequest(REF)).toMatchObject({ state: 'cancelled' });
 });
+
+test('a released attempt is forgotten', async () => {
+  const { allocator } = setup();
+  await allocator.requestLease(INPUT);
+  await allocator.releaseLease({ leaseId: 'lease-1' });
+
+  await expect(allocator.getLeaseRequestStatus(REF)).rejects.toMatchObject({
+    details: { reason: 'simlock-attempt-unknown' },
+  });
+});
+
+test('a refused attempt is forgotten', async () => {
+  const { allocator } = setup({
+    requestLease: vi.fn(async () => {
+      throw simlockError('NO_CAPACITY');
+    }),
+  });
+  expect(await allocator.requestLease(INPUT)).toMatchObject({ state: 'refused' });
+
+  await expect(allocator.getLeaseRequestStatus(REF)).rejects.toMatchObject({
+    details: { reason: 'simlock-attempt-unknown' },
+  });
+});
