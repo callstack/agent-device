@@ -18,6 +18,7 @@ import type {
 } from '@agent-device/managed-allocation/record';
 import type { AllocationOperationStore } from '@agent-device/managed-allocation/store';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { allocationOperationKey } from '@agent-device/managed-allocation/fence';
 import { AppError } from '@agent-device/kernel/errors';
 import { createManagedLeaseReachability } from '../../managed-device-reachability.ts';
 import { MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS } from './command-horizon.ts';
@@ -136,11 +137,11 @@ export async function createManagedLeaseCoordinator(options: {
       publish: async (allocation) => {
         const binding = bindingFor(allocation);
         // Recorded before the handoff so a failed publication is still torn down by cleanup.
-        published.set(operationKey(allocation.operation), binding);
+        published.set(allocationOperationKey(allocation.operation), binding);
         await options.handoff.publish(binding);
       },
       cleanup: async (allocation) => {
-        const key = operationKey(allocation.operation);
+        const key = allocationOperationKey(allocation.operation);
         const binding = published.get(key);
         if (!binding) return;
         binding.admission.fenceBinding('released');
@@ -249,7 +250,7 @@ export async function createManagedLeaseCoordinator(options: {
       result = await journal.recover(ref);
     }
     if (result.status === 'granted') {
-      const binding = published.get(operationKey(ref));
+      const binding = published.get(allocationOperationKey(ref));
       return binding
         ? { status: 'granted', binding }
         : unavailable('journal-blocked', 'Granted allocation has no published binding.');
@@ -263,7 +264,7 @@ export async function createManagedLeaseCoordinator(options: {
   ): Promise<ManagedLeaseAcquisition> {
     if (result.status === 'refused') return refusalOf(result.record);
     if (result.status === 'abandoned') return await abandon(ref, 'abandoned');
-    if (result.status === 'cleanup-pending' || published.has(operationKey(ref))) {
+    if (result.status === 'cleanup-pending' || published.has(allocationOperationKey(ref))) {
       const released = await journal.release(ref);
       return unavailable(
         released.status === 'released' ? 'handoff-failed' : 'allocator-uncertain',
@@ -446,10 +447,6 @@ function refusalOf(record: AllocationOperationRecord): ManagedLeaseAcquisition {
 
 function isAllocatorUncertain(result: AllocationJournalResult): boolean {
   return result.status === 'uncertain' && result.reason === 'allocator-uncertain';
-}
-
-function operationKey(ref: AllocationOperationRef): string {
-  return JSON.stringify([ref.requesterId, ref.attemptKey]);
 }
 
 function describeJournalResult(result: AllocationJournalResult): string {

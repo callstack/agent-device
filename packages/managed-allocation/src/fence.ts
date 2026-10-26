@@ -2,6 +2,11 @@ import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-ru
 import type { AllocationOperationRef } from './record-types.ts';
 import { isFenceGeneration, isVerbatimId } from './record-validation.ts';
 
+/** The one string identity of an attempt: its fence token and every in-memory index of it. */
+export function allocationOperationKey(ref: AllocationOperationRef): string {
+  return JSON.stringify([ref.requesterId, ref.attemptKey]);
+}
+
 export function allocationOperationFence(
   ref: AllocationOperationRef,
   generation: number,
@@ -16,7 +21,7 @@ export function allocationOperationFence(
     );
   }
   return Object.freeze({
-    token: JSON.stringify([ref.requesterId, ref.attemptKey]),
+    token: allocationOperationKey(ref),
     generation,
   });
 }

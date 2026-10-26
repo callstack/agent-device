@@ -6,6 +6,7 @@ import type {
   ManagedDeviceAllocatorPort,
   ManagedLease,
 } from '@agent-device/contracts/managed-device-allocation';
+import { allocationOperationKey } from '@agent-device/managed-allocation/fence';
 import { AppError } from '@agent-device/kernel/errors';
 
 type SimlockLeaseRecord = Readonly<{ id: string; ttlDeadline: number }>;
@@ -84,7 +85,7 @@ export function createSimlockManagedDeviceAllocator(options: {
   const leases = new Map<string, ManagedLease>();
 
   const attemptFor = (ref: LeaseRequestRef): Attempt => {
-    const attempt = attempts.get(attemptKey(ref));
+    const attempt = attempts.get(allocationOperationKey(ref));
     if (!attempt) {
       throw new AppError('COMMAND_FAILED', 'Simlock attempt is not known to this daemon.', {
         reason: 'simlock-attempt-unknown',
@@ -148,7 +149,7 @@ export function createSimlockManagedDeviceAllocator(options: {
           }
         },
       );
-    attempts.set(attemptKey(input), attempt);
+    attempts.set(allocationOperationKey(input), attempt);
     return attempt;
   };
 
@@ -199,21 +200,21 @@ export function createSimlockManagedDeviceAllocator(options: {
   /** An attempt that ended without a device has nothing left to look up or cancel. */
   const settle = (ref: LeaseRequestRef, status: LeaseRequestStatus): LeaseRequestStatus => {
     if (status.state === 'refused' || status.state === 'cancelled')
-      attempts.delete(attemptKey(ref));
+      attempts.delete(allocationOperationKey(ref));
     return status;
   };
 
   return Object.freeze({
     instanceId: options.instanceId,
     requestLease: async (input) => {
-      const attempt = attempts.get(attemptKey(input)) ?? start(input);
+      const attempt = attempts.get(allocationOperationKey(input)) ?? start(input);
       if (!(await settledBefore(attempt.settled, input.signal))) return attempt.status;
       if (attempt.error !== undefined) throw attempt.error;
       return settle(input, attempt.status);
     },
     getLeaseRequestStatus: async (ref) => await liveStatus(attemptFor(ref)),
     cancelLeaseRequest: async (ref) => {
-      const attempt = attempts.get(attemptKey(ref));
+      const attempt = attempts.get(allocationOperationKey(ref));
       if (!attempt || attempt.status.state === 'unknown') {
         return settle(ref, await cancelByRequester(ref));
       }
@@ -243,10 +244,6 @@ export function createSimlockManagedDeviceAllocator(options: {
     },
     releaseLease,
   });
-}
-
-function attemptKey(ref: LeaseRequestRef): string {
-  return JSON.stringify([ref.requesterId, ref.attemptKey]);
 }
 
 function simlockErrorCode(error: unknown): string | undefined {
