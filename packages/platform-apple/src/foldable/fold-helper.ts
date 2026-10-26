@@ -1,4 +1,4 @@
-import type { FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
+import type { DeviceRotation, FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -19,17 +19,22 @@ const HINGE_ANGLE_NO_SAMPLE_HINT =
 
 const OUTPUT_VERSION = 1;
 
+/** The orientations the guest's device-state control offers; it has no upside-down value. */
+export type FoldableRotation = Exclude<DeviceRotation, 'portrait-upside-down'>;
+
 /** The guest panel table in the `devicectl device info displays` payload shape. */
 export type SimulatorPanelPayload = { result: { displays: unknown[] } };
 
 /**
  * The fold helper bound to one simulator. Every mode is a separate `simctl spawn` of the cached
- * binary, so it reaches a simulator in any device set. `setPose` only dispatches HID; the reads
- * only observe, so a pose is verified by a process that never sent it.
+ * binary, so it reaches a simulator in any device set. `setPose` and `rotate` only dispatch HID;
+ * the reads only observe, so a pose is verified by a process that never sent it.
  */
 export type FoldHelper = Readonly<{
   /** Dispatches a preset pose or a keyframe trajectory through simulator HID. */
   setPose(pose: FoldPose | readonly FoldKeyframe[], signal?: AbortSignal): Promise<void>;
+  /** Dispatches a device orientation through the same simulator HID control channel. */
+  rotate(orientation: FoldableRotation, signal?: AbortSignal): Promise<void>;
   /**
    * One fresh CoreMotion `CMAngleManager` subscription, the source `devicectl device motion
    * hinge-angle` relays. It reports the latest sample once `windowMs` has passed since the first,
@@ -100,6 +105,13 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
         () => true,
       );
     },
+    async rotate(orientation, signal) {
+      await run(
+        ['rotate', orientation],
+        { signal, timeoutMs: 5_000, failure: ROTATE_FAILURE },
+        () => true,
+      );
+    },
     async readHingeAngle({ signal, windowMs = 0 } = {}) {
       return await run(
         ['hinge', String(windowMs)],
@@ -125,6 +137,11 @@ type ModeFailure = Readonly<{ message: string; details: { reason: string; hint?:
 const DISPATCH_FAILURE: ModeFailure = {
   message: 'Unable to send the simulator hinge pose',
   details: { reason: 'fold-hid-dispatch-failed' },
+};
+
+const ROTATE_FAILURE: ModeFailure = {
+  message: 'Unable to send the simulator orientation',
+  details: { reason: 'orientation-hid-dispatch-failed' },
 };
 
 const NO_SAMPLE_FAILURE: ModeFailure = {

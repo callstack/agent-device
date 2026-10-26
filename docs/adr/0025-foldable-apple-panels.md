@@ -331,11 +331,12 @@ On that toolchain, `fold` attempted the hinge read and reported `fold-pose-dispa
 
 Both CoreDevice facts come from the guest daemon `dtdeviceinfod`.
 It reads the hinge through private CoreMotion `CMAngleManager`, and the panels through `CADisplay` and BacklightServices `BLSBacklight`.
-The fold helper now has three modes, and each run is a separate `simctl spawn` that honors the set:
+The fold helper now has four modes, and each run is a separate `simctl spawn` that honors the set:
 
 - `set <pose|keyframes>` dispatches HID and observes nothing.
 - `hinge` takes one fresh `CMAngleManager` sample and sends no HID. It prints `{"version":1,"angleDegrees":…,"angleValid":…}`.
 - `panels` prints the integrated panels in the `devicectl device info displays` entry shape.
+- `rotate <orientation>` dispatches HID and observes nothing. The next amendment describes it.
 
 Simulator pose verification uses `hinge` for every simulator. HID completion is dispatch evidence only.
 The observation is independent of the dispatch: a separate process reads the resulting hinge state and never echoes the request.
@@ -356,6 +357,25 @@ Rejected alternatives:
 - **`simctl io enumerate` as the scoped panel table: rejected.** It reports every port as `Power state: On`, so it cannot identify the lit panel.
 - **The lit panel derived from the hinge pose: rejected.** Panel identity and power must be measured. A pose-to-panel map is a second authority.
 - **Refuse capture on a scoped multi-panel device: rejected.** The guest reports measured panel power, so the existing capture rules apply unchanged.
+
+## Amendment: foldable rotation through guest HID (2026-10-26)
+
+`XCUIDevice.orientation` has no effect on an iPhone Duo simulator, and the runner readback repeats the requested value.
+`devicectl device orientation set` reports success and has no effect on a simulator that `simctl boot` started.
+`orientation` therefore rotates a multi-panel simulator through the guest device-state control: the HID event that Device Hub's orientation menu sends (`orientation-picker-control`, type `enum`).
+The control has no upside-down value, so `portrait-upside-down` is refused with `unsupported-foldable-orientation`.
+Routing uses the `fold` admission and the panel table. A resolved panel count is a hardware fact, so the daemon probes each simulator once.
+
+The verdict comes from `devicectl device orientation get`, a process that never sent the HID event.
+CoreDevice answers each query with the value that it sampled at the previous query, so the first read after a dispatch is discarded.
+A rotation that no fresh read reports is refused with `orientation-unverified`.
+A simulator in a scoped set is refused with `unsupported-device-scope` before dispatch, because no reader can verify its rotation.
+
+Rejected alternatives:
+
+- **The panel table's `orientation.currentDeviceOrientation`: rejected.** It is screen-relative. On the Duo inner panel, it is a quarter-turn from the device orientation.
+- **A guest orientation read: rejected.** CoreMotion `CMDeviceOrientationManager` reports `Ambiguous`, and `BKSHIDServicesIsOrientationLockedWithOrientation` reports 0, after a rotation that CoreDevice and the screenshots confirm.
+- **Dispatch without a verdict in a scoped set: rejected.** The runner path already reported a false success there.
 
 ## Pose is derived from panel power, and official control does not exist
 
@@ -652,8 +672,9 @@ The silent misses investigated here came from default outer-display routes and i
   Desktop behavior remains unmeasured here.
 - **Quarter-turn detection.**
   Both Duo panels report `currentOrientation: rot90`.
-  No available path rotates a foldable.
-  Inventory therefore carries orientation without a test against changed orientation.
+  Inventory carries orientation without a test against changed orientation.
+  `orientation` now rotates a Duo simulator in the default set through guest HID (2026-10-26).
+  The changed `currentOrientation` values have no test yet.
 - **A slowly settled hinge.**
   Four reads consume twenty seconds of streams.
   A Duo that takes longer to settle inside `half-open` is refused.

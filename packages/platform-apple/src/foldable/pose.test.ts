@@ -1,7 +1,12 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const { FOLD_HELPER } = vi.hoisted(() => ({
-  FOLD_HELPER: { setPose: vi.fn(), readHingeAngle: vi.fn(), readPanelPayload: vi.fn() },
+  FOLD_HELPER: {
+    setPose: vi.fn(),
+    rotate: vi.fn(),
+    readHingeAngle: vi.fn(),
+    readPanelPayload: vi.fn(),
+  },
 }));
 
 vi.mock('../core/display-inventory.ts', async (importOriginal) => {

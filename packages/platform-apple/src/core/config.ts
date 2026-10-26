@@ -53,6 +53,15 @@ export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 8;
 export const IOS_FOLD_POSE_READ_INTERVAL_MS = 1_000;
 /** Two consecutive reads this close together mean the hinge has stopped moving. */
 export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
+/**
+ * How many fresh CoreDevice orientation reads a dispatched foldable rotation gets before it is
+ * refused. One read costs ~0.2s, and the iPhone Duo reported the new orientation on the first
+ * fresh read; the margin covers a loaded host. A read that times out counts as one that saw no
+ * orientation. With the routing probe, a cold fold-helper build, and the HID dispatch, the worst
+ * case stays inside the default 90s request envelope.
+ */
+export const IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS = 8;
+export const IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS = 2_000;
 
 // CoreSimulator can briefly stall while it services the scale lookup immediately
 // after a keyboard transition. Keep this bounded below the full capture budget.

@@ -5,8 +5,8 @@
 #import <math.h>
 #import <objc/message.h>
 
-// Private simulator HID entry points. `set` only dispatches; `hinge` and `panels` only observe, so
-// the host verifies a pose with a separate process that never sends HID.
+// Private simulator HID entry points. `set` and `rotate` only dispatch; `hinge` and `panels` only
+// observe, so the host verifies a pose with a separate process that never sends HID.
 extern CFDataRef IOCFSerialize(CFTypeRef object, CFOptionFlags options);
 extern CFTypeRef IOHIDEventCreateVendorDefinedEvent(CFAllocatorRef allocator, uint64_t timestamp,
     uint32_t usagePage, uint32_t usage, uint32_t version, const uint8_t *data,
@@ -14,10 +14,10 @@ extern CFTypeRef IOHIDEventCreateVendorDefinedEvent(CFAllocatorRef allocator, ui
 extern CFTypeRef IOHIDEventSystemClientCreate(CFAllocatorRef allocator);
 extern void IOHIDEventSystemClientDispatchEvent(CFTypeRef client, CFTypeRef event);
 
-static BOOL sendAngle(CFTypeRef client, double angle) {
+static BOOL sendControl(CFTypeRef client, NSString *source, NSString *type, id value) {
   NSDictionary *payload = @{
     @"provider": @"com.apple.Virtualization.VirtualMachines",
-    @"source": @"hinge-slider-control", @"type": @"range", @"value": @(angle),
+    @"source": source, @"type": type, @"value": value,
   };
   CFDataRef data = IOCFSerialize((__bridge CFTypeRef)payload, 1);
   if (!data) return NO;
@@ -28,6 +28,10 @@ static BOOL sendAngle(CFTypeRef client, double angle) {
   if (!event) return NO;
   CFRelease(event);
   return YES;
+}
+
+static BOOL sendAngle(CFTypeRef client, double angle) {
+  return sendControl(client, @"hinge-slider-control", @"range", @(angle));
 }
 
 static BOOL validNumber(id value) {
@@ -84,18 +88,33 @@ static BOOL runFrames(CFTypeRef client, NSArray *frames) {
   }
 }
 
+static int dispatchEvents(BOOL (^send)(CFTypeRef client)) {
+  CFTypeRef client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
+  if (!client) return 1;
+  BOOL dispatched = send(client);
+  CFRelease(client);
+  if (!dispatched) fprintf(stderr, "Unable to create simulator HID event\n");
+  return dispatched ? 0 : 1;
+}
+
 static int runSet(NSString *argument) {
   NSArray *frames = readFrames(argument);
   if (!frames) {
     fprintf(stderr, "Expected a pose or 2-64 {atMs,angle} keyframes spanning 0 to at most 60000ms\n");
     return 2;
   }
-  CFTypeRef client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
-  if (!client) return 1;
-  BOOL dispatched = runFrames(client, frames);
-  CFRelease(client);
-  if (!dispatched) fprintf(stderr, "Unable to create simulator HID event\n");
-  return dispatched ? 0 : 1;
+  return dispatchEvents(^BOOL(CFTypeRef client) { return runFrames(client, frames); });
+}
+
+// The orientation control has no upside-down value.
+static int runRotate(NSString *orientation) {
+  if (![@[@"portrait", @"landscape-left", @"landscape-right"] containsObject:orientation]) {
+    fprintf(stderr, "Expected orientation portrait, landscape-left or landscape-right\n");
+    return 2;
+  }
+  return dispatchEvents(^BOOL(CFTypeRef client) {
+    return sendControl(client, @"orientation-picker-control", @"enum", orientation);
+  });
 }
 
 static BOOL responds(id target, SEL selector) {
@@ -236,11 +255,13 @@ int main(int argc, const char *argv[]) {
   @autoreleasepool {
     NSString *mode = argc >= 2 ? @(argv[1]) : nil;
     if ([mode isEqualToString:@"set"] && argc == 3) return runSet(@(argv[2]));
+    if ([mode isEqualToString:@"rotate"] && argc == 3) return runRotate(@(argv[2]));
     if ([mode isEqualToString:@"hinge"] && (argc == 2 || argc == 3)) {
       return readHinge(argc == 3 ? @(argv[2]) : nil);
     }
     if ([mode isEqualToString:@"panels"] && argc == 2) return readPanels();
-    fprintf(stderr, "Usage: fold-helper set <pose|keyframes-json> | hinge [window-ms] | panels\n");
+    fprintf(stderr,
+        "Usage: fold-helper set <pose|keyframes-json> | rotate <orientation> | hinge [window-ms] | panels\n");
     return 2;
   }
 }
