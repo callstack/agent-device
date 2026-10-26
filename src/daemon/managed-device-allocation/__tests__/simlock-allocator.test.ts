@@ -18,7 +18,7 @@ const GRANT = {
   environment: { SIMLOCK_IOS_DEVICE_SET: '/simlock/devices' },
   lease: { id: 'lease-1', ttlDeadline: NOW + 900_000 },
 };
-const LISTED = { ...GRANT.lease, requesterId: 'job-1' };
+const LISTED = { ...GRANT.lease, requesterId: 'simlock:job-1' };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -66,7 +66,7 @@ test('a grant requests the shape fail-fast under the attempt key and maps the de
     platform: 'ios',
     model: 'iPhone 16',
     osVersion: '18',
-    requesterId: 'job-1',
+    requesterId: 'simlock:job-1',
     idempotencyKey: 'attempt-1',
     noWait: true,
     timeoutMs: 60_000,
@@ -148,7 +148,7 @@ test('cancelling a pending attempt cancels the requester and reports the cancell
   await request;
 
   expect(await allocator.cancelLeaseRequest(REF)).toMatchObject({ state: 'cancelled' });
-  expect(client.cancelLease).toHaveBeenCalledWith({ requesterId: 'job-1' });
+  expect(client.cancelLease).toHaveBeenCalledWith({ requesterId: 'simlock:job-1' });
 });
 
 test('renewal asks Simlock for the remaining width and returns the confirmed deadline', async () => {
@@ -184,7 +184,16 @@ test.each([
     });
 
     expect(await allocator.cancelLeaseRequest(REF)).toEqual({ ...REF, state });
-    expect(client.cancelLease).toHaveBeenCalledWith({ requesterId: 'job-1' });
+    expect(client.cancelLease).toHaveBeenCalledWith({ requesterId: 'simlock:job-1' });
     expect(client.requestLease).not.toHaveBeenCalled();
   },
 );
+
+test("another allocator instance's lease for the same owner is not this attempt's grant", async () => {
+  const { allocator } = setup({
+    cancelLease: vi.fn(async () => ({ result: 'not-found' as const })),
+    listLeases: vi.fn(async () => ({ leases: [{ ...LISTED, requesterId: 'other:job-1' }] })),
+  });
+
+  expect(await allocator.cancelLeaseRequest(REF)).toMatchObject({ state: 'cancelled' });
+});
