@@ -80,7 +80,7 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
   if (!apiKey && !ios && !android) return undefined;
   const iosElementTreeSource = readValue(env, 'LIMRUN_IOS_ELEMENT_TREE_SOURCE');
   if (
-    iosElementTreeSource &&
+    iosElementTreeSource !== undefined &&
     iosElementTreeSource !== 'accessibility' &&
     iosElementTreeSource !== 'xcuitest'
   ) {

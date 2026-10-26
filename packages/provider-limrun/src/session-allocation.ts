@@ -144,7 +144,6 @@ export async function allocateLimrunAndroidSession(
         instanceId: instance.metadata.id,
         ownership: 'created',
         device: buildLimrunDevice('android', params.lease, instance.metadata.id),
-        elementTreeSource: params.iosElementTreeSource,
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,
         adbUrl: instance.status.adbWebSocketUrl,
