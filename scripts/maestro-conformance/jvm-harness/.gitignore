@@ -3,3 +3,4 @@
 # and the committed wrapper.
 .gradle/
 build/
+bin/
