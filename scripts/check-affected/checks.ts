@@ -53,6 +53,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('layering', 'Import-direction layering guard', 'check:layering'),
   gate('di-seams', 'Test-only DI seam guard', 'check:di-seams'),
   gate('fallow', 'Fallow code-quality audit', 'check:fallow'),
+  gate('native-dupes', 'New native code clones (jscpd)', 'check:native-dupes'),
+  gate(
+    'native-dupes-model',
+    'Native clone detection and baseline policy',
+    'check:native-dupes:test',
+  ),
   gate('mcp-metadata', 'MCP registry metadata sync', 'check:mcp-metadata'),
   gate('build', 'Build (tsdown + declarations)', 'build'),
   gate('package', 'Published package (publint, attw, clean-install resolution)', 'check:package'),

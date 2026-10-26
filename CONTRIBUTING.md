@@ -241,6 +241,15 @@ Useful direct entry points:
   fails when `coverage/` was not written by that command on this commit. `--all` reports every
   function and never fails: that is `main`'s backlog. Both list the per-function CRAP ceilings from
   `.fallowrc.json` they honoured. `check:fallow` leaves CRAP off without coverage.
+- `pnpm check:native-dupes` — reject new native code clones against the reviewed baseline;
+  scans Swift, Objective-C (including headers), Kotlin, Java, and Python in `apple/`, `android/`,
+  and `linux/`, including tests. No Xcode or JVM is needed.
+- `pnpm native-dupes:report` — inspect all native clones without failing on new findings;
+  writes `.tmp/native-dupes/jscpd-report.json` with both locations and `isNew` markers.
+- `pnpm native-dupes:prototype` — compare detection settings and the Duo fixture pair;
+  see [measurements and baseline review](docs/experiments/native-duplication.md).
+- `pnpm native-dupes:baseline` — update accepted clones only after reviewing their source;
+  do not use a baseline refresh merely to clear a failure.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 

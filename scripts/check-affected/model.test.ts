@@ -87,6 +87,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
   // Each platform build is its own gate in its own lane, so a Swift change owns both.
   // (The Apple device lanes ride along: the runner is what those lanes boot — device-lanes.ts.)
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
+    'native-dupes',
     'swift-runner-ios',
     'swift-runner-macos',
     'packaged-runner-swift',
@@ -104,6 +105,7 @@ test('a runner XCTest source also selects the test-list and package-source check
   assert.deepEqual(
     ids(['apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift']),
     [
+      'native-dupes',
       'swift-runner-ios',
       'swift-runner-macos',
       'xctest-selection',
@@ -149,6 +151,7 @@ test('the shared foreground geometry header selects the Apple runner builds', ()
 
 test('Android helper change selects the android-helpers build', () => {
   assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), [
+    'native-dupes',
     'android-helpers',
     'replay-android',
   ]);
@@ -450,3 +453,27 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
 });
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+test('native duplication covers language inputs without selecting metadata or TypeScript', () => {
+  for (const file of [
+    'apple/fold-helper/Fold.m',
+    'apple/snapshot-bridge/Bridge.h',
+    'android/ime-helper/Input.kt',
+    'android/ime-helper/Build.kts',
+    'android/snapshot-helper/Touch.java',
+    'linux/atspi-dump.py',
+  ]) {
+    assert.ok(ids([file]).includes('native-dupes'), file);
+  }
+  for (const file of [
+    'apple/runner/README.md',
+    'android/ime-helper/AndroidManifest.xml',
+    'packages/platform-apple/src/core/app-resolution.ts',
+  ]) {
+    assert.ok(!ids([file]).includes('native-dupes'), file);
+  }
+  for (const file of ['.jscpd-native.json', 'native-dupes-baseline.json']) {
+    assert.equal(plan([file]).failOpen, true);
+    assert.ok(ids([file]).includes('native-dupes-model'), file);
+  }
+});

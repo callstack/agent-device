@@ -38,6 +38,8 @@ export const ALL_CHECKS = [
   'layering',
   'di-seams',
   'fallow',
+  'native-dupes',
+  'native-dupes-model',
   'mcp-metadata',
   'build',
   'package',
@@ -138,6 +140,8 @@ const ROOT_TOOLING = new Set([
   'tsdown.config.ts',
   'vitest.config.ts',
   '.fallowrc.json',
+  '.jscpd-native.json',
+  'native-dupes-baseline.json',
   'oxlint.config.ts',
   '.oxfmtrc.json',
   '.npmrc',
@@ -391,6 +395,18 @@ const ownsAppleRunnerBuildSource = (file: string): boolean =>
   (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
   file.endsWith('.swift');
 
+const nativeDupesOwnership: OwnershipRule = ({ file }) =>
+  /^(?:apple|android|linux)\/.*\.(?:swift|m|h|kt|kts|java|py)$/.test(file)
+    ? [
+        reason(
+          'native-dupes',
+          file,
+          'own:native-dupes',
+          'jscpd compares native code against the clone baseline',
+        ),
+      ]
+    : [];
+
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
   rule: string;
@@ -633,6 +649,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   replayCompatOwnership,
   daemonWireCompatOwnership,
   buildOwnership,
+  nativeDupesOwnership,
   deviceLaneRule,
 ];
 

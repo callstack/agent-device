@@ -164,6 +164,22 @@ jobs:
             --base
             ${{ env.FALLOW_BASE }}
 
+      - name: Test native clone detection and baseline policy
+        uses: ./.github/actions/run-gate
+        with: { gate: native-dupes-model }
+
+      - name: Check new native code clones
+        uses: ./.github/actions/run-gate
+        with: { gate: native-dupes }
+
+      - name: Upload native duplication report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-dupes-report
+          path: .tmp/native-dupes/jscpd-report.json
+          if-no-files-found: ignore
+
       - name: Check import-direction DAG
         # Structured import-direction lint over the resolved graph. See
         # scripts/layering/check.ts and CONTEXT.md (Architecture: folder DAG +

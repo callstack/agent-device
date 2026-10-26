@@ -146,6 +146,11 @@
     "fallow:all": "fallow --summary",
     "fallow:baseline": "fallow health --report-only --save-baseline fallow-baselines/health.json --summary",
     "check:fallow": "fallow audit",
+    "check:native-dupes": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-new-clones --fail-on-empty",
+    "check:native-dupes:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/native-dupes/check.test.ts",
+    "native-dupes:report": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-empty",
+    "native-dupes:baseline": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --update-baseline --fail-on-empty",
+    "native-dupes:prototype": "node --experimental-strip-types scripts/native-dupes/prototype.ts",
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
     "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/*.test.ts",
     "gate": "node --experimental-strip-types scripts/gate/run.ts",
@@ -179,7 +184,7 @@
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",
     "check:mcp-metadata": "node scripts/sync-mcp-metadata.mjs --check",
-    "check:tooling": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:layering && pnpm depgraph:test && pnpm check:gate-manifest:test && pnpm check:gate-manifest && pnpm check:production-exports && pnpm check:tmpdir-leaks:test && pnpm check:xctest-selection && pnpm check:packaged-runner-swift && pnpm check:mcp-metadata && pnpm check:doc-prose && pnpm check:doc-links && pnpm build && pnpm check:bundle-owner-files && pnpm check:package",
+    "check:tooling": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:layering && pnpm depgraph:test && pnpm check:gate-manifest:test && pnpm check:gate-manifest && pnpm check:production-exports && pnpm check:native-dupes:test && pnpm check:native-dupes && pnpm check:tmpdir-leaks:test && pnpm check:xctest-selection && pnpm check:packaged-runner-swift && pnpm check:mcp-metadata && pnpm check:doc-prose && pnpm check:doc-links && pnpm build && pnpm check:bundle-owner-files && pnpm check:package",
     "check:unit": "pnpm test:unit && pnpm check:tmpdir-leaks && pnpm test:smoke",
     "check": "node --experimental-strip-types scripts/check-affected/run.ts --run --full",
     "prepack": "npm_config_dry_run=false pnpm release:prepare",
@@ -324,6 +329,7 @@
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
+    "@agent-device/testmu": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
@@ -348,6 +354,7 @@
     "fast-check": "^4.9.0",
     "ipaddr.js": "^2.5.0",
     "jpeg-js": "^0.4.4",
+    "jscpd": "5.4.2",
     "oxc-parser": "^0.146.0",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",
@@ -360,7 +367,6 @@
     "vite": "^8.3.5",
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
-    "yauzl": "^3.4.0",
-    "@agent-device/testmu": "workspace:*"
+    "yauzl": "^3.4.0"
   }
 }
