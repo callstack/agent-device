@@ -476,3 +476,34 @@ test('disposal does not wait past its budget for an acquisition the allocator ne
 
   await expect(disposed).resolves.toBeUndefined();
 });
+
+test('a lost allocator answer is reconciled once, then withdrawn without waiting for the deadline', async () => {
+  const { allocator, recordFor, acquire } = await setup({
+    requestLease: [new Error('allocator unreachable')],
+    getLeaseRequestStatus: [new Error('allocator unreachable')],
+    cancelLeaseRequest: [cancelled],
+  });
+
+  const acquisition = acquire({ deadlineAtMs: NOW + 60_000 });
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  expect(await acquisition).toMatchObject({ status: 'unavailable', reason: 'response-lost' });
+  expect(allocator.calls.map((call) => call.method)).toEqual([
+    'requestLease',
+    'getLeaseRequestStatus',
+    'cancelLeaseRequest',
+  ]);
+  expect(recordFor().phase.status).toBe('cancelled');
+});
+
+test('a lost allocator answer that the lookup recovers is still granted', async () => {
+  const { acquire } = await setup({
+    requestLease: [new Error('allocator unreachable')],
+    getLeaseRequestStatus: [granted()],
+  });
+
+  const acquisition = acquire();
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+  expect((await acquisition).status).toBe('granted');
+});

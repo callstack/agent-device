@@ -57,7 +57,8 @@ export type ManagedLeaseUnavailableReason =
   | 'allocator-cancelled'
   | 'allocator-uncertain'
   | 'handoff-failed'
-  | 'journal-blocked';
+  | 'journal-blocked'
+  | 'response-lost';
 
 export type ManagedLeaseAcquisition =
   | Readonly<{ status: 'granted'; binding: ManagedLeaseBinding }>
@@ -251,7 +252,12 @@ export async function createManagedLeaseCoordinator(options: {
     signal: AbortSignal,
   ): Promise<ManagedLeaseAcquisition> {
     let result = await openAttempt(input, ref, signal);
+    let reconciled = false;
     while (result.status === 'pending' || isAllocatorUncertain(result)) {
+      // A lost answer gets one reconciling lookup (ADR 0021 §4); polling an allocator that has
+      // already lost it only delays giving the request back until the deadline.
+      if (isAllocatorUncertain(result) && reconciled) return await abandon(ref, 'response-lost');
+      reconciled ||= isAllocatorUncertain(result);
       if (signal.aborted) return await abandon(ref, 'abandoned');
       const remainingMs = input.deadlineAtMs - Date.now();
       if (remainingMs <= 0) return await abandon(ref, 'deadline-exceeded');
@@ -259,13 +265,18 @@ export async function createManagedLeaseCoordinator(options: {
       if (signal.aborted) return await abandon(ref, 'abandoned');
       result = await journal.recover(ref);
     }
-    if (result.status === 'granted') {
-      const binding = published.get(allocationOperationKey(ref));
-      return binding
-        ? { status: 'granted', binding }
-        : unavailable('journal-blocked', 'Granted allocation has no published binding.');
-    }
-    return await settleUngranted(ref, result);
+    return await finish(ref, result);
+  }
+
+  async function finish(
+    ref: AllocationOperationRef,
+    result: AllocationJournalResult,
+  ): Promise<ManagedLeaseAcquisition> {
+    if (result.status !== 'granted') return await settleUngranted(ref, result);
+    const binding = published.get(allocationOperationKey(ref));
+    return binding
+      ? { status: 'granted', binding }
+      : unavailable('journal-blocked', 'Granted allocation has no published binding.');
   }
 
   async function settleUngranted(
@@ -293,17 +304,12 @@ export async function createManagedLeaseCoordinator(options: {
    */
   async function abandon(
     ref: AllocationOperationRef,
-    reason: 'abandoned' | 'deadline-exceeded',
+    reason: keyof typeof ABANDON_MESSAGES,
   ): Promise<ManagedLeaseAcquisition> {
     const settled = await giveBack(ref);
     if (settled.status === 'refused') return refusalOf(settled.record);
     if (settled.status === 'cancelled' || settled.status === 'released') {
-      return unavailable(
-        reason,
-        reason === 'abandoned'
-          ? 'The managed device request was abandoned.'
-          : 'The allocator did not grant a device before the request deadline.',
-      );
+      return unavailable(reason, ABANDON_MESSAGES[reason]);
     }
     return unavailable('allocator-uncertain', describeJournalResult(settled));
   }
@@ -426,6 +432,12 @@ export async function createManagedLeaseCoordinator(options: {
   });
 }
 
+const ABANDON_MESSAGES = {
+  abandoned: 'The managed device request was abandoned.',
+  'deadline-exceeded': 'The allocator did not grant a device before the request deadline.',
+  'response-lost': "The allocator's answer was lost, so the managed device request was withdrawn.",
+} as const satisfies Partial<Record<ManagedLeaseUnavailableReason, string>>;
+
 const UNGRANTED_REASONS: Partial<
   Record<AllocationJournalResult['status'], ManagedLeaseUnavailableReason>
 > = {
@@ -443,6 +455,7 @@ function releaseOfInterrupted(acquisition: ManagedLeaseAcquisition): ManagedLeas
     case 'abandoned':
     case 'deadline-exceeded':
     case 'handoff-failed':
+    case 'response-lost':
       return { status: 'released' };
     default:
       return { status: 'not-held' };
