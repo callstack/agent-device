@@ -18,7 +18,7 @@ extension RunnerTests {
 
   /// The three answers a before/after visual comparison can give. `unobserved` carries the typed
   /// refusal that made the pair uncomparable: a display that refuses to be sampled proves nothing
-  /// either way, and reading it as "unchanged" would claim a back control is absent (#2728).
+  /// either way, and reading it as "unchanged" would claim a back control is absent.
   enum NavigationVisualObservation: Equatable {
     case changed
     case unchanged
@@ -81,23 +81,14 @@ extension RunnerTests {
   @MainActor
   private func tapResolvedNavigationBackControl(app: XCUIApplication, frame: CGRect) -> InAppBackOutcome {
     guard SnapshotGeometry.isPositiveFinite(frame) else { return .unavailable }
-    let context = navigationTapContext(app: app)
+    let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap)
+    )
     guard dispatchNavigationTap(app: app, point: CGPoint(x: frame.midX, y: frame.midY), context: context) else {
       return .unavailable
     }
     return .performed
-  }
-
-  @MainActor
-  private func navigationTapContext(
-    app: XCUIApplication,
-    windowQueryRejected: Bool = false
-  ) -> SynthesizedCoordinateContext? {
-    synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.coordinateTap),
-      windowQueryRejected: windowQueryRejected
-    )
   }
 
   /// Dispatches one navigation back tap: the synthesized gesture route first, the XCTest coordinate
@@ -233,11 +224,14 @@ extension RunnerTests {
     windowQueryRejected: Bool
   ) -> InAppBackOutcome {
 #if os(iOS)
-    guard let context = navigationTapContext(app: app, windowQueryRejected: windowQueryRejected),
-      let point = Self.topLeadingNavigationFallbackPoint(
-        in: context.referenceFrame,
-        topSafeAreaInset: screenTopSafeAreaInset()
-      ) else {
+    guard let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap),
+      windowQueryRejected: windowQueryRejected
+    ), let point = Self.topLeadingNavigationFallbackPoint(
+      in: context.referenceFrame,
+      topSafeAreaInset: screenTopSafeAreaInset()
+    ) else {
       return .unavailable
     }
     let before = captureNavigationFallbackVisualState(app: app, context: context)
@@ -257,10 +251,8 @@ extension RunnerTests {
   }
 
   /// The frame the fallback compares, encoded when the display answered and the typed refusal
-  /// otherwise. It samples the app's own screen only: consulting the system surface for an app that
-  /// resolved no window would capture SpringBoard's home screen, which reads as "unchanged" across a
-  /// before/after pair and launders a wrong-process frame into a false "no back control" — the
-  /// opposite of the unknown answer the fallback owes (#2728).
+  /// otherwise. It samples the app's own screen only: a system-surface capture reads as "unchanged"
+  /// across a before/after pair and launders a wrong-process frame into a false "no back control".
   private func captureNavigationFallbackVisualState(
     app: XCUIApplication,
     context: SynthesizedCoordinateContext
@@ -279,17 +271,14 @@ extension RunnerTests {
 
   /// Turns a capture answer into the bytes to compare. A resolved display whose image would not
   /// encode is named as the capture failure it is, not as an unnamed no-sample that would default to
-  /// "no display resolved" (#2728). Kept apart from the query so the mapping itself is testable.
+  /// "no display resolved". Kept apart from the query so the mapping itself is testable.
   static func navigationVisualSample(
     from captured: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
     encoding: (CapturedAppScreen) -> Data?
   ) -> Result<Data, RunnerAppScreenCaptureFailure> {
-    switch captured {
-    case .success(let screen):
+    captured.flatMap { screen in
       guard let png = encoding(screen) else { return .failure(.unrenderableImage) }
       return .success(png)
-    case .failure(let failure):
-      return .failure(failure)
     }
   }
 
@@ -323,7 +312,14 @@ extension RunnerTests {
     case .unobserved(let refusal):
       // No sample is not evidence of no navigation change: the fallback ran, so report the display
       // refusal it hit rather than laundering an unobservable result into "back is not available".
-      return .unverified(Self.navigationFallbackErrorPayload(refusal))
+      return .unverified(
+        ErrorPayload(
+          code: refusal.rawValue,
+          message:
+            "The in-app back fallback was dispatched, but no display could be sampled to confirm the result. This is an unknown outcome, not evidence that a back control is absent.",
+          hint: refusal.hint
+        )
+      )
     }
   }
 
@@ -341,15 +337,6 @@ extension RunnerTests {
     case (.failure(let refusal), _):
       return .unobserved(refusal: refusal)
     }
-  }
-
-  static func navigationFallbackErrorPayload(_ refusal: RunnerAppScreenCaptureFailure) -> ErrorPayload {
-    ErrorPayload(
-      code: refusal.rawValue,
-      message:
-        "The in-app back fallback was dispatched, but no display could be sampled to confirm the result. This is an unknown outcome, not evidence that a back control is absent.",
-      hint: refusal.hint
-    )
   }
 
   private func macOSNavigationBackElement(app: XCUIApplication) -> XCUIElement? {

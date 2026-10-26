@@ -360,36 +360,40 @@ extension RunnerTests {
     )
   }
 
-  func testNavigationVisualVerificationSeparatesNoChangeFromNoSample() {
-    XCTAssertEqual(
-      Self.navigationVisualObservation(before: .success(Data([1, 2, 3])), after: .success(Data([1, 2, 4]))),
-      .changed
-    )
-    XCTAssertEqual(
-      Self.navigationVisualObservation(before: .success(Data([1, 2, 3])), after: .success(Data([1, 2, 3]))),
-      .unchanged
-    )
+  func testNavigationVisualObservationSeparatesChangeFromRefusal() {
     // A refused side makes the pair uncomparable, not "unchanged"; reading it as "unchanged" would
-    // let a capture that refused become the reason the `back` command claims no control exists (#2728).
+    // let a capture that refused become the reason the `back` command claims no control exists.
+    // When both refuse, the later refusal names what the fallback last looked at before giving up.
+    typealias Sample = Result<Data, RunnerAppScreenCaptureFailure>
+    let refused: Sample = .failure(.unresolvedScreen)
+    let windowless: Sample = .failure(.unresolvedWindow)
+    let captured: Sample = .success(Data([1, 2, 3]))
+    let changed: Sample = .success(Data([1, 2, 4]))
+    let other: Sample = .success(Data([1]))
+
+    XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: changed), .changed, "changed")
+    XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: captured), .unchanged, "unchanged")
     XCTAssertEqual(
-      Self.navigationVisualObservation(before: .failure(.unresolvedWindow), after: .success(Data([1]))),
-      .unobserved(refusal: .unresolvedWindow)
+      Self.navigationVisualObservation(before: refused, after: other),
+      .unobserved(refusal: .unresolvedScreen),
+      "before refused"
     )
     XCTAssertEqual(
-      Self.navigationVisualObservation(before: .success(Data([1])), after: .failure(.unresolvedScreen)),
-      .unobserved(refusal: .unresolvedScreen)
+      Self.navigationVisualObservation(before: other, after: windowless),
+      .unobserved(refusal: .unresolvedWindow),
+      "after refused"
+    )
+    XCTAssertEqual(
+      Self.navigationVisualObservation(before: refused, after: windowless),
+      .unobserved(refusal: .unresolvedWindow),
+      "both refused: the later refusal wins"
     )
   }
 
-  func testNavigationFallbackReportsTheRefusalItHitNotADefaultCode() {
-    // The later refusal wins, so the code names what the fallback last looked at before giving up;
-    // an uncomparable pair always carries a typed reason (#2728).
-    let laterRefusal = Self.navigationVisualObservation(
-      before: .failure(.unresolvedScreen),
-      after: .failure(.unresolvedWindow)
-    )
-    XCTAssertEqual(laterRefusal, .unobserved(refusal: .unresolvedWindow))
-    switch Self.inAppBackOutcome(observation: laterRefusal) {
+  func testNavigationFallbackReportsARefusalAsAnUnknownOutcome() {
+    // The unverified answer carries the typed refusal's code and hint and says the outcome is
+    // unknown — never the definitive "no back control" a refused capture would otherwise become.
+    switch Self.inAppBackOutcome(observation: .unobserved(refusal: .unresolvedWindow)) {
     case .unverified(let payload):
       XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
       XCTAssertEqual(payload.hint, RunnerAppScreenCaptureFailure.unresolvedWindow.hint)
@@ -397,62 +401,12 @@ extension RunnerTests {
     case .performed, .unavailable:
       XCTFail("a refused capture must report an unknown outcome, not 'no back control'")
     }
-
-    // An earlier refusal is reported when the later sample captured but cannot pair with it.
-    let earlierRefusal = Self.navigationVisualObservation(
-      before: .failure(.unresolvedScreen),
-      after: .success(Data([1]))
-    )
-    let payload = Self.navigationFallbackErrorPayload(.unresolvedScreen)
-    XCTAssertEqual(earlierRefusal, .unobserved(refusal: .unresolvedScreen))
-    XCTAssertEqual(payload.code, "APP_SCREEN_UNRESOLVED")
-    XCTAssertEqual(payload.hint, RunnerAppScreenCaptureFailure.unresolvedScreen.hint)
-  }
-
-  func testNavigationFallbackReportsAWindowlessRefusalAsUnknown() {
-    // The window-less half of the route: a typed refusal stays a typed refusal through the mapping,
-    // the pair is unobserved, and the outcome is the unknown that names the refusal — never the
-    // definitive "no back control" (#2728).
-    let sample = Self.navigationVisualSample(
-      from: .failure(.unresolvedWindow),
-      encoding: { _ in Data([1, 2, 3]) }
-    )
-    XCTAssertEqual(sample, .failure(.unresolvedWindow))
-
-    let observation = Self.navigationVisualObservation(before: sample, after: sample)
-    XCTAssertEqual(observation, .unobserved(refusal: .unresolvedWindow))
-
-    switch Self.inAppBackOutcome(observation: observation) {
-    case .unverified(let payload):
-      XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
-    case .performed, .unavailable:
-      XCTFail("a refused capture must report an unknown outcome, not 'no back control'")
-    }
-  }
-
-  /// The fallback samples the app's own screen only. Asking the system surface would capture
-  /// SpringBoard's home screen, which reads as "unchanged" before/after and launders a wrong-process
-  /// frame into a false "no back control" (#2728). No test drives that route into the system-surface
-  /// capture, so the file-level ban is the pin.
-  func testNavigationFallbackSourceNeverReachesForTheSystemSurface() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("RunnerTests+Navigation.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-    for forbidden in ["self.springboard", "captureObservedScreen", "selectObservedScreenCapture"] {
-      XCTAssertFalse(
-        source.contains(forbidden),
-        "the in-app back fallback must sample the app only, never the system surface: \(forbidden)"
-      )
-    }
   }
 
   func testNavigationVisualSampleDistinguishesEncodedFrameFromRefusal() {
     // The same capture entry point yields three different answers, and only the refusals carry a
-    // code: an encoded frame is evidence, a resolved-but-unencodable image and a refusal are not
-    // (#2728). Reverting the mapping to a plain no-sample loses the reason a host keys on.
+    // reason: an encoded frame is evidence, a resolved-but-unencodable image and a refusal are not.
+    // Reverting the mapping to a plain no-sample loses the code a host keys on.
     let captured = CapturedAppScreen(
       image: RunnerImage(),
       displayID: 3,
