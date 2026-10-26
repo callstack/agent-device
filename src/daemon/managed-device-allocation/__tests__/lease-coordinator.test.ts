@@ -24,6 +24,8 @@ const OWNER = ALLOCATION_REQUEST.requesterId;
 const SHAPE = ALLOCATION_REQUEST.shape;
 const RENEW_INTERVAL_MS = 30_000;
 const POLL_INTERVAL_MS = 1_000;
+const TEARDOWN_TIMEOUT_MS = 5_000;
+const SETTLE_TIMEOUT_MS = 10_000;
 const pending: LeaseRequestStatus = { ...granted(), state: 'pending', lease: undefined };
 const cancelled: LeaseRequestStatus = { ...pending, state: 'cancelled' };
 
@@ -68,7 +70,8 @@ async function setup(
       renewIntervalMs: RENEW_INTERVAL_MS,
       renewalSafetyWindowMs: 5_000,
       pollIntervalMs: POLL_INTERVAL_MS,
-      teardownTimeoutMs: 5_000,
+      teardownTimeoutMs: TEARDOWN_TIMEOUT_MS,
+      settleTimeoutMs: SETTLE_TIMEOUT_MS,
       handoff: {
         publish: handoff.publish ?? (async () => void events.push('publish')),
         teardown: async (binding) => {
@@ -407,4 +410,44 @@ test('releasing during an acquisition whose grant was never journaled is uncerta
 
   expect(await released).toMatchObject({ status: 'uncertain' });
   expect(await acquisition).toMatchObject({ status: 'unavailable', reason: 'journal-blocked' });
+});
+
+test('a teardown past its budget leaves the device cleanup-pending and unreleased', async () => {
+  const { allocator, coordinator, recordFor, acquire } = await setup(
+    { requestLease: [granted()] },
+    { teardown: () => new Promise(() => {}) },
+  );
+  expect((await acquire()).status).toBe('granted');
+
+  const released = coordinator.release(OWNER);
+  await vi.advanceTimersByTimeAsync(TEARDOWN_TIMEOUT_MS);
+
+  expect(await released).toMatchObject({ status: 'uncertain' });
+  expect(recordFor()).toMatchObject({ binding: 'cleanup-pending', release: 'not-requested' });
+  expect(allocator.calls.map((call) => call.method)).toEqual(['requestLease']);
+});
+
+test('an allocator that never answers recovery does not hold the coordinator closed', async () => {
+  const { coordinator, recordFor, acquire, restart } = await setup({
+    requestLease: [granted()],
+  });
+  expect((await acquire()).status).toBe('granted');
+  await coordinator[Symbol.asyncDispose]();
+
+  const next = restart({ releaseLease: [new Promise(() => {})] });
+  await vi.advanceTimersByTimeAsync(SETTLE_TIMEOUT_MS);
+
+  expect((await next).coordinator.binding(OWNER)).toBeUndefined();
+  expect(recordFor()).toMatchObject({ release: 'pending' });
+});
+
+test('disposal does not wait past its budget for an acquisition the allocator never answers', async () => {
+  const { coordinator, acquire } = await setup({ requestLease: [new Promise(() => {})] });
+  void acquire();
+  await vi.advanceTimersByTimeAsync(0);
+
+  const disposed = coordinator[Symbol.asyncDispose]();
+  await vi.advanceTimersByTimeAsync(SETTLE_TIMEOUT_MS);
+
+  await expect(disposed).resolves.toBeUndefined();
 });

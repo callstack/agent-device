@@ -17,6 +17,7 @@ import type {
 } from '@agent-device/managed-allocation/record';
 import type { AllocationOperationStore } from '@agent-device/managed-allocation/store';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { AppError } from '@agent-device/kernel/errors';
 import { createManagedLeaseReachability } from '../../managed-device-reachability.ts';
 import { MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS } from './command-horizon.ts';
 import { createManagedLeaseAdmission, type ManagedLeaseAdmission } from './lease-admission.ts';
@@ -91,6 +92,7 @@ type OwnerEntry =
 const DEFAULT_RENEW_INTERVAL_MS = 30_000;
 const DEFAULT_RENEWAL_SAFETY_WINDOW_MS = 5_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+const DEFAULT_SETTLE_TIMEOUT_MS = 30_000;
 
 /**
  * Host-side lease coordination over the durable allocation journal (ADR 0021 §4, §7). One owner
@@ -112,11 +114,14 @@ export async function createManagedLeaseCoordinator(options: {
   renewalSafetyWindowMs?: number;
   pollIntervalMs?: number;
   teardownTimeoutMs?: number;
+  /** Bounds each operation recovery settles and disposal's wait; the journal keeps the rest. */
+  settleTimeoutMs?: number;
 }): Promise<ManagedLeaseCoordinator> {
   const renewIntervalMs = options.renewIntervalMs ?? DEFAULT_RENEW_INTERVAL_MS;
   const renewalSafetyWindowMs = options.renewalSafetyWindowMs ?? DEFAULT_RENEWAL_SAFETY_WINDOW_MS;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const teardownTimeoutMs = options.teardownTimeoutMs ?? MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS;
+  const settleTimeoutMs = options.settleTimeoutMs ?? DEFAULT_SETTLE_TIMEOUT_MS;
   const entries = new Map<string, OwnerEntry>();
   let disposed = false;
   const published = new Map<string, ManagedLeaseBinding>();
@@ -136,7 +141,8 @@ export async function createManagedLeaseCoordinator(options: {
         const binding = published.get(key);
         if (!binding) return;
         binding.admission.fenceBinding('released');
-        await options.handoff.teardown(binding);
+        // A teardown past its budget leaves the binding cleanup-pending, never released.
+        await within(options.handoff.teardown(binding), teardownTimeoutMs, 'Managed teardown');
         published.delete(key);
       },
     },
@@ -308,17 +314,22 @@ export async function createManagedLeaseCoordinator(options: {
         continue;
       }
       const { requesterId, attemptKey } = entry.record;
-      const result = await giveBack({ requesterId, attemptKey });
-      if (['cancelled', 'released', 'refused'].includes(result.status)) continue;
+      let outcome: Readonly<{ status: string; message: string }>;
+      try {
+        const result = await within(
+          giveBack({ requesterId, attemptKey }),
+          settleTimeoutMs,
+          'Managed lease recovery',
+        );
+        if (['cancelled', 'released', 'refused'].includes(result.status)) continue;
+        outcome = { status: result.status, message: describeJournalResult(result) };
+      } catch (error) {
+        outcome = { status: 'timed-out', message: (error as Error).message };
+      }
       emitDiagnostic({
         level: 'warn',
         phase: 'managed_lease_recovery_uncertain',
-        data: {
-          requesterId,
-          attemptKey,
-          status: result.status,
-          message: describeJournalResult(result),
-        },
+        data: { requesterId, attemptKey, ...outcome },
       });
     }
   }
@@ -390,7 +401,9 @@ export async function createManagedLeaseCoordinator(options: {
         }
         if (entry.phase === 'releasing') pending.push(entry.settled);
       }
-      await Promise.allSettled(pending);
+      await within(Promise.allSettled(pending), settleTimeoutMs, 'Managed lease disposal').catch(
+        () => {},
+      );
       entries.clear();
     },
   });
@@ -454,6 +467,29 @@ function unavailable(
   message: string,
 ): ManagedLeaseAcquisition {
   return { status: 'unavailable', reason, message };
+}
+
+/** Rejects once `ms` pass; `work` keeps running and settles on its own. */
+async function within<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new AppError('COMMAND_FAILED', `${label} did not finish within ${ms}ms.`, {
+                reason: 'managed-lease-timeout',
+              }),
+            ),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
