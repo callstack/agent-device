@@ -43,6 +43,18 @@ final class AppWindowScreenshotTests: XCTestCase {
     XCTAssertEqual(try frontWindowFrame(pid: 42, windowInfo: windows), front?.bounds)
   }
 
+  /// A shared window gets a small system indicator window in front of it; capture, scroll and the
+  /// click fallback must keep using the shared window rather than the indicator.
+  func testSkipsTheWindowSharingIndicatorInFrontOfTheSharedWindow() throws {
+    let windows = [windowInfo(id: 9, width: 66, height: 20), windowInfo(id: 8, width: 900, height: 700)]
+    let indicator = CGRect(x: 10, y: 10, width: 66, height: 20)
+    let front = try frontWindow(pid: 42, windowInfo: windows, sharingIndicatorFrames: [indicator])
+
+    XCTAssertEqual(front?.number, 8)
+    XCTAssertEqual(
+      try frontWindow(pid: 42, windowInfo: windows, sharingIndicatorFrames: [])?.number, 9)
+  }
+
   func testRefusesWhenOnlyInvisibleOrEmptyWindowsRemain() throws {
     let windows = [
       windowInfo(id: 1, onScreen: false),
