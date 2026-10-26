@@ -204,8 +204,8 @@ export type RunnerDeviceReadinessFailureReason =
  * The reason for a simulator runner launch whose service hub the host macOS refused to load. macOS
  * gates `DTServiceHub` behind a version-restriction entitlement, so an Xcode older than the macOS it
  * runs on cannot bless the simulator service at all: every launch fails the same way until the host
- * selects an Xcode that supports its macOS. AMFI's refusal is visible only as the bless line in the
- * launch output, which is why the row keys on that phrase and why no host-side preflight exists.
+ * selects an Xcode that supports its macOS. The launch output reports that refusal as a Code=1
+ * localDeviceConnectionWithError failure; a bless warning alone can also precede a successful boot.
  */
 const SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON: RunnerStartupFailureReason =
   'simulator_service_hub_unavailable';
@@ -218,12 +218,14 @@ const SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON: RunnerStartupFailureReason =
   'simulator_set_destination_not_found';
 
 /**
- * The bless refusal, in the two phrases Xcode writes on one line: the client that failed and the
- * bless it failed to perform.
+ * The reported refusal signature, including its underlying error on the same line. Code=2
+ * interruptions can report that the service hub is still alive and let the runner start (#3963).
  */
 const SIMULATOR_SERVICE_HUB_BLESS_MATCH = [
   'dtservicehubclient',
   'failed to bless service hub',
+  'dtservicehubclient code=1',
+  'localdeviceconnectionwitherror:',
 ] as const;
 
 /**
@@ -466,8 +468,8 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // macOS validates Xcode's `DTServiceHub` against a version-restriction entitlement and refuses a
     // build older than itself (AMFI: "disallowed without correct
     // com.apple.private.amfi.version-restriction entitlement version"), so no launch of this Xcode's
-    // simulator service can succeed on this host. Both phrases are Xcode's own sentence and meet on
-    // the same line of the launch output; the domain names the client, the complaint names the bless.
+    // simulator service can succeed on this host. Require the reported underlying refusal as well
+    // as the bless wording: a service-hub interruption alone does not prove this cause (#3963).
     reason: 'simulator_service_hub_bless_refused',
     match: {
       toolTextLineIncludesAll: SIMULATOR_SERVICE_HUB_BLESS_MATCH,

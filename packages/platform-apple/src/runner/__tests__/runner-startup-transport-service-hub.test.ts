@@ -40,6 +40,11 @@ beforeEach(resetAllProcessMemosForTests);
 
 const BLESS_LOG = buildFixtureById('simulator-service-hub-bless-refused').output;
 
+// Sanitized from a launch on macOS 27.0.1 / Xcode 27.1 that became ready about 2.935s later.
+const INTERRUPTED_BLESS_LOG =
+  'DTServiceHubClient failed to bless service hub for simulator <simulator> (<udid>) ' +
+  'NSUnderlyingError={Error Domain=DTServiceHubClient Code=2 "Connection to Simulator service hub (...) interrupted. Simulator service hub IS still alive."}\n';
+
 function sessionWithLaunchLog(log: string, exitCode: number | null): RunnerSession {
   const runnerLogPath = path.join(mkdtempForTestSync('runner-service-hub-'), 'runner.log');
   fs.writeFileSync(runnerLogPath, log);
@@ -167,6 +172,43 @@ test('a bless refusal already in the launch log ends the connect loop on its fir
     `expected the failure well before its ${CONNECT_BUDGET_MS}ms deadline, took ${elapsedMs}ms`,
   );
 });
+
+test('a service-hub interruption lets the same starting runner serve its command', async () => {
+  const fetchSpy = vi.fn(async () => runnerTransportResponse());
+  vi.stubGlobal('fetch', fetchSpy);
+  const session = sessionWithLaunchLog(INTERRUPTED_BLESS_LOG, null);
+
+  const response = await waitForRunner(
+    iosSimulator,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'snapshot' },
+    undefined,
+    300,
+    session,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchSpy.mock.calls.length, 1);
+});
+
+for (const [cause, log] of [
+  ['interrupted', INTERRUPTED_BLESS_LOG],
+  [
+    'unknown cause',
+    'DTServiceHubClient failed to bless service hub for simulator <simulator> (<udid>)\n',
+  ],
+] as const) {
+  test(`an unproven bless failure keeps ordinary early-exit classification: ${cause}`, async () => {
+    const error = await buildRunnerEarlyExitError({
+      session: sessionWithLaunchLog(log, 65),
+      port: 8100,
+    });
+
+    assert.equal(error.message, 'Runner did not accept connection (xcodebuild exited early)');
+    assert.equal(error.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+    assert.doesNotMatch(String(error.details?.hint), /xcode-select|DEVELOPER_DIR/);
+  });
+}
 
 test("one tail holding two launch-log causes gets the classifier's own winner, terminal", async () => {
   // The row order decides, not the loop. A scoped-set launch whose log holds both the bless refusal and
