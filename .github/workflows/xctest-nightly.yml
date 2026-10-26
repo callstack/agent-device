@@ -170,6 +170,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow \
             -resultBundlePath "$RESULT_BUNDLE_PATH" 2>&1 | tee .tmp/xctest-nightly/runner.log
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.
