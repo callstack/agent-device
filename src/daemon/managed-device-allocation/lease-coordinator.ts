@@ -116,6 +116,8 @@ export async function createManagedLeaseCoordinator(options: {
   teardownTimeoutMs?: number;
   /** Bounds each operation recovery settles and disposal's wait; the journal keeps the rest. */
   settleTimeoutMs?: number;
+  /** Daemon-level log scope for recovery and lease loss, which no request owns. */
+  withinDiagnosticsScope: (run: () => Promise<void>) => Promise<void>;
 }): Promise<ManagedLeaseCoordinator> {
   const renewIntervalMs = options.renewIntervalMs ?? DEFAULT_RENEW_INTERVAL_MS;
   const renewalSafetyWindowMs = options.renewalSafetyWindowMs ?? DEFAULT_RENEWAL_SAFETY_WINDOW_MS;
@@ -370,19 +372,21 @@ export async function createManagedLeaseCoordinator(options: {
   }
 
   function onLeaseLost(owner: string, loss: ManagedLeaseLoss): void {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'managed_lease_lost',
-      data: {
-        requesterId: owner,
-        reason: loss.reason,
-        ...(loss.error ? { error: loss.error.message } : {}),
-      },
+    void options.withinDiagnosticsScope(async () => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'managed_lease_lost',
+        data: {
+          requesterId: owner,
+          reason: loss.reason,
+          ...(loss.error ? { error: loss.error.message } : {}),
+        },
+      });
+      await release(owner);
     });
-    void release(owner);
   }
 
-  await recoverOutstanding();
+  await options.withinDiagnosticsScope(recoverOutstanding);
   return Object.freeze({
     acquire,
     release,

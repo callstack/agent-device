@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
 import { createAllocationOperationStore } from '@agent-device/managed-allocation/store';
 import { createScriptedManagedDeviceAllocator } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { withDaemonDiagnosticsScope } from '../../../daemon-diagnostics-scope.ts';
 import {
   createManagedLeaseCoordinator,
   type ManagedLeaseBinding,
@@ -61,6 +63,15 @@ async function setup(
     },
   };
   const events: string[] = [];
+  const logPath = path.join(root, 'daemon.log');
+  const loggedPhases = () =>
+    fs.existsSync(logPath)
+      ? fs
+          .readFileSync(logPath, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => (JSON.parse(line) as { phase: string }).phase)
+      : [];
   // Each start is one daemon process over the same durable journal.
   const start = async (steps: Script) => {
     const allocator = createScriptedManagedDeviceAllocator({ script: steps });
@@ -72,6 +83,7 @@ async function setup(
       pollIntervalMs: POLL_INTERVAL_MS,
       teardownTimeoutMs: TEARDOWN_TIMEOUT_MS,
       settleTimeoutMs: SETTLE_TIMEOUT_MS,
+      withinDiagnosticsScope: (run) => withDaemonDiagnosticsScope({ logPath }, run),
       handoff: {
         publish: handoff.publish ?? (async () => void events.push('publish')),
         teardown: async (binding) => {
@@ -95,7 +107,7 @@ async function setup(
       deadlineAtMs: overrides.deadlineAtMs ?? NOW + 60_000,
       ...(overrides.signal ? { signal: overrides.signal } : {}),
     });
-  return { allocator, coordinator, events, recordFor, acquire, restart: start };
+  return { allocator, coordinator, events, recordFor, acquire, loggedPhases, restart: start };
 }
 
 async function fencedStatus(binding: ManagedLeaseBinding) {
@@ -197,7 +209,7 @@ test('a held device stays renewed between commands', async () => {
 });
 
 test('a lease the allocator stops confirming is fenced, torn down, and released', async () => {
-  const { allocator, coordinator, events, acquire } = await setup({
+  const { allocator, coordinator, events, acquire, loggedPhases } = await setup({
     requestLease: [granted({ lease: renewedLease({ ttlDeadline: NOW + 40_000 }) })],
     renewLease: [new Error('allocator unreachable')],
     getLeaseRequestStatus: [new Error('allocator unreachable')],
@@ -215,6 +227,7 @@ test('a lease the allocator stops confirming is fenced, torn down, and released'
   expect(allocator.calls.at(-1)?.method).toBe('releaseLease');
   expect(coordinator.binding(OWNER)).toBeUndefined();
   expect(await fencedStatus(acquisition.binding)).toBe('teardown-required');
+  expect(loggedPhases()).toEqual(['managed_lease_lost']);
 });
 
 test('a failed handoff is torn down and its lease released', async () => {
@@ -335,7 +348,7 @@ test('a cancellation a previous process could not confirm is retried on restart'
 });
 
 test('a release the allocator cannot confirm on restart stays journaled and the coordinator still opens', async () => {
-  const { coordinator, recordFor, acquire, restart } = await setup({
+  const { coordinator, recordFor, acquire, loggedPhases, restart } = await setup({
     requestLease: [granted()],
   });
   expect((await acquire()).status).toBe('granted');
@@ -345,6 +358,7 @@ test('a release the allocator cannot confirm on restart stays journaled and the 
 
   expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'pending' });
   expect(next.coordinator.binding(OWNER)).toBeUndefined();
+  expect(loggedPhases()).toEqual(['managed_lease_recovery_uncertain']);
 });
 
 test('settled operations cost the allocator nothing on restart', async () => {
