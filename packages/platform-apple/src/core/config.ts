@@ -35,18 +35,20 @@ export const IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS = 5_000;
  */
 export const IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS = 15_000;
 /**
- * One guest hinge read: the fold helper waits at most 3s for its CoreMotion sample, so this exec
- * deadline only guards a wedged `simctl spawn`.
+ * One guest hinge read, before its sampling window: the fold helper waits at most 3s for its first
+ * CoreMotion sample, so this exec deadline only guards a wedged `simctl spawn`.
  */
-export const IOS_HINGE_ANGLE_READ_TIMEOUT_MS = 10_000;
+export const IOS_HINGE_ANGLE_READ_TIMEOUT_MS = 4_000;
 /**
  * How many hinge reads a dispatched hinge request gets to reach its pose before the pose is refused.
- * With the interval below, the settle budget is about 12 seconds of hinge observation.
+ * With the window below, the settle budget is about 9 seconds of hinge observation. The fold request
+ * envelope (`FOLD_REQUEST_TIMEOUT_MS`) covers this budget's worst case, so raise them together.
  */
-export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 12;
+export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 8;
 /**
- * The wait between two hinge reads. A guest read returns in about 0.3s, so without a deliberate gap
- * two reads of a moving hinge could land close enough together to look settled.
+ * The sampling window of every hinge read after the first. A guest read otherwise returns in about
+ * 0.3s, so without a deliberate gap two reads of a moving hinge could land close enough together to
+ * look settled. The helper spends the window inside the simulator and reports its latest sample.
  */
 export const IOS_FOLD_POSE_READ_INTERVAL_MS = 1_000;
 /** Two consecutive reads this close together mean the hinge has stopped moving. */

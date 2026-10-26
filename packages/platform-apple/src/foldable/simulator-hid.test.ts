@@ -1,25 +1,16 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
-import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 
-vi.mock('./fold-helper-cache.ts', () => ({
-  ensureFoldHelperBinary: vi.fn(async () => ({ path: '/cache/fold-helper' })),
-}));
-
+const helper = { path: '/cache/fold-helper' };
 const selectedDuo = { ...IOS_SIMULATOR, id: 'selected-duo' };
 
 test.each(['success', 'dispatch', 'cancel'] as const)(
   'HID route spawns the cached helper on the UDID and handles %s',
   async (outcome) => {
     const controller = new AbortController();
-    if (outcome === 'cancel') {
-      vi.mocked(ensureFoldHelperBinary).mockImplementationOnce(async () => {
-        controller.abort(new Error('cancelled'));
-        return { path: '/cache/fold-helper' };
-      });
-    }
+    if (outcome === 'cancel') controller.abort(new Error('cancelled'));
     const dispatches: string[][] = [];
     await withAppleToolProvider(
       createLocalAppleToolProvider({
@@ -31,7 +22,12 @@ test.each(['success', 'dispatch', 'cancel'] as const)(
         },
       }),
       async () => {
-        const operation = sendSimulatorFoldPose(selectedDuo, 'half-open', controller.signal);
+        const operation = sendSimulatorFoldPose(
+          selectedDuo,
+          helper,
+          'half-open',
+          controller.signal,
+        );
         if (outcome === 'success') await expect(operation).resolves.toBeUndefined();
         else if (outcome === 'cancel') await expect(operation).rejects.toThrow('cancelled');
         else
@@ -65,7 +61,7 @@ test('streams all keyframes in one process with a duration-derived timeout', asy
         return { stdout: '', stderr: '', exitCode: 0 };
       },
     }),
-    () => sendSimulatorFoldPose(selectedDuo, keyframes),
+    () => sendSimulatorFoldPose(selectedDuo, helper, keyframes),
   );
   expect(dispatches).toBe(1);
 });
@@ -79,7 +75,12 @@ test('HID dispatch addresses the UDID inside its scoped simulator set', async ()
         return { stdout: '', stderr: '', exitCode: 0 };
       },
     }),
-    () => sendSimulatorFoldPose({ ...selectedDuo, simulatorSetPath: '/tmp/scoped-set' }, 'closed'),
+    () =>
+      sendSimulatorFoldPose(
+        { ...selectedDuo, simulatorSetPath: '/tmp/scoped-set' },
+        helper,
+        'closed',
+      ),
   );
   expect(dispatches).toEqual([
     [

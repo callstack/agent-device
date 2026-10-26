@@ -8,7 +8,6 @@ import type { FoldScreenReport, SetFoldPoseResult } from '@agent-device/contract
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
 
 import {
   IOS_FOLD_POSE_READ_INTERVAL_MS,
@@ -21,6 +20,7 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
+import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
 import { HINGE_ANGLE_NO_SAMPLE_REASON, readSimulatorHingeAngle } from './guest-readback.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 
@@ -50,14 +50,15 @@ export async function setAppleFoldPose(
   const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
   requireFoldableInventory(device, inventory);
 
-  await sendSimulatorFoldPose(device, intent.keyframes ?? pose, options.signal);
+  const helper = await ensureFoldHelperBinary({ signal: options.signal });
+  await sendSimulatorFoldPose(device, helper, intent.keyframes ?? pose, options.signal);
   emitDiagnostic({
     level: 'info',
     phase: 'apple_fold_pose_dispatched',
     data: { deviceId: device.id, pose },
   });
 
-  const hingeAngleDegrees = await awaitHingePose(device, pose, options.signal, targetAngle);
+  const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
   const litPanel = await readLitPanel(device, options.signal);
   return {
     pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
@@ -117,9 +118,10 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
 }
 
 /**
- * Reads the hinge until it reports the requested pose. Each read is one fresh guest CoreMotion
- * sample, spaced by a fixed interval, so the attempt count bounds the settle budget. HID delivery
- * alone cannot prove the runtime accepted the requested hinge state.
+ * Reads the hinge until it reports the requested pose. Each read is a fresh guest CoreMotion
+ * subscription; every read after the first reports its latest sample after a fixed window, so two
+ * reads are spaced apart and the attempt count bounds the settle budget. HID delivery alone cannot
+ * prove the runtime accepted the requested hinge state.
  *
  * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. A
  * `half-open` angle proves only the category, because a hinge travelling between the stops passes
@@ -128,6 +130,7 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
  */
 async function awaitHingePose(
   device: DeviceInfo,
+  helper: FoldHelperBinary,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle?: number,
@@ -136,10 +139,12 @@ async function awaitHingePose(
   let previous: number | undefined;
   for (let attempt = 1; attempt <= IOS_FOLD_POSE_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
-    if (attempt > 1) await sleep(IOS_FOLD_POSE_READ_INTERVAL_MS, signal);
     previous = observed;
     try {
-      observed = await readSimulatorHingeAngle(device, { signal });
+      observed = await readSimulatorHingeAngle(device, helper, {
+        signal,
+        windowMs: attempt > 1 ? IOS_FOLD_POSE_READ_INTERVAL_MS : 0,
+      });
     } catch (error) {
       if (observed !== undefined || !isHingeNoSample(error)) throw error;
       throw await dispatchedUnverifiedPoseError(device, pose, signal, targetAngle, error);

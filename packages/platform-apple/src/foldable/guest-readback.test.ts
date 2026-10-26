@@ -4,6 +4,8 @@ vi.mock('./fold-helper-cache.ts', () => ({
   ensureFoldHelperBinary: vi.fn(async () => ({ path: '/cache/fold-helper' })),
 }));
 
+const helper = { path: '/cache/fold-helper' };
+
 import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import {
@@ -37,13 +39,34 @@ beforeEach(() => {
 test('reads one guest hinge sample through the scoped set without sending HID', async () => {
   const { value, calls } = await withHelperResult(
     { stdout: '{"version":1,"angleDegrees":130,"angleValid":true}\n', exitCode: 0 },
-    () => readSimulatorHingeAngle(scopedDuo),
+    () => readSimulatorHingeAngle(scopedDuo, helper),
   );
   expect(value).toBe(130);
   expect(calls.map((call) => call.args)).toEqual([
-    ['simctl', '--set', '/tmp/scoped-set', 'spawn', 'scoped-duo', '/cache/fold-helper', 'hinge'],
+    [
+      'simctl',
+      '--set',
+      '/tmp/scoped-set',
+      'spawn',
+      'scoped-duo',
+      '/cache/fold-helper',
+      'hinge',
+      '0',
+    ],
   ]);
-  expect(calls[0]?.options).toMatchObject({ kill: { signal: 'SIGTERM', graceMs: 1000 } });
+  expect(calls[0]?.options).toMatchObject({
+    timeoutMs: 4000,
+    kill: { signal: 'SIGTERM', graceMs: 1000 },
+  });
+});
+
+test('passes the sampling window to the helper and extends the read deadline by it', async () => {
+  const { calls } = await withHelperResult(
+    { stdout: '{"version":1,"angleDegrees":130,"angleValid":true}', exitCode: 0 },
+    () => readSimulatorHingeAngle(scopedDuo, helper, { windowMs: 1000 }),
+  );
+  expect(calls[0]?.args.slice(-2)).toEqual(['hinge', '1000']);
+  expect(calls[0]?.options).toMatchObject({ timeoutMs: 5000 });
 });
 
 test.each([
@@ -60,7 +83,7 @@ test.each([
 test('refuses a failed hinge read with the typed no-sample reason and the helper stderr', async () => {
   const { value } = await withHelperResult(
     { stdout: '', stderr: 'CMAngleManager is not available', exitCode: 3 },
-    () => readSimulatorHingeAngle(scopedDuo).catch((error: unknown) => error),
+    () => readSimulatorHingeAngle(scopedDuo, helper).catch((error: unknown) => error),
   );
   expect(value).toMatchObject({
     code: 'COMMAND_FAILED',
@@ -75,7 +98,7 @@ test('refuses a failed hinge read with the typed no-sample reason and the helper
 test('ignores a sample printed by a helper that then failed', async () => {
   const { value } = await withHelperResult(
     { stdout: '{"version":1,"angleDegrees":0,"angleValid":true}', exitCode: 1 },
-    () => readSimulatorHingeAngle(scopedDuo).catch((error: unknown) => error),
+    () => readSimulatorHingeAngle(scopedDuo, helper).catch((error: unknown) => error),
   );
   expect(value).toMatchObject({ details: { reason: 'fold-hinge-angle-no-sample' } });
 });
@@ -106,7 +129,7 @@ test('never spawns the helper for an already cancelled read', async () => {
   const controller = new AbortController();
   controller.abort(new DOMException('request cancelled', 'AbortError'));
   const { value, calls } = await withHelperResult({ stdout: '', exitCode: 0 }, () =>
-    readSimulatorHingeAngle(scopedDuo, { signal: controller.signal }).catch(
+    readSimulatorHingeAngle(scopedDuo, helper, { signal: controller.signal }).catch(
       (error: unknown) => error,
     ),
   );

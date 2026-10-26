@@ -119,8 +119,15 @@ static BOOL printJSON(NSDictionary *payload) {
 }
 
 // One fresh CoreMotion observation, the source devicectl's hinge-angle stream relays. The manager
-// delivers the current angle on subscription, so the first sample is the reading.
-static int readHinge(void) {
+// delivers the current angle on subscription and then each change, so after `windowMs` the latest
+// sample is where the hinge is now. A window spaces two reads of a moving hinge apart in time.
+static int readHinge(NSString *windowArgument) {
+  NSInteger windowMs = windowArgument ? windowArgument.integerValue : 0;
+  if (windowArgument && (windowMs < 0 || windowMs > 5000 ||
+      ![[@(windowMs) stringValue] isEqualToString:windowArgument])) {
+    fprintf(stderr, "Expected a hinge read window from 0 to 5000ms\n");
+    return 2;
+  }
   dlopen("/System/Library/Frameworks/CoreMotion.framework/CoreMotion", RTLD_NOW);
   Class managerClass = NSClassFromString(@"CMAngleManager");
   SEL start = @selector(startAngleUpdatesToQueue:handler:);
@@ -139,18 +146,20 @@ static int readHinge(void) {
   __block BOOL valid = NO;
   // The handler's second argument is not an object; the block declares only the sample.
   void (^handler)(id) = ^(id sample) {
-    if (received || !responds(sample, @selector(angleDegrees))) return;
+    if (!responds(sample, @selector(angleDegrees))) return;
     angle = ((float (*)(id, SEL))objc_msgSend)(sample, @selector(angleDegrees));
     valid = responds(sample, @selector(isAngleValid)) &&
         ((BOOL (*)(id, SEL))objc_msgSend)(sample, @selector(isAngleValid));
+    if (!received) dispatch_semaphore_signal(sampled);
     received = YES;
-    dispatch_semaphore_signal(sampled);
   };
   ((void (*)(id, SEL, NSOperationQueue *, id))objc_msgSend)(manager, start, queue, handler);
   long timedOut = dispatch_semaphore_wait(sampled, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC));
+  if (!timedOut && windowMs > 0) [NSThread sleepForTimeInterval:windowMs / 1000.0];
   if (responds(manager, @selector(stopAngleUpdates))) {
     ((void (*)(id, SEL))objc_msgSend)(manager, @selector(stopAngleUpdates));
   }
+  [queue waitUntilAllOperationsAreFinished];
   if (timedOut) {
     fprintf(stderr, "CMAngleManager delivered no hinge sample within 3 seconds\n");
     return 4;
@@ -226,9 +235,11 @@ int main(int argc, const char *argv[]) {
   @autoreleasepool {
     NSString *mode = argc >= 2 ? @(argv[1]) : nil;
     if ([mode isEqualToString:@"set"] && argc == 3) return runSet(@(argv[2]));
-    if ([mode isEqualToString:@"hinge"] && argc == 2) return readHinge();
+    if ([mode isEqualToString:@"hinge"] && (argc == 2 || argc == 3)) {
+      return readHinge(argc == 3 ? @(argv[2]) : nil);
+    }
     if ([mode isEqualToString:@"panels"] && argc == 2) return readPanels();
-    fprintf(stderr, "Usage: fold-helper set <pose|keyframes-json> | hinge | panels\n");
+    fprintf(stderr, "Usage: fold-helper set <pose|keyframes-json> | hinge [window-ms] | panels\n");
     return 2;
   }
 }

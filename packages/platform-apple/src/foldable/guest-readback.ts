@@ -4,7 +4,7 @@ import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/comm
 
 import { IOS_HINGE_ANGLE_READ_TIMEOUT_MS } from '../core/config.ts';
 import { runSimctlForDevice } from '../core/simctl.ts';
-import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
+import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
 
 /** The read returned no usable sample; the details say why. */
 export const HINGE_ANGLE_NO_SAMPLE_REASON = 'fold-hinge-angle-no-sample';
@@ -20,17 +20,20 @@ const GUEST_READBACK_VERSION = 1;
 /**
  * Reads the hinge angle the simulator guest reports, in degrees: 0 is closed, 180 is fully open.
  *
- * The fold helper's `hinge` mode takes one fresh CoreMotion `CMAngleManager` sample, the source
- * `devicectl device motion hinge-angle` relays, and never sends HID. It runs through
- * `simctl spawn`, so it reaches a simulator in any device set.
+ * The fold helper's `hinge` mode subscribes to CoreMotion `CMAngleManager`, the source
+ * `devicectl device motion hinge-angle` relays, and never sends HID. It reports the latest sample
+ * once `windowMs` has passed since the first. It runs through `simctl spawn`, so it reaches a
+ * simulator in any device set.
  */
 export async function readSimulatorHingeAngle(
   device: DeviceInfo,
-  options: { signal?: AbortSignal } = {},
+  binary: FoldHelperBinary,
+  options: { signal?: AbortSignal; windowMs?: number } = {},
 ): Promise<number> {
-  const result = await runFoldHelperObservation(device, 'hinge', {
+  const windowMs = options.windowMs ?? 0;
+  const result = await runFoldHelperObservation(device, binary, ['hinge', String(windowMs)], {
     signal: options.signal,
-    timeoutMs: IOS_HINGE_ANGLE_READ_TIMEOUT_MS,
+    timeoutMs: IOS_HINGE_ANGLE_READ_TIMEOUT_MS + windowMs,
   });
   const angle = result.exitCode === 0 ? parseHingeReading(result.stdout) : undefined;
   if (angle !== undefined) return angle;
@@ -56,7 +59,9 @@ export async function readSimulatorPanelPayload(
   device: DeviceInfo,
   options: { signal?: AbortSignal; timeoutMs: number },
 ): Promise<SimulatorPanelPayload> {
-  const result = await runFoldHelperObservation(device, 'panels', options);
+  options.signal?.throwIfAborted();
+  const binary = await ensureFoldHelperBinary({ signal: options.signal });
+  const result = await runFoldHelperObservation(device, binary, ['panels'], options);
   const payload = result.exitCode === 0 ? parsePanelsReading(result.stdout) : undefined;
   if (payload) return payload;
   throw new AppError(
@@ -68,13 +73,12 @@ export async function readSimulatorPanelPayload(
 
 async function runFoldHelperObservation(
   device: DeviceInfo,
-  mode: 'hinge' | 'panels',
+  binary: FoldHelperBinary,
+  modeArgs: readonly ['hinge', string] | readonly ['panels'],
   options: { signal?: AbortSignal; timeoutMs: number },
 ): Promise<ExecResult> {
   options.signal?.throwIfAborted();
-  const binary = await ensureFoldHelperBinary({ signal: options.signal });
-  options.signal?.throwIfAborted();
-  return await runSimctlForDevice(device, ['spawn', device.id, binary.path, mode], {
+  return await runSimctlForDevice(device, ['spawn', device.id, binary.path, ...modeArgs], {
     signal: options.signal,
     timeoutMs: options.timeoutMs,
     kill: { signal: 'SIGTERM', graceMs: 1000 },

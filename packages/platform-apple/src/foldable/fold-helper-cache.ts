@@ -22,6 +22,9 @@ const FOLD_HELPER_LOCK_DESCRIPTION = 'iOS Simulator fold helper cache';
 const FOLD_HELPER_BUILD_HINT =
   'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.';
 
+/** The built fold helper for the active toolchain. Resolve it once per fold, not once per read. */
+export type FoldHelperBinary = Readonly<{ path: string }>;
+
 /** Upper bound on a single fold-helper clang invocation; the same budget the prior per-call build used. */
 export const FOLD_HELPER_BUILD_TIMEOUT_MS = 30_000;
 
@@ -46,7 +49,7 @@ export async function ensureFoldHelperBinary(
     cacheRoot?: string;
     sourceRoot?: string;
   }> = {},
-): Promise<Readonly<{ path: string }>> {
+): Promise<FoldHelperBinary> {
   const host = input.host ?? createFoldHelperCacheHost();
   const deadline = createNativeBuildDeadline(FOLD_HELPER_PREPARATION_DEADLINE_MS, input.signal);
   try {
