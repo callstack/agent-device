@@ -234,7 +234,7 @@ func showMenuInBackground(
   let menusBefore = popUpMenuWindowNumbers(pid: pid, windowInfo: try requireWindowInfo())
   AXUIElementSetMessagingTimeout(owner, showMenuReplyTimeoutSeconds)
   let reply = AXUIElementPerformAction(owner, showMenuAction)
-  guard waitForNewMenuWindow(pid: pid, excluding: menusBefore) else {
+  guard try waitForNewMenuWindow(pid: pid, excluding: menusBefore) else {
     throw HelperError.commandFailed(
       "the element offered a context menu, but no menu opened",
       details: [
@@ -285,16 +285,20 @@ private func menuOwner(from hit: AXUIElement) -> AXUIElement? {
   return nil
 }
 
-private func waitForNewMenuWindow(pid: pid_t, excluding before: Set<Int>) -> Bool {
+/// A window list that never became readable is a refusal, not an unobserved menu.
+private func waitForNewMenuWindow(pid: pid_t, excluding before: Set<Int>) throws -> Bool {
   let deadline = Date().addingTimeInterval(Double(menuWindowWaitMs) / 1000)
+  var readAny = false
   repeat {
-    if let info = appWindowInfo(),
-      !popUpMenuWindowNumbers(pid: pid, windowInfo: info).subtracting(before).isEmpty
-    {
-      return true
+    if let info = appWindowInfo() {
+      readAny = true
+      if !popUpMenuWindowNumbers(pid: pid, windowInfo: info).subtracting(before).isEmpty {
+        return true
+      }
     }
     Thread.sleep(forTimeInterval: Double(menuWindowPollMs) / 1000)
   } while Date() < deadline
+  if !readAny { _ = try requireWindowInfo(nil) }
   return false
 }
 

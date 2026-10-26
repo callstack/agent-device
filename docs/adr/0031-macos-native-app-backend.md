@@ -90,7 +90,7 @@ Pointer actions have no event fallback until an event path verifies its outcome.
 The helper performs `AXShowMenu` on the nearest element up the hit chain (at most 32 levels) that offers it.
 Unlike a press, the walk crosses containers, which can own a menu, as AppKit consults each superview.
 Parity with a real click outside SwiftUI is unmeasured; an `NSTableView` menu may report no clicked row.
-The app tracks the open menu and does not answer the action (`kAXErrorCannotComplete`).
+In the measured SwiftUI app, the app tracks the open menu and does not answer the action (`kAXErrorCannotComplete`).
 So the reply is abandoned after 0.5 s, and a new app-owned `kCGPopUpMenuWindowLevel` window within 1 s decides success.
 Otherwise the click fails with `context-menu-not-observed`.
 The open menu is in the owner's subtree, so a snapshot shows its items and a press picks one.
