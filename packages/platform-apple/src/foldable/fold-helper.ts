@@ -52,7 +52,8 @@ export function createFoldHelper(device: DeviceInfo): FoldHelper {
   let binary: Promise<FoldHelperBinary> | undefined;
   /**
    * Runs one mode and returns what `read` takes from its stdout. A non-zero exit, an unreadable
-   * output, and a timeout all become the mode's typed failure; only a caller abort escapes as is.
+   * output, and a timeout all become the mode's typed failure. A caller abort, a helper build
+   * failure (`fold-helper-build-failed`), and any other spawn error keep their own shape.
    */
   const run = async <T>(
     args: readonly string[],
