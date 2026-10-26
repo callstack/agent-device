@@ -499,5 +499,11 @@ function probeFailure(
     detail.length > TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH
       ? `${detail.slice(0, TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH)}…`
       : detail;
-  return { ok: false, failure: { probe, reason, detail: bounded } };
+  const failure = { probe, reason, detail: bounded };
+  emitDiagnostic({
+    level: 'error',
+    phase: 'apple_toolchain_probe',
+    data: { event: 'rejected', ...failure },
+  });
+  return { ok: false, failure };
 }

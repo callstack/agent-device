@@ -119,14 +119,16 @@ test('an exhausted fingerprint retains the failed probe and retry in diagnostics
 
   expect(readFingerprint).toThrow('The Apple runner budget ran out before this step began');
 
-  expect(events.map(({ phase, data }) => [phase, data?.event, data?.cmd, data?.timeoutMs])).toEqual(
-    [
-      ['apple_toolchain_probe', 'started', 'xcodebuild', 30_000],
-      ['apple_toolchain_probe', 'failed', 'xcodebuild', 30_000],
-      ['apple_toolchain_probe', 'started', 'xcodebuild', 15_000],
-      ['apple_toolchain_probe', 'failed', 'xcodebuild', 15_000],
-    ],
-  );
+  expect(
+    events
+      .filter(({ data }) => data?.cmd)
+      .map(({ phase, data }) => [phase, data?.event, data?.cmd, data?.timeoutMs]),
+  ).toEqual([
+    ['apple_toolchain_probe', 'started', 'xcodebuild', 30_000],
+    ['apple_toolchain_probe', 'failed', 'xcodebuild', 30_000],
+    ['apple_toolchain_probe', 'started', 'xcodebuild', 15_000],
+    ['apple_toolchain_probe', 'failed', 'xcodebuild', 15_000],
+  ]);
   for (const event of events.filter(({ data }) => data?.event === 'failed')) {
     expect(event).toMatchObject({
       durationMs: event.data?.timeoutMs,
@@ -137,6 +139,69 @@ test('an exhausted fingerprint retains the failed probe and retry in diagnostics
     });
   }
   expect(clock.nowMs).toBe(45_000);
+});
+
+test.each([
+  {
+    label: 'nonzero exit',
+    output: { exitCode: 70, stdout: '', stderr: 'SDK unavailable' },
+    reason: 'nonzero_exit',
+    detail: 'exit 70: SDK unavailable',
+  },
+  {
+    label: 'empty output',
+    output: { exitCode: 0, stdout: ' \n', stderr: '' },
+    reason: 'empty_output',
+    detail: 'no output',
+  },
+  {
+    label: 'unparsable output',
+    output: { exitCode: 0, stdout: 'unexpected version format', stderr: '' },
+    reason: 'unparsable_output',
+    detail: 'unrecognized output: unexpected version format',
+  },
+  {
+    label: 'exec failure',
+    output: new Error('version probe failed'),
+    reason: 'probe_error',
+    detail: 'version probe failed',
+  },
+])(
+  'the trace records the classified $label before a later probe exhausts the budget',
+  ({ output, reason, detail }) => {
+    const clock = installToolchainProbeClock();
+    const events: DiagnosticEventInput[] = [];
+    appleRunnerTestHost.update({ emitDiagnostic: (event) => events.push(event) });
+    runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
+      if (command === 'xcode-select') return selectedDeveloperDirResult(XCODE_A);
+      if (command === 'xcodebuild') {
+        if (output instanceof Error) throw output;
+        return output;
+      }
+      throw blockForWholeTimeout(clock, command, args, options);
+    });
+
+    expect(readFingerprint).toThrow('The Apple runner budget ran out before this step began');
+    expect(
+      events.filter(
+        ({ data }) => data?.event === 'rejected' && data?.probe === 'xcodebuild -version',
+      ),
+    ).toEqual([
+      {
+        level: 'error',
+        phase: 'apple_toolchain_probe',
+        data: { event: 'rejected', probe: 'xcodebuild -version', reason, detail },
+      },
+    ]);
+  },
+);
+
+test('the trace does not reject a readable toolchain fingerprint', () => {
+  const events: DiagnosticEventInput[] = [];
+  appleRunnerTestHost.update({ emitDiagnostic: (event) => events.push(event) });
+
+  expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+  expect(events.filter(({ data }) => data?.event === 'rejected')).toEqual([]);
 });
 
 describe('the developer dir a toolchain fingerprint answers for', () => {
