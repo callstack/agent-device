@@ -1,17 +1,21 @@
 import type { FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
+import {
+  execFailureDetails,
+  isCommandTimeoutError,
+  type ExecResult,
+} from '@agent-device/host-kit/command';
 
 import { IOS_HINGE_ANGLE_READ_TIMEOUT_MS } from '../core/config.ts';
 import { runSimctlForDevice } from '../core/simctl.ts';
-import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
+import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
 
 /** The read returned no usable sample; the details say why. */
 export const HINGE_ANGLE_NO_SAMPLE_REASON = 'fold-hinge-angle-no-sample';
 
 const HINGE_ANGLE_NO_SAMPLE_HINT =
-  "The fold helper's hinge read returned no valid CoreMotion sample. The stderr in the details names the cause, such as a simulator runtime without CMAngleManager.";
+  "The fold helper's hinge read returned no valid CoreMotion sample. The details name the cause: stderr such as a simulator runtime without CMAngleManager, or timeoutMs when the read did not finish.";
 
 const OUTPUT_VERSION = 1;
 
@@ -39,70 +43,98 @@ export type FoldHelper = Readonly<{
   }): Promise<SimulatorPanelPayload>;
 }>;
 
-/** Builds (or reuses the cached build of) the fold helper and binds it to `device`. */
-export async function openFoldHelper(
-  device: DeviceInfo,
-  options: { signal?: AbortSignal } = {},
-): Promise<FoldHelper> {
-  options.signal?.throwIfAborted();
-  const binary = await ensureFoldHelperBinary({ signal: options.signal });
-  const run = (args: readonly string[], signal: AbortSignal | undefined, timeoutMs: number) => {
+/**
+ * Binds the fold helper to `device`. Nothing is built here: the first mode that runs builds (or
+ * reuses the cached build of) the binary, and every later mode reuses that answer, so a caller that
+ * refuses before any read never pays the build.
+ */
+export function createFoldHelper(device: DeviceInfo): FoldHelper {
+  let binary: Promise<FoldHelperBinary> | undefined;
+  /**
+   * Runs one mode and returns what `read` takes from its stdout. A non-zero exit, an unreadable
+   * output, and a timeout all become the mode's typed failure; only a caller abort escapes as is.
+   */
+  const run = async <T>(
+    args: readonly string[],
+    options: { signal: AbortSignal | undefined; timeoutMs: number; failure: ModeFailure },
+    read: (stdout: string) => T | undefined,
+  ): Promise<T> => {
+    const { signal, timeoutMs, failure } = options;
     signal?.throwIfAborted();
-    return runSimctlForDevice(device, ['spawn', device.id, binary.path, ...args], {
-      signal,
-      timeoutMs,
-      // simctl must forward termination to the guest before the host kills it.
-      kill: { signal: 'SIGTERM', graceMs: 1000 },
-      allowFailure: true,
-    });
+    const { path } = await (binary ??= ensureFoldHelperBinary({ signal }));
+    signal?.throwIfAborted();
+    let result: ExecResult;
+    try {
+      result = await runSimctlForDevice(device, ['spawn', device.id, path, ...args], {
+        signal,
+        timeoutMs,
+        // simctl must forward termination to the guest before the host kills it.
+        kill: { signal: 'SIGTERM', graceMs: 1000 },
+        allowFailure: true,
+      });
+    } catch (error) {
+      if (signal?.aborted || !isCommandTimeoutError(error)) throw error;
+      throw new AppError(
+        'COMMAND_FAILED',
+        failure.message,
+        { ...error.details, deviceId: device.id, ...failure.details },
+        error,
+      );
+    }
+    const value = result.exitCode === 0 ? read(result.stdout) : undefined;
+    if (value !== undefined) return value;
+    throw new AppError(
+      'COMMAND_FAILED',
+      failure.message,
+      execFailureDetails(result, { deviceId: device.id, ...failure.details }),
+    );
   };
   return Object.freeze({
     async setPose(pose, signal) {
       const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
       const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
-      const sent = await run(['set', payload], signal, durationMs + 10_000);
-      if (sent.exitCode === 0) return;
-      throw helperFailure(device, sent, 'Unable to send the simulator hinge pose', {
-        reason: 'fold-hid-dispatch-failed',
-      });
+      await run(
+        ['set', payload],
+        { signal, timeoutMs: durationMs + 10_000, failure: DISPATCH_FAILURE },
+        () => true,
+      );
     },
     async readHingeAngle({ signal, windowMs = 0 } = {}) {
-      const result = await run(
+      return await run(
         ['hinge', String(windowMs)],
-        signal,
-        IOS_HINGE_ANGLE_READ_TIMEOUT_MS + windowMs,
+        {
+          signal,
+          timeoutMs: IOS_HINGE_ANGLE_READ_TIMEOUT_MS + windowMs,
+          failure: NO_SAMPLE_FAILURE,
+        },
+        parseHingeReading,
       );
-      const angle = result.exitCode === 0 ? parseHingeReading(result.stdout) : undefined;
-      if (angle !== undefined) return angle;
-      throw helperFailure(device, result, 'The simulator reported no hinge angle sample', {
-        reason: HINGE_ANGLE_NO_SAMPLE_REASON,
-        hint: HINGE_ANGLE_NO_SAMPLE_HINT,
-      });
     },
     async readPanelPayload({ signal, timeoutMs }) {
-      const result = await run(['panels'], signal, timeoutMs);
-      const displays =
-        result.exitCode === 0 ? readVersionedLine(result.stdout)?.displays : undefined;
-      if (Array.isArray(displays)) return { result: { displays } };
-      throw helperFailure(device, result, 'The simulator reported no panel table', {
-        reason: 'fold-helper-panels-unreadable',
+      return await run(['panels'], { signal, timeoutMs, failure: PANELS_FAILURE }, (stdout) => {
+        const displays = readVersionedLine(stdout)?.displays;
+        return Array.isArray(displays) ? { result: { displays } } : undefined;
       });
     },
   } satisfies FoldHelper);
 }
 
-function helperFailure(
-  device: DeviceInfo,
-  result: ExecResult,
-  message: string,
-  details: { reason: string; hint?: string },
-): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    message,
-    execFailureDetails(result, { deviceId: device.id, ...details }),
-  );
-}
+type ModeFailure = Readonly<{ message: string; details: { reason: string; hint?: string } }>;
+
+const DISPATCH_FAILURE: ModeFailure = {
+  message: 'Unable to send the simulator hinge pose',
+  details: { reason: 'fold-hid-dispatch-failed' },
+};
+
+const NO_SAMPLE_FAILURE: ModeFailure = {
+  message: 'The simulator reported no hinge angle sample',
+  details: { reason: HINGE_ANGLE_NO_SAMPLE_REASON, hint: HINGE_ANGLE_NO_SAMPLE_HINT },
+};
+
+const PANELS_FAILURE: ModeFailure = {
+  message: 'The simulator reported no panel table',
+  details: { reason: 'fold-helper-panels-unreadable' },
+};
 
 /** The helper's one JSON line, when it is this version's shape. */
 function readVersionedLine(stdout: string): Record<string, unknown> | undefined {

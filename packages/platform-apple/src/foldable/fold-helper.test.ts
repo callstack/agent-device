@@ -4,10 +4,11 @@ vi.mock('./fold-helper-cache.ts', () => ({
   ensureFoldHelperBinary: vi.fn(async () => ({ path: '/cache/fold-helper' })),
 }));
 
+import { AppError } from '@agent-device/kernel/errors';
 import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
-import { openFoldHelper, parseHingeReading, type FoldHelper } from './fold-helper.ts';
+import { createFoldHelper, parseHingeReading, type FoldHelper } from './fold-helper.ts';
 
 const selectedDuo = { ...IOS_SIMULATOR, id: 'selected-duo' };
 const scopedDuo = { ...IOS_SIMULATOR, id: 'scoped-duo', simulatorSetPath: '/tmp/scoped-set' };
@@ -26,11 +27,13 @@ async function withHelper<T>(
     createLocalAppleToolProvider({
       runCommand: async (command, args, options) => {
         expect(command).toBe('xcrun');
+        // A non-zero exit must come back as a result for the typed failure mapping, not as a throw.
+        expect(options).toMatchObject({ allowFailure: true });
         calls.push({ args: [...args], options });
         return { stderr: '', ...result };
       },
     }),
-    async () => use(await openFoldHelper(device)),
+    async () => use(createFoldHelper(device)),
   );
   return { value, calls };
 }
@@ -41,8 +44,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test('builds the helper once and reuses it for every mode', async () => {
+test('builds the helper on first use, once, and reuses it for every mode', async () => {
   await withHelper(selectedDuo, { stdout: '', exitCode: 0 }, async (helper) => {
+    expect(ensureFoldHelperBinary).not.toHaveBeenCalled();
     await helper.setPose('closed');
     await caught(helper.readHingeAngle());
   });
@@ -183,6 +187,29 @@ test.each([
     caught(helper.readPanelPayload({ timeoutMs: 5000 })),
   );
   expect(value).toMatchObject({ details: { reason: 'fold-helper-panels-unreadable' } });
+});
+
+test.each([
+  ['setPose', (helper: FoldHelper) => helper.setPose('open'), 'fold-hid-dispatch-failed'],
+  ['readHingeAngle', (helper: FoldHelper) => helper.readHingeAngle(), 'fold-hinge-angle-no-sample'],
+  [
+    'readPanelPayload',
+    (helper: FoldHelper) => helper.readPanelPayload({ timeoutMs: 5000 }),
+    'fold-helper-panels-unreadable',
+  ],
+] as const)('%s maps a helper timeout to its typed reason', async (_mode, use, reason) => {
+  const value = await withAppleToolProvider(
+    createLocalAppleToolProvider({
+      runCommand: async () => {
+        throw new AppError('COMMAND_FAILED', 'xcrun timed out after 4000ms', { timeoutMs: 4000 });
+      },
+    }),
+    () => caught(use(createFoldHelper(scopedDuo))),
+  );
+  expect(value).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason, deviceId: 'scoped-duo', timeoutMs: 4000 },
+  });
 });
 
 test('never spawns the helper for an already cancelled read or dispatch', async () => {

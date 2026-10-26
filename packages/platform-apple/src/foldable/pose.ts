@@ -20,7 +20,7 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
-import { HINGE_ANGLE_NO_SAMPLE_REASON, openFoldHelper, type FoldHelper } from './fold-helper.ts';
+import { HINGE_ANGLE_NO_SAMPLE_REASON, createFoldHelper, type FoldHelper } from './fold-helper.ts';
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
@@ -45,8 +45,9 @@ export async function setAppleFoldPose(
   const intent = input;
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
-  // One helper serves the scoped panel reads, the dispatch, and every hinge read.
-  const helper = await openFoldHelper(device, { signal: options.signal });
+  // One helper serves the scoped panel reads, the dispatch, and every hinge read. It builds on its
+  // first use, so a default-set device that cannot fold is refused before any build.
+  const helper = createFoldHelper(device);
   const inventory = await queryAppleDisplayInventory(device, {
     signal: options.signal,
     foldHelper: helper,

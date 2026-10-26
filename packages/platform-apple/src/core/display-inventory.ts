@@ -53,7 +53,7 @@ export type AppleDisplayInventory = {
   multiScreen: boolean;
   /**
    * The panel a multi-panel capture names. Absent on a multi-panel device when
-   * neither panel power nor CoreDevice `primary` identifies a panel: list order is
+   * neither panel power nor the panel table's `primary` identifies a panel: list order is
    * not identity, so the capture refuses instead.
    */
   activeDisplay?: AppleDeviceDisplay;
@@ -64,7 +64,7 @@ export type AppleDisplayInventory = {
    */
   ambiguous: boolean;
   /**
-   * True when CoreDevice could not be asked, or answered without a usable
+   * True when the panel table could not be read, or came back without a usable
    * display list. Callers must then keep the pre-display-inventory capture path
    * rather than fail, because an unsupported toolchain is not a capture failure.
    */
@@ -92,7 +92,7 @@ type CoreDeviceDisplayPayload = {
 type AppleDisplayInventoryOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** A fold helper the caller already opened, so a scoped read does not build or probe it again. */
+  /** A fold helper the caller already holds, so a scoped read does not probe its build again. */
   foldHelper?: FoldHelper;
 };
 
@@ -162,8 +162,8 @@ async function readGuestPanelTable(
   const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
   try {
-    const { openFoldHelper } = await import('../foldable/fold-helper.ts');
-    const helper = options.foldHelper ?? (await openFoldHelper(device, { signal }));
+    const { createFoldHelper } = await import('../foldable/fold-helper.ts');
+    const helper = options.foldHelper ?? createFoldHelper(device);
     const payload = await helper.readPanelPayload({
       signal,
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
@@ -404,7 +404,7 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
     data: {
       primaryDisplay: primary.name,
       largestDisplay: widest.name,
-      hint: 'CoreDevice reported the primary panel as at least as large as the other panel. CoreDevice `primary` still selects the capture fallback; verify the device type capabilities.',
+      hint: 'The panel table reported the primary panel as at least as large as the other panel. Its `primary` flag still selects the capture fallback; verify the device type capabilities.',
     },
   });
 }
@@ -415,8 +415,8 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
  * `simctl io screenshot` without `--display` silently picks the highest screen
  * ID, which on a closed foldable is the *dark* inner panel: the capture succeeds
  * and comes back black. A multi-panel device therefore always names a display
- * explicitly — even when panel power is ambiguous — or refuses when CoreDevice
- * identifies no panel. Only a genuinely single-panel device (or an unreadable
+ * explicitly — even when panel power is ambiguous — or refuses when the panel
+ * table identifies no panel. Only a genuinely single-panel device (or an unreadable
  * toolchain) keeps the historic argv.
  */
 export async function resolveAppleCaptureDisplay(
@@ -428,7 +428,7 @@ export async function resolveAppleCaptureDisplay(
 
 /**
  * The display a capture must name (see `resolveAppleCaptureDisplay`) and, on a single-panel device,
- * the rotation that panel is showing, both from one CoreDevice read.
+ * the rotation that panel is showing, both from one panel table read.
  */
 export async function resolveAppleCaptureTarget(
   device: DeviceInfo,
@@ -440,7 +440,7 @@ export async function resolveAppleCaptureTarget(
     if (inventory.activeDisplay) return { display: inventory.activeDisplay };
     throw new AppError(
       'COMMAND_FAILED',
-      `CoreDevice did not identify which panel of ${device.name} to capture`,
+      `The panel table did not identify which panel of ${device.name} to capture`,
       {
         deviceId: device.id,
         reason: 'capture-panel-unidentified',

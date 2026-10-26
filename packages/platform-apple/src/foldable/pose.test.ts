@@ -10,7 +10,7 @@ vi.mock('../core/display-inventory.ts', async (importOriginal) => {
 });
 vi.mock('./fold-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./fold-helper.ts')>();
-  return { ...actual, openFoldHelper: vi.fn(async () => FOLD_HELPER) };
+  return { ...actual, createFoldHelper: vi.fn(() => FOLD_HELPER) };
 });
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
@@ -25,12 +25,12 @@ import {
   type AppleDeviceDisplay,
 } from '../core/display-inventory.ts';
 import { IOS_FOLD_POSE_READ_INTERVAL_MS, IOS_FOLD_POSE_SETTLE_ATTEMPTS } from '../core/config.ts';
-import { openFoldHelper } from './fold-helper.ts';
+import { createFoldHelper } from './fold-helper.ts';
 import { setAppleFoldPose } from './pose.ts';
 
 const mockInventory = vi.mocked(queryAppleDisplayInventory);
 const mockHinge = FOLD_HELPER.readHingeAngle;
-const mockOpenHelper = vi.mocked(openFoldHelper);
+const mockCreateHelper = vi.mocked(createFoldHelper);
 const mockSend = FOLD_HELPER.setPose;
 
 const duo: DeviceInfo = {
@@ -84,7 +84,7 @@ function queueBudgetReadings(fill: (index: number) => number, last: readonly num
 beforeEach(() => {
   mockInventory.mockReset();
   mockHinge.mockReset();
-  mockOpenHelper.mockClear();
+  mockCreateHelper.mockClear();
   mockSend.mockReset();
   mockSend.mockResolvedValue(undefined);
 });
@@ -107,7 +107,7 @@ test('sends the simulator HID pose and reports the pose the guest hinge read bac
   // Reads are spaced so two samples of a moving hinge cannot land together; the first is not delayed.
   // One helper serves the panel reads, the dispatch, and every hinge read: resolving it per read
   // would repeat its toolchain probe.
-  expect(mockOpenHelper).toHaveBeenCalledTimes(1);
+  expect(mockCreateHelper).toHaveBeenCalledTimes(1);
   expect(mockInventory.mock.calls.every(([, options]) => options.foldHelper === FOLD_HELPER)).toBe(
     true,
   );
