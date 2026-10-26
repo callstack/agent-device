@@ -88,6 +88,34 @@ test('publish package requires both Android helpers and excludes benchmark scrip
       ),
     /macOS helper test sources/,
   );
+  // A stub path under Tests/ that the declared list does not name is a test source, not an
+  // exemption: the old suffix rule let any PackStub.swift through.
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        [
+          ...fixturePack.files,
+          {
+            path: 'apple/macos-helper/Tests/AgentDeviceSneakyTests/PackStub.swift',
+            size: 1,
+          },
+        ],
+        { macosHelperManifestSource: helperManifestSource },
+      ),
+    /macOS helper test sources: apple\/macos-helper\/Tests\/AgentDeviceSneakyTests\/PackStub\.swift/,
+  );
+  // The other direction: a declared stub whose target left the manifest is a dead stub riding in
+  // the pack on a stale package.json entry, exempt from the path guard, and must be named.
+  assert.throws(
+    () =>
+      assertPublishPackageContents(fixturePack.files, {
+        // The manifest now declares only the Input test target; the pack still ships both stubs.
+        macosHelperManifestSource: ['.testTarget(', '  name: "AgentDeviceMacOSInputTests",'].join(
+          '\n',
+        ),
+      }),
+    /no test target declares: apple\/macos-helper\/Tests\/AgentDeviceMacOSHelperTests\/PackStub\.swift/,
+  );
   // Sources without the manifest are not a buildable Swift package; the pack must say so.
   assert.throws(
     () =>
