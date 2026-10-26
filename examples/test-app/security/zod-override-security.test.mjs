@@ -18,13 +18,18 @@ const cliRequire = createRequire(createRequire(expoDir).resolve('@expo/cli/packa
 const zodVersion = cliRequire('zod/package.json').version;
 const lockfile = fs.readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
 
-// The advisory's patched floor. A regression below it reopens the alert.
-const PATCHED_ZOD_MAJOR_MINOR = [4, 6];
-const [major, minor] = zodVersion.split('.').map(Number);
+// The advisory's patched floor. A resolution below it reopens the alert.
+const FLOOR = [4, 6, 6];
+function atOrAboveFloor(version) {
+  const [major, minor, patch] = version.split('.').map(Number);
+  return (
+    major > FLOOR[0] ||
+    (major === FLOOR[0] && (minor > FLOOR[1] || (minor === FLOOR[1] && patch >= FLOOR[2])))
+  );
+}
 assert.ok(
-  major > PATCHED_ZOD_MAJOR_MINOR[0] ||
-    (major === PATCHED_ZOD_MAJOR_MINOR[0] && minor >= PATCHED_ZOD_MAJOR_MINOR[1]),
-  `zod must resolve at or above 4.6.6, got ${zodVersion}`,
+  atOrAboveFloor(zodVersion),
+  `zod must resolve at or above ${FLOOR.join('.')}, got ${zodVersion}`,
 );
 
 function cliBuild(subpath) {
@@ -33,18 +38,15 @@ function cliBuild(subpath) {
   return cliRequire(`./build/${subpath}`);
 }
 
-test('the lockfile pins exactly one zod resolution and no vulnerable major', () => {
+test('the lockfile pins exactly one zod resolution at the patched floor', () => {
   const resolutions = [...lockfile.matchAll(/^ {2}zod@(\d+\.\d+\.\d+):/gm)].map((m) => m[1]);
-  assert.equal(resolutions.length > 0, true, 'the lockfile must resolve zod');
+  assert.ok(resolutions.length > 0, 'the lockfile must resolve zod');
   assert.equal(new Set(resolutions).size, 1, `expected one zod resolution, got ${resolutions}`);
   assert.equal(resolutions[0], zodVersion, 'the installed zod must match the lock resolution');
-  for (const version of resolutions) {
-    assert.equal(
-      version.startsWith('3.'),
-      false,
-      `zod ${version} is below the 4.6.6 advisory floor`,
-    );
-  }
+  assert.ok(
+    atOrAboveFloor(resolutions[0]),
+    `zod ${resolutions[0]} is below the ${FLOOR.join('.')} advisory floor`,
+  );
 });
 
 test('@expo/cli loads the overridden zod despite declaring a ^3 range', () => {
