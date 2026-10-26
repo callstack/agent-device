@@ -3,7 +3,7 @@
 ## Status
 
 Accepted (2026-10-03). Native is opt-in; XCTest remains the default app-session backend.
-Pointer event delivery was measured again on 2026-10-05 (#3213).
+Pointer event delivery was measured again on 2026-10-05 and 2026-10-26 (#3213).
 Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
 
 ## Rules at a glance
@@ -24,10 +24,11 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
    Refusal uses `UNSUPPORTED_OPERATION` with `reason: 'unsupported-device-backend'`, as the physical-iOS XCTest backend does.
    `macOsNativeAppInteractor` is assembled member by member, so no runner-backed member reaches it.
    Actions without a named app are refused instead of sent to the runner.
-4. Pointer actions use only accessibility: `AXPress`, focus, value, selected text, or scroll bar value.
+4. Pointer actions use only accessibility: `AXPress`, `AXShowMenu`, focus, value, selected text, or scroll bar value.
    Admission refuses press and hold.
-   Before helper execution, the interactor refuses double, secondary, and middle clicks.
-   The helper refuses press/fill without a pressable element and scroll without a settable scroll bar.
+   Before helper execution, the interactor refuses double and middle clicks.
+   A secondary click performs `AXShowMenu` and succeeds only when a new menu window of the app appears.
+   The helper refuses press/fill without a pressable element, a secondary click without a menu owner, and scroll without a settable scroll bar.
    It supplies `helperReason` under the same `reason`.
    `contracts/fixtures/macos-native-helper-outcomes.json` pins this vocabulary.
    Only keyboard text falls back to events posted to the app process.
@@ -74,6 +75,9 @@ The target window number occupied event field 51.
 Either field 58 or window-local `CGEventSetWindowLocation` supplied the remaining context.
 Public `CGEventPostToPid` delivered clicks, double-clicks with field 1 click state, and secondary clicks to all three fixtures.
 All 54 of 54 cases succeeded without app activation or frontmost-app change.
+On macOS 27.0 (26A428), field 58 no longer replaced the window-local location for a SwiftUI fixture.
+Fields 51 and 58 delivered none of 9 cases; field 51 with `CGEventSetWindowLocation` delivered 9 of 9.
+That setter is an unexported CoreGraphics symbol and changes no public event field.
 Fields 51 and 58 are undocumented.
 Drags and WKWebView button clicks arrived only after private focus-without-raise activation.
 Calculator and Electron accepted background keyboard events.
@@ -81,6 +85,16 @@ Calculator and Electron accepted background keyboard events.
 A dropped post still reports success.
 An unverified event fallback would therefore report success when no action occurred.
 Pointer actions have no event fallback until an event path verifies its outcome.
+
+**Secondary click.**
+The helper performs `AXShowMenu` on the nearest element up the hit chain that offers it.
+AppKit offers a secondary click to the hit view and then to each superview, so this owner matches the menu a real click opens.
+An app that opens the menu tracks it until the menu closes.
+The action's reply therefore times out (`kAXErrorCannotComplete`) while the menu is open.
+The reply is abandoned after 0.5 s, and a new `kCGPopUpMenuWindowLevel` window owned by the app decides the outcome.
+If no such window appears within 1 s, the click fails with `context-menu-not-observed`.
+The open menu is a child of its owner in the app's tree, so the next snapshot shows its items and a press picks one.
+Measurements: `docs/evidence/macos-native-context-menu-2026-10-26.md`.
 
 **Target resolution.**
 The helper acts only inside the session app's own on-screen windows, including menus and sheets.

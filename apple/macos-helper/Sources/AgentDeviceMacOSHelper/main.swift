@@ -126,6 +126,8 @@ struct AgentDeviceMacOSHelper {
       return try handleType(arguments: Array(arguments.dropFirst()))
     case "fill":
       return try handleFill(arguments: Array(arguments.dropFirst()))
+    case "show-menu":
+      return try handleShowMenu(arguments: Array(arguments.dropFirst()))
     case "scroll":
       return try handleScroll(arguments: Array(arguments.dropFirst()))
     case "screenshot":
@@ -474,6 +476,24 @@ struct AgentDeviceMacOSHelper {
       data: try withGhostCursor(arguments) { cursor in
         try fillInBackground(
           point: CGPoint(x: x, y: y), text: text, app: app, cursor: cursor)
+      }
+    )
+  }
+
+  static func handleShowMenu(arguments: [String]) throws -> any Encodable {
+    guard let rawX = optionValue(arguments: arguments, name: "--x"),
+          let rawY = optionValue(arguments: arguments, name: "--y"),
+          let x = Double(rawX), x.isFinite,
+          let y = Double(rawY), y.isFinite
+    else {
+      throw HelperError.invalidArgs("show-menu requires --x <number> --y <number>")
+    }
+    let app = try requireSessionApplication(
+      bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+    )
+    return SuccessEnvelope(
+      data: try withGhostCursor(arguments) { cursor in
+        try showMenuInBackground(point: CGPoint(x: x, y: y), app: app, cursor: cursor)
       }
     )
   }

@@ -13,6 +13,7 @@ import {
   runMacOsFillAction,
   runMacOsPressAction,
   runMacOsScrollAction,
+  runMacOsShowMenuAction,
   runMacOsTypeAction,
 } from './helper.ts';
 
@@ -74,6 +75,16 @@ export function macOsNativeAppInteractor(
       // Another surface's press is the helper's own surface press, never the runner's.
       if (options.surface !== undefined && options.surface !== 'app') {
         return await base.pressPoint!(point, options);
+      }
+      if (options.button === 'secondary') {
+        const result = await withHelperRefusals(
+          runMacOsShowMenuAction(point.x, point.y, {
+            bundleId: bundleId(),
+            signal: ctx.signal,
+            env,
+          }),
+        );
+        return actedOn(result);
       }
       if (options.button !== 'primary') throw nativeBackendRefusal(`${options.button} click`);
       if (options.doubleTap) throw nativeBackendRefusal('double-click');
