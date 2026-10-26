@@ -22,9 +22,13 @@ const fixturesSource = path.join(
 
 test('the host app looks up a fixture class the fixtures file declares', () => {
   const host = fs.readFileSync(hostSource, 'utf8');
-  const lookup = host.match(/NSClassFromString\(@"(\w+)"\)/);
-  assert.ok(lookup, 'the host app must resolve the fixture host with NSClassFromString');
-  const className = lookup[1]!;
+  // The host app resolves exactly one class by name: the fixture host in
+  // +agentDeviceRootViewControllerClass. Asserting the single occurrence keeps this guard from
+  // silently validating a different lookup if another NSClassFromString is ever added.
+  const lookups = [...host.matchAll(/NSClassFromString\(@"(\w+)"\)/g)];
+  assert.equal(lookups.length, 1, 'the host app must hold exactly one NSClassFromString lookup');
+  const className = lookups[0]![1]!;
+  assert.match(host, /\+ \(Class\)agentDeviceRootViewControllerClass/);
   const fixtures = fs.readFileSync(fixturesSource, 'utf8');
   // The class the host names must be declared and implemented by the fixtures file.
   assert.match(fixtures, new RegExp(`@interface ${className} :`));
