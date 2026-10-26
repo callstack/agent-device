@@ -169,6 +169,25 @@ public enum SnapshotGeometrySpace: Equatable {
     isWindow || parentIsWindow
   }
 
+  public static func space(
+    reportedType: String,
+    parentType: String?,
+    reportedFrame: CGRect,
+    inheritedFrom inherited: SnapshotGeometrySpace,
+    viewport: SnapshotViewport
+  ) -> SnapshotGeometrySpace {
+    let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
+    return space(
+      reportedBySurfaceHost: isSurfaceHost(
+        isWindow: carriers.contains(reportedType),
+        parentIsWindow: parentType.map { carriers.contains($0) } ?? false
+      ),
+      reportedFrame: reportedFrame,
+      inheritedFrom: inherited,
+      viewport: viewport
+    )
+  }
+
   private static func isQuarterTurned(_ frame: CGRect, relativeTo appFrame: CGRect) -> Bool {
     guard SnapshotGeometry.isPositiveFinite(frame),
       abs(appFrame.width - appFrame.height) > quarterTurnTolerance
@@ -185,17 +204,14 @@ extension SnapshotGeometrySpace {
     nodes: [RawAXNode],
     viewport: SnapshotViewport
   ) -> [RawAXNode] {
-    let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
     var spaces = [SnapshotGeometrySpace](repeating: .appOrientation, count: nodes.count)
     var result: [RawAXNode] = []
     result.reserveCapacity(nodes.count)
     for (position, node) in nodes.enumerated() {
       let parentIndex = node.parentIndex.flatMap { $0 >= 0 && $0 < position ? $0 : nil }
       let nodeSpace = space(
-        reportedBySurfaceHost: isSurfaceHost(
-          isWindow: carriers.contains(node.type),
-          parentIsWindow: parentIndex.map { carriers.contains(nodes[$0].type) } ?? false
-        ),
+        reportedType: node.type,
+        parentType: parentIndex.map { nodes[$0].type },
         reportedFrame: node.rect.cgRect,
         inheritedFrom: parentIndex.map { spaces[$0] } ?? .appOrientation,
         viewport: viewport

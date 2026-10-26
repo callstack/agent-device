@@ -9,7 +9,7 @@ import {
   IOS_KEYBOARD_SURFACE_ROLES,
   IOS_KEYBOARD_SETTLE_CHROME_ROLES,
   IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
-  IOS_KEYBOARD_CHROME_MARKER_ROLES,
+  isIosKeyboardChromeMarker,
   isAndroidInputMethodNode,
   hasIosKeyboardRole,
 } from './android-input-ownership.ts';
@@ -27,9 +27,9 @@ import { normalizeType } from './snapshot-text.ts';
  *
  * A capture whose producer measured the band directly publishes a {@link SnapshotKeyboardBandFact}
  * beside its tree, and the guard measures the tap point against that band — a point-in-rect check
- * with no geometry to believe. The Apple runner does this from `app.keyboards.firstMatch`, which
- * answers in the app's own orientation space (#2660); the Android helper does it from the input
- * method window's screen bounds.
+ * with no geometry to believe. The iOS XCTest runner uses the complete captured root snapshot,
+ * normalizing the keyboard and input assistant into the app's orientation space; the Android helper
+ * uses the input method window's screen bounds.
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
  * costs no round trip. This is the path for Android captures that could not list every window and for
@@ -121,20 +121,20 @@ function isKeyboardSurfaceNode(node: RawSnapshotNode): boolean {
   return isKeyboardAnchorNode(node) || IOS_KEYBOARD_SURFACE_ROLES.has(node.role ?? '');
 }
 
-/** Keyboard hosts that own descendants, until an app-fillable marker interrupts the ancestry. */
+/** Keyboard hosts whose descendants are part of the tap surface. */
 function isKeyboardSubtreeHost(node: RawSnapshotNode): boolean {
   return isKeyboardAnchorNode(node) || hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES);
 }
 
-/** Per-node ownership and system-only ancestry never cross an app-fillable assistant marker. */
-function isKeyboardOwnedNode(
+/** Tap-surface membership includes app controls hosted by the keyboard; settle ownership is separate. */
+function isKeyboardSurfaceControl(
   node: RawSnapshotNode,
   byIndex: ReadonlyMap<number, RawSnapshotNode>,
 ): boolean {
   if (
     isKeyboardSurfaceNode(node) ||
     hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
-    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES) ||
+    isIosKeyboardChromeMarker(node) ||
     isKeyboardSubtreeHost(node)
   )
     return true;
@@ -144,7 +144,7 @@ function isKeyboardOwnedNode(
     visited.add(parentIndex);
     const parent = byIndex.get(parentIndex);
     if (!parent) return false;
-    if (hasIosKeyboardRole(parent, IOS_KEYBOARD_CHROME_MARKER_ROLES)) return false;
+    if (isIosKeyboardChromeMarker(parent)) return true;
     if (isKeyboardSubtreeHost(parent)) return true;
     parentIndex = parent.parentIndex;
   }
@@ -350,7 +350,7 @@ export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
   return {
     nodes: params.nodes.map((node) => ({
       ...node,
-      keyboardOwned: isKeyboardOwnedNode(node, byIndex),
+      keyboardOwned: isKeyboardSurfaceControl(node, byIndex),
     })),
     keyboard: observeProviderKeyboard(params),
   };
@@ -428,11 +428,11 @@ export function resolveKeyboardTapOcclusion(params: {
   }
   const surface = { frame, controlRects: collectKeyboardControlRects(params.nodes) };
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
-  // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:
-  // the caller named the element, and behind the keyboard a tap does not reach it.
+  // Keyboard chrome and app controls hosted on that surface are tappable. Ordinary app content
+  // behind the same band remains occluded, even when it shares their coordinates.
   const keyboardOwned =
     params.node.keyboardOwned ??
-    isKeyboardOwnedNode(params.node, new Map(params.nodes.map((node) => [node.index, node])));
+    isKeyboardSurfaceControl(params.node, new Map(params.nodes.map((node) => [node.index, node])));
   if (keyboardOwned) {
     return { kind: 'clear', surface };
   }

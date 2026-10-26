@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { collectSettleChromeRefs, withoutSettleChrome } from './snapshot-chrome.ts';
+import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { iosInteractiveKeyboardCaptureNodes } from './snapshot-chrome.fixtures.ts';
 
 function refFor(nodes: SnapshotNode[], label: string): string {
@@ -562,4 +563,30 @@ test('public bar membership classifies an ancestor-free leaf without hiding an a
     withoutSettleChrome(nodes, 'com.example').map((node) => node.label),
     ['Volume'],
   );
+});
+
+test('tap eligibility of an app assistant action never removes it from settle observations', () => {
+  for (const host of [
+    { role: 'TUISystemInputAssistantView' },
+    { identifier: 'SystemInputAssistantView' },
+  ]) {
+    const captured = acquireProviderKeyboard({
+      viewport: { x: 0, y: 0, width: 390, height: 844 },
+      nodes: [
+        { index: 0, type: 'Keyboard', rect: { x: 0, y: 600, width: 390, height: 244 } },
+        { index: 1, type: 'Other', ...host },
+        {
+          index: 2,
+          type: 'Button',
+          label: 'Assistant action',
+          parentIndex: 1,
+          rect: { x: 200, y: 560, width: 100, height: 36 },
+        },
+      ],
+    });
+    const nodes = attachRefs(captured.nodes);
+    const action = refFor(nodes, 'Assistant action');
+    assert.equal(collectSettleChromeRefs(nodes, undefined).has(action), false);
+    assert.ok(withoutSettleChrome(nodes, undefined).some((node) => node.ref === action));
+  }
 });

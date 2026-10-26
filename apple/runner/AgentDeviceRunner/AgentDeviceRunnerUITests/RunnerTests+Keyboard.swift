@@ -31,13 +31,9 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
-/// The band the visible keyboard owns, measured by the one producer that can ask the keyboard
-/// directly instead of rebuilding it from a captured tree.
-///
-/// `app.keyboards.firstMatch` answers in the app's own orientation space, which no tree tier can say
-/// about its own rects while the app is rotated (#2612, #2653). Publishing the measurement is what
-/// lets the daemon's tap guard answer with a point-in-rect test instead of guessing where a
-/// plausible-looking band would be (#2660).
+/// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
+/// Visible frames include the input assistant and share the nodes' normalized coordinate space.
+/// A complete scan with no keyboard establishes absence; projected or partial trees never do.
 enum RunnerKeyboardBandFact: Equatable {
   case visible(CGRect)
   case absent
@@ -83,14 +79,10 @@ enum RunnerKeyboardBandFact: Equatable {
 /// on prose: a daemon log line and a `snapshot --json` reader have to agree on what `unmeasurable`
 /// meant without parsing a sentence.
 enum RunnerKeyboardBandReason {
-  /// The `app.keyboards` read threw or otherwise produced no answer at all.
-  static let queryFailed = "keyboard-frame-query-failed"
   /// The keyboard exists and reports no usable box. It is on screen — only its band is unknown, which
   /// is not the same claim as `absent`.
   static let unusableFrame = "keyboard-frame-unusable"
-  /// The read did not return inside the slice this capture had left for it, so the band was abandoned
-  /// rather than waited on: a keyboard this capture cannot afford to measure is not worth a stalled
-  /// capture, and the daemon's tap guard falls back to the tree rule for this capture alone.
+  /// The captured-tree scan did not finish within its slice of the snapshot budget.
   static let queryTimeout = "keyboard-frame-query-timeout"
   /// No slice was left at all, so the read was never dispatched.
   static let budgetExhausted = "capture-plan-budget-exhausted"
@@ -110,17 +102,11 @@ func runnerKeyboardFrameIsUsable(_ frame: CGRect) -> Bool {
     && size.width > 0 && size.height > 0
 }
 
-/// The one decision the keyboard-band probe makes, kept away from the live query so the unit lane can
-/// pin it without a keyboard on screen. Three outcomes and no fourth: a read that failed says it
-/// failed, a keyboard that is not there is proven absent, and a keyboard whose box cannot be measured
-/// is unmeasurable rather than absent — the difference is whether anything may claim this screen is
-/// clear of a keyboard.
+/// Classifies a complete capture's keyboard observation; failed or timed-out captures never call it.
 func runnerKeyboardBandFact(
-  readSucceeded: Bool,
   exists: Bool,
   frame: CGRect
 ) -> RunnerKeyboardBandFact {
-  guard readSucceeded else { return .unmeasurable(RunnerKeyboardBandReason.queryFailed) }
   guard exists else { return .absent }
   guard runnerKeyboardFrameIsUsable(frame) else {
     return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
@@ -176,37 +162,37 @@ extension RunnerTests {
 
   private func keyboardBandFact(snapshot: XCUIElementSnapshot, viewport: SnapshotViewport) -> RunnerKeyboardBandFact {
     // A live exists/frame pair can race keyboard dismissal after the tree was captured.
-    var pending: [(XCUIElementSnapshot, SnapshotGeometrySpace, Bool)] = [(snapshot, .appOrientation, false)]
+    var pending: [(XCUIElementSnapshot, SnapshotGeometrySpace, String?)] = [(snapshot, .appOrientation, nil)]
     var keyboardFrame: CGRect?
     var assistantFrame = CGRect.null
-    while let (node, inheritedSpace, parentIsCarrier) = pending.popLast() {
-      guard node.elementType != .keyboard || runnerKeyboardFrameIsUsable(node.frame) else {
-        return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
-      }
-      let isCarrier = node.elementType == .application || node.elementType == .window
+    var sawKeyboard = false
+    while let (node, inheritedSpace, parentType) = pending.popLast() {
+      let type = elementTypeName(node.elementType)
       let space = SnapshotGeometrySpace.space(
-        reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(isWindow: isCarrier, parentIsWindow: parentIsCarrier),
+        reportedType: type,
+        parentType: parentType,
         reportedFrame: node.frame,
         inheritedFrom: inheritedSpace,
         viewport: viewport
       )
       let frame = space.orientedFrame(of: node.frame)
       if node.elementType == .keyboard {
-        keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
+        sawKeyboard = true
+        // A stale keyboard in another window must not hide a valid captured keyboard.
+        if runnerKeyboardFrameIsUsable(node.frame), runnerKeyboardFrameIsUsable(frame) {
+          keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
+        }
       } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(node.frame), runnerKeyboardFrameIsUsable(frame) {
         assistantFrame = assistantFrame.union(frame)
       }
-      pending.append(contentsOf: node.children.map { ($0, space, isCarrier) })
+      pending.append(contentsOf: node.children.map { ($0, space, type) })
     }
     guard let keyboardFrame else {
-      return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+      return sawKeyboard
+        ? .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+        : runnerKeyboardBandFact(exists: false, frame: .zero)
     }
-    guard runnerKeyboardFrameIsUsable(keyboardFrame) else {
-      return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
-    }
-    return runnerKeyboardBandFact(
-      readSucceeded: true, exists: true, frame: keyboardFrame.union(assistantFrame)
-    )
+    return runnerKeyboardBandFact(exists: true, frame: keyboardFrame.union(assistantFrame))
   }
 }
 

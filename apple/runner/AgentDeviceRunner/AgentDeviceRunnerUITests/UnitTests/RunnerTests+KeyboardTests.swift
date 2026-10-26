@@ -95,24 +95,38 @@ extension RunnerTests {
       .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
     )
   }
-#endif
 
-  func testKeyboardBandFactReadFailureIsStatedAsUnmeasurableNotAbsence() {
-    // Absence would let a consumer claim the screen is clear of a keyboard on the strength of a read
-    // that never answered.
-    let fact = runnerKeyboardBandFact(
-      readSucceeded: false,
-      exists: false,
-      frame: CGRect(x: 0, y: 198, width: 402, height: 204)
-    )
-    XCTAssertEqual(fact, .unmeasurable(RunnerKeyboardBandReason.queryFailed))
-    XCTAssertEqual(fact.payload.kind, "unmeasurable")
-    XCTAssertEqual(fact.payload.reason, RunnerKeyboardBandReason.queryFailed)
-    XCTAssertNil(fact.payload.frame)
+  @MainActor
+  func testCapturedKeyboardBandIgnoresStaleKeyboardFramesWhenAnotherWindowIsUsable() {
+    let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let frame = CGRect(x: 0, y: 600, width: 390, height: 244)
+    let usable = ElementAttributesFixture(.window, viewport, children: [ElementAttributesFixture(.keyboard, frame)])
+    let stale = ElementAttributesFixture(.window, viewport, children: [ElementAttributesFixture(.keyboard, .zero)])
+    for windows in [[usable, stale], [stale, usable]] {
+      let root = ElementAttributesFixture(.application, viewport, children: windows)
+      XCTAssertEqual(
+        captureKeyboardBandFact(snapshot: root, viewport: .reported(box: viewport), deadline: .distantFuture),
+        .visible(frame)
+      )
+    }
   }
 
-  func testKeyboardBandFactPublishesAbsenceWhenTheQueryFindsNoKeyboard() {
-    let fact = runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+  @MainActor
+  func testCapturedKeyboardBandUnionsUsableKeyboardFramesAcrossWindows() {
+    let viewport = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let windows = [CGRect(x: 0, y: 600, width: 195, height: 244), CGRect(x: 195, y: 580, width: 195, height: 264)]
+      .map { ElementAttributesFixture(.window, viewport, children: [ElementAttributesFixture(.keyboard, $0)]) }
+    let root = ElementAttributesFixture(.application, viewport, children: windows)
+    XCTAssertEqual(
+      captureKeyboardBandFact(snapshot: root, viewport: .reported(box: viewport), deadline: .distantFuture),
+      .visible(CGRect(x: 0, y: 580, width: 390, height: 264))
+    )
+  }
+
+#endif
+
+  func testKeyboardBandFactPublishesAbsenceWhenTheCompleteCaptureHasNoKeyboard() {
+    let fact = runnerKeyboardBandFact(exists: false, frame: .zero)
     XCTAssertEqual(fact, .absent)
     XCTAssertEqual(fact.payload.kind, "absent")
     XCTAssertNil(fact.payload.frame)
@@ -123,7 +137,7 @@ extension RunnerTests {
     // The landscape band measured on iPhone 17 Pro (iOS 26.2) after #2653: full width across the
     // bottom of a 402 pt-tall app, which is what the tree reported as a strip down the left edge.
     let frame = CGRect(x: 0, y: 198, width: 874, height: 204)
-    let fact = runnerKeyboardBandFact(readSucceeded: true, exists: true, frame: frame)
+    let fact = runnerKeyboardBandFact(exists: true, frame: frame)
     XCTAssertEqual(fact, .visible(frame))
     let payload = fact.payload
     XCTAssertEqual(payload.kind, "visible")
@@ -144,7 +158,7 @@ extension RunnerTests {
       CGRect(x: infinite, y: 198, width: 874, height: 204)
     ]
     for frame in unusable {
-      let fact = runnerKeyboardBandFact(readSucceeded: true, exists: true, frame: frame)
+      let fact = runnerKeyboardBandFact(exists: true, frame: frame)
       XCTAssertEqual(
         fact,
         .unmeasurable(RunnerKeyboardBandReason.unusableFrame),
