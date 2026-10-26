@@ -356,3 +356,25 @@ test('settled operations cost the allocator nothing on restart', async () => {
 
   expect(next.allocator.calls).toEqual([]);
 });
+
+test('an operation left uncertain for the owner is given back before its next acquisition', async () => {
+  const { allocator, coordinator, acquire } = await setup({
+    requestLease: [
+      new Error('allocator unreachable'),
+      granted({ attemptKey: 'attempt-2', requestGeneration: 2 }),
+    ],
+    getLeaseRequestStatus: [new Error('allocator unreachable')],
+    cancelLeaseRequest: [new Error('allocator unreachable'), cancelled],
+  });
+  const stale = acquire({ deadlineAtMs: NOW + POLL_INTERVAL_MS });
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+  expect(await stale).toMatchObject({ status: 'unavailable', reason: 'allocator-uncertain' });
+
+  vi.mocked(crypto.randomUUID).mockReturnValue('attempt-2' as ReturnType<typeof crypto.randomUUID>);
+  expect((await acquire()).status).toBe('granted');
+  expect(allocator.calls.map((call) => call.method).slice(-2)).toEqual([
+    'cancelLeaseRequest',
+    'requestLease',
+  ]);
+  expect(coordinator.binding(OWNER)).toBeDefined();
+});

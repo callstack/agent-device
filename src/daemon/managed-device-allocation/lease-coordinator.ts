@@ -215,14 +215,22 @@ export async function createManagedLeaseCoordinator(options: {
     ref: AllocationOperationRef,
     signal: AbortSignal,
   ): Promise<ManagedLeaseAcquisition> {
-    let result = await journal.allocate({
-      ...ref,
-      requestGeneration: nextRequestGeneration(journal, ref.requesterId),
-      shape: input.shape,
-      deadlineAtMs: input.deadlineAtMs,
-      admission: 'fail-fast',
-      signal,
-    });
+    const request = () =>
+      journal.allocate({
+        ...ref,
+        requestGeneration: nextRequestGeneration(journal, ref.requesterId),
+        shape: input.shape,
+        deadlineAtMs: input.deadlineAtMs,
+        admission: 'fail-fast',
+        signal,
+      });
+    let result = await request();
+    // The owner has no live entry, so an operation still holding its lane is stale.
+    if (result.status === 'blocked' && result.reason === 'lane-busy' && result.record) {
+      const { requesterId, attemptKey } = result.record;
+      await giveBack({ requesterId, attemptKey });
+      result = await request();
+    }
     while (result.status === 'pending' || isAllocatorUncertain(result)) {
       if (signal.aborted) return await abandon(ref, 'abandoned');
       const remainingMs = input.deadlineAtMs - Date.now();

@@ -66,8 +66,9 @@ const REFUSALS: Readonly<Record<string, LeaseRefusalReason>> = {
  * record has aged out creates a new device. So attempts are answered from this process's own
  * record of them, and live lease authority from `lease.list`; an attempt this process did not
  * start is unknown, which keeps its journal entry non-executable until Simlock expires the lease.
- * Such an attempt can still be cancelled: Simlock cancels by requester, and a requester with
- * neither a pending request nor a lease has no device coming.
+ * Such an attempt, or one whose request response was lost, can still be cancelled: Simlock
+ * cancels by requester and holds at most one lease per requester, so once nothing is pending the
+ * requester's listed lease is this attempt's grant and is released.
  *
  * Simlock scopes requesters to the session principal only, so the requester it sees is prefixed
  * with this allocator's instance id: two daemons sharing a principal never cancel or match each
@@ -165,21 +166,31 @@ export function createSimlockManagedDeviceAllocator(options: {
     return { ...status, lease };
   };
 
-  const cancelUnstarted = async (ref: LeaseRequestRef): Promise<LeaseRequestStatus> => {
-    const requester = simlockRequester(ref.requesterId);
-    const { result } = await client.cancelLease({ requesterId: requester });
-    // `not-cancellable` is device work in flight, and a listed lease may be this attempt's grant.
-    const noDevice =
-      result === 'cancelled' ||
-      (result === 'not-found' &&
-        !(await client.listLeases()).leases.some((lease) => lease.requesterId === requester));
+  const cancelByRequester = async (ref: LeaseRequestRef): Promise<LeaseRequestStatus> => {
     const { requesterId, requestGeneration, attemptKey } = ref;
-    return {
-      requesterId,
-      requestGeneration,
-      attemptKey,
-      state: noDevice ? 'cancelled' : 'unknown',
-    };
+    const requester = simlockRequester(requesterId);
+    const { result } = await client.cancelLease({ requesterId: requester });
+    // Device work in flight has no outcome yet; a later cancel finds it pending or listed.
+    if (result === 'not-cancellable') {
+      return { requesterId, requestGeneration, attemptKey, state: 'unknown' };
+    }
+    if (result === 'not-found') {
+      const listed = (await client.listLeases()).leases.find(
+        (lease) => lease.requesterId === requester,
+      );
+      if (listed) await releaseLease({ leaseId: listed.id });
+    }
+    return { requesterId, requestGeneration, attemptKey, state: 'cancelled' };
+  };
+
+  const releaseLease = async ({ leaseId }: Readonly<{ leaseId: string }>): Promise<void> => {
+    try {
+      await client.releaseLease({ leaseId });
+    } catch (error) {
+      // An ended lease is already back with Simlock, which deletes its device.
+      if (simlockErrorCode(error) !== 'UNKNOWN_LEASE') throw error;
+    }
+    leases.delete(leaseId);
   };
 
   return Object.freeze({
@@ -192,8 +203,8 @@ export function createSimlockManagedDeviceAllocator(options: {
     },
     getLeaseRequestStatus: async (ref) => await liveStatus(attemptFor(ref)),
     cancelLeaseRequest: async (ref) => {
-      if (!attempts.has(attemptKey(ref))) return await cancelUnstarted(ref);
-      const attempt = attemptFor(ref);
+      const attempt = attempts.get(attemptKey(ref));
+      if (!attempt || attempt.status.state === 'unknown') return await cancelByRequester(ref);
       if (attempt.status.state === 'pending') {
         await client.cancelLease({ requesterId: simlockRequester(ref.requesterId) });
         // An uncancellable request is still provisioning; its grant is the caller's to release.
@@ -218,15 +229,7 @@ export function createSimlockManagedDeviceAllocator(options: {
       leases.set(leaseId, lease);
       return lease;
     },
-    releaseLease: async ({ leaseId }) => {
-      try {
-        await client.releaseLease({ leaseId });
-      } catch (error) {
-        // An ended lease is already back with Simlock, which deletes its device.
-        if (simlockErrorCode(error) !== 'UNKNOWN_LEASE') throw error;
-      }
-      leases.delete(leaseId);
-    },
+    releaseLease,
   });
 }
 

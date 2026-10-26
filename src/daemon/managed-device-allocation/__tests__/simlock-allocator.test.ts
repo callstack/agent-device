@@ -171,13 +171,13 @@ test('releasing a lease Simlock already ended succeeds', async () => {
 });
 
 test.each([
-  ['a queued request', 'cancelled', [LISTED], 'cancelled'],
-  ['a requester with no request and no lease', 'not-found', [], 'cancelled'],
-  ['a requester whose request may already be granted', 'not-found', [LISTED], 'unknown'],
-  ['device work already in flight', 'not-cancellable', [], 'unknown'],
+  ['a queued request', 'cancelled', [LISTED], 'cancelled', 0],
+  ['a requester with no request and no lease', 'not-found', [], 'cancelled', 0],
+  ['a requester whose request was already granted', 'not-found', [LISTED], 'cancelled', 1],
+  ['device work already in flight', 'not-cancellable', [], 'unknown', 0],
 ] as const)(
   'cancelling an attempt this daemon did not start: %s',
-  async (_, result, leases, state) => {
+  async (_, result, leases, state, releases) => {
     const { client, allocator } = setup({
       cancelLease: vi.fn(async () => ({ result })),
       listLeases: vi.fn(async () => ({ leases })),
@@ -185,9 +185,36 @@ test.each([
 
     expect(await allocator.cancelLeaseRequest(REF)).toEqual({ ...REF, state });
     expect(client.cancelLease).toHaveBeenCalledWith({ requesterId: 'simlock:job-1' });
+    expect(client.releaseLease).toHaveBeenCalledTimes(releases);
     expect(client.requestLease).not.toHaveBeenCalled();
   },
 );
+
+test('a grant whose release fails is not reported cancelled', async () => {
+  const { allocator } = setup({
+    cancelLease: vi.fn(async () => ({ result: 'not-found' as const })),
+    releaseLease: vi.fn(async () => {
+      throw simlockError('DAEMON_CONNECTION_LOST');
+    }),
+  });
+
+  await expect(allocator.cancelLeaseRequest(REF)).rejects.toMatchObject({
+    code: 'DAEMON_CONNECTION_LOST',
+  });
+});
+
+test('an attempt whose request response was lost is cancelled by requester', async () => {
+  const { client, allocator } = setup({
+    requestLease: vi.fn(async () => {
+      throw simlockError('DAEMON_CONNECTION_LOST');
+    }),
+    cancelLease: vi.fn(async () => ({ result: 'not-found' as const })),
+  });
+  await expect(allocator.requestLease(INPUT)).rejects.toThrow();
+
+  expect(await allocator.cancelLeaseRequest(REF)).toEqual({ ...REF, state: 'cancelled' });
+  expect(client.releaseLease).toHaveBeenCalledWith({ leaseId: 'lease-1' });
+});
 
 test("another allocator instance's lease for the same owner is not this attempt's grant", async () => {
   const { allocator } = setup({
