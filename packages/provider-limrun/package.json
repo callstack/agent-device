@@ -17,6 +17,6 @@
     }
   },
   "devDependencies": {
-    "@limrun/api": "^0.64.1"
+    "@limrun/api": "github:limrun-inc/typescript-sdk#83370dfd407d15c3a841338209d7ac1bf45c16a1"
   }
 }

@@ -5,6 +5,7 @@ packages:
 pmOnFail: warn
 verifyDepsBeforeRun: warn
 allowBuilds:
+  '@limrun/api': true
   fallow: true
 minimumReleaseAgeExclude:
   - '@chenglou/freerange@0.0.4'

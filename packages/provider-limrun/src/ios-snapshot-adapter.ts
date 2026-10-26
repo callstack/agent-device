@@ -11,7 +11,9 @@ import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
-  const tree = (await session.client.elementTree()) as IosTreeNode[];
+  const tree = (await session.client.elementTree(undefined, {
+    source: 'xcuitest',
+  })) as IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
   const nodes = flattenIosTree(tree).map((node) => interpretIosNode(node));
   return createIosSnapshotAcquisition({
