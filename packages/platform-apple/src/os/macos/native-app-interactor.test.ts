@@ -77,6 +77,17 @@ test('a native tap presses the app surface under the ghost cursor and reports th
   assert.deepEqual(result, { mechanism: 'ax-press', windowTitle: 'Untitled' });
 });
 
+test('a native secondary click opens the context menu at the point through the helper', async () => {
+  const { calls, result } = await recordHelperCalls(
+    { x: 10, y: 20, mechanism: 'ax-show-menu', windowTitle: 'Untitled' },
+    async (interactor) => await interactor.pressPoint!({ x: 10, y: 20 }, secondaryClick),
+  );
+  assert.deepEqual(calls, [
+    ['show-menu', '--x', '10', '--y', '20', '--bundle-id', 'com.apple.TextEdit', '--ghost-cursor'],
+  ]);
+  assert.deepEqual(result, { mechanism: 'ax-show-menu', windowTitle: 'Untitled' });
+});
+
 test('native type and fill address the session app, not the frontmost one', async () => {
   const { calls } = await recordHelperCalls({ mechanism: 'ax-value' }, async (interactor) => {
     await interactor.type('hello');
@@ -168,7 +179,7 @@ test('runner-only members refuse with the backend reason instead of starting XCT
   for (const refused of [
     () => interactor.back(),
     () => interactor.setOrientation('portrait'),
-    () => interactor.pressPoint!({ x: 1, y: 2 }, secondaryClick),
+    () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, button: 'middle' }),
     () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, doubleTap: true }),
     () => interactor.pressPoint!({ x: 1, y: 2 }, { ...primaryClick, holdMs: 500 }),
     () => interactor.longPress(1, 2, 500),
