@@ -2,6 +2,7 @@ import {
   AppError,
   createRequestCanceledError,
   isRequestCanceledError,
+  normalizeError,
 } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { TtlMemo } from '@agent-device/kernel/ttl-memo';
@@ -9,6 +10,7 @@ import {
   commandDeveloperDir,
   createTtlMemo,
   Deadline,
+  emitDiagnostic,
   isCommandTimeoutError,
   runCmdSync,
 } from './host.ts';
@@ -439,11 +441,35 @@ function attemptToolchainProbe(
   clock.throwIfCanceled();
   const timeoutMs = clock.attemptTimeoutMs();
   if (timeoutMs <= 0) throw runnerPhaseBudgetExhaustedError('apple_toolchain_probe');
-  return runCmdSync(cmd, args, {
-    allowFailure: true,
-    timeoutMs,
-    maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
-  });
+  const startedAtMs = Date.now();
+  const data = { cmd, args, timeoutMs };
+  emitDiagnostic({ phase: 'apple_toolchain_probe', data: { ...data, event: 'started' } });
+  try {
+    const result = runCmdSync(cmd, args, {
+      allowFailure: true,
+      timeoutMs,
+      maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
+    });
+    emitDiagnostic({
+      phase: 'apple_toolchain_probe',
+      durationMs: Date.now() - startedAtMs,
+      data: {
+        ...data,
+        event: 'completed',
+        exitCode: result.exitCode,
+        stderr: result.stderr.slice(0, TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH),
+      },
+    });
+    return result;
+  } catch (error) {
+    emitDiagnostic({
+      level: 'error',
+      phase: 'apple_toolchain_probe',
+      durationMs: Date.now() - startedAtMs,
+      data: { ...data, event: 'failed', error: normalizeError(error) },
+    });
+    throw error;
+  }
 }
 
 function parseXcodeVersionOutput(

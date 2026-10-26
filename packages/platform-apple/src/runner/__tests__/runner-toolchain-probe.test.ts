@@ -5,6 +5,7 @@ import path from 'node:path';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
+import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import {
@@ -105,6 +106,38 @@ function blockResolutionForWholeTimeout(clock: { nowMs: number }): void {
     throw blockForWholeTimeout(clock, command, args, options);
   });
 }
+
+test('an exhausted fingerprint retains the failed probe and retry in diagnostics', () => {
+  const clock = installToolchainProbeClock();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock.nowMs);
+  const events: DiagnosticEventInput[] = [];
+  appleRunnerTestHost.update({ emitDiagnostic: (event) => events.push(event) });
+  runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
+    if (command === 'xcode-select') return selectedDeveloperDirResult(XCODE_A);
+    throw blockForWholeTimeout(clock, command, args, options);
+  });
+
+  expect(readFingerprint).toThrow('The Apple runner budget ran out before this step began');
+
+  expect(events.map(({ phase, data }) => [phase, data?.event, data?.cmd, data?.timeoutMs])).toEqual(
+    [
+      ['apple_toolchain_probe', 'started', 'xcodebuild', 30_000],
+      ['apple_toolchain_probe', 'failed', 'xcodebuild', 30_000],
+      ['apple_toolchain_probe', 'started', 'xcodebuild', 15_000],
+      ['apple_toolchain_probe', 'failed', 'xcodebuild', 15_000],
+    ],
+  );
+  for (const event of events.filter(({ data }) => data?.event === 'failed')) {
+    expect(event).toMatchObject({
+      durationMs: event.data?.timeoutMs,
+      data: {
+        args: ['-version'],
+        error: { code: 'COMMAND_FAILED', details: { timeoutMs: event.data?.timeoutMs } },
+      },
+    });
+  }
+  expect(clock.nowMs).toBe(45_000);
+});
 
 describe('the developer dir a toolchain fingerprint answers for', () => {
   test('a default selection that moved re-reads instead of answering the Xcode it replaced', () => {
