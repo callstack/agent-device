@@ -328,6 +328,26 @@ test('a new key cannot reuse a stale requester generation after terminal work', 
   );
 });
 
+test('the next requester generation is the one the lane admits', async () => {
+  const setupResult = setup({
+    requestLease: [{ ...ALLOCATION_REFUSED_STATUS, attemptKey: 'attempt-2', requestGeneration: 2 }],
+  });
+  assert.equal(setupResult.journal.nextRequestGeneration('requester-a'), 1);
+  await setupResult.journal.allocate(input({ attemptKey: 'attempt-2', requestGeneration: 2 }));
+
+  const next = setupResult.journal.nextRequestGeneration('requester-a');
+  assert.equal(next, 3);
+  assert.equal(setupResult.journal.nextRequestGeneration('requester-b'), 1);
+  assert.equal(
+    (
+      await setupResult.journal.allocate(
+        input({ attemptKey: 'attempt-3', requestGeneration: next - 1 }),
+      )
+    ).status,
+    'blocked',
+  );
+});
+
 test('a terminal refusal replays without re-entering the allocator', async () => {
   const setupResult = setup({ requestLease: [ALLOCATION_REFUSED_STATUS] });
   const first = await setupResult.journal.allocate(ALLOCATION_REQUEST);

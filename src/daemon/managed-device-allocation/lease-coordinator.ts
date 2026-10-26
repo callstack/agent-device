@@ -226,7 +226,7 @@ export async function createManagedLeaseCoordinator(options: {
     const request = () =>
       journal.allocate({
         ...ref,
-        requestGeneration: nextRequestGeneration(journal, ref.requesterId),
+        requestGeneration: journal.nextRequestGeneration(ref.requesterId),
         shape: input.shape,
         deadlineAtMs: input.deadlineAtMs,
         admission: 'fail-fast',
@@ -440,16 +440,6 @@ function refusalOf(record: AllocationOperationRecord): ManagedLeaseAcquisition {
   return record.phase.status === 'refused'
     ? { status: 'refused', refusal: record.phase.refusal }
     : unavailable('journal-blocked', 'Refused allocation has no refusal.');
-}
-
-function nextRequestGeneration(journal: AllocationOperationJournal, requesterId: string): number {
-  let highest = 0;
-  for (const entry of journal.list()) {
-    if (entry.status === 'found' && entry.record.requesterId === requesterId) {
-      highest = Math.max(highest, entry.record.requestGeneration);
-    }
-  }
-  return highest + 1;
 }
 
 function isAllocatorUncertain(result: AllocationJournalResult): boolean {

@@ -17,6 +17,7 @@ export type AllocationJournalLane = Readonly<{
     requesterId: string,
     task: () => Promise<AllocationJournalResult>,
   ): Promise<AllocationJournalResult>;
+  nextRequestGeneration(requesterId: string): number;
 }>;
 
 type LaneDependencies = Readonly<{
@@ -29,6 +30,7 @@ export function createAllocationJournalLane(options: LaneDependencies): Allocati
   return Object.freeze({
     open: createOpen(options),
     withLock: createLaneLock(options.store),
+    nextRequestGeneration: (requesterId) => nextRequestGeneration(options.store, requesterId),
   });
 }
 
@@ -144,6 +146,17 @@ function laneConflict(
         'allocation request generation is not newer than durable lane history',
       )
     : undefined;
+}
+
+/** The lowest generation `laneConflict` admits over the records this lane can read. */
+function nextRequestGeneration(store: AllocationOperationStore, requesterId: string): number {
+  let highestGeneration = 0;
+  for (const entry of store.list()) {
+    const inspection = inspectLaneEntry(entry, requesterId);
+    if (isJournalResult(inspection)) continue;
+    highestGeneration = Math.max(highestGeneration, inspection.highestGeneration);
+  }
+  return highestGeneration + 1;
 }
 
 function inspectLaneEntry(

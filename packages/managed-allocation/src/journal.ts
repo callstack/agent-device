@@ -40,6 +40,7 @@ export type AllocationOperationJournal = Readonly<{
   release(ref: AllocationOperationRef): Promise<AllocationJournalResult>;
   read(ref: AllocationOperationRef): AllocationOperationRead;
   list(): AllocationOperationRead[];
+  nextRequestGeneration(requesterId: string): number;
 }>;
 
 type JournalSetup = Readonly<{
@@ -108,6 +109,7 @@ function createJournalServices(services: JournalServices): AllocationOperationJo
     release: (ref) => referenceOperation(services, ref, 'release'),
     read: (ref) => services.store.read(ref),
     list: () => services.store.list(),
+    nextRequestGeneration: (requesterId) => services.lane.nextRequestGeneration(requesterId),
   });
 }
 
