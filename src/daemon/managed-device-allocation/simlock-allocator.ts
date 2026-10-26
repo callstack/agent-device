@@ -98,13 +98,9 @@ export function createSimlockManagedDeviceAllocator(options: {
   };
 
   const start = (input: LeaseRequestInput): Attempt => {
-    const base = {
-      requesterId: input.requesterId,
-      requestGeneration: input.requestGeneration,
-      attemptKey: input.attemptKey,
-    };
+    const base = statusOf(input, 'pending');
     const attempt: Attempt = {
-      status: { ...base, state: 'pending' },
+      status: base,
       settled: Promise.resolve(),
     };
     attempt.settled = client
@@ -143,16 +139,16 @@ export function createSimlockManagedDeviceAllocator(options: {
               refusal: { reason, ...(error instanceof Error ? { message: error.message } : {}) },
             };
           } else if (code === 'CANCELLED') {
-            attempt.status = { ...base, state: 'cancelled' };
+            attempt.status = statusOf(input, 'cancelled');
           } else {
-            attempt.status = { ...base, state: 'unknown' };
+            attempt.status = statusOf(input, 'unknown');
             attempt.error = error;
           }
         },
       )
       // A grant this adapter cannot map leaves the attempt unknown, so `settled` never rejects.
       .catch((error: unknown) => {
-        attempt.status = { ...base, state: 'unknown' };
+        attempt.status = statusOf(input, 'unknown');
         attempt.error = error;
       });
     attempts.set(allocationOperationKey(input), attempt);
@@ -165,8 +161,7 @@ export function createSimlockManagedDeviceAllocator(options: {
     const leaseId = status.lease.id;
     const live = (await client.listLeases()).leases.find((lease) => lease.id === leaseId);
     if (!live) {
-      const { requesterId, requestGeneration, attemptKey } = status;
-      return { requesterId, requestGeneration, attemptKey, state: 'unknown' };
+      return statusOf(status, 'unknown');
     }
     const lease = { ...status.lease, ttlDeadline: live.ttlDeadline };
     leases.set(lease.id, lease);
@@ -174,20 +169,17 @@ export function createSimlockManagedDeviceAllocator(options: {
   };
 
   const cancelByRequester = async (ref: LeaseRequestRef): Promise<LeaseRequestStatus> => {
-    const { requesterId, requestGeneration, attemptKey } = ref;
-    const requester = simlockRequester(requesterId);
+    const requester = simlockRequester(ref.requesterId);
     const { result } = await client.cancelLease({ requesterId: requester });
     // Device work in flight has no outcome yet; a later cancel finds it pending or listed.
-    if (result === 'not-cancellable') {
-      return { requesterId, requestGeneration, attemptKey, state: 'unknown' };
-    }
+    if (result === 'not-cancellable') return statusOf(ref, 'unknown');
     if (result === 'not-found') {
       const listed = (await client.listLeases()).leases.find(
         (lease) => lease.requesterId === requester,
       );
       if (listed) await releaseLease({ leaseId: listed.id });
     }
-    return { requesterId, requestGeneration, attemptKey, state: 'cancelled' };
+    return statusOf(ref, 'cancelled');
   };
 
   const releaseLease = async ({ leaseId }: Readonly<{ leaseId: string }>): Promise<void> => {
@@ -250,6 +242,12 @@ export function createSimlockManagedDeviceAllocator(options: {
     },
     releaseLease,
   });
+}
+
+/** A status naming exactly this attempt, carrying none of the caller's other fields. */
+function statusOf(ref: LeaseRequestRef, state: LeaseRequestStatus['state']): LeaseRequestStatus {
+  const { requesterId, requestGeneration, attemptKey } = ref;
+  return { requesterId, requestGeneration, attemptKey, state };
 }
 
 function simlockErrorCode(error: unknown): string | undefined {
