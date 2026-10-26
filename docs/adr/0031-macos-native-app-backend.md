@@ -5,6 +5,7 @@
 Accepted (2026-10-03). Native is opt-in; XCTest remains the default app-session backend.
 Pointer event delivery was measured again on 2026-10-05 and 2026-10-26 (#3213).
 Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
+`AXShowMenu` was measured on SwiftUI only; AppKit, Electron, and Catalyst menus remain unmeasured.
 
 ## Rules at a glance
 
@@ -26,7 +27,7 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
    Actions without a named app are refused instead of sent to the runner.
 4. Pointer actions use only accessibility: `AXPress`, `AXShowMenu`, focus, value, selected text, or scroll bar value.
    Admission refuses press and hold.
-   Before helper execution, the interactor refuses double and middle clicks.
+   Before helper execution, the interactor refuses double clicks; admission refuses middle clicks on macOS.
    A secondary click performs `AXShowMenu` and succeeds only when a new menu window of the app appears.
    The helper refuses press/fill without a pressable element, a secondary click without a menu owner, and scroll without a settable scroll bar.
    It supplies `helperReason` under the same `reason`.
@@ -76,8 +77,7 @@ Either field 58 or window-local `CGEventSetWindowLocation` supplied the remainin
 Public `CGEventPostToPid` delivered clicks, double-clicks with field 1 click state, and secondary clicks to all three fixtures.
 All 54 of 54 cases succeeded without app activation or frontmost-app change.
 On macOS 27.0 (26A428), field 58 no longer replaced the window-local location for a SwiftUI fixture.
-Fields 51 and 58 delivered none of 9 cases; field 51 with `CGEventSetWindowLocation` delivered 9 of 9.
-That setter is an unexported CoreGraphics symbol and changes no public event field.
+Only the unexported CoreGraphics setter `CGEventSetWindowLocation` delivered there (`docs/evidence/macos-native-context-menu-2026-10-26.md`).
 Fields 51 and 58 are undocumented.
 Drags and WKWebView button clicks arrived only after private focus-without-raise activation.
 Calculator and Electron accepted background keyboard events.
@@ -87,13 +87,13 @@ An unverified event fallback would therefore report success when no action occur
 Pointer actions have no event fallback until an event path verifies its outcome.
 
 **Secondary click.**
-The helper performs `AXShowMenu` on the nearest element up the hit chain that offers it.
-AppKit offers a secondary click to the hit view and then to each superview, so this owner matches the menu a real click opens.
-An app that opens the menu tracks it until the menu closes.
-The action's reply therefore times out (`kAXErrorCannotComplete`) while the menu is open.
-The reply is abandoned after 0.5 s, and a new `kCGPopUpMenuWindowLevel` window owned by the app decides the outcome.
-If no such window appears within 1 s, the click fails with `context-menu-not-observed`.
-The open menu is a child of its owner in the app's tree, so the next snapshot shows its items and a press picks one.
+The helper performs `AXShowMenu` on the nearest element up the hit chain (at most 32 levels) that offers it.
+Unlike a press, the walk crosses containers, which can own a menu, as AppKit consults each superview.
+Parity with a real click outside SwiftUI is unmeasured; an `NSTableView` menu may report no clicked row.
+The app tracks the open menu and does not answer the action (`kAXErrorCannotComplete`).
+So the reply is abandoned after 0.5 s, and a new app-owned `kCGPopUpMenuWindowLevel` window within 1 s decides success.
+Otherwise the click fails with `context-menu-not-observed`.
+The open menu is in the owner's subtree, so a snapshot shows its items and a press picks one.
 Measurements: `docs/evidence/macos-native-context-menu-2026-10-26.md`.
 
 **Target resolution.**
@@ -140,6 +140,9 @@ A persistent pointer would require a long-lived helper.
 - **Suppress Automation Mode.**
   `automationmodetool` removes the authentication prompt, not the overlay.
   The runner still controls the pointer.
+- **Secondary click through posted pointer events.**
+  On macOS 27 it needs the unexported `CGEventSetWindowLocation`, and a dropped post still reports success.
+  `AXShowMenu` has an observable outcome, the menu window.
 - **Private SkyLight events through `SLEventPostToPid` or focus-without-raise.**
   `SLEventPostToPid` delivered no additional events beyond public `CGEventPostToPid` with the same fields (#3213).
   Focus-without-raise through `SLPSPostEventRecordTo` made the target AppKit-active while the frontmost app retained user keystrokes.
