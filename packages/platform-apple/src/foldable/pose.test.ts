@@ -1,20 +1,17 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 
-const { FOLD_HELPER } = vi.hoisted(() => ({ FOLD_HELPER: { path: '/cache/fold-helper' } }));
+const { FOLD_HELPER } = vi.hoisted(() => ({
+  FOLD_HELPER: { setPose: vi.fn(), readHingeAngle: vi.fn(), readPanelPayload: vi.fn() },
+}));
 
 vi.mock('../core/display-inventory.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/display-inventory.ts')>();
   return { ...actual, queryAppleDisplayInventory: vi.fn() };
 });
-vi.mock('./guest-readback.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./guest-readback.ts')>();
-  return { ...actual, readSimulatorHingeAngle: vi.fn() };
+vi.mock('./fold-helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./fold-helper.ts')>();
+  return { ...actual, openFoldHelper: vi.fn(async () => FOLD_HELPER) };
 });
-
-vi.mock('./simulator-hid.ts', () => ({ sendSimulatorFoldPose: vi.fn() }));
-vi.mock('./fold-helper-cache.ts', () => ({
-  ensureFoldHelperBinary: vi.fn(async () => FOLD_HELPER),
-}));
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
   return { ...actual, emitDiagnostic: vi.fn() };
@@ -28,15 +25,13 @@ import {
   type AppleDeviceDisplay,
 } from '../core/display-inventory.ts';
 import { IOS_FOLD_POSE_READ_INTERVAL_MS, IOS_FOLD_POSE_SETTLE_ATTEMPTS } from '../core/config.ts';
-import { readSimulatorHingeAngle } from './guest-readback.ts';
-import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
-import { sendSimulatorFoldPose } from './simulator-hid.ts';
+import { openFoldHelper } from './fold-helper.ts';
 import { setAppleFoldPose } from './pose.ts';
 
 const mockInventory = vi.mocked(queryAppleDisplayInventory);
-const mockHinge = vi.mocked(readSimulatorHingeAngle);
-const mockEnsureHelper = vi.mocked(ensureFoldHelperBinary);
-const mockSend = vi.mocked(sendSimulatorFoldPose);
+const mockHinge = FOLD_HELPER.readHingeAngle;
+const mockOpenHelper = vi.mocked(openFoldHelper);
+const mockSend = FOLD_HELPER.setPose;
 
 const duo: DeviceInfo = {
   platform: 'apple',
@@ -89,7 +84,7 @@ function queueBudgetReadings(fill: (index: number) => number, last: readonly num
 beforeEach(() => {
   mockInventory.mockReset();
   mockHinge.mockReset();
-  mockEnsureHelper.mockClear();
+  mockOpenHelper.mockClear();
   mockSend.mockReset();
   mockSend.mockResolvedValue(undefined);
 });
@@ -107,17 +102,16 @@ test('sends the simulator HID pose and reports the pose the guest hinge read bac
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
 
-  expect(mockSend).toHaveBeenCalledWith(duo, FOLD_HELPER, 'open', undefined);
+  expect(mockSend).toHaveBeenCalledWith('open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
   // Reads are spaced so two samples of a moving hinge cannot land together; the first is not delayed.
   // One helper serves the panel reads, the dispatch, and every hinge read: resolving it per read
   // would repeat its toolchain probe.
-  expect(mockEnsureHelper).toHaveBeenCalledTimes(1);
-  expect(mockHinge.mock.calls.every(([, helper]) => helper === FOLD_HELPER)).toBe(true);
+  expect(mockOpenHelper).toHaveBeenCalledTimes(1);
   expect(mockInventory.mock.calls.every(([, options]) => options.foldHelper === FOLD_HELPER)).toBe(
     true,
   );
-  expect(mockHinge.mock.calls.map(([, , options]) => options?.windowMs)).toEqual([
+  expect(mockHinge.mock.calls.map(([options]) => options?.windowMs)).toEqual([
     0,
     IOS_FOLD_POSE_READ_INTERVAL_MS,
   ]);
@@ -192,7 +186,7 @@ test('sends half-open and reports it only once the hinge has stopped', async () 
     hingeAngleDegrees: 130,
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
-  expect(mockSend).toHaveBeenCalledWith(duo, FOLD_HELPER, 'half-open', undefined);
+  expect(mockSend).toHaveBeenCalledWith('half-open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(3);
 });
 
@@ -376,7 +370,7 @@ test('reports a custom final angle only after it reaches and holds that angle', 
     pose: 'half-open',
     hingeAngleDegrees: 100,
   });
-  expect(mockSend).toHaveBeenCalledWith(duo, FOLD_HELPER, keyframes, undefined);
+  expect(mockSend).toHaveBeenCalledWith(keyframes, undefined);
 });
 
 test.each([
@@ -418,7 +412,7 @@ test('reports a dispatched but unverifiable pose when the first hinge read retur
       screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
     }),
   });
-  expect(mockSend).toHaveBeenCalledWith(duo, FOLD_HELPER, 'open', undefined);
+  expect(mockSend).toHaveBeenCalledWith('open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(1);
 });
 

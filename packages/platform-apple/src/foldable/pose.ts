@@ -20,9 +20,7 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
-import { ensureFoldHelperBinary, type FoldHelperBinary } from './fold-helper-cache.ts';
-import { HINGE_ANGLE_NO_SAMPLE_REASON, readSimulatorHingeAngle } from './guest-readback.ts';
-import { sendSimulatorFoldPose } from './simulator-hid.ts';
+import { HINGE_ANGLE_NO_SAMPLE_REASON, openFoldHelper, type FoldHelper } from './fold-helper.ts';
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
@@ -48,14 +46,14 @@ export async function setAppleFoldPose(
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
   // One helper serves the scoped panel reads, the dispatch, and every hinge read.
-  const helper = await ensureFoldHelperBinary({ signal: options.signal });
+  const helper = await openFoldHelper(device, { signal: options.signal });
   const inventory = await queryAppleDisplayInventory(device, {
     signal: options.signal,
     foldHelper: helper,
   });
   requireFoldableInventory(device, inventory);
 
-  await sendSimulatorFoldPose(device, helper, intent.keyframes ?? pose, options.signal);
+  await helper.setPose(intent.keyframes ?? pose, options.signal);
   emitDiagnostic({
     level: 'info',
     phase: 'apple_fold_pose_dispatched',
@@ -83,7 +81,7 @@ function isHingeNoSample(error: unknown): boolean {
  */
 async function dispatchedUnverifiedPoseError(
   device: DeviceInfo,
-  helper: FoldHelperBinary,
+  helper: FoldHelper,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle: number | undefined,
@@ -135,7 +133,7 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
  */
 async function awaitHingePose(
   device: DeviceInfo,
-  helper: FoldHelperBinary,
+  helper: FoldHelper,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle?: number,
@@ -146,7 +144,7 @@ async function awaitHingePose(
     signal?.throwIfAborted();
     previous = observed;
     try {
-      observed = await readSimulatorHingeAngle(device, helper, {
+      observed = await helper.readHingeAngle({
         signal,
         windowMs: attempt > 1 ? IOS_FOLD_POSE_READ_INTERVAL_MS : 0,
       });
@@ -274,7 +272,7 @@ function unsettledPoseError(
 
 async function readLitPanel(
   device: DeviceInfo,
-  foldHelper: FoldHelperBinary,
+  foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
   const inventory = await queryAppleDisplayInventory(device, { signal, foldHelper });

@@ -180,8 +180,8 @@ static NSString *backlightStateName(long state) {
 
 // The integrated panels in the shape of `devicectl device info displays`, read from the same guest
 // sources dtdeviceinfod uses: CADisplay for identity and geometry, BLSBacklight for panel power.
-// `integratedCount` counts every built-in panel, including one whose facts could not be read, so
-// the host can tell a short table from a single-panel device.
+// Every built-in panel gets an entry; a fact that cannot be read is omitted from its entry, so the
+// host sees a partial panel instead of a missing one.
 static int readPanels(void) {
   dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_NOW);
   dlopen("/System/Library/PrivateFrameworks/BacklightServices.framework/BacklightServices", RTLD_NOW);
@@ -195,7 +195,6 @@ static int readPanels(void) {
   Class referenceClass = NSClassFromString(@"BLSDisplayReference");
   id mainDisplay = sendObject(displayClass, @selector(mainDisplay));
   NSMutableArray *panels = [NSMutableArray array];
-  NSUInteger integratedCount = 0;
   for (id display in displays) {
     if (!responds(display, @selector(displayType))) {
       fprintf(stderr, "CADisplay cannot classify its displays in this simulator runtime\n");
@@ -205,30 +204,32 @@ static int readPanels(void) {
     if (((long (*)(id, SEL))objc_msgSend)(display, @selector(displayType)) != 0) continue;
     if (responds(display, @selector(isExternal)) &&
         ((BOOL (*)(id, SEL))objc_msgSend)(display, @selector(isExternal))) continue;
-    integratedCount += 1;
-    if (!responds(display, @selector(nativeSize)) || !responds(display, @selector(pointScale)) ||
-        !responds(display, @selector(displayId))) continue;
-    CGSize size = ((CGSize (*)(id, SEL))objc_msgSend)(display, @selector(nativeSize));
+    NSMutableDictionary *panel = [@{
+      @"type": @{@"integrated": @{}},
+      @"primary": @([display isEqual:mainDisplay]),
+    } mutableCopy];
     NSString *name = sendObject(display, @selector(name));
-    if (size.width <= 0 || size.height <= 0 || ![name isKindOfClass:NSString.class]) continue;
+    if ([name isKindOfClass:NSString.class]) panel[@"name"] = name;
+    if (responds(display, @selector(displayId))) {
+      panel[@"displayId"] = @(((unsigned (*)(id, SEL))objc_msgSend)(display, @selector(displayId)));
+    }
+    if (responds(display, @selector(nativeSize))) {
+      CGSize size = ((CGSize (*)(id, SEL))objc_msgSend)(display, @selector(nativeSize));
+      panel[@"nativeSize"] = @[@(size.width), @(size.height)];
+    }
+    if (responds(display, @selector(pointScale))) {
+      panel[@"pointScale"] = @(((unsigned long (*)(id, SEL))objc_msgSend)(display, @selector(pointScale)));
+    }
+    NSString *orientation = sendObject(display, @selector(currentOrientation));
+    if ([orientation isKindOfClass:NSString.class]) panel[@"currentOrientation"] = orientation;
     id reference = sendObjectWith(referenceClass, @selector(referenceForCADisplay:), display);
     id backlight = reference ? sendObjectWith(backlightClass, @selector(sharedBacklightForDisplay:), reference) : nil;
-    NSString *backlightState = responds(backlight, @selector(backlightState))
+    panel[@"backlightState"] = responds(backlight, @selector(backlightState))
         ? backlightStateName(((long (*)(id, SEL))objc_msgSend)(backlight, @selector(backlightState)))
         : @"unknown";
-    NSString *orientation = sendObject(display, @selector(currentOrientation));
-    [panels addObject:@{
-      @"name": name,
-      @"displayId": @(((unsigned (*)(id, SEL))objc_msgSend)(display, @selector(displayId))),
-      @"nativeSize": @[@(size.width), @(size.height)],
-      @"pointScale": @(((unsigned long (*)(id, SEL))objc_msgSend)(display, @selector(pointScale))),
-      @"currentOrientation": [orientation isKindOfClass:NSString.class] ? orientation : @"unknown",
-      @"primary": @([display isEqual:mainDisplay]),
-      @"backlightState": backlightState,
-      @"type": @{@"integrated": @{}},
-    }];
+    [panels addObject:panel];
   }
-  return printJSON(@{@"version": @1, @"integratedCount": @(integratedCount), @"displays": panels}) ? 0 : 1;
+  return printJSON(@{@"version": @1, @"displays": panels}) ? 0 : 1;
 }
 
 int main(int argc, const char *argv[]) {

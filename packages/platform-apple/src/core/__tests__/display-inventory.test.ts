@@ -683,7 +683,6 @@ describe('scoped simulator panel table', () => {
   /** Verbatim fold helper `panels` output for an open iPhone Duo in a scoped set. */
   const GUEST_PANELS_OPEN = JSON.stringify({
     version: 1,
-    integratedCount: 2,
     displays: [
       {
         primary: true,
@@ -732,18 +731,33 @@ describe('scoped simulator panel table', () => {
     assert.equal(mockRunXcrun.mock.calls.length, 0);
   });
 
-  test('reads with the fold helper the caller already resolved', async () => {
-    mockRunSimctlForDevice.mockResolvedValueOnce({
-      exitCode: 0,
-      stdout: GUEST_PANELS_OPEN,
-      stderr: '',
-    });
+  test('reads with the fold helper the caller already opened', async () => {
     vi.mocked(ensureFoldHelperBinary).mockClear();
+    const readPanelPayload = vi.fn(async () => ({
+      result: { displays: (JSON.parse(GUEST_PANELS_OPEN) as { displays: unknown[] }).displays },
+    }));
+    const foldHelper = { setPose: vi.fn(), readHingeAngle: vi.fn(), readPanelPayload };
 
-    await queryAppleDisplayInventory(scopedDuo, { foldHelper: { path: '/fold/resolved' } });
+    const inventory = await queryAppleDisplayInventory(scopedDuo, { foldHelper });
 
+    assert.equal(inventory.activeDisplay?.name, 'LCD-1');
+    assert.equal(readPanelPayload.mock.calls.length, 1);
     assert.equal(vi.mocked(ensureFoldHelperBinary).mock.calls.length, 0);
-    assert.equal(mockRunSimctlForDevice.mock.calls[0]?.[1]?.[2], '/fold/resolved');
+    assert.equal(mockRunSimctlForDevice.mock.calls.length, 0);
+  });
+
+  test('applies the same rule to a CoreDevice table whose second panel does not parse', async () => {
+    const [outer, inner] = IPHONE_DUO_CLOSED.result.displays;
+    const { displayId: _displayId, ...innerWithoutId } = inner!;
+    mockReadHostTextFile.mockResolvedValue(
+      JSON.stringify({ result: { displays: [outer, innerWithoutId] } }),
+    );
+
+    await assert.rejects(resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'capture-panel-unidentified');
+      return true;
+    });
   });
 
   test('treats a blank set path as the default set, as simctl does', async () => {
@@ -755,19 +769,21 @@ describe('scoped simulator panel table', () => {
     assert.ok(mockRunXcrun.mock.calls.some(([args]) => args.includes('displays')));
   });
 
-  function guestPanels(integratedCount: number, keep: number): string {
+  /** The open-Duo guest table, keeping `keep` panels and dropping the native size of `broken`. */
+  function guestPanels(broken: number, keep = 2): string {
     const payload = JSON.parse(GUEST_PANELS_OPEN) as { displays: Record<string, unknown>[] };
-    return JSON.stringify({
-      ...payload,
-      integratedCount,
-      displays: payload.displays.slice(0, keep),
+    const displays = payload.displays.slice(0, keep).map((panel, index) => {
+      if (index >= broken) return panel;
+      const { nativeSize: _nativeSize, ...partial } = panel;
+      return partial;
     });
+    return JSON.stringify({ ...payload, displays });
   }
 
-  test('refuses capture when the guest saw two panels but could read only one', async () => {
-    // The helper omits an integrated panel whose facts it cannot read, so the table is short. One
-    // readable panel out of two seen is not single-panel evidence, so capture never goes implicit.
-    for (const stdout of [guestPanels(2, 1), guestPanels(2, 0)]) {
+  test('refuses capture when the guest lists two panels but not both parse', async () => {
+    // The helper lists every integrated panel and omits a fact it cannot read. One readable panel
+    // out of two listed is not single-panel evidence, so capture never goes implicit.
+    for (const stdout of [guestPanels(1), guestPanels(2)]) {
       mockRunSimctlForDevice.mockResolvedValueOnce({ exitCode: 0, stdout, stderr: '' });
       await assert.rejects(resolveAppleCaptureTarget(scopedDuo), (error: unknown) => {
         assert.ok(error instanceof AppError);
@@ -777,10 +793,10 @@ describe('scoped simulator panel table', () => {
     }
   });
 
-  test('keeps the inventory unresolved when the guest read no panel of the one it saw', async () => {
+  test('keeps the inventory unresolved when the one listed panel does not parse', async () => {
     mockRunSimctlForDevice.mockResolvedValueOnce({
       exitCode: 0,
-      stdout: guestPanels(1, 0),
+      stdout: guestPanels(1, 1),
       stderr: '',
     });
 
@@ -790,7 +806,7 @@ describe('scoped simulator panel table', () => {
       mockEmitDiagnostic.mock.calls.some(
         ([event]) =>
           event.phase === 'apple_display_inventory_unresolved' &&
-          (event.data as { reason?: string }).reason === 'guest-panels-incomplete',
+          (event.data as { reason?: string }).reason === 'empty-display-list',
       ),
     );
   });
@@ -798,10 +814,7 @@ describe('scoped simulator panel table', () => {
   test.each([
     ['a failed helper', { exitCode: 3, stdout: '', stderr: 'CADisplay is not available' }],
     ['another schema version', { exitCode: 0, stdout: '{"version":2,"displays":[]}', stderr: '' }],
-    [
-      'a table without its panel count',
-      { exitCode: 0, stdout: '{"version":1,"displays":[]}', stderr: '' },
-    ],
+    ['an empty table', { exitCode: 0, stdout: '{"version":1,"displays":[]}', stderr: '' }],
   ])('keeps the inventory unresolved for %s', async (_label, result) => {
     // Both reads below see the same helper answer.
     mockRunSimctlForDevice.mockResolvedValue(result);

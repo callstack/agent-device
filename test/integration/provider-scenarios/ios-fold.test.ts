@@ -187,7 +187,7 @@ function createFoldLedgerAppleToolProvider(params: {
   const ledger: FoldLedgerCall[] = [];
   let hingeReads = 0;
   const ok = { stdout: '', stderr: '', exitCode: 0 };
-  // Every real call on the fold route (packages/platform-apple/src/foldable/simulator-hid.ts,
+  // Every real call on the fold route (packages/platform-apple/src/foldable/fold-helper.ts,
   // core/tool-provider.ts, core/simctl.ts) carries a bounded timeoutMs. A call reaching this fake
   // with none is not a worst case the envelope assertion below can see, so it must fail the test
   // rather than cost 0 virtual ms.

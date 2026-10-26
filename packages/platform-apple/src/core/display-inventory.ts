@@ -8,7 +8,7 @@ import {
   IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
   IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS,
 } from './config.ts';
-import type { FoldHelperBinary } from '../foldable/fold-helper-cache.ts';
+import type { FoldHelper } from '../foldable/fold-helper.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
 import { simulatorAddressFor } from './simctl.ts';
 
@@ -92,8 +92,8 @@ type CoreDeviceDisplayPayload = {
 type AppleDisplayInventoryOptions = {
   timeoutMs?: number;
   signal?: AbortSignal;
-  /** A fold helper the caller already resolved, so a scoped read does not resolve it again. */
-  foldHelper?: FoldHelperBinary;
+  /** A fold helper the caller already opened, so a scoped read does not build or probe it again. */
+  foldHelper?: FoldHelper;
 };
 
 const DISPLAYS_UNSUPPORTED_HINT =
@@ -115,9 +115,24 @@ export async function queryAppleDisplayInventory(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
-  if (simulatorAddressFor(device).simulatorSetPath) {
-    return await queryScopedSimulatorDisplayInventory(device, options);
+  const table = simulatorAddressFor(device).simulatorSetPath
+    ? await readGuestPanelTable(device, options)
+    : await readCoreDevicePanelTable(device, options);
+  if (!table.ok) {
+    emitUnresolvedDiagnostic(device, table.reason, table.detail);
+    return unresolvedInventory();
   }
+  return inventoryFromPanelTable(device, table.payload);
+}
+
+type PanelTableRead =
+  | { ok: true; payload: unknown }
+  | { ok: false; reason: string; detail: string };
+
+async function readCoreDevicePanelTable(
+  device: DeviceInfo,
+  options: AppleDisplayInventoryOptions,
+): Promise<PanelTableRead> {
   try {
     const outcome = await runIosDevicectlJsonRequest({
       jsonPrefix: 'agent-device-apple-displays',
@@ -125,67 +140,82 @@ export async function queryAppleDisplayInventory(
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
       signal: options.signal,
     });
-    if (!outcome.ok) {
-      emitUnresolvedDiagnostic(device, outcome.reason, outcome.result.stderr.trim());
-      return unresolvedInventory();
-    }
-    const displays = parseCoreDeviceDisplays(outcome.payload);
-    if (displays.length === 0) {
-      emitUnresolvedDiagnostic(device, 'empty-display-list', '');
-      return unresolvedInventory();
-    }
-    return buildInventory(displays);
+    if (outcome.ok) return { ok: true, payload: outcome.payload };
+    return { ok: false, reason: outcome.reason, detail: outcome.result.stderr.trim() };
   } catch (error) {
     // exec classifies its own kills, so a probe that never answered is told apart
     // from a toolchain that refused the subcommand.
-    emitUnresolvedDiagnostic(
-      device,
-      isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed',
-      error instanceof Error ? error.message : String(error),
-    );
-    return unresolvedInventory();
+    return probeFailure(error, isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed');
   }
 }
 
 /**
  * CoreDevice resolves a simulator only in the default device set, so a scoped simulator's panel
  * table comes from the fold helper inside the guest. It reads the same CADisplay and BLSBacklight
- * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape, and counts every
- * integrated panel it saw. A short table is never single-panel evidence: with two or more panels
- * seen it is a multi-panel device whose capture panel is unidentified, otherwise it is unresolved.
+ * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape.
  */
-async function queryScopedSimulatorDisplayInventory(
+async function readGuestPanelTable(
   device: DeviceInfo,
   options: AppleDisplayInventoryOptions,
-): Promise<AppleDisplayInventory> {
+): Promise<PanelTableRead> {
   // The first read on a host also builds the helper; the budget covers that build too.
   const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
   try {
-    const { readSimulatorPanelPayload } = await import('../foldable/guest-readback.ts');
-    const payload = await readSimulatorPanelPayload(device, {
+    const { openFoldHelper } = await import('../foldable/fold-helper.ts');
+    const helper = options.foldHelper ?? (await openFoldHelper(device, { signal }));
+    const payload = await helper.readPanelPayload({
       signal,
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
-      helper: options.foldHelper,
     });
-    const displays = parseCoreDeviceDisplays(payload);
-    if (displays.length > 0 && displays.length === payload.integratedCount) {
-      return buildInventory(displays);
-    }
-    if (payload.integratedCount >= 2) {
-      return { displays, multiScreen: true, ambiguous: true, unresolved: false };
-    }
-    emitUnresolvedDiagnostic(device, 'guest-panels-incomplete', '');
-    return unresolvedInventory();
+    return { ok: true, payload };
   } catch (error) {
     options.signal?.throwIfAborted();
-    emitUnresolvedDiagnostic(
-      device,
-      isCommandTimeoutError(error) || budget.aborted ? 'probe-timed-out' : 'guest-panels-failed',
-      error instanceof Error ? error.message : String(error),
-    );
-    return unresolvedInventory();
+    const timedOut = isCommandTimeoutError(error) || budget.aborted;
+    return probeFailure(error, timedOut ? 'probe-timed-out' : 'guest-panels-failed');
   }
+}
+
+function probeFailure(error: unknown, reason: string): PanelTableRead {
+  return { ok: false, reason, detail: error instanceof Error ? error.message : String(error) };
+}
+
+/**
+ * Both sources list one entry per integrated panel, so a panel the parser drops is never
+ * single-panel evidence: with two or more integrated entries the device is multi-panel whatever
+ * parsed, and its capture refuses when no parsed panel identifies the one to name.
+ */
+function inventoryFromPanelTable(device: DeviceInfo, payload: unknown): AppleDisplayInventory {
+  const displays = parseCoreDeviceDisplays(payload);
+  const integratedEntries = countIntegratedEntries(payload);
+  const parsedIntegrated = displays.filter((display) => display.integrated).length;
+  if (parsedIntegrated === integratedEntries && displays.length > 0)
+    return buildInventory(displays);
+  if (integratedEntries >= 2) {
+    return {
+      displays: displays.filter((display) => display.integrated),
+      multiScreen: true,
+      ambiguous: true,
+      unresolved: false,
+    };
+  }
+  emitUnresolvedDiagnostic(
+    device,
+    displays.length === 0 ? 'empty-display-list' : 'incomplete-panel-table',
+    '',
+  );
+  return unresolvedInventory();
+}
+
+function countIntegratedEntries(payload: unknown): number {
+  const entries = (payload as CoreDeviceDisplayPayload | null | undefined)?.result?.displays;
+  if (!Array.isArray(entries)) return 0;
+  return entries.filter(
+    (entry) =>
+      entry !== null &&
+      typeof entry === 'object' &&
+      isIntegratedDisplayType((entry as CoreDeviceDisplayEntry).type),
+  ).length;
 }
 
 function emitUnresolvedDiagnostic(device: DeviceInfo, reason: string, detail: string): void {
