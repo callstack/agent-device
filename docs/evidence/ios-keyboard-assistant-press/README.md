@@ -106,12 +106,16 @@ On an iPad Pro 11-inch (M4) simulator, iOS 27.0, portrait:
   `Assistant actions: 1`. The button is inside the measured band and above the keys.
 - AX capture exposes `TUISystemInputAssistantView`; XCTest instead reports an `Other`
   node identified as `SystemInputAssistantView`. Both representations are covered.
+- Scoped XCTest capture retained only the app button with `keyboardOwned: true`. Its
+  CLI press succeeded, and a full follow-up capture showed `Assistant actions: 1` after
+  relaunch. The new native projection regression fails without retained membership
+  for both raw and regular scoped captures.
 - AX-backed CLI press also succeeded and the label became `Assistant actions: 2`.
 - Same focused Vitest command on base `81266c2598b162d373703a921fdfedaee97ea00f`,
   with only regression tests/fixtures applied: **2 failed, 19 passed**. With this fix:
   **21 passed**.
 - Native keyboard XCTest selection: **15 passed**; shared presentation Swift tests:
-  **23 passed**. iOS and macOS runner builds passed.
+  **24 passed**. iOS and macOS runner builds passed.
 
 These are local execution results, not a GitHub native-lane pass. PR workflows require
 maintainer approval; no passing native CI result is claimed.

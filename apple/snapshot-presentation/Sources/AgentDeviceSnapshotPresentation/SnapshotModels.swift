@@ -46,6 +46,8 @@ public struct RawAXNode: Equatable {
   public private(set) var parentIndex: Int?
   public private(set) var hiddenContentAbove: Bool?
   public private(set) var hiddenContentBelow: Bool?
+  /// Tap-surface membership retained when presentation removes the keyboard host.
+  public var keyboardOwned: Bool?
   public var actions: [String]?
 
   public init(
@@ -243,7 +245,18 @@ public struct SnapshotAcquisition {
     viewport: SnapshotViewport
   ) {
     self.hint = hint
-    self.nodes = nodes
+    // Acquisition precedes scoping and interactive projection, which can remove these hosts.
+    var keyboardSurfaceIndexes = Set<Int>()
+    self.nodes = nodes.map { captured in
+      var node = captured
+      if node.type == "Keyboard" || node.type == "Key"
+        || (node.type == "Other" && node.identifier == "SystemInputAssistantView")
+        || node.parentIndex.map({ keyboardSurfaceIndexes.contains($0) }) == true {
+        keyboardSurfaceIndexes.insert(node.index)
+        node.keyboardOwned = true
+      }
+      return node
+    }
     self.truncated = truncated
     self.effectiveDepth = effectiveDepth
     self.customActions = customActions
@@ -301,6 +314,7 @@ public struct PresentedNode: Codable, Equatable {
   public let parentIndex: Int?
   public let hiddenContentAbove: Bool?
   public let hiddenContentBelow: Bool?
+  public let keyboardOwned: Bool?
   public let actions: [String]?
 
   internal init(
@@ -325,6 +339,7 @@ public struct PresentedNode: Codable, Equatable {
     self.parentIndex = parentIndex ?? raw.parentIndex
     self.hiddenContentAbove = raw.hiddenContentAbove
     self.hiddenContentBelow = raw.hiddenContentBelow
+    self.keyboardOwned = raw.keyboardOwned
     self.actions = raw.actions
   }
 
