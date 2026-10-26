@@ -470,28 +470,16 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'MCP registry metadata must stay in sync',
     owns: (file) => file === 'server.json' || file === 'smithery.yaml',
   },
-  // image-size ships no fixed release for its parser DoS advisories; the in-tree
+  // image-size ships no fixed version for its parser DoS advisories; the in-tree
   // pnpm patch is the mitigation, and only its defining files own the proof.
-  // The same suite proves the zod override moves @expo/cli onto a patched zod.
-  // Both tests read the test-app lockfile, so it owns the proof too.
   {
     check: 'test-app-security',
     rule: 'own:test-app-security',
-    detail: 'the test-app security suite proves the patch and override mitigations',
+    detail: 'the image-size parser mitigation is proven by the test-app security suite',
     owns: (file) =>
       file.startsWith('examples/test-app/patches/') ||
       file.startsWith('examples/test-app/security/') ||
-      file === 'examples/test-app/pnpm-workspace.yaml' ||
-      file === 'examples/test-app/pnpm-lock.yaml',
-  },
-  // The test-app lockfile rewires the isolated dependency graph that the
-  // test-app typecheck compiles; a lock-only bump must not fail open to the
-  // full set nor select nothing.
-  {
-    check: 'test-app-typecheck',
-    rule: 'own:test-app-lock',
-    detail: 'the test-app lockfile rewires the graph that the test-app typecheck compiles',
-    owns: (file) => file === 'examples/test-app/pnpm-lock.yaml',
+      file === 'examples/test-app/pnpm-workspace.yaml',
   },
   // In-package payload captures: a recorded tool response checked in under a package's fixture
   // directory (`packages/*/**/__tests__/fixtures/*.json`, or a `fixtures/` dir beside the module that

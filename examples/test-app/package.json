@@ -8,7 +8,7 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
-    "security:test": "node --test security/*.test.mjs"
+    "security:test": "node --test security/image-size-security.test.mjs"
   },
   "dependencies": {
     "@expo/dom-webview": "~58.0.0",

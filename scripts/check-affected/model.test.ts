@@ -249,7 +249,7 @@ test('test app source selects root lint and format plus its isolated typecheck',
   ]);
 });
 
-test('the test-app security mitigations are selected when their defining files change', () => {
+test('the image-size parser mitigation is selected when its defining files change', () => {
   for (const file of [
     'examples/test-app/patches/image-size@1.2.1.patch',
     'examples/test-app/security/image-size-security.test.mjs',
@@ -262,13 +262,6 @@ test('the test-app security mitigations are selected when their defining files c
       `expected test-app-security for ${file}`,
     );
   }
-});
-
-test('the test-app lockfile selects the security proof and the typecheck it rewires', () => {
-  const result = plan(['examples/test-app/pnpm-lock.yaml']);
-  assert.equal(result.failOpen, false, 'the test-app lockfile must not fail open');
-  assert.ok(result.checks.includes('test-app-security'));
-  assert.ok(result.checks.includes('test-app-typecheck'));
 });
 
 test('unknown path fails open to the full check set', () => {
