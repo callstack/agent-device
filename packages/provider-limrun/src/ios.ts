@@ -13,6 +13,7 @@ import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
   type InstanceClient as LimrunIosClient,
+  type ElementTreeSource,
 } from '@limrun/api/ios-client';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,6 +35,7 @@ export type LimrunIosSession = {
   readonly ownership: LimrunInstanceOwnership;
   device: DeviceInfo;
   client: LimrunIosClient;
+  readonly elementTreeSource?: ElementTreeSource;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
   readonly token: string;
   readonly dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>;
@@ -58,6 +60,7 @@ export async function createLimrunIosSession(
     ownership: LimrunInstanceOwnership;
     device: DeviceInfo;
     apiUrl: string;
+    elementTreeSource?: ElementTreeSource;
     token: string;
   },
   dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>,
@@ -74,6 +77,7 @@ export async function createLimrunIosSession(
     ownership: options.ownership,
     device: options.device,
     client,
+    elementTreeSource: options.elementTreeSource,
     token: options.token,
     dependencies,
   };

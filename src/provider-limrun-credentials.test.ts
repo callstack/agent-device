@@ -59,3 +59,18 @@ test('reads LIMRUN_KEEP_ALIVE as an opt-in flag that never registers a runtime a
   expect(keepAlive({})).toBe(false);
   expect(readLimrunCredentials({ LIMRUN_KEEP_ALIVE: '1' })).toBeUndefined();
 });
+
+test('reads the explicit iOS snapshot source and rejects invalid choices', () => {
+  expect(
+    readLimrunCredentials({ ...IOS_ENV, LIMRUN_IOS_ELEMENT_TREE_SOURCE: 'xcuitest' })
+      ?.iosElementTreeSource,
+  ).toBe('xcuitest');
+  expect(
+    readLimrunCredentials({ ...IOS_ENV, LIMRUN_IOS_ELEMENT_TREE_SOURCE: 'accessibility' })
+      ?.iosElementTreeSource,
+  ).toBe('accessibility');
+  expect(readLimrunCredentials(IOS_ENV)?.iosElementTreeSource).toBeUndefined();
+  expect(() =>
+    readLimrunCredentials({ ...IOS_ENV, LIMRUN_IOS_ELEMENT_TREE_SOURCE: 'invalid' }),
+  ).toThrow(expect.objectContaining({ code: 'INVALID_ARGS' }));
+});

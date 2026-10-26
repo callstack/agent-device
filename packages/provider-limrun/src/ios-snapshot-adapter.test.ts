@@ -16,7 +16,7 @@ test('Limrun adapter returns the tree and shared viewport facts without presenti
     client: { ...session.client, elementTree },
   });
 
-  expect(elementTree).toHaveBeenCalledWith(undefined, { source: 'xcuitest' });
+  expect(elementTree).toHaveBeenCalledWith();
   expect(result.stage).toBe('acquired');
   expect(result.acquisition.producer).toBe('limrun-ios-tree');
   expect(result.acquisition.nodes.map((node) => node.label)).toEqual([

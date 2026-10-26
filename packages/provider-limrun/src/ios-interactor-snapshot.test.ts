@@ -22,9 +22,10 @@ test('limrun iOS snapshot stamps the xctest channel with its own producer', asyn
   expect(result.acquisition.nodes.map((node) => node.label)).toEqual([undefined, 'Continue']);
 });
 
-test('Limrun snapshot retains a non-accessibility React Native testID and its tap frame', async () => {
+test('Limrun XCTest snapshot retains a non-accessibility React Native testID and its tap frame', async () => {
   const session = {
     platform: 'ios',
+    elementTreeSource: 'xcuitest',
     client: {
       elementTree: async (_point?: unknown, options?: { source?: string }) => [
         {

@@ -1,4 +1,4 @@
-import type { LimrunInstanceAccess } from '@agent-device/provider-limrun';
+import type { LimrunInstanceAccess, LimrunRuntimeOptions } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
@@ -6,6 +6,7 @@ export type LimrunCredentials = Readonly<{
   apiKey?: string;
   region?: string;
   keepAlive?: boolean;
+  iosElementTreeSource?: LimrunRuntimeOptions['iosElementTreeSource'];
   instances?: LimrunInstanceAccess;
 }>;
 
@@ -77,6 +78,17 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
   const ios = readInstanceVars(env, INSTANCE_VARS.ios);
   const android = readInstanceVars(env, INSTANCE_VARS.android);
   if (!apiKey && !ios && !android) return undefined;
+  const iosElementTreeSource = readValue(env, 'LIMRUN_IOS_ELEMENT_TREE_SOURCE');
+  if (
+    iosElementTreeSource &&
+    iosElementTreeSource !== 'accessibility' &&
+    iosElementTreeSource !== 'xcuitest'
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'LIMRUN_IOS_ELEMENT_TREE_SOURCE must be accessibility or xcuitest.',
+    );
+  }
   const instances: LimrunInstanceAccess = {
     ios: ios && { apiUrl: ios.LIM_IOS_INSTANCE_URL, token: ios.LIM_IOS_INSTANCE_TOKEN },
     android: android && {
@@ -85,7 +97,13 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
       adbUrl: android.LIM_ANDROID_INSTANCE_ADB_URL,
     },
   };
-  return { apiKey, region, keepAlive, instances: ios || android ? instances : undefined };
+  return {
+    apiKey,
+    region,
+    keepAlive,
+    ...(iosElementTreeSource ? { iosElementTreeSource } : {}),
+    instances: ios || android ? instances : undefined,
+  };
 }
 
 function readInstanceVars<Name extends string>(

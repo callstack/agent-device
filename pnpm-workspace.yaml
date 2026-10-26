@@ -5,7 +5,7 @@ packages:
 pmOnFail: warn
 verifyDepsBeforeRun: warn
 allowBuilds:
-  '@limrun/api': true
+  '@limrun/api@https://codeload.github.com/limrun-inc/typescript-sdk/tar.gz/83370dfd407d15c3a841338209d7ac1bf45c16a1': true
   fallow: true
 minimumReleaseAgeExclude:
   - '@chenglou/freerange@0.0.4'
