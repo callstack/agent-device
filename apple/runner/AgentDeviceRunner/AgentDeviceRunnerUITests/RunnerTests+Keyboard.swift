@@ -88,27 +88,13 @@ enum RunnerKeyboardBandReason {
   static let budgetExhausted = "capture-plan-budget-exhausted"
 }
 
-/// Whether a keyboard's reported box can be a band at all. A zero-area or non-finite box is what an
-/// element XCTest cannot measure looks like.
-///
-/// Reads `origin` and `size` rather than the rect's own accessors: `CGRect.width` and `CGRect.height`
-/// standardize, so a box reported with a negative size answers them with a positive one and an
-/// unmeasurable element would ship as a measured band. The daemon's reader applies the same rule to
-/// the wire frame, so neither language can publish a band the other would refuse.
-func runnerKeyboardFrameIsUsable(_ frame: CGRect) -> Bool {
-  let size = frame.size
-  let origin = frame.origin
-  return [origin.x, origin.y, size.width, size.height].allSatisfy(\.isFinite)
-    && size.width > 0 && size.height > 0
-}
-
 /// Classifies a complete capture's keyboard observation; failed or timed-out captures never call it.
 func runnerKeyboardBandFact(
   exists: Bool,
   frame: CGRect
 ) -> RunnerKeyboardBandFact {
   guard exists else { return .absent }
-  guard runnerKeyboardFrameIsUsable(frame) else {
+  guard SnapshotGeometry.isPositiveFinite(frame) else {
     return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
   }
   return .visible(frame)
@@ -179,10 +165,11 @@ extension RunnerTests {
       if node.elementType == .keyboard {
         sawKeyboard = true
         // A stale keyboard in another window must not hide a valid captured keyboard.
-        if runnerKeyboardFrameIsUsable(node.frame), runnerKeyboardFrameIsUsable(frame) {
+        if SnapshotGeometry.isPositiveFinite(node.frame), SnapshotGeometry.isPositiveFinite(frame) {
           keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
         }
-      } else if node.identifier == "SystemInputAssistantView", runnerKeyboardFrameIsUsable(node.frame), runnerKeyboardFrameIsUsable(frame) {
+      } else if SnapshotKeyboardSurface.isInputAssistant(type: type, identifier: node.identifier),
+        SnapshotGeometry.isPositiveFinite(node.frame), SnapshotGeometry.isPositiveFinite(frame) {
         assistantFrame = assistantFrame.union(frame)
       }
       pending.append(contentsOf: node.children.map { ($0, space, type) })

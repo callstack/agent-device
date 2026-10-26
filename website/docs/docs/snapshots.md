@@ -359,10 +359,12 @@ participate in settle observations.
 Run `snapshot -i` again after ending editing before retrying a refused target.
 
 Android Appium nodes carry the reported native package in `bundleId`.
-Provider snapshot nodes include `keyboardOwned`: `true` identifies a keyboard-owned node; `false`
-means capture evaluated the node and found no keyboard ownership. Both decisions survive filtering
-and scoping. An omitted field means ownership was not evaluated. App-filled assistant hosts do not
-pass keyboard ownership to their descendants.
+Snapshot nodes can include `keyboardOwned`: `true` means the node belongs to the keyboard tap
+surface, including app controls hosted there; `false` means capture evaluated the node and found
+no membership. Both decisions survive filtering and scoping. An omitted field means membership
+was not evaluated. On native XCTest captures, an `Other` node identified as
+`SystemInputAssistantView` and its descendants belong to that surface even when the tree has no
+`Keyboard` node. App controls in the assistant remain part of settle observations.
 
 The Android keyboard band is the input method window's bounds, the box around the area it takes
 touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.

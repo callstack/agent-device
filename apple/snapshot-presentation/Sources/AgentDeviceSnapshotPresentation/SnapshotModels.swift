@@ -250,7 +250,7 @@ public struct SnapshotAcquisition {
     self.nodes = nodes.map { captured in
       var node = captured
       if node.type == "Keyboard" || node.type == "Key"
-        || (node.type == "Other" && node.identifier == "SystemInputAssistantView")
+        || SnapshotKeyboardSurface.isInputAssistant(type: node.type, identifier: node.identifier)
         || node.parentIndex.map({ keyboardSurfaceIndexes.contains($0) }) == true {
         keyboardSurfaceIndexes.insert(node.index)
         node.keyboardOwned = true

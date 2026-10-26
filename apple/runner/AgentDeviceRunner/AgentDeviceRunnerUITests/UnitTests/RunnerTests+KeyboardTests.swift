@@ -80,7 +80,7 @@ extension RunnerTests {
       .absent
     )
     let keyboard = ElementAttributesFixture(.keyboard, CGRect(x: 0, y: 600, width: 390, height: 244))
-    let unrelated = ElementAttributesFixture(.other, CGRect(x: 0, y: 100, width: 390, height: 44), identifier: "other-toolbar")
+    let unrelated = ElementAttributesFixture(.button, CGRect(x: 0, y: 100, width: 390, height: 44), identifier: "SystemInputAssistantView")
     XCTAssertEqual(
       captureKeyboardBandFact(snapshot: ElementAttributesFixture(.application, frame, children: [unrelated, keyboard]), viewport: .reported(box: frame), deadline: .distantFuture),
       .visible(keyboard.frame)
@@ -150,6 +150,8 @@ extension RunnerTests {
     let infinite = CGFloat.infinity
     let unusable: [CGRect] = [
       .zero,
+      .infinite,
+      CGRect(x: CGFloat.greatestFiniteMagnitude, y: 198, width: CGFloat.greatestFiniteMagnitude, height: 204),
       CGRect(x: 0, y: 198, width: 0, height: 204),
       CGRect(x: 0, y: 198, width: 874, height: -1),
       CGRect(x: 0, y: 198, width: -874, height: 204),
