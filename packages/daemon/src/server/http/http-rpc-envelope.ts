@@ -7,7 +7,6 @@ import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,
 } from '@agent-device/daemon-contracts/request-progress-protocol';
-import { statusCodeForNormalizedError } from '../http-errors.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -70,21 +69,10 @@ function jsonRpcCodeForNormalizedError(code: string): number {
   return code === 'INVALID_ARGS' ? -32602 : -32000;
 }
 
-function statusCodeForDaemonError(error: {
-  code: string;
-  details?: Record<string, unknown>;
-}): number {
-  if (error.code === 'DEVICE_IN_USE' && error.details?.reason === 'human_control_active') {
-    return 423;
-  }
-  return statusCodeForNormalizedError(error.code);
-}
-
 export {
   createRpcError,
   jsonRpcCodeForNormalizedError,
   sendJson,
-  statusCodeForDaemonError,
   writeProgressEnvelope,
   writeRpcResponseEnvelope,
 };

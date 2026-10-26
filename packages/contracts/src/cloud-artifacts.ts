@@ -48,6 +48,12 @@ export type DaemonArtifactInventoryEntry = {
   expiresAt: string;
   /** Display rotation a screenshot was rendered in; absent when the capture reported none. */
   displayRotation?: DeviceRotation;
+  /**
+   * Public name of the session that produced the artifact, without a tenant prefix. Present on an
+   * artifact the daemon registered outside a request reply, such as a recording kept when its
+   * leased session was torn down.
+   */
+  sessionName?: string;
 };
 
 export type DaemonArtifactsResult = {

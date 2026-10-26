@@ -151,3 +151,17 @@ test('/health names macos-app among the lease backends only on a macOS host', as
     Object.defineProperty(process, 'platform', platform);
   }
 });
+
+test('a lease allocation refused by a human-control hold answers 423', async (t) => {
+  await withServer(t, async (origin, registry) => {
+    await registry.putHumanControlHold({ kind: 'host' }, 'console', {
+      scope: { backend: 'macos-app', leaseProvider: 'proxy', deviceKey: BODY.deviceKey },
+    });
+    const refused = await put(origin, LEASE_ID, BODY);
+    assert.equal(refused.status, 423);
+    const body = (await refused.json()) as { code?: string; reason?: string };
+    assert.equal(body.code, 'DEVICE_IN_USE');
+    assert.equal(body.reason, 'human_control_active');
+    assert.deepEqual(registry.listActiveLeases(), []);
+  });
+});

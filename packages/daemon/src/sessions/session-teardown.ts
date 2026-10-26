@@ -203,7 +203,11 @@ export async function finishSessionScreenRecording(params: {
   sessionStore: SessionStore;
 }): Promise<void> {
   const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
-  if (binding.read()) await finishLiveScreenRecording({ binding, intent: 'disposal' });
+  if (!binding.read()) return;
+  const completion = await finishLiveScreenRecording({ binding, intent: 'disposal' });
+  if (!params.ref.session.lease) return;
+  const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
+  retainLeasedSessionRecording(params.ref, completion);
 }
 
 export async function finishSessionAudioProbe(params: {

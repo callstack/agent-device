@@ -184,6 +184,12 @@ export default defineConfig({
             // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
             // to survive packaging before the npm package ships unbuildable Swift.
             'scripts/__tests__/strip-swift-comments.test.ts',
+            // The publishing package guard's no-test-code predicates, over fixture paths and
+            // bytes: the gate itself can only watch a healthy package pass.
+            'scripts/__tests__/shipped-test-code.test.ts',
+            // The fixture-host class-name hook between the shipped host app and the unit-test
+            // fixtures file: a rename there must fail here, not fall back silently on devices.
+            'scripts/__tests__/runner-fixture-host-lookup.test.ts',
             // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
             // over two strings; the gate itself is what runs the packager and the Swift parse.
             'scripts/__tests__/packaged-runner-swift.test.ts',

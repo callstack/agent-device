@@ -76,6 +76,7 @@ Idle reap then shuts the daemon down within one more idle window.
 
 A session cannot outlive the lease under which it was opened.
 When the lease is released or expires, the daemon tears the session down under its execution locks and clears its device claim.
+Any teardown of a leased session, including `close`, finishes an active recording. A finished export at a remote temp path then belongs to the lease's tenant as a downloadable artifact, like the artifact of any `record stop` (ADR 0024 2.5).
 This applies even when the device no longer answers.
 A release is a tenant `lease_release` or a host `DELETE /admin/leases/<lease-id>`.
 The daemon sweeps for expired leases every second.
