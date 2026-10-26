@@ -23,6 +23,8 @@ For a simulator in a scoped set, run the cached fold helper: `xcrun simctl --set
   Until GHA supports the runtime, Duo coverage remains local.
   For a scoped set, also verify all three poses with `--ios-simulator-device-set` and a capture of the active panel.
   If the hinge read returns no sample, `fold` reports `fold-pose-dispatched-unverified`.
+  After a fresh boot, a closed hinge (0°) can keep the inner panel lit for more than 30 seconds.
+  The panel list and the capture then follow the inner panel. Fold again after the simulator settles.
   To examine the pose, compare the lit panel from the panel list.
   The lit panel is evidence only. It cannot separate `half-open` from `open`.
 - Touch overlays export at the captured track size.

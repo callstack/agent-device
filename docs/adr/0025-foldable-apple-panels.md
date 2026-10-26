@@ -56,7 +56,9 @@ It is the only reader of panel tables, and it selects the source.
   It resolves a simulator only in the default device set.
   For a simulator in a scoped set, the fold helper's `panels` mode is the screen authority.
   It emits the same entry shape from the guest sources that `dtdeviceinfod` relays to CoreDevice: `CADisplay` and `BLSBacklight`.
-  Every guest entry must parse. A partial table is unresolved, because a dropped panel is not single-panel evidence.
+  The guest also counts every integrated panel it saw, readable or not, because a dropped panel is not single-panel evidence.
+  If the table is short and two or more panels were seen, the device is multi-panel without a capture panel, so capture refuses with `capture-panel-unidentified`.
+  If the helper cannot run, the inventory is unresolved, as for an unanswered CoreDevice.
 - **Panel power.**
   `backlightState` is authoritative. `active` is only a fallback because real payloads can omit it.
   A single-panel iPhone 17 reports `backlightState: activeOn` without an `active` key.

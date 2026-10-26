@@ -13,7 +13,7 @@ const HINGE_ANGLE_NO_SAMPLE_HINT =
   "The fold helper's hinge read returned no valid CoreMotion sample. The stderr in the details names the cause, such as a simulator runtime without CMAngleManager.";
 
 /** The panel read returned no usable table; the details say why. */
-export const GUEST_PANELS_UNREADABLE_REASON = 'fold-helper-panels-unreadable';
+const GUEST_PANELS_UNREADABLE_REASON = 'fold-helper-panels-unreadable';
 
 const GUEST_READBACK_VERSION = 1;
 
@@ -46,16 +46,19 @@ export async function readSimulatorHingeAngle(
 }
 
 /**
- * Reads the simulator guest's integrated panels in the `devicectl device info displays` payload
- * shape (`{ result: { displays } }`), for a simulator CoreDevice cannot address.
+ * The simulator guest's integrated panels in the `devicectl device info displays` payload shape
+ * (`{ result: { displays } }`), and how many integrated panels the guest saw, readable or not.
  */
+export type SimulatorPanelPayload = { result: { displays: unknown[] }; integratedCount: number };
+
+/** Reads the guest panel table for a simulator CoreDevice cannot address. */
 export async function readSimulatorPanelPayload(
   device: DeviceInfo,
   options: { signal?: AbortSignal; timeoutMs: number },
-): Promise<{ result: { displays: unknown[] } }> {
+): Promise<SimulatorPanelPayload> {
   const result = await runFoldHelperObservation(device, 'panels', options);
-  const displays = result.exitCode === 0 ? parsePanelsReading(result.stdout) : undefined;
-  if (displays) return { result: { displays } };
+  const payload = result.exitCode === 0 ? parsePanelsReading(result.stdout) : undefined;
+  if (payload) return payload;
   throw new AppError(
     'COMMAND_FAILED',
     'The simulator reported no panel table',
@@ -105,7 +108,12 @@ export function parseHingeReading(stdout: string): number | undefined {
   return angle;
 }
 
-function parsePanelsReading(stdout: string): unknown[] | undefined {
-  const displays = readVersionedLine(stdout)?.displays;
-  return Array.isArray(displays) ? displays : undefined;
+function parsePanelsReading(stdout: string): SimulatorPanelPayload | undefined {
+  const reading = readVersionedLine(stdout);
+  const displays = reading?.displays;
+  const integratedCount = reading?.integratedCount;
+  if (!Array.isArray(displays)) return undefined;
+  if (typeof integratedCount !== 'number' || !Number.isInteger(integratedCount)) return undefined;
+  if (integratedCount < displays.length) return undefined;
+  return { result: { displays }, integratedCount };
 }

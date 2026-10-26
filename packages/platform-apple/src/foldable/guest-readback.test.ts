@@ -83,16 +83,20 @@ test('ignores a sample printed by a helper that then failed', async () => {
 test('wraps the guest panel table in the CoreDevice payload shape', async () => {
   const displays = [{ name: 'LCD', displayId: 1 }];
   const { value, calls } = await withHelperResult(
-    { stdout: JSON.stringify({ version: 1, displays }), exitCode: 0 },
+    { stdout: JSON.stringify({ version: 1, integratedCount: 2, displays }), exitCode: 0 },
     () => readSimulatorPanelPayload(scopedDuo, { timeoutMs: 5000 }),
   );
-  expect(value).toEqual({ result: { displays } });
+  expect(value).toEqual({ result: { displays }, integratedCount: 2 });
   expect(calls[0]?.args.at(-1)).toBe('panels');
   expect(calls[0]?.options).toMatchObject({ timeoutMs: 5000 });
 });
 
-test('refuses an unreadable guest panel table with its typed reason', async () => {
-  const { value } = await withHelperResult({ stdout: '{"version":1}', exitCode: 0 }, () =>
+test.each([
+  ['no table', '{"version":1}'],
+  ['no panel count', '{"version":1,"displays":[]}'],
+  ['fewer panels seen than listed', '{"version":1,"integratedCount":0,"displays":[{}]}'],
+])('refuses a guest panel table with %s with its typed reason', async (_label, stdout) => {
+  const { value } = await withHelperResult({ stdout, exitCode: 0 }, () =>
     readSimulatorPanelPayload(scopedDuo, { timeoutMs: 5000 }).catch((error: unknown) => error),
   );
   expect(value).toMatchObject({ details: { reason: 'fold-helper-panels-unreadable' } });

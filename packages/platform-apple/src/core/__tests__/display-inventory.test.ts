@@ -682,6 +682,7 @@ describe('scoped simulator panel table', () => {
   /** Verbatim fold helper `panels` output for an open iPhone Duo in a scoped set. */
   const GUEST_PANELS_OPEN = JSON.stringify({
     version: 1,
+    integratedCount: 2,
     displays: [
       {
         primary: true,
@@ -730,19 +731,37 @@ describe('scoped simulator panel table', () => {
     assert.equal(mockRunXcrun.mock.calls.length, 0);
   });
 
-  test('keeps the inventory unresolved when any guest panel entry fails to parse', async () => {
+  function guestPanels(integratedCount: number, keep: number): string {
     const payload = JSON.parse(GUEST_PANELS_OPEN) as { displays: Record<string, unknown>[] };
-    payload.displays[1] = { ...payload.displays[1], nativeSize: [0, 2853] };
+    return JSON.stringify({
+      ...payload,
+      integratedCount,
+      displays: payload.displays.slice(0, keep),
+    });
+  }
+
+  test('refuses capture when the guest saw two panels but could read only one', async () => {
+    // The helper omits an integrated panel whose facts it cannot read, so the table is short. One
+    // readable panel out of two seen is not single-panel evidence, so capture never goes implicit.
+    for (const stdout of [guestPanels(2, 1), guestPanels(2, 0)]) {
+      mockRunSimctlForDevice.mockResolvedValueOnce({ exitCode: 0, stdout, stderr: '' });
+      await assert.rejects(resolveAppleCaptureTarget(scopedDuo), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'capture-panel-unidentified');
+        return true;
+      });
+    }
+  });
+
+  test('keeps the inventory unresolved when the guest read no panel of the one it saw', async () => {
     mockRunSimctlForDevice.mockResolvedValueOnce({
       exitCode: 0,
-      stdout: JSON.stringify(payload),
+      stdout: guestPanels(1, 0),
       stderr: '',
     });
 
-    // One parsed panel out of two is not single-panel evidence.
     const inventory = await queryAppleDisplayInventory(scopedDuo, {});
     assert.equal(inventory.unresolved, true);
-    assert.equal(inventory.multiScreen, false);
     assert.ok(
       mockEmitDiagnostic.mock.calls.some(
         ([event]) =>
@@ -755,6 +774,10 @@ describe('scoped simulator panel table', () => {
   test.each([
     ['a failed helper', { exitCode: 3, stdout: '', stderr: 'CADisplay is not available' }],
     ['another schema version', { exitCode: 0, stdout: '{"version":2,"displays":[]}', stderr: '' }],
+    [
+      'a table without its panel count',
+      { exitCode: 0, stdout: '{"version":1,"displays":[]}', stderr: '' },
+    ],
   ])('keeps the inventory unresolved for %s', async (_label, result) => {
     mockRunSimctlForDevice.mockResolvedValueOnce(result);
 

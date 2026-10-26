@@ -141,8 +141,9 @@ export async function queryAppleDisplayInventory(
 /**
  * CoreDevice resolves a simulator only in the default device set, so a scoped simulator's panel
  * table comes from the fold helper inside the guest. It reads the same CADisplay and BLSBacklight
- * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape. Every entry must
- * parse: a dropped second panel would otherwise read as single-panel evidence.
+ * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape, and counts every
+ * integrated panel it saw. A short table is never single-panel evidence: with two or more panels
+ * seen it is a multi-panel device whose capture panel is unidentified, otherwise it is unresolved.
  */
 async function queryScopedSimulatorDisplayInventory(
   device: DeviceInfo,
@@ -158,11 +159,14 @@ async function queryScopedSimulatorDisplayInventory(
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
     });
     const displays = parseCoreDeviceDisplays(payload);
-    if (displays.length === 0 || displays.length !== payload.result.displays.length) {
-      emitUnresolvedDiagnostic(device, 'guest-panels-incomplete', '');
-      return unresolvedInventory();
+    if (displays.length > 0 && displays.length === payload.integratedCount) {
+      return buildInventory(displays);
     }
-    return buildInventory(displays);
+    if (payload.integratedCount >= 2) {
+      return { displays, multiScreen: true, ambiguous: true, unresolved: false };
+    }
+    emitUnresolvedDiagnostic(device, 'guest-panels-incomplete', '');
+    return unresolvedInventory();
   } catch (error) {
     options.signal?.throwIfAborted();
     emitUnresolvedDiagnostic(

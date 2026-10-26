@@ -171,6 +171,8 @@ static NSString *backlightStateName(long state) {
 
 // The integrated panels in the shape of `devicectl device info displays`, read from the same guest
 // sources dtdeviceinfod uses: CADisplay for identity and geometry, BLSBacklight for panel power.
+// `integratedCount` counts every built-in panel, including one whose facts could not be read, so
+// the host can tell a short table from a single-panel device.
 static int readPanels(void) {
   dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_NOW);
   dlopen("/System/Library/PrivateFrameworks/BacklightServices.framework/BacklightServices", RTLD_NOW);
@@ -184,13 +186,19 @@ static int readPanels(void) {
   Class referenceClass = NSClassFromString(@"BLSDisplayReference");
   id mainDisplay = sendObject(displayClass, @selector(mainDisplay));
   NSMutableArray *panels = [NSMutableArray array];
+  NSUInteger integratedCount = 0;
   for (id display in displays) {
-    if (!responds(display, @selector(displayType)) || !responds(display, @selector(nativeSize)) ||
-        !responds(display, @selector(pointScale)) || !responds(display, @selector(displayId))) continue;
+    if (!responds(display, @selector(displayType))) {
+      fprintf(stderr, "CADisplay cannot classify its displays in this simulator runtime\n");
+      return 5;
+    }
     // displayType 0 is a built-in panel; TVOut, wireless and resizable ports are not.
     if (((long (*)(id, SEL))objc_msgSend)(display, @selector(displayType)) != 0) continue;
     if (responds(display, @selector(isExternal)) &&
         ((BOOL (*)(id, SEL))objc_msgSend)(display, @selector(isExternal))) continue;
+    integratedCount += 1;
+    if (!responds(display, @selector(nativeSize)) || !responds(display, @selector(pointScale)) ||
+        !responds(display, @selector(displayId))) continue;
     CGSize size = ((CGSize (*)(id, SEL))objc_msgSend)(display, @selector(nativeSize));
     NSString *name = sendObject(display, @selector(name));
     if (size.width <= 0 || size.height <= 0 || ![name isKindOfClass:NSString.class]) continue;
@@ -211,7 +219,7 @@ static int readPanels(void) {
       @"type": @{@"integrated": @{}},
     }];
   }
-  return printJSON(@{@"version": @1, @"displays": panels}) ? 0 : 1;
+  return printJSON(@{@"version": @1, @"integratedCount": @(integratedCount), @"displays": panels}) ? 0 : 1;
 }
 
 int main(int argc, const char *argv[]) {
