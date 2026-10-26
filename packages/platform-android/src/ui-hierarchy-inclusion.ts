@@ -31,31 +31,7 @@ export function shouldIncludeAndroidNode(
   if (info.isStructural || info.isVisual) {
     return shouldIncludeStructuralAndroidNode(node, info, descendantHittable);
   }
-  return !isComposeRoleOnlyNode(node, info, ancestorHittable);
-}
-
-// Compose's `SemanticsNode.emitFakeNodes` adds a childless node carrying only the role class name
-// inside every merging control. It takes no touch, and its toggle state stays on the merged parent.
-const COMPOSE_ROLE_CLASS_NAMES = new Set([
-  'android.widget.button',
-  'android.widget.checkbox',
-  'android.widget.radiobutton',
-]);
-
-function isComposeRoleOnlyNode(
-  node: AndroidNode,
-  info: AndroidNodeInclusionInfo,
-  ancestorHittable: boolean,
-): boolean {
-  return (
-    ancestorHittable &&
-    COMPOSE_ROLE_CLASS_NAMES.has(info.type) &&
-    node.children.length === 0 &&
-    !isAgentTarget(node) &&
-    node.passiveFacts.checked === undefined &&
-    !info.hasMeaningfulText &&
-    !info.hasMeaningfulId
-  );
+  return true;
 }
 
 function getAndroidNodeInclusionInfo(node: AndroidNode): AndroidNodeInclusionInfo {

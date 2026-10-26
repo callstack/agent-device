@@ -25,6 +25,7 @@ import {
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
+import { composeRoleNodeOf } from './ui-hierarchy-compose-role.ts';
 import {
   createAndroidSnapshotPresentationNode,
   isAndroidSnapshotPresentationFailure,
@@ -72,6 +73,8 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
+  /** Compose role nodes whose class the regular projection publishes on their parent instead. */
+  foldedComposeRoleNodes: Set<AndroidNode>;
   /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
   viewport?: Rect;
   presentationBudget: AndroidSnapshotPresentationBudget;
@@ -106,6 +109,7 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
+    foldedComposeRoleNodes: new Set(),
     presentationBudget,
     presentationNodes: [],
     truncated: false,
@@ -287,6 +291,7 @@ function appendAndroidNodeIfPresented(
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
 ): number | undefined {
+  if (!state.options.raw && state.foldedComposeRoleNodes.has(node)) return parentIndex;
   if (
     !state.options.raw &&
     isPositiveFiniteRect(node.rect) &&
@@ -397,9 +402,11 @@ function createAndroidRawSnapshotNode(
   systemChrome: boolean,
   systemBar: RawSnapshotNode['systemBar'],
 ): AndroidRawSnapshotNode {
+  const composeRole = state.options.raw ? undefined : composeRoleNodeOf(node);
+  if (composeRole) state.foldedComposeRoleNodes.add(composeRole);
   return {
     index: state.nodes.length,
-    type: node.type ?? undefined,
+    type: (composeRole ?? node).type ?? undefined,
     label: node.label ?? undefined,
     value: node.value ?? undefined,
     ...node.passiveFacts,

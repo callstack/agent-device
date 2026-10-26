@@ -94,35 +94,42 @@ test('launcher-hosted navigation survives omitted wrappers while taskbar app ico
   ]);
 });
 
-test('publishes checkable and labeled controls but not a Compose role-only node inside a clickable control', () => {
+test('publishes a Compose role node as its clickable parent and keeps real child controls', () => {
   const tree = parseUiHierarchyTree(`<hierarchy>
     <node class="android.view.View" bounds="[0,0][1080,2400]" visible-to-user="true">
-      <node class="android.view.View" resource-id="welcome-continue-with-email"
+      <node class="android.view.View" resource-id="continue-with-email"
         bounds="[53,1856][1027,1982]" clickable="true" focusable="true" visible-to-user="true">
         <node class="android.widget.TextView" text="Continue with email"
           bounds="[352,1895][728,1943]" visible-to-user="true" />
-        <node class="android.widget.Button" bounds="[53,1858][1027,1980]" visible-to-user="true" />
-      </node>
-      <node class="android.view.View" resource-id="labeled-child-control"
-        bounds="[53,2000][1027,2126]" clickable="true" visible-to-user="true">
-        <node class="android.widget.Button" text="Details" bounds="[700,2010][1000,2110]"
+        <node class="android.widget.Button" checked="false" bounds="[53,1858][1027,1980]"
           visible-to-user="true" />
       </node>
-      <node class="android.widget.Button" bounds="[53,2150][1027,2270]" visible-to-user="true" />
-      <node class="android.widget.LinearLayout" resource-id="android:id/widget_frame"
-        bounds="[53,2280][1027,2390]" clickable="true" visible-to-user="true">
-        <node class="android.widget.CheckBox" resource-id="android:id/checkbox" checked="true"
-          bounds="[900,2300][1000,2370]" visible-to-user="true" />
+      <node class="android.view.View" resource-id="nested-control-row"
+        bounds="[53,2000][1027,2110]" clickable="true" visible-to-user="true">
+        <node class="android.widget.Button" bounds="[53,2000][1027,2110]" clickable="true"
+          visible-to-user="true" />
       </node>
+      <node class="android.view.View" resource-id="legacy-row"
+        bounds="[53,2120][1027,2230]" clickable="true" visible-to-user="true">
+        <node class="android.widget.CheckBox" bounds="[900,2140][1000,2210]"
+          visible-to-user="true" />
+      </node>
+      <node class="android.widget.Button" bounds="[53,2250][1027,2370]" visible-to-user="true" />
     </node>
   </hierarchy>`);
 
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, {});
-  const buttons = nodes
-    .filter((node) => node.type === 'android.widget.Button')
-    .map((node) => node.label ?? node.rect);
-  const checkbox = nodes.find((node) => node.type === 'android.widget.CheckBox');
+  const published = nodes
+    .filter((node) => node.parentIndex !== undefined)
+    .map((node) => `${node.type} ${node.identifier ?? ''}`.trim());
 
-  expect(buttons).toEqual(['Details', { x: 53, y: 2150, width: 974, height: 120 }]);
-  expect(checkbox?.checked).toBe(true);
+  expect(published).toEqual([
+    'android.widget.Button continue-with-email',
+    'android.widget.TextView',
+    'android.view.View nested-control-row',
+    'android.widget.Button',
+    'android.view.View legacy-row',
+    'android.widget.CheckBox',
+    'android.widget.Button',
+  ]);
 });
