@@ -43,16 +43,26 @@ final class AppWindowScreenshotTests: XCTestCase {
     XCTAssertEqual(try frontWindowFrame(pid: 42, windowInfo: windows), front?.bounds)
   }
 
-  /// A shared window gets a small system indicator window in front of it; capture, scroll and the
-  /// click fallback must keep using the shared window rather than the indicator.
-  func testSkipsTheWindowSharingIndicatorInFrontOfTheSharedWindow() throws {
-    let windows = [windowInfo(id: 9, width: 66, height: 20), windowInfo(id: 8, width: 900, height: 700)]
-    let indicator = CGRect(x: 10, y: 10, width: 66, height: 20)
-    let front = try frontWindow(pid: 42, windowInfo: windows, sharingIndicatorFrames: [indicator])
+  func testFrontWindowSkipsASharingIndicatorInFrontOfAnotherWindow() {
+    let indicator = OnScreenWindow(
+      number: 9, bounds: CGRect(x: 10, y: 10, width: 66, height: 20), sharingState: 1)
+    let shared = OnScreenWindow(
+      number: 8, bounds: CGRect(x: 0, y: 0, width: 900, height: 700), sharingState: 1)
+
+    XCTAssertEqual(
+      frontWindow(among: [indicator, shared], isSharingIndicator: { $0.number == 9 })?.number, 8)
+    XCTAssertEqual(frontWindow(among: [indicator, shared], isSharingIndicator: { _ in false })?.number, 9)
+  }
+
+  /// The indicator check reads the app's accessibility tree; a lone window never needs it.
+  func testFrontWindowAsksNothingAboutALoneWindow() {
+    let lone = OnScreenWindow(
+      number: 8, bounds: CGRect(x: 0, y: 0, width: 900, height: 700), sharingState: 1)
+    var asked = false
+    let front = frontWindow(among: [lone], isSharingIndicator: { _ in asked = true; return true })
 
     XCTAssertEqual(front?.number, 8)
-    XCTAssertEqual(
-      try frontWindow(pid: 42, windowInfo: windows, sharingIndicatorFrames: [])?.number, 9)
+    XCTAssertFalse(asked)
   }
 
   func testRefusesWhenOnlyInvisibleOrEmptyWindowsRemain() throws {
