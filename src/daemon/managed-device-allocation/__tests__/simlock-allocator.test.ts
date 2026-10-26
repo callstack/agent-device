@@ -247,3 +247,13 @@ test('a refused attempt is forgotten', async () => {
     details: { reason: 'simlock-attempt-unknown' },
   });
 });
+
+test('a grant the adapter cannot map leaves the attempt unknown instead of hanging the wait', async () => {
+  const { allocator } = setup({
+    requestLease: vi.fn(async () => ({ ...GRANT, device: undefined }) as unknown as typeof GRANT),
+  });
+
+  await expect(
+    allocator.requestLease({ ...INPUT, signal: new AbortController().signal }),
+  ).rejects.toThrow(TypeError);
+});

@@ -1,3 +1,4 @@
+import { addAbortListener } from 'node:events';
 import type {
   LeaseRefusalReason,
   LeaseRequestInput,
@@ -148,7 +149,12 @@ export function createSimlockManagedDeviceAllocator(options: {
             attempt.error = error;
           }
         },
-      );
+      )
+      // A grant this adapter cannot map leaves the attempt unknown, so `settled` never rejects.
+      .catch((error: unknown) => {
+        attempt.status = { ...base, state: 'unknown' };
+        attempt.error = error;
+      });
     attempts.set(allocationOperationKey(input), attempt);
     return attempt;
   };
@@ -256,10 +262,9 @@ function settledBefore(work: Promise<void>, signal: AbortSignal | undefined): Pr
   if (!signal) return work.then(() => true);
   if (signal.aborted) return Promise.resolve(false);
   return new Promise((resolve) => {
-    const onAbort = () => resolve(false);
-    signal.addEventListener('abort', onAbort, { once: true });
+    const listener = addAbortListener(signal, () => resolve(false));
     void work.then(() => {
-      signal.removeEventListener('abort', onAbort);
+      listener[Symbol.dispose]();
       resolve(true);
     });
   });
