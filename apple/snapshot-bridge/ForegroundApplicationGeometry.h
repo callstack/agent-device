@@ -1,13 +1,7 @@
-// ForegroundApplicationGeometry.h — the one full-screen rule two native targets ask.
-//
-// The Simulator snapshot bridge refuses a capture whose app window does not fill the screen
-// (`app-window-not-full-screen`, #3844), and the iOS runner refuses to route a window-less
-// gesture onto a screen it cannot prove the app fills. Both include this header, so the rule is
-// one compilation, not a pinned copy. Each caller keeps its own unknown policy: the bridge keeps
-// a capture it cannot measure, the runner refuses authorization it cannot prove.
-//
-// Both consumers include this file by bare name: the snapshot bridge compiles it from its own
-// directory, the runner's UITests target finds it through HEADER_SEARCH_PATHS.
+// ForegroundApplicationGeometry.h — the one full-screen rule the Simulator snapshot bridge and
+// the iOS runner both include, by bare name, so the rule is one compilation and not a pinned
+// copy. Each keeps its own unknown policy: the bridge keeps a capture it cannot measure, the
+// runner refuses to authorize a route it cannot prove.
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
@@ -21,12 +15,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (pid_t)pid;
 - (CGRect)frame;
 @end
-
-// While a system surface owns the foreground, no screen is the target app's to fill and no tree is
-// the target app's to capture (ADR 0004, foreground ownership).
-static inline BOOL AgentDeviceForegroundOwnershipMatches(pid_t primaryProcessID, pid_t targetProcessID) {
-  return primaryProcessID == targetProcessID;
-}
 
 // Sub-pixel layout rounding is not a window; anything past this is one that shows the app in part
 // of the screen (Windowed Apps or Stage Manager).

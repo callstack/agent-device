@@ -182,7 +182,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
   id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
   return [application respondsToSelector:@selector(pid)] &&
-      AgentDeviceForegroundOwnershipMatches([application pid], pid);
+      [application pid] == pid;
 }
 
 // The snapshot API reports the frames of an app that runs in an iPadOS window relative to that
@@ -224,7 +224,6 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     CGRect rect = CGRectZero;
     if (_valueGetValue(raw, 3, &rect)) return rectDictionary(rect);
   }
-  if ([name isEqualToString:kAttributeFrame]) return nil;
   return nil;
 }
 

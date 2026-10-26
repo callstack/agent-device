@@ -179,9 +179,11 @@ extension RunnerTests {
       return
     }
 
+    var screen: AnyObject?
     var displayID: UInt = 0
-    let refusal = RunnerResolveSoleScreenDisplayID(springboard, &displayID)
+    let refusal = RunnerResolveSoleScreen(springboard, &screen, &displayID)
     XCTAssertNotNil(refusal, "an iPad app that does not own the screen names no sole screen for its taps")
+    XCTAssertNil(screen)
     XCTAssertEqual(displayID, 0)
   }
 

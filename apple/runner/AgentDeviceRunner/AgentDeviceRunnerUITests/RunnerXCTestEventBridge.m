@@ -114,17 +114,10 @@ static NSString *RunnerApplicationScreenFailureDescription(
   }
 }
 
-// One window read. XCTest answers with a value or raises. The window object is handed back because
-// resolving this instance is what its `screen` will answer from — re-querying `firstMatch` would
-// return an unresolved element that still names the main screen.
-//
-// Both answers are required. An app with no window answers `frame` with `(0,0 0x0)` without raising,
-// which geometry alone would read as a window the runtime has not measured, and only the query
-// itself says whether it has one. Measured on a live Duo: the runner host process, which has no
-// window, answers `exists` NO and `frame` `(0,0 0x0)` (#2728).
-//
-// The frame the read produced is reported even when it is refused: a capture that fails closed has
-// to say what it looked at, or the reason code cannot be told apart from a stale device.
+// One window read. Both answers are required: an app with no window answers `frame` with
+// `(0,0 0x0)` without raising, so only `exists` says whether the window is there. The window
+// object is handed back because resolving this instance is what its `screen` will answer from.
+// The frame is reported even when refused, so a refusal names what it looked at.
 static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
   id application,
   id _Nullable *window,
@@ -158,9 +151,8 @@ static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
   return RunnerApplicationScreenFailureNone;
 }
 
-// The screen read that must follow window resolution on that same window instance. Before the
-// frame above is asked for, the window's `screen` can still name main, so this is never merged
-// into the read ahead of it.
+// The screen read that must follow window resolution on that same window instance: before the frame
+// is asked for, `screen` can still name main, so this never merges into the read ahead of it.
 static RunnerApplicationScreenFailure RunnerReadResolvedWindowScreen(
   id window,
   CGRect windowFrame,
@@ -212,31 +204,18 @@ BOOL RunnerResolveApplicationScreen(
   return *failure == RunnerApplicationScreenFailureNone;
 }
 
-// Reads the display ID off a window the caller already resolved, so a synthesized record can be
-// routed by the same window its reference frame was measured on. The window still resolves here:
-// its frame is read before its screen, and a window that answers empty or raises fails closed with
-// the same reasons the application walk gives.
-NSString * _Nullable RunnerResolveSoleScreenDisplayID(id application, NSUInteger *displayID) {
-  id screen = nil;
-  return RunnerResolveSoleScreen(application, &screen, displayID);
-}
-
 RunnerFullScreenEvidence RunnerFullScreenEvidenceFromForeground(
   pid_t targetProcessID,
   pid_t primaryProcessID,
   CGRect appFrame,
   CGRect screenFrame
 ) {
-  // A pid that could not be read (or cannot own a process) proves nothing about ownership, so the
-  // answer is Unknown, never a guess that the app is not the primary app.
   if (targetProcessID <= 0 || primaryProcessID <= 0) {
     return RunnerFullScreenEvidenceUnknown;
   }
-  if (!AgentDeviceForegroundOwnershipMatches(primaryProcessID, targetProcessID)) {
+  if (primaryProcessID != targetProcessID) {
     return RunnerFullScreenEvidenceNotPrimaryApp;
   }
-  // A frame that is not a usable measurement is a runtime that said nothing, not a window that
-  // differs, so the answer is Unknown, never the Windowed a comparison of the numbers would read as.
   if (!AgentDeviceForegroundFramesAreMeasurable(appFrame, screenFrame)) {
     return RunnerFullScreenEvidenceUnknown;
   }
@@ -255,9 +234,8 @@ static NSString *const RunnerXCTAutomationSupportPath =
   @"/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport";
 
 static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClass(void) {
-  // Cache the answer including its absence: a runtime without the class would otherwise pay two
-  // RTLD_NOW lookups per window-less gesture forever. Code availability is the only thing cached
-  // here — the probe re-measures every attempt, because a resize changes the answer.
+  // Cache the answer including its absence; code availability is all that is cached — the probe
+  // re-measures every attempt because a resize changes the answer.
   static BOOL resolved = NO;
   static Class<AgentDeviceForegroundElement> _Nullable cached = Nil;
   if (!resolved) {
@@ -273,11 +251,9 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
   return cached;
 }
 
-// One contained probe: it checks each selector before sending it and reads the target pid, the
-// primary app's frame, and the system app's frame inside one exception scope, so any failed read
-// answers Unknown — the same typed nothing-a-guess the decision seam already reports. The target
-// pid comes from the existing runner owner for that read (RunnerAXSnapshotBridge), which picks the
-// correctly sized send for the pid_t return through the method signature.
+// One contained probe: it checks each selector before sending it and reads the target pid and both
+// frames inside one exception scope, so any failed read answers Unknown. The target pid comes from
+// the existing runner owner for that read (RunnerAXSnapshotBridge).
 static RunnerFullScreenEvidence RunnerProbeApplicationFillsScreen(id application) {
   if (application == nil) {
     return RunnerFullScreenEvidenceUnknown;
@@ -346,9 +322,7 @@ NSString * _Nullable RunnerResolveSoleScreen(
     return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
   }
   // An iPhone keeps every app full-screen, so its idiom answers the rule and the route never pays
-  // for the probe. Off the phone idiom the route opens only on the fills-screen proof — an iPad can
-  // show an app in part of its only screen — and windowed or unknown evidence keeps requiring a
-  // window. The probe answers only what it proved or failed to prove, never "not probed".
+  // for the probe. Off the phone idiom the route opens only on the fills-screen proof.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
       RunnerProbeApplicationFillsScreen(application) != RunnerFullScreenEvidenceFillsScreen) {
     return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
