@@ -1,6 +1,7 @@
 // Type surface for the plain-Node size-report module (it must stay runnable by bare `node`, so
 // it is not in the typechecked program). TypeScript resolves this file when a checked module
 // imports `./size-report-package.mjs`; keep it in step with the exports there.
+export const DOCUMENTED_PACK_STUBS: readonly string[];
 export function readMacosHelperTestTargets(manifestSource: string): string[];
 export type NpmPackEntry = Readonly<{ path: string; size: number }>;
 export function assertPublishPackageContents(

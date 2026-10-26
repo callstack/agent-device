@@ -8,11 +8,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import {
-  DOCUMENTED_PACK_STUBS,
-  testOnlyContentFailures,
-  testOnlyPathFailures,
-} from '../lib/shipped-test-code.ts';
+import { testOnlyContentFailures, testOnlyPathFailures } from '../lib/shipped-test-code.ts';
+import { DOCUMENTED_PACK_STUBS } from '../size-report-package.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 

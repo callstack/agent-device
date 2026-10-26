@@ -13,6 +13,7 @@
  */
 
 import { UNIT_TEST_CONDITION } from '../package-apple-runner-source.mjs';
+import { DOCUMENTED_PACK_STUBS } from '../size-report-package.mjs';
 
 /** Test-only directory names. Any packed path carrying one of these segments is test code. */
 const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'fixtures', 'mocks']);
@@ -24,15 +25,9 @@ const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'f
 const TEST_ONLY_FILE_PATTERN = /(^|[._])(test|spec)\.[^/]+$/;
 const TEST_ONLY_FILE_SUFFIX = 'ForTesting';
 
-/**
- * The two SPM test-target stubs `package.json` `files` ships on purpose: SwiftPM refuses to
- * resolve a package whose declared test target has no source, and `swift build` in the published
- * tree must resolve it. They are the only paths under a `Tests/` directory the package may carry.
- */
-export const DOCUMENTED_PACK_STUBS: ReadonlySet<string> = new Set([
-  'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
-  'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
-]);
+// The allowed pack stubs live in scripts/size-report-package.mjs, the publish check that already
+// requires one per test target; both decisions cannot drift.
+const documentedPackStubPaths = new Set<string>(DOCUMENTED_PACK_STUBS);
 
 /** Packaged-source locations scanned for test code that survived stripping, by path segments. */
 const RUNNER_SOURCE_ROOT = ['dist', 'apple', 'runner'];
@@ -78,7 +73,7 @@ function isTestOnlyFileName(fileName: string): boolean {
 export function testOnlyPathFailures(packedPaths: Iterable<string>): string[] {
   const failures: string[] = [];
   for (const packedPath of packedPaths) {
-    if (DOCUMENTED_PACK_STUBS.has(packedPath)) {
+    if (documentedPackStubPaths.has(packedPath)) {
       continue;
     }
     const directory = hasTestOnlyDirectory(packedPath);

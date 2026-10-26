@@ -28,6 +28,18 @@ export function readMacosHelperTestTargets(manifestSource) {
   );
 }
 
+/**
+ * The macOS helper's pack stubs: the only paths under a `Tests/` directory the package may carry.
+ * SwiftPM refuses to resolve a declared test target without sources, so `files` ships exactly one
+ * stub per target; a new target's stub must be declared here, in the failing direction. One owner
+ * for both decisions this list governs: the publish check in this file, and the package-wide
+ * no-test-code path guard, which imports it (scripts/lib/shipped-test-code.ts).
+ */
+export const DOCUMENTED_PACK_STUBS = Object.freeze([
+  'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
+  'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
+]);
+
 export function collectNpmPack(root) {
   const cachePath = path.join(root, '.tmp', 'npm-cache');
   fs.mkdirSync(cachePath, { recursive: true });
@@ -90,13 +102,14 @@ export function assertPublishPackageContents(entries, options = {}) {
   }
   // The macOS helper ships as buildable source. Its manifest declares the test targets, so the
   // packed tree must hold at least one source per target or the install-time `swift build` dies;
-  // `files` ships exactly one PackStub.swift per target and excludes every other test source.
-  // Anything else under Tests/ in the pack means the exclusion list leaked real tests.
+  // `files` ships exactly the stubs DOCUMENTED_PACK_STUBS declares and excludes every other test
+  // source. Anything else under Tests/ in the pack means the exclusion list leaked real tests.
+  const documentedStubPaths = new Set(DOCUMENTED_PACK_STUBS);
   const shippedSwiftTests = paths.filter(
     (entryPath) =>
       (entryPath === 'apple/macos-helper/Tests' ||
         entryPath.startsWith('apple/macos-helper/Tests/')) &&
-      !entryPath.endsWith('/PackStub.swift'),
+      !documentedStubPaths.has(entryPath),
   );
   if (shippedSwiftTests.length > 0) {
     throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
