@@ -4,7 +4,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from './config.ts';
+import {
+  IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
+  IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS,
+} from './config.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
 
 export type AppleDeviceDisplay = {
@@ -88,7 +91,8 @@ const DISPLAYS_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not report 'devicectl device info displays'. Update Xcode to a version that ships the display-information feature before targeting multi-display Apple devices.";
 
 /**
- * Reads the CoreDevice display table for one Apple device.
+ * Reads the CoreDevice display table for one Apple device, or the guest's equivalent for a
+ * simulator in a scoped device set.
  *
  * Deliberately uncached: which panel is lit is exactly what changes when an
  * operator folds or opens the device, and a cached answer would resume capturing
@@ -102,6 +106,9 @@ export async function queryAppleDisplayInventory(
   device: DeviceInfo,
   options: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<AppleDisplayInventory> {
+  if (device.kind === 'simulator' && device.simulatorSetPath) {
+    return await queryScopedSimulatorDisplayInventory(device, options);
+  }
   try {
     const outcome = await runIosDevicectlJsonRequest({
       jsonPrefix: 'agent-device-apple-displays',
@@ -125,6 +132,42 @@ export async function queryAppleDisplayInventory(
     emitUnresolvedDiagnostic(
       device,
       isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed',
+      error instanceof Error ? error.message : String(error),
+    );
+    return unresolvedInventory();
+  }
+}
+
+/**
+ * CoreDevice resolves a simulator only in the default device set, so a scoped simulator's panel
+ * table comes from the fold helper inside the guest. It reads the same CADisplay and BLSBacklight
+ * sources `dtdeviceinfod` reports to CoreDevice, in CoreDevice's payload shape. Every entry must
+ * parse: a dropped second panel would otherwise read as single-panel evidence.
+ */
+async function queryScopedSimulatorDisplayInventory(
+  device: DeviceInfo,
+  options: { timeoutMs?: number; signal?: AbortSignal },
+): Promise<AppleDisplayInventory> {
+  // The first read on a host also builds the helper; the budget covers that build too.
+  const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, budget]) : budget;
+  try {
+    const { readSimulatorPanelPayload } = await import('../foldable/guest-readback.ts');
+    const payload = await readSimulatorPanelPayload(device, {
+      signal,
+      timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
+    });
+    const displays = parseCoreDeviceDisplays(payload);
+    if (displays.length === 0 || displays.length !== payload.result.displays.length) {
+      emitUnresolvedDiagnostic(device, 'guest-panels-incomplete', '');
+      return unresolvedInventory();
+    }
+    return buildInventory(displays);
+  } catch (error) {
+    options.signal?.throwIfAborted();
+    emitUnresolvedDiagnostic(
+      device,
+      isCommandTimeoutError(error) || budget.aborted ? 'probe-timed-out' : 'guest-panels-failed',
       error instanceof Error ? error.message : String(error),
     );
     return unresolvedInventory();
@@ -292,7 +335,7 @@ export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInve
 }
 
 const UNIDENTIFIED_PANEL_HINT =
-  'CoreDevice reported no primary panel and panel power did not identify exactly one lit panel. Run `xcrun devicectl device info displays --device <udid>`, then retry after one panel reports a lit backlightState.';
+  'The panel table named no primary panel and panel power did not identify exactly one lit panel. Run `xcrun devicectl device info displays --device <udid>` for a simulator in the default device set, then retry after one panel reports a lit backlightState.';
 
 /**
  * Sanity-checks the panel geometry against a foldable's shape.

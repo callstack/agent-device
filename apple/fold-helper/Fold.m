@@ -1,8 +1,12 @@
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
+#import <dlfcn.h>
 #import <mach/mach_time.h>
 #import <math.h>
+#import <objc/message.h>
 
-// Private simulator HID entry points; the host verifies the resulting hinge independently.
+// Private simulator HID entry points. `set` only dispatches; `hinge` and `panels` only observe, so
+// the host verifies a pose with a separate process that never sends HID.
 extern CFDataRef IOCFSerialize(CFTypeRef object, CFOptionFlags options);
 extern CFTypeRef IOHIDEventCreateVendorDefinedEvent(CFAllocatorRef allocator, uint64_t timestamp,
     uint32_t usagePage, uint32_t usage, uint32_t version, const uint8_t *data,
@@ -80,18 +84,143 @@ static BOOL runFrames(CFTypeRef client, NSArray *frames) {
   }
 }
 
+static int runSet(NSString *argument) {
+  NSArray *frames = readFrames(argument);
+  if (!frames) {
+    fprintf(stderr, "Expected a pose or 2-64 {atMs,angle} keyframes spanning 0 to at most 60000ms\n");
+    return 2;
+  }
+  CFTypeRef client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
+  if (!client) return 1;
+  BOOL dispatched = runFrames(client, frames);
+  CFRelease(client);
+  if (!dispatched) fprintf(stderr, "Unable to create simulator HID event\n");
+  return dispatched ? 0 : 1;
+}
+
+static BOOL responds(id target, SEL selector) {
+  return target != nil && [target respondsToSelector:selector];
+}
+
+static id sendObject(id target, SEL selector) {
+  return responds(target, selector) ? ((id (*)(id, SEL))objc_msgSend)(target, selector) : nil;
+}
+
+static id sendObjectWith(id target, SEL selector, id argument) {
+  return responds(target, selector) ? ((id (*)(id, SEL, id))objc_msgSend)(target, selector, argument) : nil;
+}
+
+static BOOL printJSON(NSDictionary *payload) {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:NULL];
+  if (!data) return NO;
+  fwrite(data.bytes, 1, data.length, stdout);
+  fputc('\n', stdout);
+  return YES;
+}
+
+// One fresh CoreMotion observation, the source devicectl's hinge-angle stream relays. The manager
+// delivers the current angle on subscription, so the first sample is the reading.
+static int readHinge(void) {
+  dlopen("/System/Library/Frameworks/CoreMotion.framework/CoreMotion", RTLD_NOW);
+  Class managerClass = NSClassFromString(@"CMAngleManager");
+  SEL start = @selector(startAngleUpdatesToQueue:handler:);
+  if (!managerClass || !responds(managerClass, @selector(isAvailable)) ||
+      !((BOOL (*)(id, SEL))objc_msgSend)(managerClass, @selector(isAvailable)) ||
+      ![managerClass instancesRespondToSelector:start]) {
+    fprintf(stderr, "CMAngleManager is not available in this simulator runtime\n");
+    return 3;
+  }
+  id manager = [managerClass new];
+  NSOperationQueue *queue = [NSOperationQueue new];
+  queue.maxConcurrentOperationCount = 1;
+  dispatch_semaphore_t sampled = dispatch_semaphore_create(0);
+  __block BOOL received = NO;
+  __block double angle = NAN;
+  __block BOOL valid = NO;
+  // The handler's second argument is not an object; the block declares only the sample.
+  void (^handler)(id) = ^(id sample) {
+    if (received || !responds(sample, @selector(angleDegrees))) return;
+    angle = ((float (*)(id, SEL))objc_msgSend)(sample, @selector(angleDegrees));
+    valid = responds(sample, @selector(isAngleValid)) &&
+        ((BOOL (*)(id, SEL))objc_msgSend)(sample, @selector(isAngleValid));
+    received = YES;
+    dispatch_semaphore_signal(sampled);
+  };
+  ((void (*)(id, SEL, NSOperationQueue *, id))objc_msgSend)(manager, start, queue, handler);
+  long timedOut = dispatch_semaphore_wait(sampled, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC));
+  if (responds(manager, @selector(stopAngleUpdates))) {
+    ((void (*)(id, SEL))objc_msgSend)(manager, @selector(stopAngleUpdates));
+  }
+  if (timedOut) {
+    fprintf(stderr, "CMAngleManager delivered no hinge sample within 3 seconds\n");
+    return 4;
+  }
+  return printJSON(@{@"version": @1, @"angleDegrees": @(angle), @"angleValid": @(valid)}) ? 0 : 1;
+}
+
+// BacklightServices BLSBacklightState, named as CoreDevice's BacklightState union names it.
+static NSString *backlightStateName(long state) {
+  switch (state) {
+    case 0: return @"off";
+    case 1: return @"inactiveOn";
+    case 2: return @"activeOn";
+    case 3: return @"activeDimmed";
+    default: return @"unknown";
+  }
+}
+
+// The integrated panels in the shape of `devicectl device info displays`, read from the same guest
+// sources dtdeviceinfod uses: CADisplay for identity and geometry, BLSBacklight for panel power.
+static int readPanels(void) {
+  dlopen("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", RTLD_NOW);
+  dlopen("/System/Library/PrivateFrameworks/BacklightServices.framework/BacklightServices", RTLD_NOW);
+  Class displayClass = NSClassFromString(@"CADisplay");
+  NSArray *displays = sendObject(displayClass, @selector(displays));
+  if (![displays isKindOfClass:NSArray.class]) {
+    fprintf(stderr, "CADisplay is not available in this simulator runtime\n");
+    return 3;
+  }
+  Class backlightClass = NSClassFromString(@"BLSBacklight");
+  Class referenceClass = NSClassFromString(@"BLSDisplayReference");
+  id mainDisplay = sendObject(displayClass, @selector(mainDisplay));
+  NSMutableArray *panels = [NSMutableArray array];
+  for (id display in displays) {
+    if (!responds(display, @selector(displayType)) || !responds(display, @selector(nativeSize)) ||
+        !responds(display, @selector(pointScale)) || !responds(display, @selector(displayId))) continue;
+    // displayType 0 is a built-in panel; TVOut, wireless and resizable ports are not.
+    if (((long (*)(id, SEL))objc_msgSend)(display, @selector(displayType)) != 0) continue;
+    if (responds(display, @selector(isExternal)) &&
+        ((BOOL (*)(id, SEL))objc_msgSend)(display, @selector(isExternal))) continue;
+    CGSize size = ((CGSize (*)(id, SEL))objc_msgSend)(display, @selector(nativeSize));
+    NSString *name = sendObject(display, @selector(name));
+    if (size.width <= 0 || size.height <= 0 || ![name isKindOfClass:NSString.class]) continue;
+    id reference = sendObjectWith(referenceClass, @selector(referenceForCADisplay:), display);
+    id backlight = reference ? sendObjectWith(backlightClass, @selector(sharedBacklightForDisplay:), reference) : nil;
+    NSString *backlightState = responds(backlight, @selector(backlightState))
+        ? backlightStateName(((long (*)(id, SEL))objc_msgSend)(backlight, @selector(backlightState)))
+        : @"unknown";
+    NSString *orientation = sendObject(display, @selector(currentOrientation));
+    [panels addObject:@{
+      @"name": name,
+      @"displayId": @(((unsigned (*)(id, SEL))objc_msgSend)(display, @selector(displayId))),
+      @"nativeSize": @[@(size.width), @(size.height)],
+      @"pointScale": @(((unsigned long (*)(id, SEL))objc_msgSend)(display, @selector(pointScale))),
+      @"currentOrientation": [orientation isKindOfClass:NSString.class] ? orientation : @"unknown",
+      @"primary": @([display isEqual:mainDisplay]),
+      @"backlightState": backlightState,
+      @"type": @{@"integrated": @{}},
+    }];
+  }
+  return printJSON(@{@"version": @1, @"displays": panels}) ? 0 : 1;
+}
+
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
-    NSArray *frames = argc == 2 ? readFrames(@(argv[1])) : nil;
-    if (!frames) {
-      fprintf(stderr, "Expected a pose or 2-64 {atMs,angle} keyframes spanning 0 to at most 60000ms\n");
-      return 2;
-    }
-    CFTypeRef client = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
-    if (!client) return 1;
-    BOOL dispatched = runFrames(client, frames);
-    CFRelease(client);
-    if (!dispatched) fprintf(stderr, "Unable to create simulator HID event\n");
-    return dispatched ? 0 : 1;
+    NSString *mode = argc >= 2 ? @(argv[1]) : nil;
+    if ([mode isEqualToString:@"set"] && argc == 3) return runSet(@(argv[2]));
+    if ([mode isEqualToString:@"hinge"] && argc == 2) return readHinge();
+    if ([mode isEqualToString:@"panels"] && argc == 2) return readPanels();
+    fprintf(stderr, "Usage: fold-helper set <pose|keyframes-json> | hinge | panels\n");
+    return 2;
   }
 }

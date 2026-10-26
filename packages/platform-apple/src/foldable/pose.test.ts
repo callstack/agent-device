@@ -4,9 +4,13 @@ vi.mock('../core/display-inventory.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/display-inventory.ts')>();
   return { ...actual, queryAppleDisplayInventory: vi.fn() };
 });
-vi.mock('../core/hinge-angle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../core/hinge-angle.ts')>();
-  return { ...actual, readAppleHingeAngle: vi.fn() };
+vi.mock('./guest-readback.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./guest-readback.ts')>();
+  return { ...actual, readSimulatorHingeAngle: vi.fn() };
+});
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
 });
 vi.mock('./simulator-hid.ts', () => ({ sendSimulatorFoldPose: vi.fn() }));
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
@@ -21,12 +25,15 @@ import {
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
 } from '../core/display-inventory.ts';
-import { readAppleHingeAngle } from '../core/hinge-angle.ts';
+import { sleep } from '@agent-device/host-kit/retry';
+import { IOS_FOLD_POSE_READ_INTERVAL_MS, IOS_FOLD_POSE_SETTLE_ATTEMPTS } from '../core/config.ts';
+import { readSimulatorHingeAngle } from './guest-readback.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 import { setAppleFoldPose } from './pose.ts';
 
 const mockInventory = vi.mocked(queryAppleDisplayInventory);
-const mockHinge = vi.mocked(readAppleHingeAngle);
+const mockHinge = vi.mocked(readSimulatorHingeAngle);
+const mockSleep = vi.mocked(sleep);
 const mockSend = vi.mocked(sendSimulatorFoldPose);
 
 const duo: DeviceInfo = {
@@ -54,7 +61,7 @@ function panel(overrides: Partial<AppleDeviceDisplay>): AppleDeviceDisplay {
   };
 }
 
-/** The two Duo panels as CoreDevice reports them, with `lit` naming the panel the pose lights. */
+/** The two Duo panels as the panel table reports them, with `lit` naming the panel the pose lights. */
 function duoInventory(lit: 'outer' | 'inner') {
   return buildInventory([
     panel({ power: lit === 'outer' ? 'lit' : 'dark' }),
@@ -70,14 +77,22 @@ function duoInventory(lit: 'outer' | 'inner') {
   ]);
 }
 
+/** Queues one hinge reading per attempt in the settle budget, ending with `last`. */
+function queueBudgetReadings(fill: (index: number) => number, last: readonly number[]): void {
+  const leading = IOS_FOLD_POSE_SETTLE_ATTEMPTS - last.length;
+  for (let index = 0; index < leading; index += 1) mockHinge.mockResolvedValueOnce(fill(index));
+  for (const angle of last) mockHinge.mockResolvedValueOnce(angle);
+}
+
 beforeEach(() => {
   mockInventory.mockReset();
   mockHinge.mockReset();
+  mockSleep.mockClear();
   mockSend.mockReset();
   mockSend.mockResolvedValue(undefined);
 });
 
-test('sends the simulator HID pose and reports the pose CoreDevice read back', async () => {
+test('sends the simulator HID pose and reports the pose the guest hinge read back', async () => {
   mockInventory
     .mockResolvedValueOnce(duoInventory('outer'))
     .mockResolvedValueOnce(duoInventory('inner'));
@@ -92,6 +107,8 @@ test('sends the simulator HID pose and reports the pose CoreDevice read back', a
 
   expect(mockSend).toHaveBeenCalledWith(duo, 'open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
+  // Reads are spaced so two samples of a moving hinge cannot land together; the first is not delayed.
+  expect(mockSleep.mock.calls).toEqual([[IOS_FOLD_POSE_READ_INTERVAL_MS, undefined]]);
 });
 
 test('reports the closed outer panel in native points, not rotated to a snapshot viewport', async () => {
@@ -169,11 +186,7 @@ test('sends half-open and reports it only once the hinge has stopped', async () 
 
 test('refuses half-open when the hinge was observed there but never came to rest', async () => {
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
-  mockHinge
-    .mockResolvedValueOnce(170)
-    .mockResolvedValueOnce(150)
-    .mockResolvedValueOnce(120)
-    .mockResolvedValueOnce(90);
+  queueBudgetReadings((index) => 175 - index * 5, [120, 90]);
 
   // Every read classifies as half-open, so the requested category was observed; what is missing is
   // a hinge that stopped.
@@ -194,7 +207,7 @@ test('refuses half-open when the hinge was observed there but never came to rest
   // the hinge did not come to rest inside it.
   expect((failure as Error).message).toContain('did not settle');
   expect((failure as Error).message).not.toContain('did not reach');
-  expect(mockHinge).toHaveBeenCalledTimes(4);
+  expect(mockHinge).toHaveBeenCalledTimes(IOS_FOLD_POSE_SETTLE_ATTEMPTS);
   // A refused pose never reaches the capture-path panel read.
   expect(mockInventory).toHaveBeenCalledTimes(1);
 });
@@ -203,11 +216,7 @@ test('refuses half-open when consecutive readings only straddle the open boundar
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
   // 179° is `open` and 178.8° is `half-open`, yet they differ by 0.2°. Numerical proximity across a
   // category boundary is not two readings of a hinge that came to rest inside the requested pose.
-  mockHinge
-    .mockResolvedValueOnce(180)
-    .mockResolvedValueOnce(180)
-    .mockResolvedValueOnce(179)
-    .mockResolvedValueOnce(178.8);
+  queueBudgetReadings(() => 180, [179, 178.8]);
 
   await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -219,17 +228,13 @@ test('refuses half-open when consecutive readings only straddle the open boundar
       previousHingeAngleDegrees: 179,
     }),
   });
-  expect(mockHinge).toHaveBeenCalledTimes(4);
+  expect(mockHinge).toHaveBeenCalledTimes(IOS_FOLD_POSE_SETTLE_ATTEMPTS);
   expect(mockInventory).toHaveBeenCalledTimes(1);
 });
 
 test('refuses half-open as unverified when the last reading is another pose', async () => {
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
-  mockHinge
-    .mockResolvedValueOnce(170)
-    .mockResolvedValueOnce(150)
-    .mockResolvedValueOnce(120)
-    .mockResolvedValueOnce(180);
+  queueBudgetReadings((index) => 170 - index * 5, [180]);
 
   await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -243,7 +248,7 @@ test('refuses half-open as unverified when the last reading is another pose', as
   expect(mockInventory).toHaveBeenCalledTimes(1);
 });
 
-test('refuses the pose when the hinge never reaches it, naming what CoreDevice still reports', async () => {
+test('refuses the pose when the hinge never reaches it, naming what the simulator still reports', async () => {
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockResolvedValue(180);
 
@@ -256,7 +261,7 @@ test('refuses the pose when the hinge never reaches it, naming what CoreDevice s
       hingeAngleDegrees: 180,
     }),
   });
-  expect(mockHinge).toHaveBeenCalledTimes(4);
+  expect(mockHinge).toHaveBeenCalledTimes(IOS_FOLD_POSE_SETTLE_ATTEMPTS);
 });
 
 test('reports closed on one reading at the end stop, without waiting for a second one', async () => {
@@ -388,7 +393,7 @@ test('reports a dispatched but unverifiable pose when the first hinge read retur
     .mockResolvedValueOnce(duoInventory('outer'))
     .mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+    new AppError('COMMAND_FAILED', 'The simulator reported no hinge angle sample', {
       reason: 'fold-hinge-angle-no-sample',
     }),
   );
@@ -407,7 +412,7 @@ test('reports a dispatched but unverifiable pose when the first hinge read retur
 
 test('does not rewrite other hinge read failures as dispatched-unverified', async () => {
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
-  mockHinge.mockRejectedValue(new AppError('COMMAND_FAILED', 'devicectl wedged'));
+  mockHinge.mockRejectedValue(new AppError('COMMAND_FAILED', 'simctl spawn wedged'));
 
   await expect(setAppleFoldPose(duo, { pose: 'open' })).rejects.toMatchObject({
     details: expect.not.objectContaining({ reason: 'fold-pose-dispatched-unverified' }),
@@ -417,7 +422,7 @@ test('does not rewrite other hinge read failures as dispatched-unverified', asyn
 test('keeps a mid-settle hinge read failure as the read failure, not a missing toolchain', async () => {
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockResolvedValueOnce(100).mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+    new AppError('COMMAND_FAILED', 'The simulator reported no hinge angle sample', {
       reason: 'fold-hinge-angle-no-sample',
     }),
   );
@@ -434,7 +439,7 @@ test('omits the screen from the dispatched-unverified refusal when no panel is l
   ]);
   mockInventory.mockResolvedValueOnce(duoInventory('outer')).mockResolvedValueOnce(noneLit);
   mockHinge.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+    new AppError('COMMAND_FAILED', 'The simulator reported no hinge angle sample', {
       reason: 'fold-hinge-angle-no-sample',
       stderr: "Unknown option '--device'",
     }),

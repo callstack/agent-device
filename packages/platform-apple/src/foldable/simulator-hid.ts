@@ -16,7 +16,7 @@ export async function sendSimulatorFoldPose(
   signal?.throwIfAborted();
   const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
   const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
-  const sent = await runSimctlForDevice(device, ['spawn', device.id, binary.path, payload], {
+  const sent = await runSimctlForDevice(device, ['spawn', device.id, binary.path, 'set', payload], {
     signal,
     timeoutMs: durationMs + 10_000,
     // simctl must forward termination to the guest before the host kills it.

@@ -1,7 +1,8 @@
 # Foldable Apple verification
 
 Before you change capture behavior on a multi-panel device, read ADR 0025.
-To list the panels, run `xcrun devicectl device info displays --device <udid>`.
+To list the panels of a simulator in the default set, run `xcrun devicectl device info displays --device <udid>`.
+For a simulator in a scoped set, run the cached fold helper: `xcrun simctl --set <set> spawn <udid> <helper> panels`.
 
 - Panels: the command lists each integrated panel with `backlightState`. Only the lit panel permits capture.
   A capture of the dark panel exits 0 and writes an all-black PNG.
@@ -10,7 +11,8 @@ To list the panels, run `xcrun devicectl device info displays --device <udid>`.
   Examine the runner and simulator `testmanagerd`/BackBoard logs for display identity and delivery.
   The resolved app window owns gesture coordinates and its target screen.
 - Pose: `agent-device fold closed|half-open|open` sends private HID inside the simulator.
-  It tries to read the hinge back through `devicectl device motion hinge-angle`.
+  It reads the hinge back with the same helper in `hinge` mode, one CoreMotion sample for each read.
+  The helper path is `~/.agent-device/fold-helper/<key>/fold-helper`.
   Device Hub and host Accessibility permission are not required.
   After a fold, take another snapshot. Folds invalidate refs and coordinates.
   Verify locally with Device Hub stopped and the simulator booted through `simctl boot`.
@@ -19,7 +21,8 @@ To list the panels, run `xcrun devicectl device info displays --device <udid>`.
   - Capture of the active panel.
   - An app interaction.
   Until GHA supports the runtime, Duo coverage remains local.
-  devicectl 651.13.5 has no `device motion`. There, `fold` reports `fold-pose-dispatched-unverified`.
+  For a scoped set, also verify all three poses with `--ios-simulator-device-set` and a capture of the active panel.
+  If the hinge read returns no sample, `fold` reports `fold-pose-dispatched-unverified`.
   To examine the pose, compare the lit panel from the panel list.
   The lit panel is evidence only. It cannot separate `half-open` from `open`.
 - Touch overlays export at the captured track size.

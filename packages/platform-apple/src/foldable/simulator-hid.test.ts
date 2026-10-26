@@ -44,7 +44,7 @@ test.each(['success', 'dispatch', 'cancel'] as const)(
     expect(dispatches).toEqual(
       outcome === 'cancel'
         ? []
-        : [['simctl', 'spawn', 'selected-duo', '/cache/fold-helper', 'half-open']],
+        : [['simctl', 'spawn', 'selected-duo', '/cache/fold-helper', 'set', 'half-open']],
     );
   },
 );
@@ -70,9 +70,6 @@ test('streams all keyframes in one process with a duration-derived timeout', asy
   expect(dispatches).toBe(1);
 });
 
-// Transport-level only: this pins that a pose dispatch routes through runSimctlForDevice, which
-// targets the UDID inside its scoped set. It is NOT end-to-end scoped-fold support — `appleFoldFact`
-// refuses `unsupported-device-scope` at runtime admission before this dispatch is ever reached.
 test('HID dispatch addresses the UDID inside its scoped simulator set', async () => {
   const dispatches: string[][] = [];
   await withAppleToolProvider(
@@ -85,6 +82,15 @@ test('HID dispatch addresses the UDID inside its scoped simulator set', async ()
     () => sendSimulatorFoldPose({ ...selectedDuo, simulatorSetPath: '/tmp/scoped-set' }, 'closed'),
   );
   expect(dispatches).toEqual([
-    ['simctl', '--set', '/tmp/scoped-set', 'spawn', 'selected-duo', '/cache/fold-helper', 'closed'],
+    [
+      'simctl',
+      '--set',
+      '/tmp/scoped-set',
+      'spawn',
+      'selected-duo',
+      '/cache/fold-helper',
+      'set',
+      'closed',
+    ],
   ]);
 });

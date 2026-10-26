@@ -7,6 +7,7 @@ The pose-settle amendment is dated 2026-09-21 under #2730.
 The touch-overlay export diagnosis was corrected on 2026-09-22 under #2707.
 The Android emulator pose amendment is dated 2026-10-10.
 The no-panel refusal correction (#3761) is dated 2026-10-18.
+The guest readback amendment is dated 2026-10-26.
 This ADR covers iPhone Duo (iOS 27.1, `iPhone19,4`) and Apple devices with more than one integrated CoreDevice display.
 The amendment below also covers foldable Android emulators.
 
@@ -20,7 +21,7 @@ Only inference answers the second question.
 
 | Situation | Behavior |
 | --- | --- |
-| iOS simulator capture through `simctl` | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
+| iOS simulator capture through `simctl` | First resolve the panel table: CoreDevice in the default device set, the guest helper in a scoped set. Capture the panel that the system currently lights. |
 | Runner fallback after an eligible `simctl` failure | Follow the target app's window and capture the display that hosts it. Use the facts that the runner reports. Only a failure the fallback policy (`shouldFallbackToRunner`) accepts reaches the runner; other failures rethrow. |
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
 | Zero or multiple lit panels with a `primary` panel | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
@@ -28,19 +29,19 @@ Only inference answers the second question.
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
 | Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports an exact pose only after hinge readings verify it. |
-| Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back from CoreDevice until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
+| Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back inside the simulator until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
 | The first hinge read returns no sample | Refuse with `fold-pose-dispatched-unverified`. Panel power does not verify the pose. |
 | The hinge reaches `half-open` but keeps moving | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle inside the open interval is an observed category, not a pose that the hinge holds. |
 | External display | It is not a panel. It creates neither multi-screen classification nor a pose. |
-| CoreDevice cannot answer | Return unresolved inventory. Preserve single-panel capture. An absent host feature is not a capture failure. |
+| The panel table cannot be read | Return unresolved inventory. Preserve single-panel capture. An absent host feature is not a capture failure. |
 
 ## Contracts
 
 `packages/platform-apple/src/core/display-inventory.ts` owns the panel model.
-It is the only reader of CoreDevice display information.
+It is the only reader of panel tables, and it selects the source.
 
 - **Authority.**
-  `xcrun devicectl device info displays --json-output` (`jsonVersion` 5) is the only screen authority.
+  `xcrun devicectl device info displays --json-output` (`jsonVersion` 5) is the screen authority in the default device set.
   It reports these per-panel values:
   - `name`, also accepted by `simctl io --display`.
   - `displayId`.
@@ -52,6 +53,10 @@ It is the only reader of CoreDevice display information.
   - `active`.
   - `backlightState`.
   It works for simulators with `reality: simulated` and physical devices.
+  It resolves a simulator only in the default device set.
+  For a simulator in a scoped set, the fold helper's `panels` mode is the screen authority.
+  It emits the same entry shape from the guest sources that `dtdeviceinfod` relays to CoreDevice: `CADisplay` and `BLSBacklight`.
+  Every guest entry must parse. A partial table is unresolved, because a dropped panel is not single-panel evidence.
 - **Panel power.**
   `backlightState` is authoritative. `active` is only a fallback because real payloads can omit it.
   A single-panel iPhone 17 reports `backlightState: activeOn` without an `active` key.
@@ -94,6 +99,7 @@ It is the only reader of CoreDevice display information.
   `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` limits the probe to 5s, below the subsequent 20s screenshot deadline.
   Thus, an unresponsive CoreDevice cannot consume the capture's own budget.
   Measured cost is 0.16–0.26s, compared with 4.93s for the screenshot.
+  The guest probe costs about 0.3s. `IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS` limits it to 15s, including the first helper build.
 
 ## Why the default capture had to stop being implicit
 
@@ -202,7 +208,7 @@ The helper uses IOCFSerialize for `{provider: "com.apple.Virtualization.VirtualM
 Inside the simulator, it dispatches a vendor HID event with usage page 0xff61, usage 0x5b, and version 0.
 Requested angles are 0°, 130°, and 180°.
 Half-open preserves the observed Book angle without a promise of UI animation or orientation parity.
-CoreDevice readback and the half-open stability rule remain authoritative.
+Hinge readback and the half-open stability rule remain authoritative.
 
 This decision explicitly accepts private HID for simulator folds.
 The selected Xcode compiles packaged source into a unique temporary directory per request.
@@ -233,7 +239,7 @@ Shared golden fixtures define native and TypeScript validation.
 Existing fold request policy expires refs on successful or interrupted mutation.
 Hosted Duo tests remain local-only.
 
-## Pose control: Device Hub's control, CoreDevice's verdict
+## Pose control: Device Hub's control, the hinge read's verdict
 
 `agent-device fold` sets the pose.
 The split above still holds: the press is not evidence, and the read-back is evidence.
@@ -250,17 +256,18 @@ On 2026-10-16, the host reports Xcode 27.1 build 27A9275 and devicectl 651.13.5.
 Its `device` help lists no `motion` subcommand.
 The 2026-10-14 fix (#3587) records the same limitation for that build, then identified as 27.1 RC.
 Without a sample, the pose remains unconfirmed as described below.
+The guest readback amendment below replaces this stream with a guest read.
 
 `closed` and `open` are hinge end stops.
 One read at the stop proves the pose.
 Every other angle is `half-open`, including transient angles during movement.
 An interior angle proves only a category.
 A held pose requires two consecutive readings that both classify as `half-open` and differ by at most 0.5°.
-Each read uses the final sample from the five-second stream, so it reports the hinge's current position.
+Each read is one fresh sample, and consecutive reads are one second apart, so two reads of a moving hinge cannot land together.
 Before the amendment, one run read 175.1° one stream after Book and 130° two streams later.
 "Verified on a booted Duo" records the amended-rule run.
 
-If the budget ends at another pose, refuse with `fold-pose-unverified` and CoreDevice's observed angle.
+If the budget ends at another pose, refuse with `fold-pose-unverified` and the observed angle.
 If it ends at unsettled `half-open`, refuse with `fold-pose-unsettled`.
 A verified response includes the angle and lit panel's point size.
 That point size tells an agent its refs are stale.
@@ -296,12 +303,11 @@ It never claims failure to reach half-open, which the observation disproves.
 `fold-pose-unverified` remains the reason when the budget ends at another pose.
 It classifies only the final sample.
 A hinge that passes through `half-open` and ends at an end stop is refused as unverified, because its final pose is not the requested pose.
-Attempt count, per-read timeout, cancellation, and open/closed end-stop rules remain unchanged.
-An unsettled fold still consumes four hinge streams.
+Cancellation and open/closed end-stop rules remain unchanged.
+An unsettled fold consumes the whole read budget.
 
 If the first hinge read returns no sample, the pose remains unconfirmed regardless of cause.
-The 2026-10-14 evidence identifies devicectl 651.13.5 in Xcode 27.1 build 27A9275 as an example without `device motion`.
-An unreachable device also prints no sample.
+Examples are a runtime without `CMAngleManager` and a helper that delivers no valid sample in 3 seconds.
 HID has already dispatched, so refusal uses `fold-pose-dispatched-unverified`.
 This distinguishes unconfirmed dispatch from an observed contradictory pose.
 `hingeReadFailure` retains the read failure.
@@ -309,6 +315,40 @@ Its stderr supplies the cause instead of an assumption.
 If panel power identifies exactly one lit panel, the error includes `screen` evidence.
 Panel power cannot distinguish `half-open` from `open`, so the `screen` evidence is never promoted to a verified pose.
 A later no-sample read after an earlier sample retains its own reason.
+
+## Amendment: guest readback for hinge and scoped panels (2026-10-26)
+
+`devicectl` resolves a simulator only in Xcode's default device set.
+Its simulator plugin looks up `defaultDeviceSetWithError:`, and no flag or environment variable selects another set.
+A simulator in a scoped set (`--ios-simulator-device-set`, as Simlock leases use) therefore had no hinge readback and no panel table.
+`fold` refused it with `unsupported-device-scope`.
+devicectl 651.13.5 also has no `device motion`, so the default set had no hinge readback either.
+
+Both CoreDevice facts come from the guest daemon `dtdeviceinfod`.
+It reads the hinge through private CoreMotion `CMAngleManager`, and the panels through `CADisplay` and BacklightServices `BLSBacklight`.
+The fold helper now has three modes, and each run is a separate `simctl spawn` that honors the set:
+
+- `set <pose|keyframes>` dispatches HID and observes nothing.
+- `hinge` takes one fresh `CMAngleManager` sample and sends no HID. It prints `{"version":1,"angleDegrees":…,"angleValid":…}`.
+- `panels` prints the integrated panels in the `devicectl device info displays` entry shape.
+
+Simulator pose verification uses `hinge` for every simulator. HID completion is dispatch evidence only.
+The observation is independent of the dispatch: a separate process reads the resulting hinge state and never echoes the request.
+The host applies the existing pose, target-angle, and stability rules.
+Capture uses `panels` only for a simulator in a scoped set. The default set keeps CoreDevice, which is faster (0.11s against 0.33s) and covers physical devices.
+On 2026-10-26, a scoped and a default-set iPhone Duo on iOS 27.1 read 0°, 130°, and 180°, the Device Hub preset values.
+Guest panel power matched CoreDevice for each pose, and screenshots captured the lit panel.
+
+This amendment accepts private CoreMotion and BacklightServices symbols, in addition to the private HID already accepted.
+The helper checks each selector before it calls it.
+A runtime without a symbol yields no sample (`fold-pose-dispatched-unverified`) or an unresolved panel table, never a guess.
+
+Rejected alternatives:
+
+- **Keep devicectl for the default set: rejected.** It keeps a known failure on 651.13.5 and two hinge readers.
+- **`simctl io enumerate` as the scoped panel table: rejected.** It reports every port as `Power state: On`, so it cannot identify the lit panel.
+- **The lit panel derived from the hinge pose: rejected.** Panel identity and power must be measured. A pose-to-panel map is a second authority.
+- **Refuse capture on a scoped multi-panel device: rejected.** The guest reports measured panel power, so the existing capture rules apply unchanged.
 
 ## Pose is derived from panel power, and official control does not exist
 
@@ -356,7 +396,7 @@ Only hinge-angle readback or in-app `UIHinge.status` distinguishes them.
   That approach still required hinge readback instead of trusting the press.
 - **A `fold` that reports the requested pose: rejected.**
   A press on the wrong Device Hub window can silently succeed.
-  Only CoreDevice hinge-angle readback proves movement of the selected device.
+  Only hinge-angle readback proves movement of the selected device.
 - **Luma or content heuristics for panel selection: rejected.**
   Black screenshots can represent valid content.
   Repository policy prohibits pixel-based decisions when typed facts exist.
@@ -575,7 +615,7 @@ An unresolved element can still report the main screen.
 Coordinate-based XCTest actions also originate at the resolved window.
 Long presses and coordinate fallbacks therefore retain its display identity.
 
-CoreDevice remains authoritative for host screenshot and recording panels.
+The panel table remains authoritative for host screenshot and recording panels.
 Gesture routes follow the target app's window without a fixed panel ID or cached pose.
 Verification must observe a fresh app-visible outcome.
 Event synthesis success and `TouchEventsCompleted` alone do not prove a hit.

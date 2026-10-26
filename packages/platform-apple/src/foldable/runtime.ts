@@ -20,31 +20,16 @@ const foldOsUnavailable = Object.freeze({
 } as const);
 
 /**
- * A fold inside a scoped simulator set cannot verify its pose: the HID send honours `--set`, but
- * `devicectl device info displays` and `devicectl device motion hinge-angle` take only `--device`
- * and resolve a scoped simulator as `not found`, so ADR 0025's post-dispatch readback is impossible.
- * The refusal is the owning fact, before any display probe or HID effect; the default set is unaffected.
- */
-function foldScopeUnavailable(simulatorSetPath: string) {
-  return {
-    available: false,
-    reason: 'unsupported-device-scope',
-    hint: `fold cannot resolve a simulator scoped to the set at "${simulatorSetPath}": CoreDevice's display inventory and hinge-angle readback need a simulator in the default set, so the pose could not be verified. Run fold without --ios-simulator-device-set.`,
-  } as const;
-}
-
-/**
  * The simulator leaf that can carry a hinge: iPhone and iPad. Which *model* inside it actually
  * folds is not in `DeviceInfo`, so the operation answers that from CoreDevice's display table and
  * refuses a single-panel simulator with a typed `UNSUPPORTED_OPERATION`, the way the runner
- * answers for the Action Button hardware. A simulator scoped to a non-default set is refused too;
- * see {@link foldScopeUnavailable}.
+ * answers for the Action Button hardware. A simulator in a scoped device set is admitted: the HID
+ * send and the guest hinge and panel reads all run through `simctl --set`.
  */
 function appleFoldFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator') return foldKindUnavailable;
   const os = resolveDeviceAppleOs(device);
   if (os !== 'ios' && os !== 'ipados') return foldOsUnavailable;
-  if (device.simulatorSetPath) return foldScopeUnavailable(device.simulatorSetPath);
   return available;
 }
 

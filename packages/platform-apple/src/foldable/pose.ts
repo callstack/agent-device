@@ -8,30 +8,35 @@ import type { FoldScreenReport, SetFoldPoseResult } from '@agent-device/contract
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 
-import { IOS_FOLD_POSE_SETTLE_ATTEMPTS, IOS_FOLD_POSE_STABLE_DEGREES } from '../core/config.ts';
+import {
+  IOS_FOLD_POSE_READ_INTERVAL_MS,
+  IOS_FOLD_POSE_SETTLE_ATTEMPTS,
+  IOS_FOLD_POSE_STABLE_DEGREES,
+} from '../core/config.ts';
 import {
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
-import { HINGE_ANGLE_NO_SAMPLE_REASON, readAppleHingeAngle } from '../core/hinge-angle.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
+import { HINGE_ANGLE_NO_SAMPLE_REASON, readSimulatorHingeAngle } from './guest-readback.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
 
 const INVENTORY_REQUIRED_HINT =
-  "fold needs 'devicectl device info displays' to tell a foldable from a single-panel simulator; update Xcode to a version that ships the display-information feature.";
+  "fold needs the simulator's panel table to tell a foldable from a single-panel simulator: 'devicectl device info displays' in the default device set, or the fold helper's guest panel read in a scoped set. The apple_display_inventory_unresolved diagnostic names why the read failed.";
 
 const DISPATCHED_UNVERIFIED_HINT =
   'The pose request was sent and the device may have followed it, but the first hinge-angle read returned no sample, so fold cannot confirm it. Take a screenshot or snapshot to see which panel is lit; hingeReadFailure names why the read failed.';
 
 const POSE_UNSETTLED_HINT =
-  'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold, then read the angle directly with xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5 to see whether the simulator holds the pose.';
+  'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold to see whether the simulator holds the pose.';
 
-/** Sets a simulator hinge through guest HID and verifies the pose through CoreDevice. */
+/** Sets a simulator hinge through guest HID and verifies the pose with separate guest hinge reads. */
 export async function setAppleFoldPose(
   device: DeviceInfo,
   input: SetFoldPoseInput,
@@ -97,14 +102,10 @@ async function dispatchedUnverifiedPoseError(
 
 function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInventory): void {
   if (inventory.unresolved) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'CoreDevice reported no display table for this simulator',
-      {
-        deviceId: device.id,
-        hint: INVENTORY_REQUIRED_HINT,
-      },
-    );
+    throw new AppError('COMMAND_FAILED', 'The simulator reported no panel table', {
+      deviceId: device.id,
+      hint: INVENTORY_REQUIRED_HINT,
+    });
   }
   if (!inventory.multiScreen) {
     throw new AppError(
@@ -116,9 +117,9 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
 }
 
 /**
- * Reads the hinge until it reports the requested pose. Each read costs one bounded devicectl
- * stream, so the attempt count is the whole settle budget. HID delivery alone cannot prove
- * the runtime accepted the requested hinge state.
+ * Reads the hinge until it reports the requested pose. Each read is one fresh guest CoreMotion
+ * sample, spaced by a fixed interval, so the attempt count bounds the settle budget. HID delivery
+ * alone cannot prove the runtime accepted the requested hinge state.
  *
  * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. A
  * `half-open` angle proves only the category, because a hinge travelling between the stops passes
@@ -135,9 +136,10 @@ async function awaitHingePose(
   let previous: number | undefined;
   for (let attempt = 1; attempt <= IOS_FOLD_POSE_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
+    if (attempt > 1) await sleep(IOS_FOLD_POSE_READ_INTERVAL_MS, signal);
     previous = observed;
     try {
-      observed = await readAppleHingeAngle(device, { signal });
+      observed = await readSimulatorHingeAngle(device, { signal });
     } catch (error) {
       if (observed !== undefined || !isHingeNoSample(error)) throw error;
       throw await dispatchedUnverifiedPoseError(device, pose, signal, targetAngle, error);
@@ -232,7 +234,7 @@ function hingePoseDetails(device: DeviceInfo, pose: FoldPose, observed: number |
 function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: number | undefined) {
   return new AppError(
     'COMMAND_FAILED',
-    `${device.name} did not reach the ${pose} pose: CoreDevice still reports a hinge angle of ${observed}°`,
+    `${device.name} did not reach the ${pose} pose: the simulator still reports a hinge angle of ${observed}°`,
     {
       ...hingePoseDetails(device, pose, observed),
       reason: 'fold-pose-unverified',
