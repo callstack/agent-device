@@ -42,7 +42,7 @@ afterEach(() => {
 
 type Script = NonNullable<Parameters<typeof createScriptedManagedDeviceAllocator>[0]>['script'];
 
-function setup(
+async function setup(
   script: Script,
   handoff: Partial<ManagedLeaseHandoff> = {},
   failTransition?: string,
@@ -58,23 +58,28 @@ function setup(
       return await durable.transition(...args);
     },
   };
-  const allocator = createScriptedManagedDeviceAllocator({ script });
   const events: string[] = [];
-  const coordinator = createManagedLeaseCoordinator({
-    store,
-    allocator,
-    renewIntervalMs: RENEW_INTERVAL_MS,
-    renewalSafetyWindowMs: 5_000,
-    pollIntervalMs: POLL_INTERVAL_MS,
-    teardownTimeoutMs: 5_000,
-    handoff: {
-      publish: handoff.publish ?? (async () => void events.push('publish')),
-      teardown: async (binding) => {
-        events.push(`teardown after ${allocator.calls.map((call) => call.method).join(',')}`);
-        await handoff.teardown?.(binding);
+  // Each start is one daemon process over the same durable journal.
+  const start = async (steps: Script) => {
+    const allocator = createScriptedManagedDeviceAllocator({ script: steps });
+    const coordinator = await createManagedLeaseCoordinator({
+      store,
+      allocator,
+      renewIntervalMs: RENEW_INTERVAL_MS,
+      renewalSafetyWindowMs: 5_000,
+      pollIntervalMs: POLL_INTERVAL_MS,
+      teardownTimeoutMs: 5_000,
+      handoff: {
+        publish: handoff.publish ?? (async () => void events.push('publish')),
+        teardown: async (binding) => {
+          events.push(`teardown after ${allocator.calls.map((call) => call.method).join(',')}`);
+          await handoff.teardown?.(binding);
+        },
       },
-    },
-  });
+    });
+    return { allocator, coordinator };
+  };
+  const { allocator, coordinator } = await start(script);
   const recordFor = () => {
     const read = durable.read(ALLOCATION_REQUEST);
     if (read.status !== 'found') throw new Error(`expected a journal record, got ${read.status}`);
@@ -87,7 +92,7 @@ function setup(
       deadlineAtMs: overrides.deadlineAtMs ?? NOW + 60_000,
       ...(overrides.signal ? { signal: overrides.signal } : {}),
     });
-  return { allocator, coordinator, events, recordFor, acquire };
+  return { allocator, coordinator, events, recordFor, acquire, restart: start };
 }
 
 async function fencedStatus(binding: ManagedLeaseBinding) {
@@ -95,7 +100,7 @@ async function fencedStatus(binding: ManagedLeaseBinding) {
 }
 
 test('a granted device is journaled, published, and released only after it is fenced and torn down', async () => {
-  const { allocator, coordinator, events, recordFor, acquire } = setup({
+  const { allocator, coordinator, events, recordFor, acquire } = await setup({
     requestLease: [granted()],
     releaseLease: [undefined],
   });
@@ -123,7 +128,7 @@ test('a granted device is journaled, published, and released only after it is fe
 });
 
 test('a pending request is looked up until the allocator grants it', async () => {
-  const { allocator, events, acquire } = setup({
+  const { allocator, events, acquire } = await setup({
     requestLease: [pending],
     getLeaseRequestStatus: [pending, granted()],
   });
@@ -142,7 +147,7 @@ test('a pending request is looked up until the allocator grants it', async () =>
 
 test('a capacity refusal is returned with its retry delay and frees the owner', async () => {
   const refusal = { reason: 'simulator-capacity', retryAfterMs: 30_000 } as const;
-  const { coordinator, events, acquire } = setup({
+  const { coordinator, events, acquire } = await setup({
     requestLease: [{ ...pending, state: 'refused', refusal }],
   });
 
@@ -152,7 +157,7 @@ test('a capacity refusal is returned with its retry delay and frees the owner', 
 });
 
 test('a request still pending at its deadline is cancelled with the allocator', async () => {
-  const { allocator, events, recordFor, acquire } = setup({
+  const { allocator, events, recordFor, acquire } = await setup({
     requestLease: [pending],
     getLeaseRequestStatus: [pending, pending],
     cancelLeaseRequest: [cancelled],
@@ -168,7 +173,7 @@ test('a request still pending at its deadline is cancelled with the allocator', 
 });
 
 test('one owner holds at most one device at a time', async () => {
-  const { coordinator, acquire } = setup({ requestLease: [granted()] });
+  const { coordinator, acquire } = await setup({ requestLease: [granted()] });
 
   expect((await acquire()).status).toBe('granted');
   expect(
@@ -177,7 +182,7 @@ test('one owner holds at most one device at a time', async () => {
 });
 
 test('a held device stays renewed between commands', async () => {
-  const { allocator, acquire } = setup({
+  const { allocator, acquire } = await setup({
     requestLease: [granted({ lease: renewedLease({ ttlDeadline: NOW + 40_000 }) })],
     renewLease: [renewedLease({ ttlDeadline: NOW + 70_000 })],
   });
@@ -189,7 +194,7 @@ test('a held device stays renewed between commands', async () => {
 });
 
 test('a lease the allocator stops confirming is fenced, torn down, and released', async () => {
-  const { allocator, coordinator, events, acquire } = setup({
+  const { allocator, coordinator, events, acquire } = await setup({
     requestLease: [granted({ lease: renewedLease({ ttlDeadline: NOW + 40_000 }) })],
     renewLease: [new Error('allocator unreachable')],
     getLeaseRequestStatus: [new Error('allocator unreachable')],
@@ -210,7 +215,7 @@ test('a lease the allocator stops confirming is fenced, torn down, and released'
 });
 
 test('a failed handoff is torn down and its lease released', async () => {
-  const { allocator, events, acquire } = setup(
+  const { allocator, events, acquire } = await setup(
     { requestLease: [granted()], releaseLease: [undefined] },
     {
       publish: async () => {
@@ -226,7 +231,7 @@ test('a failed handoff is torn down and its lease released', async () => {
 
 test('releasing during acquisition gives back a grant that arrives late', async () => {
   const late = deferred<LeaseRequestStatus>();
-  const { allocator, coordinator, events, recordFor, acquire } = setup({
+  const { allocator, coordinator, events, recordFor, acquire } = await setup({
     requestLease: [late.promise],
     releaseLease: [undefined],
   });
@@ -245,7 +250,7 @@ test('releasing during acquisition gives back a grant that arrives late', async 
 });
 
 test('disposal stops renewal without releasing, leaving the lease to restart recovery', async () => {
-  const { allocator, coordinator, events, recordFor, acquire } = setup({
+  const { allocator, coordinator, events, recordFor, acquire } = await setup({
     requestLease: [granted({ lease: renewedLease({ ttlDeadline: NOW + 40_000 }) })],
   });
 
@@ -261,7 +266,7 @@ test('disposal stops renewal without releasing, leaving the lease to restart rec
 
 test('an acquisition abandoned during handoff tears the published device down and releases it', async () => {
   const caller = controller();
-  const { allocator, coordinator, events, recordFor, acquire } = setup(
+  const { allocator, coordinator, events, recordFor, acquire } = await setup(
     { requestLease: [granted()], releaseLease: [undefined] },
     {
       publish: async () => {
@@ -282,7 +287,7 @@ test('an acquisition abandoned during handoff tears the published device down an
 });
 
 test('a published device whose journal write fails is torn down and its lease released', async () => {
-  const { allocator, coordinator, events, recordFor, acquire } = setup(
+  const { allocator, coordinator, events, recordFor, acquire } = await setup(
     { requestLease: [granted()], releaseLease: [undefined] },
     {},
     'binding-published',
@@ -293,4 +298,61 @@ test('a published device whose journal write fails is torn down and its lease re
   expect(allocator.calls.at(-1)?.method).toBe('releaseLease');
   expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'released' });
   expect(coordinator.binding(OWNER)).toBeUndefined();
+});
+
+test('a lease a previous process left granted is released on restart without a status lookup', async () => {
+  const { coordinator, events, recordFor, acquire, restart } = await setup({
+    requestLease: [granted()],
+  });
+  expect((await acquire()).status).toBe('granted');
+  await coordinator[Symbol.asyncDispose]();
+
+  const next = await restart({ releaseLease: [undefined] });
+
+  expect(next.allocator.calls.map((call) => call.method)).toEqual(['releaseLease']);
+  expect(events).toEqual(['publish']);
+  expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'released' });
+});
+
+test('a cancellation a previous process could not confirm is retried on restart', async () => {
+  const { coordinator, recordFor, acquire, restart } = await setup({
+    requestLease: [pending],
+    getLeaseRequestStatus: [pending],
+    cancelLeaseRequest: [new Error('allocator unreachable')],
+  });
+  const acquisition = acquire();
+  await vi.advanceTimersByTimeAsync(0);
+  await coordinator[Symbol.asyncDispose]();
+  expect(await acquisition).toMatchObject({ status: 'unavailable', reason: 'allocator-uncertain' });
+
+  const next = await restart({ cancelLeaseRequest: [cancelled] });
+
+  expect(next.allocator.calls.map((call) => call.method)).toEqual(['cancelLeaseRequest']);
+  expect(recordFor().phase.status).toBe('cancelled');
+});
+
+test('a release the allocator cannot confirm on restart stays journaled and the coordinator still opens', async () => {
+  const { coordinator, recordFor, acquire, restart } = await setup({
+    requestLease: [granted()],
+  });
+  expect((await acquire()).status).toBe('granted');
+  await coordinator[Symbol.asyncDispose]();
+
+  const next = await restart({ releaseLease: [new Error('allocator unreachable')] });
+
+  expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'pending' });
+  expect(next.coordinator.binding(OWNER)).toBeUndefined();
+});
+
+test('settled operations cost the allocator nothing on restart', async () => {
+  const { coordinator, acquire, restart } = await setup({
+    requestLease: [granted()],
+    releaseLease: [undefined],
+  });
+  expect((await acquire()).status).toBe('granted');
+  await coordinator.release(OWNER);
+
+  const next = await restart({});
+
+  expect(next.allocator.calls).toEqual([]);
 });

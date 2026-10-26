@@ -98,8 +98,13 @@ const DEFAULT_POLL_INTERVAL_MS = 1_000;
  * renewed between commands until `release`, and is torn down and released when the allocator
  * stops confirming it. Expiry of the Host lease itself belongs to its owner, which calls
  * `release`. Disposal stops renewal without releasing, leaving held leases to restart recovery.
+ *
+ * Construction is that recovery (ADR 0021 §4, §8): Host leases do not survive a restart, so every
+ * operation a previous process left outstanding is cancelled or released before the coordinator
+ * accepts an acquisition. An operation the allocator cannot confirm stays journaled and
+ * non-executable.
  */
-export function createManagedLeaseCoordinator(options: {
+export async function createManagedLeaseCoordinator(options: {
   store: AllocationOperationStore;
   allocator: ManagedDeviceAllocatorPort;
   handoff: ManagedLeaseHandoff;
@@ -107,7 +112,7 @@ export function createManagedLeaseCoordinator(options: {
   renewalSafetyWindowMs?: number;
   pollIntervalMs?: number;
   teardownTimeoutMs?: number;
-}): ManagedLeaseCoordinator {
+}): Promise<ManagedLeaseCoordinator> {
   const renewIntervalMs = options.renewIntervalMs ?? DEFAULT_RENEW_INTERVAL_MS;
   const renewalSafetyWindowMs = options.renewalSafetyWindowMs ?? DEFAULT_RENEWAL_SAFETY_WINDOW_MS;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -262,11 +267,7 @@ export function createManagedLeaseCoordinator(options: {
     ref: AllocationOperationRef,
     reason: 'abandoned' | 'deadline-exceeded',
   ): Promise<ManagedLeaseAcquisition> {
-    const cancelled = await journal.cancel(ref);
-    const settled =
-      cancelled.status === 'blocked' && cancelled.reason === 'already-granted'
-        ? await journal.release(ref)
-        : cancelled;
+    const settled = await giveBack(ref);
     if (settled.status === 'cancelled' || settled.status === 'released') {
       return unavailable(
         reason,
@@ -276,6 +277,41 @@ export function createManagedLeaseCoordinator(options: {
       );
     }
     return unavailable('allocator-uncertain', describeJournalResult(settled));
+  }
+
+  async function giveBack(ref: AllocationOperationRef): Promise<AllocationJournalResult> {
+    const cancelled = await journal.cancel(ref);
+    return cancelled.status === 'blocked' && cancelled.reason === 'already-granted'
+      ? await journal.release(ref)
+      : cancelled;
+  }
+
+  async function recoverOutstanding(): Promise<void> {
+    for (const entry of journal.list()) {
+      if (entry.status !== 'found') {
+        if (entry.status === 'unreadable') {
+          emitDiagnostic({
+            level: 'warn',
+            phase: 'managed_lease_recovery_unreadable',
+            data: { path: entry.path, reason: entry.reason },
+          });
+        }
+        continue;
+      }
+      const { requesterId, attemptKey } = entry.record;
+      const result = await giveBack({ requesterId, attemptKey });
+      if (['cancelled', 'released', 'refused'].includes(result.status)) continue;
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'managed_lease_recovery_uncertain',
+        data: {
+          requesterId,
+          attemptKey,
+          status: result.status,
+          message: describeJournalResult(result),
+        },
+      });
+    }
   }
 
   async function release(owner: string): Promise<ManagedLeaseRelease> {
@@ -329,6 +365,7 @@ export function createManagedLeaseCoordinator(options: {
     void release(owner);
   }
 
+  await recoverOutstanding();
   return Object.freeze({
     acquire,
     release,
