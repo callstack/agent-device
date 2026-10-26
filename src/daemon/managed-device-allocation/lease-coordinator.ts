@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { addAbortListener } from 'node:events';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   LeaseRefusal,
   ManagedDeviceAllocatorPort,
@@ -245,7 +245,7 @@ export async function createManagedLeaseCoordinator(options: {
       if (signal.aborted) return await abandon(ref, 'abandoned');
       const remainingMs = input.deadlineAtMs - Date.now();
       if (remainingMs <= 0) return await abandon(ref, 'deadline-exceeded');
-      await abortableDelay(Math.min(pollIntervalMs, remainingMs), signal);
+      await sleep(Math.min(pollIntervalMs, remainingMs), undefined, { signal }).catch(() => {});
       if (signal.aborted) return await abandon(ref, 'abandoned');
       result = await journal.recover(ref);
     }
@@ -483,17 +483,4 @@ async function within<T>(work: Promise<T>, ms: number, label: string): Promise<T
   } finally {
     clearTimeout(timer);
   }
-}
-
-function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(done, ms);
-    const listener = addAbortListener(signal, done);
-    function done() {
-      clearTimeout(timer);
-      listener[Symbol.dispose]();
-      resolve();
-    }
-  });
 }
