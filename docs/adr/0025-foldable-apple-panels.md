@@ -324,7 +324,8 @@ A later no-sample read after an earlier sample retains its own reason.
 Its simulator plugin looks up `defaultDeviceSetWithError:`, and no flag or environment variable selects another set.
 A simulator in a scoped set (`--ios-simulator-device-set`, as Simlock leases use) therefore had no hinge readback and no panel table.
 `fold` refused it with `unsupported-device-scope`.
-devicectl 651.13.5 also has no `device motion`, so the default set had no hinge readback either.
+devicectl 651.13.5 also has no `device motion`.
+On that toolchain, `fold` attempted the hinge read and reported `fold-pose-dispatched-unverified` in the default set too.
 
 Both CoreDevice facts come from the guest daemon `dtdeviceinfod`.
 It reads the hinge through private CoreMotion `CMAngleManager`, and the panels through `CADisplay` and BacklightServices `BLSBacklight`.
@@ -343,7 +344,9 @@ Guest panel power matched CoreDevice for each pose, and screenshots captured the
 
 This amendment accepts private CoreMotion and BacklightServices symbols, in addition to the private HID already accepted.
 The helper checks each selector before it calls it.
-A runtime without a symbol yields no sample (`fold-pose-dispatched-unverified`) or an unresolved panel table, never a guess.
+A runtime without `CMAngleManager` yields no sample, so `fold` reports `fold-pose-dispatched-unverified`.
+A runtime without `CADisplay` yields an unresolved panel table.
+A runtime without `BLSBacklight` reports each panel's power as `unknown`, so the capture rules name the `primary` panel and set `ambiguous`.
 
 Rejected alternatives:
 

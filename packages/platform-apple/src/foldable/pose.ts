@@ -47,10 +47,14 @@ export async function setAppleFoldPose(
   const intent = input;
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
-  const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
+  // One helper serves the scoped panel reads, the dispatch, and every hinge read.
+  const helper = await ensureFoldHelperBinary({ signal: options.signal });
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal: options.signal,
+    foldHelper: helper,
+  });
   requireFoldableInventory(device, inventory);
 
-  const helper = await ensureFoldHelperBinary({ signal: options.signal });
   await sendSimulatorFoldPose(device, helper, intent.keyframes ?? pose, options.signal);
   emitDiagnostic({
     level: 'info',
@@ -59,7 +63,7 @@ export async function setAppleFoldPose(
   });
 
   const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
-  const litPanel = await readLitPanel(device, options.signal);
+  const litPanel = await readLitPanel(device, helper, options.signal);
   return {
     pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
     hingeAngleDegrees,
@@ -79,12 +83,13 @@ function isHingeNoSample(error: unknown): boolean {
  */
 async function dispatchedUnverifiedPoseError(
   device: DeviceInfo,
+  helper: FoldHelperBinary,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle: number | undefined,
   cause: unknown,
 ): Promise<AppError> {
-  const litPanel = await readLitPanel(device, signal);
+  const litPanel = await readLitPanel(device, helper, signal);
   return new AppError(
     'COMMAND_FAILED',
     `${device.name} received the ${pose} pose request, but the first hinge-angle read returned no sample to verify it`,
@@ -147,7 +152,7 @@ async function awaitHingePose(
       });
     } catch (error) {
       if (observed !== undefined || !isHingeNoSample(error)) throw error;
-      throw await dispatchedUnverifiedPoseError(device, pose, signal, targetAngle, error);
+      throw await dispatchedUnverifiedPoseError(device, helper, pose, signal, targetAngle, error);
     }
     if (isVerifiedHingePose(observed, previous, pose, targetAngle)) return observed;
   }
@@ -269,9 +274,10 @@ function unsettledPoseError(
 
 async function readLitPanel(
   device: DeviceInfo,
+  foldHelper: FoldHelperBinary,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, { signal });
+  const inventory = await queryAppleDisplayInventory(device, { signal, foldHelper });
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }

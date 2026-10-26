@@ -29,11 +29,13 @@ import {
 } from '../core/display-inventory.ts';
 import { IOS_FOLD_POSE_READ_INTERVAL_MS, IOS_FOLD_POSE_SETTLE_ATTEMPTS } from '../core/config.ts';
 import { readSimulatorHingeAngle } from './guest-readback.ts';
+import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 import { setAppleFoldPose } from './pose.ts';
 
 const mockInventory = vi.mocked(queryAppleDisplayInventory);
 const mockHinge = vi.mocked(readSimulatorHingeAngle);
+const mockEnsureHelper = vi.mocked(ensureFoldHelperBinary);
 const mockSend = vi.mocked(sendSimulatorFoldPose);
 
 const duo: DeviceInfo = {
@@ -87,6 +89,7 @@ function queueBudgetReadings(fill: (index: number) => number, last: readonly num
 beforeEach(() => {
   mockInventory.mockReset();
   mockHinge.mockReset();
+  mockEnsureHelper.mockClear();
   mockSend.mockReset();
   mockSend.mockResolvedValue(undefined);
 });
@@ -107,8 +110,13 @@ test('sends the simulator HID pose and reports the pose the guest hinge read bac
   expect(mockSend).toHaveBeenCalledWith(duo, FOLD_HELPER, 'open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
   // Reads are spaced so two samples of a moving hinge cannot land together; the first is not delayed.
-  // One helper serves the dispatch and every read: a toolchain probe per read would multiply its cost.
+  // One helper serves the panel reads, the dispatch, and every hinge read: resolving it per read
+  // would repeat its toolchain probe.
+  expect(mockEnsureHelper).toHaveBeenCalledTimes(1);
   expect(mockHinge.mock.calls.every(([, helper]) => helper === FOLD_HELPER)).toBe(true);
+  expect(mockInventory.mock.calls.every(([, options]) => options.foldHelper === FOLD_HELPER)).toBe(
+    true,
+  );
   expect(mockHinge.mock.calls.map(([, , options]) => options?.windowMs)).toEqual([
     0,
     IOS_FOLD_POSE_READ_INTERVAL_MS,

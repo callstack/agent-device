@@ -8,7 +8,9 @@ import {
   IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
   IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS,
 } from './config.ts';
+import type { FoldHelperBinary } from '../foldable/fold-helper-cache.ts';
 import { runIosDevicectlJsonRequest } from './devicectl.ts';
+import { simulatorAddressFor } from './simctl.ts';
 
 export type AppleDeviceDisplay = {
   /** CoreDevice display name, which `simctl io --display` also accepts. */
@@ -87,6 +89,13 @@ type CoreDeviceDisplayPayload = {
   };
 };
 
+type AppleDisplayInventoryOptions = {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** A fold helper the caller already resolved, so a scoped read does not resolve it again. */
+  foldHelper?: FoldHelperBinary;
+};
+
 const DISPLAYS_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not report 'devicectl device info displays'. Update Xcode to a version that ships the display-information feature before targeting multi-display Apple devices.";
 
@@ -104,9 +113,9 @@ const DISPLAYS_UNSUPPORTED_HINT =
  */
 export async function queryAppleDisplayInventory(
   device: DeviceInfo,
-  options: { timeoutMs?: number; signal?: AbortSignal },
+  options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
-  if (device.kind === 'simulator' && device.simulatorSetPath) {
+  if (simulatorAddressFor(device).simulatorSetPath) {
     return await queryScopedSimulatorDisplayInventory(device, options);
   }
   try {
@@ -147,7 +156,7 @@ export async function queryAppleDisplayInventory(
  */
 async function queryScopedSimulatorDisplayInventory(
   device: DeviceInfo,
-  options: { timeoutMs?: number; signal?: AbortSignal },
+  options: AppleDisplayInventoryOptions,
 ): Promise<AppleDisplayInventory> {
   // The first read on a host also builds the helper; the budget covers that build too.
   const budget = AbortSignal.timeout(IOS_SCOPED_DISPLAY_PROBE_BUDGET_MS);
@@ -157,6 +166,7 @@ async function queryScopedSimulatorDisplayInventory(
     const payload = await readSimulatorPanelPayload(device, {
       signal,
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
+      helper: options.foldHelper,
     });
     const displays = parseCoreDeviceDisplays(payload);
     if (displays.length > 0 && displays.length === payload.integratedCount) {
@@ -339,7 +349,7 @@ export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInve
 }
 
 const UNIDENTIFIED_PANEL_HINT =
-  'The panel table named no primary panel and panel power did not identify exactly one lit panel. Run `xcrun devicectl device info displays --device <udid>` for a simulator in the default device set, then retry after one panel reports a lit backlightState.';
+  'The panel table named no primary panel and panel power did not identify exactly one lit panel. Retry after one panel reports a lit backlightState; agent-device help foldable names the panel table source for each device set.';
 
 /**
  * Sanity-checks the panel geometry against a foldable's shape.

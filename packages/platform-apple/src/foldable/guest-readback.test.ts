@@ -8,6 +8,7 @@ const helper = { path: '/cache/fold-helper' };
 
 import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
+import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
 import {
   parseHingeReading,
   readSimulatorHingeAngle,
@@ -110,8 +111,20 @@ test('wraps the guest panel table in the CoreDevice payload shape', async () => 
     () => readSimulatorPanelPayload(scopedDuo, { timeoutMs: 5000 }),
   );
   expect(value).toEqual({ result: { displays }, integratedCount: 2 });
-  expect(calls[0]?.args.at(-1)).toBe('panels');
+  expect(calls.map((call) => call.args)).toEqual([
+    ['simctl', '--set', '/tmp/scoped-set', 'spawn', 'scoped-duo', '/cache/fold-helper', 'panels'],
+  ]);
   expect(calls[0]?.options).toMatchObject({ timeoutMs: 5000 });
+});
+
+test('reads the panel table with a helper the caller already resolved', async () => {
+  const { calls } = await withHelperResult(
+    { stdout: '{"version":1,"integratedCount":0,"displays":[]}', exitCode: 0 },
+    () =>
+      readSimulatorPanelPayload(scopedDuo, { timeoutMs: 5000, helper: { path: '/fold/resolved' } }),
+  );
+  expect(vi.mocked(ensureFoldHelperBinary)).not.toHaveBeenCalled();
+  expect(calls[0]?.args.at(-2)).toBe('/fold/resolved');
 });
 
 test.each([

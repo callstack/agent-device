@@ -139,7 +139,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       action: constSchema('fold'),
       pose: enumSchema(FOLD_POSES),
       hingeAngleDegrees: numberSchema(
-        'Hinge angle read back after the pose settled: from CoreDevice on iOS, from the emulator hinge sensor on Android.',
+        'Hinge angle read back after the pose settled: from CoreMotion inside the simulator on iOS, from the emulator hinge sensor on Android.',
       ),
       screen: objectSchema(
         {
@@ -662,7 +662,7 @@ const foldCommandFacet = defineCommandFacet({
   name: FOLD_COMMAND_NAME,
   text: {
     summary: 'Fold or unfold a foldable iPhone simulator or Android emulator',
-    cliDetail: `iPhone Duo simulators and foldable Android emulators. iOS sends a ${foldGuidance.hingeEvent} and confirms the hinge angle through CoreDevice; Android sets the emulator console posture and confirms the device state. Refs and coordinates do not survive a pose change.`,
+    cliDetail: `iPhone Duo simulators and foldable Android emulators. iOS sends a ${foldGuidance.hingeEvent} and confirms the hinge angle inside the simulator; Android sets the emulator console posture and confirms the device state. Refs and coordinates do not survive a pose change.`,
   },
   metadata: foldCommandMetadata,
   run: (client, input) => client.command.fold(input),

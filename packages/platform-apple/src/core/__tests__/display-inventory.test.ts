@@ -51,6 +51,7 @@ import { runXcrun } from '../tool-provider.ts';
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
 import { runSimctlForDevice } from '../simctl.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { ensureFoldHelperBinary } from '../../foldable/fold-helper-cache.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
 const mockRunSimctlForDevice = vi.mocked(runSimctlForDevice);
@@ -731,6 +732,29 @@ describe('scoped simulator panel table', () => {
     assert.equal(mockRunXcrun.mock.calls.length, 0);
   });
 
+  test('reads with the fold helper the caller already resolved', async () => {
+    mockRunSimctlForDevice.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: GUEST_PANELS_OPEN,
+      stderr: '',
+    });
+    vi.mocked(ensureFoldHelperBinary).mockClear();
+
+    await queryAppleDisplayInventory(scopedDuo, { foldHelper: { path: '/fold/resolved' } });
+
+    assert.equal(vi.mocked(ensureFoldHelperBinary).mock.calls.length, 0);
+    assert.equal(mockRunSimctlForDevice.mock.calls[0]?.[1]?.[2], '/fold/resolved');
+  });
+
+  test('treats a blank set path as the default set, as simctl does', async () => {
+    mockReadHostTextFile.mockResolvedValue(JSON.stringify(IPHONE_DUO_CLOSED));
+
+    await resolveAppleCaptureDisplay({ ...scopedDuo, simulatorSetPath: '   ' });
+
+    assert.equal(mockRunSimctlForDevice.mock.calls.length, 0);
+    assert.ok(mockRunXcrun.mock.calls.some(([args]) => args.includes('displays')));
+  });
+
   function guestPanels(integratedCount: number, keep: number): string {
     const payload = JSON.parse(GUEST_PANELS_OPEN) as { displays: Record<string, unknown>[] };
     return JSON.stringify({
@@ -779,7 +803,8 @@ describe('scoped simulator panel table', () => {
       { exitCode: 0, stdout: '{"version":1,"displays":[]}', stderr: '' },
     ],
   ])('keeps the inventory unresolved for %s', async (_label, result) => {
-    mockRunSimctlForDevice.mockResolvedValueOnce(result);
+    // Both reads below see the same helper answer.
+    mockRunSimctlForDevice.mockResolvedValue(result);
 
     assert.equal((await queryAppleDisplayInventory(scopedDuo, {})).unresolved, true);
     assert.deepEqual(await resolveAppleCaptureTarget(scopedDuo), {});

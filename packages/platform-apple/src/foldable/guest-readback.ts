@@ -57,10 +57,10 @@ export type SimulatorPanelPayload = { result: { displays: unknown[] }; integrate
 /** Reads the guest panel table for a simulator CoreDevice cannot address. */
 export async function readSimulatorPanelPayload(
   device: DeviceInfo,
-  options: { signal?: AbortSignal; timeoutMs: number },
+  options: { signal?: AbortSignal; timeoutMs: number; helper?: FoldHelperBinary },
 ): Promise<SimulatorPanelPayload> {
   options.signal?.throwIfAborted();
-  const binary = await ensureFoldHelperBinary({ signal: options.signal });
+  const binary = options.helper ?? (await ensureFoldHelperBinary({ signal: options.signal }));
   const result = await runFoldHelperObservation(device, binary, ['panels'], options);
   const payload = result.exitCode === 0 ? parsePanelsReading(result.stdout) : undefined;
   if (payload) return payload;
