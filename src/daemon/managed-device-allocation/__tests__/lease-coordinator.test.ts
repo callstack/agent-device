@@ -378,3 +378,33 @@ test('an operation left uncertain for the owner is given back before its next ac
   ]);
   expect(coordinator.binding(OWNER)).toBeDefined();
 });
+
+test('releasing during an acquisition the allocator refuses holds nothing', async () => {
+  const answer = deferred<LeaseRequestStatus>();
+  const { coordinator, acquire } = await setup({ requestLease: [answer.promise] });
+
+  const acquisition = acquire();
+  await vi.advanceTimersByTimeAsync(0);
+  const released = coordinator.release(OWNER);
+  answer.resolve({ ...pending, state: 'refused', refusal: { reason: 'simulator-capacity' } });
+
+  expect(await released).toEqual({ status: 'not-held' });
+  expect((await acquisition).status).toBe('refused');
+});
+
+test('releasing during an acquisition whose grant was never journaled is uncertain', async () => {
+  const answer = deferred<LeaseRequestStatus>();
+  const { coordinator, acquire } = await setup(
+    { requestLease: [answer.promise] },
+    {},
+    'allocator-status',
+  );
+
+  const acquisition = acquire();
+  await vi.advanceTimersByTimeAsync(0);
+  const released = coordinator.release(OWNER);
+  answer.resolve(granted());
+
+  expect(await released).toMatchObject({ status: 'uncertain' });
+  expect(await acquisition).toMatchObject({ status: 'unavailable', reason: 'journal-blocked' });
+});

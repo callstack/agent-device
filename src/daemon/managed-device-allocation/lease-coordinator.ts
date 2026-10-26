@@ -276,6 +276,7 @@ export async function createManagedLeaseCoordinator(options: {
     reason: 'abandoned' | 'deadline-exceeded',
   ): Promise<ManagedLeaseAcquisition> {
     const settled = await giveBack(ref);
+    if (settled.status === 'refused') return refusalOf(settled.record);
     if (settled.status === 'cancelled' || settled.status === 'released') {
       return unavailable(
         reason,
@@ -328,10 +329,7 @@ export async function createManagedLeaseCoordinator(options: {
     if (entry.phase === 'releasing') return await entry.settled;
     if (entry.phase === 'acquiring') {
       entry.cancel.abort();
-      const acquisition = await entry.settled;
-      return acquisition.status === 'unavailable' && acquisition.reason === 'allocator-uncertain'
-        ? { status: 'uncertain', message: acquisition.message }
-        : { status: 'released' };
+      return releaseOfInterrupted(await entry.settled);
     }
     entry.keepalive[Symbol.dispose]();
     const settled = releaseHeld(entry.ref);
@@ -404,6 +402,22 @@ const UNGRANTED_REASONS: Partial<
   cancelled: 'allocator-cancelled',
   uncertain: 'allocator-uncertain',
 };
+
+/** What an acquisition interrupted by `release` left behind. */
+function releaseOfInterrupted(acquisition: ManagedLeaseAcquisition): ManagedLeaseRelease {
+  if (acquisition.status !== 'unavailable') return { status: 'not-held' };
+  switch (acquisition.reason) {
+    case 'allocator-uncertain':
+    case 'journal-blocked':
+      return { status: 'uncertain', message: acquisition.message };
+    case 'abandoned':
+    case 'deadline-exceeded':
+    case 'handoff-failed':
+      return { status: 'released' };
+    default:
+      return { status: 'not-held' };
+  }
+}
 
 function refusalOf(record: AllocationOperationRecord): ManagedLeaseAcquisition {
   return record.phase.status === 'refused'
