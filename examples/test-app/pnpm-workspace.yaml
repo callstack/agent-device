@@ -8,8 +8,8 @@
 # compression/source-map-js/zod are scoped to the vulnerable major so unrelated
 # majors elsewhere in the tree stay untouched. zod is scoped per major because
 # @expo/cli hard-declares zod ^3.25.76 while expo-build-disk-cache uses zod ^4;
-# both majors are below the patched floor 4.6.6, and @expo/cli's bundled usage
-# (z.object/string/enum, safeParse, error.issues) is compatible with zod 4.
+# both majors are below the patched floor 4.6.6. security/zod-override-security.
+# test.mjs proves @expo/cli's zod usage runs clean under the override.
 overrides:
   '@xmldom/xmldom': 0.8.15
   browserslist: ^4.28.7

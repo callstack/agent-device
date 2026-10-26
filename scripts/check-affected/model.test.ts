@@ -254,6 +254,7 @@ test('the image-size parser mitigation is selected when its defining files chang
     'examples/test-app/patches/image-size@1.2.1.patch',
     'examples/test-app/security/image-size-security.test.mjs',
     'examples/test-app/pnpm-workspace.yaml',
+    'examples/test-app/pnpm-lock.yaml',
   ]) {
     const result = plan([file]);
     assert.equal(result.failOpen, false, `${file} must not fail open`);

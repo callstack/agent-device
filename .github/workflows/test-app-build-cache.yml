@@ -50,9 +50,10 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: test-app-typecheck }
 
-      # image-size has no fixed release for its parser DoS advisories; this gate
-      # proves the in-tree pnpm patch still terminates the zero-length vectors.
-      - name: Run the image-size parser security test
+      # image-size has no fixed release for its parser DoS advisories and
+      # @expo/cli hard-declares a vulnerable zod ^3; this gate's suite proves
+      # the in-tree pnpm patch and the zod override mitigations.
+      - name: Run the test app security suite
         uses: ./.github/actions/run-gate
         with: { gate: test-app-security }
 
