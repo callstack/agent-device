@@ -48,13 +48,6 @@ extension RunnerTests {
     }
   }
 
-  /// Whether the sole-screen route is open for the launched app: an iPhone with one screen always,
-  /// an iPad only while the app proves it fills that screen. `RunnerResolveSoleScreen` owns the rule;
-  /// a test reads its answer rather than restating a device list.
-  private var showsAppsOnlyFullScreen: Bool {
-    soleScreenRouteIsOpen(for: app)
-  }
-
   /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
   /// raises an exception that ends the runner test. A long press needs no tree: when the sole-screen
   /// route is open for the app it is synthesized on that screen, and anything else keeps the XCTest
@@ -84,7 +77,7 @@ extension RunnerTests {
     XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
     XCTAssertEqual(longPressResponse.data?.message, "long pressed")
     XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
-    if showsAppsOnlyFullScreen {
+    if soleScreenRouteIsOpen(for: app) {
       XCTAssertEqual(longPressCoordinatePresses, 0)
       XCTAssertNil(longPressResponse.data?.gestureFallback)
       XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
@@ -123,7 +116,7 @@ extension RunnerTests {
 
     let response = try executeOnMainPrepared(command: command, activeApp: app)
 
-    if showsAppsOnlyFullScreen {
+    if soleScreenRouteIsOpen(for: app) {
       XCTAssertTrue(response.ok, String(describing: response.error))
       let screen = UIScreen.main.bounds
       XCTAssertEqual(response.data?.x, 0)
