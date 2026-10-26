@@ -12,6 +12,8 @@
  * human-readable violations come out.
  */
 
+import { UNIT_TEST_CONDITION } from '../package-apple-runner-source.mjs';
+
 /** Test-only directory names. Any packed path carrying one of these segments is test code. */
 const TEST_ONLY_DIRECTORY_NAMES = new Set(['UnitTests', 'Tests', '__tests__', 'fixtures', 'mocks']);
 
@@ -42,7 +44,6 @@ const RUNNER_HOST_APP_TARGET = [
   'AgentDeviceRunner',
 ];
 
-const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 /**
  * The host app's fixture screens switch on these launch arguments; the shipped host must not carry
  * one. This is also what catches the fixture file itself if its drop entry is ever removed: the
