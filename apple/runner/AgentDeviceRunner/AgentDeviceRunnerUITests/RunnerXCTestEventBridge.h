@@ -54,7 +54,8 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
 
 // Reads the display ID off an already-resolved window, keeping a synthesized record's display and
 // the caller's booked reference frame on the same window. The frame is still read before the
-// screen; a window that answers empty or raises fails closed with the same typed refusals.
+// screen; a window that answers empty or raises fails closed with a refusal message naming the
+// same reason the application walk gives.
 FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowDisplayID(
   id window,
   NSUInteger *displayID
