@@ -220,11 +220,12 @@ export async function createManagedLeaseCoordinator(options: {
     return acquisition;
   }
 
-  async function allocate(
+  /** Opens the attempt on the owner's lane, giving back a stale operation that still holds it. */
+  async function openAttempt(
     input: ManagedLeaseAcquireInput,
     ref: AllocationOperationRef,
     signal: AbortSignal,
-  ): Promise<ManagedLeaseAcquisition> {
+  ): Promise<AllocationJournalResult> {
     const request = () =>
       journal.allocate({
         ...ref,
@@ -234,13 +235,22 @@ export async function createManagedLeaseCoordinator(options: {
         admission: 'fail-fast',
         signal,
       });
-    let result = await request();
+    const result = await request();
     // The owner has no live entry, so an operation still holding its lane is stale.
-    if (result.status === 'blocked' && result.reason === 'lane-busy' && result.record) {
-      const { requesterId, attemptKey } = result.record;
-      await giveBack({ requesterId, attemptKey });
-      result = await request();
+    if (result.status !== 'blocked' || result.reason !== 'lane-busy' || !result.record) {
+      return result;
     }
+    const { requesterId, attemptKey } = result.record;
+    await giveBack({ requesterId, attemptKey });
+    return await request();
+  }
+
+  async function allocate(
+    input: ManagedLeaseAcquireInput,
+    ref: AllocationOperationRef,
+    signal: AbortSignal,
+  ): Promise<ManagedLeaseAcquisition> {
+    let result = await openAttempt(input, ref, signal);
     while (result.status === 'pending' || isAllocatorUncertain(result)) {
       if (signal.aborted) return await abandon(ref, 'abandoned');
       const remainingMs = input.deadlineAtMs - Date.now();
