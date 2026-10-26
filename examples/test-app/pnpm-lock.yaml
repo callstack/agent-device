@@ -19,6 +19,8 @@ overrides:
   js-yaml@4: ^4.3.1
   nanoid@3: ^3.3.18
   '@babel/core@7': ^7.29.6
+  zod@3: ^4.6.6
+  zod@4: ^4.6.6
 
 patchedDependencies:
   image-size@1.2.1: 6544266162325551c6f85c53ca52e5b3b25ccf96127a57a4ebcc3553e89584bb
@@ -2828,11 +2830,8 @@ packages:
     resolution: {integrity: sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w==}
     engines: {node: '>=12'}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -3397,7 +3396,7 @@ snapshots:
       toqr: 0.1.1
       wrap-ansi: 7.0.0
       ws: 8.21.0
-      zod: 3.25.76
+      zod: 4.6.7
     optionalDependencies:
       expo-router: 58.0.4(69824bbec4895ab7808c7feacb129849)
       react-native: 0.88.0-rc.0(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.14)(react@19.2.3)(supports-color@8.1.1)
@@ -4529,7 +4528,7 @@ snapshots:
       '@expo/config': 58.0.0(supports-color@8.1.1)(typescript@6.0.3)
       cosmiconfig: 9.0.2(typescript@6.0.3)
       env-paths: 2.2.1
-      zod: 4.4.3
+      zod: 4.6.7
     transitivePeerDependencies:
       - typescript
 
@@ -6048,6 +6047,4 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 21.1.1
 
-  zod@3.25.76: {}
-
-  zod@4.4.3: {}
+  zod@4.6.7: {}
