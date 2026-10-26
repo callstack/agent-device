@@ -147,7 +147,7 @@
     "fallow:baseline": "fallow health --report-only --save-baseline fallow-baselines/health.json --summary",
     "check:fallow": "fallow audit",
     "check:native-dupes": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-new-clones --fail-on-empty",
-    "check:native-dupes:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/native-dupes/check.test.ts",
+    "check:native-dupes:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/native-dupes/*.test.ts",
     "native-dupes:report": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-empty",
     "native-dupes:baseline": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --update-baseline --fail-on-empty",
     "native-dupes:prototype": "node --experimental-strip-types scripts/native-dupes/prototype.ts",

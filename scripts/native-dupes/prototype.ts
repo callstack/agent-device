@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import {
+  countMotivatingClones,
+  namedConstantRange,
+  type PrototypeClone,
+} from './prototype-report.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const cli = path.join(root, 'node_modules/jscpd/run-jscpd.js');
@@ -10,6 +15,10 @@ const pair = [
   'packages/platform-apple/src/core/__tests__/display-inventory.test.ts',
   'packages/platform-apple/src/__tests__/simctl-facade.test.ts',
 ];
+const duoRange = namedConstantRange(
+  fs.readFileSync(path.join(root, pair[1]!), 'utf8'),
+  'IPHONE_DUO_CLOSED',
+);
 const variants = [
   { name: 'mild-50-5', tokens: 50, lines: 5, mode: 'mild', extra: [] },
   { name: 'weak-50-5', tokens: 50, lines: 5, mode: 'weak', extra: [] },
@@ -31,10 +40,7 @@ type Report = {
   statistics: {
     total: { clones: number; duplicatedLines: number; percentage: number; sources: number };
   };
-  duplicates: Array<{
-    firstFile: { name: string; start: number; end: number };
-    secondFile: { name: string; start: number; end: number };
-  }>;
+  duplicates: PrototypeClone[];
 };
 
 const rows = [];
@@ -71,17 +77,7 @@ for (const variant of variants) {
       fs.readFileSync(path.join(destination, 'jscpd-report.json'), 'utf8'),
     );
     const { clones, duplicatedLines, percentage, sources } = report.statistics.total;
-    const fold = report.duplicates.filter((clone) =>
-      [clone.firstFile, clone.secondFile].some((file) => file.name.endsWith('/fold-helper/Fold.m')),
-    ).length;
-    const duoPanels = report.duplicates.filter(
-      (clone) =>
-        clone.firstFile.name !== clone.secondFile.name &&
-        [clone.firstFile, clone.secondFile].some(
-          (file) =>
-            file.name.endsWith('/simctl-facade.test.ts') && file.start <= 50 && file.end >= 34,
-        ),
-    ).length;
+    const { fold, duoPanels } = countMotivatingClones(report.duplicates, duoRange);
     const row = {
       variant: variant.name,
       scope,

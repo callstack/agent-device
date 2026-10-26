@@ -477,3 +477,31 @@ test('native duplication covers language inputs without selecting metadata or Ty
     assert.ok(ids([file]).includes('native-dupes-model'), file);
   }
 });
+
+test('native duplication selection covers every configured root, format, and custom extension', () => {
+  const config: { path: string[]; format: string[]; formatsExts: Record<string, string[]> } =
+    JSON.parse(fs.readFileSync(path.join(repoRoot, '.jscpd-native.json'), 'utf8'));
+  const defaultExtensions: Record<string, string[]> = {
+    swift: ['swift'],
+    objectivec: ['m'],
+    kotlin: ['kt', 'kts'],
+    java: ['java'],
+    python: ['py'],
+  };
+  for (const format of config.format) {
+    const defaults = defaultExtensions[format];
+    assert.ok(defaults, `Declare the scanner extensions for the added ${format} format`);
+    const extensions = new Set([...defaults, ...(config.formatsExts[format] ?? [])]);
+    for (const root of config.path) {
+      for (const extension of extensions) {
+        const file = `${root}/duplication-probe/Source.${extension}`;
+        assert.ok(
+          plan([file]).reasons.some(
+            (entry) => entry.check === 'native-dupes' && entry.rule === 'own:native-dupes',
+          ),
+          file,
+        );
+      }
+    }
+  }
+});
