@@ -37,19 +37,6 @@ public enum CoordinateSpaceRotation {
     }
   }
 
-  public static func native(vector: CGVector, interfaceOrientation: Int) -> CGVector {
-    switch interfaceOrientation {
-    case RunnerInterfaceOrientation.landscapeRight:
-      return CGVector(dx: -vector.dy, dy: vector.dx)
-    case RunnerInterfaceOrientation.landscapeLeft:
-      return CGVector(dx: vector.dy, dy: -vector.dx)
-    case RunnerInterfaceOrientation.portraitUpsideDown:
-      return CGVector(dx: -vector.dx, dy: -vector.dy)
-    default:
-      return vector
-    }
-  }
-
   public static func oriented(
     point: CGPoint,
     in frame: CGRect,

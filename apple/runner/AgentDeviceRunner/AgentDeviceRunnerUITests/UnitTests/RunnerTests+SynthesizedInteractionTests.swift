@@ -216,41 +216,6 @@ extension RunnerTests {
     )
   }
 
-  func testSynthesizedDispatchInvertsCaptureOnEveryInterfaceOrientation() {
-    let frames = [
-      CGRect(x: 0, y: 0, width: 430, height: 932),
-      CGRect(x: 0, y: 0, width: 951, height: 669),
-    ]
-    for frame in frames {
-      for orientation in [
-        RunnerInterfaceOrientation.portrait,
-        RunnerInterfaceOrientation.portraitUpsideDown,
-        RunnerInterfaceOrientation.landscapeLeft,
-        RunnerInterfaceOrientation.landscapeRight,
-      ] {
-        let corners = [
-          CGPoint(x: frame.minX + 1, y: frame.minY + 1),
-          CGPoint(x: frame.midX, y: frame.midY),
-          CGPoint(x: frame.maxX - 2, y: frame.maxY - 3),
-        ]
-        for displayed in corners {
-          let captured = CoordinateSpaceRotation.oriented(
-            point: displayed,
-            in: frame,
-            interfaceOrientation: orientation
-          )
-          let dispatched = CoordinateSpaceRotation.native(
-            point: captured,
-            in: frame,
-            interfaceOrientation: orientation
-          )
-          XCTAssertEqual(dispatched.x, displayed.x, accuracy: 0.001, "orientation \(orientation)")
-          XCTAssertEqual(dispatched.y, displayed.y, accuracy: 0.001, "orientation \(orientation)")
-        }
-      }
-    }
-  }
-
   func testPlannedMultiTouchGestureAcceptsMatchingInBoundsTrajectories() throws {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,

@@ -77,24 +77,6 @@ final class CoordinateSpaceTests: XCTestCase {
     )
   }
 
-  func testNativeSynthesizedVectorRotatesByInterfaceOrientation() {
-    let cases: [(Int, CGVector)] = [
-      (RunnerInterfaceOrientation.portrait, CGVector(dx: 40, dy: -20)),
-      (RunnerInterfaceOrientation.landscapeRight, CGVector(dx: 20, dy: 40)),
-      (RunnerInterfaceOrientation.landscapeLeft, CGVector(dx: -20, dy: -40)),
-      (RunnerInterfaceOrientation.portraitUpsideDown, CGVector(dx: -40, dy: 20)),
-      (RunnerInterfaceOrientation.unknown, CGVector(dx: 40, dy: -20)),
-    ]
-    for (orientation, expected) in cases {
-      let vector = CoordinateSpaceRotation.native(
-        vector: CGVector(dx: 40, dy: -20),
-        interfaceOrientation: orientation
-      )
-      XCTAssertEqual(vector.dx, expected.dx, "dx interfaceOrientation \(orientation)")
-      XCTAssertEqual(vector.dy, expected.dy, "dy interfaceOrientation \(orientation)")
-    }
-  }
-
   /// Capture rotates back with the exact inverse of what dispatch rotates forward. A landscape
   /// rotation that drifts on one side only fails here; the two paths cannot disagree silently.
   func testOrientationRotationRoundTripsBetweenInterfaceAndNativeSpace() {

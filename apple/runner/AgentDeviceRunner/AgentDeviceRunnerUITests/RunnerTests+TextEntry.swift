@@ -149,7 +149,7 @@ extension RunnerTests {
   /// `liveContentTranslation` and never defaulted: a vector nobody read must not pass for full screen.
   enum TextEntryContentTranslation {
     case known(CGSize)
-    /// The app fills the screen, so a snapshot frame is already a screen frame.
+    /// The window's box sits at the screen origin, so a snapshot frame is already a screen frame.
     case none
     /// The window read could not answer, so no snapshot frame names a screen box.
     case unknown
