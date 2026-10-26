@@ -550,7 +550,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'find-focus-dispatch': {
     description:
-      'Mutating `find <locator> focus`, and the focus leg of `find <locator> type`: find captures its own tree, ranks its own candidate set, runs the node stages its `findAct` row declares, then dispatches a point focus itself (`type` then dispatches the text) instead of re-entering the interaction leaf. `find click`/`find fill` are NOT this path — they hand the resolved node to `runtime-ref` as a pre-resolved target (#1654). `focus <x> <y>` is the coordinate route. Every cell below classifies what the `findAct` row plus this seam actually run, not what the acting rows run.',
+      'Mutating `find <locator> focus`, and the focus leg of `find <locator> type`: find captures its own tree, ranks its own candidate set, runs the node stages its `findAct` row declares, then dispatches a point focus itself (`type` then dispatches the text) instead of re-entering the interaction leaf. `find click`/`find fill` are NOT this path — they hand the resolved node to `runtime-ref` as a pre-resolved target (#1654). `focus <x> <y>` shares only `executeFocusPoint`; it is a generic-route command that never enters the interaction leaf and no row of this matrix classifies. Every cell below classifies what the `findAct` row plus this seam actually run, not what the acting rows run.',
     commands: ['find'],
     guarantees: {
       // find's own ranking, but under the same ambiguity contract the runtime paths use: one

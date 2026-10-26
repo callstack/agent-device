@@ -13,18 +13,16 @@ import {
   KEYBOARD_COVERED_TAB_BAR_RECT,
   keyboardCoveredTabBarSnapshot,
 } from '@agent-device/test-kit';
-import {
-  assertTapTargetClearOfVisibleKeyboard,
-  describeKeyboardOccludedPointWarning,
-} from './keyboard-occlusion.ts';
+import { assertTapTargetClearOfVisibleKeyboard } from './keyboard-occlusion.ts';
 
-// The guard's own two contributions: the refusal it raises for a decision the classifier already
-// made, and the disclosure string it composes. Which geometry decides is the classifier's suite
-// (packages/contracts/src/tap-keyboard-occlusion.test.ts, golden-table-driven), and which doors run
-// the guard is proven where each door lives — the interaction leaf's in
-// src/commands/interaction/runtime/target-visibility-stages-keyboard-occlusion.test.ts, the
+// The guard's own contribution: the refusal it raises for a decision the classifier already made.
+// Which geometry decides is the classifier's suite (packages/contracts/src/tap-keyboard-occlusion.test.ts,
+// golden-table-driven), and which doors run the guard is proven where each door lives — the interaction
+// leaf's in src/commands/interaction/runtime/target-visibility-stages-keyboard-occlusion.test.ts, the
 // mutating-`find` seam's in packages/daemon/src/execution/interaction/internal/__tests__/. Every one
-// of those suites measures this same #2589 capture.
+// of those suites measures this same #2589 capture. The coordinate path's disclosure string is proven
+// through that leaf's production door (`describeKeyboardOccludedPointWarning` has exactly one caller),
+// so it is not repeated here.
 
 function centerOf(rect: Rect): Point {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
@@ -123,37 +121,4 @@ test('the refusal quotes how the caller named the target', () => {
 
 test('a target with no measurable point cannot be refused', () => {
   guard({ snapshot: keyboardCoveredTabBarSnapshot(), tapPoint: null });
-});
-
-// The coordinate path discloses the same decision instead of refusing it, in one string the
-// response publishes.
-
-function pointWarning(params: {
-  snapshot: SnapshotState;
-  point: Point;
-  keyboard?: SnapshotKeyboardBandFact;
-}): string | undefined {
-  return describeKeyboardOccludedPointWarning({
-    nodes: params.snapshot.nodes,
-    point: params.point,
-    viewport: params.snapshot.nodes[0]!.rect ?? null,
-    ...(params.keyboard ? { keyboard: params.keyboard } : {}),
-  });
-}
-
-test('a coordinate behind the keyboard discloses the point, reason, and band', () => {
-  const warning = pointWarning({
-    snapshot: keyboardCoveredTabBarSnapshot(),
-    point: { x: 200, y: 810 },
-  });
-  assert.match(warning ?? '', /\(200, 810\) is behind the visible keyboard/);
-  assert.match(warning ?? '', /tap_keyboard_occludes_target/);
-  assert.match(warning ?? '', /keyboard frame 583\.\.874/);
-});
-
-test('a coordinate on a reported key discloses nothing', () => {
-  assert.equal(
-    pointWarning({ snapshot: keyboardCoveredTabBarSnapshot(), point: { x: 160, y: 760 } }),
-    undefined,
-  );
 });

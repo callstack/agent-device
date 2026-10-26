@@ -89,12 +89,15 @@ export async function withIosContractDaemon(
   );
 }
 
-export function runnerSnapshotEntry(nodes: readonly unknown[]): ProviderScenarioProviderEntry {
+export function runnerSnapshotEntry(
+  nodes: readonly unknown[],
+  result: Record<string, unknown> = {},
+): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.snapshot',
     deviceId: CONTRACT_DEVICE_ID,
     platform: 'apple',
-    result: { nodes, truncated: false },
+    result: { nodes, truncated: false, ...result },
   };
 }
 
