@@ -93,8 +93,15 @@ export type LeaseRequestStatus = Readonly<{
   refusal?: LeaseRefusal;
 }>;
 
-/** One attempt on one requester's allocation lane. */
-export type LeaseRequestRef = Readonly<{ requesterId: string; attemptKey: string }>;
+/**
+ * One attempt on one requester's allocation lane. It carries the generation so an allocator can
+ * answer for an attempt it holds no record of with a status that names the attempt exactly.
+ */
+export type LeaseRequestRef = Readonly<{
+  requesterId: string;
+  requestGeneration: number;
+  attemptKey: string;
+}>;
 
 export type ManagedDeviceAllocatorPort = Readonly<{
   instanceId: string;

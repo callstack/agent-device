@@ -46,7 +46,11 @@ function lookupAllocation(
   signal?: AbortSignal,
 ): Promise<AllocationJournalResult> {
   return options.allocator
-    .getLeaseRequestStatus({ requesterId: record.requesterId, attemptKey: record.attemptKey })
+    .getLeaseRequestStatus({
+      requesterId: record.requesterId,
+      requestGeneration: record.requestGeneration,
+      attemptKey: record.attemptKey,
+    })
     .then((status) =>
       settleAllocatorStatus(
         options,
@@ -64,7 +68,11 @@ function cancelAllocation(
   record: AllocationOperationRecord,
 ): Promise<AllocationJournalResult> {
   return options.allocator
-    .cancelLeaseRequest({ requesterId: record.requesterId, attemptKey: record.attemptKey })
+    .cancelLeaseRequest({
+      requesterId: record.requesterId,
+      requestGeneration: record.requestGeneration,
+      attemptKey: record.attemptKey,
+    })
     .then((status) => settleAllocatorStatus(options, record, status, 'cancel'))
     .catch((error) => unknownAfterError(options, record, error));
 }

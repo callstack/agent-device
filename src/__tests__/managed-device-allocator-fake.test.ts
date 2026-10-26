@@ -48,7 +48,11 @@ describe('scripted managed device allocator', () => {
     await expect(allocator.requestLease(request)).resolves.toEqual(pending);
     // Steps are consumed per method: the lookup between the two requests takes its own script.
     await expect(
-      allocator.getLeaseRequestStatus({ requesterId: 'requester-a', attemptKey: 'attempt-1' }),
+      allocator.getLeaseRequestStatus({
+        requesterId: 'requester-a',
+        requestGeneration: 1,
+        attemptKey: 'attempt-1',
+      }),
     ).resolves.toEqual(granted);
     await expect(allocator.requestLease(request)).resolves.toEqual(granted);
     await expect(allocator.requestLease(request)).rejects.toThrow(
@@ -58,7 +62,11 @@ describe('scripted managed device allocator', () => {
       'allocator unreachable',
     );
     await expect(
-      allocator.cancelLeaseRequest({ requesterId: 'requester-a', attemptKey: 'attempt-1' }),
+      allocator.cancelLeaseRequest({
+        requesterId: 'requester-a',
+        requestGeneration: 1,
+        attemptKey: 'attempt-1',
+      }),
     ).rejects.toThrow('Unscripted allocator call: cancelLeaseRequest');
   });
 

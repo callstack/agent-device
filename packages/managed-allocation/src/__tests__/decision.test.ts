@@ -52,7 +52,7 @@ test('an allocator-unknown record never gets an implicit second request', () => 
   const action = decideAllocationAction(record.record, 'recover');
   assert.deepEqual(action, {
     kind: 'lookup',
-    ref: { requesterId: 'requester-a', attemptKey: 'attempt-1' },
+    ref: { requesterId: 'requester-a', requestGeneration: 1, attemptKey: 'attempt-1' },
   });
 });
 

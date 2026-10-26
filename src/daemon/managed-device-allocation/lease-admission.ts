@@ -108,6 +108,7 @@ export function createManagedLeaseAdmission(params: {
       try {
         const status = await allocator.getLeaseRequestStatus({
           requesterId: grant.requesterId,
+          requestGeneration: grant.requestGeneration,
           attemptKey: grant.attemptKey,
         });
         if (stopped) return;

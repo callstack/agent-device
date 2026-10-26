@@ -36,7 +36,9 @@ export type SimlockLeaseClient = Readonly<{
   ): Promise<Readonly<{ result: 'cancelled' | 'not-found' | 'not-cancellable' }>>;
   renewLease(input: Readonly<{ leaseId: string; ttlMs: number }>): Promise<SimlockLeaseRecord>;
   releaseLease(input: Readonly<{ leaseId: string }>): Promise<unknown>;
-  listLeases(): Promise<Readonly<{ leases: readonly SimlockLeaseRecord[] }>>;
+  listLeases(): Promise<
+    Readonly<{ leases: readonly (SimlockLeaseRecord & Readonly<{ requesterId: string }>)[] }>
+  >;
 }>;
 
 type Attempt = {
@@ -64,6 +66,8 @@ const REFUSALS: Readonly<Record<string, LeaseRefusalReason>> = {
  * record has aged out creates a new device. So attempts are answered from this process's own
  * record of them, and live lease authority from `lease.list`; an attempt this process did not
  * start is unknown, which keeps its journal entry non-executable until Simlock expires the lease.
+ * Such an attempt can still be cancelled: Simlock cancels by requester, and a requester with
+ * neither a pending request nor a lease has no device coming.
  */
 export function createSimlockManagedDeviceAllocator(options: {
   instanceId: string;
@@ -156,6 +160,22 @@ export function createSimlockManagedDeviceAllocator(options: {
     return { ...status, lease };
   };
 
+  const cancelUnstarted = async (ref: LeaseRequestRef): Promise<LeaseRequestStatus> => {
+    const { result } = await client.cancelLease({ requesterId: ref.requesterId });
+    // `not-cancellable` is device work in flight, and a listed lease may be this attempt's grant.
+    const noDevice =
+      result === 'cancelled' ||
+      (result === 'not-found' &&
+        !(await client.listLeases()).leases.some((lease) => lease.requesterId === ref.requesterId));
+    const { requesterId, requestGeneration, attemptKey } = ref;
+    return {
+      requesterId,
+      requestGeneration,
+      attemptKey,
+      state: noDevice ? 'cancelled' : 'unknown',
+    };
+  };
+
   return Object.freeze({
     instanceId: options.instanceId,
     requestLease: async (input) => {
@@ -166,6 +186,7 @@ export function createSimlockManagedDeviceAllocator(options: {
     },
     getLeaseRequestStatus: async (ref) => await liveStatus(attemptFor(ref)),
     cancelLeaseRequest: async (ref) => {
+      if (!attempts.has(attemptKey(ref))) return await cancelUnstarted(ref);
       const attempt = attemptFor(ref);
       if (attempt.status.state === 'pending') {
         await client.cancelLease({ requesterId: ref.requesterId });

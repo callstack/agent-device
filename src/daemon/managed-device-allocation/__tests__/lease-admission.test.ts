@@ -116,7 +116,7 @@ test('a lost renewal response is reconciled through the exact durable attempt', 
   ).toMatchObject({ status: 'admitted', ttlDeadline: NOW + 100_000 });
   expect(allocator.calls[1]).toEqual({
     method: 'getLeaseRequestStatus',
-    input: { requesterId: 'requester-a', attemptKey: 'attempt-1' },
+    input: { requesterId: 'requester-a', requestGeneration: 1, attemptKey: 'attempt-1' },
   });
 });
 

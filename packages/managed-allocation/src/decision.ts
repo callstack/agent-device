@@ -34,7 +34,11 @@ export function decideAllocationAction(
   record: AllocationOperationRecord,
   mode: AllocationDecisionMode,
 ): AllocationAction {
-  const ref = { requesterId: record.requesterId, attemptKey: record.attemptKey };
+  const ref = {
+    requesterId: record.requesterId,
+    requestGeneration: record.requestGeneration,
+    attemptKey: record.attemptKey,
+  };
 
   if (record.phase.status === 'ambiguous') {
     return blocked('ambiguous-state', 'allocation operation state is ambiguous');
