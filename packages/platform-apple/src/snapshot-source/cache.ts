@@ -139,21 +139,13 @@ export function buildSnapshotBridgeCompileArgv(
 
 function resolveSnapshotBridgeSourceRoot(host: SnapshotSourceHost): string {
   const projectRoot = host.projectRoot();
-  const checkoutRoot = path.join(projectRoot, 'apple', 'snapshot-bridge');
+  const bridgeRoot = path.join(projectRoot, 'apple', 'snapshot-bridge');
   if (
     SNAPSHOT_BRIDGE_SOURCE_FILENAMES.every((sourceFile) =>
-      host.exists(path.join(checkoutRoot, sourceFile)),
+      host.exists(path.join(bridgeRoot, sourceFile)),
     )
   ) {
-    return checkoutRoot;
-  }
-  const packagedRoot = path.join(projectRoot, 'dist', 'apple', 'snapshot-bridge');
-  if (
-    SNAPSHOT_BRIDGE_SOURCE_FILENAMES.every((sourceFile) =>
-      host.exists(path.join(packagedRoot, sourceFile)),
-    )
-  ) {
-    return packagedRoot;
+    return bridgeRoot;
   }
   throw snapshotSourceError('unsupported', 'native-source-missing', { projectRoot });
 }
