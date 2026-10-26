@@ -255,33 +255,28 @@ test('keyboard anchors without an acquisition viewport name the missing geometry
 });
 
 test('a captured assistant action remains tappable when projection removes its host', () => {
-  for (const host of [
-    { role: 'TUISystemInputAssistantView' },
-    { identifier: 'SystemInputAssistantView' },
-  ]) {
-    const viewport = { x: 0, y: 0, width: 390, height: 844 };
-    const nodes: RawSnapshotNode[] = [
-      { index: 0, type: 'Keyboard', rect: { x: 0, y: 600, width: 390, height: 244 } },
-      { index: 1, type: 'Other', ...host },
-      {
-        index: 2,
-        type: 'Button',
-        label: 'Assistant action',
-        parentIndex: 1,
-        rect: { x: 200, y: 560, width: 100, height: 36 },
-      },
-    ];
-    const captured = acquireProviderKeyboard({ nodes, viewport });
-    const action = captured.nodes.find((node) => node.index === 2)!;
-    assert.equal(
-      resolveKeyboardTapOcclusion({
-        nodes: [action],
-        viewport,
-        node: action,
-        point: { x: 250, y: 578 },
-        keyboard: { kind: 'visible', frame: { x: 0, y: 556, width: 390, height: 288 } },
-      }).kind,
-      'clear',
-    );
-  }
+  const viewport = { x: 0, y: 0, width: 390, height: 844 };
+  const nodes: RawSnapshotNode[] = [
+    { index: 0, type: 'Keyboard', rect: { x: 0, y: 600, width: 390, height: 244 } },
+    { index: 1, type: 'Other', role: 'TUISystemInputAssistantView' },
+    {
+      index: 2,
+      type: 'Button',
+      label: 'Assistant action',
+      parentIndex: 1,
+      rect: { x: 200, y: 560, width: 100, height: 36 },
+    },
+  ];
+  const captured = acquireProviderKeyboard({ nodes, viewport });
+  const action = captured.nodes.find((node) => node.index === 2)!;
+  assert.equal(
+    resolveKeyboardTapOcclusion({
+      nodes: [action],
+      viewport,
+      node: action,
+      point: { x: 250, y: 578 },
+      keyboard: { kind: 'visible', frame: { x: 0, y: 556, width: 390, height: 288 } },
+    }).kind,
+    'clear',
+  );
 });

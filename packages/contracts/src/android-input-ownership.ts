@@ -189,7 +189,7 @@ export const IOS_KEYBOARD_SUBTREE_CHROME_ROLES: ReadonlySet<string> = new Set([
 ]);
 
 /** Keyboard hosts the app can also fill: chrome itself, subtree left to the app. */
-const IOS_KEYBOARD_CHROME_MARKER_ROLES: ReadonlySet<string> = new Set([
+export const IOS_KEYBOARD_CHROME_MARKER_ROLES: ReadonlySet<string> = new Set([
   '_UIRemoteKeyboardPlaceholderView',
   'TUISystemInputAssistantView',
   'TUISystemInputAssistantPageView',
@@ -198,14 +198,4 @@ const IOS_KEYBOARD_CHROME_MARKER_ROLES: ReadonlySet<string> = new Set([
 /** True when this node's own UIKit class is one of `roles`. */
 export function hasIosKeyboardRole(node: RawSnapshotNode, roles: ReadonlySet<string>): boolean {
   return node.role !== undefined && roles.has(node.role);
-}
-
-/** AX reports a UIKit role; XCTest exposes this assistant host only by identifier. */
-export function isIosKeyboardChromeMarker(node: RawSnapshotNode): boolean {
-  return (
-    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES) ||
-    (node.role === undefined &&
-      node.type === 'Other' &&
-      node.identifier === 'SystemInputAssistantView')
-  );
 }

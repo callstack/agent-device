@@ -9,7 +9,7 @@ import {
   IOS_KEYBOARD_SURFACE_ROLES,
   IOS_KEYBOARD_SETTLE_CHROME_ROLES,
   IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
-  isIosKeyboardChromeMarker,
+  IOS_KEYBOARD_CHROME_MARKER_ROLES,
   isAndroidInputMethodNode,
   hasIosKeyboardRole,
 } from './android-input-ownership.ts';
@@ -134,7 +134,7 @@ function isKeyboardSurfaceControl(
   if (
     isKeyboardSurfaceNode(node) ||
     hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
-    isIosKeyboardChromeMarker(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES) ||
     isKeyboardSubtreeHost(node)
   )
     return true;
@@ -144,7 +144,7 @@ function isKeyboardSurfaceControl(
     visited.add(parentIndex);
     const parent = byIndex.get(parentIndex);
     if (!parent) return false;
-    if (isIosKeyboardChromeMarker(parent)) return true;
+    if (hasIosKeyboardRole(parent, IOS_KEYBOARD_CHROME_MARKER_ROLES)) return true;
     if (isKeyboardSubtreeHost(parent)) return true;
     parentIndex = parent.parentIndex;
   }

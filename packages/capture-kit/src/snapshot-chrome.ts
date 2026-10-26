@@ -5,7 +5,7 @@ import {
 } from '@agent-device/contracts/android-system-chrome';
 import {
   hasIosKeyboardRole,
-  isIosKeyboardChromeMarker,
+  IOS_KEYBOARD_CHROME_MARKER_ROLES,
   IOS_KEYBOARD_SETTLE_CHROME_ROLES,
   IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
   IOS_KEYBOARD_SURFACE_ROLES,
@@ -100,7 +100,9 @@ function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
       .map((node) => node.index),
   );
   const markerIndexes = new Set(
-    nodes.filter((node) => isIosKeyboardChromeMarker(node)).map((node) => node.index),
+    nodes
+      .filter((node) => hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES))
+      .map((node) => node.index),
   );
   const subtreeChromeRootIndexes = new Set(
     nodes

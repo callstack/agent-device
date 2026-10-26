@@ -9,9 +9,15 @@ application dependencies.
 From the repository root, with an owned, booted iPad simulator selected by `UDID`:
 
 ```sh
+: "${UDID:?Set UDID to an owned, booted iPad simulator UUID}"
+export UDID
+export STATE_DIR="$(mktemp -d /private/tmp/assistant-review.XXXXXX)"
+export AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH="$PWD/.tmp/assistant-runner-derived"
+export AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1
+export AGENT_DEVICE_XCUITEST_ARCHS=arm64
 pnpm build
-AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 AGENT_DEVICE_XCUITEST_ARCHS=arm64 pnpm build:xcuitest:ios
-pnpm clean:daemon
+pnpm build:xcuitest:ios
+AGENT_DEVICE_STATE_DIR="$STATE_DIR" pnpm clean:daemon
 mkdir -p .tmp/AssistantProbe.app
 python3 - <<'PY'
 import plistlib
@@ -36,9 +42,9 @@ node bin/agent-device.mjs open com.example.agentdevice.assistantprobe \
   --platform ios --udid "$UDID" --session assistant-review --state-dir "$STATE_DIR" --relaunch
 ```
 
-Set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` to the fresh runner build directory when
-using a non-default build location. Do not let an older running daemon serve a changed
-checkout: stop the owned daemon before opening it again.
+The setup selects the build directory before building and cleans the same state
+directory used by the CLI and SDK. See the [keyboard evidence contract](../../../website/docs/docs/snapshots.md)
+for the meaning of each `keyboard` variant and complete-capture absence evidence.
 
 The initial snapshot must show `Assistant actions: 0`. For XCTest route evidence,
 use the repository's existing conformance transport (an internal test control, not a
@@ -89,7 +95,7 @@ Then use an ordinary `snapshot -i` and its current assistant ref to repeat throu
 AX capture route; verify `Assistant actions: 2`. Ref numbers are capture-specific.
 
 ```sh
-node bin/agent-device.mjs close --session assistant-review --state-dir "$STATE_DIR"
+node bin/agent-device.mjs close --session assistant-review --platform ios --udid "$UDID" --state-dir "$STATE_DIR"
 node bin/agent-device.mjs daemon stop --clean --state-dir "$STATE_DIR"
 ```
 

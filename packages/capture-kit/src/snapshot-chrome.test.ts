@@ -584,6 +584,8 @@ test('tap eligibility of an app assistant action never removes it from settle ob
         },
       ],
     });
+    // Native acquisition supplies membership before projection; provider capture uses the UIKit role.
+    if (host.identifier) captured.nodes.find((node) => node.index === 2)!.keyboardOwned = true;
     const nodes = attachRefs(captured.nodes);
     const action = refFor(nodes, 'Assistant action');
     assert.equal(collectSettleChromeRefs(nodes, undefined).has(action), false);

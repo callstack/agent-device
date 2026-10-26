@@ -5147,7 +5147,87 @@
       }
     },
     {
-      "name": "XCTest assistant identifier keeps its hosted app button tappable inside the measured band",
+      "name": "native assistant membership remains tappable inside the measured band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 600,
+            "width": 390,
+            "height": 244
+          }
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "rect": {
+            "x": 0,
+            "y": 556,
+            "width": 390,
+            "height": 44
+          },
+          "identifier": "SystemInputAssistantView"
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Assistant action",
+          "rect": {
+            "x": 200,
+            "y": 560,
+            "width": 100,
+            "height": 36
+          },
+          "parentIndex": 1,
+          "keyboardOwned": true
+        }
+      ],
+      "keyboard": {
+        "kind": "visible",
+        "frame": {
+          "x": 0,
+          "y": 556,
+          "width": 390,
+          "height": 288
+        }
+      },
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 556,
+          "width": 390,
+          "height": 288
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 600,
+            "width": 390,
+            "height": 244
+          },
+          {
+            "x": 200,
+            "y": 560,
+            "width": 100,
+            "height": 36
+          }
+        ]
+      }
+    },
+    {
+      "name": "an app-controlled assistant identifier without native membership does not excuse its button",
       "viewport": {
         "x": 0,
         "y": 0,
@@ -5202,7 +5282,7 @@
         "index": 2
       },
       "expected": {
-        "kind": "clear",
+        "kind": "occluded",
         "frame": {
           "x": 0,
           "y": 556,
