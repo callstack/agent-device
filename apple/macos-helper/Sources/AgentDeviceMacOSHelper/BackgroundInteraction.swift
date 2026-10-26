@@ -503,13 +503,8 @@ struct OnScreenWindow {
 /// Only normal-layer windows qualify; app-modal alerts at level 8 are excluded.
 let frontWindowLayer = 0
 
-/// The pid's visible, nonempty normal-layer windows, front to back, other than the windows whose
-/// frames are excluded.
-func onScreenWindows(
-  pid: pid_t,
-  windowInfo: [[String: Any]],
-  excluding excludedFrames: [CGRect] = []
-) -> [OnScreenWindow] {
+/// The pid's visible, nonempty normal-layer windows, front to back.
+func onScreenWindows(pid: pid_t, windowInfo: [[String: Any]]) -> [OnScreenWindow] {
   windowInfo.compactMap { entry in
     guard (entry[kCGWindowOwnerPID as String] as? Int32) == pid,
       (entry[kCGWindowLayer as String] as? Int) == frontWindowLayer,
@@ -518,8 +513,7 @@ func onScreenWindows(
       let number = entry[kCGWindowNumber as String] as? Int,
       let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
       let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
-      bounds.width > 0, bounds.height > 0,
-      !excludedFrames.contains(where: { framesMatch($0, bounds) })
+      bounds.width > 0, bounds.height > 0
     else {
       return nil
     }
@@ -536,11 +530,7 @@ func appWindowInfo() -> [[String: Any]]? {
 /// The app's front on-screen window: frontmost among its eligible windows, or nil when it has
 /// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
 /// report "no window" for a WindowServer it could not ask.
-func frontWindow(
-  pid: pid_t,
-  windowInfo: [[String: Any]]? = appWindowInfo(),
-  sharingIndicatorFrames: [CGRect]? = nil
-) throws -> OnScreenWindow? {
+func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
   guard let windowInfo else {
     throw HelperError.commandFailed(
       "the app's on-screen windows could not be read",
@@ -550,11 +540,20 @@ func frontWindow(
       ]
     )
   }
-  return onScreenWindows(
-    pid: pid,
-    windowInfo: windowInfo,
-    excluding: sharingIndicatorFrames ?? windowSharingIndicatorFrames(pid: pid)
-  ).first
+  return frontWindow(
+    among: onScreenWindows(pid: pid, windowInfo: windowInfo),
+    isSharingIndicator: { isWindowSharingIndicator(pid: pid, frame: $0.bounds) }
+  )
+}
+
+/// The frontmost candidate that is not a window-sharing indicator. A lone window is never one: an
+/// indicator only appears in front of the window it belongs to.
+func frontWindow(
+  among candidates: [OnScreenWindow],
+  isSharingIndicator: (OnScreenWindow) -> Bool
+) -> OnScreenWindow? {
+  guard candidates.count > 1 else { return candidates.first }
+  return candidates.first { !isSharingIndicator($0) }
 }
 
 /// While a ScreenCaptureKit stream shares one of an app's windows, macOS 27 adds a 66 x 20
@@ -562,21 +561,22 @@ func frontWindow(
 /// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
 private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
 
-func windowSharingIndicatorFrames(pid: pid_t) -> [CGRect] {
-  windows(of: AXUIElementCreateApplication(pid)).compactMap { window in
-    let isIndicator = children(of: window).contains { child in
-      role(of: child) == "AXButton"
-        && stringAttribute(child, attribute: kAXTitleAttribute as String)
-          == windowSharingIndicatorButtonTitle
-    }
-    guard isIndicator, let rect = rectAttribute(window) else { return nil }
-    return CGRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-  }
-}
+/// A hung app reads as no indicator rather than stalling a capture.
+private let sharingIndicatorReplyTimeoutSeconds: Float = 0.25
 
-private func framesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
-  abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1 && abs(a.width - b.width) < 1
-    && abs(a.height - b.height) < 1
+private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
+  let appElement = AXUIElementCreateApplication(pid)
+  AXUIElementSetMessagingTimeout(appElement, sharingIndicatorReplyTimeoutSeconds)
+  let window = windows(of: appElement).first { window in
+    guard let rect = rectAttribute(window) else { return false }
+    return abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
+      && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
+  }
+  return window.map(children(of:))?.contains { child in
+    role(of: child) == "AXButton"
+      && stringAttribute(child, attribute: kAXTitleAttribute as String)
+        == windowSharingIndicatorButtonTitle
+  } ?? false
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
