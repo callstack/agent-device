@@ -22,6 +22,7 @@ import {
 } from './runner-transport.fixtures.ts';
 import {
   CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+  CAPTURED_RECOVERABLE_SERVICE_HUB_OUTPUT,
   CAPTURED_SCOPED_SIMULATOR,
   buildFixtureById,
 } from './runner-startup-failure-fixtures.ts';
@@ -39,11 +40,6 @@ beforeEach(resetAllProcessMemosForTests);
  */
 
 const BLESS_LOG = buildFixtureById('simulator-service-hub-bless-refused').output;
-
-// Sanitized from a launch on macOS 27.0.1 / Xcode 27.1 that became ready about 2.935s later.
-const INTERRUPTED_BLESS_LOG =
-  'DTServiceHubClient failed to bless service hub for simulator <simulator> (<udid>) ' +
-  'NSUnderlyingError={Error Domain=DTServiceHubClient Code=2 "Connection to Simulator service hub (...) interrupted. Simulator service hub IS still alive."}\n';
 
 function sessionWithLaunchLog(log: string, exitCode: number | null): RunnerSession {
   const runnerLogPath = path.join(mkdtempForTestSync('runner-service-hub-'), 'runner.log');
@@ -75,9 +71,9 @@ const SIMULATOR_WITH_IMAGE_DOWN = {
   developerDiskImageHint: 'Unlock the iPhone so it can mount the developer disk image.',
 };
 
-test('a launch that cannot bless the simulator service names the Xcode cause and its fix', async () => {
+test('a one-line service-hub refusal names the Xcode cause and its fix', async () => {
   const session = {
-    ...sessionWithLaunchLog(BLESS_LOG, 65),
+    ...sessionWithLaunchLog(BLESS_LOG.replaceAll('\n', ' '), 65),
     startupDeviceStates: SIMULATOR_WITH_IMAGE_DOWN,
   };
 
@@ -176,7 +172,7 @@ test('a bless refusal already in the launch log ends the connect loop on its fir
 test('a service-hub interruption lets the same starting runner serve its command', async () => {
   const fetchSpy = vi.fn(async () => runnerTransportResponse());
   vi.stubGlobal('fetch', fetchSpy);
-  const session = sessionWithLaunchLog(INTERRUPTED_BLESS_LOG, null);
+  const session = sessionWithLaunchLog(CAPTURED_RECOVERABLE_SERVICE_HUB_OUTPUT, null);
 
   const response = await waitForRunner(
     iosSimulator,
@@ -192,7 +188,21 @@ test('a service-hub interruption lets the same starting runner serve its command
 });
 
 for (const [cause, log] of [
-  ['interrupted', INTERRUPTED_BLESS_LOG],
+  ['interrupted', CAPTURED_RECOVERABLE_SERVICE_HUB_OUTPUT],
+  [
+    'Code=10',
+    BLESS_LOG.replaceAll('\n', ' ').replace(
+      'DTServiceHubClient Code=1 ',
+      'DTServiceHubClient Code=10 ',
+    ),
+  ],
+  [
+    'Code=100',
+    BLESS_LOG.replaceAll('\n', ' ').replace(
+      'DTServiceHubClient Code=1 ',
+      'DTServiceHubClient Code=100 ',
+    ),
+  ],
   [
     'unknown cause',
     'DTServiceHubClient failed to bless service hub for simulator <simulator> (<udid>)\n',

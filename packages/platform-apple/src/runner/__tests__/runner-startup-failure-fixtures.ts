@@ -88,6 +88,14 @@ const UNOBSERVED = 'unobserved';
 /** `xcodebuild -version` for the destination captures below (#2963 review). */
 const CAPTURED_DESTINATION_XCODE_VERSION = 'Xcode 26.2 / Build version 17C52';
 
+/**
+ * Recoverable reported-log-excerpt from #3963, sanitized on macOS 27.0.1 / Xcode 27.1. The same
+ * test-without-building launch reached AGENT_DEVICE_RUNNER_LISTENER_READY about 2.935s later.
+ */
+export const CAPTURED_RECOVERABLE_SERVICE_HUB_OUTPUT =
+  'DTServiceHubClient failed to bless service hub for simulator <simulator> (<udid>) ' +
+  'NSUnderlyingError={Error Domain=DTServiceHubClient Code=2 "Connection to Simulator service hub (...) interrupted. Simulator service hub IS still alive."}\n';
+
 /** The scoped-set simulator the destination captures targeted, and a set that does not hold it. */
 export const CAPTURED_SCOPED_SIMULATOR = {
   udid: '9DD70D58-C485-4CE5-8743-5FED48468446',
@@ -406,10 +414,11 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     provenance: 'reported-log-excerpt',
     output:
       '2026-10-15 10:23:41.112 xcodebuild[40217:166902] [MT] iOSSimulator: <DVTiOSDevice (0x1234), iPhone, 26.5 (23F770a), abcdef0123456789abcdef0123456789abcdef01> unable to connect to "com.apple.instruments.deviceservice.lockdown"\n' +
-      '(Error Domain=DVTiPhoneSimulatorErrorDomain Code=-1 "DTServiceHubClient failed to bless service hub for simulator iPhone (abcdef0123456789abcdef0123456789abcdef01)" UserInfo={NSLocalizedDescription=DTServiceHubClient failed to bless service hub for simulator iPhone (abcdef0123456789abcdef0123456789abcdef01), NSUnderlyingError=0x1234 {Error Domain=DTServiceHubClient Code=1 "\'localDeviceConnectionWithError:\' failed but didn\'t provide an error."}})\n' +
+      '(Error Domain=DVTiPhoneSimulatorErrorDomain Code=-1 "DTServiceHubClient failed to bless service hub for simulator <name> (<udid>)"\n' +
+      "UserInfo={… NSUnderlyingError=… {Error Domain=DTServiceHubClient Code=1 \"'localDeviceConnectionWithError:' failed but didn't provide an error.\"}})\n" +
       '** TEST EXECUTE FAILED **\n' +
       '** BUILD INTERRUPTED **\n',
-    note: 'Reported on #3449 from two hosts (macOS 27.2 with Xcode 26.6, macOS 27.2 with Xcode 26.5), pasted from `runner.log`. The issue quotes the bless line and the `DTServiceHubClient` line with their middles elided; the device description, the pids and pointers, and the repeated `NSLocalizedDescription` are filled in with placeholders in the shape Xcode writes, and `** BUILD INTERRUPTED **` is the line the report says follows. The row keys on the two phrases it quotes verbatim. Not inducible here: it needs an Xcode older than the host macOS supports, and the AMFI refusal behind it is in the kernel log (`com.apple.DTServiceHub disallowed without correct com.apple.private.amfi.version-restriction entitlement version`).',
+    note: "Reported on #3449 from two hosts (macOS 27.2 with Xcode 26.6, macOS 27.2 with Xcode 26.5), pasted from `runner.log`. Preserve the public excerpt's line break between the bless sentence and the underlying Code=1 error, including its elisions. The first line uses placeholder device metadata; the report says `** BUILD INTERRUPTED **` follows. Not inducible here: it needs an Xcode older than the host macOS supports, and the AMFI refusal behind it is in the kernel log (`com.apple.DTServiceHub disallowed without correct com.apple.private.amfi.version-restriction entitlement version`).",
   },
   {
     id: 'devtools-security-disabled',

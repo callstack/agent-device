@@ -218,14 +218,12 @@ const SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON: RunnerStartupFailureReason =
   'simulator_set_destination_not_found';
 
 /**
- * The reported refusal signature, including its underlying error on the same line. Code=2
- * interruptions can report that the service hub is still alive and let the runner start (#3963).
+ * The bless sentence stays on one line, but its underlying Code=1 refusal can be on the next
+ * (#3449). Code=2 interruptions can instead let the runner start (#3963).
  */
 const SIMULATOR_SERVICE_HUB_BLESS_MATCH = [
   'dtservicehubclient',
   'failed to bless service hub',
-  'dtservicehubclient code=1',
-  'localdeviceconnectionwitherror:',
 ] as const;
 
 /**
@@ -473,6 +471,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     reason: 'simulator_service_hub_bless_refused',
     match: {
       toolTextLineIncludesAll: SIMULATOR_SERVICE_HUB_BLESS_MATCH,
+      toolTextIncludesAll: ['dtservicehubclient code=1 "', 'localdeviceconnectionwitherror:'],
     },
     verdicts: {},
     buildFailure: {
