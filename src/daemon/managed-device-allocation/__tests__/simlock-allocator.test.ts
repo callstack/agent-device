@@ -4,6 +4,7 @@ import {
   createSimlockManagedDeviceAllocator,
   type SimlockLeaseClient,
 } from '../simlock-allocator.ts';
+import { simlockError } from './simlock-client.fixtures.ts';
 
 const NOW = 1_800_000_000_000;
 const REF = { requesterId: 'job-1', requestGeneration: 1, attemptKey: 'attempt-1' };
@@ -27,10 +28,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
-
-function simlockError(code: string): Error {
-  return Object.assign(new Error(`simlock ${code}`), { code });
-}
 
 function setup(overrides: Partial<SimlockLeaseClient> = {}) {
   const client = {

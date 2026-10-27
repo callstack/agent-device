@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
 import { createAllocationOperationStore } from '@agent-device/managed-allocation/store';
 import { createScriptedManagedDeviceAllocator } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
@@ -10,8 +10,10 @@ import { withDaemonDiagnosticsScope } from '../../../daemon-diagnostics-scope.ts
 import {
   createManagedLeaseCoordinator,
   type ManagedLeaseBinding,
+  type ManagedLeaseCoordinator,
   type ManagedLeaseHandoff,
 } from '../lease-coordinator.ts';
+import { createSimlockManagedDeviceAllocator } from '../simlock-allocator.ts';
 import { ALLOCATION_REQUEST } from './fixtures.ts';
 import {
   NOW,
@@ -21,6 +23,7 @@ import {
   horizon,
   renewedLease,
 } from './lease-admission.fixtures.ts';
+import { createFakeSimlock } from './simlock-client.fixtures.ts';
 
 const OWNER = ALLOCATION_REQUEST.requesterId;
 const SHAPE = ALLOCATION_REQUEST.shape;
@@ -506,4 +509,160 @@ test('a lost allocator answer that the lookup recovers is still granted', async 
   await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
 
   expect((await acquisition).status).toBe('granted');
+});
+
+describe('over the Simlock adapter', () => {
+  const SIMLOCK_REQUESTER = `simlock:${OWNER}`;
+
+  beforeEach(() => {
+    let attempts = 0;
+    vi.mocked(crypto.randomUUID).mockImplementation(
+      () => `attempt-${++attempts}` as ReturnType<typeof crypto.randomUUID>,
+    );
+  });
+
+  function setupSimlock(options: { grantOnRequest?: boolean } = {}) {
+    const simlock = createFakeSimlock({ ttlMs: 40_000, ...options });
+    const store = createAllocationOperationStore({
+      allocationsDir: path.join(mkdtempForTestSync('managed-lease-simlock-'), 'allocations'),
+    });
+    const events: string[] = [];
+    // Each start is one daemon process: its own Simlock connection and adapter memory, one journal.
+    const start = async () => {
+      const connection = simlock.connect();
+      const coordinator = await createManagedLeaseCoordinator({
+        store,
+        allocator: createSimlockManagedDeviceAllocator({
+          instanceId: 'simlock',
+          client: connection.client,
+        }),
+        renewIntervalMs: RENEW_INTERVAL_MS,
+        renewalSafetyWindowMs: 5_000,
+        pollIntervalMs: POLL_INTERVAL_MS,
+        teardownTimeoutMs: TEARDOWN_TIMEOUT_MS,
+        settleTimeoutMs: SETTLE_TIMEOUT_MS,
+        withinDiagnosticsScope: async (run) => await run(),
+        handoff: {
+          publish: async (binding) =>
+            void events.push(`publish ${binding.admission.reachability.device.id}`),
+          teardown: async () => void events.push('teardown'),
+        },
+      });
+      return { coordinator, connection };
+    };
+    const records = () =>
+      store.list().flatMap((entry) => (entry.status === 'found' ? [entry.record] : []));
+    return { simlock, events, records, start };
+  }
+
+  // A process that lost Simlock and went down: its give-back could not reach Simlock, so the
+  // journal keeps the operation unsettled, as a crash leaves it.
+  const stop = async (process: {
+    coordinator: ManagedLeaseCoordinator;
+    connection: { close(): void };
+  }) => {
+    process.connection.close();
+    const disposed = process.coordinator[Symbol.asyncDispose]();
+    await vi.advanceTimersByTimeAsync(0);
+    await disposed;
+  };
+
+  const acquireOn = (coordinator: ManagedLeaseCoordinator) =>
+    coordinator.acquire({ owner: OWNER, shape: SHAPE, deadlineAtMs: NOW + 60_000 });
+
+  test('a device is granted, renewed between commands, and deleted on release', async () => {
+    const { simlock, events, records, start } = setupSimlock();
+    const { coordinator } = await start();
+
+    expect((await acquireOn(coordinator)).status).toBe('granted');
+    expect(simlock.leases()).toMatchObject([{ id: 'lease-1', requesterId: SIMLOCK_REQUESTER }]);
+    await vi.advanceTimersByTimeAsync(RENEW_INTERVAL_MS);
+    expect(simlock.leases()[0]?.ttlDeadline).toBeGreaterThan(NOW + 40_000);
+
+    expect(await coordinator.release(OWNER)).toEqual({ status: 'released' });
+    expect(simlock.leases()).toEqual([]);
+    expect(events).toEqual(['publish UDID-1', 'teardown']);
+    expect(records()).toMatchObject([{ binding: 'cleaned', release: 'released' }]);
+  });
+
+  test('a lease Simlock expires is fenced, torn down, and settled', async () => {
+    const { simlock, events, records, start } = setupSimlock();
+    const { coordinator } = await start();
+    expect((await acquireOn(coordinator)).status).toBe('granted');
+
+    simlock.expire('lease-1');
+    await vi.advanceTimersByTimeAsync(RENEW_INTERVAL_MS);
+
+    expect(events).toEqual(['publish UDID-1', 'teardown']);
+    expect(coordinator.binding(OWNER)).toBeUndefined();
+    expect(records()).toMatchObject([{ binding: 'cleaned', release: 'released' }]);
+  });
+
+  test('a lost request answer is withdrawn, deleting the device Simlock made for it', async () => {
+    const { simlock, records, start } = setupSimlock();
+    const { coordinator, connection } = await start();
+
+    connection.loseNextResponse();
+    const acquisition = acquireOn(coordinator);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(await acquisition).toMatchObject({ status: 'unavailable', reason: 'response-lost' });
+    expect(simlock.leases()).toEqual([]);
+    expect(records()[0]?.phase.status).toBe('cancelled');
+    expect((await acquireOn(coordinator)).status).toBe('granted');
+    expect(simlock.leases()).toMatchObject([{ id: 'lease-2' }]);
+  });
+
+  test('a restart releases the device the previous process held', async () => {
+    const { simlock, events, records, start } = setupSimlock();
+    const first = await start();
+    expect((await acquireOn(first.coordinator)).status).toBe('granted');
+    first.connection.close();
+
+    await start();
+
+    expect(simlock.leases()).toEqual([]);
+    expect(events).toEqual(['publish UDID-1']);
+    expect(records()).toMatchObject([{ release: 'released' }]);
+  });
+
+  test('a restart cancels the request the previous process left waiting', async () => {
+    const { simlock, records, start } = setupSimlock({ grantOnRequest: false });
+    const first = await start();
+    void acquireOn(first.coordinator);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(simlock.waiting()).toEqual([SIMLOCK_REQUESTER]);
+    await stop(first);
+
+    await start();
+
+    expect(simlock.waiting()).toEqual([]);
+    expect(simlock.leases()).toEqual([]);
+    expect(records()[0]?.phase.status).toBe('cancelled');
+  });
+
+  test('a request still provisioning at restart is given back when its owner acquires again', async () => {
+    const { simlock, records, start } = setupSimlock({ grantOnRequest: false });
+    const first = await start();
+    void acquireOn(first.coordinator);
+    await vi.advanceTimersByTimeAsync(0);
+    simlock.startProvisioning(SIMLOCK_REQUESTER);
+    await stop(first);
+
+    const second = await start();
+    expect(records()[0]?.phase.status).toBe('unknown');
+    simlock.grant(SIMLOCK_REQUESTER);
+
+    const acquisition = acquireOn(second.coordinator);
+    await vi.advanceTimersByTimeAsync(0);
+    simlock.grant(SIMLOCK_REQUESTER);
+
+    expect((await acquisition).status).toBe('granted');
+    expect(simlock.leases()).toMatchObject([{ id: 'lease-2' }]);
+    expect(
+      records()
+        .map((record) => record.phase.status)
+        .sort(),
+    ).toEqual(['cancelled', 'granted']);
+  });
 });
