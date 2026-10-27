@@ -441,6 +441,25 @@ extension RunnerTests {
     )
   }
 
+#if os(iOS)
+  /// The context for a point measured on a window the caller already holds, such as the
+  /// SpringBoard window hosting a system alert. Nil when that window has no usable frame.
+  @MainActor
+  func synthesizedCoordinateContext(window: XCUIElement) -> SynthesizedCoordinateContext? {
+    let frame = safely("MODAL_WINDOW", CGRect.null) { window.frame }
+    guard !frame.isNull, frame.width.isFinite, frame.height.isFinite,
+      frame.width > 0, frame.height > 0
+    else {
+      return nil
+    }
+    return SynthesizedCoordinateContext(
+      referenceFrame: frame,
+      resolvedWindow: window,
+      accessibilityHealth: mainOwned.accessibilityHealth
+    )
+  }
+#endif
+
   @MainActor
   func synthesizedCoordinateContext(
     app: XCUIApplication,

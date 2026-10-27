@@ -12,6 +12,9 @@ extension RunnerTests {
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
     let source: RunnerAlertSource
+    /// The window a SpringBoard modal is hosted in. Its activation routes through this window,
+    /// because `ownerApp`'s first window can be on another panel of a foldable.
+    var window: XCUIElement? = nil
   }
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
@@ -162,7 +165,13 @@ extension RunnerTests {
           )
           return
         }
-        switch synthesizedTapAt(app: alert.ownerApp, x: frame.midX, y: frame.midY, deadline: deadline) {
+        switch synthesizedTapAt(
+          app: alert.ownerApp,
+          x: frame.midX,
+          y: frame.midY,
+          context: alert.window.flatMap { synthesizedCoordinateContext(window: $0) },
+          deadline: deadline
+        ) {
         case .performed?:
           typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
           let waitForQuiescence = unsafeBitCast(
@@ -217,7 +226,8 @@ extension RunnerTests {
       root: modal.root,
       ownerApp: modal.ownerApp,
       buttons: buttons,
-      source: .blockingSystemModal
+      source: .blockingSystemModal,
+      window: modal.window
     )
   }
 

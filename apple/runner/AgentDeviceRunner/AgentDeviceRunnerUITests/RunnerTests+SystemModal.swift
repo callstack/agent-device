@@ -102,17 +102,20 @@ extension RunnerTests {
     )
   }
 
+  /// A SpringBoard modal and the window that hosts it. A foldable's SpringBoard has windows on
+  /// each panel, and `springboard.frame` names only one of them, so the modal is placed against
+  /// its own window and its activation is routed through that window's display.
+  struct SpringBoardModal {
+    let root: XCUIElement
+    let window: XCUIElement
+  }
+
   func firstBlockingSystemModal(
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
-  ) -> XCUIElement? {
-    let alerts = safeElementsQuery {
-      springboard.alerts.allElementsBoundByIndex
-    }
-    for alert in alerts {
-      if safeIsBlockingSystemModal(alert, in: springboard) {
-        return alert
-      }
+  ) -> SpringBoardModal? {
+    if let alert = firstBlockingSystemModal(in: springboard, matching: .alert) {
+      return alert
     }
 
     // Don't start the second (sheet) enumeration once the shared probe deadline is spent (#1244).
@@ -121,15 +124,24 @@ extension RunnerTests {
       return nil
     }
 
-    let sheets = safeElementsQuery {
-      springboard.sheets.allElementsBoundByIndex
+    return firstBlockingSystemModal(in: springboard, matching: .sheet)
+  }
+
+  private func firstBlockingSystemModal(
+    in springboard: XCUIApplication,
+    matching type: XCUIElement.ElementType
+  ) -> SpringBoardModal? {
+    let windows = safeElementsQuery {
+      springboard.windows.containing(type, identifier: nil).allElementsBoundByIndex
     }
-    for sheet in sheets {
-      if safeIsBlockingSystemModal(sheet, in: springboard) {
-        return sheet
+    for window in windows {
+      let modals = safeElementsQuery {
+        window.descendants(matching: type).allElementsBoundByIndex
+      }
+      for modal in modals where safeIsBlockingSystemModal(modal, in: window) {
+        return SpringBoardModal(root: modal, window: window)
       }
     }
-
     return nil
   }
 
@@ -137,16 +149,16 @@ extension RunnerTests {
     safely("MODAL_QUERY", [], fetch)
   }
 
-  private func safeIsBlockingSystemModal(_ element: XCUIElement, in springboard: XCUIApplication) -> Bool {
-    safely("MODAL_CHECK", false) { isBlockingSystemModal(element, in: springboard) }
+  private func safeIsBlockingSystemModal(_ element: XCUIElement, in window: XCUIElement) -> Bool {
+    safely("MODAL_CHECK", false) { isBlockingSystemModal(element, in: window) }
   }
 
-  private func isBlockingSystemModal(_ element: XCUIElement, in springboard: XCUIApplication) -> Bool {
+  private func isBlockingSystemModal(_ element: XCUIElement, in window: XCUIElement) -> Bool {
     guard element.exists else { return false }
     let frame = element.frame
     if frame.isNull || frame.isEmpty { return false }
 
-    let viewport = springboard.frame
+    let viewport = window.frame
     if viewport.isNull || viewport.isEmpty { return false }
 
     let center = CGPoint(x: frame.midX, y: frame.midY)
