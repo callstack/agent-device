@@ -144,6 +144,18 @@ test('folds a Compose role node into its clickable parent only when every guard 
         clickable="true" visible-to-user="true">
         <node class="android.widget.ImageView" bounds="[0,950][1000,1000]" visible-to-user="true" />
       </node>
+      <node class="android.view.View" resource-id="compose-radio" bounds="[0,1000][1000,1050]"
+        clickable="true" visible-to-user="true">
+        <node class="android.widget.RadioButton" bounds="[0,1010][1000,1040]" visible-to-user="true" />
+      </node>
+      <node class="android.view.View" resource-id="compose-spinner" bounds="[0,1050][1000,1100]"
+        clickable="true" visible-to-user="true">
+        <node class="android.widget.Spinner" bounds="[0,1060][1000,1090]" visible-to-user="true" />
+      </node>
+      <node class="android.view.View" resource-id="compose-picker" bounds="[0,1100][1000,1150]"
+        clickable="true" visible-to-user="true">
+        <node class="android.widget.NumberPicker" bounds="[0,1110][1000,1140]" visible-to-user="true" />
+      </node>
     </node>
   </hierarchy>`);
 
@@ -178,6 +190,9 @@ test('folds a Compose role node into its clickable parent only when every guard 
     'Button',
     'View non-role-child',
     'ImageView',
+    'RadioButton compose-radio',
+    'Spinner compose-spinner',
+    'NumberPicker compose-picker',
   ]);
   expect(regular.find((node) => node.identifier === 'compose-checkbox')?.checked).toBe(true);
   expect(interactive.find((node) => node.identifier === 'compose-container')?.type).toBe(

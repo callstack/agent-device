@@ -150,11 +150,19 @@ test('runtime press on a Compose button dispatches its center only once its role
       .click(selector('id="compose-container"'), { session: 'default' })
       .then(
         () => undefined,
-        (error: { details?: { reason?: string } }) => error,
+        (error: { details?: { reason?: string; dispatched?: string } }) => error,
       );
-    return { taps, reason: failure?.details?.reason };
+    return { taps, reason: failure?.details?.reason, dispatched: failure?.details?.dispatched };
   };
 
-  assert.deepEqual(await press(false), { taps: [{ x: 540, y: 1919 }], reason: undefined });
-  assert.deepEqual(await press(true), { taps: [], reason: 'covered_by_interactive_descendants' });
+  assert.deepEqual(await press(false), {
+    taps: [{ x: 540, y: 1919 }],
+    reason: undefined,
+    dispatched: undefined,
+  });
+  assert.deepEqual(await press(true), {
+    taps: [],
+    reason: 'covered_by_interactive_descendants',
+    dispatched: 'no',
+  });
 });
