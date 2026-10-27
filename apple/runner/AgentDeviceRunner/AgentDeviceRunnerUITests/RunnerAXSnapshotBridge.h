@@ -60,14 +60,14 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 // testmanagerd's reply decoder drop the reply and time the request out — while per-element reads
 // use a different XPC message and answer normally. Reading is all this does: none of the
 // invocation routes work from the runner (XCUIElement exposes no API, XCAXClient_iOS
-// performAction: answers kAXErrorCannotComplete, setAttribute: silently no-ops, and the raw
-// AXUIElement C API cannot be aimed at app elements).
+// performAction:onElement:value: answers kAXErrorCannotComplete, setAttribute: silently no-ops,
+// and the raw AXUIElement C API cannot be aimed at app elements).
 + (nullable NSArray<NSString *> *)customActionNamesForElement:(id)element
                                                     axClient:(id)axClient
                                                    completed:(BOOL *)completed;
 
-// Bounds one element's contribution to the response (max actions, max name length) and reports
-// whether anything was clipped, so truncation is disclosed rather than silently complete.
+// Bounds one element's action list (max actions, max name length) and reports whether anything
+// was clipped, so a clipped list is disclosed rather than silently presented as complete.
 + (NSArray<NSString *> *)cappedActionNames:(NSArray<NSString *> *)names
                                  truncated:(BOOL *)truncated;
 

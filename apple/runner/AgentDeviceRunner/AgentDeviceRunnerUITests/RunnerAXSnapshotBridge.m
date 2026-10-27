@@ -56,8 +56,8 @@ static atomic_long RunnerAXCustomActionReadDispatches = 0;
 // Total single-flight admission refusals.
 static atomic_long RunnerAXCustomActionReadBlocked = 0;
 
-// Output caps. The element budget bounds how many elements are read; these bound what ONE element
-// can put in the response, so a pathological app cannot spend the whole snapshot on one node.
+// Output caps. The element budget bounds how many elements are read; these bound ONE element's
+// action list, so a pathological app cannot spend the whole snapshot on one node's list.
 static const NSUInteger RunnerAXCustomActionsMaxPerElement = 8;
 static const NSUInteger RunnerAXCustomActionNameMaxLength = 80;
 
@@ -185,7 +185,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 // Chains element-rooted snapshot requests from depth-capped frontier nodes. The AX server's depth
 // limit is per-request, so re-rooting the same request at a frontier node's live element reaches
 // content the app-rooted request could not, without passing a larger depth parameter. Bounded by
-// call count, the shared node budget, and the capture deadline.
+// call count, the shared node budget, and the capture deadline checked between requests.
 + (nullable NSDictionary *)extendSnapshotFrontiers:(NSMutableArray<RunnerAXSnapshotFrontier *> *)frontiers
                                           axClient:(id)axClient
                                         attributes:(NSArray *)attributes
