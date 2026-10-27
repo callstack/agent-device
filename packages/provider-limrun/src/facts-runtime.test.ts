@@ -16,6 +16,17 @@ test('limrunAppLogFacts admits the live-session app-log cells', () => {
   expect(facts.operations.networkDump).toEqual({ available: true });
 });
 
+test('limrunAppLogFacts reports the canonical device shape beside its provider mode', () => {
+  const facts = limrunAppLogFacts(limrunOwnerOptions(), device);
+  expect(facts.device).toStrictEqual({
+    family: 'apple',
+    appleOs: 'ios',
+    kind: 'simulator',
+    target: 'mobile',
+    providerMode: 'provider-runtime',
+  });
+});
+
 test('limrunAppLogRecoveryFacts closes the live-only cells but keeps reattach/cleanup available', () => {
   const facts = limrunAppLogRecoveryFacts(limrunOwnerOptions(), device);
   expect(facts.operations.appLogInspect).toEqual(liveSessionUnavailable);
