@@ -199,6 +199,31 @@ test('reports whether a current reader opens under the provider check key', asyn
   expect(reader[Symbol.asyncDispose]).toHaveBeenCalledOnce();
 });
 
+test('persists every ownership identity field of the bound device', () => {
+  const envelope = createProviderAppLogEnvelope({
+    provider: 'Example',
+    codec,
+    sessionId: 'one',
+    device: {
+      ...device,
+      kind: 'device',
+      iosPhysicalDeviceBackend: 'coredevice',
+    },
+    owner,
+    fence,
+    descriptor: exampleDescriptor('/sessions/one/app.log'),
+  });
+
+  expect(envelope.device).toStrictEqual({
+    id: device.id,
+    family: 'apple',
+    appleOs: 'ios',
+    kind: 'device',
+    target: 'mobile',
+    iosPhysicalDeviceBackend: 'coredevice',
+  });
+});
+
 test('refuses to persist an Apple device without its appleOs identity', () => {
   expect(() =>
     createProviderAppLogEnvelope({
