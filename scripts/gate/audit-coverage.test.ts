@@ -61,7 +61,7 @@ test('a docs-only change still reaches the command-reference gate (#1420)', () =
   const model = mutate((m) => ({
     lanes: mapLane(
       m,
-      (lane) => lane.workflow === 'pr-preview.yml',
+      (lane) => lane.workflow === 'docs.yml' && lane.gates.includes('command-docs'),
       (lane) => ({ ...lane, paths: ['website/assets/**'] }),
     ),
   }));

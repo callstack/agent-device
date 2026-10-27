@@ -1,14 +1,16 @@
 name: Docs
 
 # ci.yml ignores docs paths, so docs-only PRs need their own lane. The links
-# gate builds the site and checks the rendered pages, so the rspress version
-# (website/package.json, the lockfile) and config re-run it as well.
+# gate builds the site and checks the rendered pages, so the Astro version
+# (website/package.json, the lockfile), its config and the site's own pages and
+# components re-run it as well.
 on:
   pull_request:
     paths:
       - 'website/docs/**'
       - 'website/package.json'
-      - 'website/rspress.config.ts'
+      - 'website/astro.config.mjs'
+      - 'website/src/**'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'
@@ -28,7 +30,8 @@ on:
     paths:
       - 'website/docs/**'
       - 'website/package.json'
-      - 'website/rspress.config.ts'
+      - 'website/astro.config.mjs'
+      - 'website/src/**'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'
@@ -78,3 +81,21 @@ jobs:
       - name: Check docs links
         uses: ./.github/actions/run-gate
         with: { gate: docs-links }
+
+  # ci.yml ignores docs paths, so a docs-only PR never reaches the unit lane that carries the
+  # command-reference coverage gate. Documenting a retired command, or dropping a public
+  # command's docs, fails here instead.
+  command-docs:
+    name: Command reference doc coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check command reference doc coverage
+        uses: ./.github/actions/run-gate
+        with: { gate: command-docs }

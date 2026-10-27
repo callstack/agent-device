@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # pr-preview-cleanup.yml runs on the same close event and must finish.
       - name: Cancel the PR's unfinished runs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -31,7 +30,6 @@ jobs:
               | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\")
               | select(any(.pull_requests[]; .number == $PR_NUMBER))
               | select(.id != $RUN_ID)
-              | select(.path != \".github/workflows/pr-preview-cleanup.yml\")
               | .id")
           refused=()
           for id in $ids; do
