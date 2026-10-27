@@ -72,7 +72,7 @@ export function listSessionSelectorConflicts(
     mismatches.push({ key: 'serial', value: flags.serial });
   }
 
-  if (flags.device && !matchesDeviceNameSelector(device, flags.device)) {
+  if (flags.device && !matchesBoundDeviceSelector(device, flags.device)) {
     mismatches.push({ key: 'device', value: flags.device });
   }
 
@@ -96,6 +96,18 @@ export function listSessionSelectorConflicts(
   }
 
   return mismatches;
+}
+
+function matchesBoundDeviceSelector(device: SessionState['device'], selector: string): boolean {
+  return matchesDeviceNameSelector(device, selector) || isBoundAppleDeviceUdid(device, selector);
+}
+
+/**
+ * A bound Apple device also answers `--device=<UDID>`: its UDID is the one identity that stays
+ * unique when two simulators share a name.
+ */
+export function isBoundAppleDeviceUdid(device: SessionState['device'], selector: string): boolean {
+  return isIosFamily(device) && selector === device.id;
 }
 
 export function formatSessionSelectorConflict(conflict: SessionSelectorConflict): string {

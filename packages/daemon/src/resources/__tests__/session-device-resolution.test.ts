@@ -287,3 +287,36 @@ test('resolveCommandDevice keeps an app device session on its app when a selecto
 
   expect(device).toBe(session.device);
 });
+
+test('resolveCommandDevice resolves the bound Apple device UDID given as --device by UDID', async () => {
+  mockResolveTargetDevice.mockResolvedValue(iosSimulatorSession.device);
+
+  const device = await resolveCommandDevice({
+    platformServices,
+    session: iosSimulatorSession,
+    flags: { platform: 'ios', device: 'sim-1' },
+    env: process.env,
+  });
+
+  expect(device).toBe(iosSimulatorSession.device);
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { platform: 'ios', udid: 'sim-1' },
+    expect.anything(),
+  );
+});
+
+test('resolveCommandDevice keeps --device as a name when it is not the bound device UDID', async () => {
+  mockResolveTargetDevice.mockResolvedValue(iosSimulatorSession.device);
+
+  await resolveCommandDevice({
+    platformServices,
+    session: iosSimulatorSession,
+    flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+    env: process.env,
+  });
+
+  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
+    { platform: 'ios', device: 'iPhone 17 Pro' },
+    expect.anything(),
+  );
+});

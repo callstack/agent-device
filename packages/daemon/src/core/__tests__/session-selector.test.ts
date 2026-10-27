@@ -148,6 +148,40 @@ test('accepts the AVD name selector that selected the bound device', async () =>
   );
 });
 
+test('accepts the bound Apple device UDID as a device selector', () => {
+  const session = makeSession({
+    device: {
+      platform: 'apple',
+      id: 'B2C1-SIM-001',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      target: 'mobile',
+      booted: true,
+    },
+  });
+  assert.doesNotThrow(() =>
+    assertSessionSelectorMatches(ref(session), { platform: 'ios', device: 'B2C1-SIM-001' }),
+  );
+  assert.throws(
+    () => assertSessionSelectorMatches(ref(session), { device: 'B2C1-SIM-002' }),
+    (err: unknown) =>
+      err instanceof AppError &&
+      err.code === 'INVALID_ARGS' &&
+      err.message.includes('--device=B2C1-SIM-002'),
+  );
+});
+
+test('rejects an Android serial as a device selector', () => {
+  const session = makeSession();
+  assert.throws(
+    () => assertSessionSelectorMatches(ref(session), { device: 'emulator-5554' }),
+    (err: unknown) =>
+      err instanceof AppError &&
+      err.code === 'INVALID_ARGS' &&
+      err.message.includes('--device=emulator-5554'),
+  );
+});
+
 test('rejects mismatched target selector', () => {
   const session = makeSession();
   assert.throws(
