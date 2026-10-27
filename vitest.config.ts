@@ -55,6 +55,9 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 
+/** The `apple-runner` project's tests, which need its host setup and so run in no other project. */
+const APPLE_RUNNER_TESTS: readonly string[] = ['packages/platform-apple/src/runner/**/*.test.ts'];
+
 /**
  * The projects `test:coverage` keeps out of the instrumented invocation, which the stamp reporter has to
  * expect: without it, the lane's own `--project=!fuzz-worker` is indistinguishable from someone narrowing
@@ -64,13 +67,14 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
  */
 export const COVERAGE_UNINSTRUMENTED_PROJECTS: readonly string[] = ['fuzz-worker'];
 /**
- * Every test the mutation lane must not collect. The two lists above stay
+ * Every test the mutation lane must not collect. The lists above stay
  * module-local: this union is the whole cross-file surface, and the mutation lane
  * wants exactly it.
  */
 export const MUTATION_EXCLUDED_TESTS: readonly string[] = [
   ...MUTATION_EXCLUDED_SUBPROCESS_TESTS,
   ...FUZZ_WORKER_TESTS,
+  ...APPLE_RUNNER_TESTS,
 ];
 
 // Env stubs never outlive the test that made them. Applied to every project below and imported by
@@ -237,7 +241,7 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [...FUZZ_WORKER_TESTS, 'packages/platform-apple/src/runner/**/*.test.ts'],
+          exclude: [...FUZZ_WORKER_TESTS, ...APPLE_RUNNER_TESTS],
           setupFiles: SETUP_FILES,
         },
       },
@@ -248,7 +252,7 @@ export default defineConfig({
           // capabilities behind the package's test-host seam (R11 keeps the
           // package from importing root utilities directly).
           name: 'apple-runner',
-          include: ['packages/platform-apple/src/runner/**/*.test.ts'],
+          include: [...APPLE_RUNNER_TESTS],
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',

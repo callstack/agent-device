@@ -18,8 +18,8 @@ name: Mutation Harness Canary
 # On a harness diff the matrix is the canary (`LANE_CANARY`, selected by
 # observed end-to-end runtime within the job budget — lane sources own no kernel,
 # so derivation alone would select nothing) plus any kernel that same diff
-# reaches through the import graph (scripts/mutation/ownership.ts): a kernel
-# source, or a test that reaches one. Selected modules are sharded like the
+# owns (scripts/mutation/ownership.ts): a kernel source, or a test that
+# imports one. Selected modules are sharded like the
 # weekly sweep, so the PR's wall clock is one module rather than their sum.
 
 on:

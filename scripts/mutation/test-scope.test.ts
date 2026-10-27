@@ -5,7 +5,6 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { test } from 'node:test';
 import {
   expandMutateFiles,
-  relatedTestFiles,
   readTestScope,
   TEST_SCOPE_ENV,
   threadHostileTestFiles,
@@ -33,35 +32,6 @@ test('the thread-hostile exclusion is derived from imports, not listed', () => {
   // A pure decision-kernel test is never excluded — that would hide survivors.
   assert.ok(!files.includes('packages/daemon/src/core/__tests__/ref-frame.test.ts'));
   assert.ok(files.every((file) => file.endsWith('.test.ts')));
-});
-
-test('related scope discovery follows indirect imports without executing tests', async () => {
-  const root = fs.realpathSync(mkdtempForTestSync('mutation-scope-'));
-  try {
-    fs.mkdirSync(path.join(root, 'src'));
-    fs.writeFileSync(
-      path.join(root, 'package.json'),
-      JSON.stringify({ name: 'scope-fixture', type: 'module' }),
-    );
-    fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'));
-    const marker = path.join(root, 'executed');
-    fs.writeFileSync(
-      path.join(root, 'vitest.config.ts'),
-      `export default { test: { projects: [{ test: { name: 'unit-core', include: ['src/**/*.test.ts'] } }] } };`,
-    );
-    fs.writeFileSync(path.join(root, 'src/kernel.ts'), 'export const value = 1;');
-    fs.writeFileSync(path.join(root, 'src/consumer.ts'), "export { value } from './kernel';");
-    fs.writeFileSync(
-      path.join(root, 'src/consumer.test.ts'),
-      `import { value } from './consumer'; import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, String(value)); throw new Error('discovery must not execute tests');`,
-    );
-    fs.writeFileSync(path.join(root, 'src/unrelated.test.ts'), "throw new Error('unrelated');");
-    assert.deepEqual(await relatedTestFiles(['src/kernel.ts'], root, []), ['src/consumer.test.ts']);
-    assert.equal(fs.existsSync(marker), false, 'scope discovery executed the test module');
-    assert.deepEqual(await relatedTestFiles(['src/kernel.ts'], root, ['src/consumer.test.ts']), []);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
 });
 
 test('a missing scope file is rejected and an empty scope file reads as an empty list', () => {

@@ -119,7 +119,7 @@ export function mutateGlobs(ids: readonly ModuleId[] = ALL_MODULE_IDS): string[]
 
 /**
  * The module a lane-tooling change proves itself against. Keep this to a real
- * end-to-end sweep whose observed related-test scope fits the 30-minute job
+ * end-to-end sweep whose observed owned-test scope fits the 30-minute job
  * budget; mutant count alone does not capture replay cost.
  */
 export const LANE_CANARY: ModuleId = 'snapshot-occlusion';

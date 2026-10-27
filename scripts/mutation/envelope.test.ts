@@ -429,15 +429,13 @@ test('a non-zero Stryker exit fails even when it wrote a report', () => {
     fs.mkdirSync(path.join(root, 'bin'));
     fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'));
     fs.writeFileSync(path.join(root, 'stryker.config.json'), '{}');
-    fs.writeFileSync(
-      path.join(root, 'vitest.config.ts'),
-      `export default { test: { projects: [{ test: { name: 'unit-core', include: ['src/**/*.test.ts'] } }] } };`,
-    );
     fs.writeFileSync(path.join(root, 'packages/kernel/src/errors.ts'), 'export const value = 1;');
     fs.writeFileSync(
       path.join(root, 'src/consumer.test.ts'),
       "import { value } from '../packages/kernel/src/errors'; console.log(value);",
     );
+    // Ownership reads the tracked import graph.
+    runCmdSync('git', ['add', 'src', 'packages'], { cwd: root });
     fs.writeFileSync(
       path.join(root, 'bin/pnpm'),
       `#!/bin/sh
