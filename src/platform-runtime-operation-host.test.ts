@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, vi } from 'vitest';
@@ -30,7 +30,7 @@ vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
 }));
 
 import { captureMacOsSurfaceSnapshot } from '@agent-device/platform-apple/macos';
-import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   createPlatformRuntimeHost,
   loadMacOsSurfaceSnapshot,
@@ -76,6 +76,33 @@ test('operation host composes the shared lazy Apple-tool and toolchain capabilit
   expect(host.appleTools).toBe(capabilities.appleTools);
   expect(host.toolchains).toBe(capabilities.toolchains);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'the command port resolves executables through the host environment the host was given',
+  async () => {
+    // The operation host hands its own host environment to the command port. Reading the process
+    // environment there (#3753) would resolve a tool this host never named, so a tool inside the one
+    // directory this host names resolves and a name no PATH carries stays unresolved.
+    const binDir = mkdtempForTestSync('operation-host-command-path-');
+    writeFileSync(join(binDir, 'probe-tool'), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(binDir, 'probe-tool'), 0o755);
+    const host = createPlatformRuntimeHost({
+      host: { env: { PATH: binDir }, cwd: binDir },
+      sessionsDir: '/tmp/sessions',
+      resolveSessionArtifacts: () => ({
+        outputPath: '/tmp/sessions/one/app.log',
+        pidPath: '/tmp/sessions/one/app-log.pid',
+      }),
+      shutdownLoaders,
+      snapshot,
+    });
+
+    await expect(host.commands.which('probe-tool')).resolves.toBe('probe-tool');
+    await expect(
+      host.commands.which('agent-device-command-runner-probe-absent'),
+    ).resolves.toBeUndefined();
+  },
+);
 
 test('composes focused deployment executors instead of a cross-family deployment host', () => {
   const source = readFileSync(join(directory, 'platform-runtime-operation-host.ts'), 'utf8');
