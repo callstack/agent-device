@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import {
+  buildUiHierarchySnapshot,
+  parseUiHierarchyTree,
+} from '@agent-device/platform-android/mechanics';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 import { ref, selector } from './selector-read-utils.ts';
 
@@ -120,4 +124,37 @@ test('runtime press refuses a selector match with a zero-area rect and dispatche
     },
   );
   assert.deepEqual(taps, []);
+});
+
+test('runtime press on a Compose button dispatches its center only once its role node is folded', async () => {
+  const tree = parseUiHierarchyTree(`<hierarchy>
+    <node class="android.view.View" resource-id="compose-container" bounds="[53,1856][1027,1982]"
+      clickable="true" focusable="true" visible-to-user="true">
+      <node class="android.widget.TextView" text="Continue with email" bounds="[352,1895][728,1943]"
+        visible-to-user="true" />
+      <node class="android.widget.Button" bounds="[53,1858][1027,1980]" visible-to-user="true" />
+    </node>
+  </hierarchy>`);
+  const press = async (raw: boolean) => {
+    const taps: Point[] = [];
+    const device = createInteractionDevice(
+      makeSnapshotState(buildUiHierarchySnapshot(tree, undefined, { raw }).nodes),
+      {
+        tap: async (_context, point) => {
+          taps.push(point);
+          return { ok: true };
+        },
+      },
+    );
+    const failure = await device.interactions
+      .click(selector('id="compose-container"'), { session: 'default' })
+      .then(
+        () => undefined,
+        (error: { details?: { reason?: string } }) => error,
+      );
+    return { taps, reason: failure?.details?.reason };
+  };
+
+  assert.deepEqual(await press(false), { taps: [{ x: 540, y: 1919 }], reason: undefined });
+  assert.deepEqual(await press(true), { taps: [], reason: 'covered_by_interactive_descendants' });
 });

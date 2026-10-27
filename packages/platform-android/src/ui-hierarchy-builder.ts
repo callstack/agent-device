@@ -25,7 +25,7 @@ import {
 import { collectAndroidHiddenNodes } from './ui-hierarchy-visibility.ts';
 import { scopePresentedAndroidSnapshot } from './ui-hierarchy-scope.ts';
 import { isCollectionContainerType, shouldIncludeAndroidNode } from './ui-hierarchy-inclusion.ts';
-import { composeRoleNodeOf } from './ui-hierarchy-compose-role.ts';
+import { collectComposeRoleFolds } from './ui-hierarchy-compose-role.ts';
 import {
   createAndroidSnapshotPresentationNode,
   isAndroidSnapshotPresentationFailure,
@@ -73,8 +73,10 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
-  /** Compose role nodes whose class the regular projection publishes on their parent instead. */
-  foldedComposeRoleNodes: Set<AndroidNode>;
+  /** Compose containers mapped to the role node whose class they publish. Empty for raw. */
+  composeRoleFolds: ReadonlyMap<AndroidNode, AndroidNode>;
+  /** The role nodes those containers absorb, which the regular projection omits. */
+  foldedComposeRoleNodes: ReadonlySet<AndroidNode>;
   /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
   viewport?: Rect;
   presentationBudget: AndroidSnapshotPresentationBudget;
@@ -109,6 +111,7 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
+    composeRoleFolds: new Map(),
     foldedComposeRoleNodes: new Set(),
     presentationBudget,
     presentationNodes: [],
@@ -119,6 +122,10 @@ export function buildUiHierarchySnapshot(
     presentationBudget.check('work');
     state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
     state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
+    state.composeRoleFolds = options.raw
+      ? new Map()
+      : collectComposeRoleFolds(tree, presentationBudget);
+    state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
     for (const root of tree.children) {
       walkUiHierarchyNode(state, root, 0);
       if (state.truncated) break;
@@ -291,7 +298,7 @@ function appendAndroidNodeIfPresented(
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
 ): number | undefined {
-  if (!state.options.raw && state.foldedComposeRoleNodes.has(node)) return parentIndex;
+  if (state.foldedComposeRoleNodes.has(node)) return parentIndex;
   if (
     !state.options.raw &&
     isPositiveFiniteRect(node.rect) &&
@@ -402,11 +409,9 @@ function createAndroidRawSnapshotNode(
   systemChrome: boolean,
   systemBar: RawSnapshotNode['systemBar'],
 ): AndroidRawSnapshotNode {
-  const composeRole = state.options.raw ? undefined : composeRoleNodeOf(node);
-  if (composeRole) state.foldedComposeRoleNodes.add(composeRole);
   return {
     index: state.nodes.length,
-    type: (composeRole ?? node).type ?? undefined,
+    type: (state.composeRoleFolds.get(node) ?? node).type ?? undefined,
     label: node.label ?? undefined,
     value: node.value ?? undefined,
     ...node.passiveFacts,
