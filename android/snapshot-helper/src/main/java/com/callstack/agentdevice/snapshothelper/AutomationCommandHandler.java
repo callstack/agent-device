@@ -40,9 +40,7 @@ final class AutomationCommandHandler {
       result.putString("ok", "true");
       SessionResponseWriter.writeSessionResponse(output, result, "");
     } catch (Throwable error) {
-      result.putString("ok", "false");
-      result.putString("errorType", error.getClass().getName());
-      result.putString("message", error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      SessionResponseWriter.putSessionError(result, error);
       if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
       SessionResponseWriter.writeSessionResponse(output, result, "");
     }
