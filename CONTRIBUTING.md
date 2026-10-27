@@ -246,12 +246,13 @@ Useful direct entry points:
   and `linux/`, including tests. No Xcode or JVM is needed.
 - `pnpm native-dupes:report` — inspect all native clones without failing on new findings;
   writes `.tmp/native-dupes/jscpd-report.json` with both locations and `isNew` markers.
-- `pnpm native-dupes:prototype` — compare detection settings and the Duo fixture pair;
-  see [measurements and baseline review](docs/experiments/native-duplication.md).
 - `pnpm native-dupes:baseline` — update accepted clones only after reviewing their source;
   do not use a baseline refresh merely to clear a failure.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
+
+For native duplication settings, reproduction commands, and baseline pruning, see
+[the experiment notes](docs/experiments/native-duplication.md).
 
 See [`docs/agents/testing.md`](docs/agents/testing.md) for check selection and blocked validation; see
 [`test authoring`](docs/agents/test-authoring.md) for shared test utilities and test-speed rules. See [gate maintenance](docs/agents/gates.md) for mutation and fuzz harnesses. For real devices, follow

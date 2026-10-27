@@ -211,3 +211,30 @@ test('same-file clones fail while comment blocks and ignored build outputs do no
   write('apple/build/Generated.swift', source);
   assert.equal(run().exitCode, 0, 'comments and ignored generated copies must not add clones');
 });
+
+test('baseline refresh prunes removed clones so their later reintroduction fails', () => {
+  const { cwd, write, run } = fixture();
+  const source = sources[0]!.source;
+  const baselinePath = path.join(cwd, 'native-dupes-baseline.json');
+  write('apple/Capture.swift', source);
+  write('apple/Copy.swift', source);
+  assert.equal(run(baselineArgs).exitCode, 0);
+  const accepted = fs.readFileSync(baselinePath, 'utf8');
+  fs.unlinkSync(path.join(cwd, 'apple/Copy.swift'));
+  assert.equal(run().exitCode, 0);
+  assert.equal(
+    fs.readFileSync(baselinePath, 'utf8'),
+    accepted,
+    'checks must leave the baseline unchanged',
+  );
+  write('apple/Copy.swift', source);
+  assert.equal(run().exitCode, 0, 'an unpruned allowance accepts the same clone again');
+  fs.unlinkSync(path.join(cwd, 'apple/Copy.swift'));
+  assert.equal(run(baselineArgs).exitCode, 0);
+  const pruned = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+  assert.deepEqual(pruned.fingerprints, {});
+  write('apple/Copy.swift', source);
+  const reintroduced = run();
+  assert.equal(reintroduced.exitCode, 1);
+  assert.equal(reintroduced.report?.statistics.total.newClones, 1);
+});

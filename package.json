@@ -147,10 +147,9 @@
     "fallow:baseline": "fallow health --report-only --save-baseline fallow-baselines/health.json --summary",
     "check:fallow": "fallow audit",
     "check:native-dupes": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-new-clones --fail-on-empty",
-    "check:native-dupes:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/native-dupes/*.test.ts",
+    "check:native-dupes:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/native-dupes/check.test.ts",
     "native-dupes:report": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-empty",
     "native-dupes:baseline": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --update-baseline --fail-on-empty",
-    "native-dupes:prototype": "node --experimental-strip-types scripts/native-dupes/prototype.ts",
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
     "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/*.test.ts",
     "gate": "node --experimental-strip-types scripts/gate/run.ts",
@@ -329,7 +328,6 @@
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
-    "@agent-device/testmu": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
@@ -367,6 +365,7 @@
     "vite": "^8.3.5",
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "@agent-device/testmu": "workspace:*"
   }
 }

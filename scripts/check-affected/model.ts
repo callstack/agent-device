@@ -19,6 +19,7 @@
 // non-.ts fixture whose owning suite cannot be derived). Existing GitHub CI
 // remains authoritative; this only optimizes local/agent feedback.
 
+import nativeDupesConfig from '../../.jscpd-native.json' with { type: 'json' };
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 import { deviceLaneOwnership } from './device-lanes.ts';
 
@@ -396,7 +397,7 @@ const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.endsWith('.swift');
 
 const nativeDupesOwnership: OwnershipRule = ({ file }) =>
-  /^(?:apple|android|linux)\/.*\.(?:swift|m|h|kt|kts|java|py)$/.test(file)
+  nativeDupesConfig.path.some((root) => file.startsWith(`${root}/`))
     ? [
         reason(
           'native-dupes',

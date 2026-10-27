@@ -156,6 +156,7 @@ test('Android helper change selects the android-helpers build', () => {
     'replay-android',
   ]);
   assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), [
+    'native-dupes',
     'android-helpers',
     'replay-android',
   ]);
@@ -454,54 +455,26 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-test('native duplication covers language inputs without selecting metadata or TypeScript', () => {
-  for (const file of [
-    'apple/fold-helper/Fold.m',
-    'apple/snapshot-bridge/Bridge.h',
-    'android/ime-helper/Input.kt',
-    'android/ime-helper/Build.kts',
-    'android/snapshot-helper/Touch.java',
-    'linux/atspi-dump.py',
-  ]) {
-    assert.ok(ids([file]).includes('native-dupes'), file);
+test('every configured scan root selects native duplication regardless of extension', () => {
+  const config: { path: string[] } = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, '.jscpd-native.json'), 'utf8'),
+  );
+  for (const root of config.path) {
+    for (const extension of ['mm', 'future']) {
+      const file = path.posix.join(root, 'duplication-probe', `Source.${extension}`);
+      assert.ok(
+        plan([file]).reasons.some(
+          (entry) => entry.check === 'native-dupes' && entry.rule === 'own:native-dupes',
+        ),
+        file,
+      );
+    }
+    const neighbor = path.posix.join(`${root}-neighbor`, 'Source.mm');
+    assert.ok(!plan([neighbor]).reasons.some((entry) => entry.rule === 'own:native-dupes'));
   }
-  for (const file of [
-    'apple/runner/README.md',
-    'android/ime-helper/AndroidManifest.xml',
-    'packages/platform-apple/src/core/app-resolution.ts',
-  ]) {
-    assert.ok(!ids([file]).includes('native-dupes'), file);
-  }
+  assert.ok(!ids(['packages/platform-apple/src/core/app-resolution.ts']).includes('native-dupes'));
   for (const file of ['.jscpd-native.json', 'native-dupes-baseline.json']) {
     assert.equal(plan([file]).failOpen, true);
     assert.ok(ids([file]).includes('native-dupes-model'), file);
-  }
-});
-
-test('native duplication selection covers every configured root, format, and custom extension', () => {
-  const config: { path: string[]; format: string[]; formatsExts: Record<string, string[]> } =
-    JSON.parse(fs.readFileSync(path.join(repoRoot, '.jscpd-native.json'), 'utf8'));
-  const defaultExtensions: Record<string, string[]> = {
-    swift: ['swift'],
-    objectivec: ['m'],
-    kotlin: ['kt', 'kts'],
-    java: ['java'],
-    python: ['py'],
-  };
-  for (const format of config.format) {
-    const defaults = defaultExtensions[format];
-    assert.ok(defaults, `Declare the scanner extensions for the added ${format} format`);
-    const extensions = new Set([...defaults, ...(config.formatsExts[format] ?? [])]);
-    for (const root of config.path) {
-      for (const extension of extensions) {
-        const file = `${root}/duplication-probe/Source.${extension}`;
-        assert.ok(
-          plan([file]).reasons.some(
-            (entry) => entry.check === 'native-dupes' && entry.rule === 'own:native-dupes',
-          ),
-          file,
-        );
-      }
-    }
   }
 });

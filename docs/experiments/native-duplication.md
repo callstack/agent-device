@@ -6,16 +6,27 @@ Swift build caches, Android build output, and packaged helpers. No source exclus
 
 ## Reproduce the comparison
 
+The table records source commit `a16d4372376bf18eea3dff4cbe85e15fc68e7fc0`.
+It is an experiment record, not a target for later revisions. Files below the token minimum do
+not contribute to jscpd's analyzed-file count. Percentages are its duplicated-line metric,
+not unique lines to remove.
+
+Use jscpd 5.4.2. To replay the recorded inputs without changing this checkout, extract only
+tracked source from that commit:
+
 ```sh
 pnpm install --frozen-lockfile
-pnpm native-dupes:prototype
+pnpm exec jscpd --version
+native_dupes_source="$(mktemp -d "${TMPDIR:-/tmp}/agent-device-native-dupes.XXXXXX")"
+git archive a16d4372376bf18eea3dff4cbe85e15fc68e7fc0 -- apple android linux \
+  packages/platform-apple/src/core/__tests__/display-inventory.test.ts \
+  packages/platform-apple/src/__tests__/simctl-facade.test.ts | tar -x -C "$native_dupes_source"
 ```
 
-Each variant scans `apple/`, `android/`, and `linux/`, then scans the two TypeScript tests named in
-the original report. JSON reports and `summary.json` go to `.tmp/native-dupes-prototypes/`.
-The prototype fixes the worker count at two. The table records this source revision, not a target
-for later revisions. Percentages are jscpd's duplicated-line metric, not unique lines to remove.
-Files below the token minimum do not contribute to its analyzed-file count.
+The version command must report `jscpd 5.4.2`. The commands below fix the worker count at two.
+`--no-gitignore` lets the tracked-source archive be scanned independently of its temporary path;
+the archive contains no ignored build output. Each row has a native scan and a separate scan of
+the two TypeScript tests. Reports go to `.tmp/native-dupes-prototypes/`.
 
 | Mode | Tokens / lines | Native clones | Duplicated lines | Duplication | Duo pair clones | Duo panel fragments |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -27,6 +38,44 @@ Files below the token minimum do not contribute to its analyzed-file count.
 | weak | 20 / 3 | 860 | 5435 | 11.20% | 31 | 2 |
 | weak + consistent identifier normalization | 50 / 5 | 196 | 2150 | 4.44% | 5 | 0 |
 | weak + gaps up to 8 lines | 30 / 3 | 384 | 2960 | 6.10% | 13 | 0 |
+
+Exact commands, in table order:
+
+```sh
+# mild-50-5
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode mild --min-tokens 50 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/mild-50-5-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode mild --min-tokens 50 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/mild-50-5-duo
+
+# weak-50-5
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 50 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-50-5-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 50 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-50-5-duo
+
+# weak-70-5
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 70 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-70-5-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 70 --min-lines 5 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-70-5-duo
+
+# weak-100-8
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 100 --min-lines 8 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-100-8-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 100 --min-lines 8 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-100-8-duo
+
+# weak-30-3
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 30 --min-lines 3 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-30-3-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 30 --min-lines 3 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-30-3-duo
+
+# weak-20-3
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 20 --min-lines 3 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-20-3-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 20 --min-lines 3 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/weak-20-3-duo
+
+# renamed-50-5
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 50 --min-lines 5 --ignore-identifiers=consistent --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/renamed-50-5-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 50 --min-lines 5 --ignore-identifiers=consistent --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/renamed-50-5-duo
+
+# gap-30-3
+pnpm exec jscpd "$native_dupes_source/apple" "$native_dupes_source/android" "$native_dupes_source/linux" --format swift,objectivec,kotlin,java,python --formats-exts objectivec:m,h --mode weak --min-tokens 30 --min-lines 3 --max-gap-lines 8 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/gap-30-3-native
+pnpm exec jscpd "$native_dupes_source/packages/platform-apple/src/core/__tests__/display-inventory.test.ts" "$native_dupes_source/packages/platform-apple/src/__tests__/simctl-facade.test.ts" --format typescript --mode weak --min-tokens 30 --min-lines 3 --max-gap-lines 8 --workers 2 --no-gitignore --absolute --reporters json --output .tmp/native-dupes-prototypes/gap-30-3-duo
+
+rm -rf "$native_dupes_source"
+```
 
 The measured native runs took about 170–195 ms each, including Node startup, using two workers.
 This is a single timing sample per variant, not a performance benchmark. Linux execution belongs
@@ -53,15 +102,22 @@ in 5.1.0. A custom comparison script or percentage ceiling is unnecessary. The b
 content fingerprints and clone multiplicities. It tolerates line shifts and fails on a third copy
 of an accepted pair. A new clone fails even if another clone is removed and the total stays equal.
 The executable policy tests cover each language, headers, line shifts, extra copies, replacement
-clones, missing baselines, and empty scans.
+clones, missing baselines, empty scans, and removed-clone pruning.
 
 The rollout starts with a report-only measurement and saves that result in
 `native-dupes-baseline.json`. `check:native-dupes` then rejects new fingerprints or increased
 multiplicities. It scans all native files rather than filtering by changed files. This keeps
 unchanged files available as comparison targets and needs no Git history in CI. `check:affected`
-selects it for native source changes; configuration and baseline changes select the full check set.
+selects it for non-documentation changes under the roots in `.jscpd-native.json`. It does not
+filter by extension, so new scanner formats cannot escape selection. Some metadata changes also
+select this inexpensive scan. Configuration and baseline changes select the full check set.
 `--changed` is unsuitable for PR enforcement because it filters by working-tree status, which is
 empty after a commit. The normal check never updates the baseline.
+
+After rebasing onto `21f3f50a90f21bf8f994e742cbb7dd295f255d6c`, the initial baseline was
+refreshed from main's native source: 82 clones, 854 duplicated lines (1.78%), and 218 analyzed
+files. Three fingerprints were replaced by upstream native changes. The table above remains the
+historical comparison at `a16d4372376bf18eea3dff4cbe85e15fc68e7fc0`.
 
 ## Motivating cases and limits
 
@@ -91,3 +147,11 @@ share an owner. If retaining duplication is intentional, review its source befor
 `pnpm native-dupes:baseline`. Review the baseline diff together with the source change. Do not
 regenerate it merely to clear a failing check. A detector upgrade or a change to matching options
 also needs a fresh comparison and baseline review. Missing baselines and empty scans fail closed.
+
+The normal check does not prune stale fingerprints. If a clone disappears while its fingerprint
+remains in the baseline, the same block can be reintroduced up to its saved multiplicity without
+failing. When removing a clone, run `pnpm native-dupes:baseline` in the same PR. jscpd's
+`--update-baseline` replaces the saved fingerprints with those found by that scan, removing absent
+fingerprints and reducing obsolete multiplicities. Review that the refresh removes or reduces
+entries; investigate any additions. The executable pruning test proves that removal passes,
+an unpruned allowance accepts reintroduction, and a refreshed baseline rejects reintroduction.
