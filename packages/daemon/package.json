@@ -26,6 +26,7 @@
   "devDependencies": {
     "@agent-device/proxy": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
+    "@types/node": "^22.20.1",
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",
