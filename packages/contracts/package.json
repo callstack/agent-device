@@ -288,6 +288,10 @@
       "types": "./src/interactor-types.ts",
       "default": "./src/interactor-types.ts"
     },
+    "./unsupported-interactor": {
+      "types": "./src/unsupported-interactor.ts",
+      "default": "./src/unsupported-interactor.ts"
+    },
     "./keyboard": {
       "types": "./src/keyboard.ts",
       "default": "./src/keyboard.ts"

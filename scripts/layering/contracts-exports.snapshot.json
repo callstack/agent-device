@@ -131,6 +131,7 @@
   "@agent-device/contracts/tv-remote",
   "@agent-device/contracts/tv-remote-runtime",
   "@agent-device/contracts/type-text-runtime",
+  "@agent-device/contracts/unsupported-interactor",
   "@agent-device/contracts/viewport-runtime",
   "@agent-device/contracts/wait",
   "@agent-device/contracts/wait-runtime-plan"
