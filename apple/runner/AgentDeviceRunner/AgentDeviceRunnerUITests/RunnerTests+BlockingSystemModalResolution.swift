@@ -5,7 +5,6 @@ extension RunnerTests {
     let root: XCUIElement
     let ownerApp: XCUIApplication
     let actions: [XCUIElement]
-    /// The SpringBoard window hosting `root`, or nil for a remote host queried as a whole app.
     var window: XCUIElement? = nil
   }
 

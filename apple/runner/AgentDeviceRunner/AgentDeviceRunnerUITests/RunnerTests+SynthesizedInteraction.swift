@@ -443,7 +443,7 @@ extension RunnerTests {
 
 #if os(iOS)
   /// The context for a point measured on a window the caller already holds, such as the
-  /// SpringBoard window hosting a system alert. Nil when that window has no usable frame.
+  /// SpringBoard window hosting a system alert.
   @MainActor
   func synthesizedCoordinateContext(window: XCUIElement) -> SynthesizedCoordinateContext? {
     let frame = safely("MODAL_WINDOW", CGRect.null) { window.frame }

@@ -12,8 +12,6 @@ extension RunnerTests {
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
     let source: RunnerAlertSource
-    /// The window a SpringBoard modal is hosted in. Its activation routes through this window,
-    /// because `ownerApp`'s first window can be on another panel of a foldable.
     var window: XCUIElement? = nil
   }
 

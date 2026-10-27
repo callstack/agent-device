@@ -114,7 +114,7 @@ extension RunnerTests {
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
   ) -> SpringBoardModal? {
-    if let alert = firstBlockingSystemModal(in: springboard, matching: .alert) {
+    if let alert = firstBlockingSystemModal(in: springboard, matching: .alert, deadline: deadline) {
       return alert
     }
 
@@ -124,17 +124,19 @@ extension RunnerTests {
       return nil
     }
 
-    return firstBlockingSystemModal(in: springboard, matching: .sheet)
+    return firstBlockingSystemModal(in: springboard, matching: .sheet, deadline: deadline)
   }
 
   private func firstBlockingSystemModal(
     in springboard: XCUIApplication,
-    matching type: XCUIElement.ElementType
+    matching type: XCUIElement.ElementType,
+    deadline: Date
   ) -> SpringBoardModal? {
     let windows = safeElementsQuery {
       springboard.windows.containing(type, identifier: nil).allElementsBoundByIndex
     }
     for window in windows {
+      guard Date() < deadline else { return nil }
       let modals = safeElementsQuery {
         window.descendants(matching: type).allElementsBoundByIndex
       }

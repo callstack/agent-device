@@ -64,7 +64,10 @@ extension RunnerTests {
       matches = snapshot.elementType == .window && containsDismissPopupMarker(snapshot)
     }
     if matches && visible { return [snapshot] }
-    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: viewport) }
+    // A window is the viewport of what it hosts: a foldable's SpringBoard has a window on each
+    // panel, and the application frame names only one of them.
+    let childViewport = snapshot.elementType == .window && !frame.isNull && !frame.isEmpty ? frame : viewport
+    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: childViewport) }
   }
 
   private func containsDismissPopupMarker(_ snapshot: XCUIElementSnapshot) -> Bool {
