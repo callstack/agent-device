@@ -13,47 +13,28 @@ enum RunnerAccessibilityHealth: String, Equatable {
   case unavailable
 }
 
-enum SynthesizedKeyboardPolicy: String, Equatable, Hashable {
-  case never
-  case requiredWhenAvailable
-
-  func allowsProbe(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
-    switch self {
-    case .never:
-      return false
-    case .requiredWhenAvailable:
-      return accessibilityHealth != .unavailable
-    }
-  }
-}
-
-enum SynthesizedFallbackPolicy: String, Equatable, Hashable {
-  case privateSynthesisRequired
-  case xctestCoordinateWhenAccessibilityAvailable
-  case xctestCoordinateAllowed
-
-  func allowsXCTestCoordinateFallback(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
-    switch self {
-    case .privateSynthesisRequired:
-      return false
-    case .xctestCoordinateWhenAccessibilityAvailable:
-      return accessibilityHealth != .unavailable
-    case .xctestCoordinateAllowed:
-      return true
-    }
-  }
-}
-
 enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   case coordinateTap
   case coordinateLongPress
   case scroll
   case synthesizedDrag
-}
 
-struct SynthesizedGesturePolicy: Equatable, Hashable {
-  let keyboardPolicy: SynthesizedKeyboardPolicy
-  let fallbackPolicy: SynthesizedFallbackPolicy
+  /// Whether the call site's XCTest coordinate gesture may run after private synthesis fails.
+  /// Scroll's swipe is viewport-center-symmetric, so an unverified dispatch cannot be told apart
+  /// from one that never reached the view, and it keeps the refusal. A coordinate long press
+  /// resolves the app frame through the tree, so on a tree XCTest cannot serialize that read fails
+  /// after its retries and raises an exception that ends the runner test; its fallback needs a tree
+  /// that answers.
+  func allowsXCTestCoordinateFallback(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
+    switch self {
+    case .coordinateTap:
+      return true
+    case .coordinateLongPress, .synthesizedDrag:
+      return accessibilityHealth != .unavailable
+    case .scroll:
+      return false
+    }
+  }
 }
 
 struct SynthesizedCoordinateContext {
@@ -63,54 +44,22 @@ struct SynthesizedCoordinateContext {
   /// sole-screen route: XCTest could not resolve the window, `referenceFrame` is the device's only
   /// screen, and the record is routed to that screen.
   let resolvedWindow: XCUIElement?
-  let keyboardPolicy: SynthesizedKeyboardPolicy
   let accessibilityHealth: RunnerAccessibilityHealth
 
   func withReferenceFrame(_ frame: CGRect) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
       referenceFrame: frame,
       resolvedWindow: resolvedWindow,
-      keyboardPolicy: keyboardPolicy,
       accessibilityHealth: accessibilityHealth
     )
   }
 
+  /// The keyboard probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch`
+  /// with a live AX fetch — so `.unavailable` skips it: there the fetch is known not to answer,
+  /// and a gesture that needs the frame fails open on a missing one. `.unknown` still probes;
+  /// skipping it there left the first scroll of a session swiping under the keys.
   var allowsKeyboardProbe: Bool {
-    keyboardPolicy.allowsProbe(accessibilityHealth: accessibilityHealth)
-  }
-}
-
-func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> SynthesizedGesturePolicy {
-  switch kind {
-  case .coordinateTap:
-    return SynthesizedGesturePolicy(
-      keyboardPolicy: .never,
-      fallbackPolicy: .xctestCoordinateAllowed
-    )
-  case .coordinateLongPress:
-    // XCTest's coordinate press resolves the app frame through the tree. On a tree XCTest cannot
-    // serialize, that read fails after its retries and the press raises an exception that ends the
-    // runner test, so the fallback needs a tree that answers.
-    return SynthesizedGesturePolicy(
-      keyboardPolicy: .never,
-      fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
-    )
-  case .scroll:
-    // Scroll places a viewport-center-symmetric swipe, so it cannot tell a keyboard-struck swipe
-    // from a scroll that reached the edge without reading the live keyboard frame (#2500). The
-    // probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch` with a live AX
-    // fetch — but skipping it on `.unknown` left the first scroll of a session swiping under the
-    // keys, which is the failure this command exists to avoid. `.unavailable` still skips it: there
-    // the fetch is known not to answer, and `ScrollViewportPolicy` fails open on a missing frame.
-    return SynthesizedGesturePolicy(
-      keyboardPolicy: .requiredWhenAvailable,
-      fallbackPolicy: .privateSynthesisRequired
-    )
-  case .synthesizedDrag:
-    return SynthesizedGesturePolicy(
-      keyboardPolicy: .requiredWhenAvailable,
-      fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
-    )
+    accessibilityHealth != .unavailable
   }
 }
 
@@ -167,13 +116,13 @@ extension RunnerTests {
     steps: [SequenceStep],
     app: XCUIApplication
   ) -> SynthesizedCoordinateContext? {
-    guard let kind = steps.lazy.compactMap(synthesizedPolicyKind(forSequenceStep:)).first else {
+    guard steps.lazy.contains(where: { synthesizedPolicyKind(forSequenceStep: $0) != nil }) else {
       return nil
     }
-    return synthesizedCoordinateContext(app: app, policy: synthesizedGesturePolicy(kind))
+    return synthesizedCoordinateContext(app: app)
   }
 
-  /// `context` is nil when no window frame resolved; `kind`'s fallback policy then reads the
+  /// `context` is nil when no window frame resolved; `kind`'s fallback decision then reads the
   /// runner's current accessibility health.
   @MainActor
   func performSynthesizedGesture(
@@ -192,7 +141,7 @@ extension RunnerTests {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
       return .performed(timing: timing)
     }
-    let fallbackAllowed = synthesizedGesturePolicy(kind).fallbackPolicy.allowsXCTestCoordinateFallback(
+    let fallbackAllowed = kind.allowsXCTestCoordinateFallback(
       accessibilityHealth: context?.accessibilityHealth ?? mainOwned.accessibilityHealth
     )
     logSynthesizedGesturePolicyDecision(
@@ -218,7 +167,7 @@ extension RunnerTests {
       fallbackAttempted: fallbackAttempted
     )
     // The same decision for the same gesture kind on every command is one line; a changed policy
-    // (AX health, keyboard, fallback) is a new one.
+    // (AX health or the fallback decision) is a new one.
     if lastLoggedGesturePolicyLines[kind] != line {
       lastLoggedGesturePolicyLines[kind] = line
       runnerMarkerWriter(line)
@@ -235,12 +184,9 @@ extension RunnerTests {
       return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
         + " context=unavailable fallbackAttempted=\(fallbackAttempted)"
     }
-    let fallbackPolicy = synthesizedGesturePolicy(kind).fallbackPolicy
     return "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue)"
-      + " axHealth=\(context.accessibilityHealth.rawValue) frameSource=window"
-      + " keyboardPolicy=\(context.keyboardPolicy.rawValue)"
-      + " fallbackPolicy=\(fallbackPolicy.rawValue)"
-      + " fallbackAllowed=\(fallbackPolicy.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth))"
+      + " axHealth=\(context.accessibilityHealth.rawValue)"
+      + " fallbackAllowed=\(kind.allowsXCTestCoordinateFallback(accessibilityHealth: context.accessibilityHealth))"
       + " fallbackAttempted=\(fallbackAttempted)"
   }
 }

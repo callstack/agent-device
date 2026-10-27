@@ -42,10 +42,7 @@ extension RunnerTests {
         return textInputProbeUnavailableResponse()
       }
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(policyKind)
-      )
+      let context = synthesizedCoordinateContext(app: activeApp)
       switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
       }) {

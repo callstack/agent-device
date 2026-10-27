@@ -21,10 +21,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.synthesizedDrag)
-    ) else {
+    guard let context = context ?? synthesizedCoordinateContext(app: app) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -107,10 +104,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.coordinateTap)
-    ) else {
+    guard let context = context ?? synthesizedCoordinateContext(app: app) else {
       return .unsupported(
         message: "synthesized coordinate tap could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -348,10 +342,7 @@ extension RunnerTests {
   @MainActor
   func gestureViewportFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
-    guard let context = synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.synthesizedDrag)
-    ) else {
+    guard let context = synthesizedCoordinateContext(app: app) else {
       return frameAvoidingKeyboard(app: app, frame: app.frame)
     }
     // The sole-screen route means the windows query just failed, so a keyboard probe would too.
@@ -396,23 +387,15 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext? = nil
   ) -> SynthesizedDragPlan? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.synthesizedDrag)
-    )
+    let context = context ?? synthesizedCoordinateContext(app: app)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
       let context
     else {
       return nil
     }
-    let points = keyboardAvoidingSynthesizedDragPoints(
-      app: app,
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      context: context
-    )
+    let points = context.allowsKeyboardProbe
+      ? keyboardAvoidingDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
+      : DragPoints(x: x, y: y, x2: x2, y2: y2)
     return SynthesizedDragPlan(
       points: points,
       context: context
@@ -420,23 +403,6 @@ extension RunnerTests {
 #else
     return nil
 #endif
-  }
-
-  func axFreeDragVisualizationFrame(
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    referenceFrame: CGRect
-  ) -> DragVisualizationFrame {
-    return DragVisualizationFrame(
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      referenceWidth: Double(referenceFrame.width),
-      referenceHeight: Double(referenceFrame.height)
-    )
   }
 
   func logSynthesizedDispatch(
@@ -478,7 +444,6 @@ extension RunnerTests {
   @MainActor
   func synthesizedCoordinateContext(
     app: XCUIApplication,
-    policy: SynthesizedGesturePolicy,
     windowQueryRejected: Bool = false
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
@@ -508,7 +473,6 @@ extension RunnerTests {
     return SynthesizedCoordinateContext(
       referenceFrame: referenceFrame,
       resolvedWindow: window,
-      keyboardPolicy: policy.keyboardPolicy,
       accessibilityHealth: health
     )
 #else
@@ -579,24 +543,6 @@ extension RunnerTests {
     default:
       return nil
     }
-  }
-
-  func keyboardAvoidingSynthesizedDragPoints(
-    app: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    context: SynthesizedCoordinateContext
-  ) -> DragPoints {
-#if os(iOS)
-    guard context.allowsKeyboardProbe else {
-      return DragPoints(x: x, y: y, x2: x2, y2: y2)
-    }
-    return keyboardAvoidingDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
-#else
-    return DragPoints(x: x, y: y, x2: x2, y2: y2)
-#endif
   }
 
   func swipe(app: XCUIApplication, direction: String) -> DragVisualizationFrame? {

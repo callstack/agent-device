@@ -76,10 +76,7 @@ extension RunnerTests {
           var fallback: GestureFallback?
           if command.synthesized == true {
             let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-            let context = synthesizedCoordinateContext(
-              app: activeApp,
-              policy: synthesizedGesturePolicy(policyKind)
-            )
+            let context = synthesizedCoordinateContext(app: activeApp)
             switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
               synthesizedTapAt(
                 app: activeApp,
@@ -169,10 +166,7 @@ extension RunnerTests {
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-          let context = synthesizedCoordinateContext(
-            app: activeApp,
-            policy: synthesizedGesturePolicy(policyKind)
-          )
+          let context = synthesizedCoordinateContext(app: activeApp)
           switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }) {
@@ -233,10 +227,7 @@ extension RunnerTests {
       let fallback: GestureFallback?
 #if os(iOS)
       let policyKind = SynthesizedGesturePolicyKind.coordinateLongPress
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(policyKind)
-      )
+      let context = synthesizedCoordinateContext(app: activeApp)
       switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
         synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
       }) {
@@ -287,11 +278,7 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
-      let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
-      guard let scrollContext = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(scrollPolicyKind)
-      ) else {
+      guard let scrollContext = synthesizedCoordinateContext(app: activeApp) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")

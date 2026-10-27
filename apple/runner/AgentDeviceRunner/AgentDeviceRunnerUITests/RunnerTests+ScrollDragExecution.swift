@@ -141,8 +141,7 @@ extension RunnerTests {
     profile: SynthesizedDragProfile
   ) -> Response? {
 #if os(iOS)
-    let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(app: activeApp, policy: policy)
+    let context = context ?? synthesizedCoordinateContext(app: activeApp)
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,
@@ -162,12 +161,13 @@ extension RunnerTests {
       )
     }
     let durationMs = min(max(durationMs, 16), 10000)
-    let dragFrame = axFreeDragVisualizationFrame(
+    let dragFrame = DragVisualizationFrame(
       x: plan.points.x,
       y: plan.points.y,
       x2: plan.points.x2,
       y2: plan.points.y2,
-      referenceFrame: plan.referenceFrame
+      referenceWidth: Double(plan.referenceFrame.width),
+      referenceHeight: Double(plan.referenceFrame.height)
     )
     switch performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
       synthesizedDragAt(
