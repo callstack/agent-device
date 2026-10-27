@@ -12,7 +12,8 @@ extension RunnerTests {
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
     let source: RunnerAlertSource
-    var window: XCUIElement? = nil
+    /// The window hosting a SpringBoard modal; nil routes through `ownerApp`.
+    let window: XCUIElement?
   }
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
@@ -163,11 +164,27 @@ extension RunnerTests {
           )
           return
         }
+        var hostContext: SynthesizedCoordinateContext?
+        if let window = alert.window {
+          // Never fall back to the owner app's first window: on a foldable it can be another panel.
+          guard let context = SynthesizedCoordinateContext(
+            validating: safely("ALERT_WINDOW", CGRect.null) { window.frame },
+            resolvedWindow: window,
+            accessibilityHealth: mainOwned.accessibilityHealth
+          ) else {
+            outcome = .unsupported(
+              message: "alert activation could not read the window hosting the alert",
+              hint: "Inspect the current alert before deciding whether to act again."
+            )
+            return
+          }
+          hostContext = context
+        }
         switch synthesizedTapAt(
           app: alert.ownerApp,
           x: frame.midX,
           y: frame.midY,
-          context: alert.window.flatMap { synthesizedCoordinateContext(window: $0) },
+          context: hostContext,
           deadline: deadline
         ) {
         case .performed?:
@@ -238,7 +255,7 @@ extension RunnerTests {
     guard !buttons.isEmpty else {
       return nil
     }
-    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source)
+    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: nil)
   }
 
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {

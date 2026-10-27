@@ -140,8 +140,11 @@ extension RunnerTests {
       let modals = safeElementsQuery {
         window.descendants(matching: type).allElementsBoundByIndex
       }
-      for modal in modals where safeIsBlockingSystemModal(modal, in: window) {
-        return SpringBoardModal(root: modal, window: window)
+      for modal in modals {
+        guard Date() < deadline else { return nil }
+        if safeIsBlockingSystemModal(modal, in: window) {
+          return SpringBoardModal(root: modal, window: window)
+        }
       }
     }
     return nil

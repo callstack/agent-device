@@ -5,7 +5,8 @@ extension RunnerTests {
     let root: XCUIElement
     let ownerApp: XCUIApplication
     let actions: [XCUIElement]
-    var window: XCUIElement? = nil
+    /// The SpringBoard window hosting `root`; nil for a remote host queried as a whole app.
+    let window: XCUIElement?
   }
 
   enum BlockingSystemModalResolution {
@@ -66,7 +67,7 @@ extension RunnerTests {
       // inside actionableElements turn that disappearance into an empty result.
       let actions = actionableElements(in: host)
       guard !actions.isEmpty else { continue }
-      return ResolvedBlockingSystemModal(root: host, ownerApp: host, actions: actions)
+      return ResolvedBlockingSystemModal(root: host, ownerApp: host, actions: actions, window: nil)
     }
     return nil
   }
