@@ -115,10 +115,16 @@ test('publishes a Compose role node as its clickable parent and keeps real child
           visible-to-user="true" />
       </node>
       <node class="android.widget.Button" bounds="[53,2250][1027,2370]" visible-to-user="true" />
+      <node class="android.view.View" resource-id="hidden-role-row"
+        bounds="[53,2380][1027,2390]" clickable="true" visible-to-user="true">
+        <node class="android.widget.Button" bounds="[53,2380][1027,2390]"
+          visible-to-user="false" />
+      </node>
     </node>
   </hierarchy>`);
 
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, {});
+  const interactive = buildUiHierarchySnapshot(tree, undefined, { interactiveOnly: true }).nodes;
   const published = nodes
     .filter((node) => node.parentIndex !== undefined)
     .map((node) => `${node.type} ${node.identifier ?? ''}`.trim());
@@ -131,5 +137,9 @@ test('publishes a Compose role node as its clickable parent and keeps real child
     'android.view.View legacy-row',
     'android.widget.CheckBox',
     'android.widget.Button',
+    'android.view.View hidden-role-row',
   ]);
+  expect(interactive.find((node) => node.identifier === 'continue-with-email')?.type).toBe(
+    'android.widget.Button',
+  );
 });

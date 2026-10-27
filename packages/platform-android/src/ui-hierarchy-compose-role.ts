@@ -26,6 +26,7 @@ function isComposeRoleNode(child: AndroidNode, parent: AndroidNode): boolean {
   return (
     COMPOSE_ROLE_CLASS_NAMES.has(child.type?.toLowerCase() ?? '') &&
     child.children.length === 0 &&
+    child.visibleToUser !== false &&
     !isAgentTarget(child) &&
     !child.label &&
     !child.identifier &&
