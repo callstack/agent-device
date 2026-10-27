@@ -7,7 +7,7 @@ import Footer from '../components/site/Footer.astro';
 import Nav from '../components/site/Nav.astro';
 import { adopters, site } from '../site/content';
 
-const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 const addYourself = `${site.repo}/edit/main/website/src/site/content.ts`;
 ---
 

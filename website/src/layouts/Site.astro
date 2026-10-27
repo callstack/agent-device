@@ -13,18 +13,18 @@ import { site } from '../site/content';
 import { fullTitle } from '../site/meta';
 
 interface Props {
+  /** The canonical path, when it differs from this page's own (a duplicate page). */
+  canonicalPath?: string;
+  description: string;
+  /** Structured data for this page, rendered as JSON-LD. */
+  jsonLd?: object;
+  /** Pages that should stay out of search results (the 404). Add them to noindexPaths too. */
+  noindex?: boolean;
   /**
    * The page's own title, without the product name; leave it out on the home page. The full
    * title ("Page | Name", or "Name: subtitle" for home) is composed by fullTitle() in meta.ts.
    */
   title?: string;
-  description: string;
-  /** Pages that should stay out of search results (the 404). Add them to noindexPaths too. */
-  noindex?: boolean;
-  /** The canonical path, when it differs from this page's own (a duplicate page). */
-  canonicalPath?: string;
-  /** Structured data for this page, rendered as JSON-LD. */
-  jsonLd?: object;
 }
 
 const { title: pageTitle, description, noindex = false, canonicalPath, jsonLd } = Astro.props;

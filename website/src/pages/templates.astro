@@ -7,7 +7,7 @@ import Nav from '../components/site/Nav.astro';
 import PixelIcon from '../components/site/PixelIcon.astro';
 import { templates } from '../site/content';
 
-const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 ---
 
 <Site

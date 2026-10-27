@@ -11,7 +11,7 @@ const MAX = 160;
 /** The first prose paragraph of a Markdown body, as plain text, cut to fit a description. */
 export function describe(body: string): string | undefined {
   const blocks = body
-    .replace(/```[\s\S]*?```/g, '')
+    .replaceAll(/```[\s\S]*?```/g, '')
     .split(/\n\s*\n/)
     .map((b) => b.trim());
   const prose = blocks.find(
@@ -19,10 +19,10 @@ export function describe(body: string): string | undefined {
   );
   if (!prose) return undefined;
   const text = prose
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[`*_]/g, '')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replaceAll(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replaceAll(/[`*_]/g, '')
+    .replaceAll(/\s+/g, ' ')
     .trim();
   if (text.length <= MAX) return text;
   const cut = text.slice(0, MAX);

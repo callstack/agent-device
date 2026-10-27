@@ -23,7 +23,7 @@ const order = ['bottleneck', 'loop', 'inner', 'outer', 'feedback', 'stories', 'a
 const num = (id: (typeof order)[number]) => String(order.indexOf(id) + 1).padStart(2, '0');
 
 // Inline `code` in copy.
-const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 
 // Structured data: the site, Callstack, the product as an application and as source code, and
 // the FAQ on this page.
@@ -73,7 +73,7 @@ const jsonLd = {
       mainEntity: faq.map(({ q, a }) => ({
         '@type': 'Question',
         name: q,
-        acceptedAnswer: { '@type': 'Answer', text: a.replace(/`/g, '') },
+        acceptedAnswer: { '@type': 'Answer', text: a.replaceAll('`', '') },
       })),
     },
   ],

@@ -7,12 +7,12 @@ import { site } from '../../site/content';
 import type { SceneName } from './dither';
 
 interface Props {
-  scene?: SceneName;
-  /** Where the cluster stands, 0..1 across: put it behind the product visual. */
-  focus?: number;
   /** Size of one dither cell in CSS pixels. */
   cell?: number;
   class?: string;
+  /** Where the cluster stands, 0..1 across: put it behind the product visual. */
+  focus?: number;
+  scene?: SceneName;
 }
 const { scene = 'mark', focus = 0.72, cell = 2, class: className } = Astro.props;
 ---

@@ -6,9 +6,9 @@ import { site } from '../../site/content';
 import { bitmapPath } from './icons';
 
 interface Props {
+  class?: string;
   /** The largest height to fill; the mark takes the nearest whole-step height under it. */
   height?: number;
-  class?: string;
   label?: string;
 }
 const { height = 20, class: className, label } = Astro.props;

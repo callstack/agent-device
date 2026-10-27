@@ -19,13 +19,13 @@ export type Tab = {
 };
 
 interface Props {
-  tabs: Tab[];
-  /** What the tabs choose between, for screen readers: "Platform", "Bundler". */
-  label: string;
   /** Prefixes the tab and panel ids, so two tab sets can share a page. */
   id?: string;
+  /** What the tabs choose between, for screen readers: "Platform", "Bundler". */
+  label: string;
   /** Pads every snippet to this many lines, so switching tabs doesn't change the height. */
   minLines?: number;
+  tabs: Tab[];
 }
 const { tabs, label, id = 'tabs', minLines = 10 } = Astro.props;
 ---

@@ -6,9 +6,9 @@ import type { Adopter } from '../../site/content';
 
 interface Props {
   adopter: Adopter;
+  class?: string;
   /** The mark's height. */
   size?: string;
-  class?: string;
 }
 
 const { adopter, size = '1.5rem', class: className } = Astro.props;

@@ -196,7 +196,7 @@ function markScene(
     // On the 404 page the middle, tallest stone is the one that is missing.
     if (hollow && k === (n - 1) / 2) {
       // Taller than the rest and uncapped: an outline does not turn into a skyline.
-      const c = stones[stones.length - 1]!;
+      const c = stones.at(-1)!;
       c.hollow = true;
       c.step = Math.max(2, Math.round((0.82 * size) / H));
       c.base = Math.round(rows + 0.04 * size);

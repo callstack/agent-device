@@ -4,13 +4,13 @@
 import { Code } from 'astro:components';
 
 interface Props {
+  class?: string;
   code: string;
   lang: string;
   /** Pads the gutter to this many lines, so short snippets share a height. */
   minLines?: number;
   /** Wraps long lines under their own line number instead of scrolling sideways. */
   wrap?: boolean;
-  class?: string;
 }
 
 const { code, lang, minLines = 0, wrap = false, class: className } = Astro.props;

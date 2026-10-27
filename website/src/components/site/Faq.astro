@@ -7,7 +7,7 @@ interface Props {
 }
 const { num } = Astro.props;
 // Inline `code` in answers.
-const html = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+const html = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 ---
 
 <section aria-labelledby="faq-title">
