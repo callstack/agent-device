@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { addAbortListener } from 'node:events';
 import type {
   LeaseRefusal,
   ManagedDeviceAllocatorPort,
@@ -261,7 +261,7 @@ export async function createManagedLeaseCoordinator(options: {
       if (signal.aborted) return await abandon(ref, 'abandoned');
       const remainingMs = input.deadlineAtMs - Date.now();
       if (remainingMs <= 0) return await abandon(ref, 'deadline-exceeded');
-      await sleep(Math.min(pollIntervalMs, remainingMs), undefined, { signal }).catch(() => {});
+      await abortableDelay(Math.min(pollIntervalMs, remainingMs), signal);
       if (signal.aborted) return await abandon(ref, 'abandoned');
       result = await journal.recover(ref);
     }
@@ -506,4 +506,18 @@ async function within<T>(work: Promise<T>, ms: number, label: string): Promise<T
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Global setTimeout on purpose: vitest fake timers drive it, not node:timers/promises.
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    const listener = addAbortListener(signal, done);
+    function done() {
+      clearTimeout(timer);
+      listener[Symbol.dispose]();
+      resolve();
+    }
+  });
 }
