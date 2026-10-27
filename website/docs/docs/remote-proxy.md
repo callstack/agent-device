@@ -3,8 +3,6 @@ title: Remote Proxy
 description: Run agent-device on a Mac with simulator or device access and control it from another machine through an HTTP tunnel.
 ---
 
-# Remote Proxy
-
 Use `agent-device proxy` when the machine running your agent cannot access the iOS simulator, Android emulator, or physical device directly, but another Mac can. The proxy runs on the device host, fronts the local daemon over HTTP, and lets a remote `agent-device` client call it through cloudflared, ngrok, or another tunnel.
 
 The proxy authenticates clients with a bearer token. You do not need `agent-device auth`.

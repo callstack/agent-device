@@ -2,8 +2,6 @@
 title: Snapshots
 ---
 
-# Snapshots
-
 Take a snapshot to read the UI as a structured tree and get refs (`@e1`, `@e2`, …) for the elements on
 the current screen.
 

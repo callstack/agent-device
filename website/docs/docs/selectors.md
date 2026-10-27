@@ -2,8 +2,6 @@
 title: Selectors
 ---
 
-# Selectors
-
 Target an element by what it says or is, instead of a snapshot ref. Use `find` to search by text,
 label, value, role, or id, or pass a selector expression to any command that takes a target.
 

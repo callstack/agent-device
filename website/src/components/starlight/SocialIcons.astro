@@ -1,0 +1,35 @@
+---
+// Header links: mono, uppercase, text only. The nav links from content.ts that leave the docs.
+import { nav } from '../../site/content';
+
+const links = nav
+  .filter(({ href }) => !href.startsWith('/docs'))
+  .map(({ text, href }) => ({ label: text, href, external: /^https?:/.test(href) }));
+---
+
+{
+  links.map(({ label, href, external }) => (
+    <a href={href} class="cs-header-link" rel={external ? 'me noopener' : undefined}>
+      {label}
+      {external && <span aria-hidden="true">↗</span>}
+    </a>
+  ))
+}
+
+<style>
+  .cs-header-link {
+    font-family: var(--cs-font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.055em;
+    text-transform: uppercase;
+    color: var(--cs-muted);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .cs-header-link:hover {
+    color: var(--sl-color-white);
+  }
+  .cs-header-link span {
+    margin-inline-start: 0.25em;
+  }
+</style>

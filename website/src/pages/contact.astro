@@ -1,0 +1,221 @@
+---
+// Contact Callstack about agent-device. The form posts to the same HubSpot form as the old site,
+// with the same field names and `agent_device_reason` values (HubSpot options), so submissions
+// keep landing where they did. `?reason=<id>` preselects a reason; links from /cloud and
+// /templates use it.
+import Site from '../layouts/Site.astro';
+import Footer from '../components/site/Footer.astro';
+import Nav from '../components/site/Nav.astro';
+
+const reasons = [
+  { id: 'talk-to-sales', label: 'Devices and QA for my team', value: 'Talk to Consultant', note: 'Device hosts, CI setup or agent-driven QA' },
+  { id: 'request-access', label: 'Set up a template', value: 'Request Access', note: 'A QA agent in your CI and pull requests' },
+  { id: 'missing-option', label: 'Missing support', value: 'Missing Option', note: 'A device cloud or agent harness we should support' },
+  { id: 'general', label: 'Something else', value: 'General', note: 'Questions or feedback' },
+];
+---
+
+<Site
+  title="Contact"
+  description="Talk to Callstack about agent-device: device hosts, CI setup, agent-driven QA for your team, or support for your device cloud."
+>
+  <Nav />
+  <main class="frame">
+    <section class="page-head" aria-labelledby="contact-title">
+      <p class="section-head label"><b>[01]</b> Contact</p>
+      <div class="intro">
+        <h1 class="h2" id="contact-title">Tell us what you’re building. <em>We’ll get back to you.</em></h1>
+        <p class="lede">agent-device is made at Callstack. We help teams put it to work on real apps.</p>
+      </div>
+    </section>
+
+    <form class="contact" data-contact novalidate>
+      <fieldset class="reasons">
+        <legend class="label">What is it about?</legend>
+        {
+          reasons.map((r, i) => (
+            <label class="reason">
+              <input type="radio" name="reason" value={r.id} data-value={r.value} checked={i === 0} />
+              <span class="reason-text">
+                <span class="reason-label">{r.label}</span>
+                <span class="reason-note">{r.note}</span>
+              </span>
+            </label>
+          ))
+        }
+      </fieldset>
+
+      <div class="fields">
+        <label class="field">
+          <span class="label">Name</span>
+          <input name="name" autocomplete="name" required />
+        </label>
+        <label class="field">
+          <span class="label">Work email</span>
+          <input name="email" type="email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span class="label">Company</span>
+          <input name="company" autocomplete="organization" />
+        </label>
+        <label class="field field--wide">
+          <span class="label">Message</span>
+          <textarea name="message" rows="5" required></textarea>
+        </label>
+      </div>
+
+      <div class="submit">
+        <button class="btn" type="submit">Send <span aria-hidden="true">→</span></button>
+        <p class="status" role="status" data-status></p>
+      </div>
+    </form>
+  </main>
+  <Footer />
+</Site>
+
+<script>
+  const PORTAL = '5711799';
+  const FORM = '4073135f-0426-450a-afc9-2738835a9284';
+
+  const form = document.querySelector<HTMLFormElement>('[data-contact]');
+  const status = document.querySelector<HTMLElement>('[data-status]');
+  if (form && status) {
+    const wanted = new URLSearchParams(location.search).get('reason');
+    const preset = form.querySelector<HTMLInputElement>(`input[name="reason"][value="${CSS.escape(wanted ?? '')}"]`);
+    if (preset) preset.checked = true;
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const data = new FormData(form);
+      const reason = form.querySelector<HTMLInputElement>('input[name="reason"]:checked');
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (button) button.disabled = true;
+      status.textContent = 'Sending…';
+      try {
+        const response = await fetch(`https://api.hsforms.com/submissions/v3/integration/submit/${PORTAL}/${FORM}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields: [
+              { name: 'firstname', value: data.get('name') },
+              { name: 'email', value: data.get('email') },
+              { name: 'company', value: data.get('company') },
+              { name: 'message', value: data.get('message') },
+              { name: 'agent_device_reason', value: reason?.dataset.value ?? 'General' },
+            ],
+            context: { pageUri: location.href, pageName: 'Contact | agent-device' },
+          }),
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        form.reset();
+        status.textContent = 'Thanks. We’ll reply by email.';
+      } catch {
+        status.textContent = 'That didn’t go through. Try again, or email hello@callstack.com.';
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .contact {
+    display: grid;
+    gap: 2rem;
+    padding: 2rem var(--pad) 3rem;
+  }
+  .reasons {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line);
+  }
+  .reasons legend {
+    margin-bottom: 0.75rem;
+  }
+  .reason {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-right: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .reason:last-of-type {
+    border-right: 0;
+  }
+  .reason:has(input:checked) {
+    background: var(--surface);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .reason input {
+    accent-color: var(--accent);
+  }
+  .reason-text {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .reason-label {
+    color: var(--text);
+  }
+  .reason-note {
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .field {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .field--wide {
+    grid-column: 1 / -1;
+  }
+  .field input,
+  .field textarea {
+    width: 100%;
+    padding: 0.75rem;
+    font: inherit;
+    color: var(--text);
+    background: var(--field);
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+  }
+  .field input:focus-visible,
+  .field textarea:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 0;
+  }
+  .submit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+  }
+  .status {
+    margin: 0;
+    color: var(--muted);
+  }
+  @media (max-width: 64rem) {
+    .reasons {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .reason {
+      border-bottom: 1px solid var(--line);
+    }
+  }
+  @media (max-width: 48rem) {
+    .reasons,
+    .fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .reason {
+      border-right: 0;
+    }
+  }
+</style>

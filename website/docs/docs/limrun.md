@@ -3,8 +3,6 @@ title: Limrun
 description: Drive Limrun iOS simulators and Android emulators with agent-device.
 ---
 
-# Limrun
-
 Use Limrun to run agent-device on remote iOS simulators and Android emulators. You need a Limrun API key, or the URL and token of an instance someone else created. Limrun does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
 
 ## Set credentials and connect

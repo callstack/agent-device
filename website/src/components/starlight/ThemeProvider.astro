@@ -1,0 +1,13 @@
+---
+// Dark is the default look. Starlight falls back to the system preference when nothing is
+// stored, so seed "dark" for first-time visitors only. Choosing "Auto" in the picker stores ""
+// (not null), so an explicit choice is never overwritten.
+import Default from '@astrojs/starlight/components/ThemeProvider.astro';
+---
+
+<script is:inline>
+  try {
+    if (localStorage.getItem('starlight-theme') === null) localStorage.setItem('starlight-theme', 'dark');
+  } catch {}
+</script>
+<Default />

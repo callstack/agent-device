@@ -2,8 +2,6 @@
 title: Run Maestro flows
 ---
 
-# Run Maestro flows
-
 `agent-device` runs a subset of Maestro YAML flows on iOS and Android, and exports `.ad` scripts to Maestro YAML. This is a compatibility layer, not full Maestro support:
 
 - Only the commands and fields in [Supported subset](#supported-subset) run. Anything else fails with source context instead of being skipped.

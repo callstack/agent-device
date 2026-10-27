@@ -1,0 +1,26 @@
+---
+// Question-and-answer cells, three across, from content.ts `faq`.
+import { faq } from '../../site/content';
+
+interface Props {
+  num: string;
+}
+const { num } = Astro.props;
+// Inline `code` in answers.
+const html = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+
+<section aria-labelledby="faq-title">
+  <p class="section-head label"><b>[{num}]</b> FAQ</p>
+  <h2 class="sr-only" id="faq-title">Frequently asked questions</h2>
+  <dl class="cells cells--3">
+    {
+      faq.map(({ q, a }) => (
+        <div class="cell">
+          <dt class="h3">{q}</dt>
+          <dd class="body" set:html={html(a)} />
+        </div>
+      ))
+    }
+  </dl>
+</section>

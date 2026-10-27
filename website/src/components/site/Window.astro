@@ -1,0 +1,78 @@
+---
+// Window chrome: a mini wordmark tag, a mono title (a file name, `zsh` or `agent`) and the
+// three window controls. Code and terminals go inside; it has a solid fill, so it can sit on a
+// dithered scene.
+import { site } from '../../site/content';
+
+interface Props {
+  title?: string;
+  class?: string;
+  /** Rendered as the title element's id so a script can swap it. */
+  titleId?: string;
+}
+const { title = '', class: className, titleId } = Astro.props;
+---
+
+<div class:list={['window', className]}>
+  <div class="window-bar">
+    <span class="window-tag" translate="no">{site.wordmark}</span>
+    <span class="window-title" id={titleId}>{title}</span>
+    <span class="window-controls" aria-hidden="true">
+      <svg viewBox="0 0 10 10" width="9" height="9"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor"></path></svg>
+      <svg viewBox="0 0 10 10" width="9" height="9"><path d="M1 5h8" stroke="currentColor"></path></svg>
+      <svg viewBox="0 0 10 10" width="9" height="9"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor"></rect></svg>
+    </span>
+  </div>
+  <div class="window-body">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .window {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .window-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .window-tag {
+    padding: 0 0.1875rem;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.625rem;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+  .window-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+  }
+  .window-controls {
+    display: flex;
+    gap: 0.75rem;
+    color: var(--faint);
+  }
+  .window-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+</style>

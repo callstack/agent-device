@@ -1,0 +1,41 @@
+/*
+ * Switzer by Jérémie Blanc, distributed by the Indian Type Foundry under the ITF Free Font
+ * License (https://www.fontshare.com/licenses/itf-ffl). Geist Mono by the Geist Project Authors
+ * (https://github.com/vercel/geist-font), SIL Open Font License 1.1, Latin subset.
+ * Self-hosted so the site makes no requests to third-party font services.
+ */
+@font-face {
+  font-family: 'Switzer';
+  src: url('./Switzer-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Switzer';
+  src: url('./Switzer-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Switzer';
+  src: url('./Switzer-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./GeistMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./GeistMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}

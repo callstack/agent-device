@@ -2,8 +2,6 @@
 title: Configuration
 ---
 
-# Configuration
-
 Set CLI defaults in a config file instead of repeating flags on every command. A repository's
 `./agent-device.json` can only set safe command defaults; connection, credential, and provider
 settings belong in your user config, an explicit `--config` file, or environment variables.

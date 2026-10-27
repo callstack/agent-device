@@ -1,0 +1,208 @@
+/*
+ * The docs theme, matching the landing page (landing.css): near-black, white and one accent;
+ * light, tightly tracked grotesk headlines; uppercase mono metadata; square corners; 1px
+ * hairlines; no shadows.
+ *
+ * The accent comes from src/site/brand.ts as CSS variables (--accent, --accent-hover,
+ * --accent-deep, --accent-rule, --accent-low, --accent-low-light, --accent-high-light),
+ * injected by the Starlight `head` entry in astro.config.mjs. No accent hex belongs here.
+ *
+ * This file is unlayered, so it wins over Starlight's layered defaults. That also means every
+ * token overridden for dark mode (:root) must be overridden again for light mode, or the dark
+ * value would leak into light mode.
+ */
+
+:root {
+  --cs-font-display: 'Switzer', Arial, sans-serif;
+  --cs-font-mono: 'Geist Mono', ui-monospace, monospace;
+  /* Rules, borders and the selection in the accent; --cs-on-brand is text on top of it. */
+  --cs-brand: var(--accent);
+  --cs-on-brand: #0a0a0a;
+
+  --sl-font: var(--cs-font-display);
+  --sl-font-mono: var(--cs-font-mono);
+  --sl-line-height-headings: 1.1;
+
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
+}
+
+/* ---------- Dark (default) ---------- */
+:root {
+  --cs-bg: #0a0a0a;
+  --cs-fg: #ffffff;
+  --cs-accent: var(--accent);
+  --cs-muted: #b4b4b4;
+  --cs-line: #ffffff29;
+  --cs-line-soft: #ffffff17;
+  --cs-wash: #ffffff0a;
+  --cs-code-bg: #111111;
+  --cs-code-fg: #ededed;
+  --cs-code-border: #ffffff26;
+
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eeeeee;
+  --sl-color-gray-2: #d4d4d4;
+  --sl-color-gray-3: #9b9b9b;
+  --sl-color-gray-4: #6a6a6a;
+  --sl-color-gray-5: #2b2b2b;
+  --sl-color-gray-6: #141414;
+  --sl-color-gray-7: #0d0d0d;
+  --sl-color-black: #0a0a0a;
+
+  --sl-color-accent-low: var(--accent-low);
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-high: var(--accent-hover);
+
+  --sl-color-text: #d4d4d4;
+  --sl-color-text-accent: var(--accent);
+  --sl-color-text-invert: #0a0a0a;
+  --sl-color-bg: #0a0a0a;
+  --sl-color-bg-nav: #0a0a0a;
+  --sl-color-bg-sidebar: #0a0a0a;
+  --sl-color-bg-inline-code: #161616;
+  --sl-color-bg-accent: var(--accent);
+  --sl-color-hairline-light: #ffffff29;
+  --sl-color-hairline: #ffffff1f;
+  --sl-color-hairline-shade: #ffffff1f;
+  --sl-color-backdrop-overlay: #000000b3;
+}
+
+/* ---------- Light ---------- */
+:root[data-theme='light'] {
+  /* The bright accent is too pale for rules and text on white, so light mode uses deeper ones. */
+  --cs-brand: var(--accent-rule);
+  --cs-on-brand: #ffffff;
+
+  --cs-bg: #ffffff;
+  --cs-fg: #000000;
+  --cs-accent: var(--accent-deep);
+  --cs-muted: #636363;
+  --cs-line: #00000024;
+  --cs-line-soft: #00000014;
+  --cs-wash: #00000004;
+  --cs-code-bg: #f6f6f5;
+  --cs-code-fg: #1f1f1f;
+  --cs-code-border: #dededb;
+
+  --sl-color-white: #000000;
+  --sl-color-gray-1: #111111;
+  --sl-color-gray-2: #2b2b2b;
+  --sl-color-gray-3: #636363;
+  --sl-color-gray-4: #8d8d8d;
+  --sl-color-gray-5: #d9d9d9;
+  --sl-color-gray-6: #f1f1f0;
+  --sl-color-gray-7: #f9f9f8;
+  --sl-color-black: #ffffff;
+
+  --sl-color-accent-low: var(--accent-low-light);
+  --sl-color-accent: var(--accent-deep);
+  --sl-color-accent-high: var(--accent-high-light);
+
+  --sl-color-text: #2b2b2b;
+  --sl-color-text-accent: var(--accent-deep);
+  --sl-color-text-invert: #ffffff;
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-bg-inline-code: #f2f2f0;
+  --sl-color-bg-accent: var(--accent-deep);
+  --sl-color-hairline-light: #00000024;
+  --sl-color-hairline: #0000001a;
+  --sl-color-hairline-shade: #0000001a;
+  --sl-color-backdrop-overlay: #ffffffb3;
+}
+
+/* ---------- Global ---------- */
+
+/* Square corners everywhere — Starlight has no radius token, so this is the one blunt rule. */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--cs-bg);
+}
+
+::selection {
+  background: var(--cs-brand);
+  color: var(--cs-on-brand);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cs-accent);
+  outline-offset: 2px;
+}
+
+/* Header chrome: black bar, hairline under it, mono links on the right. */
+.header {
+  gap: 1.5rem;
+}
+.social-icons {
+  gap: 1.75rem !important;
+}
+.social-icons::after {
+  border-inline-end-color: var(--cs-line) !important;
+  height: 1rem !important;
+}
+
+/* Theme select and search: mono, hairline, square. */
+starlight-theme-select label {
+  --sl-select-width: 7em !important;
+}
+starlight-theme-select select,
+starlight-lang-select select {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+site-search button[data-open-modal] {
+  border: 1px solid var(--cs-line) !important;
+  background: transparent !important;
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cs-muted) !important;
+}
+site-search button[data-open-modal]:hover {
+  border-color: var(--cs-accent) !important;
+  color: var(--sl-color-white) !important;
+}
+/* The shortcut is a <kbd> wrapping one <kbd> per key: frame the wrapper only, so the keys
+   don't draw overlapping boxes inside it. */
+site-search button[data-open-modal] > kbd {
+  background: transparent !important;
+  border: 1px solid var(--cs-line);
+  font-family: var(--cs-font-mono);
+}
+site-search button[data-open-modal] > kbd kbd {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 0.1em;
+  font-family: inherit;
+}
+site-search dialog {
+  border: 1px solid var(--cs-line) !important;
+  background: var(--cs-bg) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

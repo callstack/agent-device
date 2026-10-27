@@ -1,0 +1,37 @@
+---
+// The mark: the pixel bitmap from content.ts on its own step grid, in currentColor, with crisp
+// edges. The height is rounded down to whole steps, so every step stays a whole number of
+// pixels. Renders nothing when the product has no mark.
+import { site } from '../../site/content';
+import { bitmapPath } from './icons';
+
+interface Props {
+  /** The largest height to fill; the mark takes the nearest whole-step height under it. */
+  height?: number;
+  class?: string;
+  label?: string;
+}
+const { height = 20, class: className, label } = Astro.props;
+const mark = site.mark;
+const rows = mark?.length ?? 0;
+const cols = Math.max(0, ...(mark ?? []).map((r) => r.length));
+const step = rows ? Math.max(1, Math.floor(height / rows)) : 0;
+---
+
+{
+  mark && (
+    <svg
+      class={className}
+      width={step * cols}
+      height={step * rows}
+      viewBox={`0 0 ${cols} ${rows}`}
+      fill="currentColor"
+      shape-rendering="crispEdges"
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : 'true'}
+    >
+      <path d={bitmapPath(mark)} />
+    </svg>
+  )
+}

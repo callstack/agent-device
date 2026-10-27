@@ -2,8 +2,6 @@
 title: Known Limitations
 ---
 
-# Known Limitations
-
 Platform constraints that change what you see during automation, and what to do instead.
 
 ## iOS: "Allow Paste" dialog never appears

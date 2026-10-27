@@ -3,8 +3,6 @@ title: BrowserStack
 description: Drive BrowserStack App Automate sessions with agent-device.
 ---
 
-# BrowserStack
-
 Use BrowserStack App Automate to run agent-device on hosted Android and iOS devices over WebDriver. You need a BrowserStack account with App Automate access.
 
 ## Set credentials and connect

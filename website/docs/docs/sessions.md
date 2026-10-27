@@ -2,8 +2,6 @@
 title: Sessions
 ---
 
-# Sessions
-
 A session ties your commands to one device and app, so state and snapshots carry over from one command
 to the next.
 

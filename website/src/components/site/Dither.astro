@@ -1,0 +1,40 @@
+---
+// A dithered pixel scene in the accent, drawn on a canvas. It fills its positioned parent. The
+// scenes live in dither.ts: `mark` (the default signature: a druse of the product's pixel mark
+// on dark rock), `hollow` (the same with one stone missing, for the 404 page) and `flow` (soft
+// bands of light, for quiet backdrops behind code). Add the product's own signature scene there.
+import { site } from '../../site/content';
+import type { SceneName } from './dither';
+
+interface Props {
+  scene?: SceneName;
+  /** Where the cluster stands, 0..1 across: put it behind the product visual. */
+  focus?: number;
+  /** Size of one dither cell in CSS pixels. */
+  cell?: number;
+  class?: string;
+}
+const { scene = 'mark', focus = 0.72, cell = 2, class: className } = Astro.props;
+---
+
+<canvas
+  class:list={['dither', className]}
+  data-scene={scene}
+  data-focus={focus}
+  data-cell={cell}
+  data-mark={site.mark?.join('/')}
+  aria-hidden="true"></canvas>
+
+<script>
+  // Dithering starts after the page has loaded, and each canvas only when it first comes near
+  // the viewport, so it never competes with the first paint.
+  import { whenNear } from './lazy';
+
+  const start = () => {
+    for (const canvas of document.querySelectorAll<HTMLCanvasElement>('canvas.dither')) {
+      whenNear(canvas, () => void import('./dither-host').then((m) => m.host(canvas)));
+    }
+  };
+  if (document.readyState === 'complete') start();
+  else addEventListener('load', start, { once: true });
+</script>

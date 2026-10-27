@@ -2,11 +2,9 @@
 title: Quick Start
 ---
 
-# Quick Start
-
 Open an app, read its UI, and interact with it from the command line.
 
-Before you start, [install `agent-device`](/docs/installation) and the platform tools for your target: Xcode for iOS, the Android SDK and ADB for Android, or the HarmonyOS Command Line Tools for HarmonyOS. To set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent, see [AI Agent Setup](/docs/agent-setup). To give an agent the whole documentation as one text file, use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt).
+Before you start, [install `agent-device`](/docs/installation) and the platform tools for your target: Xcode for iOS, the Android SDK and ADB for Android, or the HarmonyOS Command Line Tools for HarmonyOS. To set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent, see [AI Agent Setup](/docs/agent-setup). To give an agent the whole documentation as one text file, use [llms-full.txt](https://agent-device.dev/llms-full.txt).
 
 Device automation follows this pattern:
 

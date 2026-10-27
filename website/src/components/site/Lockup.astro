@@ -1,0 +1,57 @@
+---
+// The lockup: the mark (when the product has one), the accent wordmark block and the
+// BY CALLSTACK chip, which is dropped on phones.
+import { site } from '../../site/content';
+import Mark from './Mark.astro';
+
+interface Props {
+  href?: string;
+}
+const { href = '/' } = Astro.props;
+---
+
+<a class="lockup" href={href} aria-label={`${site.name} by Callstack, home`}>
+  <Mark height={20} class="lockup-mark" />
+  <span class="lockup-word" translate="no">{site.wordmark}</span>
+  <span class="lockup-by label">by Callstack</span>
+</a>
+
+<style>
+  .lockup {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .lockup :global(.lockup-mark) {
+    color: var(--accent);
+    margin-inline-end: 0.125rem;
+  }
+  .lockup-word {
+    padding: 0.0625rem 0.3125rem;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.125rem;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    transition: background-color 120ms;
+  }
+  .lockup:hover .lockup-word {
+    background: var(--accent-hover);
+  }
+  .lockup-by {
+    padding: 0.25rem 0.375rem;
+    background: #1a1a1a;
+    color: var(--muted);
+    font-size: 0.625rem;
+  }
+  @media (max-width: 30rem) {
+    .lockup-by {
+      display: none;
+    }
+  }
+</style>

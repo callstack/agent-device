@@ -1,0 +1,323 @@
+/* Docs-page styling on top of theme.css: typography, sidebar, and Starlight's built-in components. */
+
+/* ---------- Page title and headings ---------- */
+h1#_top {
+  font-family: var(--cs-font-display);
+  font-weight: 400;
+  font-size: clamp(2.5rem, 1.6rem + 3vw, 3.75rem);
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+  color: var(--sl-color-white);
+  margin-top: 1.5rem;
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6):not(:where(.not-content *)) {
+  font-weight: 400;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content h2:not(:where(.not-content *)) {
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+/* Hairline over each section, drawn on the anchor wrapper (the h2 itself is inline). */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  margin-top: 2.5em;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--cs-line);
+}
+.sl-markdown-content h3:not(:where(.not-content *)) {
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.sl-markdown-content h4:not(:where(.not-content *)) {
+  letter-spacing: -0.02em;
+}
+.sl-markdown-content :is(h5, h6):not(:where(.not-content *)) {
+  font-family: var(--cs-font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+
+.sl-markdown-content :is(strong, b):not(:where(.not-content *)) {
+  font-weight: 500;
+  color: var(--sl-color-white);
+}
+
+/* The page description, when Starlight renders a lede. */
+.sl-markdown-content > p:first-child:not(:where(.not-content *)) {
+  color: var(--sl-color-gray-2);
+}
+
+/* Links: accent, hairline underline. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-text-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  text-decoration-color: currentColor;
+}
+
+/* Inline code: mono on a faint wash with a hairline. */
+.sl-markdown-content :not(pre) > code:not(:where(.not-content *)) {
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--cs-line-soft);
+  background: var(--sl-color-bg-inline-code);
+  color: var(--sl-color-gray-1);
+}
+
+/* Tables: hairline rows, mono uppercase header. */
+.sl-markdown-content table:not(:where(.not-content *)) {
+  border-collapse: collapse;
+}
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border: 0;
+  border-bottom: 1px solid var(--cs-line);
+  padding: 0.625rem 1rem 0.625rem 0;
+  background: transparent;
+}
+.sl-markdown-content th:not(:where(.not-content *)) {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+.sl-markdown-content tr:nth-child(2n):not(:where(.not-content *)) {
+  background: transparent;
+}
+
+.sl-markdown-content hr:not(:where(.not-content *)) {
+  border-top-color: var(--cs-line);
+}
+
+.expressive-code .frame .header {
+  gap: 0;
+}
+.expressive-code .frame.has-title .title,
+.expressive-code .frame.is-terminal .title {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar-content {
+  padding-top: 1.5rem;
+}
+.sidebar-content .top-level > li + li {
+  margin-top: 1.25rem;
+}
+.sidebar-content summary .group-label .large {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+.sidebar-content ul ul li {
+  border-inline-start-color: var(--cs-line);
+}
+.sidebar-content a {
+  color: var(--sl-color-gray-2);
+  font-size: 0.9375rem;
+}
+.sidebar-content a:hover {
+  color: var(--sl-color-white);
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  font-weight: 400;
+  color: var(--sl-color-white);
+  background: var(--cs-wash);
+}
+.sidebar-content ul ul li:has(> a[aria-current='page']) {
+  border-inline-start-color: var(--cs-brand);
+}
+
+/* ---------- Right-hand table of contents ---------- */
+starlight-toc h2,
+mobile-starlight-toc .toggle {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--cs-muted) !important;
+}
+starlight-toc a[aria-current='true'],
+mobile-starlight-toc a[aria-current='true'] {
+  color: var(--sl-color-text-accent) !important;
+}
+
+/* ---------- Asides ---------- */
+.starlight-aside {
+  border: 1px solid var(--cs-line);
+  border-inline-start: 3px solid var(--sl-color-asides-border, var(--cs-brand));
+  background: var(--cs-wash);
+}
+.starlight-aside--note {
+  --sl-color-asides-border: var(--cs-brand);
+  --sl-color-asides-text-accent: var(--cs-accent);
+}
+.starlight-aside--tip {
+  --sl-color-asides-border: var(--sl-color-gray-3);
+  --sl-color-asides-text-accent: var(--sl-color-white);
+}
+.starlight-aside__title {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+/* ---------- Cards, link cards, link buttons, badges ---------- */
+.card {
+  border: 1px solid var(--cs-line) !important;
+  background: transparent !important;
+}
+.card .title {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.card .icon {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--cs-accent) !important;
+}
+
+.sl-link-card {
+  border: 1px solid var(--cs-line) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease;
+}
+.sl-link-card:hover {
+  border-color: var(--cs-brand) !important;
+  background: var(--cs-wash) !important;
+}
+.sl-link-card .title {
+  font-weight: 400 !important;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white) !important;
+}
+.sl-link-card .icon {
+  color: var(--cs-accent) !important;
+}
+
+.sl-link-button {
+  font-family: var(--cs-font-mono);
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.sl-link-button.primary {
+  background: var(--sl-color-bg-accent) !important;
+  border-color: var(--sl-color-bg-accent) !important;
+  color: var(--sl-color-text-invert) !important;
+}
+
+.sl-badge {
+  font-family: var(--cs-font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------- Tabs ---------- */
+starlight-tabs [role='tablist'] {
+  border-bottom: 1px solid var(--cs-line) !important;
+}
+starlight-tabs .tab {
+  --sl-tab-color-border: transparent !important;
+}
+starlight-tabs .tab:has([aria-selected='true']),
+starlight-tabs [role='tab'][aria-selected='true'] {
+  --sl-tab-color-border: var(--cs-brand) !important;
+}
+starlight-tabs [role='tab'] {
+  font-family: var(--cs-font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cs-muted) !important;
+}
+starlight-tabs [role='tab'][aria-selected='true'] {
+  color: var(--sl-color-white) !important;
+  font-weight: 400 !important;
+}
+
+/* ---------- Steps ---------- */
+.sl-steps {
+  --bullet-size: 1.75rem;
+}
+.sl-steps > li::before {
+  font-family: var(--cs-font-mono);
+  font-weight: 400 !important;
+  background: transparent !important;
+  border: 1px solid var(--cs-brand);
+  color: var(--sl-color-white) !important;
+}
+.sl-steps > li::after {
+  background: var(--cs-line) !important;
+}
+
+/* ---------- File tree ---------- */
+starlight-file-tree {
+  border: 1px solid var(--cs-line);
+  background: var(--cs-wash) !important;
+}
+
+/* ---------- Footer: edit link, pagination ---------- */
+.meta {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pagination-links a {
+  border: 1px solid var(--cs-line) !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease;
+}
+.pagination-links a:hover {
+  border-color: var(--cs-brand) !important;
+}
+.pagination-links a > span {
+  font-family: var(--cs-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+.pagination-links .link-title {
+  font-family: var(--cs-font-display);
+  font-size: 1.375rem;
+  letter-spacing: -0.03em;
+  text-transform: none;
+  color: var(--sl-color-white);
+}
+
+/* Top-level links (Introduction, Compatibility...) read like the links inside groups. */
+.sidebar-content .top-level > li > a.large {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  color: var(--sl-color-gray-2);
+}
+.sidebar-content .top-level > li > a.large[aria-current='page'] {
+  color: var(--sl-color-white);
+}
+
+/* A page that opens on a section needs no rule or gap above it. */
+.sl-markdown-content > .sl-heading-wrapper.level-h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}

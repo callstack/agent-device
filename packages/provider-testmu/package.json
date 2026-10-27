@@ -66,5 +66,5 @@
     "url": "git+https://github.com/callstack/agent-device.git",
     "directory": "packages/provider-testmu"
   },
-  "homepage": "https://oss.callstack.com/agent-device/docs/testmu"
+  "homepage": "https://agent-device.dev/docs/testmu"
 }

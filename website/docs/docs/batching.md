@@ -2,8 +2,6 @@
 title: Batching
 ---
 
-# Batching
-
 Use `batch` to run several commands in one daemon request. It saves round trips when you already know
 the next sequence of actions.
 

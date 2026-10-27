@@ -1,0 +1,121 @@
+---
+// Not found: the loop scene with its main track missing, a dashed outline where it should
+// be, and the pulses flaring along it as they pass. Starlight's own 404 is disabled
+// (disable404Route in astro.config.mjs); the host serves 404.html for unknown paths.
+import Site from '../layouts/Site.astro';
+import Dither from '../components/site/Dither.astro';
+import Footer from '../components/site/Footer.astro';
+import Nav from '../components/site/Nav.astro';
+import { giantSize } from '../components/site/giant';
+import { docs, notFound, site } from '../site/content';
+---
+
+<Site
+  title="Page not found"
+  description={`There is no page at this address. Go to the ${site.name} home page or the docs.`}
+  noindex
+>
+  <Nav />
+  <main class="frame">
+    <section class="nf" aria-labelledby="nf-title">
+      <Dither scene="loop-hollow" focus={0.72} class="nf-scene" />
+      <div class="nf-card">
+        <p class="label nf-code"><span>404</span> Page not found</p>
+        <h1 class="h1" id="nf-title">{notFound[0]} <em>{notFound[1]}</em></h1>
+        <p class="lede nf-path" data-path hidden>You asked for <code data-path-text></code>.</p>
+        <div class="actions">
+          <a class="btn" href="/">Home <span aria-hidden="true">→</span></a>
+          <a class="btn btn--dark" href={docs.intro}>Docs</a>
+        </div>
+        <p class="nf-links">
+          <a class="label more" href={docs.start}>Get started <span aria-hidden="true">→</span></a>
+          <a class="label more" href={site.repo}>GitHub <span aria-hidden="true">→</span></a>
+        </p>
+      </div>
+    </section>
+    <section class="finale nf-finale" aria-hidden="true">
+      <p class="giant" translate="no" style={`font-size: ${giantSize(site.wordmark)}`}>{site.wordmark}</p>
+    </section>
+  </main>
+  <Footer />
+</Site>
+
+<script>
+  // The path the visitor asked for, as text only.
+  const box = document.querySelector<HTMLElement>('[data-path]');
+  const text = document.querySelector<HTMLElement>('[data-path-text]');
+  const path = decodeURIComponent(location.pathname);
+  if (box && text && path && path !== '/404' && path !== '/404.html') {
+    text.textContent = path.length > 80 ? `${path.slice(0, 77)}...` : path;
+    box.hidden = false;
+  }
+</script>
+
+<style>
+  .nf {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: calc(100dvh - 3.75rem);
+    overflow: hidden;
+  }
+  .nf-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.25rem;
+    width: min(100% - 2 * var(--pad), 34rem);
+    margin: var(--pad);
+    padding: var(--pad);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .nf-code {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+    color: var(--muted);
+  }
+  .nf-code span {
+    padding: 0.125rem 0.375rem;
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  .nf-card .h1 {
+    max-width: 14ch;
+  }
+  .nf-path code {
+    padding: 0.05em 0.3em;
+    background: var(--field);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .actions {
+    margin-top: 0.25rem;
+  }
+  .nf-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 2rem;
+    margin: 0;
+  }
+  .nf-finale {
+    margin-top: 0;
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 48rem) {
+    /* On a phone the card sits at the top and the missing stone shows below it. */
+    .nf {
+      align-items: flex-start;
+      min-height: 46rem;
+    }
+    .nf :global(.nf-scene) {
+      top: 24rem;
+      height: calc(100% - 24rem);
+    }
+  }
+</style>

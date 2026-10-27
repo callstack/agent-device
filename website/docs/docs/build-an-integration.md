@@ -2,8 +2,6 @@
 title: Build an integration
 ---
 
-# Build an integration
-
 This page is for developers who build a bridge, remote daemon, device-cloud backend, or in-process runner on top of agent-device. These entry points let your server own device access, command dispatch, or Metro while reusing agent-device's behavior.
 
 To drive devices from your own Node.js code, use the [Node.js API](/docs/client-api) instead.

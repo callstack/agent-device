@@ -2,8 +2,6 @@
 title: AI SDK
 ---
 
-# AI SDK
-
 Use `agent-device/ai-sdk` to give an [AI SDK](https://ai-sdk.dev/) agent a typed set of tools for navigating and inspecting an app. The tools run in-process, share one named session, and by default cover the core loop of reading the screen and acting on it.
 
 ```bash

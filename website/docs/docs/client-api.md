@@ -2,8 +2,6 @@
 title: Node.js API
 ---
 
-# Node.js API
-
 This page is for developers who drive devices from their own Node.js code. Use `createAgentDeviceClient()` for typed, deterministic device automation instead of shelling out to the CLI.
 
 Building an agent? Start with the dedicated [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration. Building a bridge, remote daemon, or device-cloud backend that owns device access or command dispatch? See [Build an integration](/docs/build-an-integration).

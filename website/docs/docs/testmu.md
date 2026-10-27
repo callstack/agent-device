@@ -3,8 +3,6 @@ title: TestMu AI
 description: Drive TestMu AI (formerly LambdaTest) virtual devices, Android emulators and iOS simulators, and real devices with agent-device.
 ---
 
-# TestMu AI
-
 Use TestMu AI (formerly LambdaTest) to run agent-device on hosted Android emulators, iOS
 simulators, and real devices over WebDriver. agent-device uses virtual devices (emulators and
 simulators) by default; pass `--provider-device-type real` for a real device. You need a TestMu AI

@@ -2,8 +2,6 @@
 title: Replay & E2E Testing
 ---
 
-# Replay & E2E Testing
-
 Record a session as an `.ad` script, then run it again with `replay` or run a folder of scripts as an E2E suite with `test`.
 
 `replay` has a 60-second wall-clock budget within a 90-second client timeout. Use

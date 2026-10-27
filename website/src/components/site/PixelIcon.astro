@@ -1,0 +1,20 @@
+---
+// A 9x9 pixel icon from icons.ts, in currentColor.
+import { bitmapPath, icons, type IconName } from './icons';
+
+interface Props {
+  name: IconName;
+  size?: number;
+  class?: string;
+}
+const { name, size = 18, class: className } = Astro.props;
+---
+
+<svg
+  class={className}
+  width={size}
+  height={size}
+  viewBox="0 0 9 9"
+  fill="currentColor"
+  shape-rendering="crispEdges"
+  aria-hidden="true"><path d={bitmapPath(icons[name])} /></svg>

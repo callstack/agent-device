@@ -3,8 +3,6 @@ title: AI Agent Setup
 description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, iOS Simulator and Android Emulator skills, and MCP for agent-device app verification.
 ---
 
-# AI Agent Setup
-
 Set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent to drive mobile, TV, desktop, and web apps with `agent-device`, through skills, project rules, or MCP.
 
 In short: install the CLI, let the agent start with the requested app, and have it read the installed CLI help only for specialized work or when a command is unclear. MCP tools use the same daemon client as the CLI.
@@ -124,7 +122,7 @@ description: Use agent-device for app and device automation
 alwaysApply: true
 ---
 
-REPLACE THIS LINE with the recommended agent rule from https://oss.callstack.com/agent-device/docs/agent-setup#recommended-agent-rule
+REPLACE THIS LINE with the recommended agent rule from https://agent-device.dev/docs/agent-setup#recommended-agent-rule
 EOF
 ```
 
@@ -247,7 +245,7 @@ For the local execution model, permissions, artifacts, and sensitive data guidan
 
 ## Agent-readable docs
 
-Use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt) when an agent needs the whole documentation as one text file. For exact command syntax, the installed CLI help is authoritative:
+Use [llms-full.txt](https://agent-device.dev/llms-full.txt) when an agent needs the whole documentation as one text file. For exact command syntax, the installed CLI help is authoritative:
 
 ```bash
 agent-device help

@@ -1,0 +1,131 @@
+---
+// Run anywhere: the same agent-device commands on a laptop, in CI, through a remote device host,
+// and on device clouds (content.ts `cloud`). Ends with the door to Callstack for team setups.
+import Site from '../layouts/Site.astro';
+import Closing from '../components/site/Closing.astro';
+import Dither from '../components/site/Dither.astro';
+import Footer from '../components/site/Footer.astro';
+import Nav from '../components/site/Nav.astro';
+import PixelIcon from '../components/site/PixelIcon.astro';
+import { cloud, docs } from '../site/content';
+
+const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+
+<Site
+  title="Run anywhere"
+  description="Run agent-device on your machine, in CI, through a remote device host, or on BrowserStack, AWS Device Farm, TestMu AI and Limrun, with the same commands."
+>
+  <Nav />
+  <main class="frame">
+    <section class="page-head" aria-labelledby="cloud-title">
+      <p class="section-head label"><b>[01]</b> Run anywhere</p>
+      <div class="intro">
+        <h1 class="h2" id="cloud-title">{cloud.headline[0]} <em>{cloud.headline[1]}</em></h1>
+        <p class="lede">{cloud.lede}</p>
+      </div>
+    </section>
+
+    <ol class="cells cells--4">
+      {
+        cloud.paths.map((p) => (
+          <li class="cell">
+            <span class="cell-top">
+              <PixelIcon name={p.icon} size={27} class="accent" />
+            </span>
+            <span class="label cell-num">{p.label}</span>
+            <h2 class="h3">{p.title}</h2>
+            <p class="body" set:html={md(p.body)} />
+            <code class="cmdline">
+              <span class="p">$</span> {p.cmd}
+            </code>
+            <a class="label more" href={p.href}>
+              Read the guide <span aria-hidden="true">→</span>
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+
+    <section aria-labelledby="providers-title">
+      <p class="section-head label"><b>[02]</b> Device clouds</p>
+      <div class="intro">
+        <h2 class="h2" id="providers-title">Hosted devices, <em>same session model.</em></h2>
+        <p class="lede">
+          Connect a provider and your agent opens, reads and drives its devices with the commands it
+          already uses. Evidence and replay work the same way.
+        </p>
+      </div>
+      <ul class="cells cells--4 providers">
+        {
+          cloud.providers.map((p) => (
+            <li class="cell">
+              <a class="provider" href={p.href}>
+                {p.name} <span aria-hidden="true">→</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <a class="label more pad" href={docs.clouds}>Compare the providers <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section class="team" aria-labelledby="team-title">
+      <Dither scene="flow" focus={0.5} />
+      <div class="team-card">
+        <p class="section-head label"><b>[03]</b> For teams</p>
+        <h2 class="h2" id="team-title">{cloud.team.headline[0]} <em>{cloud.team.headline[1]}</em></h2>
+        <p class="lede">{cloud.team.body}</p>
+        <div class="actions">
+          <a class="btn" href="/contact?reason=talk-to-sales">Talk to Callstack <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <Closing />
+  </main>
+  <Footer />
+</Site>
+
+<style>
+  .cell .cell-num {
+    margin-top: 0.5rem;
+  }
+  .providers .provider {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .providers .provider:hover {
+    color: var(--accent);
+  }
+  .pad {
+    display: inline-block;
+    padding: 1.25rem var(--pad);
+  }
+  .team {
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .team-card {
+    position: relative;
+    display: grid;
+    gap: 1rem;
+    max-width: 40rem;
+    margin: clamp(2rem, 6vw, 4rem) var(--pad);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .team-card .section-head {
+    padding: 0;
+    border: 0;
+  }
+  .team-card .h2,
+  .team-card .lede {
+    margin: 0;
+  }
+</style>

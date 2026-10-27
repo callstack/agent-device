@@ -1,0 +1,87 @@
+---
+// Templates and examples that exist today, each linking to its code (content.ts `templates`).
+import Site from '../layouts/Site.astro';
+import Closing from '../components/site/Closing.astro';
+import Footer from '../components/site/Footer.astro';
+import Nav from '../components/site/Nav.astro';
+import PixelIcon from '../components/site/PixelIcon.astro';
+import { templates } from '../site/content';
+
+const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+---
+
+<Site
+  title="Templates and examples"
+  description="Start from working code: a QA agent on Expo EAS Workflows, Node.js SDK examples and replay scripts for agent-device."
+>
+  <Nav />
+  <main class="frame">
+    <section class="page-head" aria-labelledby="templates-title">
+      <p class="section-head label"><b>[{String(templates.length).padStart(2, '0')}]</b> Templates and examples</p>
+      <div class="intro">
+        <h1 class="h2" id="templates-title">Start from working code. <em>Make it yours.</em></h1>
+        <p class="lede">
+          A QA agent that runs in CI, examples for building on the Node.js API, and the replay scripts
+          the project tests itself with.
+        </p>
+      </div>
+    </section>
+
+    <div class="cells cells--3">
+      {
+        templates.map((t) => (
+          <a class="cell cell--link" href={t.href}>
+            <span class="cell-top">
+              <PixelIcon name={t.icon} size={27} class="accent" />
+            </span>
+            <h2 class="h3">{t.title}</h2>
+            <p class="body" set:html={md(t.body)} />
+            <ul class="tags">
+              {t.tags.map((tag) => (
+                <li class="label">{tag}</li>
+              ))}
+            </ul>
+            <span class="label more">
+              {t.cta} <span aria-hidden="true">↗</span>
+            </span>
+          </a>
+        ))
+      }
+    </div>
+
+    <section class="help" aria-labelledby="help-title">
+      <h2 class="h3" id="help-title">Want it set up for your project?</h2>
+      <p class="body">Callstack can wire a QA agent into your CI and pull request reviews.</p>
+      <a class="label more" href="/contact?reason=request-access">Get in touch <span aria-hidden="true">→</span></a>
+    </section>
+
+    <Closing />
+  </main>
+  <Footer />
+</Site>
+
+<style>
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .tags li {
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--line-strong);
+    color: var(--muted);
+  }
+  .help {
+    display: grid;
+    gap: 0.75rem;
+    padding: 2rem var(--pad);
+    border-bottom: 1px solid var(--line);
+  }
+  .help .h3,
+  .help .body {
+    margin: 0;
+  }
+</style>

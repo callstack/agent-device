@@ -2,8 +2,6 @@
 title: Debugging & Profiling
 ---
 
-# Debugging & Profiling
-
 When UI automation is not enough, use these commands to collect runtime evidence from the app or device.
 
 ## What you can capture

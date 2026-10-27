@@ -1,0 +1,67 @@
+---
+// Platforms, frameworks and tools scrolling under the hero (content.ts `marquee`). The list is
+// rendered twice so the loop is seamless; screen readers get it once.
+import { marquee } from '../../site/content';
+---
+
+<div class="marquee" role="region" aria-label="Works with">
+  <p class="sr-only">Works with {marquee.join(', ')}.</p>
+  <div class="track label" aria-hidden="true">
+    {
+      [0, 1].map(() => (
+        <span class="run">
+          {marquee.map((name) => (
+            <span class="item">
+              <i />
+              {name}
+            </span>
+          ))}
+        </span>
+      ))
+    }
+  </div>
+</div>
+
+<style>
+  .marquee {
+    position: relative;
+    overflow: hidden;
+    border-top: 1px solid var(--line);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+  .track {
+    display: flex;
+    width: max-content;
+    animation: scroll 38s linear infinite;
+  }
+  .marquee:hover .track {
+    animation-play-state: paused;
+  }
+  .run {
+    display: flex;
+  }
+  .item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.125rem 1.5rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .item i {
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+  }
+  @keyframes scroll {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* One still row, its ends faded like the moving one. */
+    .track {
+      animation: none;
+    }
+  }
+</style>

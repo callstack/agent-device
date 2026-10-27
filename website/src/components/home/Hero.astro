@@ -1,0 +1,248 @@
+---
+// The home page hero: the motto in two beats, a lede, GET STARTED and the install command, a
+// `zsh` window with the setup beside them on wide screens, then the session on the loop scene:
+// a tab per kind of job (build, verify, profile), each the prompt a developer gives as a
+// message, and every agent-device call the agent makes as its own card, output nested inside.
+import CopyCommand from '../site/CopyCommand.astro';
+import Dither from '../site/Dither.astro';
+import Window from '../site/Window.astro';
+import { docs, home, jobs, site } from '../../site/content';
+import type { Line } from '../../site/content';
+
+// Each command starts a tool call; the lines after it, up to the next command, are its output.
+const calls = (lines: Line[]) =>
+  lines.reduce<{ args: string; out: Line[] }[]>((acc, l) => {
+    if (l.kind === 'cmd') acc.push({ args: l.text.replace(/^agent-device /, ''), out: [] });
+    else acc.at(-1)?.out.push(l);
+    return acc;
+  }, []);
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-top hero-top--split">
+    <div class="hero-copy">
+      <h1 class="h1" id="hero-title">{site.headline[0]} <em>{site.headline[1]}</em></h1>
+      <p class="lede">{site.lede}</p>
+      <div class="actions">
+        <a class="btn" href={docs.start}>Get started <span aria-hidden="true">→</span></a>
+        <CopyCommand command={site.install} />
+      </div>
+    </div>
+    <Window title="zsh" class="hero-side">
+      <div class="term">
+        {/* One line per element: .term is white-space: pre-wrap, so markup whitespace shows. */}
+        {home.setup.map((l) => ('cmd' in l ? <div class="ln"><span class="p">$</span> {l.cmd}</div> : <div class="ln dim"># {l.comment}</div>))}
+      </div>
+    </Window>
+  </div>
+
+  <div
+    class="viz"
+    data-hero
+    role="region"
+    aria-label="Prompts a developer gives a coding agent, and the agent-device commands the agent runs for each"
+  >
+    <Dither scene="loop" focus={0.5} />
+    <!-- HERO VISUAL -->
+    <div class="rig">
+      <div class="session">
+        <div class="jobs-tabs" role="tablist" aria-label="Job">
+          {
+            jobs.map((j, i) => (
+              <button class="label jobs-tab" role="tab" id={`job-tab-${j.id}`} aria-controls={`job-${j.id}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1} data-job-tab>
+                {j.name}
+              </button>
+            ))
+          }
+        </div>
+        {
+          jobs.map((j, i) => (
+            <div class="job" role="tabpanel" id={`job-${j.id}`} aria-labelledby={`job-tab-${j.id}`} hidden={i !== 0} data-job>
+              <div class="prompt" data-step>
+                <span class="label who">You</span>
+                <p>{j.prompt}</p>
+              </div>
+              <ol class="calls">
+                {calls(j.transcript).map((c) => (
+                  <li class="call" data-step>
+                    <span class="label tool">agent-device</span>
+                    <code class="args">{c.args}</code>
+                    {c.out.length > 0 && (
+                      <div class="out">
+                        {c.out.map((l) => (
+                          <div class={`ln ${l.kind}`}>{l.text}</div>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+    <!-- /HERO VISUAL -->
+  </div>
+</section>
+
+<script>
+  // The animation code loads only when the hero first nears the viewport.
+  import { whenNear } from '../site/lazy';
+
+  const root = document.querySelector<HTMLElement>('[data-hero]');
+  if (root) whenNear(root, () => void import('./hero').then((m) => m.default(root)));
+</script>
+
+<style>
+  .hero-top--split {
+    grid-template-columns: minmax(0, 1fr) 28.5rem;
+    align-items: center;
+    padding-block: clamp(2rem, 4.5vw, 3.75rem);
+  }
+  .hero-top--split .h1 {
+    max-width: 16ch;
+  }
+  :global(.hero-side) .term {
+    font-size: 0.6875rem;
+    overflow-wrap: normal;
+  }
+  .rig {
+    position: relative;
+    display: flex;
+    gap: var(--pad);
+    align-items: center;
+    justify-content: center;
+    padding: clamp(2rem, 5vw, 3.5rem) var(--pad);
+  }
+  .session {
+    flex: 0 1 42rem;
+    min-width: 0;
+  }
+  .jobs-tabs {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .jobs-tab {
+    flex: 1 1 0;
+    padding: 0.75rem 1rem;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-right: 1px solid var(--line-strong);
+    cursor: pointer;
+  }
+  .jobs-tab:last-child {
+    border-right: 0;
+  }
+  .jobs-tab[aria-selected='true'] {
+    color: var(--on-accent);
+    background: var(--accent);
+  }
+  .job {
+    display: grid;
+    gap: 0.75rem;
+    min-height: 34rem;
+    align-content: start;
+    margin-top: 0.75rem;
+  }
+  .job[hidden] {
+    display: none;
+  }
+  .prompt {
+    display: grid;
+    gap: 0.375rem;
+    justify-self: end;
+    max-width: 85%;
+    padding: 0.875rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+  }
+  .prompt p {
+    margin: 0;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .who {
+    color: var(--accent);
+  }
+  .calls {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .call {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.25rem 0.75rem;
+    align-items: baseline;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+  .tool {
+    color: var(--accent);
+  }
+  .args {
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .out {
+    grid-column: 2;
+    color: var(--muted);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .out .add {
+    color: var(--accent);
+  }
+  .out .del {
+    color: var(--faint);
+  }
+  [data-step].is-hidden {
+    visibility: hidden;
+  }
+  [data-step].is-in {
+    animation: step-in 0.2s steps(3, end);
+  }
+  @keyframes step-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  @media (max-width: 64rem) {
+    .hero-top--split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :global(.hero-side) {
+      display: none;
+    }
+    /* Too narrow for two across: the pictures stack. */
+    .rig {
+      flex-direction: column;
+    }
+    .session {
+      flex: none;
+      width: 100%;
+    }
+    .job {
+      min-height: 40rem;
+    }
+    .prompt {
+      max-width: none;
+    }
+    .call {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .out {
+      grid-column: 1;
+    }
+  }
+</style>

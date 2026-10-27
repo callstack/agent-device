@@ -3,8 +3,6 @@ title: Installation
 description: Install agent-device for AI agent app automation, mobile testing, simulator and emulator workflows, desktop app verification, and version-matched CLI help.
 ---
 
-# Installation
-
 Install `agent-device` on the machine where your coding agent runs terminal commands.
 
 ## Requirements

@@ -3,8 +3,6 @@ title: AWS Device Farm
 description: Drive AWS Device Farm remote-access sessions with agent-device.
 ---
 
-# AWS Device Farm
-
 Use AWS Device Farm to run agent-device on hosted Android and iOS devices through remote-access WebDriver sessions. You need an AWS account with a Device Farm project and the AWS CLI installed. AWS Device Farm does not cover Vega OS: agent-device rejects a Vega Fire TV ARN. For Vega, use a local Vega Virtual Device (VVD).
 
 ## Set credentials and connect

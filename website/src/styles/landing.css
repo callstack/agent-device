@@ -1,0 +1,756 @@
+/*
+ * The Callstack product look, shared with Apex, Simlock, Appduct, agent-device and the rest of
+ * the family: near-black, one bright accent, a light grotesk for headlines, uppercase mono for
+ * everything that labels, square corners, 1px hairlines, dithered pixel art instead of photos
+ * or gradients.
+ *
+ * The accent variables (--accent, --accent-hover, --accent-rgb) are not set here: Site.astro
+ * injects them from src/site/brand.ts, so the accent lives in one file.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --font-display: 'Switzer', Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --field: #161616;
+  --line: rgb(255 255 255 / 0.08);
+  --line-strong: rgb(255 255 255 / 0.16);
+  --text: #ffffff;
+  --muted: rgb(255 255 255 / 0.62);
+  --faint: rgb(255 255 255 / 0.5);
+
+  --on-accent: #0a0a0a;
+
+  --frame: 75rem;
+  --gutter: clamp(1rem, 3vw, 2rem);
+  --pad: clamp(1.25rem, 3vw, 2.5rem);
+  --rhythm: clamp(2.5rem, 6vw, 5rem);
+  --label-tracking: 0.08em;
+
+  --code-fg: #e9e9e9;
+  --code-kw: rgb(255 255 255 / 0.55);
+  --code-str: var(--accent);
+  --code-fn: #ffffff;
+  --code-num: var(--accent);
+  --code-com: rgb(255 255 255 / 0.5);
+  --code-punc: rgb(255 255 255 / 0.55);
+  --code-type: #ffffff;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The frame: a centred column whose left and right hairlines run the whole page. */
+.frame {
+  position: relative;
+  width: min(100% - 2 * var(--gutter), var(--frame));
+  margin-inline: auto;
+  border-inline: 1px solid var(--line);
+}
+
+/* Mono labels: section numbers, tabs, buttons, metadata. */
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+/* A section opens on a hairline row: "[01]  HOW IT WORKS". */
+.section-head {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  margin: 0;
+  padding: 0.875rem var(--pad);
+  border-block: 1px solid var(--line);
+  color: var(--muted);
+}
+.section-head b {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2rem, 1.3rem + 2.6vw, 3.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+.h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.125rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.h1 em,
+.h2 em {
+  font-style: normal;
+  color: var(--accent);
+}
+.lede {
+  margin: 0;
+  max-width: 40rem;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  line-height: 1.55;
+  color: var(--muted);
+}
+.body {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.body code,
+.lede code {
+  padding: 0.05em 0.3em;
+  background: var(--field);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text);
+}
+.accent {
+  color: var(--accent);
+}
+
+/* Buttons: square, mono, accent fill or dark. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms;
+}
+.btn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.btn--dark {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: var(--text);
+}
+.btn--dark:hover {
+  background: #262626;
+  border-color: #262626;
+}
+
+/* The full-width accent bar for the main call to action. */
+.cta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: clamp(4.5rem, 9vw, 7rem);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background-color 120ms;
+}
+.cta-bar:hover {
+  background: var(--accent-hover);
+}
+
+/* Small mono chips: EXPERIMENTAL, AGENT, client names. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.4375rem;
+  background: var(--field);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chip--line {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  padding: 0.375rem 0.625rem;
+}
+.chip--agent {
+  color: var(--accent);
+}
+
+/* Code on the landing page: Shiki with CSS-variable colours, so it follows the accent. */
+.astro-code {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  tab-size: 2;
+}
+.astro-code code {
+  font-family: inherit;
+}
+
+/* Typed lines in the hero animations: laid out in full, revealed as they are typed. */
+.is-pending,
+.ghost {
+  visibility: hidden;
+}
+
+/* Dithered canvases fill whatever box they are placed in. */
+.dither {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* ---------- Section building blocks, shared by every page ---------- */
+
+section {
+  position: relative;
+}
+.intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: var(--rhythm) var(--pad) clamp(2rem, 4vw, 3rem);
+}
+.intro .h2 {
+  max-width: 24ch;
+}
+.more {
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 120ms;
+}
+.more:hover,
+.cell--link:hover .more {
+  color: var(--accent);
+}
+.pkg {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* A shell command in running text: the prompt in the accent, the command in white. */
+.cmdline {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.cmdline .p {
+  color: var(--accent);
+}
+
+/* Hairline cells. */
+.cells {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.cells--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cells--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.cells--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.cells--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+  padding: var(--pad);
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+.cells--2 > .cell:nth-child(2n),
+.cells--3 > .cell:nth-child(3n),
+.cells--4 > .cell:nth-child(4n),
+.cells--5 > .cell:nth-child(5n) {
+  border-right: 0;
+}
+.cell .body {
+  flex: 1;
+}
+.cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.cell--link {
+  text-decoration: none;
+  transition: background-color 120ms;
+}
+.cell--link:hover {
+  background: var(--surface);
+}
+.cell-num {
+  color: var(--faint);
+}
+dl.cells dd {
+  margin: 0;
+}
+
+/* Copy beside a window. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--pad);
+  align-items: center;
+  padding: var(--rhythm) var(--pad);
+}
+.split-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+/* A dithered band with something solid centred on it (a command, a window). */
+.band {
+  position: relative;
+  display: grid;
+  /* A shrinkable track, or the grid sizes to a long command's full width and clips it. */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  min-height: clamp(9rem, 18vw, 13rem);
+  padding: 2rem var(--pad);
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+.band > :not(canvas) {
+  position: relative;
+}
+.stage {
+  position: relative;
+  padding: clamp(2.5rem, 7vw, 5.5rem) var(--pad);
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+.stage > :not(canvas) {
+  position: relative;
+}
+
+.foot-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin: 0;
+  padding: 1.25rem var(--pad);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Equal-width tabs across the frame. */
+.tab-bar {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  border-top: 1px solid var(--line);
+}
+.tab {
+  min-height: 3rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition:
+    color 120ms,
+    border-color 120ms;
+}
+.tab + .tab {
+  border-left: 1px solid var(--line);
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* The hero shell every variant uses: copy, then the animation on its scene. */
+.hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--pad);
+  padding: var(--rhythm) var(--pad);
+}
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+.hero-copy .h1 {
+  max-width: 17ch;
+  /* Pull the capitals up to the padding edge: Switzer's line box sits ~0.18em above them. */
+  margin-top: -0.18em;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.75rem;
+}
+.actions .cmd {
+  width: min(100%, 22rem);
+  padding-block: 0.25rem;
+}
+.viz {
+  position: relative;
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+
+/* Animated transcripts and terminals. */
+.term {
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: var(--code-fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term .ln {
+  min-height: 1.75em;
+}
+.term .p {
+  color: var(--accent);
+}
+.term .user {
+  color: var(--text);
+}
+.term .tool {
+  color: var(--text);
+}
+.term .dim {
+  color: var(--faint);
+}
+.term .out {
+  color: var(--muted);
+}
+.term .ok {
+  color: var(--accent);
+}
+/* Snapshot diffs after --settle: what appeared, and what went away. */
+.term .add {
+  color: var(--accent);
+}
+.term .del {
+  color: var(--faint);
+}
+/* Tool-call arguments: keys in muted white, values in the accent, punctuation faint. */
+.term .k {
+  color: var(--muted);
+}
+.term .s {
+  color: var(--accent);
+}
+
+/* The close: the accent bar and the wordmark set as wide as the frame. */
+.finale {
+  margin-top: clamp(3rem, 8vw, 6rem);
+  container-type: inline-size;
+}
+.giant {
+  margin: 0;
+  padding: 7cqi 0 5cqi;
+  font-family: var(--font-display);
+  font-weight: 500;
+  /* Overridden inline with giantSize() (giant.ts), which fits the product's wordmark. */
+  font-size: 21.6cqi;
+  line-height: 0.8;
+  letter-spacing: -0.045em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  user-select: none;
+}
+
+@media (max-width: 64rem) {
+  .cells--4,
+  .cells--5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cells--4 > .cell:nth-child(n),
+  .cells--5 > .cell:nth-child(n) {
+    border-right: 1px solid var(--line);
+  }
+  .cells--4 > .cell:nth-child(2n),
+  .cells--5 > .cell:nth-child(2n) {
+    border-right: 0;
+  }
+}
+@media (max-width: 48rem) {
+  .tab-bar {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab {
+    flex: 0 0 auto;
+    padding: 0 1rem;
+  }
+  .cells--2,
+  .cells--3,
+  .cells--4,
+  .cells--5,
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cells > .cell:nth-child(n) {
+    border-right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* ---------- Building blocks for product pictures ----------
+ * A pictured panel (a mono table inside a Window), a duct between two pictures with packets
+ * stepping along it (anim.ts sendPacket), and a picked row. Compose the hero visual from these,
+ * Window, Phone-like frames you draw yourself, and the .term transcript styles above.
+ */
+
+.pane {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+.pane.is-on {
+  display: flex;
+}
+.pane-row {
+  display: grid;
+  grid-template-columns: var(--cols, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  white-space: nowrap;
+}
+.pane-row > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane-head {
+  color: var(--faint);
+  font-size: 0.625rem;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+.pane-row[data-row] {
+  visibility: hidden;
+}
+.pane-row[data-row].is-on {
+  visibility: visible;
+}
+.pane .dim {
+  color: var(--faint);
+}
+.pane .mut {
+  color: var(--muted);
+}
+.pane .live {
+  color: var(--accent);
+}
+.pane .flash {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* A duct between two visuals: a dotted track; packets step along it. */
+.duct {
+  --track: rgb(255 255 255 / 0.5);
+  position: relative;
+  flex: 1 1 4rem;
+  max-width: 9rem;
+  min-width: 3rem;
+  height: 2.25rem;
+  background: repeating-linear-gradient(90deg, var(--track) 0 4px, transparent 4px 8px) center /
+    100% 2px no-repeat;
+}
+.duct.is-live {
+  --track: var(--accent);
+}
+.pkt {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--accent);
+  opacity: 0;
+}
+.pkt--back {
+  background: var(--text);
+}
+@media (max-width: 48rem) {
+  .duct {
+    flex: 0 0 3rem;
+    width: 2.25rem;
+    min-width: 0;
+    max-width: none;
+    height: 3rem;
+    background: repeating-linear-gradient(180deg, var(--track) 0 4px, transparent 4px 8px) center /
+      2px 100% no-repeat;
+  }
+  .pkt {
+    top: 0;
+    left: 50%;
+  }
+}
+
+/* Long commands (the skill install) get more room on a band. */
+.band .cmd {
+  width: min(100%, 48rem);
+}
+
+/* A row picked out in a pictured panel: selection, never status. */
+.pane-row.is-picked {
+  position: relative;
+  background: var(--surface);
+}
+.pane-row.is-picked::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent);
+}
+.intro--sub {
+  padding-top: clamp(2rem, 4vw, 3rem);
+}

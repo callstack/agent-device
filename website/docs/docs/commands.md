@@ -2,8 +2,6 @@
 title: Commands
 ---
 
-# Commands
-
 Find the command for a task, the flags it takes, and how it behaves on each platform.
 
 For persistent defaults and project-scoped CLI settings, see [Configuration](/docs/configuration).

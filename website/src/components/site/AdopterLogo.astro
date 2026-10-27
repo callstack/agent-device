@@ -1,0 +1,43 @@
+---
+// An adopter's official mark (content.ts `adopters[].logo`), followed by its name. `mono` marks
+// are drawn as white silhouettes so the row reads as one; `keep` marks (a mark on its own solid
+// tile) keep their light and dark parts, in greyscale.
+import type { Adopter } from '../../site/content';
+
+interface Props {
+  adopter: Adopter;
+  /** The mark's height. */
+  size?: string;
+  class?: string;
+}
+
+const { adopter, size = '1.5rem', class: className } = Astro.props;
+---
+
+<span class:list={['adopter-logo', className]} style={`--logo-size: ${size}`}>
+  {adopter.logo && <img src={adopter.logo.src} alt="" class={`mark mark--${adopter.logo.mode}`} loading="lazy" decoding="async" />}
+  <span class="name">{adopter.name}</span>
+</span>
+
+<style>
+  .adopter-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-family: var(--font-display);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .mark {
+    width: auto;
+    height: var(--logo-size);
+    max-width: calc(var(--logo-size) * 1.6);
+    object-fit: contain;
+  }
+  .mark--mono {
+    filter: brightness(0) invert(1);
+  }
+  .mark--keep {
+    filter: grayscale(1);
+  }
+</style>

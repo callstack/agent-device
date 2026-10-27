@@ -3,8 +3,6 @@ title: Security & Trust
 description: Security and trust guidance for agent-device local app automation, device permissions, screenshots, recordings, logs, network dumps, audio probes, traces, and reports.
 ---
 
-# Security & Trust
-
 `agent-device` runs locally by default and can control every device, simulator, emulator, and desktop app your user account can reach. Treat it like any developer tool that interacts with apps, captures screens, and reads diagnostic output.
 
 ## Local control

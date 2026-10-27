@@ -1,0 +1,10 @@
+---
+// The close of a landing page: the accent CTA bar and the giant wordmark, as wide as the frame.
+import { docs, site } from '../../site/content';
+import { giantSize } from './giant';
+---
+
+<section class="finale" aria-label="Get started">
+  <a class="cta-bar" href={docs.start}>Get started <span aria-hidden="true">→</span></a>
+  <p class="giant" aria-hidden="true" translate="no" style={`font-size: ${giantSize(site.wordmark)}`}>{site.wordmark}</p>
+</section>

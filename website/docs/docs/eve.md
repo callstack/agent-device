@@ -2,8 +2,6 @@
 title: Eve
 ---
 
-# Eve
-
 [Eve](https://eve.dev/) is Vercel's filesystem-first framework for durable agents. Files under `agent/tools/` become typed model tools, so you give the agent device access by wrapping the `agent-device` Node.js client in one of those files.
 
 Create an Eve project, then add `agent-device`:

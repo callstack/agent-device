@@ -1,0 +1,774 @@
+---
+// The home page: the hero, who uses it, then the product story in numbered sections: the
+// bottleneck in shipping with agents, the delivery loop and the step agent-device owns, three
+// stages of that loop (while building, on every pull request, back from production) with one
+// picture and a proof point each, three adopter stories, where it runs, the FAQ and the close. The words and code come
+// from src/site/content.ts; this file only lays them out. To reorder, edit `order`.
+import Site from '../layouts/Site.astro';
+import Closing from '../components/site/Closing.astro';
+import Faq from '../components/site/Faq.astro';
+import Footer from '../components/site/Footer.astro';
+import Marquee from '../components/site/Marquee.astro';
+import Nav from '../components/site/Nav.astro';
+import CodeBlock from '../components/site/CodeBlock.astro';
+import Dither from '../components/site/Dither.astro';
+import Window from '../components/site/Window.astro';
+import AdopterLogo from '../components/site/AdopterLogo.astro';
+import Hero from '../components/home/Hero.astro';
+import { adopters, cloud, docs, faq, home, site } from '../site/content';
+import { compact, monthlyDownloads } from '../site/npm';
+
+// Section numbers, [01] onwards, in page order.
+const order = ['bottleneck', 'loop', 'inner', 'outer', 'feedback', 'stories', 'anywhere', 'watch', 'faq'] as const;
+const num = (id: (typeof order)[number]) => String(order.indexOf(id) + 1).padStart(2, '0');
+
+// Inline `code` in copy.
+const md = (s: string) => s.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+// Structured data: the site, Callstack, the product as an application and as source code, and
+// the FAQ on this page.
+const homeUrl = new URL('/', Astro.site).href;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${homeUrl}#website`,
+      url: homeUrl,
+      name: site.name,
+      description: site.description,
+      publisher: { '@id': 'https://callstack.com/#organization' },
+    },
+    {
+      '@type': 'Organization',
+      '@id': 'https://callstack.com/#organization',
+      name: 'Callstack',
+      url: 'https://callstack.com/',
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${homeUrl}#software`,
+      name: site.name,
+      description: site.description,
+      url: homeUrl,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: site.platforms.join(', '),
+      license: site.license.spdx,
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      softwareHelp: new URL(docs.intro, Astro.site).href,
+      sameAs: [site.repo, site.npm],
+      publisher: { '@id': 'https://callstack.com/#organization' },
+    },
+    {
+      '@type': 'SoftwareSourceCode',
+      name: site.name,
+      codeRepository: site.repo,
+      programmingLanguage: site.language,
+      license: site.license.spdx,
+      targetProduct: { '@id': `${homeUrl}#software` },
+    },
+    {
+      '@type': 'FAQPage',
+      mainEntity: faq.map(({ q, a }) => ({
+        '@type': 'Question',
+        name: q,
+        acceptedAnswer: { '@type': 'Answer', text: a.replace(/`/g, '') },
+      })),
+    },
+  ],
+};
+const { usedBy, bottleneck, loop, inner, outer, feedback } = home;
+const byName = (name: string) => adopters.find((a) => a.name === name)!;
+const stories = home.stories.map(byName);
+const featured = adopters.filter((a) => a.featured);
+const innerProof = byName(inner.proof);
+const downloads = await monthlyDownloads();
+---
+
+<Site description={site.description} jsonLd={jsonLd}>
+  <Nav />
+  <main class="frame">
+    <Hero />
+    <Marquee />
+
+    <section class="used-by" aria-labelledby="used-by-title">
+      <p class="label" id="used-by-title">{usedBy.label}</p>
+      <ul class="used-by-logos">
+        {featured.map((a) => <li><AdopterLogo adopter={a} /></li>)}
+      </ul>
+      <div class="used-by-foot">
+        <a class="label more" href={usedBy.more.href}>{usedBy.more.text} <span aria-hidden="true">→</span></a>
+        {
+          downloads && (
+            <a class="downloads" href={site.npm}>
+              <span class="downloads-n">{compact(downloads)}</span>
+              <span class="label">npm downloads in the last 30 days <span aria-hidden="true">↗</span></span>
+            </a>
+          )
+        }
+      </div>
+    </section>
+
+    <section id="bottleneck" aria-labelledby="bottleneck-title">
+      <p class="section-head label"><b>[{num('bottleneck')}]</b> {bottleneck.label}</p>
+      <div class="editorial">
+        <h2 class="h2" id="bottleneck-title">{bottleneck.headline[0]} <em>{bottleneck.headline[1]}</em></h2>
+        <div class="editorial-body">
+          {bottleneck.body.map((p) => <p class="lede">{p}</p>)}
+        </div>
+      </div>
+    </section>
+
+    <section id="loop" aria-labelledby="loop-title">
+      <p class="section-head label"><b>[{num('loop')}]</b> {loop.label}</p>
+      <div class="intro">
+        <h2 class="h2" id="loop-title">{loop.headline[0]} <em>{loop.headline[1]}</em></h2>
+        <p class="lede">{loop.lede}</p>
+      </div>
+      <div class="ring-stage">
+        <Dither scene="flow" focus={0.5} />
+        <ol class="ring">
+          {
+            loop.steps.map((step) => (
+              <li class:list={['ring-step', { 'ring-step--product': step.product }]} style={`--n: ${step.n}`}>
+                <span class="label ring-num">{String(step.n).padStart(2, '0')}</span>
+                <h3 class="h3">{step.title}</h3>
+                <p class="body">{step.body}</p>
+                {step.product && <span class="label ring-tag">agent-device</span>}
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section id="inner" aria-labelledby="inner-title">
+      <p class="section-head label"><b>[{num('inner')}]</b> {inner.label}</p>
+      <div class="split">
+        <div class="split-copy">
+          <h2 class="h2" id="inner-title">{inner.headline[0]} <em>{inner.headline[1]}</em></h2>
+          <p class="lede" set:html={md(inner.lede)} />
+          <div class="proof">
+            <AdopterLogo adopter={innerProof} size="1.25rem" />
+            <p class="body" set:html={md(innerProof.how)} />
+            <a class="label more" href={innerProof.sources.at(-1)!.href}>Read the case study <span aria-hidden="true">↗</span></a>
+          </div>
+          <a class="label more" href={inner.link.href}>{inner.link.text} <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="stage">
+          <Dither scene="flow" focus={0.5} />
+          <div class="pr">
+            <div class="pr-head">
+              <span class="label">Pull request</span>
+              <span class="label pr-state">Verified on the device</span>
+            </div>
+            <ul class="pr-files">
+              {
+                inner.evidence.map((e) => (
+                  <li>
+                    <span class="label pr-kind">{e.kind}</span>
+                    <span class="pr-file">{e.file}</span>
+                    <code class="pr-from">{e.from}</code>
+                  </li>
+                ))
+              }
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="outer" aria-labelledby="outer-title">
+      <p class="section-head label"><b>[{num('outer')}]</b> {outer.label}</p>
+      <div class="split split--flip">
+        <div class="split-copy">
+          <h2 class="h2" id="outer-title">{outer.headline[0]} <em>{outer.headline[1]}</em></h2>
+          <p class="lede" set:html={md(outer.lede)} />
+          <div class="proof">
+            <span class="label proof-label">Start from</span>
+            <a class="proof-link" href={outer.proof.href}>{outer.proof.text} <span aria-hidden="true">↗</span></a>
+          </div>
+          <a class="label more" href={outer.link.href}>{outer.link.text} <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="stage">
+          <Dither scene="flow" focus={0.5} />
+          <div class="repeat-pic">
+            <Window title={outer.file}>
+              <CodeBlock code={outer.script} lang="bash" wrap />
+            </Window>
+            <div class="ci">
+              <span class="label">CI</span>
+              <code>{outer.ci}</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="feedback" aria-labelledby="feedback-title">
+      <p class="section-head label"><b>[{num('feedback')}]</b> {feedback.label}</p>
+      <div class="split">
+        <div class="split-copy">
+          <h2 class="h2" id="feedback-title">{feedback.headline[0]} <em>{feedback.headline[1]}</em></h2>
+          <p class="lede" set:html={md(feedback.lede)} />
+          <a class="label more" href={feedback.link.href}>{feedback.link.text} <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="stage">
+          <Dither scene="flow" focus={0.5} />
+          <div class="finding">
+            <p class="finding-summary">{feedback.finding.summary}</p>
+            <div class="finding-row">
+              <span class="label finding-kind">{feedback.finding.kind}</span>
+              <span class="finding-component">{feedback.finding.component}</span>
+            </div>
+            <p class="finding-detail">{feedback.finding.detail}</p>
+            <p class="finding-fix"><span class="label">Fix</span> {feedback.finding.fix}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stories" aria-labelledby="stories-title">
+      <p class="section-head label"><b>[{num('stories')}]</b> Who uses it</p>
+      <div class="intro">
+        <h2 class="h2" id="stories-title">In their repos, <em>on their apps.</em></h2>
+      </div>
+      <ol class="stories">
+        {
+          stories.map((a) => (
+            <li class="story">
+              <AdopterLogo adopter={a} size="1.75rem" class="story-name" />
+              <p class="body" set:html={md(a.how)} />
+              <ul class="story-sources">
+                {a.sources.map((src) => (
+                  <li><a class="label more" href={src.href}>{src.text} <span aria-hidden="true">↗</span></a></li>
+                ))}
+              </ul>
+            </li>
+          ))
+        }
+      </ol>
+      <a class="label more pad" href="/showcase">All {adopters.length} teams and projects <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section id="anywhere" aria-labelledby="anywhere-title">
+      <p class="section-head label"><b>[{num('anywhere')}]</b> Run anywhere</p>
+      <div class="intro">
+        <h2 class="h2" id="anywhere-title">{cloud.headline[0]} <em>{cloud.headline[1]}</em></h2>
+        <p class="lede">{cloud.lede}</p>
+      </div>
+      <ol class="path">
+        {
+          cloud.paths.map((p, i) => (
+            <li class="path-step">
+              <span class="label path-num">{String(i + 1).padStart(2, '0')}</span>
+              <div>
+                <h3 class="h3">{p.title}</h3>
+                <p class="body" set:html={md(p.body)} />
+              </div>
+              <code class="path-cmd">{p.cmd}</code>
+            </li>
+          ))
+        }
+      </ol>
+      <a class="label more pad" href="/cloud">Run agent-device anywhere <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section id="watch" aria-labelledby="watch-title">
+      <p class="section-head label"><b>[{num('watch')}]</b> Watch and learn</p>
+      <div class="intro">
+        <h2 class="h2" id="watch-title">Closing the loop, <em>from the people building it.</em></h2>
+      </div>
+      <ul class="videos">
+        {
+          home.videos.map((v) => (
+            <li>
+              <a class="video" href={`https://www.youtube.com/watch?v=${v.id}`}>
+                <img src={`https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`} alt="" width="480" height="360" loading="lazy" decoding="async" />
+                <span class="label video-where">{v.where}</span>
+                <span class="video-title">{v.title}</span>
+                <span class="video-who">{v.who}</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <Faq num={num('faq')} />
+
+    <section class="reading" aria-labelledby="reading-title">
+      <p class="label" id="reading-title">Read more</p>
+      <ul>
+        {home.reading.map((r) => <li><a href={r.href}>{r.text} <span aria-hidden="true">↗</span></a></li>)}
+      </ul>
+    </section>
+    <Closing />
+  </main>
+  <Footer />
+</Site>
+
+<style>
+  .used-by {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.5rem;
+    padding: 1.5rem var(--pad);
+    border-bottom: 1px solid var(--line);
+  }
+  .used-by-logos {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 2.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 1.0625rem;
+  }
+
+  /* Editorial: headline on the left, two paragraphs on the right. */
+  .editorial {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--pad);
+    padding: var(--rhythm) var(--pad);
+  }
+  .editorial .h2 {
+    margin: 0;
+  }
+  .editorial-body {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .editorial-body .lede {
+    margin: 0;
+  }
+
+  /* The splits: copy beside one picture on a quiet scene; the middle one flips sides. */
+  .split--flip > .split-copy {
+    order: 2;
+  }
+  .stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 24rem;
+    padding: clamp(1.5rem, 4vw, 3rem);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .pr {
+    position: relative;
+    width: 100%;
+    max-width: 28rem;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .pr-head {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .pr-state {
+    color: var(--accent);
+  }
+  .pr-files {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pr-files li {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .pr-files li:last-child {
+    border-bottom: 0;
+  }
+  .pr-kind {
+    color: var(--muted);
+  }
+  .pr-file {
+    color: var(--text);
+  }
+  .pr-from {
+    font-size: 0.6875rem;
+    color: var(--faint);
+  }
+  .repeat-pic {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 30rem;
+  }
+  .ci {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.75rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    font-size: 0.75rem;
+  }
+  .ci .label {
+    color: var(--accent);
+  }
+  .ci code {
+    overflow-wrap: anywhere;
+  }
+
+  /* The loop: a ring of six on a 3 x 2 grid, top row left to right, bottom row back. The
+     agent-device steps are lit. */
+  .ring-stage {
+    position: relative;
+    padding: clamp(1.5rem, 4vw, 3rem) var(--pad);
+    border-top: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .ring {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2.5rem 3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ring-step {
+    position: relative;
+    display: grid;
+    gap: 0.5rem;
+    align-content: start;
+    padding: 1.25rem;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .ring-step .h3,
+  .ring-step .body {
+    margin: 0;
+  }
+  .ring-num {
+    color: var(--muted);
+  }
+  .ring-step--product {
+    border-color: var(--accent);
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .ring-step--product .ring-num,
+  .ring-tag {
+    color: var(--accent);
+  }
+  /* Arrows between neighbours: right along the top row, down at the end, left along the bottom
+     row, and up from the last step back to the first. */
+  .ring-step::after {
+    position: absolute;
+    font-family: var(--font-mono);
+    color: var(--accent);
+  }
+  .ring-step:nth-child(1)::after,
+  .ring-step:nth-child(2)::after {
+    content: '→';
+    right: -2rem;
+    top: 50%;
+  }
+  .ring-step:nth-child(3)::after {
+    content: '↓';
+    left: 50%;
+    bottom: -2rem;
+  }
+  .ring-step:nth-child(5)::after,
+  .ring-step:nth-child(6)::after {
+    content: '←';
+    left: -2rem;
+    top: 50%;
+  }
+  .ring-step:nth-child(4)::after {
+    content: '↑';
+    left: 50%;
+    top: -2rem;
+  }
+
+  .proof {
+    display: grid;
+    gap: 0.625rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--line-strong);
+    border-left: 2px solid var(--accent);
+  }
+  .proof .body {
+    margin: 0;
+  }
+  .proof-label {
+    color: var(--muted);
+  }
+  .proof-link {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .proof-link:hover {
+    color: var(--accent);
+  }
+  .finding {
+    position: relative;
+    display: grid;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 30rem;
+    padding: 1.25rem;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.6;
+  }
+  .finding p {
+    margin: 0;
+  }
+  .finding-summary {
+    color: var(--muted);
+  }
+  .finding-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+  }
+  .finding-kind {
+    padding: 0.125rem 0.5rem;
+    color: var(--on-accent);
+    background: var(--accent);
+  }
+  .finding-component {
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .finding-detail {
+    color: var(--muted);
+  }
+  .finding-fix {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line);
+    color: var(--text);
+  }
+  .finding-fix .label {
+    margin-right: 0.5rem;
+    color: var(--accent);
+  }
+
+  /* Stories and the path: rows, not boxes. */
+  .stories,
+  .path {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+  }
+  .story {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr) 16rem;
+    gap: 1rem 2rem;
+    align-items: baseline;
+    padding: 1.75rem var(--pad);
+    border-bottom: 1px solid var(--line);
+  }
+  .story .h3,
+  .story .body {
+    margin: 0;
+  }
+  .story-sources {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .path-step {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 22rem);
+    gap: 1rem 2rem;
+    align-items: baseline;
+    padding: 1.5rem var(--pad);
+    border-bottom: 1px solid var(--line);
+  }
+  .path-step .h3 {
+    margin: 0 0 0.5rem;
+  }
+  .path-step .body {
+    margin: 0;
+  }
+  .path-num {
+    color: var(--accent);
+  }
+  .path-cmd {
+    font-size: 0.75rem;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+  .pad {
+    display: inline-block;
+    padding: 1.25rem var(--pad);
+  }
+
+  .used-by-foot {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .downloads {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .downloads:hover {
+    color: var(--accent);
+  }
+  .downloads-n {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--accent);
+  }
+  .videos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+  }
+  .videos li {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .videos li:nth-child(3n) {
+    border-right: 0;
+  }
+  .video {
+    display: grid;
+    gap: 0.5rem;
+    height: 100%;
+    padding: 1.25rem var(--pad) 1.5rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .video img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    margin-bottom: 0.5rem;
+    filter: grayscale(0.6);
+    transition: filter 0.2s;
+  }
+  .video:hover img {
+    filter: none;
+  }
+  .video:hover .video-title {
+    color: var(--accent);
+  }
+  .video-where {
+    color: var(--accent);
+  }
+  .video-title {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    line-height: 1.3;
+  }
+  .video-who {
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+  .reading {
+    padding: 2rem var(--pad);
+    border-top: 1px solid var(--line);
+  }
+  .reading ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 2rem;
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .reading a {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .reading a:hover {
+    color: var(--accent);
+  }
+
+  @media (max-width: 64rem) {
+    .videos {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .videos li:nth-child(n) {
+      border-right: 1px solid var(--line);
+    }
+    .videos li:nth-child(2n) {
+      border-right: 0;
+    }
+    .ring {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2.5rem;
+    }
+    /* One column: the loop reads in its own order, every arrow points down. */
+    .ring-step {
+      order: var(--n);
+    }
+    .ring-step:nth-child(n)::after {
+      content: '↓';
+      left: 50%;
+      right: auto;
+      top: auto;
+      bottom: -2rem;
+    }
+    .ring-step:nth-child(4)::after {
+      content: '↻';
+    }
+    .story {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .path-step {
+      grid-template-columns: 2.5rem minmax(0, 1fr);
+    }
+    .path-cmd {
+      grid-column: 2;
+    }
+  }
+  @media (max-width: 48rem) {
+    .videos {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .videos li:nth-child(n) {
+      border-right: 0;
+    }
+    .editorial {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .split--flip > .split-copy {
+      order: 0;
+    }
+    .pr-files li {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .pr-from {
+      display: none;
+    }
+    .reading ul {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

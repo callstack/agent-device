@@ -1,13 +1,28 @@
 {
-  "name": "agent-device-docs",
+  "name": "agent-device-website",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
-    "dev": "rspress dev",
-    "build": "rspress build"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "og": "node scripts/og.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.4",
+    "@astrojs/starlight": "^0.42.2",
+    "astro": "^7.3.3",
+    "sharp": "^0.35.4",
+    "starlight-llms-txt": "^0.12.0"
   },
   "devDependencies": {
-    "@callstack/rspress-preset": "^0.6.6",
-    "@rspress/core": "^2.0.12"
+    "@astrojs/check": "^0.9.10",
+    "playwright-core": "^1.62.1",
+    "typescript": "~5.9.2"
   }
 }

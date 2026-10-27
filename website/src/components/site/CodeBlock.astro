@@ -1,0 +1,119 @@
+---
+// Highlighted code with zero-padded line numbers. Colours come from the --code-* CSS variables
+// in landing.css, so strings and numbers follow the accent.
+import { Code } from 'astro:components';
+
+interface Props {
+  code: string;
+  lang: string;
+  /** Pads the gutter to this many lines, so short snippets share a height. */
+  minLines?: number;
+  /** Wraps long lines under their own line number instead of scrolling sideways. */
+  wrap?: boolean;
+  class?: string;
+}
+
+const { code, lang, minLines = 0, wrap = false, class: className } = Astro.props;
+const lines = code.split('\n').length;
+const padded = lines < minLines ? code + '\n'.repeat(minLines - lines) : code;
+
+const theme = {
+  name: 'site',
+  type: 'dark',
+  colors: { 'editor.background': 'transparent', 'editor.foreground': 'var(--code-fg)' },
+  tokenColors: [
+    { scope: ['comment', 'punctuation.definition.comment'], settings: { foreground: 'var(--code-com)' } },
+    {
+      scope: [
+        'keyword',
+        'storage',
+        'storage.type',
+        'storage.modifier',
+        'keyword.control',
+        'variable.language',
+        'constant.language',
+        'keyword.operator.new',
+      ],
+      settings: { foreground: 'var(--code-kw)' },
+    },
+    {
+      scope: ['string', 'string.quoted', 'string.template', 'punctuation.definition.string'],
+      settings: { foreground: 'var(--code-str)' },
+    },
+    { scope: ['constant.numeric'], settings: { foreground: 'var(--code-num)' } },
+    {
+      scope: ['entity.name.function', 'support.function', 'meta.function-call'],
+      settings: { foreground: 'var(--code-fn)' },
+    },
+    {
+      scope: ['entity.name.type', 'support.type', 'support.class', 'support.type.property-name'],
+      settings: { foreground: 'var(--code-type)' },
+    },
+    { scope: ['punctuation', 'meta.brace', 'keyword.operator'], settings: { foreground: 'var(--code-punc)' } },
+    // Shell: only quoted strings are strings. Plain arguments read as text, options dimmed like
+    // keywords, line continuations like punctuation.
+    { scope: ['string.unquoted'], settings: { foreground: 'var(--code-fg)' } },
+    { scope: ['constant.other.option'], settings: { foreground: 'var(--code-kw)' } },
+    { scope: ['constant.character.escape.line-continuation'], settings: { foreground: 'var(--code-punc)' } },
+    // JSON: keys white, values in the accent.
+    { scope: ['support.type.property-name.json'], settings: { foreground: 'var(--code-type)' } },
+  ],
+};
+---
+
+<div class:list={['code', { 'code--wrap': wrap }, className]}>
+  <Code code={padded} lang={lang as any} theme={theme as any} wrap={wrap} />
+</div>
+
+<style>
+  .code {
+    overflow-x: auto;
+    padding: 1rem 0;
+  }
+  .code :global(code) {
+    counter-reset: line;
+    display: block;
+    min-width: max-content;
+  }
+  .code :global(.line) {
+    display: inline-block;
+    min-height: 1.75em;
+    padding-inline-end: 1.25rem;
+  }
+  .code :global(.line)::before {
+    counter-increment: line;
+    content: counter(line, decimal-leading-zero);
+    display: inline-block;
+    width: 2rem;
+    margin-inline: 1rem 1.25rem;
+    color: var(--faint);
+    user-select: none;
+  }
+  .code--wrap {
+    overflow-x: visible;
+  }
+  .code--wrap :global(code) {
+    min-width: 0;
+  }
+  .code--wrap :global(.line) {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    padding-inline-start: 4.25rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .code--wrap :global(.line)::before {
+    position: absolute;
+    left: 0;
+  }
+  @media (max-width: 30rem) {
+    .code :global(.line)::before {
+      width: 1.25rem;
+      margin-inline: 0.75rem 0.75rem;
+    }
+    .code--wrap :global(.line) {
+      padding-inline-start: 2.75rem;
+    }
+  }
+</style>

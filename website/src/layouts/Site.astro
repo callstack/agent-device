@@ -1,0 +1,86 @@
+---
+// The shell for pages outside Starlight (home, 404, any other landing page): fonts, tokens, the
+// accent from brand.ts, search and social tags, and the pointers agents use. Pages add the nav
+// and footer themselves.
+import '../fonts/font-face.css';
+import '../styles/landing.css';
+
+import geistMono from '../fonts/GeistMono-Regular.woff2?url';
+import switzerMedium from '../fonts/Switzer-Medium.woff2?url';
+import switzerRegular from '../fonts/Switzer-Regular.woff2?url';
+import { brandCss } from '../site/brand';
+import { site } from '../site/content';
+import { fullTitle } from '../site/meta';
+
+interface Props {
+  /**
+   * The page's own title, without the product name; leave it out on the home page. The full
+   * title ("Page | Name", or "Name: subtitle" for home) is composed by fullTitle() in meta.ts.
+   */
+  title?: string;
+  description: string;
+  /** Pages that should stay out of search results (the 404). Add them to noindexPaths too. */
+  noindex?: boolean;
+  /** The canonical path, when it differs from this page's own (a duplicate page). */
+  canonicalPath?: string;
+  /** Structured data for this page, rendered as JSON-LD. */
+  jsonLd?: object;
+}
+
+const { title: pageTitle, description, noindex = false, canonicalPath, jsonLd } = Astro.props;
+const title = fullTitle(pageTitle);
+// Pages are built as files (`build.format: 'file'`) and served without `.html` or a trailing
+// slash (`cleanUrls`, `trailingSlash: false` in vercel.json), so the canonical drops both.
+const path = (canonicalPath ?? Astro.url.pathname)
+  .replace(/\.html$/, '')
+  .replace(/(^|\/)index$/, '$1')
+  .replace(/(.)\/$/, '$1');
+const canonical = new URL(path, Astro.site).href;
+const ogImage = new URL('/og-image.jpg', Astro.site).href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+
+    <meta name="color-scheme" content="dark" />
+    <style is:inline set:html={brandCss}></style>
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:locale" content="en" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={site.ogAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={site.ogAlt} />
+
+    <link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt" />
+
+    <link rel="preload" href={switzerMedium} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={switzerRegular} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={geistMono} as="font" type="font/woff2" crossorigin />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

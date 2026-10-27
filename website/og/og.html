@@ -1,0 +1,297 @@
+<!doctype html>
+<!--
+  The social card (1200x630) and, with ?format=banner, the README banner (1660x512).
+  scripts/og.mjs serves the website folder, opens this page in Chromium and saves screenshots
+  to public/og-image.jpg and public/banner.jpg. Edit the layout here, then run `pnpm og`.
+
+  Facts and colours are not written here: the script serves content.ts as /og/site.json and
+  brand.ts as /og/brand.css, and the page fills itself in from them.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="/og/brand.css" />
+    <style>
+      @font-face {
+        font-family: 'Switzer';
+        src: url('/src/fonts/Switzer-Medium.woff2') format('woff2');
+        font-weight: 500;
+      }
+      @font-face {
+        font-family: 'Geist Mono';
+        src: url('/src/fonts/GeistMono-Regular.woff2') format('woff2');
+        font-weight: 400;
+      }
+      :root {
+        --line: rgb(255 255 255 / 0.1);
+        --line-strong: rgb(255 255 255 / 0.2);
+        --muted: rgb(255 255 255 / 0.62);
+        --faint: rgb(255 255 255 / 0.5);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #0a0a0a;
+        color: #fff;
+        font-family: 'Switzer', sans-serif;
+      }
+      .card {
+        position: absolute;
+        inset: 0 48px;
+        border-inline: 1px solid var(--line);
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 52px 56px 0;
+      }
+      .mark {
+        height: 40px;
+        margin-right: 4px;
+        color: var(--accent);
+      }
+      .wordmark {
+        padding: 2px 9px;
+        background: var(--accent);
+        color: #0a0a0a;
+        font-weight: 500;
+        font-size: 34px;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+      .mono {
+        font-family: 'Geist Mono', monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .by {
+        padding: 6px 10px;
+        background: #1a1a1a;
+        color: var(--faint);
+        font-size: 15px;
+      }
+      h1 {
+        margin: 32px 56px 0;
+        max-width: 1000px;
+        font-weight: 500;
+        font-size: 70px;
+        line-height: 1.04;
+        letter-spacing: -0.035em;
+      }
+      h1 em {
+        display: block;
+        font-style: normal;
+        color: var(--accent);
+      }
+      .band {
+        position: absolute;
+        inset: auto 0 0;
+        height: 250px;
+        border-top: 1px solid var(--line);
+      }
+      canvas {
+        image-rendering: pixelated;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .windows {
+        position: absolute;
+        left: 56px;
+        top: 34px;
+        display: flex;
+        gap: 24px;
+      }
+      .window {
+        background: #0a0a0a;
+        border: 1px solid var(--line-strong);
+        font-family: 'Geist Mono', monospace;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--faint);
+      }
+      .tag {
+        padding: 0 4px;
+        background: var(--accent);
+        color: #0a0a0a;
+        font-family: 'Switzer', sans-serif;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      .term {
+        width: 560px;
+        padding: 12px 16px 14px;
+        font-size: 15px;
+        line-height: 1.7;
+        white-space: nowrap;
+        color: #e9e9e9;
+      }
+      .accent {
+        color: var(--accent);
+      }
+      .out {
+        color: var(--muted);
+      }
+      .platforms {
+        position: absolute;
+        right: 56px;
+        bottom: 24px;
+        padding: 6px 10px;
+        background: #0a0a0a;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      /* The README banner: copy on the left, the picture on the scene on the right. */
+      body[data-format='banner'] {
+        width: 1245px;
+        height: 384px;
+      }
+      /* No frame hairlines: on GitHub they read as a stray border. */
+      [data-format='banner'] .card {
+        inset: 0;
+        border-inline: 0;
+      }
+      [data-format='banner'] .top {
+        padding: 44px 64px 0;
+      }
+      [data-format='banner'] h1 {
+        margin: 28px 64px 0;
+        max-width: 480px;
+        font-size: 50px;
+      }
+      [data-format='banner'] .band {
+        inset: 0 0 0 600px;
+        height: auto;
+        border-top: 0;
+        border-left: 1px solid var(--line);
+      }
+      [data-format='banner'] .windows {
+        left: 40px;
+        top: 50%;
+        translate: 0 -50%;
+        flex-direction: column;
+        gap: 16px;
+      }
+      [data-format='banner'] .term {
+        width: 540px;
+      }
+      [data-format='banner'] .platforms {
+        left: -536px;
+        right: auto;
+        bottom: 40px;
+        padding: 0;
+        background: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="top">
+        <svg
+          class="mark"
+          fill="currentColor"
+          shape-rendering="crispEdges"
+          aria-hidden="true"
+          hidden
+        >
+          <path />
+        </svg>
+        <span class="wordmark" data-wordmark></span>
+        <span class="by mono">by Callstack</span>
+      </div>
+      <h1><span data-beat="0"></span> <em data-beat="1"></em></h1>
+      <div class="band">
+        <canvas id="dither"></canvas>
+        <div class="windows">
+          <!-- OG VISUAL: replace with the product story, the same picture as the hero. -->
+          <div class="window">
+            <div class="bar"><span class="tag" data-wordmark></span>zsh</div>
+            <div class="term" data-term></div>
+          </div>
+          <!-- /OG VISUAL -->
+        </div>
+        <span class="platforms mono" data-platforms></span>
+      </div>
+    </div>
+    <script type="module">
+      import { drawDither } from '/og/dither.js';
+
+      const site = await (await fetch('/og/site.json')).json();
+      const banner = new URLSearchParams(location.search).get('format') === 'banner';
+      if (banner) document.body.dataset.format = 'banner';
+
+      for (const el of document.querySelectorAll('[data-wordmark]')) el.textContent = site.wordmark;
+      for (const el of document.querySelectorAll('[data-beat]'))
+        el.textContent = site.headline[el.dataset.beat];
+      document.querySelector('[data-platforms]').textContent = site.platforms.join(' · ');
+
+      // The mark, on its own step grid, when the product has one.
+      if (site.mark.length) {
+        const svg = document.querySelector('.mark');
+        const w = Math.max(...site.mark.map((r) => r.length));
+        const h = site.mark.length;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        svg.style.width = `${(40 / h) * w}px`;
+        svg
+          .querySelector('path')
+          .setAttribute(
+            'd',
+            site.mark
+              .flatMap((row, y) => [...row].map((c, x) => (c === '#' ? `M${x} ${y}h1v1h-1z` : '')))
+              .join(''),
+          );
+        svg.hidden = false;
+      }
+
+      // The terminal: the hero's transcript, as text only.
+      const term = document.querySelector('[data-term]');
+      for (const line of site.transcript) {
+        const div = document.createElement('div');
+        if (line.kind === 'cmd') {
+          const p = document.createElement('span');
+          p.className = 'accent';
+          p.textContent = '$ ';
+          div.append(p, line.text);
+        } else {
+          div.className = line.kind === 'ok' ? 'accent' : 'out';
+          div.textContent = line.text;
+        }
+        term.append(div);
+      }
+
+      await document.fonts.ready;
+
+      // A long headline steps its size down until it clears what sits below it.
+      const h1 = document.querySelector('h1');
+      const below = document.querySelector(banner ? '[data-platforms]' : '.band');
+      let size = parseFloat(getComputedStyle(h1).fontSize);
+      while (
+        h1.getBoundingClientRect().bottom > below.getBoundingClientRect().top - 20 &&
+        size > 28
+      ) {
+        size -= 2;
+        h1.style.fontSize = `${size}px`;
+      }
+
+      const canvas = document.getElementById('dither');
+      const cols = Math.round(canvas.clientWidth / 2);
+      const rows = Math.round(canvas.clientHeight / 2);
+      drawDither(canvas, 'loop', 9, site.rgb, cols, rows, banner ? 0.86 : 0.9, site.mark);
+      window.ogReady = true;
+    </script>
+  </body>
+</html>

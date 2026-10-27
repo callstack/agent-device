@@ -1,0 +1,134 @@
+---
+// Equal-width tab cells across the frame, one per platform, bundler or framework. Each panel is
+// a Window with real code over a flow backdrop, then a strip with the package, a line about it
+// and a setup link. Arrow keys move along the tab bar (WAI-ARIA tabs pattern).
+import CodeBlock from './CodeBlock.astro';
+import Dither from './Dither.astro';
+import Window from './Window.astro';
+
+export type Tab = {
+  id: string;
+  name: string;
+  /** The window title: the file the code lives in. */
+  file: string;
+  lang: string;
+  code: string;
+  pkg?: string;
+  note?: string;
+  href?: string;
+};
+
+interface Props {
+  tabs: Tab[];
+  /** What the tabs choose between, for screen readers: "Platform", "Bundler". */
+  label: string;
+  /** Prefixes the tab and panel ids, so two tab sets can share a page. */
+  id?: string;
+  /** Pads every snippet to this many lines, so switching tabs doesn't change the height. */
+  minLines?: number;
+}
+const { tabs, label, id = 'tabs', minLines = 10 } = Astro.props;
+---
+
+<div class="tabs" data-tabs>
+  <div class="tab-bar" role="tablist" aria-label={label}>
+    {
+      tabs.map((t, i) => (
+        <button
+          class="tab label"
+          role="tab"
+          id={`${id}-tab-${t.id}`}
+          aria-controls={`${id}-panel-${t.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {t.name}
+        </button>
+      ))
+    }
+  </div>
+  <div class="tabs-stage">
+    <Dither scene="flow" />
+    {
+      tabs.map((t, i) => (
+        <div
+          class="panel"
+          role="tabpanel"
+          id={`${id}-panel-${t.id}`}
+          aria-labelledby={`${id}-tab-${t.id}`}
+          hidden={i !== 0}
+        >
+          <Window title={t.file} class="tabs-window">
+            <CodeBlock code={t.code} lang={t.lang} minLines={minLines} />
+          </Window>
+          {(t.pkg || t.note || t.href) && (
+            <div class="panel-foot">
+              {t.pkg && <code class="pkg">{t.pkg}</code>}
+              {t.note && <span class="body">{t.note}</span>}
+              {t.href && (
+                <a class="label more" href={t.href}>
+                  Set up {t.name} <span aria-hidden="true">→</span>
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  for (const root of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+    const select = (tab: HTMLButtonElement) => {
+      for (const t of tabs) {
+        const on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute('aria-controls')!)!.hidden = !on;
+      }
+    };
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => select(tab));
+      tab.addEventListener('keydown', (e) => {
+        const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!step) return;
+        const next = tabs[(i + step + tabs.length) % tabs.length]!;
+        select(next);
+        next.focus();
+      });
+    });
+  }
+</script>
+
+<style>
+  .tabs-stage {
+    position: relative;
+    padding: clamp(2.5rem, 7vw, 5.5rem) var(--pad) 0;
+    border-top: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .panel {
+    position: relative;
+  }
+  .panel :global(.tabs-window) {
+    max-width: 46rem;
+    margin: 0 auto clamp(2.5rem, 7vw, 5.5rem);
+  }
+  .panel-foot {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    align-items: center;
+    margin-inline: calc(-1 * var(--pad));
+    padding: 1rem var(--pad);
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .panel-foot .body {
+    flex: 1;
+    min-width: 14rem;
+  }
+</style>
