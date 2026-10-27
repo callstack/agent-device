@@ -1,9 +1,9 @@
-// `pnpm check:doc-links` — every internal link on the built docs site lands on a page and an
-// element ID that rspress actually rendered, and README.md's links into the published docs do too.
-// It reads website/doc_build after `pnpm --dir website build`, so rspress's own slugger, link
+// `pnpm check:doc-links` — every internal link on the built site lands on a page and an
+// element ID that Astro actually rendered, and README.md's links into the published docs do too.
+// It reads website/dist after `pnpm --dir website build`, so Starlight's own slugger, link
 // rewriting, and clean URLs are what get checked. External URLs are skipped (no network).
 //
-// The HTML is parsed with regexes on purpose: it is rspress's generated output, which always
+// The HTML is parsed with regexes on purpose: it is Astro's generated output, which always
 // writes attributes double-quoted with `&`, `"`, `<`, `>` entity-escaped, so `id="…"` and
 // `href="…"` cannot contain an unescaped quote.
 
@@ -12,12 +12,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
-const BUILD_DIR = path.join(REPO_ROOT, 'website/doc_build');
+const BUILD_DIR = path.join(REPO_ROOT, 'website/dist');
 const DOCS_SOURCE_DIR = 'website/docs';
-// README links to the published site, whose root is this URL whatever base a local build used.
-const PUBLISHED_SITE = 'https://oss.callstack.com/agent-device/';
-const README_DOCS_URL =
-  /https:\/\/oss\.callstack\.com\/agent-device\/docs\/[\w./-]*(?:#[\w%.-]+)?/g;
+// The site is built at the domain root (astro.config.mjs sets no `base`).
+const BASE = '/';
+// README links to the published site, whose root is this URL.
+const PUBLISHED_SITE = 'https://agent-device.dev/';
+const README_DOCS_URL = /https:\/\/agent-device\.dev\/docs\/[\w./-]*(?:#[\w%.-]+)?/g;
 
 export type DocLinkViolation = {
   /** Built page route (`docs/sessions`), or `README.md:<line>`. */
@@ -133,7 +134,7 @@ function readmeViolations(site: Site, readmeText: string): DocLinkViolation[] {
 }
 
 /**
- * Check a built rspress site. `base` is the base it was built with, with leading and trailing
+ * Check a built site. `base` is the base it was built with, with leading and trailing
  * slashes (`/agent-device/`); internal hrefs start with it. README's URLs name the published site.
  */
 export function checkDocLinks(
@@ -159,21 +160,6 @@ export function checkDocLinks(
   return [...violations, ...readmeViolations(site, readmeText)];
 }
 
-/**
- * The base the site was built with, read from the build rather than restated: rspress emits its
- * entry script under `assetPrefix`, which defaults to `base` (rspress `initRsbuild.js`).
- */
-function builtBase(buildDir: string): string {
-  const home = fs.readFileSync(path.join(buildDir, 'index.html'), 'utf8');
-  const match = /<script defer src="(\/[^"]*?)static\/js\/index\.[\w]+\.js"/.exec(home);
-  const base = match?.[1];
-  // A wrong base would make every internal link look external and pass; the home link proves it.
-  if (!base || !home.includes(`href="${base}"`)) {
-    throw new Error('doc links: cannot read the site base from doc_build/index.html.');
-  }
-  return base;
-}
-
 function sourceHint(where: string): string {
   const source = `${DOCS_SOURCE_DIR}/${where}.md`;
   return fs.existsSync(path.join(REPO_ROOT, source)) ? ` (${source})` : '';
@@ -182,15 +168,14 @@ function sourceHint(where: string): string {
 function main(): number {
   if (!fs.existsSync(path.join(BUILD_DIR, 'index.html'))) {
     process.stderr.write(
-      'doc links: website/doc_build is missing; run `pnpm --dir website build` first.\n',
+      'doc links: website/dist is missing; run `pnpm --dir website build` first.\n',
     );
     return 1;
   }
-  const base = builtBase(BUILD_DIR);
   const readme = fs.readFileSync(path.join(REPO_ROOT, 'README.md'), 'utf8');
-  const violations = checkDocLinks(BUILD_DIR, readme, base);
+  const violations = checkDocLinks(BUILD_DIR, readme, BASE);
   if (violations.length === 0) {
-    process.stdout.write(`doc links: every internal link resolves (base ${base}).\n`);
+    process.stdout.write('doc links: every internal link resolves.\n');
     return 0;
   }
   for (const { where, message } of violations) {

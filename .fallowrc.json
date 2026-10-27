@@ -42,9 +42,7 @@
     "examples/sdk/batch-orchestration.ts",
     "examples/sdk/ai-sdk-tools.ts",
     "examples/sdk/host-runtime.ts",
-    "test/integration/**/*.test.ts",
-    "website/docs/404.mdx",
-    "website/rspress.config.ts"
+    "test/integration/**/*.test.ts"
   ],
   "framework": [
     {
@@ -59,6 +57,8 @@
   ],
   "ignorePatterns": [
     "examples/test-app/**",
+    // The Astro site: a standalone app with its own entry points (pages, components, configs).
+    "website/**",
     "scripts/perf/**",
     "scripts/layering/**",
     "scripts/di-seams/**",
@@ -236,7 +236,7 @@
     },
     {
       // Tool config default exports, loaded by the tool rather than imported.
-      "file": "{oxlint.config.ts,tsdown.config.ts,packages/provider-*/tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
+      "file": "{oxlint.config.ts,tsdown.config.ts,packages/provider-*/tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts}",
       "exports": ["default"]
     },
     {

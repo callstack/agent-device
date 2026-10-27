@@ -270,8 +270,6 @@ export function renderPage(data: MatrixData): string {
     'description: Which commands each target supports, read from the runtime code that decides it.',
     '---',
     '',
-    '# Capabilities',
-    '',
     'The target tables below are generated from the runtime command-admission facts that back the `capabilities` command: a command that leaves the code leaves this page. Labels, limits, and integration rows are maintained beside the generator, and command availability does not establish support for every operation, subcommand, or device model.',
     `It covers agent-device ${data.version}, generated ${data.generatedAt}.`,
     '',

@@ -95,14 +95,14 @@ test('external URLs are skipped and asset links must exist', () => {
 
 test('README links into the published docs are checked against the built pages', () => {
   const readme = [
-    'Read [sessions](https://oss.callstack.com/agent-device/docs/sessions#find-a-sessions-logs-and-artifacts).',
-    'Bare: https://oss.callstack.com/agent-device/docs/sessions#gone',
-    '[Missing](https://oss.callstack.com/agent-device/docs/retired) and [repo](CONTRIBUTING.md).',
-    'Elsewhere: https://oss.callstack.com/agent-device-old/docs/retired',
-    'End of sentence: https://oss.callstack.com/agent-device/docs/sessions.',
+    'Read [sessions](https://agent-device.dev/docs/sessions#find-a-sessions-logs-and-artifacts).',
+    'Bare: https://agent-device.dev/docs/sessions#gone',
+    '[Missing](https://agent-device.dev/docs/retired) and [repo](CONTRIBUTING.md).',
+    'Elsewhere: https://agent-device.dev-old/docs/retired',
+    'End of sentence: https://agent-device.dev/docs/sessions.',
   ].join('\n');
   assert.deepEqual(plant({}, readme), [
-    'README.md:2: link "https://oss.callstack.com/agent-device/docs/sessions#gone" → no heading "gone"',
-    'README.md:3: link "https://oss.callstack.com/agent-device/docs/retired" → no such page',
+    'README.md:2: link "https://agent-device.dev/docs/sessions#gone" → no heading "gone"',
+    'README.md:3: link "https://agent-device.dev/docs/retired" → no such page',
   ]);
 });

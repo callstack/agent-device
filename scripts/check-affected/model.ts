@@ -568,7 +568,7 @@ function isAgentGuidance(file: string): boolean {
 // The user docs: README and the docs site pages. `check:doc-prose` reads them; `check:doc-links`
 // resolves their links and also reruns when the website manifest or config that decide what the
 // built site renders change.
-const SITE_BUILD_INPUTS = new Set(['website/package.json', 'website/rspress.config.ts']);
+const SITE_BUILD_INPUTS = new Set(['website/package.json', 'website/astro.config.mjs']);
 
 // The generated capabilities page. Its cells are a read of the runtime facts, so the
 // page and the generator that renders it share one drift gate.
