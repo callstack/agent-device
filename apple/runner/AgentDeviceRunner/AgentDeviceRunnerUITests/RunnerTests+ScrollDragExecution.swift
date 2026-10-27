@@ -113,9 +113,7 @@ extension RunnerTests {
     )
   }
 
-  /// The one XCTest coordinate drag both lanes run: keyboard trimming, the visualization frame of
-  /// the trimmed points, timing, the unsupported outcome and the response shape. Each caller owns
-  /// its hold duration, and only the synthesized-swipe fallback passes `fallback` evidence.
+  /// Callers own the hold duration; only synthesized fallback attaches `fallback` evidence.
   @MainActor
   private func executeCoordinateDrag(
     activeApp: XCUIApplication,

@@ -30,6 +30,8 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
+    let referenceFrame = app.frame
+    XCTAssertFalse(referenceFrame.isEmpty)
     let command = try runnerCommandFixture(
       """
       {"command":"drag","commandId":"coordinate-drag","x":160,"y":150,"x2":40,"y2":150}
@@ -44,8 +46,8 @@ extension RunnerTests {
     XCTAssertEqual(response.data?.y, 150)
     XCTAssertEqual(response.data?.x2, 40)
     XCTAssertEqual(response.data?.y2, 150)
-    XCTAssertGreaterThan(response.data?.referenceWidth ?? 0, 0)
-    XCTAssertGreaterThan(response.data?.referenceHeight ?? 0, 0)
+    XCTAssertEqual(response.data?.referenceWidth, Double(referenceFrame.width))
+    XCTAssertEqual(response.data?.referenceHeight, Double(referenceFrame.height))
     XCTAssertNil(response.data?.gestureFallback)
     XCTAssertNil(response.data?.gestureFallbackMessage)
     XCTAssertNil(response.data?.gestureFallbackHint)
