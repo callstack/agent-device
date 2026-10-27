@@ -69,7 +69,7 @@ export async function prepareSimulatorStatusBarForScreenshot(
       previousOverrides = await readSimulatorStatusBarOverrides(device);
       canRestorePreviousOverrides = true;
     } catch (error) {
-      emitStatusBarDiagnostic(device, 'snapshot_failed', error);
+      emitSimulatorStatusBarDiagnostic(device, 'snapshot_failed', error);
     }
   }
 
@@ -79,7 +79,7 @@ export async function prepareSimulatorStatusBarForScreenshot(
     }
     await applySimulatorStatusBarOverrideArgs(device, DETERMINISTIC_SCREENSHOT_STATUS_BAR_ARGS);
   } catch (error) {
-    emitStatusBarDiagnostic(device, 'prepare_failed', error);
+    emitSimulatorStatusBarDiagnostic(device, 'prepare_failed', error);
   }
 
   return async () => {
@@ -234,7 +234,11 @@ function isCellularDataNetworkType(value: string | undefined): boolean {
   return Boolean(value && value !== 'hide' && value !== 'wifi');
 }
 
-function emitStatusBarDiagnostic(
+/**
+ * Records one best-effort status bar step that failed, under `ios_screenshot_status_bar_<phase>`.
+ * A status bar problem never decides a screenshot's outcome, so callers swallow the error.
+ */
+export function emitSimulatorStatusBarDiagnostic(
   device: DeviceInfo,
   phase: 'snapshot_failed' | 'prepare_failed' | 'restore_failed',
   error: unknown,
