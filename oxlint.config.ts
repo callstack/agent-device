@@ -153,6 +153,13 @@ export default defineConfig({
       },
     },
     {
+      // The Astro site: page scripts run in the browser, and `.astro` frontmatter has the
+      // `Astro` global.
+      files: ['website/**'],
+      env: { browser: true },
+      globals: { Astro: 'readonly' },
+    },
+    {
       files: ['examples/test-app/src/**/*.tsx'],
       rules: {
         'react/immutability': 'off',
