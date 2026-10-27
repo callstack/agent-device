@@ -1105,7 +1105,7 @@ url: /agent-device/docs/capabilities.md
 # Capabilities
 
 The target tables below are generated from the runtime command-admission facts that back the `capabilities` command: a command that leaves the code leaves this page. Labels, limits, and integration rows are maintained beside the generator, and command availability does not establish support for every operation, subcommand, or device model.
-It covers agent-device 0.21.33-dev, generated 2026-10-26.
+It covers agent-device 0.21.34-dev, generated 2026-10-27.
 
 **Yes** means the facts admit every command in that row on the target and every operation the row advertises. **No** means at least one is refused. A qualified cell names the operations that answer there. Targets that share the same available operations print as one column.
 
