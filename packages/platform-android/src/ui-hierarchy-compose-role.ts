@@ -1,4 +1,4 @@
-import { intersectArea } from '@agent-device/kernel/screenshot-geometry';
+import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
 import { isAgentTarget, type AndroidNode, type AndroidUiHierarchy } from './ui-hierarchy-node.ts';
@@ -52,6 +52,5 @@ function isComposeRoleNode(child: AndroidNode, parent: AndroidNode): boolean {
 }
 
 function liesInside(inner: Rect | undefined, outer: Rect | undefined): boolean {
-  if (!inner || !outer || inner.width <= 0 || inner.height <= 0) return false;
-  return intersectArea(inner, outer) === inner.width * inner.height;
+  return isPositiveFiniteRect(inner) && outer !== undefined && rectContains(outer, inner);
 }
