@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-3980/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3980/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3980/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-3980/static/js/index.1474dfc88f.js"></script>
+<script defer src="/agent-device/pr-preview/pr-3980/static/js/index.b3c7672ce2.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -120,7 +120,7 @@
 <li><code>back</code> uses app-owned back navigation: visible in-app back UI on Apple targets, and the back keyevent on Android. <code>--in-app</code> names this default explicitly.</li>
 <li>On iOS, a single-screen iPhone or an iPad whose app provably fills its screen, <code>back</code> can use a top-leading tap when the app tree is unreadable. It compares the screen before and after the tap. If the screen cannot be captured, the command reports an unknown outcome; inspect the screen before you retry.</li>
 <li><code>back --system</code> sends system back input: the Android back keyevent, the iOS back gesture, or the tvOS Siri Remote Menu button. macOS has no system back, so it reports unavailable.</li>
-<li><code>orientation portrait|portrait-upside-down|landscape-left|landscape-right</code> works on iOS and Android mobile targets only. On ADB-backed Android it turns auto-rotate off, and the lock persists after the session ends until something turns it back on.</li>
+<li><code>orientation portrait|portrait-upside-down|landscape-left|landscape-right</code> works on iOS and Android mobile targets only. On ADB-backed Android it turns auto-rotate off, and the lock persists after the session ends until something turns it back on. A foldable iPhone simulator (iPhone Duo) refuses <code>portrait-upside-down</code>, and refuses every rotation in a scoped simulator set (<code>--ios-simulator-device-set</code>).</li>
 <li><code>orientation auto</code> hands rotation back to the sensor on ADB-backed Android, local or Limrun (<code>accelerometer_rotation=1</code>, <code>user_rotation</code> untouched), and reports <code>orientation: &quot;auto&quot;</code>. It does not wait for the display to rotate, because there is no target rotation: the sensor decides, and an emulator usually settles on portrait. Every other backend refuses <code>auto</code> with <code>UNSUPPORTED_OPERATION</code>.</li>
 <li><code>action-button</code> presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no <code>--settle</code>, and it doesn&#x27;t activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with <code>UNSUPPORTED_OPERATION</code>.</li>
 <li><code>action-button</code> reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.</li>
