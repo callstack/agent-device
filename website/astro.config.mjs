@@ -54,7 +54,7 @@ export default defineConfig({
         Footer: './src/components/starlight/Footer.astro',
       },
       social: [{ icon: 'github', label: 'GitHub', href: repo }],
-      editLink: { baseUrl: `${repo}/edit/main/${siteDir}/src/content/docs/` },
+      editLink: { baseUrl: `${repo}/edit/main/${siteDir}/` },
       head: [
         // The accent as CSS variables (src/site/brand.ts), read by theme.css and docs.css.
         { tag: 'style', content: brandCss },

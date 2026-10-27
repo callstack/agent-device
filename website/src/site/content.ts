@@ -208,8 +208,8 @@ export const jobs = [
 
 /**
  * Who uses agent-device. Every entry is backed by a public source, checked on 2026-10-27:
- * code in the adopter's own public repo, or a post they or Callstack published. Names only, no
- * logos, until each company agrees to the use of its trademark. Do not add entries without a
+ * code in the adopter's own public repo, or a post they or Callstack published. Featured
+ * adopters show their official mark (`logo`) on the home page. Do not add entries without a
  * source (the README lists some that have none).
  */
 export type Adopter = {
@@ -358,7 +358,7 @@ export const adopters: Adopter[] = [
     sources: [
       {
         text: '1k-ui-verify skill',
-        href: 'https://github.com/OneKeyHQ/app-monorepo/blob/main/.skillshare/skills/1k-ui-verify/SKILL.md',
+        href: 'https://github.com/OneKeyHQ/app-monorepo/blob/x/.skillshare/skills/1k-ui-verify/SKILL.md',
       },
     ],
   },
