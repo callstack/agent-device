@@ -8,7 +8,7 @@ import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/syste
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { tvRemoteButtonsForPlatform } from '@agent-device/contracts/tv-remote';
 import {
-  hasAppleActionButton,
+  isHandheldAppleDevice,
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
@@ -149,15 +149,15 @@ const actionButtonOsUnavailable = Object.freeze({
   hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
 } as const);
 /**
- * The leaf reading is {@link hasAppleActionButton}, the same rule a provider owner reads; what this
- * owner adds is its kind gate. The leaf is the whole claim: which model inside it carries the button
- * is a hardware question the runner answers with `hasHardwareButton(.action)`, never a guess here.
- * iPhone and iPad is deliberately not {@link appleMobileInputEligible}, which is `orientation`'s
- * reading and admits visionOS — a headset has a Digital Crown and no Action Button.
+ * The leaf reading is {@link isHandheldAppleDevice}, the same rule a provider owner reads; what
+ * this owner adds is its kind gate. `DeviceInfo` records no model identifier, so which iPhone or
+ * iPad carries the button is a hardware question the runner answers with
+ * `hasHardwareButton(.action)`. iPhone and iPad is deliberately not
+ * {@link appleMobileInputEligible}, which is `orientation`'s reading and admits visionOS.
  */
 function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return actionButtonKindUnavailable;
-  return hasAppleActionButton(device) ? available : actionButtonOsUnavailable;
+  return isHandheldAppleDevice(device) ? available : actionButtonOsUnavailable;
 }
 
 const volumeButtonOsUnavailable = Object.freeze({
@@ -173,11 +173,11 @@ const volumeButtonSimulatorUnavailable = Object.freeze({
 /**
  * `XCUIDevice.press(.volumeUp/.volumeDown)` is simulator-unavailable in the XCUITest header, so
  * the local runner presses volume on a physical iPhone or iPad only. The iPhone/iPad leaf read is
- * {@link hasAppleActionButton}; tvOS, macOS, watchOS and visionOS have no volume key to press and
- * hear that refusal, not the simulator one (#3848 review).
+ * {@link isHandheldAppleDevice}; tvOS, macOS, watchOS and visionOS have no volume key to press and
+ * hear that refusal, not the simulator one.
  */
 function appleVolumeButtonFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!hasAppleActionButton(device)) return volumeButtonOsUnavailable;
+  if (!isHandheldAppleDevice(device)) return volumeButtonOsUnavailable;
   if (device.kind !== 'device') return volumeButtonSimulatorUnavailable;
   return available;
 }
