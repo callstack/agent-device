@@ -1,16 +1,13 @@
 name: Docs
 
 # ci.yml ignores docs paths, so docs-only PRs need their own lane. The links
-# gate builds the site and checks the rendered pages, so the Astro version
-# (website/package.json, the lockfile), its config and the site's own pages and
-# components re-run it as well.
+# gate builds the site and checks the rendered pages, so anything in website/,
+# the lockfile and server.json (the MCP manifest's source) re-run it as well.
 on:
   pull_request:
     paths:
-      - 'website/docs/**'
-      - 'website/package.json'
-      - 'website/astro.config.mjs'
-      - 'website/src/**'
+      - 'website/**'
+      - 'server.json'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'
@@ -28,10 +25,8 @@ on:
     branches:
       - main
     paths:
-      - 'website/docs/**'
-      - 'website/package.json'
-      - 'website/astro.config.mjs'
-      - 'website/src/**'
+      - 'website/**'
+      - 'server.json'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'

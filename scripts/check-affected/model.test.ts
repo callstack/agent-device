@@ -231,7 +231,11 @@ test('user docs pages and README select the docs-links and docs-prose checks', (
     assert.deepEqual(result.checks, ['docs-links', 'docs-prose'], file);
     assert.deepEqual(result.docsOnlyPaths, []);
   }
-  for (const file of ['website/package.json', 'website/astro.config.mjs']) {
+  for (const file of [
+    'website/package.json',
+    'website/astro.config.mjs',
+    'website/src/content.config.ts',
+  ]) {
     assert.deepEqual(plan([file]).checks, ['docs-links'], file);
   }
   assert.deepEqual(plan(['website/docs/docs/commands.md']).checks, [
