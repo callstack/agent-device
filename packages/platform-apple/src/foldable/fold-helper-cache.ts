@@ -4,11 +4,13 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { runAppleToolCommand } from '../core/tool-provider.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { createNativeBuildDeadline, type NativeBuildDeadline } from '../native-build/deadline.ts';
 import { NativeBuildError } from '../native-build/errors.ts';
 import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
-import { readHostToolchainIdentity } from '../native-build/toolchain-identity.ts';
+import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  readHostToolchainIdentity,
+} from '../native-build/toolchain-identity.ts';
 import {
   ensureNativeBuildCacheEntry,
   execNativeBuildClang,

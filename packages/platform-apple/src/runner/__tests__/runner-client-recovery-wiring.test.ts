@@ -3,7 +3,6 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { RunnerSession } from '../runner-session.ts';
@@ -11,7 +10,6 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
 import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
-import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import { createRunnerPhaseBudget, requireRunnerPhaseRemainingMs } from '../runner-phase-budget.ts';
 import { captureDiagnostics } from './runner-session-fixtures.ts';
 import {
@@ -751,20 +749,6 @@ test.each([
     arrange: () => {
       ensureRunnerSessionMock.mockImplementation(async () =>
         requireRunnerPhaseRemainingMs(createRunnerPhaseBudget(0, undefined), 'runner_startup'),
-      );
-      return { run: readSnapshot, sends: sessionStarts };
-    },
-  },
-  {
-    producer: 'an unreadable toolchain',
-    reason: 'apple_toolchain_probe_unavailable',
-    arrange: () => {
-      resetAllProcessMemosForTests();
-      appleRunnerTestHost.update({
-        runCmdSync: () => ({ exitCode: 1, stdout: '', stderr: 'xcode-select: error' }),
-      });
-      ensureRunnerSessionMock.mockImplementation(async () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR),
       );
       return { run: readSnapshot, sends: sessionStarts };
     },

@@ -15,7 +15,6 @@ import {
   writeRunnerLease,
   type RunnerLease,
 } from '../runner-lease.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -306,7 +305,6 @@ test('building a new runner cache key sweeps the keys beside it', async () => {
     return { exitCode: 0, stdout: '', stderr: '' };
   });
   appleRunnerTestHost.update({
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     runCmdStreaming,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',

@@ -1,15 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { hasCachedAppleRunnerArtifact } from '../runner-xctestrun.ts';
 
-const mockRunCmdSync = vi.fn();
-
 beforeEach(() => {
-  appleRunnerTestHost.update({ runCmdSync: mockRunCmdSync });
+  appleRunnerTestHost.update({});
 });
 
 const simulator: DeviceInfo = {
@@ -24,16 +22,6 @@ const simulator: DeviceInfo = {
 let derivedDir: string;
 
 beforeEach(() => {
-  mockRunCmdSync.mockImplementation((command: string, args: string[]) => {
-    if (command === 'xcodebuild') {
-      return { exitCode: 0, stdout: 'Xcode 26.2\nBuild version 17C52\n', stderr: '' };
-    }
-    return {
-      exitCode: 0,
-      stdout: args.includes('--show-sdk-build-version') ? '23C53\n' : '26.2\n',
-      stderr: '',
-    };
-  });
   derivedDir = mkdtempForTestSync('agent-device-cache-probe-');
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derivedDir;
 });

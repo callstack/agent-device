@@ -197,8 +197,8 @@ export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
   options: {
     /**
-     * The startup phase's one budget: the fingerprint check below spends from it, its
-     * cancellation reaches those probes, and the adopted session inherits the rest (#2422).
+     * The startup phase's one budget: its cancellation stops the fingerprint check below, and the
+     * adopted session inherits the rest (#2422).
      */
     budget?: RunnerPhaseBudget;
     expectedRunnerSessionId?: string;

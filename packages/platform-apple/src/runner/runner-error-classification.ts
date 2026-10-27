@@ -87,8 +87,8 @@ const hasRunnerTokenUnsupportedReason: RunnerErrorDetailsMatch = (details) =>
 /**
  * The runner refused the command before running it while abandoned main-thread work drains (#1105).
  * A resend keys on this code, never on `details.retriable`: that flag tells a caller's poll to try
- * again, and its other producers (a not-running app, a spent startup budget, an unavailable
- * toolchain probe, an external provider) must not be resent inside one request.
+ * again, and its other producers (a not-running app, a spent startup budget, an external
+ * provider) must not be resent inside one request.
  */
 const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
   details.runnerErrorCode === RUNNER_BUSY_RUNNER_CODE;

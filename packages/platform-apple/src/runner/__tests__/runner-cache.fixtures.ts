@@ -5,13 +5,8 @@ import { onTestFinished } from 'vitest';
 import { writeRunnerCacheMetadataForArtifacts } from '../runner-cache.ts';
 import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import type { ExistingXctestrunState, RunnerXctestrunCacheMetadata } from '../runner-cache.ts';
-import { stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-
-// The identity half reads the host toolchain, so the fixture that builds a manifest answers those
-// probes itself: a consumer must not have to know it is importing an Xcode-touching helper.
-stubAppleToolchainProbes();
 
 /**
  * A cache root and a content manifest for the tests that decide what a manifest certifies: the

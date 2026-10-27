@@ -12,7 +12,6 @@ import {
   makeBackgroundRunner,
   runnerResponse,
 } from './runner-session-fixtures.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -136,7 +135,6 @@ beforeEach(async () => {
   builds = [];
   appleRunnerTestHost.update({
     runCmdStreaming: mockBuildForTesting,
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     runCmdBackground: mockRunCmdBackground,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',
@@ -158,7 +156,6 @@ beforeEach(async () => {
   vi.resetAllMocks();
   appleRunnerTestHost.update({
     runCmdStreaming: mockBuildForTesting,
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',
   });

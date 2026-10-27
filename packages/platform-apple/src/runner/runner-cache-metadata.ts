@@ -16,7 +16,7 @@ import {
 import {
   requireRunnerToolchainFingerprint,
   type RunnerToolchainFingerprint,
-} from './runner-toolchain-probe.ts';
+} from './runner-toolchain-identity.ts';
 import type { RunnerPhaseBudget } from './runner-phase-budget.ts';
 import { computeRunnerSourceFingerprint } from './runner-source.ts';
 
@@ -138,7 +138,10 @@ export function resolveExpectedRunnerCacheMetadata(
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
-    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind), budget),
+    ...requireRunnerToolchainFingerprint(
+      resolveRunnerSdkName(platformName, device.kind),
+      budget?.signal,
+    ),
     platformName,
     deviceKind: device.kind,
     target: device.target ?? 'mobile',
