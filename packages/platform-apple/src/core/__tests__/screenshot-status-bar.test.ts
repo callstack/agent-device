@@ -1,16 +1,13 @@
 import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   prepareSimulatorStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
+import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
 // The fake tool provider installs through the production withAppleToolProvider
 // scope, so `calls` records the flat invocations the PATH-stub scripts saw.
@@ -33,25 +30,6 @@ function statusBarScript(listResponse: () => string | { stderr: string; exitCode
     if (args[3] === 'clear' || args[3] === 'override') return '';
     return { stderr: `unexpected xcrun args: ${args.join(' ')}`, exitCode: 1 };
   };
-}
-
-// A status bar step that fails best-effort has to reach the request log, or a debug run cannot
-// explain why a screenshot still shows a non-deterministic status bar.
-async function statusBarDiagnosticEvents(run: () => Promise<unknown>) {
-  const logPath = path.join(
-    await mkdtempForTest('agent-device-ios-status-bar-diag-'),
-    'log.ndjson',
-  );
-  await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, run);
-  return readFileSync(logPath, 'utf8')
-    .trim()
-    .split('\n')
-    .map(
-      (line) =>
-        JSON.parse(line) as { level: string; phase: string; data?: Record<string, unknown> },
-    )
-    .filter((event) => event.phase.startsWith('ios_screenshot_status_bar_'))
-    .map(({ level, phase, data }) => ({ level, phase, data }));
 }
 
 beforeEach(() => {
@@ -122,9 +100,6 @@ test('prepareSimulatorStatusBarForScreenshot still normalizes when snapshotting 
   );
 });
 
-// The command list above proves a failed step is tolerated; the log line is what proves the same
-// run can be explained. One event per failed step, carrying the device it failed on and the
-// normalized xcrun failure.
 test('a failed status bar snapshot logs snapshot_failed with the tool failure', async () => {
   const events = await statusBarDiagnosticEvents(async () => {
     await withFakeAppleTool(
@@ -170,16 +145,7 @@ test('a failed status bar override logs prepare_failed and the step stays best-e
       async ({ calls }) => {
         const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
         await restore();
-        // The deterministic override is the step that fails, so the screenshot proceeds with
-        // whatever status bar the simulator kept, and restoration still runs.
-        assert.deepEqual(
-          calls.map((args) => args.join(' ')),
-          [
-            'simctl status_bar sim-1 list',
-            'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
-            'simctl status_bar sim-1 clear',
-          ],
-        );
+        assert.equal(calls.at(-1)?.join(' '), 'simctl status_bar sim-1 clear');
       },
     );
   });

@@ -1,6 +1,6 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs, existsSync, readFileSync } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RunnerScreenCaptureMetadata } from '@agent-device/contracts/screen-capture-contract';
 import { bindTestCommandHost } from '@agent-device/test-kit';
@@ -65,6 +65,7 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
+import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
@@ -107,15 +108,6 @@ async function waitForFileText(filePath: string, attempts = 20): Promise<string>
     }
   }
   throw lastError;
-}
-
-function statusBarItemLogLines(logPath: string) {
-  if (!existsSync(logPath)) return [];
-  return readFileSync(logPath, 'utf8')
-    .trim()
-    .split('\n')
-    .filter((line) => line.includes('"ios_screenshot_status_bar_'))
-    .map((line) => JSON.parse(line) as { level: string; phase: string; data?: unknown });
 }
 
 test('shouldRetryIosSimulatorScreenshot detects simulator screen-surface timeout', () => {
@@ -371,27 +363,16 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
-// The screenshot flow owns the prepare and restore steps around a capture, so it owns reporting
-// that they failed. Both must go through the status bar module's emitter: a second emitter here
-// would drift on the phase vocabulary or drop the normalized tool failure.
-async function statusBarDiagnosticEvents(run: () => Promise<void>) {
-  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-status-bar-diag-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    await withDiagnosticsScope({ command: 'screenshot', debug: true, logPath }, run);
-    return statusBarItemLogLines(logPath);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
-}
-
-function statusBarItemSummary(event: { level: string; phase: string; data?: unknown }) {
-  const data = event.data as { deviceId?: string; exitCode?: number };
+function statusBarItemSummary(event: {
+  level: string;
+  phase: string;
+  data?: Record<string, unknown>;
+}) {
   return {
     level: event.level,
     phase: event.phase,
-    deviceId: data.deviceId,
-    exitCode: data.exitCode,
+    deviceId: event.data?.deviceId,
+    exitCode: event.data?.exitCode,
   };
 }
 
@@ -408,7 +389,7 @@ test('captureSimulatorScreenshotWithFallback logs a status bar preparation failu
       env: process.env,
       appBundleId: 'com.example.app',
       normalizeStatusBar: true,
-      deps: { normalizeDensity: async () => {} },
+      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
     });
   });
 
@@ -435,7 +416,7 @@ test('captureSimulatorScreenshotWithFallback logs a status bar restoration failu
       env: process.env,
       appBundleId: 'com.example.app',
       normalizeStatusBar: true,
-      deps: { normalizeDensity: async () => {} },
+      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
     });
   });
 
