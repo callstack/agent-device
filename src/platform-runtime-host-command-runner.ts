@@ -7,9 +7,8 @@ import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 
 /**
- * The host command port both runtime hosts expose, built from the host environment each was handed
- * rather than the process one (#3794). A request that names no `env` is dispatched without an
- * environment, so the command host enclosing the call keeps owning what that command inherits.
+ * Uses host.env for lookup and explicit request overlays. Only request.cwd sets the spawn directory.
+ * Without request.env, the enclosing command host owns environment inheritance.
  */
 export function createHostCommandRunner(host: HostEnvironment): HostCommandRunner {
   const env = host.env;

@@ -11,7 +11,6 @@ import {
 } from '@agent-device/host-kit/command';
 import { createHostCommandRunner } from './platform-runtime-host-command-runner.ts';
 
-/** A child that answers only after a pause, so a deadline or a cancel always arrives first. */
 const DELAYED_CHILD = ['-e', 'setTimeout(() => process.stdout.write("finished"), 300)'];
 
 type DispatchedCommand = Readonly<{
@@ -153,7 +152,11 @@ test('the deadline a request names bounds the command the port runs', async () =
   const commands = createHostCommandRunner({ env: process.env, cwd: process.cwd() });
 
   await expect(
-    commands.run({ executable: process.execPath, args: DELAYED_CHILD, timeoutMs: 100 }),
+    commands.run({
+      executable: process.execPath,
+      args: ['-e', 'setTimeout(() => {}, 10_000)'],
+      timeoutMs: 100,
+    }),
   ).rejects.toSatisfy(isCommandTimeoutError);
 });
 
