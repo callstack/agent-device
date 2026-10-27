@@ -224,6 +224,29 @@ test('persists every ownership identity field of the bound device', () => {
   });
 });
 
+test('omits absent optional ownership fields from the persisted device identity', () => {
+  const envelope = createProviderAppLogEnvelope({
+    provider: 'Example',
+    codec,
+    sessionId: 'one',
+    device: {
+      id: 'android-1',
+      platform: 'android',
+      name: 'Android',
+      kind: 'device',
+    },
+    owner,
+    fence,
+    descriptor: exampleDescriptor('/sessions/one/app.log'),
+  });
+
+  expect(envelope.device).toStrictEqual({
+    id: 'android-1',
+    family: 'android',
+    kind: 'device',
+  });
+});
+
 test('refuses to persist an Apple device without its appleOs identity', () => {
   expect(() =>
     createProviderAppLogEnvelope({
