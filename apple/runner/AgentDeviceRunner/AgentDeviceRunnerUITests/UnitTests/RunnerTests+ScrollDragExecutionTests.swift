@@ -24,6 +24,34 @@ private final class RunnerSynthesizedSwipeFailureStub: NSObject {
 extension RunnerTests {
 #if os(iOS)
   @MainActor
+  func testCoordinateDragPreservesFrameWithoutFallbackDiagnostics() throws {
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      """
+      {"command":"drag","commandId":"coordinate-drag","x":160,"y":150,"x2":40,"y2":150}
+      """
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.message, "dragged")
+    XCTAssertEqual(response.data?.x, 160)
+    XCTAssertEqual(response.data?.y, 150)
+    XCTAssertEqual(response.data?.x2, 40)
+    XCTAssertEqual(response.data?.y2, 150)
+    XCTAssertGreaterThan(response.data?.referenceWidth ?? 0, 0)
+    XCTAssertGreaterThan(response.data?.referenceHeight ?? 0, 0)
+    XCTAssertNil(response.data?.gestureFallback)
+    XCTAssertNil(response.data?.gestureFallbackMessage)
+    XCTAssertNil(response.data?.gestureFallbackHint)
+  }
+
+  @MainActor
   func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
     let selector = NSSelectorFromString(
       "synthesizeSwipeWithApplication:resolvedWindow:x:y:x2:y2:durationMs:"
