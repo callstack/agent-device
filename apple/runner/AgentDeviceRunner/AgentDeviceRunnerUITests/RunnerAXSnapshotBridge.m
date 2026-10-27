@@ -183,9 +183,10 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 }
 
 // Chains element-rooted snapshot requests from depth-capped frontier nodes. The AX server's depth
-// limit is per-request, so re-rooting the same request at a frontier node's live element reaches
-// content the app-rooted request could not, without passing a larger depth parameter. Bounded by
-// call count, the shared node budget, and the capture deadline checked between requests.
+// limit is per-request (kAXErrorIllegalArgument above a tree-size-dependent value), so re-rooting
+// the same request at a frontier node's live element reaches content the app-rooted request could
+// not, without passing a larger depth parameter. Bounded by call count, the shared node budget,
+// and the capture deadline checked between requests.
 + (nullable NSDictionary *)extendSnapshotFrontiers:(NSMutableArray<RunnerAXSnapshotFrontier *> *)frontiers
                                           axClient:(id)axClient
                                         attributes:(NSArray *)attributes
