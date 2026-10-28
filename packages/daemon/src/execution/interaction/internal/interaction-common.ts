@@ -13,8 +13,10 @@ import {
   isSensitiveFillText,
   sensitiveFillPlaceholder,
 } from '@agent-device/ad-script';
-import { parameterizeRecordedFillPayload } from '@agent-device/selectors/parameterized-recorded-fill';
-import { redactFillReadBack } from '../../../core/fill-read-back-redaction.ts';
+import {
+  parameterizeRecordedFillPayload,
+  redactFillReadBack,
+} from '@agent-device/selectors/parameterized-recorded-fill';
 import type { InteractionFinalizationOperations } from '../../../core/interaction/internal/types.ts';
 
 export function finalizeTouchInteraction(params: {

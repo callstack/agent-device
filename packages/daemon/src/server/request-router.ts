@@ -34,7 +34,6 @@ import type {
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from '../core/session-store.ts';
-import { redactFillFailureReadBack } from '../core/fill-read-back-redaction.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,
@@ -69,7 +68,10 @@ import {
   sensitiveFillPlaceholder,
 } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
-import { parameterizeSensitiveString } from '@agent-device/selectors/parameterized-recorded-fill';
+import {
+  parameterizeSensitiveString,
+  redactFillFailureReadBack,
+} from '@agent-device/selectors/parameterized-recorded-fill';
 import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
 import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
