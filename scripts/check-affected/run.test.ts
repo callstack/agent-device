@@ -256,12 +256,22 @@ test('a test-only change leaves the full unit suite to CI', async () => {
 });
 
 test('the related run still stands in for provider-integration on a narrowed plan', async () => {
-  assert.equal(
-    await runFailingOn('test:integration:provider', [
-      'packages/platform-apple/src/runner/runner-cache-metadata.ts',
-    ]),
-    0,
-  );
+  const changedFiles = ['packages/platform-apple/src/runner/runner-cache-metadata.ts'];
+  const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
+  assert.equal(plan.failOpen, false);
+  assert.ok(plan.checks.includes('provider-integration'));
+  const executed: string[][] = [];
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute: async (command) => {
+      executed.push(command);
+      return 0;
+    },
+    cwd: '.',
+    changedFiles,
+  });
+  assert.equal(code, 0);
+  assert.ok(executed.some((command) => command.includes('related')));
+  assert.ok(!executed.some((command) => command.includes('test:integration:provider')));
 });
 
 test('runChecks fails fast on a stale install before running format or any other check', async () => {
