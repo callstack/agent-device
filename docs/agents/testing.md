@@ -41,7 +41,7 @@ Do not reduce selection to get a pass.
 Read required-check status on the PR.
 The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns full coverage, native builds, device lanes, provider integration, and compatibility that uses history.
-Locally, related tests replace only provider integration.
+On a narrowed plan, related tests replace only provider integration.
 A production source change also runs the unit suite (about 3 minutes), because some unit gates read sources as text.
 Check the Integration Tests and Coverage jobs at the actual PR head.
 For docs-only changes, run the selected documentation checks.
