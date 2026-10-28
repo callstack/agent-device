@@ -176,6 +176,17 @@ async function sessionExit(
   };
 }
 
+/** The AppError a promise rejects with; fails the test when it resolves. */
+async function rejection(promise: Promise<unknown>): Promise<AppError> {
+  try {
+    await promise;
+  } catch (error) {
+    assert.ok(error instanceof AppError, String(error));
+    return error;
+  }
+  throw new Error('expected the promise to reject');
+}
+
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
 function assertPrivate(text: string): void {
@@ -399,7 +410,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
     );
 
   const exited = new FakeAndroidProcess();
-  const exitedFailure = waitFor(exited, 5_000).catch((error: AppError) => error);
+  const exitedFailure = rejection(waitFor(exited, 5_000));
   printed(exited);
   await pause();
   exited.emitExit(1, null);
@@ -410,7 +421,7 @@ test('a startup failure attaches no raw helper stream to its details or the log'
   assert.ok(exitResultOf(exitedError.details ?? {}).stderrTail.endsWith('am: Killed'));
 
   const stalled = new FakeAndroidProcess();
-  const stalledFailure = waitFor(stalled, 50).catch((error: AppError) => error);
+  const stalledFailure = rejection(waitFor(stalled, 50));
   printed(stalled);
   const stalledError = await stalledFailure;
   assertPrivate(JSON.stringify(normalizeError(stalledError)));
