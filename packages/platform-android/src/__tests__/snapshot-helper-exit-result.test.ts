@@ -203,11 +203,8 @@ test('the request log entry for a failed capture carries the instrumentation res
             { helperAdb, helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
           ),
           (error) => {
-            const details = (error as { details?: Record<string, unknown> }).details;
-            assert.equal(
-              (details?.instrumentation as { aborted?: string }).aborted,
-              'System has crashed.',
-            );
+            const details = (error as { details: Record<string, unknown> }).details;
+            assert.equal(readExitResult(details).aborted, 'System has crashed.');
             return true;
           },
         );
@@ -215,15 +212,20 @@ test('the request log entry for a failed capture carries the instrumentation res
     );
 
     const event = await readDiagnostic(logPath, 'android_snapshot_helper_failed');
-    assert.equal((event.data?.instrumentation as { exitCode?: number }).exitCode, 1);
-    assert.equal(
-      (event.data?.instrumentation as { aborted?: string }).aborted,
-      'System has crashed.',
-    );
+    const logged = readExitResult(event.data ?? {});
+    assert.equal(logged.exitCode, 1);
+    assert.equal(logged.aborted, 'System has crashed.');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+function readExitResult(fields: Record<string, unknown>): {
+  exitCode?: number;
+  aborted?: string;
+} {
+  return (fields.instrumentation ?? {}) as { exitCode?: number; aborted?: string };
+}
 
 async function readDiagnostic(
   logPath: string,
