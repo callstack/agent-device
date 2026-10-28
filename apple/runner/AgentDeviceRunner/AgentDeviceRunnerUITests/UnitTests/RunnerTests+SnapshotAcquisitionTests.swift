@@ -66,5 +66,67 @@ extension RunnerTests {
     XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.button, CGRect(x: 30, y: 780, width: 100, height: 30), label: "Left")))
     XCTAssertEqual(matched, [], "a refused element's attributes are not recorded")
   }
+
+  /// The Limrun provider applies the same geometry to its tab bar hit-tests and reads this table too.
+  @MainActor
+  func testCollapsedTabGeometryMatchesGoldenFixture() throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("contracts/fixtures/ios-collapsed-tab-geometry.json")
+    let fixture = try JSONDecoder().decode(CollapsedTabGeometryFixture.self, from: Data(contentsOf: fixtureURL))
+    XCTAssertFalse(fixture.containers.isEmpty)
+    XCTAssertFalse(fixture.candidates.isEmpty)
+    XCTAssertFalse(fixture.rows.isEmpty)
+    for row in fixture.containers {
+      XCTAssertEqual(isCollapsedTabContainer(ElementAttributesFixture(.tabBar, row.frame.cgRect)), row.expected, row.name)
+    }
+    for row in fixture.candidates {
+      XCTAssertEqual(
+        Self.isCollapsedTabCandidate(type: .button, frame: row.frame.cgRect, in: row.container.cgRect),
+        row.expected, row.name
+      )
+    }
+    for row in fixture.rows {
+      XCTAssertEqual(
+        Self.collapsedTabRowFits(midpoints: row.midpoints, containerHeight: row.container.height),
+        row.expected, row.name
+      )
+    }
+  }
+}
+
+private struct CollapsedTabGeometryFixture: Decodable {
+  struct Rect: Decodable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+    var cgRect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+  }
+  struct Container: Decodable {
+    let name: String
+    let frame: Rect
+    let expected: Bool
+  }
+  struct Candidate: Decodable {
+    let name: String
+    let container: Rect
+    let frame: Rect
+    let expected: Bool
+  }
+  struct Row: Decodable {
+    let name: String
+    let container: Rect
+    let midpoints: [Double]
+    let expected: Bool
+  }
+  let containers: [Container]
+  let candidates: [Candidate]
+  let rows: [Row]
 }
 #endif

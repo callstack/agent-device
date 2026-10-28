@@ -96,5 +96,7 @@ function residueIdentity(residue: IosAcquisitionResidue): string {
       return JSON.stringify({ kind: residue.kind, fact: residue.fact });
     case 'fallback-source':
       return JSON.stringify({ kind: residue.kind, producer: residue.producer });
+    case 'collapsed-tab-bar-probe-failed':
+      return JSON.stringify({ kind: residue.kind, reason: residue.reason });
   }
 }

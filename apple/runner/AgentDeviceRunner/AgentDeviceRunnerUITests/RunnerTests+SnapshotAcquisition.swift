@@ -412,6 +412,13 @@ extension RunnerTests {
     return area < containerArea * 0.9 && containerFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
   }
 
+  /// Whether a collapsed tab container's items sit in one row: their vertical midpoints spread no
+  /// more than modest jitter or a short two-row wrap allows, which still rejects unrelated controls.
+  static func collapsedTabRowFits(midpoints: [Double], containerHeight: Double) -> Bool {
+    let rowSpread = (midpoints.max() ?? 0) - (midpoints.min() ?? 0)
+    return rowSpread <= max(24.0, containerHeight * 0.6)
+  }
+
   /// Whether an element names something an agent can address: a label, identifier or value that is
   /// not blank. Candidate types carry no placeholder.
   static func hasCollapsedTabContent(_ attributes: XCUIElementAttributes) -> Bool {
@@ -449,9 +456,9 @@ extension RunnerTests {
 
     if candidates.count < 2 { return [] }
     let rowMidpoints = candidates.map { $0.rect.y + ($0.rect.height / 2) }
-    let rowSpread = (rowMidpoints.max() ?? 0) - (rowMidpoints.min() ?? 0)
-    // Allow modest vertical jitter and short two-row wraps while still rejecting unrelated controls.
-    if rowSpread > max(24.0, Double(containerFrame.height) * 0.6) { return [] }
+    if !Self.collapsedTabRowFits(midpoints: rowMidpoints, containerHeight: Double(containerFrame.height)) {
+      return []
+    }
 
     var seen = Set<String>()
     let uniqueCandidates = candidates.filter { node in

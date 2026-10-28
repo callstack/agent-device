@@ -102,6 +102,8 @@ export function createIosSnapshotAcquisition(
     viewport: IosViewportEvidence;
     keyboard?: SnapshotKeyboardBandFact;
     lineage: IosSnapshotLineage;
+    /** What the provider itself observed it could not acquire. */
+    residue?: readonly IosAcquisitionResidue[];
   }>,
 ): SnapshotRuntimeAcquiredResult {
   const producer = IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES[input.producer];
@@ -114,7 +116,10 @@ export function createIosSnapshotAcquisition(
       viewport: input.viewport,
       ...(input.keyboard ? { keyboard: input.keyboard } : {}),
       lineage: input.lineage,
-      residue: deriveIosSnapshotAcquisitionResidue(producer, input.viewport),
+      residue: Object.freeze([
+        ...deriveIosSnapshotAcquisitionResidue(producer, input.viewport),
+        ...(input.residue ?? []),
+      ]),
     },
   };
 }

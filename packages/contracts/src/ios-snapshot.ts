@@ -152,6 +152,11 @@ export type IosAcquisitionResidue =
   | Readonly<{
       kind: 'fallback-source';
       producer: IosSnapshotProducer;
+    }>
+  /** A collapsed tab bar stayed unexpanded because a hit-test across it did not answer. */
+  | Readonly<{
+      kind: 'collapsed-tab-bar-probe-failed';
+      reason: 'rejected' | 'timed-out';
     }>;
 
 type IosSnapshotAcquisitionForIntent<Intent extends IosAcquisitionIntent> = Readonly<{

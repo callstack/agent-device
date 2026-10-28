@@ -1,0 +1,93 @@
+{
+  "containers": [
+    {
+      "name": "a full-width iPhone tab bar",
+      "frame": { "x": 0, "y": 791, "width": 402, "height": 83 },
+      "expected": true
+    },
+    {
+      "name": "exactly 1.75 times as wide as it is tall",
+      "frame": { "x": 0, "y": 700, "width": 350, "height": 200 },
+      "expected": true
+    },
+    {
+      "name": "narrower than 160 points",
+      "frame": { "x": 0, "y": 834, "width": 150, "height": 40 },
+      "expected": false
+    },
+    {
+      "name": "narrower than 1.75 times its height",
+      "frame": { "x": 0, "y": 694, "width": 300, "height": 180 },
+      "expected": false
+    },
+    {
+      "name": "an empty frame",
+      "frame": { "x": 0, "y": 874, "width": 402, "height": 0 },
+      "expected": false
+    }
+  ],
+  "candidates": [
+    {
+      "name": "an item centered inside the container",
+      "container": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "frame": { "x": 30, "y": 800, "width": 100, "height": 30 },
+      "expected": true
+    },
+    {
+      "name": "the container's own frame",
+      "container": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "frame": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "expected": false
+    },
+    {
+      "name": "a wrapper centered on the container",
+      "container": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "frame": { "x": 0, "y": 515, "width": 400, "height": 600 },
+      "expected": false
+    },
+    {
+      "name": "an item overlapping the container with its center outside",
+      "container": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "frame": { "x": 30, "y": 780, "width": 100, "height": 30 },
+      "expected": false
+    },
+    {
+      "name": "an item with an empty frame",
+      "container": { "x": 20, "y": 800, "width": 360, "height": 31 },
+      "frame": { "x": 30, "y": 800, "width": 0, "height": 30 },
+      "expected": false
+    }
+  ],
+  "rows": [
+    {
+      "name": "items in one row",
+      "container": { "x": 0, "y": 791, "width": 402, "height": 83 },
+      "midpoints": [822, 822, 822],
+      "expected": true
+    },
+    {
+      "name": "a spread within 0.6 of a tall container",
+      "container": { "x": 0, "y": 791, "width": 402, "height": 83 },
+      "midpoints": [800, 849],
+      "expected": true
+    },
+    {
+      "name": "a spread past 0.6 of a tall container",
+      "container": { "x": 0, "y": 791, "width": 402, "height": 83 },
+      "midpoints": [800, 850],
+      "expected": false
+    },
+    {
+      "name": "a spread of 24 points in a short container",
+      "container": { "x": 0, "y": 800, "width": 402, "height": 31 },
+      "midpoints": [805, 829],
+      "expected": true
+    },
+    {
+      "name": "a spread past 24 points in a short container",
+      "container": { "x": 0, "y": 800, "width": 402, "height": 31 },
+      "midpoints": [805, 830],
+      "expected": false
+    }
+  ]
+}

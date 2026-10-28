@@ -106,6 +106,11 @@ function snapshotWarnings(residue: readonly IosAcquisitionResidue[]): { warnings
           `iOS snapshot acquisition did not provide a valid viewport (${entry.reason}); retry with --raw to inspect the acquired tree, while regular presentation requires viewport evidence.`,
         ];
       }
+      if (entry.kind === 'collapsed-tab-bar-probe-failed') {
+        return [
+          `iOS snapshot could not read the tabs of a collapsed tab bar (hit-test ${entry.reason}); the bar is listed without its tabs. Retry the snapshot.`,
+        ];
+      }
       if (entry.kind !== 'unavailable-fact') return [];
       const warning = IOS_SNAPSHOT_FACT_WARNINGS[entry.fact];
       return warning ? [warning] : [];

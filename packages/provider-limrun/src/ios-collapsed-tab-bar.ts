@@ -1,3 +1,4 @@
+import type { IosAcquisitionResidue } from '@agent-device/contracts/ios-snapshot';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
 
@@ -6,10 +7,19 @@ type Point = { x: number; y: number };
 /** One Limrun hit-test: the element tree at `point`, as `client.elementTree(point)` returns it. */
 type LimrunIosHitTest = (point: Point) => Promise<IosTreeNode | IosTreeNode[]>;
 
-/** Horizontal spacing of the hit-tests across a collapsed tab bar; below the 44 pt minimum tab width. */
+type ProbeFailure = Extract<IosAcquisitionResidue, { kind: 'collapsed-tab-bar-probe-failed' }>;
+
+/** Preferred spacing of the hit-tests across a bar. */
 const TAB_PROBE_SPACING = 32;
-/** The most hit-tests one snapshot sends. They run in parallel, so the added latency is about one round trip. */
+/** Widest spacing that still hits every tab: the 44 pt minimum tap target. */
+const MAX_TAB_PROBE_SPACING = 44;
+/** The most hit-tests one snapshot sends, over every candidate bar. */
 const MAX_TAB_PROBES = 24;
+/**
+ * How long a candidate's parallel hit-tests may take. A live probe answers in about 150 ms; the
+ * SDK's own request timeout is 30 s, which would stall the snapshot.
+ */
+const TAB_PROBE_TIMEOUT_MS = 1_500;
 
 /**
  * The tree with a collapsed tab bar's tabs published as its children. A live Limrun iPhone
@@ -17,41 +27,54 @@ const MAX_TAB_PROBES = 24;
  * trait, while hit-tests inside its frame return the tab buttons. This applies the Apple runner's
  * collapsed tab container rule (`isCollapsedTabContainer`, `collapsedTabFallbackNodes`) to those
  * hit-tests; Limrun marks a tab with the `TabButton` trait, which stands in for the runner's
- * candidate types.
+ * candidate types. `contracts/fixtures/ios-collapsed-tab-geometry.json` holds the shared geometry.
+ *
+ * Candidates are probed in tree order until one yields tabs. Expansion is all or nothing: when a
+ * candidate's hit-test fails, that bar keeps its reported shape, the residue says why, and no
+ * further candidate is probed. A partial tab set would look complete.
  */
 export async function expandLimrunCollapsedTabBar(
   tree: IosTreeNode | IosTreeNode[],
   viewport: Rect | null,
   hitTest: LimrunIosHitTest,
-): Promise<IosTreeNode[]> {
+): Promise<{ tree: IosTreeNode[]; residue: ProbeFailure[] }> {
   const roots = Array.isArray(tree) ? tree : [tree];
-  const bar = viewport ? findCollapsedTabBar(roots, viewport) : undefined;
-  if (!bar) return roots;
-  const hits = await Promise.all(tabProbePoints(bar.frame).map(hitTest));
-  const tabs = collapsedTabBarTabs(bar.frame, hits.flatMap(flattenHit));
-  if (tabs.length === 0) return roots;
-  const rebuild = (node: IosTreeNode): IosTreeNode => {
-    if (node === bar.node) return { ...node, children: tabs };
-    const children = readIosNodeChildren(node);
-    return children.length === 0 ? node : { ...node, children: children.map(rebuild) };
-  };
-  return roots.map(rebuild);
+  if (!viewport) return { tree: roots, residue: [] };
+  let remaining = MAX_TAB_PROBES;
+  for (const bar of collapsedTabBars(roots, viewport)) {
+    const points = tabProbePoints(bar.frame, remaining);
+    if (!points) break;
+    remaining -= points.length;
+    const outcome = await probe(points, hitTest);
+    if ('reason' in outcome) return { tree: roots, residue: [outcome] };
+    const tabs = collapsedTabBarTabs(bar.frame, outcome.hits);
+    if (tabs.length > 0) {
+      return { tree: roots.map((root) => withTabs(root, bar.node, tabs)), residue: [] };
+    }
+  }
+  return { tree: roots, residue: [] };
 }
 
-function findCollapsedTabBar(
-  nodes: IosTreeNode[],
-  viewport: Rect,
-): { node: IosTreeNode; frame: Rect } | undefined {
-  for (const node of nodes) {
+function withTabs(node: IosTreeNode, bar: IosTreeNode, tabs: IosTreeNode[]): IosTreeNode {
+  if (node === bar) return { ...node, children: tabs };
+  const children = readIosNodeChildren(node);
+  return children.length === 0
+    ? node
+    : { ...node, children: children.map((child) => withTabs(child, bar, tabs)) };
+}
+
+function collapsedTabBars(roots: IosTreeNode[], viewport: Rect) {
+  const bars: { node: IosTreeNode; frame: Rect }[] = [];
+  const visit = (node: IosTreeNode) => {
     const children = readIosNodeChildren(node);
     const frame = readIosNodeRect(node);
     if (children.length === 0 && frame && isCollapsedTabBar(node, frame, viewport)) {
-      return { node, frame };
+      bars.push({ node, frame });
     }
-    const bar = findCollapsedTabBar(children, viewport);
-    if (bar) return bar;
-  }
-  return undefined;
+    children.forEach(visit);
+  };
+  roots.forEach(visit);
+  return bars;
 }
 
 /** The runner's wide childless container, in the shape Limrun reports an iPhone tab bar. */
@@ -66,13 +89,38 @@ function isCollapsedTabBar(node: IosTreeNode, frame: Rect, viewport: Rect): bool
   );
 }
 
-function tabProbePoints(frame: Rect): Point[] {
-  const count = Math.min(MAX_TAB_PROBES, Math.ceil(frame.width / TAB_PROBE_SPACING));
+/** Points across the bar's middle, or undefined when the budget left cannot reach every tab. */
+function tabProbePoints(frame: Rect, budget: number): Point[] | undefined {
+  const needed = Math.ceil(frame.width / MAX_TAB_PROBE_SPACING);
+  if (budget < needed) return undefined;
+  const count = Math.min(budget, Math.max(needed, Math.ceil(frame.width / TAB_PROBE_SPACING)));
   const y = frame.y + frame.height / 2;
   return Array.from({ length: count }, (_, index) => ({
     x: frame.x + (frame.width * (index + 0.5)) / count,
     y,
   }));
+}
+
+async function probe(
+  points: Point[],
+  hitTest: LimrunIosHitTest,
+): Promise<{ hits: IosTreeNode[] } | ProbeFailure> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<ProbeFailure>((resolve) => {
+    timer = setTimeout(
+      () => resolve({ kind: 'collapsed-tab-bar-probe-failed', reason: 'timed-out' }),
+      TAB_PROBE_TIMEOUT_MS,
+    );
+  });
+  const answered = Promise.all(points.map(hitTest)).then(
+    (hits) => ({ hits: hits.flatMap(flattenHit) }),
+    (): ProbeFailure => ({ kind: 'collapsed-tab-bar-probe-failed', reason: 'rejected' }),
+  );
+  try {
+    return await Promise.race([answered, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function flattenHit(hit: IosTreeNode | IosTreeNode[]): IosTreeNode[] {

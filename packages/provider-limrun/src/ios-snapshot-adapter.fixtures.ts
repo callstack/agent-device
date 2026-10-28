@@ -65,54 +65,83 @@ export function createLimrunSnapshotSession(
   } as unknown as Pick<LimrunIosSession, 'client' | 'instanceId'>;
 }
 
-const IPHONE_SCREEN = { width: 402, height: 874 };
-const IPHONE_TAB_BAR_FRAME = { x: 0, y: 791, width: 402, height: 83 };
+type Point = { x: number; y: number };
+type Screen = { width: number; height: number };
+type Frame = NonNullable<IosTreeNode['frame']>;
 
-/** The iOS 26 tab bar as a live Limrun iPhone reports it: one childless `Group` along the bottom. */
-export function limrunCollapsedTabBarTree(
-  barFrame: IosTreeNode['frame'] = IPHONE_TAB_BAR_FRAME,
+export const IPHONE_SCREEN: Readonly<Screen> = Object.freeze({ width: 402, height: 874 });
+export const IPHONE_TAB_BAR_FRAME: Readonly<Frame> = Object.freeze({
+  x: 0,
+  y: 791,
+  width: 402,
+  height: 83,
+});
+
+/** An app screen whose root holds `children` above one line of text. */
+export function limrunScreenTree(
+  children: IosTreeNode[],
+  screen: Screen = IPHONE_SCREEN,
 ): IosTreeNode[] {
   return [
     {
       type: 'Application',
       AXLabel: 'Agent Device Tester',
-      frame: { x: 0, y: 0, ...IPHONE_SCREEN },
+      frame: { x: 0, y: 0, ...screen },
       children: [
         {
           type: 'StaticText',
           AXLabel: 'Welcome',
-          frame: { x: 16, y: 120, width: 370, height: 30 },
+          frame: { x: 16, y: 120, width: 300, height: 30 },
         },
-        {
-          type: 'Group',
-          AXLabel: 'Tab Bar',
-          role: 'AXGroup',
-          traits: ['Scrollable'],
-          frame: barFrame,
-        },
+        ...children,
       ],
     },
   ];
 }
 
-/** The tab buttons a live Limrun `elementTree(point)` returns inside the tab bar's frame. */
+/** A childless `Group`, the way a live Limrun iPhone reports the iOS 26 tab bar. */
+export function limrunEmptyGroup(frame: Frame, label?: string): IosTreeNode {
+  return {
+    type: 'Group',
+    ...(label ? { AXLabel: label } : {}),
+    role: 'AXGroup',
+    traits: ['Scrollable'],
+    frame,
+  };
+}
+
+export function limrunCollapsedTabBarTree(barFrame: Frame = IPHONE_TAB_BAR_FRAME): IosTreeNode[] {
+  return limrunScreenTree([limrunEmptyGroup(barFrame, 'Tab Bar')]);
+}
+
+/**
+ * The five tab buttons a live Limrun iPhone 16 Pro (iOS 26.4) returned from `elementTree(point)`
+ * inside the test app's tab bar, with Home selected.
+ */
 export const LIMRUN_TAB_BUTTONS: readonly IosTreeNode[] = [
-  limrunTabButton('Home', 25, ['Selected', 'Button', 'TabButton'], 1),
-  limrunTabButton('Catalog', 140, ['Button', 'TabButton'], 0),
-  limrunTabButton('Settings', 299, ['TabButton', 'Button'], 0),
+  limrunTabButton('Home', { x: 25, y: 795, width: 74, height: 54 }, true),
+  limrunTabButton('Catalog', {
+    x: 93.41666666666666,
+    y: 795,
+    width: 74.33333333333334,
+    height: 54,
+  }),
+  limrunTabButton('Form', { x: 162.16666666666666, y: 795, width: 74, height: 54 }),
+  limrunTabButton('Audio', { x: 230.58333333333331, y: 795, width: 74, height: 54 }),
+  limrunTabButton('Settings', { x: 299, y: 795, width: 78, height: 54 }),
 ];
 
-function limrunTabButton(label: string, x: number, traits: string[], value: number): IosTreeNode {
+export function limrunTabButton(label: string, frame: Frame, selected = false): IosTreeNode {
   return {
     type: 'RadioButton',
     role: 'AXRadioButton',
     subrole: 'AXTabButton',
     role_description: 'tab',
     AXLabel: label,
-    AXValue: value,
-    traits,
+    AXValue: selected ? 1 : 0,
+    traits: selected ? ['Selected', 'Button', 'TabButton'] : ['Button', 'TabButton'],
     enabled: true,
-    frame: { x, y: 795, width: 78, height: 54 },
+    frame,
     children: [],
   };
 }
@@ -120,36 +149,45 @@ function limrunTabButton(label: string, x: number, traits: string[], value: numb
 /**
  * A Limrun session whose `elementTree()` returns `tree` and whose `elementTree(point)` hit-tests
  * `hits`: the first whose frame holds the point, else the deepest tree node that does, as one node.
+ * `hitTest` replaces that answer for a point, for example with a rejection.
  */
-export function createLimrunHitTestSession(tree: IosTreeNode[], hits: readonly IosTreeNode[]) {
-  const probes: { x: number; y: number }[] = [];
-  const contains = (node: IosTreeNode, point: { x: number; y: number }) => {
-    const frame = node.frame;
-    return (
-      frame?.x !== undefined &&
-      frame.y !== undefined &&
-      frame.width !== undefined &&
-      frame.height !== undefined &&
-      point.x >= frame.x &&
-      point.x < frame.x + frame.width &&
-      point.y >= frame.y &&
-      point.y < frame.y + frame.height
-    );
-  };
-  const deepestHit = (nodes: readonly IosTreeNode[], point: { x: number; y: number }) => {
+export function createLimrunHitTestSession(
+  tree: IosTreeNode[],
+  hits: readonly IosTreeNode[],
+  options: {
+    screen?: Screen;
+    hitTest?: (point: Point, hit: IosTreeNode) => Promise<IosTreeNode | IosTreeNode[]>;
+  } = {},
+) {
+  const probes: Point[] = [];
+  const deepestHit = (nodes: readonly IosTreeNode[], point: Point) => {
     let hit: IosTreeNode | undefined;
     for (const node of nodes) {
-      if (!contains(node, point)) continue;
+      if (!frameHolds(node.frame, point)) continue;
       hit = deepestHit(node.children ?? [], point) ?? node;
     }
     return hit;
   };
-  const session = createLimrunSnapshotSession(tree, IPHONE_SCREEN);
-  session.client.elementTree = (async (point?: { x: number; y: number }) => {
+  const session = createLimrunSnapshotSession(tree, options.screen ?? IPHONE_SCREEN);
+  session.client.elementTree = (async (point?: Point) => {
     if (!point) return tree;
     probes.push(point);
-    const hit = hits.find((node) => contains(node, point)) ?? deepestHit(tree, point);
-    return { ...hit, children: [] };
+    const found = hits.find((node) => frameHolds(node.frame, point)) ?? deepestHit(tree, point);
+    const hit = { ...found, children: [] };
+    return options.hitTest ? options.hitTest(point, hit) : hit;
   }) as unknown as typeof session.client.elementTree;
   return { session, probes };
+}
+
+function frameHolds(frame: IosTreeNode['frame'], point: Point): boolean {
+  return (
+    frame?.x !== undefined &&
+    frame.y !== undefined &&
+    frame.width !== undefined &&
+    frame.height !== undefined &&
+    point.x >= frame.x &&
+    point.x < frame.x + frame.width &&
+    point.y >= frame.y &&
+    point.y < frame.y + frame.height
+  );
 }
