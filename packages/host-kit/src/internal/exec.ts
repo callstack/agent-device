@@ -275,7 +275,7 @@ function runSpawnedCommand(
         stderr,
         exitCode: finalExitCode,
         stdoutBuffer: stdoutChunks ? Buffer.concat(stdoutChunks) : undefined,
-        ...(child.signalCode ? { signal: child.signalCode } : {}),
+        ...endedBySignal(child),
       });
     }
     // A deadline that fires after the child exited on its own still has to settle: the
@@ -337,6 +337,11 @@ function runSpawnedCommand(
       settle(code);
     });
   });
+}
+
+/** The `signal` field of an `ExecResult` for a child a signal ended; empty for any other exit. */
+function endedBySignal(child: { signalCode: NodeJS.Signals | null }): Pick<ExecResult, 'signal'> {
+  return child.signalCode ? { signal: child.signalCode } : {};
 }
 
 export async function whichCmd(cmd: string, env: EnvMap): Promise<boolean> {
@@ -573,7 +578,7 @@ export function runCmdBackground(
         stdout,
         stderr,
         exitCode: finalExitCode,
-        ...(child.signalCode ? { signal: child.signalCode } : {}),
+        ...endedBySignal(child),
       });
     }
     const settlement = createCommandKillSettlement({

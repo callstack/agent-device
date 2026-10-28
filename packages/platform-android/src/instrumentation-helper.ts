@@ -177,7 +177,7 @@ function holdsSnapshotContent(line: string): boolean {
  * shape, including a fragment whose opening tag is missing. Instrumentation records and every other
  * line stay. This runs on the whole output, before any tail is cut from it.
  */
-export function filterSnapshotContent(output: string): { text: string; removed: boolean } {
+function filterSnapshotContent(output: string): { text: string; removed: boolean } {
   let removed = false;
   const text = output
     .split(/\r?\n/)
