@@ -61,3 +61,14 @@ agent-device artifacts <provider-session-id> --provider <provider> --json
 ```
 
 Providers finalize video and log URLs after the session ends. If the lookup reports artifacts as pending right after `close`, retry it a little later.
+
+## Expo Simulators
+
+[Expo Simulators](https://docs.expo.dev/preview/simulators/introduction/) runs Android Emulators and iOS Simulators on EAS. It is not an `agent-device` provider: an Expo Simulators session provisions its own `agent-device` daemon, and you run the same commands inside the session through `eas simulator:exec`:
+
+```bash
+eas simulator:exec npx agent-device@latest open com.example.app --platform ios
+eas simulator:exec npx agent-device@latest snapshot -i
+```
+
+Expo Simulators is a limited-access preview. For session setup, see Expo's [agent-device guide](https://docs.expo.dev/agents/agent-device/) and [Drive the device](https://docs.expo.dev/preview/simulators/how-to/drive-the-device/).

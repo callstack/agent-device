@@ -1,6 +1,6 @@
 <a href="https://www.callstack.com/open-source?utm_campaign=generic&utm_source=github&utm_medium=referral&utm_content=agent-device" align="center">
   <picture>
-    <img alt="agent-device: mobile app automation and verification for AI coding agents" src="website/docs/public/agent-device-banner.jpg">
+    <img alt="agent-device: open-source device layer for agents" src="website/docs/public/agent-device-banner.jpg">
   </picture>
 </a>
 
@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Glama MCP server](https://glama.ai/mcp/servers/callstack/agent-device/badges/score.svg)](https://glama.ai/mcp/servers/callstack/agent-device)
 
-**Mobile app automation and verification for AI coding agents.** Give coding agents a live app feedback loop through a CLI, built-in MCP server, or typed Node.js API.
+**Open-source device layer for AI coding agents.** Let coding agents control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud, through a CLI, built-in MCP server, or typed Node.js API.
 
 <!-- Intro rule: category line, job pitch with the platform list, works-with/proof lines, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. Every name in the proof lines must link to public evidence. -->
 

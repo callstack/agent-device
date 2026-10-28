@@ -3,7 +3,7 @@ title: Introduction
 description: Learn what agent-device is, where it fits in agentic mobile, TV, desktop, and web development, and how agents use it for app verification, debugging, profiling, QA, and replay.
 ---
 
-`agent-device` is a CLI that lets coding agents verify and QA apps on iOS, Android, HarmonyOS, tvOS, Android TV, Fire TV devices running Fire OS, Amazon Vega OS TV apps in the Vega Virtual Device, macOS (including Electron apps), Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
+`agent-device` is an open-source device layer for coding agents: a CLI, MCP server, and Node.js API that let agents verify and QA apps, locally or in device clouds, on iOS, Android, HarmonyOS, tvOS, Android TV, Fire TV devices running Fire OS, Amazon Vega OS TV apps in the Vega Virtual Device, macOS (including Electron apps), Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
 
 Use it when an agent needs to inspect and operate a running app, not only reason about source code or screenshots.
 
