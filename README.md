@@ -187,7 +187,7 @@ Yes. The typed Node.js client is a public surface over that same runtime, so an 
 
 ### How is it different from Appium, Detox, or Maestro?
 
-With `agent-device`, an agent reads app state and chooses each command at run time. Teams use Appium, Detox, and Maestro to write and maintain test suites. `agent-device` can complement them by saving its runs as `.ad` scripts or exporting them as strict Maestro YAML.
+With `agent-device`, an agent reads app state and chooses each command at run time. For stable, repeatable test suites, use [e2e](https://e2e.tester.army/), a TypeScript testing framework for web and mobile apps. `agent-device` can also save its runs as `.ad` scripts or export them as strict Maestro YAML.
 
 ### Can agent-device run in CI?
 
