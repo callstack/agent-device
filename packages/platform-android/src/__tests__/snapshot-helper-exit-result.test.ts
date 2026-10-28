@@ -280,6 +280,121 @@ test('a large one-line XML report never leaves a sensitive value in the details 
   }
 });
 
+test('ordinary quoted assignments are kept while snapshot attributes are dropped', async () => {
+  const error = await captureError({
+    exitCode: 1,
+    stdout: [
+      'E AndroidRuntime: java.lang.IllegalStateException message="binder died" code="7"',
+      `ret-value" text="${SECRET}" bounds="[0,0][1,1]" />`,
+    ].join('\n'),
+    stderr: 'am: Killed',
+  });
+
+  const result = error.details?.instrumentation as ExitResultFields & {
+    snapshotContentRemoved?: true;
+  };
+  assert.ok(result.outputTail.includes('message="binder died" code="7"'), result.outputTail);
+  assert.ok(!result.outputTail.includes(SECRET));
+  assert.equal(result.snapshotContentRemoved, true);
+  assert.equal(result.outputTruncated, true);
+});
+
+test('a long diagnostic line keeps its end and a long snapshot line is dropped', async () => {
+  const diagnostic = `${'frame '.repeat(5_000)}Caused by: binder has died`;
+  const kept = (await captureError({ exitCode: 1, stdout: diagnostic })).details
+    ?.instrumentation as ExitResultFields & { snapshotContentRemoved?: true };
+  assert.ok(kept.outputTail.endsWith('Caused by: binder has died'), kept.outputTail);
+  assert.equal(kept.outputTruncated, true);
+  assert.equal(kept.snapshotContentRemoved, undefined);
+
+  const snapshot = `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>`;
+  const dropped = (await captureError({ exitCode: 1, stdout: snapshot, stderr: 'am: Killed' }))
+    .details?.instrumentation as ExitResultFields & { snapshotContentRemoved?: true };
+  assert.ok(!dropped.outputTail.includes(SECRET));
+  assert.ok(dropped.outputTail.endsWith('am: Killed'));
+  assert.equal(dropped.snapshotContentRemoved, true);
+  assert.equal(dropped.outputTruncated, true);
+});
+
+test('a session exit result keeps a long diagnostic line and drops a long snapshot line', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-android-session-long-line-');
+  const logPath = path.join(tmpDir, 'diag.ndjson');
+  try {
+    const processes: FakeAndroidProcess[] = [];
+    const provider = createSessionProvider({ calls: [], processes });
+    const capture = () =>
+      captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+    await withDiagnosticsScope(
+      { debug: true, logPath, session: 'android-test', requestId: 'req-9', command: 'snapshot' },
+      async () => {
+        assert.ok(await capture());
+        // The line arrives in pieces, so it outgrows the window before it completes.
+        processes[0]!.stdout.write('frame '.repeat(4_000));
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+        processes[0]!.stdout.write('frame '.repeat(1_000) + 'Caused by: binder has died\n');
+        processes[0]!.stdout.write(
+          `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>\n`,
+        );
+        processes[0]!.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        processes[0]!.emitExit(1, null);
+        await capture();
+      },
+    );
+
+    const log = await fs.readFile(logPath, 'utf8');
+    assert.ok(!log.includes(SECRET));
+    const exit = readExitResult(
+      (await readDiagnostic(logPath, 'android_snapshot_helper_session_exited')).data ?? {},
+    ) as Partial<ExitResultFields> & { snapshotContentRemoved?: true };
+    assert.equal(exit.aborted, 'System has crashed.');
+    assert.equal(exit.snapshotContentRemoved, true);
+    assert.equal(exit.outputTruncated, true);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('a session exit result keeps the end of a long diagnostic line', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-android-session-long-diag-');
+  const logPath = path.join(tmpDir, 'diag.ndjson');
+  try {
+    const processes: FakeAndroidProcess[] = [];
+    const provider = createSessionProvider({ calls: [], processes });
+    const capture = () =>
+      captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+    await withDiagnosticsScope(
+      { debug: true, logPath, session: 'android-test', requestId: 'req-10', command: 'snapshot' },
+      async () => {
+        assert.ok(await capture());
+        // The line arrives in pieces, so it outgrows the window before it completes.
+        processes[0]!.stdout.write('frame '.repeat(4_000));
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+        processes[0]!.stdout.write('frame '.repeat(1_000) + 'Caused by: binder has died\n');
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        processes[0]!.emitExit(1, null);
+        await capture();
+      },
+    );
+
+    const exit = readExitResult(
+      (await readDiagnostic(logPath, 'android_snapshot_helper_session_exited')).data ?? {},
+    );
+    assert.ok(exit.outputTail?.endsWith('Caused by: binder has died'), exit.outputTail);
+    assert.equal(exit.outputTruncated, true);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('a single-line shortMsg or longMsg is held to the message cap', async () => {
   const result = await captureExitResult({
     exitCode: 0,

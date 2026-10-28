@@ -11,11 +11,9 @@ import {
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
-} from './instrumentation-helper.ts';
-import {
   readInstrumentationExitResult,
   withoutSnapshotContent,
-} from './instrumentation-exit-result.ts';
+} from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,

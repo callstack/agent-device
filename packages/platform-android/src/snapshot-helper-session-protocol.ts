@@ -7,8 +7,6 @@ import {
 import {
   readInstrumentationExitResult,
   withoutSnapshotContent,
-} from './instrumentation-exit-result.ts';
-import {
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,

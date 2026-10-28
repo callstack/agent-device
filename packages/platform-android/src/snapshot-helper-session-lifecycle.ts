@@ -10,7 +10,7 @@ import type { AndroidAdbProcess } from './adb-executor.ts';
 import {
   recordInstrumentationProcess,
   type AndroidInstrumentationProcessRecord,
-} from './instrumentation-exit-result.ts';
+} from './instrumentation-helper.ts';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
