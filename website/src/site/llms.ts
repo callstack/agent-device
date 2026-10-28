@@ -3,18 +3,19 @@
 // these details, the generated documentation sets and the optional links.
 
 export const llmsDescription =
-  'Open-source, agent-native automation and verification for mobile, TV, desktop, and managed web apps. It gives AI agents structured UI state, semantic interaction, and runtime evidence through a CLI, MCP server, and typed Node.js API.';
+  'Open-source device layer for AI agents: it lets coding agents control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud. It gives agents structured UI state, semantic interaction, and runtime evidence through a CLI, MCP server, and typed Node.js API.';
 
 export const llmsDetails = `agent-device is the agent's hands, eyes, and evidence collector. The calling agent remains responsible for understanding the task, choosing actions, and judging whether the observed result is correct.
 
 ## When to use agent-device
 
 - Verify behavior in a running app instead of reasoning only from source code, tests, or screenshots.
-- Explore UI flows on simulators, emulators, physical devices, desktop apps, TV targets, and supported hosted devices.
+- Explore UI flows on simulators, emulators, physical devices, desktop apps, and TV targets.
+- Run the same commands against devices elsewhere: a remote device host through the proxy, or hosted devices in a device cloud (BrowserStack, AWS Device Farm, TestMu AI, Limrun).
 - Reproduce bugs and collect bounded screenshots, recordings, logs, network, trace, or performance evidence.
 - Turn a successful exploratory flow into a deterministic \`.ad\` replay.
 
-Use established test frameworks such as Appium, Maestro, Detox, XCTest, and Espresso for stable human-authored suites. Use agent-device when an agent needs to explore, observe, debug, or verify live behavior.
+For stable, repeatable test suites, use [e2e](https://e2e.tester.army/), a TypeScript testing framework for web and mobile apps. Use agent-device when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
 
 ## How agents should approach it
 
@@ -37,6 +38,7 @@ The capabilities page is generated from the runtime's own capability facts, so i
 
 ## Start here
 
+- [Installation](https://agent-device.dev/docs/installation): \`npm install -g agent-device\` (Node.js 22.12 or newer), then \`agent-device doctor\` to check the setup.
 - [Introduction](https://agent-device.dev/docs/introduction): Scope, supported workflows, and responsibility boundaries.
 - [AI Agent Setup](https://agent-device.dev/docs/agent-setup): CLI, skills, MCP, and coding-agent setup.
 - [Quick Start](https://agent-device.dev/docs/quick-start): First app-verification workflow.

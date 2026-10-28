@@ -25,6 +25,20 @@ import Lockup from './Lockup.astro';
   </div>
 </header>
 
+<script>
+  // The Menu disclosure closes on a tap outside it or on Escape, like a menu.
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.menu')) {
+    addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+    });
+    addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !menu.open) return;
+      menu.open = false;
+      menu.querySelector('summary')?.focus();
+    });
+  }
+</script>
+
 <style>
   .nav {
     position: sticky;

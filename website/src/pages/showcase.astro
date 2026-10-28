@@ -102,6 +102,11 @@ const addYourself = `${site.repo}/edit/main/website/src/site/content.ts`;
     padding: 0;
     list-style: none;
   }
+  /* Source names are file paths and titles: keep their case, and wrap inside the column. */
+  .sources .more {
+    white-space: normal;
+    text-transform: none;
+  }
   .add {
     display: grid;
     gap: 0.75rem;

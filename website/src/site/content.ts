@@ -165,6 +165,7 @@ export const jobs = [
       { kind: 'cmd', text: 'agent-device open MyApp --platform ios' },
       { kind: 'cmd', text: 'agent-device snapshot -i' },
       { kind: 'cmd', text: 'agent-device screenshot ./onboarding-ios.png' },
+      { kind: 'cmd', text: 'agent-device close' },
       { kind: 'cmd', text: 'agent-device open MyApp --platform android' },
       { kind: 'cmd', text: 'agent-device snapshot -i' },
       { kind: 'cmd', text: 'agent-device screenshot ./onboarding-android.png' },
@@ -179,19 +180,25 @@ export const jobs = [
     prompt:
       'Add a contact named Ada in the iOS Contacts app, verify it saved, and attach evidence.',
     transcript: [
-      { kind: 'cmd', text: 'agent-device open Contacts --platform ios --save-script' },
+      {
+        kind: 'cmd',
+        text: 'agent-device open Contacts --platform ios --save-script ./contacts.ad',
+      },
       { kind: 'cmd', text: 'agent-device snapshot -i' },
       { kind: 'out', text: '@e2 [button] "Add"' },
-      { kind: 'cmd', text: 'agent-device record start' },
+      { kind: 'cmd', text: 'agent-device record start ./recording.mp4' },
       { kind: 'cmd', text: 'agent-device press @e2 --settle' },
       { kind: 'add', text: '+ @e7 [text-field] "First name"' },
       { kind: 'cmd', text: 'agent-device fill @e7 "Ada" --settle' },
       { kind: 'add', text: '+ @e14 [text-field] "Ada"' },
-      { kind: 'cmd', text: 'agent-device screenshot ./contact-form.png' },
+      { kind: 'cmd', text: 'agent-device press \'role=button label="Done"\' --settle' },
+      { kind: 'cmd', text: 'agent-device wait text "Ada"' },
+      { kind: 'cmd', text: 'agent-device screenshot ./contact-saved.png' },
       { kind: 'cmd', text: 'agent-device record stop' },
       { kind: 'cmd', text: 'agent-device close' },
     ] as Line[],
-    reply: 'Ada is saved. Attached: contact-form.png, the recording, and contacts.ad to replay it.',
+    reply:
+      'Ada is saved: her contact card shows after Done. Attached: contact-saved.png, recording.mp4, and contacts.ad to replay it.',
   },
   {
     id: 'profile',
@@ -275,6 +282,10 @@ export const adopters: Adopter[] = [
         text: 'Setup guide',
         href: 'https://github.com/MetaMask/metamask-mobile/blob/main/docs/readme/agent-device.md',
       },
+      {
+        text: 'snapshot-backend.ts',
+        href: 'https://github.com/MetaMask/metamask-mobile/blob/main/tests/llm-workflow/android/snapshot-backend.ts',
+      },
     ],
     featured: true,
   },
@@ -294,7 +305,7 @@ export const adopters: Adopter[] = [
   {
     name: 'Expo',
     logo: { src: '/logos/expo.svg', mode: 'mono' },
-    how: 'Expo Simulators, the remote iOS Simulators and Android Emulators on EAS, are driven with agent-device, and Expo’s docs have an agent-device page. Agents also verify Orbit on physical iPhones, iPads and Android devices with it.',
+    how: 'Expo Simulators, the remote iOS Simulators and Android Emulators on EAS, can be driven with agent-device, and Expo’s docs have an agent-device page. Agents also verify Orbit on physical iPhones, iPads and Android devices with it.',
     sources: [
       {
         text: 'Expo Simulators docs',
@@ -424,8 +435,8 @@ export const adopters: Adopter[] = [
     how: 'The repo’s end-to-end skill uses agent-device for mobile setup and debugging.',
     sources: [
       {
-        text: 'e2e skill',
-        href: 'https://github.com/kortix-ai/suna/blob/main/.agents/skills/e2e/SKILL.md',
+        text: 'e2e skill setup',
+        href: 'https://github.com/kortix-ai/suna/blob/dev/.agents/skills/e2e/references/setup.md',
       },
     ],
   },
@@ -464,7 +475,7 @@ export const cloud = {
       icon: 'cube',
       label: 'Device clouds',
       title: 'On hosted devices',
-      body: 'The same commands drive BrowserStack, AWS Device Farm, TestMu AI and Limrun devices through provider plugins, and Expo Simulators on EAS.',
+      body: 'The same commands drive BrowserStack, AWS Device Farm and Limrun devices built in, TestMu AI through its provider plugin, and Expo Simulators on EAS.',
       cmd: 'agent-device connect limrun --platform ios',
       href: docs.clouds,
     },
@@ -474,7 +485,7 @@ export const cloud = {
     { name: 'AWS Device Farm', href: '/docs/aws-device-farm' },
     { name: 'TestMu AI', href: '/docs/testmu' },
     { name: 'Limrun', href: '/docs/limrun' },
-    { name: 'Expo Simulators', href: 'https://docs.expo.dev/preview/simulators/introduction/' },
+    { name: 'Expo Simulators', href: '/docs/device-clouds#expo-simulators' },
   ],
   team: {
     headline: ['Need devices for your team?', 'Talk to Callstack.'],
@@ -540,7 +551,7 @@ export const home = {
     proof: 'Expensify',
     /** The files the Verify job in the hero produces. */
     evidence: [
-      { kind: 'Screenshot', file: 'contact-form.png', from: 'screenshot' },
+      { kind: 'Screenshot', file: 'contact-saved.png', from: 'screenshot' },
       { kind: 'Video', file: 'recording.mp4', from: 'record stop' },
       { kind: 'Replay', file: 'contacts.ad', from: '--save-script' },
     ],

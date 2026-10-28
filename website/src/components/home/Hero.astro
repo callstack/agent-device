@@ -47,7 +47,7 @@ const calls = (lines: Line[]) =>
         )
       }
     </div>
-    <a class="label more" href={docs.start}>Read the docs <span aria-hidden="true">→</span></a>
+    <a class="label more" href={docs.intro}>Read the docs <span aria-hidden="true">→</span></a>
   </div>
 
   <div
@@ -70,6 +70,7 @@ const calls = (lines: Line[]) =>
             ))
           }
         </div>
+        <div class="jobs">
         {
           jobs.map((j, i) => (
             <div class="job" role="tabpanel" id={`job-${j.id}`} aria-labelledby={`job-tab-${j.id}`} hidden={i !== 0} data-job>
@@ -99,6 +100,7 @@ const calls = (lines: Line[]) =>
             </div>
           ))
         }
+        </div>
       </div>
     </div>
     <!-- /HERO VISUAL -->
@@ -214,15 +216,21 @@ const calls = (lines: Line[]) =>
     color: var(--on-accent);
     background: var(--accent);
   }
-  .job {
+  /* The panels share one cell, so the session is as tall as the tallest job and switching tabs
+     never moves the page below. */
+  .jobs {
     display: grid;
-    gap: 0.75rem;
-    min-height: 34rem;
-    align-content: start;
     margin-top: 0.75rem;
   }
+  .job {
+    grid-area: 1 / 1;
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+  }
   .job[hidden] {
-    display: none;
+    display: grid;
+    visibility: hidden;
   }
   .prompt {
     display: grid;
@@ -316,9 +324,6 @@ const calls = (lines: Line[]) =>
     .session {
       flex: none;
       width: 100%;
-    }
-    .job {
-      min-height: 40rem;
     }
     .prompt,
     .reply {

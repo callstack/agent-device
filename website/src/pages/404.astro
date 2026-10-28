@@ -7,6 +7,7 @@ import Dither from '../components/site/Dither.astro';
 import Footer from '../components/site/Footer.astro';
 import Nav from '../components/site/Nav.astro';
 import { giantSize } from '../components/site/giant';
+import NameCase from '../components/site/NameCase.astro';
 import { docs, notFound, site } from '../site/content';
 ---
 
@@ -21,7 +22,7 @@ import { docs, notFound, site } from '../site/content';
       <Dither scene="loop-hollow" focus={0.72} class="nf-scene" />
       <div class="nf-card">
         <p class="label nf-code"><span>404</span> Page not found</p>
-        <h1 class="h1" id="nf-title">{notFound[0]} <em>{notFound[1]}</em></h1>
+        <h1 class="h1" id="nf-title"><NameCase text={notFound[0]} /> <em><NameCase text={notFound[1]} /></em></h1>
         <p class="lede nf-path" data-path hidden>You asked for <code data-path-text></code>.</p>
         <div class="actions">
           <a class="btn" href="/">Home <span aria-hidden="true">→</span></a>

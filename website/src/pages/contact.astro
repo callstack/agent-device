@@ -31,9 +31,9 @@ const reasons = [
       <fieldset class="reasons">
         <legend class="label">What is it about?</legend>
         {
-          reasons.map((r, i) => (
+          reasons.map((r) => (
             <label class="reason">
-              <input type="radio" name="reason" value={r.id} data-value={r.value} checked={i === 0} />
+              <input type="radio" name="reason" value={r.id} data-value={r.value} checked={r.id === 'general'} />
               <span class="reason-text">
                 <span class="reason-label">{r.label}</span>
                 <span class="reason-note">{r.note}</span>

@@ -606,6 +606,11 @@ const innerProof = byName(inner.proof);
     padding: 0;
     list-style: none;
   }
+  /* Source names are file paths and titles: keep their case, and wrap inside the column. */
+  .story-sources .more {
+    white-space: normal;
+    text-transform: none;
+  }
   .path-step {
     display: grid;
     grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 22rem);
