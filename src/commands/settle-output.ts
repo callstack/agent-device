@@ -99,7 +99,8 @@ function formatSettleDiffLines(view: SettleTextView): string[] {
  * out of the diff gets `plain_ref_requires_complete_frame`. Render the added
  * line's ref in the same paste-ready `@eN~s<gen>` form the tail already uses.
  * Only added lines carry a ref (`SettleDiffLine`); removed lines render
- * verbatim, since nothing there is a target.
+ * verbatim, since nothing there is a target. An added line whose text lost its ref prefix gets the
+ * pinned ref in front.
  */
 function pinnedDiffLineText(
   line: { text?: string; ref?: string },
@@ -109,7 +110,11 @@ function pinnedDiffLineText(
   const pinned = pinnedRefText(line.ref, refsGeneration);
   if (!pinned || !line.ref) return text;
   const plain = `@${line.ref}`;
-  return text.startsWith(`${plain} `) ? `${pinned}${text.slice(plain.length)}` : text;
+  // A line whose text was replaced whole (a sensitive fill's) has no prefix to pin, so the
+  // structured ref leads it instead.
+  return text.startsWith(`${plain} `)
+    ? `${pinned}${text.slice(plain.length)}`
+    : `${pinned} ${text}`;
 }
 
 // Unchanged interactive tail: only present when the diff's added lines

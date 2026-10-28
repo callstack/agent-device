@@ -170,6 +170,35 @@ describe('press CLI output', () => {
     );
   });
 
+  // A sensitive fill replaces the line text whole, ref prefix included. The structured ref still
+  // has to reach the CLI caller, or a new target in the diff is unreachable.
+  test('renders a pinned ref for a redacted added line whose text carries no ref prefix', () => {
+    const output = formatPress({
+      message: 'Filled 9 chars',
+      settle: {
+        settled: true,
+        waitedMs: 300,
+        refsGeneration: 3,
+        diff: {
+          summary: { additions: 1, removals: 1, unchanged: 8 },
+          lines: [
+            { kind: 'removed', text: '${CODE}' },
+            { kind: 'added', text: '${CODE}', ref: 'e4' },
+          ],
+        },
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Filled 9 chars',
+        'settled after 300ms: +1 -1 (~8 unchanged)',
+        '- ${CODE}',
+        '+ @e4~s3 ${CODE}',
+      ].join('\n'),
+    );
+  });
+
   // The warning itself is the dispatcher's output, not this formatter's (#2682);
   // `cli-output.test.ts` asserts it lands on stdout for `press`.
   test('leaves the response warning to the dispatcher', () => {
