@@ -57,8 +57,8 @@
   ],
   "ignorePatterns": [
     "examples/test-app/**",
-    // The Astro site: a standalone app with its own entry points (pages, components, configs).
-    "website/**",
+    // The social card template: scripts/og.mjs serves it with generated /og/* files.
+    "website/og/og.html",
     "scripts/perf/**",
     "scripts/layering/**",
     "scripts/di-seams/**",
@@ -71,7 +71,17 @@
     // by an import edge. Same shape as the help-conformance declaration files above.
     "scripts/size-report-package.d.mts"
   ],
-  "dynamicallyLoaded": ["packages/daemon/src/execution/interaction/index.ts"],
+  "dynamicallyLoaded": [
+    "packages/daemon/src/execution/interaction/index.ts",
+    // The site's modules that Astro loads without an import Fallow can read: from an .astro
+    // <script> block (hero.ts, dither-host.ts), as a worker URL (dither.worker.ts), by a path
+    // in astro.config.mjs (routeData.ts) or by convention (ec.config.mjs, Expressive Code).
+    "website/src/components/home/hero.ts",
+    "website/src/components/site/dither-host.ts",
+    "website/src/components/site/dither.worker.ts",
+    "website/src/routeData.ts",
+    "website/ec.config.mjs"
+  ],
   "ignoreDependencies": [
     "@theme",
     // @agent-device/maestro owns the source import, while the published root
@@ -94,6 +104,30 @@
     "@arethetypeswrong/cli"
   ],
   "ignoreExports": [
+    {
+      // og.html draws the social card's scene with it; scripts/og.mjs serves the module to the page.
+      "file": "website/src/components/site/dither.ts",
+      "exports": ["drawDither"]
+    },
+    {
+      // Starlight runs the route middleware by name (routeMiddleware in astro.config.mjs).
+      "file": "website/src/routeData.ts",
+      "exports": ["onRequest"]
+    },
+    {
+      // Astro and Expressive Code read the default export of each site config by convention.
+      "file": "website/{astro,ec}.config.mjs",
+      "exports": ["default"]
+    },
+    {
+      // .astro <script> blocks import these with import(), which Fallow cannot read.
+      "file": "website/src/components/home/hero.ts",
+      "exports": ["default"]
+    },
+    {
+      "file": "website/src/components/site/dither-host.ts",
+      "exports": ["host"]
+    },
     {
       // The standalone packed-install harness loads this fixture from the selected package path and reads its request scenarios dynamically.
       "file": "packages/provider-*/test/package-smoke.mjs",

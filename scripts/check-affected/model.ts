@@ -490,6 +490,12 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'MCP registry metadata must stay in sync',
     owns: (file) => file === 'server.json' || file === 'smithery.yaml',
   },
+  {
+    check: 'docs-links',
+    rule: 'own:docs-links',
+    detail: 'the site builds /.well-known/mcp.json from server.json',
+    owns: (file) => file === 'server.json',
+  },
   // image-size ships no fixed version for its parser DoS advisories; the in-tree
   // pnpm patch is the mitigation, and only its defining files own the proof.
   {

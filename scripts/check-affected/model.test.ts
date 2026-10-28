@@ -200,8 +200,8 @@ test('colocated Android binary fixtures select the unit suite instead of failing
   );
 });
 
-test('MCP metadata change selects the mcp-metadata check', () => {
-  assert.deepEqual(ids(['server.json']), ['mcp-metadata']);
+test('MCP metadata change selects the mcp-metadata check and the site build that serves it', () => {
+  assert.deepEqual(ids(['server.json']), ['mcp-metadata', 'docs-links']);
 });
 
 test('public package surface change selects the build and the published-package gate via exports', () => {
