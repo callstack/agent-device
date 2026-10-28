@@ -19,7 +19,7 @@ async function latestVersion(): Promise<string> {
     });
   } catch (error) {
     throw new Error(
-      `mcp.json: the site build reads the published version from ${REGISTRY}, which is unreachable. Without network access this is an infrastructure fault, not a site bug.`,
+      `mcp.json: the site build reads the published version from ${REGISTRY}, and the request failed or timed out. A host without network access, or a slow registry, is an infrastructure fault, not a site bug.`,
       { cause: error },
     );
   }
