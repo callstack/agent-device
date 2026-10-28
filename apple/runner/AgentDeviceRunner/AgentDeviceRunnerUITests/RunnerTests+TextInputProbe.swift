@@ -130,12 +130,12 @@ extension RunnerTests {
 
   /// Runs `body` with its XCTest issues held back instead of recorded, and hands them to the caller,
   /// which records the ones it does not explain.
-  func holdingRecordedIssues(_ body: () -> Void) -> (issues: [XCTIssue], exception: Bool) {
+  func holdingRecordedIssues(_ body: () -> Void) -> (issues: [XCTIssue], exceptionMessage: String?) {
     withIssueScope { issues in
-      let (_, exception) = catchingObjCException(fallback: ()) { body() }
+      let (_, exceptionMessage) = catchingObjCException(fallback: ()) { body() }
       suppressedIssueLock.lock()
       defer { suppressedIssueLock.unlock() }
-      return (issues.held, exception != nil)
+      return (issues.held, exceptionMessage)
     }
   }
 

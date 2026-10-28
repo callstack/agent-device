@@ -313,9 +313,11 @@ extension RunnerTests {
     wasVisible: Bool
   ) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
 #if os(iOS)
+    // `element` is bound by index, and the keyboard the tap raises shifts those indices, so the
+    // return goes to whatever the tap focused rather than to a re-resolved `element`.
     let typed = typeKeyboardReturn({
       element.tap()
-      element.typeText(XCUIKeyboardKey.return.rawValue)
+      app.typeText(XCUIKeyboardKey.return.rawValue)
     })
     guard typed else {
       return (wasVisible: wasVisible, pressed: false, visible: isKeyboardVisible(app: app))
@@ -329,18 +331,20 @@ extension RunnerTests {
 
   /// Types a return, false when nothing was typed: an ObjC exception, or XCTest's refusal to type
   /// with nothing focused. XCTest records that refusal as an issue, which would invalidate the runner
-  /// session; any other issue is recorded as usual, since the return may have gone out.
+  /// session, so it alone is dropped; every other issue is recorded as usual.
   private func typeKeyboardReturn(_ type: () -> Void) -> Bool {
-    let (issues, exception) = holdingRecordedIssues(type)
-    if issues.contains(where: { Self.isNoKeyboardFocusIssue($0.compactDescription) }) {
-      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_NO_FOCUS")
-      return false
+    let (issues, exceptionMessage) = holdingRecordedIssues(type)
+    let noFocus = issues.filter { Self.isNoKeyboardFocusIssue($0.compactDescription) }
+    issues.filter { !Self.isNoKeyboardFocusIssue($0.compactDescription) }.forEach { record($0) }
+    if !noFocus.isEmpty { NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_NO_FOCUS") }
+    if let exceptionMessage {
+      NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_IGNORED_EXCEPTION=%@", exceptionMessage)
     }
-    issues.forEach { record($0) }
-    if exception { NSLog("AGENT_DEVICE_RUNNER_KEYBOARD_RETURN_IGNORED_EXCEPTION") }
-    return !exception
+    return noFocus.isEmpty && exceptionMessage == nil
   }
 
+  /// XCTest names this refusal only in its English issue text, as it does the AX failures that
+  /// `isSuppressedAxSnapshotIssueDescription` matches.
   static func isNoKeyboardFocusIssue(_ description: String) -> Bool {
     description.contains("Neither element nor any descendant has keyboard focus")
   }
