@@ -598,7 +598,7 @@ const ERROR_TEXT_FIELDS: ReadonlySet<string> = new Set(['message', 'hint', 'caus
  */
 function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError): DaemonError {
   const text = sensitiveFillText(req);
-  if (!text) return error;
+  if (text === undefined) return error;
   const placeholder = sensitiveFillPlaceholder(req.flags);
   const replace = (value: string) => parameterizeSensitiveString(value, text, placeholder);
   return Object.fromEntries(

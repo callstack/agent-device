@@ -3,7 +3,9 @@ import { selectorContainsValue } from './index.ts';
 
 const STRUCTURAL_ROOT_OUTPUT_KEYS = new Set([
   'action',
+  'after',
   'backend',
+  'before',
   'cost',
   'delayMs',
   'evidence',
@@ -19,13 +21,16 @@ const STRUCTURAL_ROOT_OUTPUT_KEYS = new Set([
   'referenceHeight',
   'referenceWidth',
   'refLabel',
+  'requested',
   'resolution',
   'selector',
   'selectorChain',
   'settle',
+  'target',
   'targetHittable',
   'targetKind',
   'text',
+  'verification',
   'warning',
   'x',
   'y',
@@ -39,8 +44,9 @@ const STABLE_ROOT_OUTPUT_STRING_KEYS = new Set([
   'ref',
   'selector',
   'targetKind',
+  'verification',
 ]);
-const STRUCTURED_OUTPUT_KEYS = new Set(['cost', 'evidence', 'resolution', 'settle']);
+const STRUCTURED_OUTPUT_KEYS = new Set(['cost', 'evidence', 'resolution', 'settle', 'target']);
 const STRUCTURAL_KEYS_BY_PATH = new Map<string, ReadonlySet<string>>([
   ['cost', new Set(['nodeCount', 'runnerRoundTrips', 'wallClockMs'])],
   [
@@ -82,6 +88,8 @@ const STRUCTURAL_KEYS_BY_PATH = new Map<string, ReadonlySet<string>>([
   ['settle.diff.summary', new Set(['additions', 'removals', 'unchanged'])],
   ['settle.refs', new Set(['ref'])],
   ['settle.tail', new Set(['label', 'ref', 'role'])],
+  ['target', new Set(['className', 'packageName', 'rect', 'resourceId'])],
+  ['target.rect', new Set(['height', 'width', 'x', 'y'])],
 ]);
 const STABLE_STRUCTURAL_STRING_PATHS = new Set([
   'evidence.digest',
@@ -99,6 +107,7 @@ const STABLE_STRUCTURAL_STRING_PATHS = new Set([
   'settle.refs.ref',
   'settle.tail.ref',
   'settle.tail.role',
+  'target.className',
 ]);
 
 /**

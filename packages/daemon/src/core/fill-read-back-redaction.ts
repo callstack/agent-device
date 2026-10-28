@@ -13,12 +13,50 @@ const UNCONFIRMED_READ_BACK_FIELDS = ['requested', 'before', 'after'] as const;
 const FAILURE_READ_BACK_FIELDS = ['expected', 'actual'] as const;
 const FAILURE_INPUT_NODE_FIELDS = ['targetInput', 'actualInput'] as const;
 
-export function redactUnconfirmedFillReadBack<TPayload extends ReadBackRecord | undefined>(
+/**
+ * Replaces the text a sensitive fill's response read back from the field: the unconfirmed
+ * evidence, and the diff lines and tail labels of a `--settle` observation. Refs, counts and
+ * summaries stay. This runs before literal parameterization, so a short literal cannot rewrite
+ * the `verification` discriminator this checks.
+ */
+export function redactFillReadBack<TPayload extends ReadBackRecord | undefined>(
   payload: TPayload,
   placeholder: string,
 ): TPayload {
-  if (!payload || payload.verification !== 'unconfirmed') return payload;
-  return { ...payload, ...placeholderFields(payload, UNCONFIRMED_READ_BACK_FIELDS, placeholder) };
+  if (!payload) return payload;
+  const unconfirmed =
+    payload.verification === 'unconfirmed'
+      ? placeholderFields(payload, UNCONFIRMED_READ_BACK_FIELDS, placeholder)
+      : {};
+  return {
+    ...payload,
+    ...unconfirmed,
+    ...(isRecord(payload.settle)
+      ? { settle: redactSettleReadBack(payload.settle, placeholder) }
+      : {}),
+  };
+}
+
+function redactSettleReadBack(settle: ReadBackRecord, placeholder: string): ReadBackRecord {
+  const { diff, tail } = settle;
+  return {
+    ...settle,
+    ...(isRecord(diff) && Array.isArray(diff.lines)
+      ? {
+          diff: {
+            ...diff,
+            lines: diff.lines.map((line) => redactTextField(line, 'text', placeholder)),
+          },
+        }
+      : {}),
+    ...(Array.isArray(tail)
+      ? { tail: tail.map((entry) => redactTextField(entry, 'label', placeholder)) }
+      : {}),
+  };
+}
+
+function redactTextField(entry: unknown, field: string, placeholder: string): unknown {
+  return isRecord(entry) ? { ...entry, ...placeholderFields(entry, [field], placeholder) } : entry;
 }
 
 /** A backend fill failure is typed by `failureReason`; only that shape carries read-back text. */
