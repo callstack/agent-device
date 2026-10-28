@@ -232,6 +232,21 @@ jobs:
     with:
       release_tag: v${{ needs.plan.outputs.version }}
 
+  # agent-device.dev serves /.well-known/mcp.json with the npm `latest` version read when the
+  # site builds. A tag push builds nothing on Vercel, so ask for a production build of main.
+  redeploy-site:
+    name: Redeploy agent-device.dev
+    needs: [plan, publish]
+    if: needs.plan.outputs.mode == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Trigger the site's production build
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_SITE_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$DEPLOY_HOOK" > /dev/null
+
   mark-released:
     name: Move main past ${{ needs.plan.outputs.version }}
     needs: [plan, publish]

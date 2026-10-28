@@ -1,8 +1,9 @@
 // /.well-known/mcp.json: the stdio MCP server's registry identity, from the repo's server.json,
-// with the version set to the latest one published on npm when the site is built. The site
-// redeploys on every push to main, so the version follows releases. Without npm the build
-// fails: server.json between releases carries an unpublished `-dev` version, and agents would
-// be told to install a package that does not exist.
+// with the version set to the latest one published on npm when the site is built. The release
+// workflow (release.yml, redeploy-site) rebuilds the site right after each stable release, so
+// the version follows releases. Without npm the build fails: server.json between releases
+// carries an unpublished `-dev` version, and agents would be told to install a package that
+// does not exist.
 import type { APIRoute } from 'astro';
 
 import server from '../../../../server.json';
