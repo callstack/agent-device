@@ -29,20 +29,11 @@ Use established test frameworks such as Appium, Maestro, Detox, XCTest, and Espr
 
 ## Capabilities
 
-- Targets: iOS and Android simulators, emulators, and physical devices; HarmonyOS; tvOS; Android TV; Fire TV devices running Fire OS; macOS desktop and app devices; Linux desktop targets; and a limited managed web browser.
-- Vega OS is supported only in the Vega Virtual Device: app open and close plus remote keys. Physical Vega OS devices, capture, selectors, install, logging, and performance report unsupported there.
-- Frameworks: native apps, React Native, Expo, and Flutter. Which commands and evidence you get depends on what each target supports.
-- Reads app state through accessibility snapshots with element refs and semantic selectors; use screenshots as evidence or when accessibility data is poor.
-- Collects app and device logs and symbolicates crashes on Apple targets. Android Java/R8 and native crash symbolication is left to other tools.
-- Network inspection parses recent HTTP(s) entries from app logs locally, so results depend on what the app logs. On TestMu AI, network logs are a provider feature returned after the session ends.
-- Performance: CPU profile reports return weighted top functions and frame health covers dropped frames and jank windows. Raw xctrace and Perfetto traces are kept on disk as artifacts for the agent to inspect.
-- React DevTools inspects React Native components and profiles renders. JS heap usage, heap snapshots, and small runtime evals run through Metro CDP.
-- Replay: save a working flow as a \`.ad\` script and run it with the \`test\` runner. Import Maestro YAML flows and export \`.ad\` scripts to strict Maestro YAML.
-- Integration: a stdio MCP server and a typed Node.js client API over the same execution path as the CLI.
-- Runs parallel agent sessions against separate sessions and devices, with host-local device claims and tenant-scoped leases on remote daemons. Keep state-changing commands serial within one session.
-- Device clouds: Limrun, BrowserStack, AWS Device Farm, and TestMu AI, plus a self-hosted remote daemon you run yourself.
-- Open source under the MIT license.
-- [Capabilities](https://agent-device.dev/docs/capabilities): full per-target capability list and limits.
+The capabilities page is generated from the runtime's own capability facts, so it is the one source for what each target supports.
+
+- [Capabilities](https://agent-device.dev/docs/capabilities): every target, framework, and command family, with their limits.
+- \`agent-device capabilities --platform <platform>\` lists the commands the installed version supports on one target.
+- [Device clouds](https://agent-device.dev/docs/device-clouds): hosted devices and the self-hosted remote daemon.
 
 ## Start here
 

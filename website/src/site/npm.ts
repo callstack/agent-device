@@ -20,7 +20,8 @@ export async function monthlyDownloads(): Promise<number | undefined> {
   }
 }
 
-/** Rounded down, so the figure never overstates: 1018444 is "1M+", 246586 is "246k+". */
+/** Rounded down, so the figure never overstates: 1018444 is "1M+", 246586 is "246k+", 812 is "812+". */
 export function compact(n: number): string {
-  return n >= 1e6 ? `${Math.floor(n / 1e6)}M+` : `${Math.floor(n / 1e3)}k+`;
+  if (n >= 1e6) return `${Math.floor(n / 1e6)}M+`;
+  return n >= 1e3 ? `${Math.floor(n / 1e3)}k+` : `${n}+`;
 }

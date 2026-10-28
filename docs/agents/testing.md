@@ -58,6 +58,8 @@ GitHub owns:
 Related tests do not replace those obligations.
 Check the Integration Tests and Coverage jobs at the actual PR head.
 For docs-only changes, run the selected documentation checks.
+The site build reads the published `agent-device` version from registry.npmjs.org.
+If the host has no network access, the `docs-links` check fails. Record this failure as an infrastructure fault.
 Do not add tests that assert prose.
 
 ## A gate failed

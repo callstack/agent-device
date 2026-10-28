@@ -13,12 +13,13 @@ async function latestVersion(): Promise<string> {
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(10_000),
   });
-  const { version } = (await response.json()) as { version?: string };
-  if (!response.ok || !version) {
+  if (!response.ok) {
     throw new Error(
       `mcp.json: npm did not return the published version (HTTP ${response.status}).`,
     );
   }
+  const { version } = (await response.json()) as { version?: string };
+  if (!version) throw new Error('mcp.json: the npm response has no version for agent-device.');
   return version;
 }
 
