@@ -3,12 +3,11 @@
 // beside the GitHub stars and npm downloads, then the session on the loop scene: a tab per kind
 // of job (build, verify, profile), each the prompt a developer gives, every agent-device call the
 // agent makes as its own card with the output nested inside, and the agent's reply. Behind it
-// all, the dimmed loop scene and accent sparkles over the top.
+// all, the dimmed loop scene. The sparkles above the fold span the page (index.astro).
 import CopyCommand from '../site/CopyCommand.astro';
 import Dither from '../site/Dither.astro';
 import GitHubStars from '../site/GitHubStars.astro';
 import PixelIcon from '../site/PixelIcon.astro';
-import Sparkles from '../site/Sparkles.astro';
 import { docs, jobs, site } from '../../site/content';
 import type { Line } from '../../site/content';
 import { compact, monthlyDownloads } from '../../site/npm';
@@ -27,13 +26,12 @@ const calls = (lines: Line[]) =>
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero-bg" aria-hidden="true">
     <Dither scene="loop" focus={0.5} />
-    <Sparkles />
   </div>
   <div class="hero-top hero-center">
     <h1 class="h1" id="hero-title">{site.headline[0]} <em>{site.headline[1]}</em></h1>
     <p class="lede">{site.lede}</p>
     <div class="actions">
-      <CopyCommand command={site.install} />
+      <CopyCommand command={site.install} label="Install" />
       <GitHubStars class="label stat" named />
       {
         downloads !== undefined && (
@@ -127,10 +125,13 @@ const calls = (lines: Line[]) =>
     pointer-events: none;
   }
   /* Starts below the headline, so the main track sits just above the tabs; the top edge fades
-     out under the lede and the sparkles carry the accent above it. */
+     out under the lede. The height follows the width, not the session, so switching tabs never
+     resizes the scene. */
   .hero-bg :global(.dither) {
-    top: 22rem;
-    height: calc(100% - 22rem);
+    inset: 22rem 0 auto;
+    height: auto;
+    aspect-ratio: 8 / 5;
+    min-height: 36rem;
     opacity: 0.45;
     mask-image: linear-gradient(to bottom, transparent, #000 16rem);
   }
@@ -154,6 +155,9 @@ const calls = (lines: Line[]) =>
   .hero-center .actions {
     justify-content: center;
     margin-top: 0.5rem;
+  }
+  .hero-center .actions :global(.cmd) {
+    width: min(100%, 27rem);
   }
   .hero-center :global(.stat) {
     display: inline-flex;

@@ -13,6 +13,7 @@ import Footer from '../components/site/Footer.astro';
 import Marquee from '../components/site/Marquee.astro';
 import NameCase from '../components/site/NameCase.astro';
 import Nav from '../components/site/Nav.astro';
+import Sparkles from '../components/site/Sparkles.astro';
 import CodeBlock from '../components/site/CodeBlock.astro';
 import Dither from '../components/site/Dither.astro';
 import Window from '../components/site/Window.astro';
@@ -87,6 +88,7 @@ const innerProof = byName(inner.proof);
 ---
 
 <Site description={site.description} jsonLd={jsonLd}>
+  <div class="sky" aria-hidden="true"><Sparkles count={64} depth={96} /></div>
   <Nav />
   <main class="frame">
     <Hero />
@@ -299,6 +301,15 @@ const innerProof = byName(inner.proof);
 </Site>
 
 <style>
+  /* Sparkles above the fold, across the whole window, behind the page frame. */
+  .sky {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 44rem;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
   /* The label, centred, links to the showcase; the logos sit centred below it. */
   .used-by {
     display: flex;
