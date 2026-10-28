@@ -311,7 +311,7 @@ A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
 A backend older than the spec returns a lease without `lease.device`.
-The client then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
+The CLI proxy connection then releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: 'device-spec-unsupported'`.
 `details.released` reports whether the release succeeded.
 A live lease serves a later command only when every spec key that the command names equals the one the lease was allocated by; otherwise the command fails with `CONNECTION_DEVICE_CONFLICT`.
 The client never picks a device by spec from the daemon inventory.
