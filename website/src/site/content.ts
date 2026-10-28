@@ -480,11 +480,7 @@ export const cloud = {
 /** The home page, section by section, in page order. index.astro only lays these out. */
 export const home = {
   /** The strip under the hero: who uses it, by name, linking to /showcase. */
-  usedBy: {
-    label: 'Used by teams at',
-    names: adopters.filter((a) => a.featured).map((a) => a.name),
-    more: { text: 'See how they use it', href: '/showcase' },
-  },
+  usedBy: { label: 'Used by teams at', href: '/showcase' },
 
   /** The bottleneck: why verification is the step that slows shipping with agents. */
   bottleneck: {

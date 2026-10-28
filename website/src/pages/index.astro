@@ -93,13 +93,10 @@ const innerProof = byName(inner.proof);
     <Marquee />
 
     <section class="used-by" aria-labelledby="used-by-title">
-      <p class="label" id="used-by-title">{usedBy.label}</p>
+      <p class="label" id="used-by-title"><a href={usedBy.href}>{usedBy.label}</a></p>
       <ul class="used-by-logos">
         {featured.map((a) => <li><AdopterLogo adopter={a} /></li>)}
       </ul>
-      <div class="used-by-foot">
-        <a class="label more" href={usedBy.more.href}><NameCase text={usedBy.more.text} /> <span aria-hidden="true">→</span></a>
-      </div>
     </section>
 
     <section id="bottleneck" aria-labelledby="bottleneck-title">
@@ -302,18 +299,31 @@ const innerProof = byName(inner.proof);
 </Site>
 
 <style>
+  /* The label, centred, links to the showcase; the logos sit centred below it. */
   .used-by {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-    gap: 0.75rem 1.5rem;
-    padding: 1.5rem var(--pad);
+    gap: 1.25rem;
+    padding: 1.75rem var(--pad);
     border-bottom: 1px solid var(--line);
+    text-align: center;
+  }
+  .used-by .label {
+    margin: 0;
+  }
+  .used-by .label a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 120ms;
+  }
+  .used-by .label a:hover {
+    color: var(--accent);
   }
   .used-by-logos {
     display: flex;
-    flex: 1 1 auto;
     flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
     gap: 1rem 2.25rem;
     margin: 0;
@@ -612,14 +622,6 @@ const innerProof = byName(inner.proof);
     padding: 1.25rem var(--pad);
   }
 
-  .used-by-foot {
-    display: flex;
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-  }
   .videos {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
