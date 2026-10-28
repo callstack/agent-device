@@ -4,7 +4,11 @@ import { test } from 'vitest';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
-import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotPresentationKey,
+  type Point,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -74,6 +78,8 @@ function createGuardedDevice(params: {
   expectedResolvedTarget?: boolean;
   /** The daemon-only ADR 0014 authorized frame: the tree a `@ref` resolves against for identity. */
   refFrame?: SnapshotState;
+  /** Answers each capture by the presentation it asked for, instead of `trees` in order. */
+  presentations?: { interactive: SnapshotState[]; full: SnapshotState[] };
 }): {
   press: (target: 'selector' | 'ref') => Promise<Point[]>;
   pressSelector: (expression: string) => Promise<Point[]>;
@@ -83,6 +89,7 @@ function createGuardedDevice(params: {
 } {
   const clock = createFakeClock();
   let captureCount = 0;
+  const presentedLooks = { interactive: 0, full: 0 };
   const taps: Point[] = [];
   const baselineTree = params.baselineTree ?? slideTree(MID_FLIGHT_X);
   const baseline: MovingTargetBaseline | undefined =
@@ -102,8 +109,11 @@ function createGuardedDevice(params: {
   const device = createAgentDevice({
     backend: {
       platform: 'android',
-      captureSnapshot: async () => {
-        const snapshot = params.trees[Math.min(captureCount, params.trees.length - 1)]!;
+      captureSnapshot: async (_context, options) => {
+        const presentation = options?.interactiveOnly ? 'interactive' : 'full';
+        const looks = params.presentations?.[presentation] ?? params.trees;
+        const look = params.presentations ? presentedLooks[presentation]++ : captureCount;
+        const snapshot = looks[Math.min(look, looks.length - 1)]!;
         captureCount += 1;
         return { snapshot };
       },
@@ -628,6 +638,117 @@ test('Android refuses to adopt matching identity from another application', asyn
         (error as AppError).details?.reason,
         INTERACTION_ERROR_REASONS.targetStillMoving,
       );
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), []);
+});
+
+/**
+ * A navigation just finished, and the caller took a snapshot of the new screen to press one of its
+ * refs. The previous screen's tree does not show the target, so the gate re-observes. Refs number a
+ * capture densely, and an interactive-only capture drops the non-interactive container, so `@e2`
+ * names the target only in a capture taken in the frame's mode (#3981). `observation` is the mode
+ * of a later read-only capture that replaced the session's operational snapshot.
+ */
+function navigatedFrame(params: {
+  frame: 'full' | 'interactive';
+  observation?: 'full' | 'interactive';
+  targetXs: number[];
+}) {
+  const presentation = (interactiveOnly: boolean) => ({
+    presentationKey: buildSnapshotPresentationKey({ interactiveOnly }),
+  });
+  const target = (x: number) => ({
+    type: 'android.widget.Button',
+    bundleId: 'com.example.app',
+    label: 'Slide target',
+    rect: { x, y: BUTTON_Y, width: 120, height: 50 },
+    hittable: true,
+  });
+  const neighbour = { ...target(280), label: 'Search' };
+  const controls = (x: number) =>
+    params.frame === 'full' ? [target(x), neighbour] : [neighbour, target(x)];
+  const full = (x: number) =>
+    makeSnapshotState(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'android.view.View',
+          rect: { x: 0, y: 0, width: 400, height: 800 },
+        },
+        ...controls(x).map((node, offset) => ({
+          index: offset + 1,
+          depth: 1,
+          parentIndex: 0,
+          ...node,
+        })),
+      ],
+      presentation(false),
+    );
+  const interactive = (x: number) =>
+    makeSnapshotState(
+      controls(x).map((node, index) => ({ index, depth: 0, ...node })),
+      presentation(true),
+    );
+  const capture = { full, interactive };
+  const restingX = params.targetXs[0]!;
+  return createGuardedDevice({
+    stored: capture[params.observation ?? params.frame](restingX),
+    refFrame: capture[params.frame](restingX),
+    trees: [],
+    presentations: {
+      interactive: params.targetXs.map(interactive),
+      full: params.targetXs.map(full),
+    },
+    baselineAgeMs: 100,
+    baselineTree: makeSnapshotState([
+      { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Project Phoenix' },
+    ]),
+  });
+}
+
+test('Android re-measures a still @ref in the presentation its frame was captured in (#3981)', async () => {
+  const device = navigatedFrame({ frame: 'full', targetXs: [RESTING_X] });
+
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test('Android re-measures a still @ref from an interactive frame with an interactive capture', async () => {
+  // A full-tree look would name the neighbour `@e2`, so only the frame's own mode dispatches here.
+  const device = navigatedFrame({ frame: 'interactive', targetXs: [RESTING_X] });
+
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test("Android re-measures in the ref frame's mode, not the latest observation's", async () => {
+  // A read-only interactive capture after the full-tree snapshot advanced the operational
+  // observation; the ref still resolves against the frame, so the re-observation follows the frame.
+  const device = navigatedFrame({
+    frame: 'full',
+    observation: 'interactive',
+    targetXs: [RESTING_X],
+  });
+
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test('Android still refuses a full-tree @ref that keeps moving after a navigation', async () => {
+  const device = navigatedFrame({
+    frame: 'full',
+    targetXs: Array.from({ length: 40 }, (_, index) => RESTING_X + (index % 2) * 40),
+  });
+
+  await assert.rejects(
+    () => device.press('ref'),
+    (error: unknown) => {
+      const details = (error as AppError).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.dispatched, 'no');
+      assert.ok(details?.movedToRect, 'each look measured the target, so the refusal names where');
+      assert.match(String(details?.hint), /snapshot -i/);
+      assert.match(String(details?.hint), /ref frame/);
       return true;
     },
   );

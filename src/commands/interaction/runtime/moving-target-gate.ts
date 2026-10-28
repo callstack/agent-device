@@ -4,7 +4,11 @@ import type {
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotPresentationKey,
+  type Rect,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -123,8 +127,13 @@ export function movingTargetGateDecision(params: {
   };
 }
 
-/** A press owed a re-observation: the recheck decision, which carries the wait it owes. */
-type MovingTargetRecheck = Extract<MovingTargetGateDecision, { kind: 'recheck' }>;
+/**
+ * A press owed a re-observation: the recheck decision, which carries the wait it owes, and the
+ * capture mode a `@ref` look takes, read once from the frame that cannot change during the gate.
+ */
+type MovingTargetRecheck = Extract<MovingTargetGateDecision, { kind: 'recheck' }> & {
+  refLookInteractiveOnly: boolean;
+};
 
 /**
  * The gate's idle-path cost, stated as code: one session-record read, no capture. A press whose
@@ -137,7 +146,10 @@ async function readMovingTargetGate(
   resolvedNode: SnapshotNode,
   resolvedSurface: SurfaceScopedNodes | undefined,
 ): Promise<MovingTargetRecheck | undefined> {
-  const baseline = await readGateBaseline(runtime, options);
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  // A session store that carries no baseline is the non-daemon case: an in-process runtime owns no
+  // mutation history, and a gate with no history has nothing to worry about.
+  const baseline = session?.movingTargetBaseline;
   if (!baseline) return undefined;
   const decision = movingTargetGateDecision({
     baselineFinishedAtMs: baseline.finishedAt,
@@ -147,7 +159,9 @@ async function readMovingTargetGate(
       ? { windowMs: ANDROID_MOVING_TARGET_WINDOW_MS }
       : {}),
   });
-  return decision.kind === 'recheck' ? decision : undefined;
+  return decision.kind === 'recheck'
+    ? { ...decision, refLookInteractiveOnly: refFrameIsInteractiveOnly(session) }
+    : undefined;
 }
 
 /**
@@ -182,21 +196,6 @@ function baselineShowsTargetAtRest(
 }
 
 /**
- * The baseline the gate screens against. A session store that carries none is the non-daemon case —
- * an in-process runtime owns no mutation history — and a gate with no history has nothing to worry
- * about.
- */
-async function readGateBaseline(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-): Promise<CommandSessionRecord['movingTargetBaseline']> {
-  const session: CommandSessionRecord | undefined = await runtime.sessions.get(
-    options.session ?? 'default',
-  );
-  return session?.movingTargetBaseline;
-}
-
-/**
  * Re-resolves past the end of the window and one sample gap later; agreement is the resting
  * position. A re-resolution that fails outright is left to propagate: the resolution path's own typed
  * refusal (`selector_not_found`, `ref_not_found`, both `dispatched: 'no'`) describes a target the
@@ -214,10 +213,13 @@ async function resolveAtRestTarget(
   // caller tuning `--settle` against this error needs.
   const waitedFrom = now(runtime);
   await sleep(runtime, gate.waitMs);
-  const first = await reObserveTarget(runtime, options, params);
+  const first = await reObserveTarget(runtime, options, params, gate.refLookInteractiveOnly);
   if (!first.measured) throw motionRefusal(resolved, undefined, now(runtime) - waitedFrom);
   await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
-  const second = onSameSurface(first, await reObserveTarget(runtime, options, params));
+  const second = onSameSurface(
+    first,
+    await reObserveTarget(runtime, options, params, gate.refLookInteractiveOnly),
+  );
   if (second.measured && areCapturedRectsAtSamePosition(first.rect, second.rect))
     return second.resolved;
   throw motionRefusal(resolved, second.rect, now(runtime) - waitedFrom);
@@ -232,13 +234,16 @@ async function resolveAndroidAtRestTarget(
 ): Promise<ResolvedInteractionTarget> {
   const startedAt = now(runtime);
   const deadline = startedAt + Math.max(gate.waitMs, ANDROID_TARGET_QUIET_MS);
-  let previous = await reObserveTarget(runtime, options, params);
+  let previous = await reObserveTarget(runtime, options, params, gate.refLookInteractiveOnly);
   if (!previous.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
   let quietSince = now(runtime);
   let observations = 0;
   while (observations < 2 || now(runtime) < deadline) {
     await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
-    const next = onSameSurface(previous, await reObserveTarget(runtime, options, params));
+    const next = onSameSurface(
+      previous,
+      await reObserveTarget(runtime, options, params, gate.refLookInteractiveOnly),
+    );
     observations++;
     if (!next.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
     if (!areCapturedRectsAtSamePosition(previous.rect, next.rect)) quietSince = now(runtime);
@@ -299,12 +304,15 @@ type MovingTargetMeasured = {
  * ADR 0014's reconciliation adopt the capture's coordinates for a same-identity node, which is the
  * sanctioned way a ref's position moves. `measureRefObservation` then asks whether that adoption is
  * what actually got dispatched — a resolution that kept its authorized frame node measured nothing
- * here, and the gate refuses rather than comparing one stale rect to itself.
+ * here, and the gate refuses rather than comparing one stale rect to itself. Reconciliation reads
+ * `@eN` by its ordinal, so a plain full-tree frame is re-observed full-tree; every other frame,
+ * including depth, scope, raw, and custom-action captures, is re-observed interactive-only.
  */
 async function reObserveTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext & { target: InteractionTarget },
   params: ResolveInteractionTargetParams,
+  refLookInteractiveOnly: boolean,
 ): Promise<MovingTargetObservation> {
   if (options.target.kind !== 'ref') {
     const resolved = await resolveInteractionTarget(runtime, options, params);
@@ -316,7 +324,7 @@ async function reObserveTarget(
       ? { measured: true, resolved, rect, surfaceBundleId }
       : { measured: false, resolved, rect: undefined };
   }
-  const { snapshot } = await captureInteractionSnapshot(runtime, options, true);
+  const { snapshot } = await captureInteractionSnapshot(runtime, options, refLookInteractiveOnly);
   const resolved = await resolveInteractionTarget(runtime, options, params);
   return { resolved, ...measureRefObservation(surfaceScopedNodes(snapshot), resolved) };
 }
@@ -343,6 +351,19 @@ function measureRefObservation(
   return measured
     ? { measured: true, rect, surfaceBundleId: capture.surfaceBundleId }
     : { measured: false, rect: undefined };
+}
+
+const FULL_TREE_PRESENTATION_KEY = buildSnapshotPresentationKey({ interactiveOnly: false });
+
+/**
+ * Whether a ref re-observation captures interactive-only. Refs number a capture densely, so an
+ * interactive-only look at a full-tree frame names other nodes by the same refs, and a still target
+ * reads as unmeasured (#3981). A frame in a presentation the gate cannot reproduce (depth, scope,
+ * raw, custom actions) keeps the interactive look and stays fail-closed.
+ */
+function refFrameIsInteractiveOnly(session: CommandSessionRecord): boolean {
+  const frame = session.refFrameSnapshot ?? session.snapshot;
+  return frame?.presentationKey !== FULL_TREE_PRESENTATION_KEY;
 }
 
 function resolvedRect(resolved: ResolvedInteractionTarget): Rect | undefined {
