@@ -19,17 +19,17 @@ export const site = {
    * What it is, in a few words. The home page title is "Name: subtitle" (src/site/meta.ts),
    * 60 characters at most in all.
    */
-  subtitle: 'Eyes and hands for coding agents on real apps',
+  subtitle: 'The device layer for AI agents',
   /** The motto, in two beats. Used by the hero, the social card and the banner. */
-  headline: ['Give your agent eyes and hands.', 'On the real app.'],
+  headline: ['The device layer for AI agents.', 'Ask yours to use it.'],
   /** The hero lede: one or two sentences, naming who it is for. */
-  lede: 'agent-device lets coding agents run, read and operate real iOS, Android, TV and desktop apps. Ask for a change, and your agent builds it, checks it on the device and brings back evidence you can review.',
+  lede: 'agent-device gives agents a CLI, MCP server and typed API for real iOS, Android, TV and desktop apps. They work from compact UI snapshots instead of screenshots, so the same task costs fewer tokens, and products like e2e and T3 Code build on it as their driver.',
   /** The meta description: 160 characters at most. */
   description:
-    'Open-source runtime that lets AI coding agents run, read, operate and verify real iOS, Android, TV and desktop apps, and bring back evidence.',
+    'The device layer for AI agents: a CLI, MCP server and typed API that run and verify real iOS, Android, TV and desktop apps from compact UI snapshots.',
   install: 'npm i -g agent-device',
   /** Alt text for the social card (public/og-image.jpg): the lockup, the motto, the picture. */
-  ogAlt: 'agent-device by Callstack. Give your agent eyes and hands. On the real app.',
+  ogAlt: 'agent-device by Callstack. The device layer for AI agents. Ask yours to use it.',
   /** Who holds the copyright in the footer: "© YEAR AGENT-DEVICE BY CALLSTACK". */
   owner: 'Callstack',
   callstack: 'https://callstack.com/?utm_source=agent-device&utm_medium=referral',

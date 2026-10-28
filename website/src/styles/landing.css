@@ -159,6 +159,10 @@ canvas {
   font-style: normal;
   color: var(--accent);
 }
+/* The page headline's second beat starts its own line, as on the social card. */
+.h1 em {
+  display: block;
+}
 .lede {
   margin: 0;
   max-width: 40rem;
