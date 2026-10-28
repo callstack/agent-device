@@ -123,7 +123,9 @@ export async function answerLaunchConfirmation(
 /**
  * Presses `Open` and verifies a failed press. Only a press the runner's watchdog abandoned, with the
  * same confirmation still up, is pressed again, while the budget holds another whole press. Any
- * other failure, and a confirmation that is gone, ends the answer at once.
+ * other failure, and a confirmation that is gone, ends the answer at once. The runner refuses new
+ * work as `RUNNER_BUSY` until abandoned work drains, so a read that sees the confirmation proves the
+ * abandoned press finished without answering it, and the next press cannot answer a later alert.
  */
 async function acceptConfirmation(
   port: LaunchConfirmationPort,
