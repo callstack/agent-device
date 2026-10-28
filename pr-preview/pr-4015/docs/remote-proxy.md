@@ -1,0 +1,283 @@
+# Remote Proxy
+
+Use `agent-device proxy` when the machine running your agent cannot access the iOS simulator, Android emulator, or physical device directly, but another Mac can. The proxy runs on the device host, fronts the local daemon over HTTP, and lets a remote `agent-device` client call it through cloudflared, ngrok, or another tunnel.
+
+The proxy authenticates clients with a bearer token. You do not need `agent-device auth`.
+
+## Start the proxy on the device host
+
+On the Mac with simulator or device access, run:
+
+```bash
+agent-device proxy --port 4310
+```
+
+The command prints the local proxy URL and a `daemon auth token`. Keep the token secret: anyone who has it can control the daemon behind the proxy.
+
+Expose the proxy through your tunnel:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:4310
+# or
+ngrok http 4310
+```
+
+By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want the proxy reachable from the host network.
+
+## Connect from the agent machine
+
+On the machine running the agent, connect to the public tunnel URL with the `/agent-device` base path and the printed token. The connection profile stores only routing metadata, never the token, so export the token once and every command in the shell picks it up:
+
+```bash
+export AGENT_DEVICE_DAEMON_AUTH_TOKEN=<token>
+agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device
+agent-device devices --platform ios
+agent-device open MyApp --platform ios
+agent-device snapshot --platform ios
+agent-device close
+agent-device disconnect
+```
+
+`--daemon-auth-token <token>` works instead of the environment variable, but it authenticates only the command you pass it to. Later commands need the token again through the environment variable, a `daemonAuthToken` entry in your remote config profile, or the flag on each command.
+
+`connect proxy` stores the proxy profile and client identity. `open` leases the device for you, and the lease expires after five minutes without commands. A lease allocated directly over the RPC without `ttlMs` gets the daemon's one-minute inactivity default instead. Either window starts when allocation completes, not when it was requested. `close` releases the active session and its device lease, unless the lease was allocated with `retainOnClose`; only `leases.release`, expiry, or daemon shutdown ends that one. The reply to any request that closed a session lists the leases it ended in `endedLeases`, as `{ leaseId, outcome: 'released' }`. This covers `close`, a `batch` with a close step, and a `replay` or `test` script that closes, as well as the session cleanup `test` runs after each script. A successful reply has the field in `data`, and a failed one has it in `error.details`. A gateway in front of the daemon reads the lease end from that reply. When the reply names the stored lease, the CLI forgets it, so the next `open` leases a device again. `disconnect` clears local connection state.
+
+Without `--udid` or `--serial`, `open` does not pick the device on the agent machine: it sends `--platform`, `--target`, and `--device` with the lease request, the daemon behind the proxy picks a matching device, and later commands use the device the lease names. The device therefore does not need to exist before `open`, which lets a service in front of the daemon create or choose it at that point. While that lease is active, an `open` that names a different device is refused instead of running on the leased one; close the session first, or run `connect --force` to start over. An existing lease that names no device, such as one supplied through `leaseId`, is refused with reason `LEASE_SCOPE_MISMATCH` and left active.
+
+`open` names each new lease with an id it makes (32 lowercase hex characters) and sends it with the allocation, so a host in front of the daemon knows the lease id before the daemon allocates. A direct `agent_device.lease.allocate` RPC can pass `leaseId` (16 to 128 hex characters) the same way; repeating the id of a live lease returns that lease when the retry carries the same tenant, run, client, lease backend, and provider, and either names no device or the device the lease binds, so a retry after a lost reply does not allocate a second one. A retry without `ttlMs` keeps the lease's window. A retry that changes any of those fields is refused like any other reused id. The id identifies the lease: one run can hold several leases. Any other id this daemon has already given a lease, active or ended, is refused with `INVALID_ARGS` and reason `LEASE_ID_IN_USE`, and without one the daemon makes the id. Use the id the reply carries: a run that already holds a lease gets that lease back, and an older daemon ignores the requested id.
+
+Several agents can share one proxy when each follows the same `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent holds the device until it closes its session or its lease expires.
+
+Do not put the proxy endpoint, token, tenant, or provider fields in `./agent-device.json`: repository
+configuration accepts only project-safe automation defaults. Set the endpoint and token with `connect proxy`, user
+config, an explicit `--config` file, or protected CI environment variables.
+
+## Human takeover
+
+With a remote device already leased by `open`, pause mutations through the same connection:
+
+```bash
+agent-device takeover --session remote-session
+```
+
+The command runs in the foreground and keeps the hold until you press Ctrl+C. While it holds,
+state-changing commands fail with `DEVICE_IN_USE` and `details.reason: "human_control_active"`.
+Snapshots, screenshots, selector reads, logs, and other read-only diagnostics still work, the agent
+session stays open, and its lease does not expire from inactivity. The hold activates after
+mutations already in progress finish. To check or recover a hold, run `takeover status` or
+`takeover release <hold-id>` with the same session.
+
+If the `takeover` process disappears, its hold expires on its own. When the last hold on the device
+is released or expires, the lease's inactivity window starts over. A tenant can change only the
+holds owned by its own lease.
+
+If the requesting connection disconnects while the hold waits for those mutations, the pending hold
+is removed and never activates. This applies to both tenant RPCs and host PUTs. An active hold lasts
+until its TTL runs out or you release it.
+
+Lease-owner operations use ordinary `agent_device.command` RPCs at `POST /rpc`, with command
+`human_control` and positionals `["list"]`, `["put", "<hold-id>", "{\"ttlMs\":15000}"]`, or
+`["remove", "<hold-id>"]`. Supply the same tenant, run, client, lease, backend, provider, and device
+metadata as other requests. The PUT payload contains only `reason` and `ttlMs`; the server derives
+the target from the admitted lease. It rejects caller-supplied `scope`.
+
+### Manage holds from the host
+
+Automation on the device host can manage holds independently of a tenant. Read the daemon's `httpPort` and
+`token` from `daemon.json` in its effective state directory, then use the loopback listener with
+`Authorization: Bearer <daemon-token>` or `X-Agent-Device-Token: <daemon-token>`. An HTTP listener
+is required. A tenant credential does not grant this capability.
+
+```text
+PUT    /admin/human-control/holds/<hold-id>
+GET    /admin/human-control/holds
+DELETE /admin/human-control/holds/<hold-id>
+```
+
+The host PUT body names the exact lease contention identity, including its backend and provider.
+Use the lease's `deviceKey`, not a bare device ID or a display name:
+
+```json
+{
+  "scope": {
+    "backend": "ios-instance",
+    "leaseProvider": "proxy",
+    "deviceKey": "ios:mobile:<simulator-udid>"
+  },
+  "reason": "Human is using the VM console.",
+  "ttlMs": 15000
+}
+```
+
+Repeated PUT renews the hold. Omitting `ttlMs` keeps it until explicit release or daemon shutdown.
+Tenant RPCs cannot modify host holds. Multiple holds can coexist; mutations resume only when all
+holds on the device end.
+
+Holds, like leases, do not survive a daemon restart. Reconnect and put the hold back before a
+person continues on the device. Takeover requires a device-scoped remote lease; it does not fence
+off devices across local daemons on the same host.
+
+### Lease one macOS app to a client
+
+A host can hand a client one macOS app instead of a device. A `macos-app` lease names that app by
+bundle id, optionally pinned to one process (`<bundleId>@<pid>`). Only the host allocates it, on the
+same loopback listener and daemon token as host holds; a tenant `lease_allocate` for `macos-app` is
+refused:
+
+```text
+PUT    /admin/leases/<lease-id>
+GET    /admin/leases
+DELETE /admin/leases/<lease-id>
+```
+
+```json
+{
+  "tenantId": "host-tenant",
+  "runId": "run-1",
+  "clientId": "client-1",
+  "leaseBackend": "macos-app",
+  "leaseProvider": "proxy",
+  "deviceKey": "com.example.app@12345",
+  "ttlMs": 300000
+}
+```
+
+The lease id is 16 to 128 hex characters the host chooses. Repeating the PUT renews the lease; a PUT
+that names another scope for an existing id is refused. The lease stays allocated across the
+client's `close` unless the body sets `retainOnClose: false`, and DELETE revokes it at once. It
+expires after `ttlMs` without a renewal or a client request, like any lease. A client heartbeat can
+shorten that window but never extend it past the `ttlMs` of the last PUT. A client cannot release
+it: `disconnect` drops only its local connection state, and a tenant `lease_release` is refused with
+`MACOS_APP_LEASE_HOST_OWNED`. The lease ends by the host's `DELETE /admin/leases/<lease-id>`, by
+expiry, by daemon restart, or when a session it holds closes and the body set `retainOnClose` to
+false.
+
+The client connects with a remote config that names the lease, and runs `open <bundleId>`:
+
+```json
+{
+  "daemonBaseUrl": "https://<tunnel-url>",
+  "daemonAuthToken": "<client-token>",
+  "tenant": "host-tenant",
+  "runId": "run-1",
+  "clientId": "client-1",
+  "leaseId": "<lease-id>",
+  "leaseBackend": "macos-app",
+  "leaseProvider": "proxy",
+  "deviceKey": "com.example.app@12345",
+  "platform": "macos"
+}
+```
+
+Requests under a `macos-app` lease are limited to `open`, `close`, `snapshot`, `wait`,
+`find`, `get`, `is`, `click`, `fill`, `press`, `type`, `focus`, `scroll`, `screenshot`, and `batch`,
+plus the lease's own heartbeat; `doctor`, `devices`, `session list` and the other
+inventory commands are refused too.
+`open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
+capture only the app window, inputs that name a host path or a launch (`--save-script`,
+`--launch-url`, `--launch-console`, a screenshot path other than the client's own temp file) are
+refused, device selectors (`--udid`, `--serial`, `--device`, `--target`) are refused, `open` and
+`batch` must carry `--platform macos`, every other command must run in the session `open` created for
+the leased app, and a pid-pinned lease stops working when that process exits. `open`
+requires the daemon to run the native macOS app backend (`AGENT_DEVICE_MACOS_APP_BACKEND=native`).
+A refusal fails with `UNAUTHORIZED` and `details.reason: "MACOS_APP_LEASE_DENIED"`.
+
+Responses under the lease name nothing else about the host. `open` omits the session state and log
+paths and the device (`device`, `id`, `kind`), a failure omits `logPath` and `diagnosticsRecord` and
+replaces host paths and the host name in its text with `<host-path>` and `<host>`, and a snapshot's
+fallback screenshot path stays on the host; the screenshot arrives through the artifact route. The
+request diagnostics route is not served to a tenant that held the lease, and a daemon started with
+`leases.require` does not serve it at all.
+
+These rules apply to requests made under the lease. To refuse requests that name no lease at all,
+start the daemon with a policy that requires one (`leases.require`, below). The proxy token is shared
+by every client of the proxy, so a host serving several clients through one proxy authenticates each
+client itself and sets each request's tenant, session isolation, and lease before forwarding it.
+Embedding `@agent-device/proxy` with its `authenticate` option does the tenant and session
+isolation part: the proxy sends each client's requests as the tenant `authenticate` returns. A tenant id is 1-128 letters, numbers, dots, underscores or hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only `agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload tickets carry the client's own `authorization` and `x-agent-device-token` headers, or the `uploadHeaders` that `authenticate` returns, and never the daemon's token.
+
+## Restrict what clients can do
+
+Start the proxy with a daemon policy to confine every client to named devices and commands. The
+daemon enforces the policy on every request, including `batch` steps and `replay` actions:
+
+```json
+{
+  "version": 1,
+  "devices": { "allow": [{ "udid": "<simulator-udid>" }] },
+  "commands": { "deny": ["boot", "shutdown"] },
+  "capabilities": { "deny": ["device-shutdown"] }
+}
+```
+
+```bash
+AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
+```
+
+- `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
+  devices and `serial` for Android. With the native macOS backend, allowing the Mac also allows
+  each app on it. To allow one app only, list its app device id, for example
+  `host-macos-local:app:com.apple.textedit`. The Mac then appears in `devices`, but whole-Mac
+  sessions stay denied.
+- `commands` takes either `allow` or `deny`, not both. With `allow`, commands added in later releases
+  stay denied. Some client-side tools reach the daemon through internal commands: allow `runtime` for
+  Maestro flows, and `install-from-source` for remote installs.
+- `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
+  that would shut the device down.
+- `leases.require: "macos-app"` (the only accepted value) refuses every request that is not made
+  under a `macos-app` lease or that its allow list does not cover, including requests that name no
+  lease and inventory commands such as `doctor` and `session list`.
+
+The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
+already running for the state directory with a different policy, the proxy refuses to reuse it;
+stop that daemon first. A denied request fails with `UNAUTHORIZED` and
+`details.reason: "DAEMON_POLICY_DENIED"`.
+
+## What the proxy exposes
+
+The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
+
+The proxy passes the daemon's HTTP status through. Most failed upload and artifact requests answer
+a JSON body `{ "ok": false, "error": "...", "code": "..." }`. When the daemon writes this body, it
+also carries a `hint`, and `reason` when the error has one. An artifact, upload, or materialized-path
+id that was already consumed, has expired, or never existed answers `404` with
+`code: "COMMAND_FAILED"` and `reason: "RESOURCE_EXPIRED"`. A `/rpc` call that names the same id
+answers `404` when it does not stream progress. A call that streams progress, as the CLI does
+without `--json`, can already have answered `200`; its final envelope carries the failure.
+
+Other failures answer a `4xx` or `5xx` status that depends on the route and the error. For example,
+invalid arguments answer `400`, a bad token answers `401`, and a human-control hold answers `423`.
+The proxy answers its own failures, such as an unreachable daemon, with `500` and no `reason`. The
+daemon and the proxy share error codes. Read `code` and `reason` to interpret an error. Do not use
+them to tell whether the daemon or the proxy answered.
+
+The proxy checks the client token and forwards authorized requests with the local daemon token. Remote clients never see the daemon token.
+
+The proxy does not forward `/admin/*`, including human-control holds. A caller on the device host
+must use the daemon's loopback port and local daemon token.
+
+## Embed the proxy in your own gateway
+
+`agent-device proxy` is also available as a library, `@agent-device/proxy`, for gateways that front
+daemons on many hosts. It serves the same routes with the same token handling, but you choose the
+transport on both sides: it answers standard Fetch API `Request` objects, so you can host it on
+any HTTP server or carry requests over WebSocket, and it can reach the daemon through your own
+tunnel instead of HTTP. See the
+[package README](https://github.com/callstack/agent-device/tree/main/packages/proxy#readme)
+for the API.
+
+## Compatibility
+
+Remote clients read `/health` before sending commands and compare the daemon RPC protocol version. Keep client and proxy versions close: patch-level differences usually work, and incompatible RPC protocol versions fail before any command runs.
+
+`/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field. `leaseBackends` lists the lease backends the daemon admits (`macos-app` only on a macOS host); a host
+checks `upstream.leaseBackends` for `macos-app` before handing out a macOS app lease, and older
+daemons omit it.
+
+```json
+{"ok":true,"service":"agent-device-proxy","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}
+```
+
+## Clean up
+
+Run `agent-device disconnect` when you finish the remote session. Stop the tunnel and the `agent-device proxy` process only when the host should stop accepting remote clients. Restarting the proxy generates a fresh token unless you supplied `--daemon-auth-token` explicitly.
