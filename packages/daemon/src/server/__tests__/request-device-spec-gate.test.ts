@@ -75,3 +75,20 @@ test('a command naming a spec is refused with device-spec-unsupported before it 
   });
   expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
 });
+
+test('a command giving a spec key the wrong type is refused with device-spec-invalid before it runs', async () => {
+  // The named osVersion would be refused as unsupported; the invalid key is reported instead.
+  const response = await sendAppSwitcher({
+    osVersion: '18',
+    physical: 'yes' as unknown as boolean,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      details: { reason: 'device-spec-invalid', keys: ['physical'] },
+    },
+  });
+  expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
+});

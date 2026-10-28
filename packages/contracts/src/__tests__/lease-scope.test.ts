@@ -18,7 +18,6 @@ import {
   readLeaseDeviceSpec,
   requireLeaseDeviceSpec,
 } from '../lease-scope.ts';
-import type { AppError } from '@agent-device/kernel/errors';
 
 test('leaseScopeFromOptions normalizes public aliases and projects request meta', () => {
   const scope = leaseScopeFromOptions({
@@ -303,13 +302,10 @@ test('requireLeaseDeviceSpec refuses an invalid key with device-spec-invalid', (
     spec: { physical: true },
     keys: ['physical'],
   });
-  assert.throws(
-    () => requireLeaseDeviceSpec({ physical: 'yes' }),
-    (error: AppError) =>
-      error.code === 'INVALID_ARGS' &&
-      error.details?.reason === 'device-spec-invalid' &&
-      JSON.stringify(error.details?.keys) === '["physical"]',
-  );
+  assert.throws(() => requireLeaseDeviceSpec({ physical: 'yes' }), {
+    code: 'INVALID_ARGS',
+    details: { reason: 'device-spec-invalid', keys: ['physical'] },
+  });
 });
 
 test('readLeaseDevice reads the granted facts and rejects an echo missing one', () => {
