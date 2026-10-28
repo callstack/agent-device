@@ -84,7 +84,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
 
 const closeCommandMetadata = defineFieldCommandMetadata(
   'close',
-  'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop. Android ADB close fails with android-app-close-timeout if the app stays foreground, or its process stays running, past its 2s check window.',
+  'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop. Android ADB close fails with android-app-close-timeout if the app stays foreground past 2s, a killed process does not exit within 10s, or a new process runs past 2s.',
   {
     app: stringField('Optional app to close.'),
     shutdown: booleanField('Shutdown the session/device where supported.'),

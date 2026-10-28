@@ -156,7 +156,7 @@ function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicati
   };
 }
 
-test('relaunch refuses to open or observe after the Android process close fence expires', async () => {
+test('relaunch refuses to open or observe after the Android exit close fence expires', async () => {
   vi.useFakeTimers();
   bindAndroidAdbHostStub({});
   const { calls, lifecycle } = createLifecycle({
@@ -183,7 +183,7 @@ test('relaunch refuses to open or observe after the Android process close fence 
         code: 'COMMAND_FAILED',
         details: {
           reason: 'android-app-close-timeout',
-          phase: 'process',
+          phase: 'exit',
           packageName: 'com.example.app',
         },
       });

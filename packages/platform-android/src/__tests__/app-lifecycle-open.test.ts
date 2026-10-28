@@ -409,7 +409,10 @@ test('openAndroidApp stops the bound package before an app-bound deep link when 
       url: 'example://bottom-tabs',
       terminateRunningApp: true,
     });
-    assert.deepEqual(calls[0], ['shell', 'am', 'force-stop', 'com.example.app']);
+    assert.deepEqual(calls.slice(0, 2), [
+      ['shell', 'pidof', 'com.example.app'],
+      ['shell', 'am', 'force-stop', 'com.example.app'],
+    ]);
     assert.deepEqual(calls.at(-1)?.slice(0, 4), ['shell', 'am', 'start', '-W']);
   });
 });
@@ -417,7 +420,10 @@ test('openAndroidApp stops the bound package before an app-bound deep link when 
 test('openAndroidApp stops a resolved package before launching it when terminating a running app', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'com.example.app', { terminateRunningApp: true });
-    assert.deepEqual(calls[0], ['shell', 'am', 'force-stop', 'com.example.app']);
+    assert.deepEqual(calls.slice(0, 2), [
+      ['shell', 'pidof', 'com.example.app'],
+      ['shell', 'am', 'force-stop', 'com.example.app'],
+    ]);
     assert.deepEqual(calls.at(-1)?.slice(0, 4), ['shell', 'am', 'start', '-W']);
     assert.equal(calls.filter((call) => call[2] === 'start').length, 1);
   });
