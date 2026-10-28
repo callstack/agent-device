@@ -189,12 +189,12 @@ test('page script judges a kept selection by boundary points, not by text', () =
 });
 
 test('page script trusts select() for inputs without a selection API and checks the rest', () => {
-  const control = (type: string, selectionStart: number | null) => ({
+  const control = (type: string, selectionStart: number | null, selectionEnd = 3) => ({
     tagName: 'INPUT',
     type,
     value: 'old',
     selectionStart,
-    selectionEnd: selectionStart === null ? null : 3,
+    selectionEnd: selectionStart === null ? null : selectionEnd,
     select: () => {},
   });
   assert.equal(runInPage(pageWithFocusedAndHit(control('email', null)).doc), 'selected');
@@ -203,6 +203,8 @@ test('page script trusts select() for inputs without a selection API and checks 
   // A text input whose selection did not cover the value must not pass as selected.
   assert.equal(runInPage(pageWithFocusedAndHit(control('text', 1)).doc), 'selection-failed');
   assert.equal(runInPage(pageWithFocusedAndHit(control('text', null)).doc), 'selection-failed');
+  // A selection that starts at 0 but ends before the end of the value leaves text unselected.
+  assert.equal(runInPage(pageWithFocusedAndHit(control('text', 0, 2)).doc), 'selection-failed');
 });
 
 test('selection outcome reads the backend result and treats anything else as no answer', () => {
