@@ -283,13 +283,14 @@ test('a macOS app session forwards the bundle its surface is scoped to', async (
 });
 
 test('an accept whose deadline already passed still asks once and reports the typed failure', async () => {
+  vi.useFakeTimers();
   // Every clock read lands 5 ms later, so the retry window a past deadline floors to 1 ms is
   // already spent by the time the loop could first check it.
   let nowMs = 1_000_000;
   const clock = vi.spyOn(Date, 'now').mockImplementation(() => (nowMs += 5));
   mockRunner.mockRejectedValue(runnerAbsence());
 
-  const failure = await actOnAppleAlert(
+  const outcome = actOnAppleAlert(
     IOS_SIMULATOR,
     runnerOptions,
     'accept',
@@ -298,6 +299,8 @@ test('an accept whose deadline already passed still asks once and reports the ty
   )
     .catch((error: unknown) => error)
     .finally(() => clock.mockRestore());
+  await vi.advanceTimersByTimeAsync(3_500);
+  const failure = await outcome;
 
   assert.ok(failure instanceof AppError, 'an expired deadline must reject with an AppError');
   assert.equal(failure.details?.runnerErrorCode, ALERT_NOT_FOUND_RUNNER_CODE);

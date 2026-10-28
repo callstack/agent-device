@@ -32,8 +32,8 @@ export function applicationLifecycleExecutionFromRequest(
 }
 
 /**
- * An enforced daemon deadline is the request's deadline. Otherwise it is when the client stops
- * waiting for the result, as the transport that admitted the request (or its parent) recorded it.
+ * An enforced daemon deadline is the request's deadline. Otherwise it is the result deadline the
+ * transport that admitted the request (or its parent) set, ahead of the client's envelope.
  */
 function requestDeadlineAtMs(req: DaemonRequest): number | undefined {
   const requestId = req.meta?.requestId;

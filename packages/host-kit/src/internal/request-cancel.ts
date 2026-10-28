@@ -15,9 +15,9 @@ type RequestCancelState = {
 type RequestAbortController = AbortController & {
   executionDeadlineMs?: number;
   /**
-   * When the client stops waiting for the result, as the transport that admitted the request
-   * computed it. An attempt registered under a parent inherits the parent's, because it runs inside
-   * the parent's client envelope.
+   * The daemon's own result deadline, which the transport that admitted the request set ahead of
+   * the client's: the end of the client envelope less the daemon's result margin. An attempt
+   * registered under a parent inherits the parent's, because it runs inside the parent's envelope.
    */
   resultDeadlineMs?: number;
 };
@@ -165,7 +165,7 @@ export function getRequestExecutionDeadlineMs(requestId: string | undefined): nu
   return requestId ? requestAbortControllers().get(requestId)?.executionDeadlineMs : undefined;
 }
 
-/** When the client stops waiting for the request's result, if the admitting transport knew. */
+/** The daemon's result deadline the admitting transport set for the request, if it set one. */
 export function getRequestResultDeadlineMs(requestId: string | undefined): number | undefined {
   return requestId ? requestAbortControllers().get(requestId)?.resultDeadlineMs : undefined;
 }

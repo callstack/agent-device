@@ -35,7 +35,7 @@ test('an rpc request registers its tracking id while in flight and releases it o
   }
 });
 
-test('an admitted open must settle within its client envelope less the daemon result margin', async (t) => {
+test('an admitted open records a result deadline of its client envelope less the daemon result margin', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   let deadlineAtMs: number | undefined;
   const { port, server } = await startRpcServer(TOKEN, async (request) => {
