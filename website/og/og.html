@@ -22,6 +22,11 @@
         src: url('/src/fonts/GeistMono-Regular.woff2') format('woff2');
         font-weight: 400;
       }
+      @font-face {
+        font-family: 'Geist Mono';
+        src: url('/src/fonts/GeistMono-Medium.woff2') format('woff2');
+        font-weight: 500;
+      }
       :root {
         --line: rgb(255 255 255 / 0.1);
         --line-strong: rgb(255 255 255 / 0.2);
@@ -56,14 +61,18 @@
         margin-right: 4px;
         color: var(--accent);
       }
+      /* An SVG keeps its 300px default box under `hidden` unless told otherwise. */
+      .mark[hidden] {
+        display: none;
+      }
       .wordmark {
         padding: 2px 9px;
         background: var(--accent);
         color: #0a0a0a;
+        font-family: 'Geist Mono', monospace;
         font-weight: 500;
         font-size: 34px;
         line-height: 1.2;
-        text-transform: uppercase;
       }
       .mono {
         font-family: 'Geist Mono', monospace;
@@ -145,13 +154,17 @@
       .out {
         color: var(--muted);
       }
+      /* Wraps in the space right of the window, so it never covers the transcript. */
       .platforms {
         position: absolute;
         right: 56px;
         bottom: 24px;
+        max-width: 400px;
         padding: 6px 10px;
         background: #0a0a0a;
         font-size: 14px;
+        line-height: 1.6;
+        text-align: right;
         color: var(--muted);
       }
 
@@ -193,8 +206,10 @@
         left: -536px;
         right: auto;
         bottom: 40px;
+        max-width: 480px;
         padding: 0;
         background: none;
+        text-align: left;
       }
     </style>
   </head>
@@ -237,7 +252,11 @@
       for (const el of document.querySelectorAll('[data-wordmark]')) el.textContent = site.wordmark;
       for (const el of document.querySelectorAll('[data-beat]'))
         el.textContent = site.headline[el.dataset.beat];
-      document.querySelector('[data-platforms]').textContent = site.platforms.join(' · ');
+      // Names keep their spaces unbroken, so a wrap never splits "Android TV", and each
+      // separator stays on the line of the name before it.
+      document.querySelector('[data-platforms]').textContent = site.platforms
+        .map((name) => name.replaceAll(' ', '\u00a0'))
+        .join('\u00a0· ');
       document.querySelector('[data-owner]').textContent = `by ${site.owner}`;
 
       // The mark, on its own step grid, when the product has one.
