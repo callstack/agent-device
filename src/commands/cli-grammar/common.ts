@@ -1,5 +1,6 @@
 import type { ElementTarget, InteractionTarget } from '@agent-device/contracts/client';
 import type { CliFlags, InternalRequestOptions } from '@agent-device/contracts/command';
+import { requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   checkElementTargetArgs,
@@ -141,6 +142,13 @@ export function repeatedInputFromFlags(flags: CliFlags): Record<string, unknown>
     jitterPx: flags.jitterPx,
     doubleTap: flags.doubleTap,
   });
+}
+
+/** The spec keys the flags name, as `readLeaseDeviceSpec` decides them. */
+export function leaseDeviceSpecInputFromFlags(
+  flags: CliFlags,
+): Pick<CliFlags, 'osVersion' | 'imageTag' | 'physical'> {
+  return requireLeaseDeviceSpec(flags).spec;
 }
 
 export function targetInputFromClientTarget(

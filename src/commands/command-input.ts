@@ -422,6 +422,19 @@ export function repeatedFields() {
   };
 }
 
+/**
+ * The device spec a proxy lease is allocated by, on the commands that allocate one. The fields
+ * reach the daemon request; a daemon refuses them, and the CLI drops them once a proxy backend has
+ * leased a device by them.
+ */
+export function leaseDeviceSpecFields() {
+  return {
+    osVersion: optionField('osVersion'),
+    imageTag: optionField('imageTag'),
+    physical: optionField('physical'),
+  };
+}
+
 export function fieldsInputSchema(fields: CommandFieldMap): JsonSchema {
   return commandInputSchema(fieldProperties(fields), requiredFieldNames(fields));
 }

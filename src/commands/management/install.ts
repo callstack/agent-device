@@ -8,6 +8,7 @@ import { parseGitHubActionsArtifactInstallSourceSpec } from '@agent-device/provi
 import {
   booleanField,
   jsonSchemaField,
+  leaseDeviceSpecFields,
   looseObjectSchema,
   requiredField,
   integerField,
@@ -16,6 +17,7 @@ import {
 import {
   commonInputFromFlags,
   direct,
+  leaseDeviceSpecInputFromFlags,
   request,
   requiredDaemonString,
   requiredString,
@@ -24,7 +26,6 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
-import { leaseDeviceSpecFields, leaseDeviceSpecInputFromFlags } from './lease-device-spec.ts';
 
 const installCommandMetadata = defineFieldCommandMetadata(
   'install',
@@ -32,7 +33,7 @@ const installCommandMetadata = defineFieldCommandMetadata(
   {
     app: stringField('Optional app identifier hint.'),
     appPath: requiredField(stringField('Path to app binary.')),
-    ...leaseDeviceSpecFields,
+    ...leaseDeviceSpecFields(),
   },
 );
 
@@ -42,7 +43,7 @@ const reinstallCommandMetadata = defineFieldCommandMetadata(
   {
     app: requiredField(stringField()),
     appPath: requiredField(stringField('Path to app binary.')),
-    ...leaseDeviceSpecFields,
+    ...leaseDeviceSpecFields(),
   },
 );
 
@@ -51,7 +52,7 @@ const uninstallCommandMetadata = defineFieldCommandMetadata(
   'Remove an installed app from the selected device. A package name or bundle id that is not installed succeeds with wasInstalled: false.',
   {
     app: requiredField(stringField('Package name, bundle id, or installed app name.')),
-    ...leaseDeviceSpecFields,
+    ...leaseDeviceSpecFields(),
   },
 );
 
