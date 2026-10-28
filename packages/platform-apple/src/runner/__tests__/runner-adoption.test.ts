@@ -3,7 +3,6 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import {
   buildDetachedRunnerLease,
   buildRunnerLease,
@@ -20,7 +19,6 @@ import {
 import { resolveRunnerCacheKey } from '../runner-cache-metadata.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 vi.mock('../runner-transport.ts', async (importOriginal) => {
@@ -269,9 +267,8 @@ test('the adopted runner keeps the log file its predecessor opened for it', asyn
   expect(restamped.runnerLogPath).toBe(runnerLogPath);
 });
 
-test('a request canceled during the fingerprint probe fails adoption instead of skipping it, cold or with the fingerprint cache warm', async () => {
-  // The fingerprint check runs the same blocking toolchain probes a fresh
-  // startup would, and it is handed the request's signal. A cancellation from
+test('a request canceled before the fingerprint check fails adoption instead of skipping it', async () => {
+  // The fingerprint check is handed the request's signal. A cancellation from
   // there is not an unresolvable derived path: swallowing it would let startup
   // walk on past a client that is already gone (#2422).
   const lease = writeStaleLease();
@@ -292,18 +289,12 @@ test('a request canceled during the fingerprint probe fails adoption instead of 
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 
   // The mock above only proves adoption propagates whatever the fingerprint
-  // call throws. Exercise the real production code path too: warm the actual
-  // toolchain fingerprint memo (the module-level cache in
-  // runner-cache-metadata.ts is a singleton the mock above never touches),
-  // then adopt again with an already-aborted signal. Before the fix,
-  // requireRunnerToolchainFingerprint returned the memoized value without
-  // checking the signal, so a cache hit let adoption go on to probe uptime
-  // and write the lease for an already-canceled request (#2422 round 4).
-  resetAllProcessMemosForTests();
+  // call throws. Exercise the real production code path too: with an
+  // already-aborted signal, the real fingerprint read cancels before it reads
+  // anything, so adoption never probes uptime or writes the lease (#2422).
   const { resolveExpectedRunnerCacheMetadata: actualResolveExpectedRunnerCacheMetadata } =
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
-  appleRunnerTestHost.update({ runCmdSync: vi.fn(appleToolchainProbeResult) });
-  actualResolveExpectedRunnerCacheMetadata(simulator);
+  appleRunnerTestHost.update({});
 
   const warmRequest = new AbortController();
   warmRequest.abort();

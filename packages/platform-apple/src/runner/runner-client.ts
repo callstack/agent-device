@@ -140,8 +140,8 @@ export function prewarmAppleRunnerCache(
     options,
     failurePhase: 'ios_runner_cache_prewarm_failed',
     task: async (runnerOptions) => {
-      // A cache prewarm owns the build phase it starts: one budget for the cache
-      // decision's toolchain probes and the `xcodebuild` that may follow them.
+      // A cache prewarm owns the build phase it starts: one budget for the
+      // `xcodebuild` the cache decision may call for.
       await ensureXctestrunArtifact(device, {
         ...runnerOptions,
         budget: createRunnerPhaseBudget(runnerOptions.buildTimeoutMs, runnerOptions.signal),

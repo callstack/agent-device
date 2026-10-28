@@ -728,7 +728,7 @@ test('Provider-backed integration daemon HTTP server reports unknown upload tick
       headers: { ...auth, 'content-type': 'application/octet-stream' },
       body: Buffer.from('late-chunk'),
     });
-    assert.equal(directChunk.status, 500);
+    assert.equal(directChunk.status, 404);
     const directBody = (await directChunk.json()) as {
       ok?: boolean;
       code?: string;
@@ -743,7 +743,7 @@ test('Provider-backed integration daemon HTTP server reports unknown upload tick
       headers: { ...auth, 'content-type': 'application/json' },
       body: JSON.stringify({ uploadId: unknownUploadId }),
     });
-    assert.equal(finalize.status, 500);
+    assert.equal(finalize.status, 404);
     const finalizeBody = (await finalize.json()) as {
       ok?: boolean;
       code?: string;

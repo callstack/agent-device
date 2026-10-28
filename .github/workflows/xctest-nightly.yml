@@ -20,9 +20,30 @@ concurrency:
 
 jobs:
   full-suite:
-    name: iOS Runner Full XCTest Suite
+    name: iOS Runner Full XCTest Suite (${{ matrix.leg.name }})
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        leg:
+          # Both legs share the toolchain, the runner build cache, and the artifact steps above.
+          # The full suite runs on an iPhone, where the sole-screen rule is decided by the idiom
+          # alone. The iPad leg boots an iPad and runs only the sole-screen tests: the iPad half
+          # of the rule — the route opens only while the in-process full-screen evidence proves
+          # the app fills its screen — can execute nowhere else, so only its assertions can turn
+          # a revert to idiom-only routing red instead of silently green.
+          # `name-prefix` is what each leg asserts the booted simulator's name starts with: the
+          # boot action falls back to any simulator when the preferred name is missing, so a
+          # renamed or absent device model must fail the leg that depends on its idiom.
+          - name: iPhone full suite
+            device-name: iPhone 17 Pro
+            name-prefix: iPhone
+            lane: nightly
+          - name: iPad sole-screen evidence
+            device-name: iPad Pro 11-inch (M5)
+            name-prefix: iPad
+            lane: nightly-ipad
     env:
       # Must match apple.yml. The runtime version rides in the derived-data cache key, and
       # AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS is BOTH an input to the cache's build-variant
@@ -38,7 +59,7 @@ jobs:
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
       RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/RunnerTests.xcresult
       RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-nightly/test-results-summary.json
-      XCTEST_LANE: nightly
+      XCTEST_LANE: ${{ matrix.leg.lane }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -67,7 +88,32 @@ jobs:
         uses: ./.github/actions/boot-ios-test-simulator
         with:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
-          preferred-device-name: iPhone 17 Pro
+          preferred-device-name: ${{ matrix.leg.device-name }}
+
+      # The boot action falls back to any simulator when the preferred name is missing, so each
+      # leg proves it booted the family it claims: the full-suite leg's coverage is iPhone-only at
+      # the idiom, and the iPad leg's sole-screen tests can only prove the rule on an iPad. A
+      # renamed or removed device model on the image fails here instead of quietly testing the
+      # wrong idiom.
+      - name: Assert the booted simulator's family
+        run: |
+          set -euo pipefail
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const [udid, prefix] = process.argv.slice(1);
+            const payload = JSON.parse(
+              execFileSync("xcrun", ["simctl", "list", "devices", "-j"], { maxBuffer: 64 * 1024 * 1024 }).toString(),
+            );
+            const device = Object.values(payload.devices ?? {})
+              .flat()
+              .find((entry) => entry.udid === udid);
+            if (!device?.name?.startsWith(prefix)) {
+              console.error(`Booted ${device?.name ?? udid}; this leg needs a simulator named "${prefix}…"`);
+              process.exit(1);
+            }
+            console.log(`Booted ${device.name}`);
+          ' '${{ steps.ios-simulator.outputs.simulator-udid }}' '${{ matrix.leg.name-prefix }}'
+        shell: bash
 
       # Same command as apple.yml's targeted step minus every `-only-testing:` flag, so the
       # xctestrun's own test plan decides what runs — with one exception.
@@ -84,6 +130,7 @@ jobs:
       # A typo in that identifier silently re-arms the hang, so
       # `pnpm check:xctest-selection` validates `-skip-testing:` exactly like `-only-testing:`.
       - name: Run the full iOS runner XCTest suite
+        if: matrix.leg.lane == 'nightly'
         run: |
           set -euo pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
@@ -101,6 +148,31 @@ jobs:
               throw new Error("Optional observation ended the runner test before its wait completed");
             }
           '
+
+      # The iPad leg runs a named selection: the smallest set that can execute the off-phone half of
+      # the sole-screen rule — the admission boundary itself, one hostile-tree command that must
+      # reach synthesis, and `back`'s route witness.
+      # Geometry and error cases live in the host-runnable evidence matrix instead. `xcodebuild`
+      # exits 0 when a selection matches nothing, so the reporter below asserts the executed count
+      # against this lane's reach (`XCTEST_LANE=nightly-ipad`, derived by check:xctest-selection).
+      - name: Run the sole-screen tests on iPad
+        if: matrix.leg.lane == 'nightly-ipad'
+        run: |
+          set -euo pipefail
+          # This leg skips the full-suite step that creates this directory for the iPhone leg, so
+          # it must create it in its own leg before `tee` writes into it.
+          mkdir -p .tmp/xctest-nightly
+          UDID='${{ steps.ios-simulator.outputs.simulator-udid }}'
+          XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
+          test -n "$XCTESTRUN_PATH"
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN_PATH" \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow \
+            -resultBundlePath "$RESULT_BUNDLE_PATH" 2>&1 | tee .tmp/xctest-nightly/runner.log
 
       # Best-effort and never the job's verdict on its own; the step below is what asserts.
       # `--compact` first because a red night's summary is the large one, and the job summary
@@ -122,8 +194,9 @@ jobs:
       # build variant without the unit-test compile flag, an empty test plan, or a renamed
       # target would all read as a healthy night. The reporter asserts the executed count
       # equals what `pnpm check:xctest-selection` derives this lane reaches from the `#if`
-      # guards (XCTEST_LANE above), so a guard that compiles a file of tests out of iOS reads
-      # as red too. The failure list is capped so a badly red night cannot blow the 1 MiB
+      # guards and this workflow's own flags (XCTEST_LANE above), so a guard that compiles a
+      # file of tests out of iOS, or a selection whose name no longer matches, reads as red
+      # too. The failure list is capped so a badly red night cannot blow the 1 MiB
       # job-summary limit and lose the headline with it.
       - name: Report the run and assert the source-derived count
         if: always()
@@ -142,7 +215,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: xctest-nightly-results-${{ github.run_id }}-${{ github.run_attempt }}
+          name: xctest-nightly-${{ matrix.leg.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
           include-hidden-files: true
           path: .tmp/xctest-nightly
           if-no-files-found: warn

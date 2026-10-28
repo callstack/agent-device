@@ -100,6 +100,31 @@ extension RunnerTests {
     ) {
       return synthesizedResponse
     }
+    return executeCoordinateDrag(
+      activeApp: activeApp,
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      holdDuration: synthesized == nil
+        ? coordinateDragHoldDuration()
+        : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs),
+      message: message
+    )
+  }
+
+  /// Callers own the hold duration; only synthesized fallback attaches `fallback` evidence.
+  @MainActor
+  private func executeCoordinateDrag(
+    activeApp: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double,
+    holdDuration: TimeInterval,
+    message: String,
+    fallback: GestureFallback? = nil
+  ) -> Response {
     let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
     let dragFrame = resolvedDragVisualizationFrame(
       app: activeApp,
@@ -108,9 +133,6 @@ extension RunnerTests {
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    let holdDuration = synthesized == nil
-      ? coordinateDragHoldDuration()
-      : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
     let (timing, outcome) = performGesture(activeApp) {
       dragAt(
         app: activeApp,
@@ -124,7 +146,7 @@ extension RunnerTests {
     if let response = unsupportedResponse(for: outcome) {
       return response
     }
-    return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
+    return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame), fallback: fallback)
   }
 
   @MainActor
@@ -141,8 +163,7 @@ extension RunnerTests {
     profile: SynthesizedDragProfile
   ) -> Response? {
 #if os(iOS)
-    let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(app: activeApp, policy: policy)
+    let context = context ?? synthesizedCoordinateContext(app: activeApp)
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,
@@ -162,12 +183,13 @@ extension RunnerTests {
       )
     }
     let durationMs = min(max(durationMs, 16), 10000)
-    let dragFrame = axFreeDragVisualizationFrame(
+    let dragFrame = DragVisualizationFrame(
       x: plan.points.x,
       y: plan.points.y,
       x2: plan.points.x2,
       y2: plan.points.y2,
-      referenceFrame: plan.referenceFrame
+      referenceWidth: Double(plan.referenceFrame.width),
+      referenceHeight: Double(plan.referenceFrame.height)
     )
     switch performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
       synthesizedDragAt(
@@ -184,13 +206,13 @@ extension RunnerTests {
     case .performed(let timing):
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
     case .xctestFallback(let fallbackMessage, let hint):
-      return executeCoordinateDragFallback(
+      return executeCoordinateDrag(
         activeApp: activeApp,
         x: plan.points.x,
         y: plan.points.y,
         x2: plan.points.x2,
         y2: plan.points.y2,
-        durationMs: durationMs,
+        holdDuration: synthesizedSwipeFallbackHoldDuration(durationMs: durationMs),
         message: message,
         fallback: GestureFallback(strategy: "xctest-coordinate-drag", message: fallbackMessage, hint: hint)
       )
@@ -200,47 +222,6 @@ extension RunnerTests {
 #else
     return nil
 #endif
-  }
-
-  @MainActor
-  private func executeCoordinateDragFallback(
-    activeApp: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double,
-    message: String,
-    fallback: GestureFallback
-  ) -> Response {
-    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
-    let dragFrame = resolvedDragVisualizationFrame(
-      app: activeApp,
-      x: dragPoints.x,
-      y: dragPoints.y,
-      x2: dragPoints.x2,
-      y2: dragPoints.y2
-    )
-    let holdDuration = synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
-    let (timing, outcome) = performGesture(activeApp) {
-      dragAt(
-        app: activeApp,
-        x: dragPoints.x,
-        y: dragPoints.y,
-        x2: dragPoints.x2,
-        y2: dragPoints.y2,
-        holdDuration: holdDuration
-      )
-    }
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(
-      message: message,
-      timing: timing,
-      frame: .drag(dragFrame),
-      fallback: fallback
-    )
   }
 
   /// Adds the #2500 avoidance evidence to a scroll response. Only the frame resolver knows whether

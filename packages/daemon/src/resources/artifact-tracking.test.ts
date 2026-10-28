@@ -27,3 +27,25 @@ test('disposing a runtime removes the temporary files it still tracks', () => {
   expect(fs.existsSync(uploadDir)).toBe(false);
   expect(fs.existsSync(artifactPath)).toBe(false);
 });
+
+test('a file tracked twice for one tenant keeps one id, and another tenant gets its own', () => {
+  const root = mkdtempForTestSync('agent-device-artifact-reuse-');
+  const artifactPath = path.join(root, 'recording.mp4');
+  fs.writeFileSync(artifactPath, 'video');
+  const runtime = createRuntimeStateHandle();
+
+  const [first, again, otherTenant] = runtime.run(() => {
+    const track = (tenantId: string) =>
+      trackDownloadableArtifact({
+        artifactPath,
+        tenantId,
+        artifactType: 'screen-recording',
+        fileName: 'recording.mp4',
+      });
+    return [track('tenant-a'), track('tenant-a'), track('tenant-b')];
+  });
+  runtime.dispose();
+
+  expect(again).toBe(first);
+  expect(otherTenant).not.toBe(first);
+});

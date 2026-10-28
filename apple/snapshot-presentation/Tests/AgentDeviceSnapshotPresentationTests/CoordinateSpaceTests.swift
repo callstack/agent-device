@@ -28,9 +28,18 @@ final class CoordinateSpaceTests: XCTestCase {
       let oriented: Frame
     }
 
+    struct WindowContentCase: Decodable {
+      struct Offset: Decodable { let width, height: Double }
+      let name: String
+      let reportedBox: Frame
+      let viewportBox: Frame
+      let offset: Offset?
+    }
+
     let constants: Constants
     let quarterTurnCases: [QuarterTurnCase]
     let rotationCases: [RotationCase]
+    let windowContentCases: [WindowContentCase]
   }
 
   /// Identity in portrait/unknown, 90° per landscape, 180° upside-down.
@@ -63,27 +72,9 @@ final class CoordinateSpaceTests: XCTestCase {
         in: offsetLandscape,
         interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft
       ),
-      CGPoint(x: 268, y: 1040),
-      "non-zero frame origin is localized before rotation"
+      CGPoint(x: 288, y: 1030),
+      "a frame offset from the screen never moves the turned point (#3899)"
     )
-  }
-
-  func testNativeSynthesizedVectorRotatesByInterfaceOrientation() {
-    let cases: [(Int, CGVector)] = [
-      (RunnerInterfaceOrientation.portrait, CGVector(dx: 40, dy: -20)),
-      (RunnerInterfaceOrientation.landscapeRight, CGVector(dx: 20, dy: 40)),
-      (RunnerInterfaceOrientation.landscapeLeft, CGVector(dx: -20, dy: -40)),
-      (RunnerInterfaceOrientation.portraitUpsideDown, CGVector(dx: -40, dy: 20)),
-      (RunnerInterfaceOrientation.unknown, CGVector(dx: 40, dy: -20)),
-    ]
-    for (orientation, expected) in cases {
-      let vector = CoordinateSpaceRotation.native(
-        vector: CGVector(dx: 40, dy: -20),
-        interfaceOrientation: orientation
-      )
-      XCTAssertEqual(vector.dx, expected.dx, "dx interfaceOrientation \(orientation)")
-      XCTAssertEqual(vector.dy, expected.dy, "dy interfaceOrientation \(orientation)")
-    }
   }
 
   /// Capture rotates back with the exact inverse of what dispatch rotates forward. A landscape
@@ -308,11 +299,13 @@ final class CoordinateSpaceTests: XCTestCase {
   /// (packages/platform-apple/src/snapshot-source/window-coordinate-space.test.ts). Add
   /// cases there, never fork the rule. Detection is replayed under both landscape turns, because
   /// which window declares the native space cannot depend on which way the app is turned; the
-  /// rotation rows carry their own orientation.
+  /// rotation rows carry their own orientation. The window-content rows (#3899) replay here alone:
+  /// the bridge guest refuses a windowed tree before the vitest twin's decoder can read one.
   func testWindowCoordinateSpaceMatchesGoldenParityTable() throws {
     let fixture = try loadWindowCoordinateSpaceFixture()
     XCTAssertFalse(fixture.quarterTurnCases.isEmpty, "parity table must not be empty")
     XCTAssertFalse(fixture.rotationCases.isEmpty, "parity table must not be empty")
+    XCTAssertFalse(fixture.windowContentCases.isEmpty, "parity table must not be empty")
     XCTAssertEqual(
       fixture.constants.quarterTurnTolerance,
       SnapshotGeometrySpace.quarterTurnTolerance,
@@ -346,6 +339,13 @@ final class CoordinateSpaceTests: XCTestCase {
           interfaceOrientation: testCase.interfaceOrientation
         ),
         testCase.oriented.cgRect,
+        testCase.name
+      )
+    }
+    for testCase in fixture.windowContentCases {
+      XCTAssertEqual(
+        SnapshotContentTranslation.offset(reportedBox: testCase.reportedBox.cgRect, viewportBox: testCase.viewportBox.cgRect),
+        testCase.offset.map { CGSize(width: $0.width, height: $0.height) },
         testCase.name
       )
     }
@@ -484,6 +484,37 @@ final class CoordinateSpaceTests: XCTestCase {
       )[1].hittable,
       false
     )
+  }
+
+  /// #3899: a placed window's subtree publishes at its screen position, while the system windows
+  /// under it and a window at the screen origin keep what the platform reported.
+  func testNormalizedTranslatesOnlyAPlacedWindowsSubtree() {
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let reportedRoot = CGRect(x: 0, y: 0, width: 386, height: 682)
+    let acquired = [
+      coordinateNode(0, "Application", reportedRoot, nil, 0),
+      coordinateNode(1, "Window", reportedRoot, 0, 1),
+      coordinateNode(2, "Other", reportedRoot, 1, 2),
+      coordinateNode(3, "Button", CGRect(x: 335, y: 14, width: 37, height: 36), 2, 3, label: "Add"),
+      coordinateNode(4, "Window", CGRect(x: 0, y: 925, width: 834, height: 282), 0, 1, label: "keyboard"),
+      coordinateNode(5, "Key", CGRect(x: 300, y: 1100, width: 60, height: 60), 4, 2),
+      coordinateNode(6, "Window", CGRect(x: 0, y: 0, width: 834, height: 1210), 0, 1, label: "springboard"),
+      coordinateNode(7, "Alert", CGRect(x: 300, y: 500, width: 240, height: 160), 6, 2),
+    ]
+    func normalized(viewport: CGRect) -> [RawAXNode] {
+      SnapshotGeometrySpace.normalized(
+        nodes: acquired,
+        viewport: .reported(box: viewport, interfaceOrientation: RunnerInterfaceOrientation.portrait)
+      )
+    }
+    let reported = acquired.map(\.rect.cgRect)
+    let placedNodes = normalized(viewport: windowOnScreen)
+    let placed = placedNodes.map(\.rect.cgRect)
+    XCTAssertEqual(Array(placed[0...2]), [windowOnScreen, windowOnScreen, windowOnScreen])
+    XCTAssertEqual(placed[3], CGRect(x: 559, y: 221, width: 37, height: 36), "Add draws at (559,221)")
+    XCTAssertEqual(placedNodes[3].hittable, true, "hittability reads the translated frame")
+    XCTAssertEqual(Array(placed[4...]), Array(reported[4...]), "system windows already report screen space")
+    XCTAssertEqual(normalized(viewport: reportedRoot).map(\.rect.cgRect), reported, "a window at the screen origin is unchanged")
   }
 
   func testNormalizedOfAnEmptyArrayIsEmpty() {

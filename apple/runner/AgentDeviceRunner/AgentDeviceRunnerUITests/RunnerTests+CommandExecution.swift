@@ -6,6 +6,7 @@ extension RunnerTests {
   func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
+    activeAppBundleId: String? = nil,
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
@@ -75,10 +76,7 @@ extension RunnerTests {
           var fallback: GestureFallback?
           if command.synthesized == true {
             let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-            let context = synthesizedCoordinateContext(
-              app: activeApp,
-              policy: synthesizedGesturePolicy(policyKind)
-            )
+            let context = synthesizedCoordinateContext(app: activeApp)
             switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
               synthesizedTapAt(
                 app: activeApp,
@@ -147,26 +145,28 @@ extension RunnerTests {
           bundleId: mainOwned.bundleId
         )
         let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
-          xCTestChannelPenalized: xCTestChannelPenalized
+          xCTestChannelPenalized: xCTestChannelPenalized,
+          evidence: command.coordinateTapTextInputEvidence,
+          point: CGPoint(x: x, y: y),
+          targetBundleId: activeAppBundleId
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
           textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
-          // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil
+          // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.
+          clearRememberedTextEntryTap()
           NSLog(
-            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
-            mainOwned.bundleId ?? ""
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@ reason=%@",
+            mainOwned.bundleId ?? "",
+            xCTestChannelPenalized ? "penalized-xctest-channel" : "evidence"
           )
         }
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-          let context = synthesizedCoordinateContext(
-            app: activeApp,
-            policy: synthesizedGesturePolicy(policyKind)
-          )
+          let context = synthesizedCoordinateContext(app: activeApp)
           switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }) {
@@ -223,15 +223,38 @@ extension RunnerTests {
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "longPress requires x and y"))
       }
-      let duration = (command.durationMs ?? 800) / 1000.0
+      let durationMs = command.durationMs ?? 800
+      let fallback: GestureFallback?
+#if os(iOS)
+      let policyKind = SynthesizedGesturePolicyKind.coordinateLongPress
+      let context = synthesizedCoordinateContext(app: activeApp)
+      switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
+        synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
+      }) {
+      case .performed(let timing):
+        let touchFrame = context.map { touchVisualizationFrame(x: x, y: y, context: $0) }
+        return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
+      case .xctestFallback(let message, let hint):
+        fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)
+      case .refused(_, let message, let hint):
+        return unsupportedResponse(message: message, hint: hint)
+      }
+#else
+      fallback = nil
+#endif
       let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
       let (timing, outcome) = performGesture(activeApp) {
-        longPressAt(app: activeApp, x: x, y: y, duration: duration)
+        longPressAt(app: activeApp, x: x, y: y, duration: durationMs / 1000.0)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
       }
-      return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
+      return gestureResponse(
+        message: "long pressed",
+        timing: timing,
+        frame: .touch(touchFrame),
+        fallback: fallback
+      )
     case .drag:
       guard let x = command.x, let y = command.y, let x2 = command.x2, let y2 = command.y2 else {
         return Response(ok: false, error: ErrorPayload(message: "drag requires x, y, x2, and y2"))
@@ -255,11 +278,7 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
-      let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
-      guard let scrollContext = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(scrollPolicyKind)
-      ) else {
+      guard let scrollContext = synthesizedCoordinateContext(app: activeApp) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
@@ -644,7 +663,7 @@ extension RunnerTests {
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
     case .gestureViewport:
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
+      let frame = gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }

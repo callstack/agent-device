@@ -31,13 +31,9 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
-/// The band the visible keyboard owns, measured by the one producer that can ask the keyboard
-/// directly instead of rebuilding it from a captured tree.
-///
-/// `app.keyboards.firstMatch` answers in the app's own orientation space, which no tree tier can say
-/// about its own rects while the app is rotated (#2612, #2653). Publishing the measurement is what
-/// lets the daemon's tap guard answer with a point-in-rect test instead of guessing where a
-/// plausible-looking band would be (#2660).
+/// Keyboard coverage read from the capture's complete pre-projection root snapshot on iOS XCTest.
+/// Visible frames include the input assistant and share the nodes' normalized coordinate space.
+/// A complete scan with no keyboard establishes absence; projected or partial trees never do.
 enum RunnerKeyboardBandFact: Equatable {
   case visible(CGRect)
   case absent
@@ -83,46 +79,22 @@ enum RunnerKeyboardBandFact: Equatable {
 /// on prose: a daemon log line and a `snapshot --json` reader have to agree on what `unmeasurable`
 /// meant without parsing a sentence.
 enum RunnerKeyboardBandReason {
-  /// The `app.keyboards` read threw or otherwise produced no answer at all.
-  static let queryFailed = "keyboard-frame-query-failed"
   /// The keyboard exists and reports no usable box. It is on screen — only its band is unknown, which
   /// is not the same claim as `absent`.
   static let unusableFrame = "keyboard-frame-unusable"
-  /// The read did not return inside the slice this capture had left for it, so the band was abandoned
-  /// rather than waited on: a keyboard this capture cannot afford to measure is not worth a stalled
-  /// capture, and the daemon's tap guard falls back to the tree rule for this capture alone.
+  /// The captured-tree scan did not finish within its slice of the snapshot budget.
   static let queryTimeout = "keyboard-frame-query-timeout"
   /// No slice was left at all, so the read was never dispatched.
   static let budgetExhausted = "capture-plan-budget-exhausted"
 }
 
-/// Whether a keyboard's reported box can be a band at all. A zero-area or non-finite box is what an
-/// element XCTest cannot measure looks like.
-///
-/// Reads `origin` and `size` rather than the rect's own accessors: `CGRect.width` and `CGRect.height`
-/// standardize, so a box reported with a negative size answers them with a positive one and an
-/// unmeasurable element would ship as a measured band. The daemon's reader applies the same rule to
-/// the wire frame, so neither language can publish a band the other would refuse.
-func runnerKeyboardFrameIsUsable(_ frame: CGRect) -> Bool {
-  let size = frame.size
-  let origin = frame.origin
-  return [origin.x, origin.y, size.width, size.height].allSatisfy(\.isFinite)
-    && size.width > 0 && size.height > 0
-}
-
-/// The one decision the keyboard-band probe makes, kept away from the live query so the unit lane can
-/// pin it without a keyboard on screen. Three outcomes and no fourth: a read that failed says it
-/// failed, a keyboard that is not there is proven absent, and a keyboard whose box cannot be measured
-/// is unmeasurable rather than absent — the difference is whether anything may claim this screen is
-/// clear of a keyboard.
+/// Classifies a complete capture's keyboard observation; failed or timed-out captures never call it.
 func runnerKeyboardBandFact(
-  readSucceeded: Bool,
   exists: Bool,
   frame: CGRect
 ) -> RunnerKeyboardBandFact {
-  guard readSucceeded else { return .unmeasurable(RunnerKeyboardBandReason.queryFailed) }
   guard exists else { return .absent }
-  guard runnerKeyboardFrameIsUsable(frame) else {
+  guard SnapshotGeometry.isPositiveFinite(frame) else {
     return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
   }
   return .visible(frame)
@@ -131,18 +103,15 @@ func runnerKeyboardBandFact(
 private struct KeyboardBandProbeTimeout: Error {}
 
 extension RunnerTests {
-  /// The band the visible keyboard owns, read once per capture.
+  /// The band the visible keyboard owns in the captured tree.
   ///
   /// Returns nil only where there is no iOS keyboard to look for. Every other outcome is stated,
   /// including the ones where looking failed: a missing field would leave the daemon guessing which
   /// tier answered, while a published `unmeasurable` names the reason where the band would have been.
   ///
-  /// Its own main-thread hop with its own slice, taken after the tree so the fact is never older than
-  /// the tree it is compared against, and so a keyboard this capture cannot afford to measure costs the
-  /// capture nothing: a timeout abandons the fact and leaves the tree tier standing, the same trade
-  /// `boundedBlockingSystemAlertSnapshot` makes for the probe it bounds (#2660). The elapsed time rides
-  /// the stamp so the cost of the extra query stays checkable in the field.
-  func captureKeyboardBandFact(app: XCUIApplication, deadline: Date) -> RunnerKeyboardBandFact? {
+  /// The tree and keyboard band describe the same capture, even if the live keyboard disappears.
+  /// Its own bounded main-thread hop preserves the existing budget and timeout evidence.
+  func captureKeyboardBandFact(snapshot: XCUIElementSnapshot, viewport: SnapshotViewport, deadline: Date) -> RunnerKeyboardBandFact? {
 #if os(iOS)
     let slice = min(Self.keyboardBandProbeBudget, max(0, deadline.timeIntervalSinceNow))
     guard slice > 0 else {
@@ -160,7 +129,7 @@ extension RunnerTests {
         timeout: slice,
         timeoutError: { KeyboardBandProbeTimeout() }
       ) {
-        self.keyboardBandFact(app: app)
+        self.keyboardBandFact(snapshot: snapshot, viewport: viewport)
       }
     } catch {
       fact = .unmeasurable(RunnerKeyboardBandReason.queryTimeout)
@@ -177,15 +146,40 @@ extension RunnerTests {
 #endif
   }
 
-  private func keyboardBandFact(app: XCUIApplication) -> RunnerKeyboardBandFact {
-    let read = safely("KEYBOARD_BAND_FACT") { () -> RunnerKeyboardBandFact? in
-      let keyboard = app.keyboards.firstMatch
-      guard keyboard.exists else {
-        return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+  private func keyboardBandFact(snapshot: XCUIElementSnapshot, viewport: SnapshotViewport) -> RunnerKeyboardBandFact {
+    // A live exists/frame pair can race keyboard dismissal after the tree was captured.
+    var pending: [(XCUIElementSnapshot, SnapshotGeometrySpace, String?)] = [(snapshot, .appOrientation, nil)]
+    var keyboardFrame: CGRect?
+    var assistantFrame = CGRect.null
+    var sawKeyboard = false
+    while let (node, inheritedSpace, parentType) = pending.popLast() {
+      let type = elementTypeName(node.elementType)
+      let space = SnapshotGeometrySpace.space(
+        reportedType: type,
+        parentType: parentType,
+        reportedFrame: node.frame,
+        inheritedFrom: inheritedSpace,
+        viewport: viewport
+      )
+      let frame = space.orientedFrame(of: node.frame)
+      if node.elementType == .keyboard {
+        sawKeyboard = true
+        // A stale keyboard in another window must not hide a valid captured keyboard.
+        if SnapshotGeometry.isPositiveFinite(node.frame), SnapshotGeometry.isPositiveFinite(frame) {
+          keyboardFrame = keyboardFrame.map { $0.union(frame) } ?? frame
+        }
+      } else if SnapshotKeyboardSurface.isInputAssistant(type: type, identifier: node.identifier),
+        SnapshotGeometry.isPositiveFinite(node.frame), SnapshotGeometry.isPositiveFinite(frame) {
+        assistantFrame = assistantFrame.union(frame)
       }
-      return runnerKeyboardBandFact(readSucceeded: true, exists: true, frame: keyboard.frame)
+      pending.append(contentsOf: node.children.map { ($0, space, type) })
     }
-    return read ?? .unmeasurable(RunnerKeyboardBandReason.queryFailed)
+    guard let keyboardFrame else {
+      return sawKeyboard
+        ? .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+        : runnerKeyboardBandFact(exists: false, frame: .zero)
+    }
+    return runnerKeyboardBandFact(exists: true, frame: keyboardFrame.union(assistantFrame))
   }
 }
 

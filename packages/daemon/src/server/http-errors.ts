@@ -3,8 +3,11 @@ import { normalizeError } from '@agent-device/kernel/errors';
 
 export type NormalizedHttpError = ReturnType<typeof normalizeError>;
 
-export function statusCodeForNormalizedError(code: string): number {
-  switch (code) {
+export function statusCodeForNormalizedError(error: {
+  code: string;
+  details?: Record<string, unknown>;
+}): number {
+  switch (error.code) {
     case 'INVALID_ARGS':
       return 400;
     case 'UNAUTHORIZED':
@@ -15,15 +18,30 @@ export function statusCodeForNormalizedError(code: string): number {
     // fallthrough
     case 'REPAIR_SESSION_EXPIRED':
       return 404;
+    case 'DEVICE_IN_USE':
+      return error.details?.reason === 'human_control_active' ? 423 : 500;
+    case 'COMMAND_FAILED':
+      // A TTL registry cannot tell an expired id from one that never existed,
+      // so a gone resource is 404 rather than 410.
+      return error.details?.reason === 'RESOURCE_EXPIRED' ? 404 : 500;
     default:
       return 500;
   }
 }
 
 export function sendRestJsonError(res: http.ServerResponse, normalized: NormalizedHttpError): void {
-  res.statusCode = statusCodeForNormalizedError(normalized.code);
+  res.statusCode = statusCodeForNormalizedError(normalized);
   res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify({ ok: false, error: normalized.message, code: normalized.code }));
+  const reason = normalized.details?.reason;
+  res.end(
+    JSON.stringify({
+      ok: false,
+      error: normalized.message,
+      code: normalized.code,
+      ...(typeof reason === 'string' ? { reason } : {}),
+      ...(normalized.hint !== undefined ? { hint: normalized.hint } : {}),
+    }),
+  );
 }
 
 /**
@@ -38,6 +56,6 @@ export function failStreamedHttpResponse(res: http.ServerResponse, error: Error)
     return;
   }
   const normalized = normalizeError(error);
-  res.statusCode = statusCodeForNormalizedError(normalized.code);
+  res.statusCode = statusCodeForNormalizedError(normalized);
   res.end(normalized.message);
 }

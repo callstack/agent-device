@@ -53,37 +53,13 @@ export function buildRecordingUnsupportedResponse(
 }
 
 export function buildRecordingStopResponse(completion: ScreenRecordingCompletion): DaemonResponse {
-  const artifacts: DaemonArtifact[] = [recordingArtifact(completion)];
-  if (completion.chunks && completion.chunks.length > 1) {
-    artifacts.push(
-      ...completion.chunks.slice(1).map((chunk) => ({
-        field: 'chunkPath',
-        artifactType: 'screen-recording-chunk' as const,
-        path: chunk.path,
-        localPath: chunk.clientOutPath,
-        fileName: path.basename(chunk.clientOutPath ?? chunk.path),
-      })),
-    );
-  }
-  if (completion.telemetryPath) {
-    const clientTelemetryPath = completion.clientOutPath
-      ? deriveRecordingTelemetryPath(completion.clientOutPath)
-      : undefined;
-    artifacts.push({
-      field: 'telemetryPath',
-      artifactType: 'screen-recording-telemetry',
-      path: completion.telemetryPath,
-      localPath: clientTelemetryPath,
-      fileName: path.basename(completion.telemetryPath),
-    });
-  }
   return {
     ok: true,
     data: {
       recording: 'stopped',
       outPath: completion.outPath,
       telemetryPath: completion.telemetryPath,
-      artifacts,
+      artifacts: recordingStopArtifacts(completion),
       recordingBackend: completion.backend,
       recordingScope: completion.scope,
       recordOnlySession: completion.recordOnlySession,
@@ -109,6 +85,35 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
       })),
     } satisfies RecordingCommandResult,
   };
+}
+
+/** The files a finished recording hands to its caller: the video, later chunks, and telemetry. */
+export function recordingStopArtifacts(completion: ScreenRecordingCompletion): DaemonArtifact[] {
+  const artifacts: DaemonArtifact[] = [recordingArtifact(completion)];
+  if (completion.chunks && completion.chunks.length > 1) {
+    artifacts.push(
+      ...completion.chunks.slice(1).map((chunk) => ({
+        field: 'chunkPath',
+        artifactType: 'screen-recording-chunk' as const,
+        path: chunk.path,
+        localPath: chunk.clientOutPath,
+        fileName: path.basename(chunk.clientOutPath ?? chunk.path),
+      })),
+    );
+  }
+  if (completion.telemetryPath) {
+    const clientTelemetryPath = completion.clientOutPath
+      ? deriveRecordingTelemetryPath(completion.clientOutPath)
+      : undefined;
+    artifacts.push({
+      field: 'telemetryPath',
+      artifactType: 'screen-recording-telemetry',
+      path: completion.telemetryPath,
+      localPath: clientTelemetryPath,
+      fileName: path.basename(completion.telemetryPath),
+    });
+  }
+  return artifacts;
 }
 
 function recordingArtifact(completion: ScreenRecordingCompletion): DaemonArtifact {

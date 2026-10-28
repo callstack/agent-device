@@ -132,6 +132,8 @@ function markSurfaceStabilization(
   // never stored: "no usable baseline" has exactly one
   // representation (absent), so no consumer has to tell `undefined` from `[]`
   // — and the loop cannot rebase a baseline that was never really there.
+  // Constructing the baseline here is the whole distrust authorization. The loop is
+  // not given a second platform flag that could disagree with it.
   const baselineSignature = requiresPostGestureBaselineDistrust(session.device)
     ? buildInteractionSurfaceSignature(session.snapshot?.nodes ?? [])
     : undefined;
@@ -142,10 +144,13 @@ function markSurfaceStabilization(
     markedAt: Date.now(),
     ...(baselineSignature?.length
       ? {
-          baselineSignature,
-          // Recorded so the loop can tell a comparable quiet capture from one
-          // served by a different backend, which is not comparable at all.
-          baselineBackend: snapshotSurfaceComparisonKey(session.snapshot),
+          // The baseline the loop judges against AND re-baselines under; see
+          // `DeferredSurface.baseline`.
+          baseline: {
+            provenance: 'pre-action' as const,
+            signature: baselineSignature,
+            comparisonKey: snapshotSurfaceComparisonKey(session.snapshot),
+          },
         }
       : {}),
   };
@@ -359,10 +364,8 @@ export async function capturePostGestureStabilizedResult<T>(params: {
       pending: {
         action: pending.action,
         positionals: pending.positionals ?? [],
-        baselineSignature: pending.baselineSignature,
-        baselineBackend: pending.baselineBackend,
+        baseline: pending.baseline,
       },
-      needsBaselineDistrust: requiresPostGestureBaselineDistrust(session.device),
       initial: params.initial,
       hooks: {
         capture,
@@ -370,7 +373,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
           const snapshot = readSnapshot(value);
           return {
             signature: buildInteractionSurfaceSignature(snapshot.nodes),
-            backend: snapshotSurfaceComparisonKey(snapshot),
+            comparisonKey: snapshotSurfaceComparisonKey(snapshot),
           };
         },
         signaturesStable: areInteractionSurfaceSignaturesStable,

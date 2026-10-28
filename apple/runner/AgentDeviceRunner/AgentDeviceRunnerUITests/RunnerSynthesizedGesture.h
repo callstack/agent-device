@@ -14,8 +14,8 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 @interface RunnerSynthesizedGesture : NSObject
 
 // `resolvedWindow` is the app window the caller already resolved for the gesture's reference
-// frame. The record's display ID is read from that same window so geometry and routing can never
-// name different windows; pass nil to fall back to the application's first window.
+// frame, so the record's display ID is read from that same window. Pass nil for the sole-screen
+// route: the app's tree could not name its window and the screen is proven instead.
 + (NSString * _Nullable)synthesizeSwipeWithApplication:(id)application
                                         resolvedWindow:(id _Nullable)resolvedWindow
                                                     x:(double)x

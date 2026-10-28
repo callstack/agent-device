@@ -75,6 +75,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-application-resources.ts',
     'src/platform-runtime-audio-probe-host.ts',
     'src/platform-runtime-device-shutdown-host.ts',
+    'src/platform-runtime-host-command-runner.ts',
     'src/platform-runtime-host-device-shell.ts',
     'src/platform-runtime-host.ts',
     'src/platform-runtime-local-application-interactors.ts',

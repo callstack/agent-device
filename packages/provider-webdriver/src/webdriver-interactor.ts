@@ -690,7 +690,7 @@ class WebDriverInteractor implements Interactor {
   private async readTextEntryState(): Promise<TextEntryStateBeforeTap> {
     const [keyboard, active] = await Promise.all([
       this.client.isKeyboardShown(TEXT_ENTRY_PROBE_TIMEOUT_MS),
-      this.client.activeElement(TEXT_ENTRY_PROBE_TIMEOUT_MS),
+      this.client.activeElementReference(TEXT_ENTRY_PROBE_TIMEOUT_MS),
     ]);
     return {
       keyboard,

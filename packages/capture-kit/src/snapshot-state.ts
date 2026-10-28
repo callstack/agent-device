@@ -1,6 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSnapshotOcclusionContextEvidence,
+  readSnapshotTextInputGeometry,
+  attachSnapshotTextInputGeometry,
   snapshotCaptureAnnotationsFrom,
   publicSnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
@@ -91,6 +93,8 @@ export function buildSnapshotState(
       : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
     snapshotRefMinting(data),
   );
+  const textInputGeometry = readSnapshotTextInputGeometry(data.nodes);
+  if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
   return {
     nodes,
     truncated: data?.truncated,

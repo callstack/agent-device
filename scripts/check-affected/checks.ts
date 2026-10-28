@@ -53,6 +53,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('layering', 'Import-direction layering guard', 'check:layering'),
   gate('di-seams', 'Test-only DI seam guard', 'check:di-seams'),
   gate('fallow', 'Fallow code-quality audit', 'check:fallow'),
+  gate('native-dupes', 'New native code clones (jscpd)', 'check:native-dupes'),
+  gate(
+    'native-dupes-model',
+    'Native clone detection and baseline policy',
+    'check:native-dupes:test',
+  ),
   gate('mcp-metadata', 'MCP registry metadata sync', 'check:mcp-metadata'),
   gate('build', 'Build (tsdown + declarations)', 'build'),
   gate('package', 'Published package (publint, attw, clean-install resolution)', 'check:package'),
@@ -128,6 +134,16 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('fixture-cache', 'Trusted fixture-artifact selection', 'test:fixture-cache'),
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
   gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
+  // The docs page's cells are generated from the runtime facts, so the check is
+  // the guard over that generation: it regenerates and diffs, proves the drift
+  // report fires on a changed cell, and proves every qualified cell still names
+  // facts that hold. It loads the platform runtimes against a stub host and a
+  // scripted provider wire, so it needs no device or network.
+  gate(
+    'capabilities-matrix',
+    'Capabilities page matches runtime facts',
+    'check:capabilities-matrix',
+  ),
   gate('docs-links', 'Docs internal links and heading anchors', 'check:doc-links'),
   gate('docs-prose', 'Docs filler, marketing, and time-relative words', 'check:doc-prose'),
   gate('agent-guidance', 'Agent guidance ownership and context budgets', 'check:agent-guidance'),

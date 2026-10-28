@@ -13,7 +13,6 @@ import {
   openRunnerStartAdmission,
   runnerStartAdmitsPreparation,
 } from '../runner-xctestrun.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -37,7 +36,6 @@ beforeEach(() => {
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derived;
   runCmdStreaming.mockReset();
   appleRunnerTestHost.update({
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     runCmdStreaming,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',

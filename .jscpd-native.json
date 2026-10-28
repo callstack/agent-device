@@ -1,0 +1,12 @@
+{
+  "path": ["apple", "android", "linux"],
+  "format": ["swift", "objectivec", "kotlin", "java", "python"],
+  "formatsExts": { "objectivec": ["m", "h"] },
+  "mode": "weak",
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["console", "json"],
+  "output": ".tmp/native-dupes",
+  "noColors": true,
+  "noTips": true
+}

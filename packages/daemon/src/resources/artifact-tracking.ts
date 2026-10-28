@@ -38,6 +38,7 @@ type ArtifactEntry = {
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
+  sessionName?: string;
   deleteAfterDownload: boolean;
   createdAt: number;
   directoryArchive?: DirectoryArchive;
@@ -77,6 +78,8 @@ export type DownloadableArtifactRegistration = {
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   displayRotation?: DeviceRotation;
+  /** Public session name, for an artifact registered outside a request reply. */
+  sessionName?: string;
 };
 
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
@@ -88,9 +91,16 @@ export type PreparedDownloadableArtifact = {
   sizeBytes: number;
 };
 
+/**
+ * Registers one file for download and returns its id. A file the same tenant can already download
+ * returns its existing entry unchanged: two ids for one file would each delete it after their own
+ * download.
+ */
 export function trackDownloadableArtifact(
   params: DownloadableArtifactRegistration & { deleteAfterDownload?: boolean },
 ): string {
+  const existingId = findTrackedArtifactId(params.artifactPath, params.tenantId);
+  if (existingId) return existingId;
   const artifactId = crypto.randomUUID();
   const createdAt = Date.now();
   const timer = setTimeout(() => {
@@ -103,11 +113,22 @@ export function trackDownloadableArtifact(
     artifactType: params.artifactType,
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
+    ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
     deleteAfterDownload: params.deleteAfterDownload !== false,
     createdAt,
     timer,
   });
   return artifactId;
+}
+
+function findTrackedArtifactId(
+  artifactPath: string,
+  tenantId: string | undefined,
+): string | undefined {
+  for (const [artifactId, entry] of pendingArtifacts()) {
+    if (entry.artifactPath === artifactPath && entry.tenantId === tenantId) return artifactId;
+  }
+  return undefined;
 }
 
 export async function prepareDownloadableArtifact(
@@ -151,6 +172,7 @@ export async function listDownloadableArtifacts(
       createdAt: new Date(entry.createdAt).toISOString(),
       expiresAt: new Date(entry.createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS).toISOString(),
       ...(entry.displayRotation !== undefined ? { displayRotation: entry.displayRotation } : {}),
+      ...(entry.sessionName !== undefined ? { sessionName: entry.sessionName } : {}),
     });
   }
   return artifacts;

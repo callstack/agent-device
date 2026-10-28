@@ -64,7 +64,9 @@ export const COMPOSITE_TIMEOUT_POLICIES = {
 /**
  * Covers the fold route's worst-case ledger (display inventory, fold-helper preparation, HID
  * dispatch, hinge settle reads, final display inventory) plus the daemon-result margin. Proven by
- * the ledger test: `test/integration/provider-scenarios/ios-fold.test.ts`.
+ * the ledger test for a default-set simulator: `test/integration/provider-scenarios/ios-fold.test.ts`.
+ * A scoped-set simulator reads its two display inventories through the guest helper, at most 15s
+ * each instead of 5s, and still fits.
  */
 const FOLD_REQUEST_TIMEOUT_MS = 255_000;
 

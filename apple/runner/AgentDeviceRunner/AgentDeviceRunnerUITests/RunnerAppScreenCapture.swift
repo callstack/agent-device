@@ -129,6 +129,27 @@ extension RunnerTests {
     else {
       return .failure(RunnerAppScreenCaptureFailure(resolution))
     }
+    return capturedScreen(captureScreen, displayID: displayID)
+  }
+
+  /// Samples the same sole-screen route that synthesized gestures use when the app tree refuses
+  /// its window. On an iPad the route opens only while the app provably fills its sole screen, so
+  /// a windowed app keeps refusing instead of sampling the wrong frame.
+  func captureSoleAppScreen(app: XCUIApplication) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+    var screen: AnyObject?
+    var displayID: UInt = 0
+    guard RunnerResolveSoleScreen(app, &screen, &displayID) == nil,
+      let captureScreen = screen as? XCUIScreen
+    else {
+      return .failure(.unresolvedScreen)
+    }
+    return Self.capturedScreen(captureScreen, displayID: displayID)
+  }
+
+  private static func capturedScreen(
+    _ captureScreen: XCUIScreen,
+    displayID: UInt
+  ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     let image = captureScreen.screenshot().image
     guard let upright = runnerUprightCaptureImage(image) else {
       return .failure(.unrenderableImage)

@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON } from '@agent-device/kernel/errors';
 import {
   ANDROID_TEST_IME_FLOW_HINT,
   buildReplayDivergenceFailureResponseFromDescriptor,
@@ -50,6 +51,72 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   });
   expect(response.error.details).toHaveProperty('reason');
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
+});
+
+test('bounded resource refusal keeps canonical typed fields on a replay-variable collision', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'record:start secret-value cannot run within a bounded composite',
+      hint: 'Use the original secret-value input in the same session.',
+      details: {
+        reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+        shape: 'record:start',
+        standaloneCommandName: 'record',
+        dispatched: 'no',
+      },
+    },
+    actionLabel: 'record start secret-value',
+    action: 'record',
+    positionals: ['start', '<redacted>'],
+    step: 2,
+    replayPath: '/tmp/flows/record.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [
+      { name: 'MODE', value: 'record' },
+      { name: 'SOURCE', value: 'secret-value' },
+    ],
+  });
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details).toMatchObject({
+    reason: BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+    shape: 'record:start',
+    standaloneCommandName: 'record',
+    dispatched: 'no',
+    replayPath: '/tmp/flows/record.ad',
+  });
+  expect(response.error.details).not.toHaveProperty('standaloneCommand');
+  expect(response.error.hint).toContain('<var:SOURCE>');
+  expect(response.error.message).toContain('<var:SOURCE>');
+  expect(JSON.stringify(response)).not.toContain('secret-value');
+});
+
+test('cleanup failed steps retain their type while replay variables are scrubbed', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Session cleanup failed',
+      details: {
+        reason: 'session_cleanup_incomplete',
+        failedSteps: ['application_lifecycle', 'secret-value'],
+      },
+    },
+    actionLabel: 'close',
+    action: 'close',
+    positionals: [],
+    step: 1,
+    replayPath: '/tmp/close.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [{ name: 'SECRET', value: 'secret-value' }],
+  });
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details).toMatchObject({
+    reason: 'session_cleanup_incomplete',
+    failedSteps: ['application_lifecycle', '<var:SECRET>'],
+  });
+  expect(JSON.stringify(response)).not.toContain('secret-value');
 });
 
 // #2997: the Android platform states `open --test-ime` because it sees one dispatched

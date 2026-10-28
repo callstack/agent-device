@@ -399,6 +399,9 @@ function normalizePressOptions(
     button: options.button ?? resolveClickButton(context),
     ...series,
     surface: options.surface ?? context.surface,
+    ...(options.coordinateTapTextInputEvidence
+      ? { coordinateTapTextInputEvidence: options.coordinateTapTextInputEvidence }
+      : {}),
   };
 }
 

@@ -19,8 +19,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   bindProviderApplicationLifecycleInteractor,
-  invokeApplicationClose,
-  invokeApplicationOpen,
+  bindDirectApplicationLifecycle,
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
@@ -46,7 +45,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
-import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShape, isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -201,39 +200,20 @@ function providerScenarioApplicationLifecycle(
     signal,
     resolveInteractor: (runner) => runtime.getInteractor(device, runner),
   });
+  const direct = bindDirectApplicationLifecycle({
+    binding,
+    owner: 'scenario-provider',
+    openTargetIdentity: 'bundle-id',
+    closeBeforeRelaunch: true,
+  });
   return Object.freeze({
+    ...direct,
     resolveOpenTarget: async (input) => ({
       ...(input.target?.includes('.') ? { appBundleId: input.target } : {}),
       ...(input.target === undefined ? {} : { appName: input.target }),
     }),
-    prepareApplicationOpen: async () => undefined,
-    openApplication: async (input) => {
-      if (input.relaunch && input.target) {
-        await invokeApplicationClose({
-          device,
-          interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-          positionals: [input.appBundleId ?? input.target],
-        });
-      }
-      await invokeApplicationOpen({
-        device,
-        interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-        positionals: input.positionals,
-        appBundleId: input.appBundleId,
-        execution: input.execution,
-      });
-      return { appBundleId: input.appBundleId, timing: {} };
-    },
     applyRuntimeHints: async () => undefined,
     clearRuntimeHints: async () => undefined,
-    closeApplication: async (input) => {
-      await invokeApplicationClose({
-        device,
-        interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-        positionals: input.positionals,
-      });
-    },
-    finalizeApplicationClose: async () => ({}),
     prepareAppleRunner: async () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'Fake provider does not prepare Apple runners.');
     },
@@ -269,16 +249,16 @@ function providerScenarioRuntimeFacts(
       // The press rides the same interactor transport as every other catalog operation, but the
       // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
       // Apple owner's fact reads instead of restating it (#2699).
-      actionButton: hasAppleActionButton(device) ? fakeProviderAvailable : fakeProviderUnavailable,
+      actionButton: isHandheldAppleDevice(device) ? fakeProviderAvailable : fakeProviderUnavailable,
       // The hardware-button volume press rides the same runner transport, and the XCUITest
       // volume key exists on a physical iPhone/iPad only, so the fixture reads the same kind and
-      // leaf rule the Apple owner's fact reads (#3848). No Apple leaf presses power.
+      // leaf rule the Apple owner's fact reads. No Apple leaf presses power.
       volumeUp:
-        device.kind === 'device' && hasAppleActionButton(device)
+        device.kind === 'device' && isHandheldAppleDevice(device)
           ? fakeProviderAvailable
           : fakeProviderUnavailable,
       volumeDown:
-        device.kind === 'device' && hasAppleActionButton(device)
+        device.kind === 'device' && isHandheldAppleDevice(device)
           ? fakeProviderAvailable
           : fakeProviderUnavailable,
       power: fakeProviderUnavailable,

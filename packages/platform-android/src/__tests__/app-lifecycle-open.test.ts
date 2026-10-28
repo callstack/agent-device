@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { openAndroidApp } from '../app-lifecycle.ts';
+import { listAndroidApps, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -752,6 +752,122 @@ test('openAndroidApp fallback resolve-activity includes MAIN/LAUNCHER flags', as
         ],
       ]);
     },
+  );
+});
+
+test('openAndroidApp TV fallback carries the resolved LAUNCHER category into the component launch', async () => {
+  // A Fire OS app that declares no LEANBACK_LAUNCHER activity resolves under LAUNCHER only; the
+  // fallback launch must carry that category, not the target's LEANBACK_LAUNCHER.
+  await withFakeAdb(
+    (args) => {
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') {
+        if (args.includes('-p')) {
+          return [
+            'Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LEANBACK_LAUNCHER] pkg=com.example.tvapp }',
+            'Error: Activity not started, unable to resolve Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT,android.intent.category.LEANBACK_LAUNCHER] flg=0x10000000 pkg=com.example.tvapp }',
+          ].join('\n');
+        }
+        return 'Status: ok';
+      }
+      if (
+        args[0] === 'shell' &&
+        args[1] === 'cmd' &&
+        args[2] === 'package' &&
+        args[3] === 'resolve-activity'
+      ) {
+        if (args.includes('android.intent.category.LEANBACK_LAUNCHER')) {
+          return { stdout: '', stderr: 'No activity found', exitCode: 1 };
+        }
+        return 'com.example.tvapp/com.example.tvapp.MainActivity';
+      }
+      return undefined;
+    },
+    async ({ calls, device }) => {
+      await openAndroidApp(device, 'com.example.tvapp');
+      assert.deepEqual(calls, [
+        [
+          'shell',
+          'am',
+          'start',
+          '-W',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.DEFAULT',
+          '-c',
+          'android.intent.category.LEANBACK_LAUNCHER',
+          '-p',
+          'com.example.tvapp',
+        ],
+        // resolve-activity tries LEANBACK_LAUNCHER first on a TV target...
+        [
+          'shell',
+          'cmd',
+          'package',
+          'resolve-activity',
+          '--brief',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.LEANBACK_LAUNCHER',
+          'com.example.tvapp',
+        ],
+        // ...then LAUNCHER, which resolves the component.
+        [
+          'shell',
+          'cmd',
+          'package',
+          'resolve-activity',
+          '--brief',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.LAUNCHER',
+          'com.example.tvapp',
+        ],
+        // The fallback launch uses the category the component resolved under.
+        [
+          'shell',
+          'am',
+          'start',
+          '-W',
+          '-a',
+          'android.intent.action.MAIN',
+          '-c',
+          'android.intent.category.DEFAULT',
+          '-c',
+          'android.intent.category.LAUNCHER',
+          '-n',
+          'com.example.tvapp/com.example.tvapp.MainActivity',
+        ],
+      ]);
+    },
+    { device: { ...ANDROID_EMULATOR, target: 'tv' } },
+  );
+});
+
+test('listAndroidApps on a TV target queries LEANBACK_LAUNCHER then LAUNCHER', async () => {
+  await withFakeAdb(
+    (args) => {
+      if (args.includes('query-activities')) {
+        return args.includes('android.intent.category.LAUNCHER')
+          ? 'com.example.fireosapp/.MainActivity\n'
+          : '';
+      }
+      return undefined;
+    },
+    async ({ calls, device }) => {
+      const apps = await listAndroidApps(device, 'all');
+      assert.deepEqual(apps, [{ package: 'com.example.fireosapp', name: 'Fireosapp' }]);
+      const queriedCategories = calls
+        .filter((call) => call.includes('query-activities'))
+        .map((call) => call.at(-1));
+      assert.deepEqual(queriedCategories, [
+        'android.intent.category.LEANBACK_LAUNCHER',
+        'android.intent.category.LAUNCHER',
+      ]);
+    },
+    { device: { ...ANDROID_EMULATOR, target: 'tv' } },
   );
 });
 

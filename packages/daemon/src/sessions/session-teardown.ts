@@ -111,7 +111,7 @@ export function reportSessionCleanupFailures(params: {
       reason: 'session_cleanup_incomplete',
       session: params.sessionName,
       failedSteps,
-      hint: 'Some session resources failed to release; inspect the session log for per-resource diagnostics. The session was still deleted, so retrying is safe.',
+      hint: 'Some session resources failed to release. The session was retired; inspect the session log, device state, and retained claims before recovery. Do not retry close on the retired session.',
     },
   );
 }
@@ -203,7 +203,11 @@ export async function finishSessionScreenRecording(params: {
   sessionStore: SessionStore;
 }): Promise<void> {
   const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
-  if (binding.read()) await finishLiveScreenRecording({ binding, intent: 'disposal' });
+  if (!binding.read()) return;
+  const completion = await finishLiveScreenRecording({ binding, intent: 'disposal' });
+  if (!params.ref.session.lease) return;
+  const { retainLeasedSessionRecording } = await import('./leased-recording-retention.ts');
+  retainLeasedSessionRecording(params.ref, completion);
 }
 
 export async function finishSessionAudioProbe(params: {

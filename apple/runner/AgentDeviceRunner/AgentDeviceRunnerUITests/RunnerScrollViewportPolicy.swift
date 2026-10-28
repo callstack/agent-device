@@ -193,7 +193,7 @@ extension RunnerTests {
   ) -> RunnerScrollViewport {
 #if os(iOS)
     // Every scroll reports its decision, including the two ways it avoids reading the keyboard at
-    // all: a policy that forbids the probe, and a probe that finds no keyboard.
+    // all: unavailable accessibility health, and a probe that finds no keyboard.
     guard context.allowsKeyboardProbe else {
       logScrollViewport(decision: "probeSkipped", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
       return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: .unobstructed)
@@ -230,8 +230,8 @@ extension RunnerTests {
 
 #if os(iOS)
   /// The #2500 diagnostic for a scroll that reports no travel: whether the swipe was clipped, and
-  /// whether the keyboard probe was even permitted. `axHealth` is the first thing to read, because a
-  /// policy that skipped the probe looks exactly like a keyboard that was never found.
+  /// whether the keyboard probe was even permitted. `axHealth` is the first thing to read, because
+  /// a health that skips the probe looks exactly like a keyboard that was never found.
   private func logScrollViewport(
     decision: String,
     keyboardMinY: Double?,
@@ -239,9 +239,8 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext
   ) {
     NSLog(
-      "AGENT_DEVICE_RUNNER_SCROLL_VIEWPORT kind=scroll axHealth=%@ keyboardPolicy=%@ decision=%@ keyboardMinY=%@ swipeHeight=%.1f",
+      "AGENT_DEVICE_RUNNER_SCROLL_VIEWPORT kind=scroll axHealth=%@ decision=%@ keyboardMinY=%@ swipeHeight=%.1f",
       context.accessibilityHealth.rawValue,
-      context.keyboardPolicy.rawValue,
       decision,
       keyboardMinY.map { String(format: "%.1f", $0) } ?? "none",
       swipeHeight

@@ -65,6 +65,7 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
+import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
@@ -360,6 +361,73 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+});
+
+function statusBarItemSummary(event: {
+  level: string;
+  phase: string;
+  data?: Record<string, unknown>;
+}) {
+  return {
+    level: event.level,
+    phase: event.phase,
+    deviceId: event.data?.deviceId,
+    exitCode: event.data?.exitCode,
+  };
+}
+
+test('captureSimulatorScreenshotWithFallback logs a status bar preparation failure', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+  mockOpenIosSimulatorApp.mockResolvedValue(undefined);
+  mockRetryWithPolicy.mockResolvedValue(undefined);
+  mockPrepareStatusBarForScreenshot.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'status_bar override failed', { exitCode: 69 }),
+  );
+
+  const events = await statusBarDiagnosticEvents(async () => {
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+      env: process.env,
+      appBundleId: 'com.example.app',
+      normalizeStatusBar: true,
+      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
+    });
+  });
+
+  assert.deepEqual(events.map(statusBarItemSummary), [
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_prepare_failed',
+      deviceId: 'sim-1',
+      exitCode: 69,
+    },
+  ]);
+});
+
+test('captureSimulatorScreenshotWithFallback logs a status bar restoration failure', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+  mockOpenIosSimulatorApp.mockResolvedValue(undefined);
+  mockRetryWithPolicy.mockResolvedValue(undefined);
+  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {
+    throw new AppError('COMMAND_FAILED', 'status_bar clear failed', { exitCode: 70 });
+  });
+
+  const events = await statusBarDiagnosticEvents(async () => {
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+      env: process.env,
+      appBundleId: 'com.example.app',
+      normalizeStatusBar: true,
+      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
+    });
+  });
+
+  assert.deepEqual(events.map(statusBarItemSummary), [
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_restore_failed',
+      deviceId: 'sim-1',
+      exitCode: 70,
+    },
+  ]);
 });
 
 test('captureSimulatorScreenshotWithFallback skips status bar normalization by default', async () => {

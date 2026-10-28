@@ -1,6 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../http/http-server.ts';
@@ -341,6 +342,61 @@ test('daemon artifact downloads can be forced retained by server option', async 
     const inventoryAfterDownloads = await fetch(`${baseUrl}/artifacts`, { headers: auth });
     const body = (await inventoryAfterDownloads.json()) as ArtifactInventoryResponse;
     assert.ok(body.artifacts.some((entry) => entry.id === artifactId));
+  } finally {
+    cleanupDownloadableArtifact(artifactId);
+    await closeLoopbackServer(server);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon artifact downloads answer 404 for a consumed or unknown artifact id', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-gone-');
+  const artifactPath = path.join(tempDir, 'shot.png');
+  fs.writeFileSync(artifactPath, 'png-body');
+  const artifactId = trackDownloadableArtifact({
+    artifactPath,
+    artifactType: 'screenshot',
+    fileName: 'shot.png',
+  });
+  const server = await createDaemonHttpServer({
+    token: 'daemon-secret',
+    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const auth = { authorization: 'Bearer daemon-secret' };
+
+    const consumingDownload = await fetch(
+      `${baseUrl}/artifacts/${encodeURIComponent(artifactId)}`,
+      { headers: auth },
+    );
+    assert.equal(consumingDownload.status, 200);
+    assert.equal(await consumingDownload.text(), 'png-body');
+
+    for (const goneId of [artifactId, crypto.randomUUID()]) {
+      const gone = await fetch(`${baseUrl}/artifacts/${encodeURIComponent(goneId)}`, {
+        headers: auth,
+      });
+      assert.equal(gone.status, 404, `expected 404 for ${goneId}`);
+      const body = (await gone.json()) as {
+        ok?: boolean;
+        code?: string;
+        error?: string;
+        reason?: string;
+        hint?: string;
+      };
+      assert.equal(body.ok, false);
+      assert.equal(body.code, 'COMMAND_FAILED');
+      assert.equal(body.reason, 'RESOURCE_EXPIRED');
+      assert.match(body.error ?? '', /not found or expired/);
+      assert.ok(body.hint, 'the expiry hint reaches the REST caller');
+    }
   } finally {
     cleanupDownloadableArtifact(artifactId);
     await closeLoopbackServer(server);

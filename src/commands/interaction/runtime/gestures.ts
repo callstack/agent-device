@@ -1,4 +1,7 @@
-import type { DragGestureInput } from '@agent-device/contracts/gesture-plan-types';
+import {
+  LONG_PRESS_DURATION_MAX_MS,
+  type DragGestureInput,
+} from '@agent-device/contracts/gesture-plan-types';
 import type {
   HoverCommandResult,
   LongPressCommandResult,
@@ -149,7 +152,7 @@ export const longPressCommand: RuntimeCommand<
   const durationMs =
     options.durationMs === undefined
       ? undefined
-      : requireIntInRange(options.durationMs, 'durationMs', 0, 120_000);
+      : requireIntInRange(options.durationMs, 'durationMs', 0, LONG_PRESS_DURATION_MAX_MS);
   const point = requireResolvedPoint(resolved);
   const backendResult = await runtime.backend.longPress(toBackendContext(runtime, options), point, {
     durationMs,

@@ -171,39 +171,6 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
   });
 });
 
-// The scoped-set refusal is a real route outcome, not just a narrowed binding: a scoped session's
-// `setFoldPose` fact refuses on admission, so the wire error carries the typed reason and the fact's
-// own hint, and the device is never bound or posed. The hint is a sentinel the route could never
-// compose, so the assertion proves propagation without re-typing production's wording.
-test('refuses a scoped simulator set on the route with the typed reason, never binding', async () => {
-  const scopedDevice: DeviceInfo = { ...testDevice, simulatorSetPath: '/tmp/scoped-set' };
-  const scopeRefusal = {
-    available: false,
-    reason: 'unsupported-device-scope',
-    hint: 'SCOPED-SET-HINT-SENTINEL',
-  } as const;
-  const harness = runtimeHarness(scopeRefusal, vi.fn(), scopedDevice);
-
-  const resolved = await resolveBoundFoldRuntime({
-    platformServices: daemonPlatformServicesFixture(),
-    device: scopedDevice,
-    positionals: ['half-open'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
-  });
-
-  expect(resolved.ok).toBe(false);
-  if (resolved.ok || resolved.response.ok) throw new Error('the scoped-set fact admitted fold');
-  expect(resolved.response.error).toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    message: 'fold is not supported on this device',
-    hint: 'SCOPED-SET-HINT-SENTINEL',
-    details: { reason: 'unsupported-device-scope' },
-  });
-  expect(harness.bindDevice).not.toHaveBeenCalled();
-  expect(harness.setFoldPose).not.toHaveBeenCalled();
-});
-
 test('passes the validated timed intent to the admitted fold owner', async () => {
   const setFoldPose = vi.fn(async (): Promise<SetFoldPoseResult> => ({
     pose: 'half-open',

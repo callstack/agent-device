@@ -1,3 +1,4 @@
+import OSLog
 import XCTest
 
 extension RunnerTests {
@@ -80,9 +81,9 @@ extension RunnerTests {
       let value = body()
       return (value, try XCTUnwrap(Int(valueReads.label)) - before)
     }
-    let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false)
+    let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false, contentTranslation: .none)
 
-    let (lookup, lookupReads) = try countingReads { textInputAt(app: app, x: point.x, y: point.y) }
+    let (lookup, lookupReads) = try countingReads { textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none) }
     let (input, resolutionReads) = try countingReads { resolveTextEntryInput(app: app, target: target) }
 
     XCTAssertEqual(lookup?.snapshot?.identifier, "agent-device-hardware-keyboard-input")
@@ -90,5 +91,92 @@ extension RunnerTests {
     XCTAssertEqual(resolutionReads, lookupReads)
   }
 
+  /// After a focus tap raises the software keyboard, stabilization takes focus from the tapped
+  /// input's own read before it asks for the keyboard. While the keyboard is presented, the keyboard
+  /// query blocks and then finds none. The keyboard is already up here, so asking it first confirms
+  /// focus from the keyboard's arrival instead.
+  @MainActor
+  func testFocusStabilizationAsksTheTappedInputBeforeTheKeyboard() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-soft-keyboard"]
+    app.launch()
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    field.tap()
+    try XCTSkipUnless(
+      app.keyboards.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout),
+      "software keyboard is down: this simulator cannot show the keyboard a focus tap raises"
+    )
+
+    let stabilized = stabilizeTextInputBeforeTyping(app: app, target: field, contentTranslation: .none, keyboardVisibleBeforeTap: false)
+
+    guard case .inputReportsKeyboardFocus(let read) = stabilized.evidence else {
+      return XCTFail("focus confirmed by \(stabilized.evidence?.name ?? "nothing"), not by the tapped input")
+    }
+    XCTAssertEqual(read.snapshot?.frame, field.frame)
+  }
+
+  /// A fill whose focus tap raises the software keyboard hands the read that confirmed focus to the
+  /// entry as its first read. The fixture counts queries as in
+  /// `testFillReadsEachResolvedFieldThroughOneSnapshot`: this fill made 17, and 19 when the focus step
+  /// or the entry read the input again. A read costs two queries. A keyboard that arrives before the
+  /// field reports focus ends the poll without handing its read on, so the entry reads the input
+  /// again and the fill makes 19 by design, and each poll before the last adds two more queries. The
+  /// test skips unless the focus step's log line records `input-reports-keyboard-focus` on its first
+  /// poll, so its budget holds only for the route it is about.
+  @MainActor
+  func testFillThatRaisesTheSoftwareKeyboardReusesTheReadThatConfirmedFocus() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+      "--agent-device-text-entry-counts-value-reads",
+    ]
+    app.launch()
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertFalse(isKeyboardVisible(app: app))
+    let valueReads = app.staticTexts["agent-device-text-entry-value-reads"]
+    let frame = field.frame
+    let fill = try runnerCommandFixture(
+      #"{"command":"type","commandId":"fill-raises-keyboard","text":"hello","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    )
+
+    let readsBefore = try XCTUnwrap(Int(valueReads.label))
+    let fillStartedAt = Date()
+    let response = executeTypeCommand(activeApp: app, command: fill)
+    let readsAfter = try XCTUnwrap(Int(valueReads.label))
+
+    try XCTSkipUnless(
+      app.keyboards.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout),
+      "software keyboard is down: this simulator did not raise the keyboard the focus tap asked for"
+    )
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.textEntryRoute, "xctest-element")
+    XCTAssertEqual(valueReads.value as? String, "hello")
+    let focus = try XCTUnwrap(loggedTextEntryFocus(since: fillStartedAt), "the focus step logged no evidence line")
+    try XCTSkipUnless(
+      focus.evidence == TextEntryFocusEvidence.inputReportsKeyboardFocusName && focus.polls == 1,
+      "focus was confirmed by \(focus.evidence) after \(focus.polls) polls, which reads the input more than once by design"
+    )
+    XCTAssertLessThanOrEqual(readsAfter - readsBefore, 17)
+  }
+
+  /// The last evidence line the focus step logged after `start`, read from this process's unified log.
+  private func loggedTextEntryFocus(since start: Date) throws -> (evidence: String, polls: Int)? {
+    let store = try OSLogStore(scope: .currentProcessIdentifier)
+    let marker = TextEntryFocusEvidence.logMarker
+    return try store.getEntries(at: store.position(date: start))
+      .compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+      .compactMap { message -> (evidence: String, polls: Int)? in
+        guard let range = message.range(of: marker) else { return nil }
+        let fields = message[range.upperBound...].components(separatedBy: " polls=")
+        guard fields.count == 2, let polls = Int(fields[1]) else { return nil }
+        return (fields[0], polls)
+      }
+      .last
+  }
 #endif
 }

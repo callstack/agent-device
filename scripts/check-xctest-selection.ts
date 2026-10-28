@@ -3,7 +3,8 @@
 // (#1781 A7). Also ensures those unit-test methods are stripped from the Apple runner source
 // copied into the npm package.
 //
-// Three lanes run the `AgentDeviceRunnerUITests` bundle, and each reaches a different set:
+// Three workflows run the `AgentDeviceRunnerUITests` bundle over four lanes, and each reaches a
+// different set:
 //
 //   - host    smoke-macos/action.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
@@ -13,6 +14,8 @@
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
 //             iOS-only branch).
+//   - nightly-ipad xctest-nightly.yml's iPad leg: the named `-only-testing:` selection only —
+//             the sole-screen route's off-phone half, which runs nowhere else.
 //
 // The classification therefore lives in the `#if` guards, so this check evaluates them per
 // platform rather than treating a source-level `func test…` as running everywhere. What it
@@ -52,14 +55,17 @@ export const PR_XCTEST_SOURCE_FILE = '.github/actions/smoke-ios-run/action.yml';
 /** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
 export const NIGHTLY_WORKFLOW_FILE = '.github/workflows/xctest-nightly.yml';
 
-export type LaneId = 'host' | 'pr' | 'nightly';
+export type LaneId = 'host' | 'pr' | 'nightly' | 'nightly-ipad';
 
 export type Lane = {
   readonly id: LaneId;
   readonly workflow: string;
   readonly platform: Platform;
-  /** `whole`: everything compiled minus `-skip-testing:`; `platform-branch`: derived from guards. */
-  readonly selection: 'whole' | 'platform-branch';
+  /**
+   * `whole`: everything compiled minus `-skip-testing:`; `platform-branch`: derived from guards;
+   * `named-only`: exactly the lane's own `-only-testing:` selection.
+   */
+  readonly selection: 'whole' | 'platform-branch' | 'named-only';
   /** The job-summary heading the lane's reporter prints. */
   readonly title: string;
 };
@@ -86,6 +92,13 @@ export const LANES: readonly Lane[] = [
     selection: 'whole',
     title: 'iOS runner full XCTest suite',
   },
+  {
+    id: 'nightly-ipad',
+    workflow: NIGHTLY_WORKFLOW_FILE,
+    platform: 'iOS',
+    selection: 'named-only',
+    title: 'iPad runner sole-screen selection',
+  },
 ];
 
 export function lane(id: string): Lane {
@@ -102,7 +115,9 @@ export function lane(id: string): Lane {
  * Every workflow whose test identifiers this check owns. All are read, so a workflow that is
  * renamed or deleted fails here rather than leaving a stale claim in the output.
  */
-export const GUARDED_WORKFLOWS: readonly string[] = LANES.map((entry) => entry.workflow);
+export const GUARDED_WORKFLOWS: readonly string[] = [
+  ...new Set(LANES.map((entry) => entry.workflow)),
+];
 
 /**
  * The one method that must be reachable by no lane: `testCommand` is the runner's server
@@ -186,6 +201,13 @@ function identifiers(
   );
 }
 
+/** The lane's platform's compiled identifiers, before its flags narrow them. */
+function compiledIdentifiersForLane(declaredTests: readonly DeclaredTest[], entry: Lane): string[] {
+  return declaredTests
+    .filter((test) => test.platforms.includes(entry.platform))
+    .map((test) => test.identifier);
+}
+
 /** What one lane reaches: its platform's compiled set, narrowed by its flags. */
 function laneReach(
   entry: Lane,
@@ -195,13 +217,13 @@ function laneReach(
 ): Set<string> {
   if (entry.selection === 'platform-branch')
     return new Set(iosPrTestIdentifiers(declaredTests, sharedPlatformBranchIds));
+  const compiled = compiledIdentifiersForLane(declaredTests, entry);
+  if (entry.selection === 'named-only') {
+    const named = identifiers(flagged, entry.workflow, 'only-testing');
+    return new Set(compiled.filter((id) => named.has(id)));
+  }
   const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
-  return new Set(
-    declaredTests
-      .filter((test) => test.platforms.includes(entry.platform))
-      .map((test) => test.identifier)
-      .filter((id) => !skipped.has(id)),
-  );
+  return new Set(compiled.filter((id) => !skipped.has(id)));
 }
 
 export function iosPrTestIdentifiers(
@@ -382,6 +404,7 @@ export function counts(report: SelectionReport): {
   host: number;
   pr: number;
   nightly: number;
+  nightlyIpad: number;
   dark: number;
 } {
   return {
@@ -389,6 +412,7 @@ export function counts(report: SelectionReport): {
     host: report.reach.host.size,
     pr: report.reach.pr.size,
     nightly: report.reach.nightly.size,
+    nightlyIpad: report.reach['nightly-ipad'].size,
     dark: report.dark.length,
   };
 }
@@ -467,12 +491,13 @@ export function reportFailures(report: SelectionReport): string[] {
 }
 
 export function formatSummary(report: SelectionReport): string {
-  const { declared, host, pr, nightly, dark } = counts(report);
+  const { declared, host, pr, nightly, nightlyIpad, dark } = counts(report);
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
     `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR iOS branch lane (${PR_XCTEST_SOURCE_FILE}, ` +
     `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
-    `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
+    `reaches ${nightly}, its iPad leg selects ${nightlyIpad}; ${dark} reachable by no lane; ` +
+    `${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
 }
 

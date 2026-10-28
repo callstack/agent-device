@@ -56,9 +56,9 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
   ],
   tv: [
-    'Use this when the target is Android TV, Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
+    'Use this when the target is Android TV (including Fire TV devices on Fire OS over ADB), Apple TV/tvOS, or an Amazon Vega OS TV app running in the Vega Virtual Device (VVD). TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control',
     'Vega OS is driven through the SDK-matched Vega CLI and VDA, not ADB',
-    'Initial support is VVD-only. Physical Fire TV devices remain unsupported',
+    'Initial support is VVD-only. Physical devices that run Vega OS remain unsupported',
     'The VVD is never booted implicitly',
     'Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented',
   ],
@@ -101,9 +101,9 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
     '9. Reopen the app bundle under test',
   ],
   foldable: [
-    "Each iOS simulator capture resolves the CoreDevice display table, selects the sole lit panel when power identifies it, and normalizes density with that panel's own point scale. There is no screen flag. When panel power names no single lit panel, the capture names CoreDevice's primary panel, which may be dark and yield an all-black PNG. Check the pose with UIHinge.status before trusting that capture. With no primary panel either, capture fails with COMMAND_FAILED and reason capture-panel-unidentified rather than pick a panel by list order.",
+    "Each iOS simulator capture resolves the panel table, selects the sole lit panel when power identifies it, and normalizes density with that panel's own point scale. The table comes from CoreDevice in the default simulator set and from a helper inside the simulator in a scoped set (--ios-simulator-device-set), which CoreDevice cannot reach. There is no screen flag. When panel power names no single lit panel, the capture names the table's primary panel, which may be dark and yield an all-black PNG. Check the pose with UIHinge.status before trusting that capture. With no primary panel either, capture fails with COMMAND_FAILED and reason capture-panel-unidentified rather than pick a panel by list order.",
     'The two panels are different sizes (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across',
-    'Expect a fold to take 10-16 seconds: each hinge read is a five-second devicectl stream, and half-open waits for the hinge to stop moving. Re-snapshot after every fold',
+    'Expect a fold to take 2-4 seconds: half-open waits for two agreeing hinge reads one second apart, and the first fold after a boot can take longer while the hinge settles. Re-snapshot after every fold',
     'fold sends a private HID hinge event inside the selected simulator',
     'If a task asserts behavior for more than one pose, fold to each pose and re-snapshot, and report which poses the run covered',
   ],

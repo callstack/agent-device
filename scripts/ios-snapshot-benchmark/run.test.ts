@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import { resolveRepoRoot } from './host.ts';
+import { resolveRepoRoot } from '../lib/bench-host.ts';
 
 test('CLI refuses an unmarked existing root before any descendant can be cleared', async () => {
   const repoRoot = resolveRepoRoot();

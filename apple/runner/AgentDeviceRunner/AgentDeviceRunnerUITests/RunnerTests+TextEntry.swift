@@ -145,10 +145,21 @@ extension RunnerTests {
     let identity: TextEntryInputIdentity
   }
 
+  /// The vector from a snapshot frame to the screen (#3899, ADR 0004), read once per command by
+  /// `liveContentTranslation` and never defaulted: a vector nobody read must not pass for full screen.
+  enum TextEntryContentTranslation {
+    case known(CGSize)
+    /// The window's box sits at the screen origin, so a snapshot frame is already a screen frame.
+    case none
+    /// The window read could not answer, so no snapshot frame names a screen box.
+    case unknown
+  }
+
   struct TextEntryTarget {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
+    let contentTranslation: TextEntryContentTranslation
     let fromTapWitness: Bool
     /// The input the first resolved element was. Once bound, resolution refuses any other input.
     let boundIdentity: TextEntryInputIdentity?
@@ -166,6 +177,7 @@ extension RunnerTests {
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
+      contentTranslation: TextEntryContentTranslation,
       fromTapWitness: Bool = false,
       boundIdentity: TextEntryInputIdentity? = nil,
       inputAtRefreshPoint: TextInputAtPoint? = nil,
@@ -174,6 +186,7 @@ extension RunnerTests {
       self.element = element
       self.refreshPoint = refreshPoint
       self.prefersFocusedElement = prefersFocusedElement
+      self.contentTranslation = contentTranslation
       self.fromTapWitness = fromTapWitness
       self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
       self.inputAtRefreshPoint = inputAtRefreshPoint
@@ -186,11 +199,12 @@ extension RunnerTests {
       guard let input else {
         return self
       }
-      let frame = input.snapshot?.frame ?? .zero
+      let frame = input.frameOnScreen ?? .zero
       return TextEntryTarget(
         element: input.element,
         refreshPoint: frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: prefersFocusedElement,
+        contentTranslation: contentTranslation,
         fromTapWitness: fromTapWitness,
         boundIdentity: boundIdentity ?? input.identity,
         inputAtRefreshPoint: inputAtRefreshPoint
@@ -208,16 +222,18 @@ extension RunnerTests {
     let element: XCUIElement
     /// Nil when the element exists but could not be snapshotted.
     let snapshot: XCUIElementSnapshot?
+    let contentTranslation: TextEntryContentTranslation
 
-    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?) {
+    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?, contentTranslation: TextEntryContentTranslation) {
       self.element = element
       self.snapshot = snapshot
+      self.contentTranslation = contentTranslation
     }
 
     /// Reads a handle that may name an input the app has removed; nil when it names none or the read
     /// raised. The snapshot of a missing element throws only after XCTest waits about two seconds for
     /// a match, so existence is read first.
-    init?(reading element: XCUIElement) {
+    init?(reading element: XCUIElement, contentTranslation: TextEntryContentTranslation) {
       var exists = false
       var snapshot: XCUIElementSnapshot?
       if let exception = RunnerObjCExceptionCatcher.catchException({
@@ -228,15 +244,15 @@ extension RunnerTests {
         return nil
       }
       guard exists else { return nil }
-      self.init(element: element, snapshot: snapshot)
+      self.init(element: element, snapshot: snapshot, contentTranslation: contentTranslation)
     }
 
     /// Reads a handle its query has just listed, inside the caller's exception containment, so the
     /// snapshot is read first and existence only when the snapshot fails; nil when it names no element.
-    init?(readingListed element: XCUIElement) {
+    init?(readingListed element: XCUIElement, contentTranslation: TextEntryContentTranslation) {
       let snapshot = try? element.snapshot()
       guard snapshot != nil || element.exists else { return nil }
-      self.init(element: element, snapshot: snapshot)
+      self.init(element: element, snapshot: snapshot, contentTranslation: contentTranslation)
     }
 
     var identity: TextEntryInputIdentity? {
@@ -248,6 +264,18 @@ extension RunnerTests {
         return snapshot
       }
       return element
+    }
+
+    /// The input's screen box. Nil without a snapshot, because the live `element.frame` of a handle
+    /// that stopped answering records a failure (#3060), and nil for an `.unknown` vector, because a
+    /// window-local point must not dispatch as a screen point (#3899). Point dispatch refuses nil.
+    var frameOnScreen: CGRect? {
+      guard let frame = snapshot?.frame else { return nil }
+      switch contentTranslation {
+      case .known(let offset): return frame.offsetBy(dx: offset.width, dy: offset.height)
+      case .none: return frame
+      case .unknown: return nil
+      }
     }
   }
 
@@ -311,9 +339,44 @@ extension RunnerTests {
     boundIdentity?.isDistinguishable ?? true
   }
 
+  /// What confirmed that a focus tap's input took focus.
+  enum TextEntryFocusEvidence {
+    /// tvOS moves focus with the focus engine, so there is nothing to wait for.
+    case focusEngine
+    /// The app-wide focus query named a text input (not iOS).
+    case focusedInput
+    /// The tapped input's own read reports keyboard focus. That read is the focus step's post-focus
+    /// read.
+    case inputReportsKeyboardFocus(ResolvedTextEntryInput)
+    /// A software keyboard appeared after the tap, so some input took focus.
+    case keyboardAppeared
+    /// The app-wide keyboard-focus query answered with the tapped input.
+    case focusQueryMatchesInput
+
+    /// The log line that records the evidence and the number of focus polls: `logMarker`, the name, then `polls=<n>`.
+    static let logMarker = "AGENT_DEVICE_RUNNER_TEXT_ENTRY_FOCUS evidence="
+    static let inputReportsKeyboardFocusName = "input-reports-keyboard-focus"
+
+    /// The name `runner.log` records.
+    var name: String {
+      switch self {
+      case .focusEngine: return "focus-engine"
+      case .focusedInput: return "focused-input"
+      case .inputReportsKeyboardFocus: return Self.inputReportsKeyboardFocusName
+      case .keyboardAppeared: return "keyboard-appeared"
+      case .focusQueryMatchesInput: return "focus-query-matches-input"
+      }
+    }
+  }
+
   struct TextEntryStabilization {
     let element: XCUIElement?
-    let focusConfirmed: Bool
+    /// Nil when nothing confirmed focus before the focus timeout.
+    let evidence: TextEntryFocusEvidence?
+    /// The focus polls that ran, which is 1 when the first poll confirmed focus.
+    let polls: Int
+
+    var focusConfirmed: Bool { evidence != nil }
   }
 
   struct TextEntryTapWitness {
@@ -326,9 +389,17 @@ extension RunnerTests {
     }
   }
 
-  /// Clears `input`, which must have been read with nothing dispatched since.
-  func clearTextInput(app: XCUIApplication, _ input: ResolvedTextEntryInput) {
-    // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
+  /// Clears the reader's input. Every post goes through `reader.dispatch` and every read back through
+  /// `reader.input()`, so a bound target's clear stops at an input that took its place. On iOS a
+  /// readable value is selected whole and deleted, wherever the caret is. Otherwise, or when text is
+  /// left, delete bursts run from the caret, and a value longer than one burst is read again after
+  /// each burst until it reads empty, stops shortening, or has had at least one burst more than it
+  /// needs.
+  func clearTextInput(app: XCUIApplication, reader: inout TextEntryReader) {
+    guard let input = reader.input() else {
+      return
+    }
+    // Skip the clear (edge-tap, select all, delete bursts) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
     // bottom->top and reveals a "Suggestions" list) — tapping there navigates away instead of
@@ -336,17 +407,91 @@ extension RunnerTests {
     // editableTextValue returns nil for secure (and unknown) fields, where we CANNOT confirm
     // emptiness — those must still be cleared, or replace would concatenate stale + new text.
     // So distinguish nil (clear) from "" (skip).
-    if let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true),
-       existing.isEmpty {
+    let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true)
+    if existing?.isEmpty == true {
       return
     }
     // Read before the caret tap, which dispatches to the app.
-    let count = estimatedDeleteCount(for: input.attributes)
+    var valueLength = normalizedElementText(input.attributes.value).count
+    // The tap also focuses the field, which a clear can reach with focus unconfirmed.
 #if !os(tvOS)
-    moveCaretToEnd(app: app, input: input)
+    reader.dispatch { moveCaretToEnd(app: app, input: input) }
 #endif
-    let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: count)
-    input.element.typeText(deletes)
+    // An input that stops answering once focused (#3060) cannot be read back, so it gets one burst.
+    guard reader.input() != nil else {
+      let burst = Self.textClearBurst(valueLength: valueLength)
+      reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+      return
+    }
+#if os(iOS)
+    // The tap aims at the end of what the field shows, which a long value has scrolled past, so
+    // bursts from there reach only what is before the caret (#3851). Select all reaches all of it, but
+    // only a read can show it took: a masked field can ignore it, so an unreadable value keeps the
+    // bursts alone.
+    if existing != nil {
+      var passes = 0
+      let outcome = Self.clearUntilEmpty(
+        clearOnce: {
+          guard let input = reader.input() else {
+            return .stop
+          }
+          passes += 1
+          reader.dispatch {
+            input.element.typeKey("a", modifierFlags: .command)
+            input.element.typeText(XCUIKeyboardKey.delete.rawValue)
+          }
+          return .posted
+        },
+        read: {
+          textValueRead(for: reader.input()?.attributes, treatingPlaceholderAsEmpty: true)
+        }
+      )
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR route=element passes=%d outcome=%@", passes, String(describing: outcome))
+      // Text left after every pass goes to the bursts; an input that no longer resolves is not typed into.
+      guard outcome == .notCleared,
+            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) })
+      else {
+        return
+      }
+      valueLength = remaining.count
+    }
+#endif
+    for _ in 0...(valueLength / Self.maxTextClearBurst + 1) {
+      guard let input = reader.input() else {
+        return
+      }
+      let burst = Self.textClearBurst(valueLength: valueLength)
+      reader.dispatch { input.element.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: burst)) }
+      // A burst that covers the value needs no read.
+      guard burst < valueLength + Self.textClearSlack,
+            let remaining = reader.input().flatMap({ editableTextValue(for: $0.attributes, treatingPlaceholderAsEmpty: true) }),
+            Self.textClearContinues(clearedLength: valueLength, remainingLength: remaining.count)
+      else {
+        return
+      }
+      valueLength = remaining.count
+    }
+  }
+
+  /// Extra deletes past a value's length, for whitespace its normalized read trimmed.
+  private static let textClearSlack = 8
+
+  /// The most deletes one clear burst sends. A longer value takes more bursts.
+  private static let maxTextClearBurst = 120
+
+  /// Deletes for one clear burst on a value of `valueLength` characters, at least 24 for a value
+  /// that reads empty but may not be.
+  static func textClearBurst(valueLength: Int) -> Int {
+    let base = valueLength == 0 ? 24 : valueLength + textClearSlack
+    return max(24, min(maxTextClearBurst, base))
+  }
+
+  /// Whether a clear sends another burst after one sized from `clearedLength` characters left
+  /// `remainingLength`. Each burst must shorten the value, so a field that ignores deletes or
+  /// rewrites its value ends the clear instead of looping; the fill's verification reports what
+  /// remains.
+  static func textClearContinues(clearedLength: Int, remainingLength: Int) -> Bool {
+    remainingLength > 0 && remainingLength < clearedLength
   }
 
   func isTextEntryElement(_ element: XCUIElement) -> Bool {
@@ -377,7 +522,8 @@ extension RunnerTests {
       return resolveUnboundTextEntryInput(app: app, target: target)
     }
     func boundInput(_ candidate: XCUIElement) -> ResolvedTextEntryInput? {
-      guard let input = ResolvedTextEntryInput(reading: candidate), input.identity == boundIdentity else { return nil }
+      guard let input = ResolvedTextEntryInput(reading: candidate, contentTranslation: target.contentTranslation),
+        input.identity == boundIdentity else { return nil }
       return input
     }
     if target.prefersFocusedElement, let focused = focusedTextInput(app: app), let input = boundInput(focused) {
@@ -386,12 +532,13 @@ extension RunnerTests {
     if let element = target.element, let input = boundInput(element) {
       return input
     }
-    if let input = target.inputAtRefreshPoint, let read = textInputIfStillResolves(input) {
+    if let input = target.inputAtRefreshPoint,
+       let read = textInputIfStillResolves(input, contentTranslation: target.contentTranslation) {
       return read
     }
     if target.inputAtRefreshPoint == nil,
        let refreshPoint = target.refreshPoint,
-       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint),
+       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation),
        let match = candidates.first(where: { $0.identity == boundIdentity }) {
       return match
     }
@@ -426,7 +573,7 @@ extension RunnerTests {
     guard let refreshPoint = target.refreshPoint else {
       return true
     }
-    switch probeTextInputs(app: app, point: refreshPoint) {
+    switch probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) {
     case .absent:
       return true
     case .matches(let candidates):
@@ -460,17 +607,20 @@ extension RunnerTests {
 
   /// Resolution for a target not bound to an input yet: the first element that exists.
   private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
-    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:)) {
+    let read = { (element: XCUIElement) in
+      ResolvedTextEntryInput(reading: element, contentTranslation: target.contentTranslation)
+    }
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(read) {
       return focused
     }
-    if let element = target.element, let input = ResolvedTextEntryInput(reading: element) {
+    if let element = target.element, let input = read(element) {
       return input
     }
     if let refreshPoint = target.refreshPoint,
-       let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
+       let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y, contentTranslation: target.contentTranslation) {
       return refreshed
     }
-    return focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:))
+    return focusedTextInput(app: app).flatMap(read)
   }
 
   private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) {
@@ -489,7 +639,7 @@ extension RunnerTests {
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    guard let frame = input.snapshot?.frame, !frame.isEmpty else {
+    guard let frame = input.frameOnScreen, !frame.isEmpty else {
       return
     }
     _ = tapAt(
@@ -498,12 +648,6 @@ extension RunnerTests {
       y: frame.minY + max(2, frame.height / 2)
     )
 #endif
-  }
-
-  private func estimatedDeleteCount(for element: any XCUIElementAttributes) -> Int {
-    let valueText = normalizedElementText(element.value)
-    let base = valueText.isEmpty ? 24 : (valueText.count + 8)
-    return max(24, min(120, base))
   }
 
   private func normalizedElementText(_ value: Any?) -> String {

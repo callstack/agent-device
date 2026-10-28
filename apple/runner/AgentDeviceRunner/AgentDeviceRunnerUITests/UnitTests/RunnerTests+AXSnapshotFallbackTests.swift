@@ -170,12 +170,15 @@ extension RunnerTests {
   }
 
   /// A request-pinned backend degraded nothing, so its verdict must not claim
-  /// slow accessibility work — that reason drives a user-facing warning.
+  /// slow accessibility work — that reason drives a user-facing warning. The pin
+  /// answers through the pre-selection producer and seeds no failure.
   func testRequestPinnedBackendReportsItsOwnReason() {
-    let requested = Self.xcTestChannelStateFirstFailure(
+    let requested = Self.snapshotPlanPreSelectionReason(
       .deferredToIndependentBackend, requestPinnedBackend: true)
     XCTAssertEqual(requested?.code, "requested-backend")
     XCTAssertFalse(requested?.reason.contains("slow accessibility work") ?? true)
+    XCTAssertNil(Self.xcTestChannelStateFirstFailure(
+      .deferredToIndependentBackend, requestPinnedBackend: true))
 
     // The circuit breaker's own deferral keeps its established code and wording.
     let breaker = Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)

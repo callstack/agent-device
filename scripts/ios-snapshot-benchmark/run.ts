@@ -10,7 +10,7 @@ import { classifyFailure, formatCliFailure, openFixture, type CliContext } from 
 import { BenchmarkControlError, runDeepButtonControls } from './deep-control.ts';
 import { CONTRACT, screenFixture } from './definitions.ts';
 import { deepButtonFixtureEvidence } from './deep-button.ts';
-import { readGitRevision, readHostIdentity, readTarget, readToolchain } from './host.ts';
+import { readGitRevision, readHostIdentity, readTarget, readToolchain } from '../lib/bench-host.ts';
 import {
   BenchmarkCellAdmissionError,
   BenchmarkContentionError,

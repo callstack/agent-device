@@ -7,16 +7,15 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerEarlyExitError } from '../runner-startup-transport.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
-import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import { STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import {
   CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
   CAPTURED_SCOPED_SIMULATOR,
 } from './runner-startup-failure-fixtures.ts';
 
-const toolchainProbe = stubAppleToolchainProbes();
 beforeEach(resetAllProcessMemosForTests);
 
 // Verbatim xcodebuild output from an iPhone that was not in the signing account.
@@ -208,7 +207,6 @@ test('a scoped-set simulator whose destination is missing names its set and the 
     CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
     SET_WITHOUT_UDID,
   );
-  resolveExpectedRunnerCacheMetadata(session.device);
 
   const error = (await buildRunnerEarlyExitError({ session, port: 8100 })) as AppError;
 
@@ -222,8 +220,8 @@ test('a scoped-set simulator whose destination is missing names its set and the 
   );
 });
 
-test('a scoped-set destination error before any cache decision read the Xcode still names the set', async () => {
-  toolchainProbe.mockClear();
+test('a scoped-set destination error under an unreadable Xcode still names the set', async () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => mkdtempForTestSync('no-xcode-') });
   const error = (await buildRunnerEarlyExitError({
     session: simulatorSessionFailingWith(
       CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
@@ -239,7 +237,6 @@ test('a scoped-set destination error before any cache decision read the Xcode st
     error.message,
     `Runner did not accept connection (xcodebuild exited early): xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${SET_WITHOUT_UDID}`,
   );
-  assert.equal(toolchainProbe.mock.calls.length, 0);
 });
 
 test('a default-set simulator early exit keeps its boot-failure reason', async () => {

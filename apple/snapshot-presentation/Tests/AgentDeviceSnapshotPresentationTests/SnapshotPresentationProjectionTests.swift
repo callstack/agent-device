@@ -47,4 +47,47 @@ final class SnapshotPresentationProjectionTests: XCTestCase {
     XCTAssertEqual(presented.hiddenContentBelow, scoped.hiddenContentBelow)
     XCTAssertEqual(presented.actions, scoped.actions)
   }
+  func testAssistantTapMembershipSurvivesRawAndRegularScoping() throws {
+    for raw in [false, true] {
+      let options = PresentationOptions(interactiveOnly: !raw, depth: nil, scope: "assistant-action", raw: raw)
+      let acquisition = SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: [
+          RawAXNode(
+            index: 0, type: "Other", label: nil, identifier: "SystemInputAssistantView", value: nil,
+            rect: SnapshotRect(x: 0, y: 556, width: 390, height: 44), enabled: true,
+            focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
+            hiddenContentAbove: nil, hiddenContentBelow: nil
+          ),
+          RawAXNode(
+            index: 1, type: "Button", label: "Assistant action", identifier: "assistant-action", value: nil,
+            rect: SnapshotRect(x: 200, y: 560, width: 100, height: 36), enabled: true,
+            focused: nil, selected: nil, hittable: true, depth: 1, parentIndex: 0,
+            hiddenContentAbove: nil, hiddenContentBelow: nil
+          ),
+          RawAXNode(
+            index: 2, type: "Button", label: "Underlying app control", identifier: nil, value: nil,
+            rect: SnapshotRect(x: 200, y: 560, width: 100, height: 36), enabled: true,
+            focused: nil, selected: nil, hittable: true, depth: 0, parentIndex: nil,
+            hiddenContentAbove: nil, hiddenContentBelow: nil
+          ),
+        ],
+        truncated: false, effectiveDepth: nil,
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 390, height: 844))
+      )
+      let result = try XCTUnwrap(SnapshotPresentation.present(acquisition, options: options))
+      XCTAssertEqual(result.nodes.count, 1)
+      let action = try XCTUnwrap(result.nodes.first)
+      XCTAssertEqual(action.identifier, "assistant-action")
+      XCTAssertNil(action.parentIndex)
+      let payload = try JSONSerialization.jsonObject(with: JSONEncoder().encode(action)) as? [String: Any]
+      XCTAssertEqual(payload?["keyboardOwned"] as? Bool, true)
+      let unscoped = SnapshotPresentation.presentRaw(acquisition,
+        options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true))
+      let underlying = try XCTUnwrap(unscoped.nodes.first { $0.label == "Underlying app control" })
+      let underlyingPayload = try JSONSerialization.jsonObject(with: JSONEncoder().encode(underlying)) as? [String: Any]
+      XCTAssertNil(underlyingPayload?["keyboardOwned"])
+    }
+  }
+
 }

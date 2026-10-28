@@ -16,7 +16,7 @@ import {
 import {
   requireRunnerToolchainFingerprint,
   type RunnerToolchainFingerprint,
-} from './runner-toolchain-probe.ts';
+} from './runner-toolchain-identity.ts';
 import type { RunnerPhaseBudget } from './runner-phase-budget.ts';
 import { computeRunnerSourceFingerprint } from './runner-source.ts';
 
@@ -38,6 +38,14 @@ const RUNNER_SANDBOX_BUILD_ARGS = [
  */
 const RUNNER_RUNTIME_SWIFT_FLAGS =
   '$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY';
+/**
+ * The Objective-C half of the unit-test build setting. The host app's fixture screens live in
+ * `AgentDeviceRunnerAppFixtures.m`, which compiles only under this define, so the flag decides
+ * both the Swift `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` blocks and the fixture host the UnitTests/
+ * suites launch. `OTHER_CFLAGS` rather than `GCC_PREPROCESSOR_DEFINITIONS`: a command-line value
+ * for the latter replaces the configuration's list instead of extending it.
+ */
+const RUNNER_UNIT_TEST_C_FLAGS = '-D AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const RUNNER_UNIT_TEST_SWIFT_FLAGS = `${RUNNER_RUNTIME_SWIFT_FLAGS} -D AGENT_DEVICE_RUNNER_UNIT_TESTS`;
 
 export type RunnerXctestrunCacheMetadata = RunnerToolchainFingerprint & {
@@ -130,7 +138,10 @@ export function resolveExpectedRunnerCacheMetadata(
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
-    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind), budget),
+    ...requireRunnerToolchainFingerprint(
+      resolveRunnerSdkName(platformName, device.kind),
+      budget?.signal,
+    ),
     platformName,
     deviceKind: device.kind,
     target: device.target ?? 'mobile',
@@ -345,7 +356,15 @@ export function resolveRunnerBuildLocationSettings(derived: string): string[] {
 export function resolveRunnerSandboxBuildArgs(
   env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): string[] {
-  return [...RUNNER_SANDBOX_BUILD_ARGS, `OTHER_SWIFT_FLAGS=${resolveRunnerSwiftFlags(env)}`];
+  const swiftFlags = `OTHER_SWIFT_FLAGS=${resolveRunnerSwiftFlags(env)}`;
+  if (!isEnvTruthy(env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS)) {
+    return [...RUNNER_SANDBOX_BUILD_ARGS, swiftFlags];
+  }
+  return [
+    ...RUNNER_SANDBOX_BUILD_ARGS,
+    swiftFlags,
+    `OTHER_CFLAGS=$(inherited) ${RUNNER_UNIT_TEST_C_FLAGS}`,
+  ];
 }
 
 function resolveRunnerSwiftFlags(env: NodeJS.ProcessEnv): string {

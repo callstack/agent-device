@@ -18,18 +18,186 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func assertInAppBackDispatch(navigationBar: Bool) throws {
-    app.launchArguments = ["--agent-device-back-regression"] + (navigationBar ? ["--navigation-bar"] : [])
+  func testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+
+    guard soleScreenRouteIsOpen(for: app) else {
+      guard case .unavailable = outcome else {
+        return XCTFail("without a window or a sole screen there is no route to tap")
+      }
+      return
+    }
+    guard case .performed = outcome else {
+      return XCTFail("a window-less back must synthesize and verify against the sole display")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// The sole-screen route compares real captures: a tap that lands on nothing leaves the screen
+  /// unchanged, so back is unavailable rather than performed.
+  @MainActor
+  func testInAppBackOnTheSoleScreenReportsATapThatChangedNothingAsUnavailable() throws {
+    _ = try launchBackFixture([])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+
+    guard case .unavailable = outcome else {
+      return XCTFail("a top-leading tap on an app without a back control must not read as performed")
+    }
+  }
+
+  /// After the tree rejects a query, `back` reaches the top-leading control through whichever route
+  /// is open: the sole screen where the app proves it fills it (both families here), the resolved
+  /// window everywhere else. The refusal half on a real device is
+  /// `testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen` and the unprovable-foreground
+  /// test below, which stand where no simulator here can: its foreground app always fills its screen.
+  @MainActor
+  func testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
+      tapInAppBackControl(app: app)
+    }
+
+    guard case .performed = outcome else {
+      return XCTFail("back must reach the fixture's top-leading control through a window or the sole screen")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// The window route the sole-screen rule leaves when the probe cannot prove the fill: with the
+  /// probe's primary-app read stubbed to answer nothing (the evidence seam's `unknown`), the route
+  /// closes, and a rejected tree still dispatches `back` through the resolved window. An iPhone
+  /// keeps the sole-screen route by idiom — it answers before the probe is ever asked, so no stub
+  /// can close it there and the window route is the off-phone half's own. Real windowed geometry
+  /// needs an iPad set to Windowed Apps, which no lane runs; `unknown` closes the same route for
+  /// the same reason — the fill is not proven.
+  @MainActor
+  func testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+    // Runs the real probe once, which is also what registers the AXRuntime class this seam stubs.
+    XCTAssertTrue(soleScreenRouteIsOpen(for: app))
+    guard UIDevice.current.userInterfaceIdiom != .phone else {
+      return
+    }
+    let restoreProbe = stubForegroundPrimaryAppAsUnprovable()
+    defer { restoreProbe() }
+    XCTAssertFalse(
+      soleScreenRouteIsOpen(for: app),
+      "an iPad whose app the probe cannot prove keeps requiring a resolved window"
+    )
+
+    let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
+      tapInAppBackControl(app: app)
+    }
+    guard case .performed = outcome else {
+      return XCTFail("a refused sole-screen route must still dispatch back through the resolved window")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// Stands in for a device showing the app in part of its screen as far as the probe can tell: the
+  /// probe's `primaryApp` read answers nothing, which the evidence seam reports as `unknown`. The
+  /// windowed geometry itself needs an iPad set to Windowed Apps, which no lane runs; `unknown`
+  /// closes the same route for the same reason — the fill is not proven.
+  private func stubForegroundPrimaryAppAsUnprovable() -> () -> Void {
+    let element = NSClassFromString("AXElement")
+    let method = element.flatMap { class_getClassMethod($0, NSSelectorFromString("primaryApp")) }
+    guard let method else {
+      preconditionFailure("AXRuntime did not register AXElement before the probe seam was stubbed")
+    }
+    let original = method_getImplementation(method)
+    let replacement = imp_implementationWithBlock(
+      { (_: AnyObject) -> AnyObject? in nil } as @convention(block) (AnyObject) -> AnyObject?
+    )
+    method_setImplementation(method, replacement)
+    return {
+      method_setImplementation(method, original)
+      imp_removeBlock(replacement)
+    }
+  }
+
+  /// Launches the runner app and waits for its fixture surface. With
+  /// `--agent-device-back-regression` it shows a top-leading back control whose press sets the
+  /// returned status to "Back performed", and without it nothing there.
+  @MainActor
+  private func launchBackFixture(
+    _ arguments: [String],
+    navigationBar: Bool = false
+  ) throws -> XCUIElement {
+    app.launchArguments = arguments + (navigationBar ? ["--navigation-bar"] : [])
     app.launch()
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let status = app.staticTexts["agent-device-back-status"]
+    let status = arguments.contains("--agent-device-back-regression")
+      ? app.staticTexts["agent-device-back-status"]
+      : app.staticTexts.element(matching: NSPredicate(format: "label == %@", "Agent Device Runner"))
     XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
+    return status
+  }
+
+  @MainActor
+  private func endBackFixture() {
+    invalidateCachedTarget(reason: "unit_test_cleanup")
+    app.terminate()
+  }
+
+  /// Stands in for XCTest on a tree it cannot serialize while `body` runs: the first `rejections`
+  /// queries record the rejection the runner suppresses and find nothing, and unless
+  /// `framesReadable`, every element frame reads empty.
+  @MainActor
+  private func withRejectedAppTree<T>(
+    framesReadable: Bool,
+    rejections: Int = .max,
+    _ body: () -> T
+  ) throws -> T {
+    var restorations: [() -> Void] = []
+    defer { restorations.reversed().forEach { $0() } }
+    let selector = NSSelectorFromString("allElementsBoundByIndex")
+    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, selector))
+    let originalQuery = method_getImplementation(query)
+    var remainingRejections = rejections
+    let rejectedQuery = imp_implementationWithBlock({ (target: AnyObject) -> NSArray in
+      guard remainingRejections > 0 else {
+        typealias Query = @convention(c) (AnyObject, Selector) -> NSArray
+        return unsafeBitCast(originalQuery, to: Query.self)(target, selector)
+      }
+      remainingRejections -= 1
+      self.record(XCTIssue(type: .assertionFailure, compactDescription: "Failed to resolve query: kAXErrorIllegalArgument"))
+      return []
+    } as @convention(block) (AnyObject) -> NSArray)
+    method_setImplementation(query, rejectedQuery)
+    restorations.append {
+      method_setImplementation(query, originalQuery)
+      imp_removeBlock(rejectedQuery)
+    }
+    if !framesReadable {
+      let frame = try XCTUnwrap(class_getInstanceMethod(XCUIElement.self, NSSelectorFromString("frame")))
+      let originalFrame = method_getImplementation(frame)
+      let unavailableFrame = imp_implementationWithBlock({ (_: AnyObject) -> CGRect in .zero } as @convention(block) (AnyObject) -> CGRect)
+      method_setImplementation(frame, unavailableFrame)
+      restorations.append {
+        method_setImplementation(frame, originalFrame)
+        imp_removeBlock(unavailableFrame)
+      }
+    }
+    return body()
+  }
+
+  @MainActor
+  private func assertInAppBackDispatch(navigationBar: Bool) throws {
+    let status = try launchBackFixture(
+      ["--agent-device-back-regression"],
+      navigationBar: navigationBar
+    )
+    defer { endBackFixture() }
     var xctestTaps = 0
     var restorations: [() -> Void] = []
     defer { restorations.reversed().forEach { $0() } }
@@ -62,20 +230,44 @@ extension RunnerTests {
   }
 #endif
 
+  /// The fallback point sits inside the top bar on both families, from the screen's own top inset:
+  /// an iPhone 17 Pro measures a 59-pt inset with its bar at y 62-116; an iPad Pro 11" measures 32
+  /// with its bar at y 32-86, where a frame-height fraction that serves the iPhone (0.1·874=87, and
+  /// the old clamp's 96 at any taller height) lands below the iPad's bar.
   func testTopLeadingNavigationFallbackPointTargetsHeaderControlBand() throws {
-    let point = try XCTUnwrap(
+    let iPhone = try XCTUnwrap(
       Self.topLeadingNavigationFallbackPoint(
-        in: CGRect(x: 0, y: 0, width: 430, height: 932)
+        in: CGRect(x: 0, y: 0, width: 402, height: 874),
+        topSafeAreaInset: 59
       )
     )
+    XCTAssertEqual(iPhone.x, 32.16, accuracy: 0.01)
+    XCTAssertEqual(iPhone.y, 81, accuracy: 0.01, "inside the iPhone bar band 62-116")
 
-    XCTAssertEqual(point.x, 34.4, accuracy: 0.01)
-    XCTAssertEqual(point.y, 132, accuracy: 0.01)
+    let iPad = try XCTUnwrap(
+      Self.topLeadingNavigationFallbackPoint(
+        in: CGRect(x: 0, y: 0, width: 834, height: 1210),
+        topSafeAreaInset: 32
+      )
+    )
+    XCTAssertEqual(iPad.x, 44, accuracy: 0.01, "the leading-slot cap keeps a tablet tap inside the bar")
+    XCTAssertEqual(iPad.y, 56, accuracy: 0.01, "inside the iPad bar band 32-86")
   }
 
   func testTopLeadingNavigationFallbackPointRejectsInvalidFrame() {
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .infinite))
-    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .zero))
+    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .infinite, topSafeAreaInset: 59))
+    XCTAssertNil(Self.topLeadingNavigationFallbackPoint(in: .zero, topSafeAreaInset: 59))
+  }
+
+  /// A runtime that reports no inset proves nothing about the band, so the point stays inside the
+  /// compact bar it used to target; a large inset (a surface that pushed the content down) must not
+  /// send the tap deep into the page.
+  func testTopLeadingNavigationFallbackPointStaysBoundedForUnknownAndLargeInsets() throws {
+    let frame = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    let noInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 0))
+    XCTAssertEqual(noInset.y, 56, accuracy: 0.01, "the compact bar bound")
+    let hugeInset = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(in: frame, topSafeAreaInset: 400))
+    XCTAssertEqual(hugeInset.y, 96, accuracy: 0.01, "never leaves the header band")
   }
 
   func testNavigationBackControlRankPrefersBackThenCloseThenCancel() {
@@ -168,91 +360,53 @@ extension RunnerTests {
     )
   }
 
-  func testNavigationVisualVerificationSeparatesNoChangeFromNoSample() {
+  func testNavigationVisualObservationSeparatesChangeFromRefusal() {
+    // A refused side makes the pair uncomparable, not "unchanged"; reading it as "unchanged" would
+    // let a capture that refused become the reason the `back` command claims no control exists.
+    // When both refuse, the later refusal names what the fallback last looked at before giving up.
+    typealias Sample = Result<Data, RunnerAppScreenCaptureFailure>
+    let refused: Sample = .failure(.unresolvedScreen)
+    let windowless: Sample = .failure(.unresolvedWindow)
+    let captured: Sample = .success(Data([1, 2, 3]))
+    let changed: Sample = .success(Data([1, 2, 4]))
+    let other: Sample = .success(Data([1]))
+
+    XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: changed), .changed, "changed")
+    XCTAssertEqual(Self.navigationVisualObservation(before: captured, after: captured), .unchanged, "unchanged")
     XCTAssertEqual(
-      Self.navigationVisualObservation(before: Data([1, 2, 3]), after: Data([1, 2, 4])),
-      .changed
+      Self.navigationVisualObservation(before: refused, after: other),
+      .unobserved(refusal: .unresolvedScreen),
+      "before refused"
     )
     XCTAssertEqual(
-      Self.navigationVisualObservation(before: Data([1, 2, 3]), after: Data([1, 2, 3])),
-      .unchanged
+      Self.navigationVisualObservation(before: other, after: windowless),
+      .unobserved(refusal: .unresolvedWindow),
+      "after refused"
     )
-    // A missing sample is neither a change nor a no-change; treating it as "unchanged" would let a
-    // capture that refused become the reason the `back` command claims no control exists (#2728).
-    XCTAssertEqual(Self.navigationVisualObservation(before: nil, after: Data([1])), .unobserved)
-    XCTAssertEqual(Self.navigationVisualObservation(before: Data([1]), after: nil), .unobserved)
-    XCTAssertEqual(Self.navigationVisualObservation(before: nil, after: nil), .unobserved)
+    XCTAssertEqual(
+      Self.navigationVisualObservation(before: refused, after: windowless),
+      .unobserved(refusal: .unresolvedWindow),
+      "both refused: the later refusal wins"
+    )
   }
 
-  func testNavigationFallbackReportsTheRefusalItHitNotADefaultCode() {
-    // The refusal from the most recent sample wins, so the code names what the fallback last looked at
-    // before giving up; an earlier refusal is reported only when the later sample carried none (#2728).
-    let after = NavigationVisualSample(
-      data: nil,
-      refusalCode: "APP_SCREEN_WINDOW_UNRESOLVED",
-      refusalHint: "after hint"
-    )
-    let before = NavigationVisualSample(
-      data: nil,
-      refusalCode: "APP_SCREEN_UNRESOLVED",
-      refusalHint: "before hint"
-    )
-    let laterWins = Self.navigationFallbackErrorPayload(after: after, before: before)
-    XCTAssertEqual(laterWins.code, "APP_SCREEN_WINDOW_UNRESOLVED")
-    XCTAssertEqual(laterWins.hint, "after hint")
-
-    let onlyBefore = Self.navigationFallbackErrorPayload(
-      after: NavigationVisualSample(data: nil),
-      before: before
-    )
-    XCTAssertEqual(onlyBefore.code, "APP_SCREEN_UNRESOLVED")
-    XCTAssertEqual(onlyBefore.hint, "before hint")
-
-    // Neither side named a reason (unreachable on iOS): a real capture code, never a bare failure.
-    let unnamed = Self.navigationFallbackErrorPayload(
-      after: NavigationVisualSample(data: nil),
-      before: NavigationVisualSample(data: nil)
-    )
-    XCTAssertEqual(unnamed.code, "APP_SCREEN_UNRESOLVED")
-    XCTAssertTrue(unnamed.message.contains("unknown outcome"))
-  }
-
-  func testVerifyNavigationFallbackOutcomeReportsUnresolvedWindowWithoutSystemSurface() {
-    // The in-app `back` fallback ran its tap but the app resolved no window. It must name that refusal
-    // as an unknown outcome AND must not have sampled the system surface: capturing SpringBoard's home
-    // screen twice reads as "unchanged" and launders a wrong-process frame into "no back control
-    // exists" (#2728). This drives the SAME `navigationFallbackSample` production calls, handing it a
-    // system surface that fails the test if consulted — so reverting the fallback to sample SpringBoard
-    // (or dropping the refusal code) turns this red, which an inline `.never` re-creation could not.
-    var askedSystemSurface = false
-    let sample = Self.navigationFallbackSample(
-      resolvingApp: { .failure(.unresolvedWindow) },
-      systemSurface: {
-        askedSystemSurface = true
-        return .failure(.unresolvedWindow)
-      },
-      encoding: { _ in Data([1, 2, 3]) }
-    )
-    XCTAssertFalse(askedSystemSurface, "the in-app fallback samples the app only, never SpringBoard")
-
-    XCTAssertNil(sample.data)
-    XCTAssertEqual(sample.refusalCode, "APP_SCREEN_WINDOW_UNRESOLVED")
-
-    let observation = Self.navigationVisualObservation(before: sample.data, after: sample.data)
-    XCTAssertEqual(observation, .unobserved)
-
-    switch Self.inAppBackOutcome(observation: observation, before: sample, after: sample) {
+  func testNavigationFallbackReportsARefusalAsAnUnknownOutcome() {
+    // The unverified answer carries the typed refusal's code and hint and says the outcome is
+    // unknown — never the definitive "no back control" a refused capture would otherwise become.
+    switch Self.inAppBackOutcome(observation: .unobserved(refusal: .unresolvedWindow)) {
     case .unverified(let payload):
       XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+      XCTAssertEqual(payload.hint, RunnerAppScreenCaptureFailure.unresolvedWindow.hint)
+      XCTAssertTrue(payload.message.contains("unknown outcome"))
     case .performed, .unavailable:
       XCTFail("a refused capture must report an unknown outcome, not 'no back control'")
     }
   }
 
   func testNavigationVisualSampleDistinguishesEncodedFrameFromRefusal() {
-    // The same capture entry point yields three different samples, and only the refusal ones may carry
-    // a code: an encoded frame is evidence, a resolved-but-unencodable image and a refusal are not
-    // (#2728). Reverting the mapping to a plain no-sample loses the reason a host keys on.
+    // The same capture entry point yields three different answers, and only the refusals carry a
+    // reason: an encoded frame is evidence, a resolved-but-unencodable image and a refusal are not.
+    // Reverting the mapping to a plain no-sample loses the code a host keys on.
     let captured = CapturedAppScreen(
       image: RunnerImage(),
       displayID: 3,
@@ -261,26 +415,18 @@ extension RunnerTests {
       pixelsPerPoint: 3
     )
 
-    let encoded = Self.navigationVisualSample(
-      from: .success(captured),
-      encoding: { _ in Data([7, 7]) }
+    XCTAssertEqual(
+      Self.navigationVisualSample(from: .success(captured), encoding: { _ in Data([7, 7]) }),
+      .success(Data([7, 7]))
     )
-    XCTAssertEqual(encoded.data, Data([7, 7]))
-    XCTAssertNil(encoded.refusalCode)
-
-    let unencodable = Self.navigationVisualSample(
-      from: .success(captured),
-      encoding: { _ in nil }
+    XCTAssertEqual(
+      Self.navigationVisualSample(from: .success(captured), encoding: { _ in nil }),
+      .failure(.unrenderableImage)
     )
-    XCTAssertNil(unencodable.data)
-    XCTAssertEqual(unencodable.refusalCode, "APP_SCREEN_CAPTURE_UNRENDERABLE")
-
-    let refused = Self.navigationVisualSample(
-      from: .failure(.unresolvedScreen),
-      encoding: { _ in Data([7, 7]) }
+    XCTAssertEqual(
+      Self.navigationVisualSample(from: .failure(.unresolvedScreen), encoding: { _ in Data([7, 7]) }),
+      .failure(.unresolvedScreen)
     )
-    XCTAssertNil(refused.data)
-    XCTAssertEqual(refused.refusalCode, "APP_SCREEN_UNRESOLVED")
   }
 }
 #endif

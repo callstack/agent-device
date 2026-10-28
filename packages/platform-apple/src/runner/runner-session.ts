@@ -118,8 +118,8 @@ export async function ensureRunnerSession(
     readmitRunnerStartAdmission(startAdmission);
     assertRunnerStartAdmitsPreparation(device.id, startAdmission);
     // One budget for the whole start, opened once the lock is held so a start queued behind
-    // another does not spend its clock waiting: the reuse check's toolchain probes, adoption and
-    // the startup itself all read it. The request's cancellation rides with it, so a client
+    // another does not spend its clock waiting: the reuse check, adoption and the startup itself
+    // all read it. The request's cancellation rides with it, so a client
     // disconnect kills the blocking xctestrun build and runner launch (killProcessTree via exec)
     // instead of orphaning them; a caller's own deadline does not, so the start it interrupts is
     // still there for the retry (#2894). A start that outlives its caller is still bounded: once

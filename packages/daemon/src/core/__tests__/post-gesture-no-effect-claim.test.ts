@@ -184,7 +184,7 @@ test('no pre-gesture snapshot means no baseline, no rebase, and no no-effect cla
   const session = makeSession('ios');
   session.snapshot = undefined; // nothing captured before the gesture
   markPostGestureStabilization(session, 'scroll', ['up']);
-  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baseline?.signature, undefined);
 
   const { result, rebased, vetoed } = await runStabilization(session, () =>
     makeSnapshotState(pickupSnapshot(500).nodes, {

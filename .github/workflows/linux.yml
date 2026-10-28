@@ -46,14 +46,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Fetch the PR base for Linux smoke selection
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; Linux smoke selection will fail open."
+
+      - name: Select Linux smoke tests
+        id: impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node --experimental-strip-types scripts/device-lane-impact.ts replay-linux linux-command-evidence
+
       # Unbounded, this step could not fail — it could only stall. On 2026-08-19 a slow mirror
       # held apt past the job's 30-minute budget on four main-branch runs and several unrelated
       # PRs, which reported as a red check on branches that never ran a line of project code.
-      # Two bounds fix that: apt retries and times out each mirror request itself (a blip
-      # self-heals without a manual re-run), and `timeout-minutes` is the backstop for a mirror
-      # that drips bytes slowly enough to defeat the socket timeout. A healthy install takes
-      # about a minute, so six is generous.
+      # On 2026-10-22 it recurred: the step took 20-60s normally, but 10 of 73 runs hit the
+      # 6-minute backstop. The Azure mirror appears to be a pull-through cache. A package nobody
+      # else requested recently (poppler-data, fonts-urw-base35, pulled in by gnome-calculator)
+      # is fetched from a slow upstream on first request, and the download crawls or stalls. The
+      # retry that warmed the mirror then succeeded in seconds, which is why re-runs were green.
+      # Three bounds fix that: the downloaded .debs are cached so most runs never ask the mirror
+      # for them, a download that does stall is dropped and retried under a per-attempt deadline
+      # (apt resumes with the files already fetched), and `timeout-minutes` stays as the
+      # backstop. dpkg itself never runs under a deadline.
+      - name: Restore Linux desktop package archives
+        id: apt-archives
+        if: steps.impact.outputs.run != 'false'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+        with:
+          path: ~/apt-archives
+          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
+          restore-keys: apt-archives-${{ runner.os }}-
+
       - name: Install Linux desktop dependencies
+        if: steps.impact.outputs.run != 'false'
         timeout-minutes: 6
         run: |
           set -euo pipefail
@@ -64,23 +94,55 @@ jobs:
             # The runner's own unattended-upgrades timer holds the dpkg lock; wait, don't hang.
             -o DPkg::Lock::Timeout=60
           )
-          sudo apt-get update -qq "${APT_OPTS[@]}"
-          sudo apt-get install -y -qq "${APT_OPTS[@]}" \
-            xvfb \
-            xdotool \
-            scrot \
-            at-spi2-core \
-            python3-gi \
-            gir1.2-atspi-2.0 \
-            libatk-adaptor \
-            dbus-x11 \
-            gnome-calculator \
+          PACKAGES=(
+            xvfb
+            xdotool
+            scrot
+            at-spi2-core
+            python3-gi
+            gir1.2-atspi-2.0
+            libatk-adaptor
+            dbus-x11
+            gnome-calculator
             wmctrl
+          )
+          # Retry a network phase under a per-attempt deadline.
+          apt_bounded() {
+            local seconds="$1"
+            shift
+            for attempt in 1 2 3; do
+              printf 'APT %s attempt %s start (UTC): %s\n' "$1" "$attempt" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              if sudo timeout --kill-after=5 "$seconds" apt-get "$@" "${APT_OPTS[@]}"; then
+                return 0
+              fi
+            done
+            echo "::error::apt-get $1 did not finish within ${seconds}s on 3 attempts"
+            return 1
+          }
+          mkdir -p ~/apt-archives
+          sudo cp -n ~/apt-archives/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+          apt_bounded 30 update
+          apt_bounded 75 install -y --no-install-recommends --download-only "${PACKAGES[@]}"
+          printf 'APT install start (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          sudo apt-get install -y --no-install-recommends "${APT_OPTS[@]}" "${PACKAGES[@]}"
+          printf 'APT install complete (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Drop archives for versions the index no longer offers so the cache cannot grow.
+          sudo apt-get autoclean -q
+          rm -f ~/apt-archives/*.deb
+          # An unmatched glob stays literal and fails cp under set -e when the runner image already has every package.
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb ~/apt-archives/
+          fi
 
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
+      - name: Save Linux desktop package archives
+        if: steps.impact.outputs.run != 'false' && steps.apt-archives.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+        with:
+          path: ~/apt-archives
+          key: apt-archives-${{ runner.os }}-${{ hashFiles('.github/workflows/linux.yml') }}
 
       - name: Start Xvfb and D-Bus
+        if: steps.impact.outputs.run != 'false'
         run: |
           # Start virtual framebuffer (1280x1024, 24-bit color)
           Xvfb :99 -screen 0 1280x1024x24 &
@@ -93,6 +155,7 @@ jobs:
           echo "DBUS_SESSION_BUS_PID=$DBUS_SESSION_BUS_PID" >> "$GITHUB_ENV"
 
       - name: Start AT-SPI2 registry
+        if: steps.impact.outputs.run != 'false'
         run: |
           # The registry must start AFTER DBUS_SESSION_BUS_ADDRESS is available
           # (it was written to GITHUB_ENV in the previous step).
@@ -112,6 +175,7 @@ jobs:
           fi
 
       - name: Verify environment
+        if: steps.impact.outputs.run != 'false'
         run: |
           echo "=== Display ==="
           xdotool getdisplaygeometry
@@ -125,9 +189,11 @@ jobs:
           xdotool version
 
       - name: Run Linux replay smoke test
+        if: steps.impact.outputs.run != 'false'
         run: pnpm clean:daemon
 
       - name: Execute Linux replay smoke test
+        if: steps.impact.outputs.run != 'false'
         uses: ./.github/actions/run-gate
         with:
           gate: replay-linux
@@ -138,15 +204,17 @@ jobs:
             test/artifacts/replays-linux.junit.xml
 
       - name: Reset daemon before Linux command evidence
+        if: steps.impact.outputs.run != 'false'
         run: pnpm clean:daemon
 
       - name: Execute Linux command evidence
+        if: steps.impact.outputs.run != 'false'
         uses: ./.github/actions/run-gate
         with:
           gate: linux-command-evidence
 
       - name: Upload Linux artifacts
-        if: always()
+        if: always() && steps.impact.outputs.run != 'false'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-artifacts

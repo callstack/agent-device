@@ -5,4 +5,5 @@ export {
   pollUntilSettled,
   retryWithPolicy,
   sleep,
+  RETRY_PHASE,
 } from './internal/retry.ts';

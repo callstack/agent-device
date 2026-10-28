@@ -27,7 +27,10 @@ import {
   resolveRunnerContainerBundleIds,
   type AppleRunnerCommandOptions,
 } from '../runner/index.ts';
-import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
+import {
+  emitSimulatorStatusBarDiagnostic,
+  prepareSimulatorStatusBarForScreenshot,
+} from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
   resolveAppleCaptureTarget,
@@ -156,7 +159,7 @@ export async function captureSimulatorScreenshotWithFallback(
     try {
       restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
     } catch (error) {
-      emitStatusBarDiagnostic(device, 'prepare_failed', error);
+      emitSimulatorStatusBarDiagnostic(device, 'prepare_failed', error);
     }
   }
   try {
@@ -198,7 +201,7 @@ export async function captureSimulatorScreenshotWithFallback(
     return captureFacts;
   } finally {
     await restoreStatusBar().catch((error) =>
-      emitStatusBarDiagnostic(device, 'restore_failed', error),
+      emitSimulatorStatusBarDiagnostic(device, 'restore_failed', error),
     );
   }
 }
@@ -386,23 +389,6 @@ function emitScreenshotFallbackDiagnostic(
       from,
       to: 'runner',
       ...errorMeta,
-    },
-  });
-}
-
-function emitStatusBarDiagnostic(
-  device: DeviceInfo,
-  phase: 'prepare_failed' | 'restore_failed',
-  error: unknown,
-): void {
-  emitDiagnostic({
-    level: 'warn',
-    phase: `ios_screenshot_status_bar_${phase}`,
-    data: {
-      platform: device.platform,
-      deviceKind: device.kind,
-      deviceId: device.id,
-      ...extractAppleToolErrorMeta(error),
     },
   });
 }

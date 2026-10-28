@@ -110,7 +110,7 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
     },
     settle: {
       diff: {
-        lines: [{ kind: 'added', text: `TextField value=prefix${placeholder}suffix` }],
+        lines: [{ kind: 'added', text: placeholder }],
       },
       hint: `Observed ${placeholder}4`,
       [`echo${placeholder}key`]: true,
@@ -125,6 +125,62 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   const recordedResult = session.actions[0]?.result;
   expect(recordedResult).toEqual(response.data);
   expect(JSON.stringify(recordedResult)).not.toContain(secret);
+});
+
+test('a sensitive fill replaces the text its --settle observation read back and keeps refs and counts', () => {
+  const sessionStore = makeSessionStore();
+  const session = makeAuthoringSession('sensitive-settle');
+  sessionStore.publish(session.name, session);
+  const payload = {
+    text: '000629177',
+    settle: {
+      settled: true,
+      waitedMs: 1,
+      captures: 2,
+      quietMs: 1,
+      timeoutMs: 100,
+      diff: {
+        summary: { additions: 1, removals: 1, unchanged: 3 },
+        lines: [
+          { kind: 'removed', text: 'TextField value=000 62' },
+          { kind: 'added', text: 'TextField value=00 062 91 77', ref: 'e4' },
+        ],
+      },
+      tail: [{ ref: 'e5', role: 'button', label: 'Code 00 062 91 77' }],
+    },
+  };
+
+  const response = finalizeTouchInteraction({
+    ref: sessionStore.lookup(session.name)!,
+    sessionStore,
+    command: 'fill',
+    positionals: ['id="code"', '000629177'],
+    flags: { recordAs: 'CODE' },
+    result: payload,
+    responseData: payload,
+    actionStartedAt: 1,
+    actionFinishedAt: 2,
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  const settled = {
+    settle: {
+      settled: true,
+      captures: 2,
+      diff: {
+        summary: { additions: 1, removals: 1, unchanged: 3 },
+        lines: [
+          { kind: 'removed', text: '${CODE}' },
+          { kind: 'added', text: '${CODE}', ref: 'e4' },
+        ],
+      },
+      tail: [{ ref: 'e5', role: 'button', label: '${CODE}' }],
+    },
+  };
+  expect(response.data).toMatchObject(settled);
+  expect(session.actions[0]?.result).toMatchObject(settled);
+  expect(JSON.stringify([response.data, session.actions])).not.toMatch(/000629177|062 91|000 62/);
 });
 
 test('parameterized fill scrubs concatenated backend values and object keys through the handler route', async () => {

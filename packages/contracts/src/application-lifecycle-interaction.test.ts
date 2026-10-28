@@ -5,6 +5,7 @@ import type { OpenApplicationInput } from './application-lifecycle-runtime.ts';
 import {
   bindDirectApplicationLifecycle,
   bindLocalApplicationLifecycleInteractor,
+  bindProviderApplicationLifecycleInteractor,
   invokeApplicationOpen,
 } from './application-lifecycle-interaction.ts';
 
@@ -164,4 +165,31 @@ test.each([
       execution,
     }),
   ).rejects.toThrow(message);
+});
+
+test('provider interactor resolution refuses launch-console before a relaunch close', async () => {
+  const calls: string[] = [];
+  const binding = bindProviderApplicationLifecycleInteractor({
+    device: IOS_SIMULATOR,
+    signal: new AbortController().signal,
+    resolveInteractor: () => {
+      calls.push('resolve');
+      return interactorWithOpen();
+    },
+  });
+  const lifecycle = bindDirectApplicationLifecycle({
+    binding,
+    owner: 'provider',
+    openTargetIdentity: 'bundle-id',
+    closeBeforeRelaunch: true,
+  });
+  await expect(
+    lifecycle.openApplication(
+      openInput({ relaunch: true, execution: { launchConsole: '/tmp/app.log' } }),
+    ),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'launch-console-owner-unadmitted', deviceId: IOS_SIMULATOR.id },
+  });
+  expect(calls).toEqual([]);
 });

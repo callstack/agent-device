@@ -7,6 +7,7 @@ import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
 import {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
@@ -153,22 +154,12 @@ export function createAppleInteractor(
       );
     },
     setOrientation: async (orientation) => {
-      const result = await runAppleRunnerCommand(
-        device,
-        // `rotate` is the runner-protocol command name (its own namespace); the
-        // CLI-facing command/method is `orientation`.
-        { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
-        runnerOpts,
-      );
-      const observed = readRunnerOrientation(result);
-      if (observed !== orientation) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          `iOS runner observed ${observed} after requesting ${orientation}`,
-          { requestedOrientation: orientation, observedOrientation: observed },
-        );
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
+        return await setAppleFoldableOrientation(device, orientation, {
+          signal: runnerOpts.signal,
+        });
       }
-      return { orientation: observed };
+      return await setRunnerOrientation(device, orientation, runnerContext, runnerOpts);
     },
     appSwitcher: async () => {
       await runAppleRunnerCommand(
@@ -251,7 +242,13 @@ export function createAppleInteractor(
   const served =
     appBackend === 'native' ? macOsNativeAppInteractor(interactor, runnerContext, env) : interactor;
   if (!runnerProvider) return served;
-  return withInjectedAppleRunnerTransport(device, runnerContext, served, runnerProvider);
+  return withInjectedAppleRunnerTransport(
+    device,
+    runnerContext,
+    runnerOpts,
+    served,
+    runnerProvider,
+  );
 }
 
 async function captureAppleSnapshot(
@@ -409,6 +406,30 @@ function readRunnerString(result: Record<string, unknown>, key: string): string 
   return typeof value === 'string' ? value : undefined;
 }
 
+async function setRunnerOrientation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+  runnerContext: RunnerContext,
+  runnerOpts: RunnerCallOptions,
+): Promise<{ orientation: DeviceRotation }> {
+  const result = await runAppleRunnerCommand(
+    device,
+    // `rotate` is the runner-protocol command name (its own namespace); the
+    // CLI-facing command/method is `orientation`.
+    { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
+    runnerOpts,
+  );
+  const observed = readRunnerOrientation(result);
+  if (observed !== orientation) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `iOS runner observed ${observed} after requesting ${orientation}`,
+      { requestedOrientation: orientation, observedOrientation: observed },
+    );
+  }
+  return { orientation: observed };
+}
+
 function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {
   const orientation = result.orientation;
   if (typeof orientation === 'string' && DEVICE_ROTATIONS.includes(orientation as DeviceRotation)) {
@@ -431,6 +452,7 @@ function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation 
 function withInjectedAppleRunnerTransport(
   device: DeviceInfo,
   runnerContext: RunnerContext,
+  runnerOpts: RunnerCallOptions,
   interactor: Interactor,
   runnerProvider: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): Interactor {
@@ -443,6 +465,9 @@ function withInjectedAppleRunnerTransport(
     readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
     readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
+    // The foldable probe and HID dispatch use local tooling; a provider device keeps the runner.
+    setOrientation: async (orientation) =>
+      await setRunnerOrientation(device, orientation, runnerContext, runnerOpts),
   };
   return withMethodScope(providerInteractor, (task) =>
     withAppleRunnerProvider(

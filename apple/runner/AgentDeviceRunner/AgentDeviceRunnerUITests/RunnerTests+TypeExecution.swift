@@ -31,8 +31,9 @@ extension RunnerTests {
       // A replacement with no input at the point has nothing to bind to: its clear and its typed
       // text would reach the app-level first responder, so an empty point and a lookup that cannot
       // answer both refuse here, each under its own reason.
+      let contentTranslation = liveContentTranslation(app: activeApp)
       let inputAtPoint: TextInputAtPoint
-      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y) {
+      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
       case .input(let input):
         inputAtPoint = input
       case .absent:
@@ -41,10 +42,7 @@ extension RunnerTests {
         return textInputProbeUnavailableResponse()
       }
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(policyKind)
-      )
+      let context = synthesizedCoordinateContext(app: activeApp)
       switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
       }) {
@@ -54,6 +52,7 @@ extension RunnerTests {
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false,
+          contentTranslation: contentTranslation,
           inputAtRefreshPoint: inputAtPoint
         )
       case .xctestFallback:
@@ -113,13 +112,11 @@ extension RunnerTests {
       )
     }
     if textResult.verified == false {
-      let expected = textResult.expectedText ?? ""
-      let observed = textResult.observedText ?? ""
       return Response(
         ok: false,
         error: ErrorPayload(
           code: "TEXT_ENTRY_MISMATCH",
-          message: "text entry read-back did not match: expected \"\(expected)\", observed \"\(observed)\"",
+          message: "text entry read-back did not match the requested text",
           hint: textEntryMode == .replacement
             ? "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."
             : nil

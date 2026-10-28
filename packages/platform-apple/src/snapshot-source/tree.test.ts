@@ -437,6 +437,46 @@ test('the bridge tree types a tab-button-trait element as Button, matching the X
   );
 });
 
+test('the bridge tree types a text-entry-trait element as a text input, matching the XCTest tree', () => {
+  // Real guest word from a Compose Multiplatform 1.12 BasicTextField on iOS 27: automation type
+  // Other, with the text-entry (bit 18) and text-area (bit 47) traits. The XCTest tree types it
+  // TextView and reports it editable.
+  const composeFieldTraits = 140746078552064n;
+  const field = (type: number, word: bigint) =>
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [children]: [
+          {
+            [application]: 'AccessibilityElement',
+            [baseType]: 'UIAccessibilityElement',
+            [automationType]: type,
+            [label]: 'Name',
+            [frame]: { X: 24, Y: 391, Width: 354, Height: 48 },
+            [traits]: word.toString(),
+            [children]: [],
+          },
+        ],
+      },
+      { truncated: false },
+      limits,
+    ).nodes[1];
+
+  assert.deepEqual(
+    [field(0, composeFieldTraits)?.type, field(0, composeFieldTraits)?.editable],
+    ['TextView', true],
+  );
+  assert.equal(field(0, composeFieldTraits & ~(1n << 47n))?.type, 'TextField');
+  assert.equal(field(0, composeFieldTraits | (1n << 24n))?.type, 'SecureTextField');
+  assert.equal(field(0, composeFieldTraits | (1n << 10n))?.type, 'SearchField');
+  assert.equal(
+    field(0, composeFieldTraits & ~(1n << 18n))?.type,
+    'Other',
+    'without the text-entry trait the automation type decides',
+  );
+  assert.equal(field(45, composeFieldTraits)?.type, 'SearchField', 'a declared input type is kept');
+});
+
 test('the bridge tree reads keyboard focus from the is-editing trait, matching the XCTest tree', () => {
   const editor = (word?: unknown) => ({
     [automationType]: 57,

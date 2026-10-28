@@ -1,5 +1,5 @@
 import { BUILD_TIMEOUT_MS, ensureSnapshotBridgeBinary } from './cache.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../native-build/toolchain-identity.ts';
 import { createDetachedAttempts } from '../detached-attempt.ts';
 import {
   createSnapshotSourceDeadline,

@@ -4,11 +4,13 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { runAppleToolCommand } from '../core/tool-provider.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { createNativeBuildDeadline, type NativeBuildDeadline } from '../native-build/deadline.ts';
 import { NativeBuildError } from '../native-build/errors.ts';
 import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
-import { readHostToolchainIdentity } from '../native-build/toolchain-identity.ts';
+import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  readHostToolchainIdentity,
+} from '../native-build/toolchain-identity.ts';
 import {
   ensureNativeBuildCacheEntry,
   execNativeBuildClang,
@@ -21,6 +23,9 @@ const FOLD_HELPER_SCHEMA_VERSION = 1 as const;
 const FOLD_HELPER_LOCK_DESCRIPTION = 'iOS Simulator fold helper cache';
 const FOLD_HELPER_BUILD_HINT =
   'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.';
+
+/** The built fold helper for the active toolchain. Resolve it once per fold, not once per read. */
+export type FoldHelperBinary = Readonly<{ path: string }>;
 
 /** Upper bound on a single fold-helper clang invocation; the same budget the prior per-call build used. */
 export const FOLD_HELPER_BUILD_TIMEOUT_MS = 30_000;
@@ -46,7 +51,7 @@ export async function ensureFoldHelperBinary(
     cacheRoot?: string;
     sourceRoot?: string;
   }> = {},
-): Promise<Readonly<{ path: string }>> {
+): Promise<FoldHelperBinary> {
   const host = input.host ?? createFoldHelperCacheHost();
   const deadline = createNativeBuildDeadline(FOLD_HELPER_PREPARATION_DEADLINE_MS, input.signal);
   try {

@@ -10,14 +10,16 @@ import {
   type CloudWebDriverCapabilityOverrides,
 } from './capabilities.ts';
 import type { CloudWebDriverPlatform } from './runtime.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 
 /** The declared map fact generation now reads. Defaults to a provider with no overrides. */
 function capabilities(
   platform: CloudWebDriverPlatform = 'android',
   overrides?: CloudWebDriverCapabilityOverrides,
+  provider: string = CLOUD_WEBDRIVER_PROVIDERS.browserStack,
 ) {
   return createCloudWebDriverCapabilities({
-    provider: 'browserstack',
+    provider,
     platform,
     ...(overrides ? { overrides } : {}),
   });
@@ -32,7 +34,7 @@ const device: DeviceInfo = {
   booted: true,
 };
 
-test('direct WebDriver network uses only the canonical session log and preserves empty success', async () => {
+test('direct WebDriver refuses a live network dump instead of answering from another source', async () => {
   const run = vi.fn(async () => ({ stdout: 'must not execute', stderr: '', exitCode: 0 }));
   const owner = createWebDriverPlatformRuntimeOwner({
     host: host(run),
@@ -50,20 +52,12 @@ test('direct WebDriver network uses only the canonical session log and preserves
     },
   });
 
-  await expect(
-    binding.operations.networkDump?.({
-      sessionId: 'one',
-      maxEntries: 25,
-      include: 'summary',
-      maxPayloadChars: 2048,
-      maxScanLines: 4000,
-    }),
-  ).resolves.toMatchObject({
-    source: 'app-log',
-    backend: 'android',
-    dump: { exists: false, entries: [] },
+  expect(binding.operations.networkDump).toBeUndefined();
+  expect(binding.facts.operations.networkDump).toMatchObject({
+    available: false,
+    reason: 'network-capture-post-session',
+    hint: 'The provider publishes any network capture only after its session ends, on the provider dashboard.',
   });
-  expect(binding.facts.operations.networkDump).toEqual({ available: true });
   expect(binding.facts.operations.appLogInspect).toMatchObject({ available: false });
   for (const operation of [
     'deployApp',
@@ -80,8 +74,53 @@ test('direct WebDriver network uses only the canonical session log and preserves
   expect(run).not.toHaveBeenCalled();
 });
 
+test('a provider with no capture of its own states the same refusal for a live dump', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm, 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities('android', undefined, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm),
+  });
+
+  expect(await owner.inspectFacts({ ...device, id: 'aws-device-farm:lease-one' })).toMatchObject({
+    operations: {
+      networkDump: {
+        available: false,
+        reason: 'network-capture-post-session',
+        hint: 'The provider publishes any network capture only after its session ends, on the provider dashboard.',
+      },
+    },
+  });
+});
+
+/**
+ * The `network` cell is also the fallback the shared hub gives every optional cell this owner leaves
+ * unclassified, `snapshot` among them, and `findText`/`querySelector` start from the snapshot cell.
+ * So the post-session reason must be stated on `networkDump` alone, or an unrelated read reports it.
+ */
+test('the post-session refusal stays on networkDump and does not leak into the text reads', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities(),
+  });
+
+  const facts = await owner.inspectFacts(device);
+
+  expect(facts.operations.networkDump).toMatchObject({
+    available: false,
+    reason: 'network-capture-post-session',
+  });
+  for (const operation of ['findText', 'querySelector'] as const) {
+    expect(facts.operations[operation].available).toBe(false);
+    if (facts.operations[operation].available) throw new Error(`${operation} admitted a live read`);
+    expect(facts.operations[operation].reason).toBe('unsupported-provider-mode');
+  }
+});
+
 test.each([
-  ['Android', device, 'android'],
+  ['Android', device],
   [
     'iOS',
     {
@@ -91,9 +130,8 @@ test.each([
       id: 'browserstack:ios:lease-one',
       name: 'Remote iPhone',
     },
-    'ios-device',
   ],
-])('classifies the direct WebDriver %s network cell', async (_name, runtimeDevice, backend) => {
+])('classifies the direct WebDriver %s device binding', async (_name, runtimeDevice) => {
   const owner = createWebDriverPlatformRuntimeOwner({
     host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
     owner: providerRuntimeOwner('browserstack', String(_name).toLowerCase()),
@@ -114,7 +152,10 @@ test.each([
     available: false,
     reason: 'unsupported-provider-mode',
   });
-  expect(binding.facts.operations.networkDump).toEqual({ available: true });
+  expect(binding.facts.operations.networkDump).toMatchObject({
+    available: false,
+    reason: 'network-capture-post-session',
+  });
   expect(binding.facts.operations.ensureReady).toEqual({ available: true });
   expect(binding.facts.operations.bootTarget).toEqual({ available: true });
   expect(binding.facts.operations.bootTargetHeadless).toMatchObject({ available: false });
@@ -130,15 +171,6 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
-  await expect(
-    binding.operations.networkDump?.({
-      sessionId: 'one',
-      maxEntries: 25,
-      include: 'summary',
-      maxPayloadChars: 2048,
-      maxScanLines: 4000,
-    }),
-  ).resolves.toMatchObject({ source: 'app-log', backend });
 });
 
 test.each([
@@ -701,56 +733,6 @@ test('Android TV hardware buttons are refused before a WebDriver interactor is a
     expect(binding.operations[button], button).toBeUndefined();
   }
   expect(getInteractor).not.toHaveBeenCalled();
-});
-
-test('an Apple WebDriver dump bounded to one entry reports unnamed traffic without its identities', async () => {
-  // Five keep-alive requests CFNetwork logged no URL for, and no connection
-  // line to resolve them against: many more unnamed tasks than maxEntries.
-  const summaries = Array.from(
-    { length: 5 },
-    (_, index) =>
-      `2026-09-09 18:22:28.167 Df app[1:2] [com.apple.CFNetwork:Summary] Task <2FAEF670>.<${index + 10}> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1}`,
-  );
-  const base = host(vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })));
-  const owner = createWebDriverPlatformRuntimeOwner({
-    host: {
-      ...base,
-      appLogs: {
-        ...base.appLogs,
-        readRecent: async () => ({
-          path: '/sessions/one/app.log',
-          exists: true,
-          text: `${summaries.join('\n')}\n`,
-          skippedLines: 0,
-        }),
-      },
-    },
-    owner: providerRuntimeOwner('browserstack', 'apple'),
-    ownsDevice: () => true,
-    capabilities: capabilities(),
-  });
-  const binding = await owner.bind({
-    device: { ...device, platform: 'apple', appleOs: 'ios', id: 'browserstack:lease-ios' },
-    intent: { kind: 'ordinary' },
-    scope: {
-      signal: new AbortController().signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-  });
-
-  const result = await binding.operations.networkDump?.({
-    sessionId: 'one',
-    maxEntries: 1,
-    include: 'summary',
-    maxPayloadChars: 2048,
-    maxScanLines: 4000,
-  });
-
-  if (result?.source !== 'app-log') throw new Error('expected app-log result');
-  expect(result.backend).toBe('ios-device');
-  expect(result.dump.unnamedRequests).toBe(5);
-  expect(result.dump).not.toHaveProperty('unnamedRequestIds');
 });
 
 test('an iOS WebDriver device serves keyboard dismiss, and neither the unproven enter nor the Android IME probe', async () => {

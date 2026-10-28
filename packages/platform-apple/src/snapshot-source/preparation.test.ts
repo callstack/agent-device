@@ -11,16 +11,9 @@ import {
   type SnapshotBridgePreparation,
   SNAPSHOT_BRIDGE_PREPARATION_RETRY_AFTER_MS,
 } from './preparation.ts';
+import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
 import type { SnapshotSourceBridgeBinary, SnapshotSourceHost } from './types.ts';
 import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
-
-const BRIDGE_SOURCES = [
-  'SnapshotBridge.m',
-  'SnapshotBridgeRuntime.m',
-  'SnapshotBridgeRuntime.h',
-  'SnapshotBridgeCapture.h',
-  'SnapshotBridgeCapture.m',
-];
 
 test('one detached preparation answers every capture that arrives while it runs', async () => {
   const root = await writeBridgeSource('preparation-shared-');
@@ -197,7 +190,7 @@ async function writeBridgeSource(prefix: string): Promise<string> {
   const root = await mkdtempForTest(`agent-device-bridge-${prefix}`);
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  for (const name of BRIDGE_SOURCES) {
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
   return root;

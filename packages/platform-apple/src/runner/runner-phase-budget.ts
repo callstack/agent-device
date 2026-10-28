@@ -5,7 +5,7 @@ import { Deadline } from './host.ts';
  * Everything one runner phase may spend: the single clock every step of the phase reads,
  * and the owning request's cancellation. Created once, where the phase begins, and handed
  * on as this object — no step below receives a timeout number it could open a second phase
- * with, which is how a cold probe stall and the build each spent the same budget (#2422).
+ * with, which is how a toolchain probe stall and the build once each spent the same budget (#2422).
  */
 export type RunnerPhaseBudget = Readonly<{
   /** The phase's clock; absent when its owner carries no budget at all. */
@@ -45,15 +45,10 @@ export function requireRunnerPhaseRemainingMs(
 }
 
 /** Says the phase budget ran out, not that the step it would have run is broken. */
-export function runnerPhaseBudgetExhaustedError(phase: string): AppError {
+function runnerPhaseBudgetExhaustedError(phase: string): AppError {
   return new AppError('COMMAND_FAILED', 'The Apple runner budget ran out before this step began', {
     phase,
     reason: 'runner_phase_budget_exhausted',
     retriable: true,
   });
-}
-
-/** The step that threw named its own phase; the caller only needs to know it was the budget. */
-export function isRunnerPhaseBudgetExhaustedError(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'runner_phase_budget_exhausted';
 }

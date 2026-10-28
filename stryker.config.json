@@ -7,7 +7,7 @@
   "plugins_comment": "Named explicitly: the default `@stryker-mutator/*` glob does not resolve under pnpm's non-flat node_modules, so plugin discovery finds no test runner.",
   "plugins": ["@stryker-mutator/vitest-runner"],
   "testRunner": "vitest",
-  "vitest_comment": "The harness derives the related test scope once. Per-test coverage filters each mutant; repeating Vitest related discovery during every mutant adds no coverage.",
+  "vitest_comment": "The harness derives each kernel's owned test scope from the import graph once. Per-test coverage filters each mutant; repeating Vitest related discovery during every mutant adds no coverage.",
   "vitest": {
     "configFile": "vitest.mutation.config.ts",
     "related": false

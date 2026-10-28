@@ -125,9 +125,7 @@ final class RunnerTests: XCTestCase {
   // channel when an independent recovery backend exists, or use a bounded XCTest probe when it
   // does not, for the same screen class (#1105/#1156).
   let snapshotXCTestChannelPenaltyLock = NSLock()
-  var snapshotXCTestChannelPenaltyBundleId: String?
-  var snapshotXCTestChannelPenaltyUntil = Date.distantPast
-  let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
+  var snapshotXCTestChannelPenalty = SnapshotXCTestChannelPenalty()
   let snapshotXCTestPenaltyWarmupExemption = SnapshotXCTestPenaltyWarmupExemption()
   // Sticky per-bundle hint for the private AX depth ladder: deep RN screens reject the default
   // depth with kAXErrorIllegalArgument on EVERY capture, so once a shallower rung is accepted
@@ -312,6 +310,8 @@ final class RunnerTests: XCTestCase {
     NSLog("AGENT_DEVICE_RUNNER_AUTH=required")
     NSLog("AGENT_DEVICE_RUNNER_DESIRED_PORT=%d", configuration.port.rawValue)
     listener = try Self.makeRunnerListener(port: configuration.port)
+    // Reads the OS prompt strings off the alert path, so the first accept/dismiss deadline does not pay for it.
+    DispatchQueue.global(qos: .utility).async { _ = RunnerAlertLabelVocabulary.system }
     listener?.stateUpdateHandler = { [weak self] state in
       switch state {
       case .ready:

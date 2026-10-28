@@ -2,7 +2,6 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   DeviceInventoryHost,
   HostOperatingSystem,
-  HostCommandRequest,
   HostTemporaryTextFile,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -12,8 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
-import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
+import { createHostCommandRunner } from './platform-runtime-host-command-runner.ts';
 import { hostHomeDirectoryFromEnv } from '@agent-device/host-kit/host-file';
 
 export function createDeviceInventoryHost(host: HostEnvironment): DeviceInventoryHost {
@@ -24,24 +22,7 @@ export function createDeviceInventoryHost(host: HostEnvironment): DeviceInventor
   // Guessing the process home would be an ambient read (#3753), so undefined is the honest answer.
   const homeDirectory = hostHomeDirectoryFromEnv(env);
   return Object.freeze({
-    commands: Object.freeze({
-      which: async (executable: string) =>
-        (await whichCmd(executable, env)) ? executable : undefined,
-      run: async (request: HostCommandRequest, signal?: AbortSignal) => {
-        const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
-          allowFailure: request.allowFailure,
-          cwd: request.cwd,
-          env: request.env ? { ...env, ...request.env } : undefined,
-          signal,
-          timeoutMs: request.timeoutMs,
-        });
-        return {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        };
-      },
-    }),
+    commands: createHostCommandRunner(host),
     appleTools: createAppleToolHost(),
     toolchains: createHostToolchainPreparer(env),
     files: Object.freeze({

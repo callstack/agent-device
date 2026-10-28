@@ -54,6 +54,23 @@ test('resolveAppleSnapshotPresentationSourceRoot falls back to packaged source',
   assert.equal(resolveAppleSnapshotPresentationSourceRoot(root), packagedSource);
 });
 
+test('computeRunnerSourceFingerprint covers the shared foreground geometry header in the checkout layout', () => {
+  const root = makeTempRoot();
+  fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
+    'runner\n',
+  );
+  const header = path.join(root, 'apple', 'snapshot-bridge', 'ForegroundApplicationGeometry.h');
+  fs.mkdirSync(path.dirname(header), { recursive: true });
+  fs.writeFileSync(header, '#pragma once\n');
+
+  const before = computeRunnerSourceFingerprint(root);
+  fs.writeFileSync(header, '#pragma once\n// changed\n');
+
+  assert.notEqual(computeRunnerSourceFingerprint(root), before);
+});
+
 test('computeRunnerSourceFingerprint covers the shared snapshot presentation sources', () => {
   const root = makeTempRoot();
   fs.mkdirSync(path.join(root, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });

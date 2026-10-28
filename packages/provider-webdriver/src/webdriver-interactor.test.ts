@@ -449,6 +449,10 @@ function createTextEntryWorld() {
     sendKeys: async () => {
       world.transcript.push('keys');
     },
+    activeElementReference: (timeoutMs?: number) =>
+      world.client
+        .activeElement(timeoutMs)
+        .then((ref) => (typeof ref === 'string' ? ref : { id: ref.id })),
     activeElement: async (timeoutMs?: number) => {
       world.transcript.push('active');
       world.probeTimeouts.push(timeoutMs);

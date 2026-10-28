@@ -251,7 +251,8 @@ extension RunnerTests {
     case cleared
     /// The field never exposes its value, so it is typed into unverified, as the commit wait leaves it.
     case unverified
-    /// The field still held text after the last pass, or could not be read. Nothing is typed.
+    /// The field still held text after the last pass, or could not be read. The synthesized post
+    /// types nothing; the element route's clear falls back to delete bursts.
     case notCleared
     /// A clear post stopped the plan.
     case stopped
@@ -259,7 +260,7 @@ extension RunnerTests {
 
   /// Clears until the field reads empty, at most `maxClearPassCount` passes. A read that cannot
   /// answer ends the clear, so the post never types over text it could not see removed.
-  static func clearForSynthesizedReplacement(
+  static func clearUntilEmpty(
     clearOnce: () -> SynthesizedStepDispatch,
     read: () -> TextValueRead
   ) -> SynthesizedClearOutcome {
@@ -378,7 +379,7 @@ extension RunnerTests {
         }
         if step.replacesExistingText {
           var passes = 0
-          let outcome = Self.clearForSynthesizedReplacement(
+          let outcome = Self.clearUntilEmpty(
             clearOnce: {
               passes += 1
               return enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)

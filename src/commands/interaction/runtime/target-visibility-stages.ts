@@ -8,6 +8,10 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
+import type {
+  ResolvedInteractionTarget,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
 import {
   runNodePipelineStages,
   type SelectorPipelineHooks,
@@ -228,4 +232,17 @@ export async function throwIfOffscreenInteractionTarget(
     }),
     'no',
   );
+}
+
+/**
+ * The capture that measured a resolved target's point: its `preAction` tree, when the dispatched
+ * node is one of that tree's nodes. The rescue above returns a copy patched with a live rect, which
+ * is not, so a rescued point (and a raw coordinate) has no observation. A backend may draw evidence
+ * about the tap point only from this value.
+ */
+export function pointObservationOf(
+  target: ResolvedInteractionTarget,
+): SurfaceScopedNodes | undefined {
+  if (target.kind === 'point' || !target.node || !target.preAction) return undefined;
+  return target.preAction.nodes.includes(target.node) ? target.preAction : undefined;
 }

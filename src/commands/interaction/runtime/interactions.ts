@@ -21,6 +21,7 @@ import {
 } from './post-action-observation.ts';
 import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
 import { guardResolvedTargetAgainstMotion } from './moving-target-gate.ts';
+import { pointObservationOf } from './target-visibility-stages.ts';
 import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
 import type {
   ExpectedResolvedTarget,
@@ -170,6 +171,7 @@ async function tapCommand(
     resolved,
   );
   const point = requireResolvedPoint(atRest);
+  const pointObservation = pointObservationOf(atRest);
   let backendResult;
   try {
     backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
@@ -179,6 +181,7 @@ async function tapCommand(
       holdMs: options.holdMs,
       jitterPx: options.jitterPx,
       doubleTap: options.doubleTap,
+      ...(pointObservation ? { pointObservation } : {}),
     });
   } catch (error) {
     // Resolution is complete before the backend call. Preserve it out of

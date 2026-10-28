@@ -21,53 +21,10 @@ import { buildAppleSimulatorRecordVideoArgs } from '../simctl-facade.ts';
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
 import { runXcrun } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
+import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from './display-fixtures.ts';
 
 const mockReadHostTextFile = vi.mocked(readHostTextFile);
 const mockRunXcrun = vi.mocked(runXcrun);
-
-/** Measured `devicectl device info displays` shape for a closed iPhone Duo. */
-const IPHONE_DUO_CLOSED = JSON.stringify({
-  result: {
-    displays: [
-      {
-        active: true,
-        backlightState: 'activeOn',
-        displayId: 1,
-        name: 'LCD',
-        nativeSize: [1398, 2034],
-        pointScale: 3,
-        primary: true,
-        type: { integrated: {} },
-      },
-      {
-        active: false,
-        backlightState: 'off',
-        displayId: 3,
-        name: 'LCD-1',
-        nativeSize: [2007, 2853],
-        pointScale: 3,
-        primary: false,
-        type: { integrated: {} },
-      },
-    ],
-  },
-});
-
-const IPHONE_17_SINGLE_PANEL = JSON.stringify({
-  result: {
-    displays: [
-      {
-        backlightState: 'activeOn',
-        displayId: 1,
-        name: 'LCD',
-        nativeSize: [1206, 2622],
-        pointScale: 3,
-        primary: true,
-        type: { integrated: {} },
-      },
-    ],
-  },
-});
 
 describe('buildAppleSimulatorRecordVideoArgs', () => {
   beforeEach(() => {
@@ -77,7 +34,7 @@ describe('buildAppleSimulatorRecordVideoArgs', () => {
   });
 
   test('names the lit panel instead of recording the dark default', async () => {
-    mockReadHostTextFile.mockResolvedValue(IPHONE_DUO_CLOSED);
+    mockReadHostTextFile.mockResolvedValue(JSON.stringify(IPHONE_DUO_CLOSED));
     expect(await buildAppleSimulatorRecordVideoArgs(IOS_SIMULATOR, '/tmp/duo.mp4')).toEqual([
       'simctl',
       'io',
@@ -89,7 +46,7 @@ describe('buildAppleSimulatorRecordVideoArgs', () => {
   });
 
   test('keeps the historic argv for a single-panel device', async () => {
-    mockReadHostTextFile.mockResolvedValue(IPHONE_17_SINGLE_PANEL);
+    mockReadHostTextFile.mockResolvedValue(JSON.stringify(IPHONE_17_SINGLE_PANEL));
     expect(await buildAppleSimulatorRecordVideoArgs(IOS_SIMULATOR, '/tmp/rec.mp4')).toEqual([
       'simctl',
       'io',
@@ -100,7 +57,7 @@ describe('buildAppleSimulatorRecordVideoArgs', () => {
   });
 
   test('threads the caller signal into the panel probe', async () => {
-    mockReadHostTextFile.mockResolvedValue(IPHONE_17_SINGLE_PANEL);
+    mockReadHostTextFile.mockResolvedValue(JSON.stringify(IPHONE_17_SINGLE_PANEL));
     const controller = new AbortController();
     await buildAppleSimulatorRecordVideoArgs(IOS_SIMULATOR, '/tmp/rec.mp4', {
       signal: controller.signal,

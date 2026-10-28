@@ -20,3 +20,4 @@ export {
 } from './runner-provider.ts';
 export { buildRunnerSequenceCommand, parseRunnerSequenceResult } from './runner-sequence.ts';
 export { resolveRunnerContainerBundleIds } from './runner-cache-metadata.ts';
+export { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from './apple-runner-platform.ts';

@@ -1,6 +1,136 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+/// Stands in for XCTest on an app tree it cannot serialize (a React Native feed at accessibility
+/// depth 62 or more): the windows query finds no window and every element frame, the application's
+/// included, reads as null.
+private final class RunnerUnserializableTreeStub: NSObject {
+  /// Each element frame read costs XCTest's retries on such a tree, about 2 s each.
+  static var frameReads = 0
+  @objc var allElementsBoundByIndex: [XCUIElement] { [] }
+  @objc var frame: CGRect {
+    Self.frameReads += 1
+    return .null
+  }
+}
+
+/// Counts XCTest coordinate presses without performing them.
+private final class RunnerCoordinatePressCounter: NSObject {
+  static var presses = 0
+  @objc(pressForDuration:)
+  func press(forDuration duration: TimeInterval) {
+    Self.presses += 1
+  }
+}
+
+extension RunnerTests {
+  /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
+  private func simulateUnserializableAppTree() throws -> () -> Void {
+    let swaps: [(Method?, Method?)] = [
+      (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.allElementsBoundByIndex))),
+      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+       class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame))),
+      (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
+       class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
+    ]
+    let resolved = try swaps.map { (try XCTUnwrap($0.0), try XCTUnwrap($0.1)) }
+    let originals = resolved.map { target, stub in
+      (target, method_setImplementation(target, method_getImplementation(stub)))
+    }
+    RunnerCoordinatePressCounter.presses = 0
+    RunnerUnserializableTreeStub.frameReads = 0
+    return {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+    }
+  }
+
+  /// On a tree XCTest cannot serialize, XCTest's coordinate press reads an infinite app frame and
+  /// raises an exception that ends the runner test. A long press needs no tree: when the sole-screen
+  /// route is open for the app it is synthesized on that screen, and anything else keeps the XCTest
+  /// press.
+  @MainActor
+  func testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .healthy
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let longPress = try runnerCommandFixture(
+      #"{"command":"longPress","commandId":"unserializable-long-press","x":40,"y":40,"durationMs":600}"#
+    )
+    let pressSeries = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"unserializable-press-series","steps":[{"kind":"longPress","x":40,"y":40,"durationMs":600,"pauseMs":50},{"kind":"longPress","x":40,"y":40,"durationMs":600}]}"#
+    )
+
+    let longPressResponse = try executeOnMainPrepared(command: longPress, activeApp: app)
+    let longPressCoordinatePresses = RunnerCoordinatePressCounter.presses
+    let pressSeriesResponse = try executeOnMainPrepared(command: pressSeries, activeApp: app)
+
+    XCTAssertTrue(longPressResponse.ok, String(describing: longPressResponse.error))
+    XCTAssertEqual(longPressResponse.data?.message, "long pressed")
+    XCTAssertTrue(pressSeriesResponse.ok, String(describing: pressSeriesResponse.error))
+    if soleScreenRouteIsOpen(for: app) {
+      XCTAssertEqual(longPressCoordinatePresses, 0)
+      XCTAssertNil(longPressResponse.data?.gestureFallback)
+      XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+      XCTAssertEqual(RunnerUnserializableTreeStub.frameReads, 0)
+      let steps = pressSeriesResponse.data?.sequenceResults ?? []
+      XCTAssertEqual(steps.count, 2)
+      let holds = [(longPressResponse.data?.gestureStartUptimeMs, longPressResponse.data?.gestureEndUptimeMs)]
+        + steps.map { ($0.gestureStartUptimeMs, $0.gestureEndUptimeMs) }
+      for (start, end) in holds {
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(end) - XCTUnwrap(start), 600)
+      }
+    } else {
+      XCTAssertEqual(longPressCoordinatePresses, 1)
+      XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
+      XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
+    }
+  }
+
+  /// A swipe asks for the gesture viewport before it plans its path. On a tree XCTest cannot
+  /// serialize, the app whose sole screen it provably fills answers with that screen, the frame the
+  /// planned gesture's record is routed to; anything else keeps requiring a window.
+  @MainActor
+  func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"gestureViewport","commandId":"unserializable-gesture-viewport"}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    if soleScreenRouteIsOpen(for: app) {
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      let screen = UIScreen.main.bounds
+      XCTAssertEqual(response.data?.x, 0)
+      XCTAssertEqual(response.data?.y, 0)
+      XCTAssertEqual(response.data?.x2, Double(screen.width))
+      XCTAssertEqual(response.data?.y2, Double(screen.height))
+    } else {
+      XCTAssertFalse(response.ok)
+      XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
+    }
+  }
+}
+#endif
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
   func testSoleScreenReferenceFrameLaysTheScreenInTheAppsOrientation() {
@@ -20,19 +150,49 @@ extension RunnerTests {
   }
 
 #if os(iOS)
-  /// The sole-screen route is the boundary every window-less gesture crosses, so it decides the device
-  /// rule itself: an iPhone with one screen names that screen, and an iPad refuses, because it can show
-  /// the app in part of its screen. Run on both device families to cover both answers.
-  func testSoleScreenDisplayIDIsNamedOnlyForAnIPhoneWithOneScreen() {
-    var displayID: UInt = 0
-    let refusal = RunnerResolveSoleScreenDisplayID(&displayID)
-    if UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 {
-      XCTAssertNil(refusal)
-      XCTAssertNotEqual(displayID, 0)
-    } else {
-      XCTAssertNotNil(refusal)
-      XCTAssertEqual(displayID, 0)
+  /// The launched runner host app fills its simulator's only screen, so its window-less gestures
+  /// route through that screen on either family. A windowed iPad app is refused the same route — that
+  /// case needs an iPad set to Windowed Apps, which the nightly lane does not run; what the rule
+  /// refuses here is the closest executable negative: on an iPad, an app that is not the
+  /// accessibility primary app has no screen to fill, so naming one would book a tap on another
+  /// app's frame. An iPhone keeps the rule by idiom, as before this change.
+  @MainActor
+  func testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen() throws {
+    app.launch()
+    mainOwned.app = app
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
     }
+    XCTAssertTrue(
+      soleScreenRouteIsOpen(for: app),
+      "the foreground app fills the simulator's only screen on both families"
+    )
+    guard UIDevice.current.userInterfaceIdiom != .phone else {
+      return
+    }
+
+    var screen: AnyObject?
+    var displayID: UInt = 0
+    let refusal = RunnerResolveSoleScreen(springboard, &screen, &displayID)
+    XCTAssertNotNil(refusal, "an iPad app that does not own the screen names no sole screen for its taps")
+    XCTAssertNil(screen)
+    XCTAssertEqual(displayID, 0)
+  }
+
+  /// #3899: a synthesized turn swaps the display's side lengths, never a placed window's smaller box.
+  func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let screen = UIScreen.main.fixedCoordinateSpace.bounds.size
+    XCTAssertEqual(
+      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      CGRect(origin: .zero, size: screen)
+    )
+    XCTAssertEqual(
+      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight),
+      CGRect(x: 0, y: 0, width: screen.height, height: screen.width)
+    )
   }
 #endif
 
@@ -49,41 +209,6 @@ extension RunnerTests {
         interfaceOrientation: RunnerInterfaceOrientation.portrait
       )
     )
-  }
-
-  func testSynthesizedDispatchInvertsCaptureOnEveryInterfaceOrientation() {
-    let frames = [
-      CGRect(x: 0, y: 0, width: 430, height: 932),
-      CGRect(x: 0, y: 0, width: 951, height: 669),
-    ]
-    for frame in frames {
-      for orientation in [
-        RunnerInterfaceOrientation.portrait,
-        RunnerInterfaceOrientation.portraitUpsideDown,
-        RunnerInterfaceOrientation.landscapeLeft,
-        RunnerInterfaceOrientation.landscapeRight,
-      ] {
-        let corners = [
-          CGPoint(x: frame.minX + 1, y: frame.minY + 1),
-          CGPoint(x: frame.midX, y: frame.midY),
-          CGPoint(x: frame.maxX - 2, y: frame.maxY - 3),
-        ]
-        for displayed in corners {
-          let captured = CoordinateSpaceRotation.oriented(
-            point: displayed,
-            in: frame,
-            interfaceOrientation: orientation
-          )
-          let dispatched = CoordinateSpaceRotation.native(
-            point: captured,
-            in: frame,
-            interfaceOrientation: orientation
-          )
-          XCTAssertEqual(dispatched.x, displayed.x, accuracy: 0.001, "orientation \(orientation)")
-          XCTAssertEqual(dispatched.y, displayed.y, accuracy: 0.001, "orientation \(orientation)")
-        }
-      }
-    }
   }
 
   func testPlannedMultiTouchGestureAcceptsMatchingInBoundsTrajectories() throws {

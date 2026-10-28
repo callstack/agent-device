@@ -8,6 +8,7 @@ import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -195,7 +196,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
                   .readLine();
           if (command == null) {
             SessionResponseWriter.writeSessionError(
-                socket.getOutputStream(), "", "java.io.EOFException", "empty command");
+                socket.getOutputStream(), "", new EOFException("empty command"));
             continue;
           }
           String[] parts = command.trim().split("\\s+", 3);
@@ -229,8 +230,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
             SessionResponseWriter.writeSessionError(
                 socket.getOutputStream(),
                 requestId,
-                "java.lang.IllegalArgumentException",
-                "unknown session command");
+                new IllegalArgumentException("unknown session command"));
             continue;
           }
           writeSessionSnapshot(
@@ -272,11 +272,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       result.putString("byteLength", Integer.toString(capture.xml.getBytes(StandardCharsets.UTF_8).length));
       SessionResponseWriter.writeSessionResponse(output, result, capture.xml);
     } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(
-          output,
-          requestId,
-          error.getClass().getName(),
-          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      SessionResponseWriter.writeSessionError(output, requestId, error);
     }
   }
 

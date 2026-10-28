@@ -98,6 +98,18 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   },
 ];
 
+/**
+ * The most test files one kernel's mutation scope may hold. Every shard of a
+ * module replays its whole scope in Stryker's dry run before the first mutant,
+ * so this bounds a shard however many shards the module declares. Measured on
+ * ubuntu-latest (weekly run 40164641005): a 684-file scope dry-ran in 4–7 min
+ * and its shards finished in 9–19 min of the 22-minute step; a 1,471-file scope
+ * dry-ran in 8–11 min and a shard outran the step. The unit suite enforces it
+ * (`scripts/__tests__/mutation-scope-budget.test.ts`), so the PR that grows a
+ * scope past it fails instead of the next weekly sweep.
+ */
+export const MAX_MUTATION_TEST_SCOPE_FILES = 600;
+
 export const ALL_MODULE_IDS: readonly ModuleId[] = KERNEL_MODULES.map((module) => module.id);
 
 export function moduleById(id: ModuleId): KernelModule {
@@ -119,7 +131,7 @@ export function mutateGlobs(ids: readonly ModuleId[] = ALL_MODULE_IDS): string[]
 
 /**
  * The module a lane-tooling change proves itself against. Keep this to a real
- * end-to-end sweep whose observed related-test scope fits the 30-minute job
+ * end-to-end sweep whose observed owned-test scope fits the 30-minute job
  * budget; mutant count alone does not capture replay cost.
  */
 export const LANE_CANARY: ModuleId = 'snapshot-occlusion';

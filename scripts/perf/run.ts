@@ -1,72 +1,109 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { parseConfig, REPO_ROOT, usesSourceCli } from './config.ts';
+import { parseConfig, REPO_ROOT, type PerfConfig } from './config.ts';
+import { collectMetadata } from './metadata.ts';
+import { writeRunOutput } from './report.ts';
 import {
-  runScenario,
-  setupIsolation,
-  teardownIsolation,
-  type IsolationContext,
-} from './harness.ts';
-import { writeReports } from './report.ts';
-import type { RunResult } from './types.ts';
+  describeCoverage,
+  FIXTURE_APP_EVENT_URL_TEMPLATE,
+  SUITE_EXCLUSIONS,
+  suiteFor,
+  type SuiteScenario,
+} from './suite.ts';
+import { runFinalizer, runSuite, type SuiteContext } from './suite-harness.ts';
+import { PERF_SUMMARY_SCHEMA, type Measurement, type PerfSummary } from './types.ts';
 
-function readVersion(): string {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
-    return typeof pkg.version === 'string' ? pkg.version : 'unknown';
-  } catch {
-    return 'unknown';
-  }
+function log(msg: string): void {
+  process.stderr.write(`[perf] ${msg}\n`);
 }
 
-function main(): void {
-  const cfg = parseConfig(process.argv.slice(2));
-  // The dist binary needs a build; running from source (AGENT_DEVICE_PERF_CLI) does not.
-  if (!usesSourceCli() && !fs.existsSync(path.join(REPO_ROOT, 'dist', 'src'))) {
-    process.stderr.write('[perf] dist/ is missing — run `pnpm build` first.\n');
-    process.exit(1);
-  }
-
-  const startedAt = new Date().toISOString();
-  let ctx: IsolationContext | null = null;
-  let exitCode = 0;
-
-  const cleanup = (): void => {
-    if (ctx) {
-      teardownIsolation(ctx, cfg);
-      ctx = null;
-    }
-  };
-  process.on('SIGINT', () => {
+function onInterrupt(cleanup: () => void): void {
+  process.once('SIGINT', () => {
     cleanup();
     process.exit(130);
   });
-  process.on('SIGTERM', () => {
+  process.once('SIGTERM', () => {
     cleanup();
     process.exit(143);
   });
-
-  try {
-    ctx = setupIsolation(cfg);
-    const measurements = runScenario(ctx, cfg);
-    const run: RunResult = {
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      platform: cfg.platform,
-      device: { udid: ctx.profile.udid, serial: ctx.profile.serial, name: ctx.profile.deviceName },
-      config: { rounds: cfg.rounds, warmup: cfg.warmup, keepArtifacts: cfg.keepArtifacts },
-      agentDeviceVersion: readVersion(),
-      measurements,
-    };
-    const { jsonPath, mdPath } = writeReports(run, cfg.outDir);
-    process.stderr.write(`\n[perf] report: ${mdPath}\n[perf] json:   ${jsonPath}\n`);
-  } catch (error) {
-    process.stderr.write(`[perf] error: ${(error as Error).stack ?? String(error)}\n`);
-    exitCode = 1;
-  } finally {
-    cleanup();
-  }
-  process.exit(exitCode);
 }
 
-main();
+function selectScenarios(cfg: PerfConfig): SuiteScenario[] {
+  const suite = suiteFor(cfg.platform);
+  if (!cfg.scenarios) return suite;
+  const unknown = cfg.scenarios.filter((id) => !suite.some((s) => s.id === id));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown scenarios: ${unknown.join(', ')} (known: ${suite.map((s) => s.id).join(', ')})`,
+    );
+  }
+  return suite.filter((s) => cfg.scenarios!.includes(s.id));
+}
+
+async function runPlatformSuite(
+  cfg: PerfConfig,
+): Promise<{ measurements: Measurement[]; coverage: PerfSummary['coverage'] }> {
+  const scenarios = selectScenarios(cfg);
+  // The daemon inherits these from the first CLI call; they route trigger-app-event to the fixture.
+  process.env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE ??= FIXTURE_APP_EVENT_URL_TEMPLATE;
+  process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE ??= FIXTURE_APP_EVENT_URL_TEMPLATE;
+  const rawDir = path.join(cfg.outDir, 'raw');
+  const ctx: SuiteContext = {
+    platform: cfg.platform,
+    stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-perf-')),
+    device: cfg.platform === 'ios' ? cfg.udid! : cfg.serial!,
+    appId: cfg.appId,
+    artifactsDir: path.join(rawDir, 'artifacts'),
+    rawDir,
+  };
+  fs.mkdirSync(ctx.artifactsDir, { recursive: true });
+  log(`state-dir: ${ctx.stateDir}`);
+  const finalize = runFinalizer(ctx, cfg.keepArtifacts);
+  onInterrupt(finalize);
+  try {
+    const measurements = await runSuite(ctx, cfg, scenarios);
+    return {
+      measurements,
+      coverage: describeCoverage(scenarios, SUITE_EXCLUSIONS[cfg.platform]),
+    };
+  } finally {
+    finalize();
+  }
+}
+
+async function main(): Promise<void> {
+  const cfg = parseConfig(process.argv.slice(2));
+  // The CLI and the iOS forced-backend probe run from the build.
+  if (!fs.existsSync(path.join(REPO_ROOT, 'dist', 'src'))) {
+    throw new Error('dist/ is missing — run `pnpm build` first.');
+  }
+  const startedAt = new Date().toISOString();
+  // Read before the run, so a checkout change during a long run cannot relabel it.
+  const metadata = collectMetadata(cfg);
+  const { measurements, coverage } = await runPlatformSuite(cfg);
+  const summary: PerfSummary = {
+    schema: PERF_SUMMARY_SCHEMA,
+    platform: cfg.platform,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    config: {
+      rounds: cfg.rounds,
+      warmup: cfg.warmup,
+      scenarios: [...new Set(measurements.map((m) => m.scenario))],
+    },
+    metadata,
+    coverage,
+    measurements,
+  };
+  const { jsonPath, mdPath } = writeRunOutput(summary, cfg.outDir);
+  log(`report: ${mdPath}`);
+  log(`summary: ${jsonPath}`);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((error: unknown) => {
+    process.stderr.write(`[perf] error: ${(error as Error).stack ?? String(error)}\n`);
+    process.exit(1);
+  });

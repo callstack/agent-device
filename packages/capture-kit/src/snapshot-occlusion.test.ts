@@ -671,6 +671,50 @@ test('a full-viewport toolbar container does not cover its application siblings'
   assert.equal(annotated[1]?.interactionBlocked, undefined);
 });
 
+test.for([
+  // #3883: on iOS 27 an app's 2pt top bar pushes the floating-bar container to y=2.
+  {
+    name: 'a toolbar container 2pt below the viewport top does not cover its application siblings',
+    topInset: 2,
+    expected: undefined,
+  },
+  {
+    name: 'a toolbar container 4pt below the viewport top does not cover its application siblings',
+    topInset: 4,
+    expected: undefined,
+  },
+  {
+    name: 'a toolbar container 5pt below the viewport top covers its application siblings',
+    topInset: 5,
+    expected: 'covered',
+  },
+])('$name', ({ topInset, expected }) => {
+  const application: RawSnapshotNode = {
+    index: 0,
+    type: 'application',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  };
+  const target: RawSnapshotNode = {
+    index: 1,
+    type: 'button',
+    role: 'button',
+    parentIndex: 0,
+    label: 'Room',
+    rect: { x: 16, y: 313, width: 408, height: 46 },
+  };
+  const toolbarContainer: RawSnapshotNode = {
+    index: 2,
+    type: 'toolbar',
+    parentIndex: 0,
+    label: 'Toolbar',
+    rect: { x: 0, y: topInset, width: 440, height: 956 - topInset },
+  };
+
+  const annotated = annotateCoveredSnapshotNodes([application, target, toolbarContainer]);
+
+  assert.equal(annotated[1]?.interactionBlocked, expected);
+});
+
 test('the kind fields join with a separator, so adjacent fragments never accidentally concatenate into a match', () => {
   // type "tab" + role "bar" must read as "tab bar" (no match for the
   // 'tabbar' overlay fragment) — never "tabbar" via an unseparated join,

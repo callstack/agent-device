@@ -5,7 +5,12 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { parse } from 'yaml';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { selectAppleBridgeProof, selectIosSmoke, selectIosXctests } from '../apple-ci-impact.ts';
+import {
+  selectAppleBridgeProof,
+  selectIosSmoke,
+  selectIosXctests,
+  selectMacosSmoke,
+} from '../apple-ci-impact.ts';
 import { selectChecks } from '../check-affected/model.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -226,12 +231,32 @@ test.each([
   ['macOS silently skipped', { MACOS_OUTCOME: 'skipped' }, 1],
   ['iOS cleanup fails', { IOS_CLEANUP_OUTCOME: 'failure' }, 1],
   ['macOS cleanup fails', { MACOS_CLEANUP_OUTCOME: 'failure' }, 1],
+  ['macOS not selected', { MACOS_SELECTED: 'false', MACOS_OUTCOME: 'skipped' }, 0],
+  ['unselected macOS unexpectedly ran', { MACOS_SELECTED: 'false' }, 1],
+  [
+    'no phase selected',
+    {
+      IOS_SELECTED: 'false',
+      IOS_OUTCOME: 'skipped',
+      MACOS_SELECTED: 'false',
+      MACOS_OUTCOME: 'skipped',
+      IOS_CLEANUP_OUTCOME: 'skipped',
+      MACOS_CLEANUP_OUTCOME: 'skipped',
+    },
+    0,
+  ],
+  [
+    'cleanup skipped while a phase ran',
+    { IOS_SELECTED: 'false', IOS_OUTCOME: 'skipped', MACOS_CLEANUP_OUTCOME: 'skipped' },
+    1,
+  ],
 ] as const)('the final Apple status guard preserves failure: %s', (_label, overrides, expected) => {
   const guard = appleJob().steps.find((step) => step.env?.IOS_OUTCOME)!;
   expect(guard.if).toBe('always()');
   expect(guard.env).toEqual({
     IOS_SELECTED: '${{ steps.ios-impact.outputs.run }}',
     IOS_OUTCOME: '${{ steps.ios.outcome }}',
+    MACOS_SELECTED: '${{ steps.macos-impact.outputs.run }}',
     MACOS_OUTCOME: '${{ steps.macos.outcome }}',
     IOS_CLEANUP_OUTCOME: '${{ steps.ios-cleanup.outcome }}',
     MACOS_CLEANUP_OUTCOME: '${{ steps.macos-cleanup.outcome }}',
@@ -241,6 +266,7 @@ test.each([
       ...process.env,
       IOS_SELECTED: 'true',
       IOS_OUTCOME: 'success',
+      MACOS_SELECTED: 'true',
       MACOS_OUTCOME: 'success',
       IOS_CLEANUP_OUTCOME: 'success',
       MACOS_CLEANUP_OUTCOME: 'success',
@@ -278,6 +304,35 @@ test('iOS smoke uses affected-check ownership and fails open on uncertain diffs'
   expect(selectIosSmoke('pull_request', null).run).toBe(true);
   expect(selectIosSmoke('pull_request', []).run).toBe(true);
   expect(selectIosSmoke('push', ['src/foo.test.ts']).run).toBe(true);
+});
+
+test('macOS smoke uses affected-check ownership and keeps the bridge proof inputs', () => {
+  const steps = appleJob().steps;
+  const select = steps.find((step) => step.id === 'macos-impact')!;
+  const build = steps.find((step) => step.id === 'build')!;
+  const macos = steps.find((step) => step.id === 'macos')!;
+  expect(select.run).toContain('scripts/apple-ci-impact.ts macos');
+  expect(steps.indexOf(select)).toBeLessThan(steps.indexOf(build));
+  expect(build.if).toContain("steps.macos-impact.outputs.run != 'false'");
+  expect(macos.if).toContain("steps.macos-impact.outputs.run != 'false'");
+  for (const file of [
+    'src/foo.test.ts',
+    'packages/daemon/src/sessions/__tests__/session.test.ts',
+    'packages/platform-android/src/index.ts',
+    'test/integration/replays/ios/basic.ad',
+  ]) {
+    expect(selectMacosSmoke('pull_request', [file]).run, file).toBe(false);
+  }
+  for (const file of [
+    'packages/platform-apple/src/foldable/fold-helper-cache.test.ts',
+    'packages/platform-apple/src/index.ts',
+    'src/index.ts',
+    '.github/actions/smoke-macos/action.yml',
+  ]) {
+    expect(selectMacosSmoke('pull_request', [file]).run, file).toBe(true);
+  }
+  expect(selectMacosSmoke('pull_request', null).run).toBe(true);
+  expect(selectMacosSmoke('push', ['src/foo.test.ts']).run).toBe(true);
 });
 
 function cacheInputs(action: string, stepId = 'source-hash'): string[] {
@@ -542,7 +597,7 @@ test('a shallow PR merge still yields a known change set for all Apple selectors
       );
     expect(select('xctest')).toContain('skip;');
     expect(select('bridge')).toContain('skip;');
-    expect(select('smoke')).toContain('run; iOS device-lane input changed: src/feature.ts');
+    expect(select('smoke')).toContain('run; replay-ios input changed: src/feature.ts');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

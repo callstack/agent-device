@@ -33,6 +33,9 @@ const NODE_OS_PATH = {
   name: 'node:os',
 };
 
+const TOOLCHAIN_IDENTITY_EXEC_MESSAGE =
+  'Read the toolchain identity from the selected Xcode files; an exec here can stall the runner cache decision.';
+
 const CHILD_PROCESS_BAN_ROOTS = ['src', 'packages/host-kit/src'];
 const PROVIDER_BAN_ROOTS = ['src/commands', 'src/cli/commands'];
 
@@ -242,6 +245,27 @@ export default defineConfig({
       ]),
       rules: {
         'no-restricted-imports': ['error', { paths: [CHILD_PROCESS_PATH] }],
+      },
+    },
+    {
+      // The runner cache key reads the selected Xcode's files and execs nothing: a hosted macOS
+      // runner can stall an `xcrun` exec longer than any budget (Perf Nightly run 40441065511).
+      files: ['packages/platform-apple/src/runner/runner-toolchain-identity.ts'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              { ...CHILD_PROCESS_PATH, message: TOOLCHAIN_IDENTITY_EXEC_MESSAGE },
+              { name: '@agent-device/host-kit/command', message: TOOLCHAIN_IDENTITY_EXEC_MESSAGE },
+              {
+                name: './host.ts',
+                allowImportNames: ['commandDeveloperDir'],
+                message: TOOLCHAIN_IDENTITY_EXEC_MESSAGE,
+              },
+            ],
+          },
+        ],
       },
     },
     {

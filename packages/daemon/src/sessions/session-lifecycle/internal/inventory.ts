@@ -2,10 +2,8 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveSessionRunnerLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import {
-  commandRuntimeUseRequirements,
-  listRuntimeFactCommands,
-} from '@agent-device/command-registry/registry';
+import { listRuntimeFactCommands } from '@agent-device/command-registry/registry';
+import { commandIsAvailableFromFacts } from '@agent-device/command-registry/planned-operations';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import {
   assertResolvedAppsFilter,
@@ -13,6 +11,7 @@ import {
   type ProviderAppCatalogQuery,
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
+import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -44,11 +43,7 @@ import {
   selectorTargetsSessionDevice,
 } from '../../../resources/session-device-resolution.ts';
 import { resolveSessionScope, sessionMatchesInventoryScope } from '../../session-routing.ts';
-import type {
-  BoundDeviceRuntime,
-  RuntimeFacts,
-  RuntimeOperationFact,
-} from '@agent-device/contracts/platform-runtime';
+import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import {
   type PlatformRuntimeOperations,
   appsRuntimeUse,
@@ -294,14 +289,14 @@ async function capabilitiesInventoryResponse(params: {
     ok: true,
     data: {
       device: publicDeviceInfo(device),
-      ...(device.platform === 'android' && factOwnedCapabilityAvailable('press', facts)
+      ...(device.platform === 'android' && commandIsAvailableFromFacts('press', facts)
         ? { targetReadiness: { press: 'bounded-geometry' } }
         : {}),
       availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
         // available even when the sessionless runtime probe cannot see a foreground app.
         if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
-        return factOwnedCapabilityAvailable(command, facts);
+        return commandIsAvailableFromFacts(command, facts);
       }),
     },
   };
@@ -331,39 +326,6 @@ function hasMacSessionSurface(
     session.surface !== undefined &&
     session.surface !== 'app' &&
     session.surface !== 'frontmost-app',
-  );
-}
-
-function factOwnedCapabilityAvailable(
-  command: string,
-  facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
-): boolean {
-  const declaredUses = commandRuntimeUseRequirements(command);
-  if (!declaredUses) return false;
-  if (!facts) return false;
-  // A request names exactly one action, so one fully admitted use is enough. An empty `required`
-  // is not one: `[].every` is vacuously true, and a plan that needs no operation must not read as
-  // proof that the device can run the command.
-  return declaredUses.some(
-    (required) =>
-      required.length > 0 && required.every((operation) => hasAvailableFact(facts, operation)),
-  );
-}
-
-/**
- * Descriptor execution metadata is structurally validated as string arrays, not as keys of the
- * concrete facts catalog. Keep the projection fail-closed when a descriptor names an operation the
- * inspected owner does not state, instead of letting an arbitrary property lookup throw out of the
- * whole `capabilities` response.
- */
-function hasAvailableFact(
-  facts: RuntimeFacts<PlatformRuntimeOperations>,
-  operation: string,
-): boolean {
-  if (!Object.hasOwn(facts.operations, operation)) return false;
-  return (
-    (facts.operations as Readonly<Record<string, RuntimeOperationFact>>)[operation]?.available ===
-    true
   );
 }
 
@@ -466,16 +428,7 @@ async function resolveAppsRuntime(params: {
     (fact) => !fact.available,
   );
   if (unavailable && !unavailable.available) {
-    return {
-      response: {
-        ok: false,
-        error: {
-          code: 'UNSUPPORTED_OPERATION',
-          message: 'apps is not supported on this device',
-          ...(unavailable.hint ? { hint: unavailable.hint } : {}),
-        },
-      },
-    };
+    return { response: unsupportedOperationResponse('apps', unavailable) };
   }
   return { runtime: await requireRuntimeBinding(params.bindDevice)(params.device, appsRuntimeUse) };
 }

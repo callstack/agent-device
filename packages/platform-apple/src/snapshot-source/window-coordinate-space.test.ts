@@ -42,6 +42,7 @@ type Fixture = {
   constants: { quarterTurnTolerance: number };
   quarterTurnCases: QuarterTurnCase[];
   rotationCases: RotationCase[];
+  windowContentCases: { name: string }[];
 };
 
 const TABLE_PATH = path.resolve(
@@ -83,7 +84,9 @@ test('the quarter-turn window rule agrees with every golden parity table case', 
   assert.ok(table.quarterTurnCases.length > 0, 'parity table must not be empty');
   assert.ok(table.rotationCases.length > 0, 'parity table must not be empty');
   assertUniqueNames(
-    [...table.quarterTurnCases, ...table.rotationCases].map((fixture) => fixture.name),
+    [...table.quarterTurnCases, ...table.rotationCases, ...table.windowContentCases].map(
+      (fixture) => fixture.name,
+    ),
     'parity table',
   );
   for (const fixture of table.quarterTurnCases) {
@@ -104,7 +107,7 @@ const LANDSCAPE_RIGHT = 3;
 const LANDSCAPE_LEFT = 4;
 
 /**
- * The dispatch direction — an app-space point in the native space a synthesized event is performed in
+ * The dispatch direction — the caller's screen point in the native space a synthesized event is performed in
  * — as the runner's own `CoordinateSpaceRotation.native(point:in:interfaceOrientation:)` computes it.
  *
  * The capture's inverse is NOT implemented here: it lives in Swift alone, and a TypeScript copy of it
@@ -115,8 +118,8 @@ const LANDSCAPE_LEFT = 4;
  * forward map it ships with.
  */
 function nativePoint(point: Point, app: Rect, interfaceOrientation: number): Point {
-  const localX = point.x - app.x;
-  const localY = point.y - app.y;
+  // The turn moves axes and never an origin (#3899).
+  const { x: localX, y: localY } = point;
   switch (interfaceOrientation) {
     case LANDSCAPE_RIGHT:
       return { x: app.height - localY, y: localX };

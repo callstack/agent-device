@@ -263,7 +263,8 @@ extension RunnerTests {
     guard let index = RunnerAlertButtonChoice.buttonIndex(
       for: alert.buttons.map(\.label),
       action: action,
-      popupMarkerSurface: alert.source == .dismissPopup
+      popupMarkerSurface: alert.source == .dismissPopup,
+      vocabulary: .system
     ) else {
       return nil
     }

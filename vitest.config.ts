@@ -55,6 +55,9 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 
+/** The `apple-runner` project's tests, which need its host setup and so run in no other project. */
+const APPLE_RUNNER_TESTS: readonly string[] = ['packages/platform-apple/src/runner/**/*.test.ts'];
+
 /**
  * The projects `test:coverage` keeps out of the instrumented invocation, which the stamp reporter has to
  * expect: without it, the lane's own `--project=!fuzz-worker` is indistinguishable from someone narrowing
@@ -64,13 +67,14 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
  */
 export const COVERAGE_UNINSTRUMENTED_PROJECTS: readonly string[] = ['fuzz-worker'];
 /**
- * Every test the mutation lane must not collect. The two lists above stay
+ * Every test the mutation lane must not collect. The lists above stay
  * module-local: this union is the whole cross-file surface, and the mutation lane
  * wants exactly it.
  */
 export const MUTATION_EXCLUDED_TESTS: readonly string[] = [
   ...MUTATION_EXCLUDED_SUBPROCESS_TESTS,
   ...FUZZ_WORKER_TESTS,
+  ...APPLE_RUNNER_TESTS,
 ];
 
 // Env stubs never outlive the test that made them. Applied to every project below and imported by
@@ -150,6 +154,7 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'scripts/__tests__/eager-closure-budgets.test.ts',
+            'scripts/__tests__/mutation-scope-budget.test.ts',
             'scripts/__tests__/closure-growth-rule.test.ts',
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
             'scripts/__tests__/npm-skills-exclusion.test.ts',
@@ -159,6 +164,7 @@ export default defineConfig({
             'scripts/__tests__/xctest-declarations.test.ts',
             'scripts/__tests__/xctest-selection.test.ts',
             'scripts/__tests__/apple-ci-impact.test.ts',
+            'scripts/__tests__/device-lane-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',
@@ -183,6 +189,12 @@ export default defineConfig({
             // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
             // to survive packaging before the npm package ships unbuildable Swift.
             'scripts/__tests__/strip-swift-comments.test.ts',
+            // The publishing package guard's no-test-code predicates, over fixture paths and
+            // bytes: the gate itself can only watch a healthy package pass.
+            'scripts/__tests__/shipped-test-code.test.ts',
+            // The fixture-host class-name hook between the shipped host app and the unit-test
+            // fixtures file: a rename there must fail here, not fall back silently on devices.
+            'scripts/__tests__/runner-fixture-host-lookup.test.ts',
             // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
             // over two strings; the gate itself is what runs the packager and the Swift parse.
             'scripts/__tests__/packaged-runner-swift.test.ts',
@@ -196,6 +208,8 @@ export default defineConfig({
             'scripts/__tests__/release-version.test.ts',
             'scripts/__tests__/release-plan.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            // The perf suite's pure logic, without a device.
+            'scripts/perf/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',
@@ -228,7 +242,7 @@ export default defineConfig({
             // The Maestro conformance oracle runs via `node --test` in its own CI
             // job (scripts/maestro-conformance), like the layering guard.
           ],
-          exclude: [...FUZZ_WORKER_TESTS, 'packages/platform-apple/src/runner/**/*.test.ts'],
+          exclude: [...FUZZ_WORKER_TESTS, ...APPLE_RUNNER_TESTS],
           setupFiles: SETUP_FILES,
         },
       },
@@ -239,7 +253,7 @@ export default defineConfig({
           // capabilities behind the package's test-host seam (R11 keeps the
           // package from importing root utilities directly).
           name: 'apple-runner',
-          include: ['packages/platform-apple/src/runner/**/*.test.ts'],
+          include: [...APPLE_RUNNER_TESTS],
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',
