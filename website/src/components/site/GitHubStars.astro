@@ -85,6 +85,10 @@ const label = `${site.name} on GitHub`;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
+  /* No count yet (the build could not read it): no empty box in the gap. */
+  [data-stars-count]:empty {
+    display: none;
+  }
   .gh-stars svg {
     flex: none;
     color: var(--accent);
