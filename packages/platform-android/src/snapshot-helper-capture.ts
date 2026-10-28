@@ -245,9 +245,15 @@ function readAndroidSnapshotHelperOutput(
     return parseAndroidSnapshotHelperOutput(`${result.stdout}\n${result.stderr}`);
   } catch (error) {
     // `am instrument` exits 0 after a helper that reported its own failure, so that report is the
-    // answer. Any other parse failure, including a report of success with no XML, has no report of
-    // its own and falls through to the instrumentation result below.
-    if (error instanceof AppError && isExplicitHelperFailure(error.details?.helper)) throw error;
+    // answer: its message, metadata and typed reason stay, and the instrumentation result is added.
+    if (error instanceof AppError && error.details?.helper) {
+      throw new AppError(
+        error.code,
+        error.message,
+        { ...error.details, instrumentation: readInstrumentationExitResult(result) },
+        error.cause,
+      );
+    }
     // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
     // message already branches on the exit code.
     // Stdout is not copied into the details: it can hold the snapshot the helper was printing.
@@ -269,12 +275,6 @@ function readAndroidSnapshotHelperOutput(
       error,
     );
   }
-}
-
-function isExplicitHelperFailure(helper: unknown): boolean {
-  return (
-    typeof helper === 'object' && helper !== null && (helper as { ok?: unknown }).ok === 'false'
-  );
 }
 
 export function parseAndroidSnapshotHelperOutput(output: string): AndroidSnapshotHelperOutput {

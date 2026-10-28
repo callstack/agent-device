@@ -139,6 +139,8 @@ export type AndroidInstrumentationExitResult = {
   longMsg?: string;
   error?: string;
   stack?: string;
+  /** Fields dropped whole because their value held a snapshot marker. */
+  withheldFields?: Array<MessageField | 'aborted'>;
 };
 
 const LINE_MAX_CHARS = 4_096;
@@ -151,6 +153,49 @@ const FAILED_ENVELOPES = [
   new RegExp(`^android\\.util\\.AndroidException: INSTRUMENTATION_FAILED: ${COMPONENT}$`),
   new RegExp(`^onError: commandError=(?:true|false) message=INSTRUMENTATION_FAILED: ${COMPONENT}$`),
 ];
+// Attributes `AccessibilityTreeXml` writes. A value that holds one in `name="` form, a tag
+// bracket, or a payload record is withheld whole rather than filtered.
+const SNAPSHOT_ATTRIBUTES = [
+  'bounds',
+  'checked',
+  'class',
+  'clickable',
+  'content-desc',
+  'drawing-order',
+  'editable',
+  'enabled',
+  'focusable',
+  'focused',
+  'heading',
+  'hint',
+  'hint-showing',
+  'index',
+  'package',
+  'password',
+  'resource-id',
+  'role-description',
+  'scrollable',
+  'selected',
+  'selection-end',
+  'selection-start',
+  'text',
+  'visible-to-user',
+  'window-active',
+  'window-focused',
+  'window-index',
+  'window-layer',
+  'window-region-rect',
+  'window-type',
+];
+const SNAPSHOT_MARKER_RE = new RegExp(
+  `<|/>|payloadBase64|(?<![\\w-])(?:${SNAPSHOT_ATTRIBUTES.join('|')})="`,
+);
+
+/** A JVM constructor name is not an element; every other `<` is a snapshot marker. */
+function holdsSnapshotMarker(text: string): boolean {
+  return SNAPSHOT_MARKER_RE.test(text.replaceAll('<init>', '').replaceAll('<clinit>', ''));
+}
+
 const ABORTED_RE = /^INSTRUMENTATION_ABORTED:[ \t]?(.*)$/;
 const PROTOCOL_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|STATUS_CODE|RESULT|CODE|ABORTED|FAILED):/;
 const VALUE_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|RESULT): ([^=]*)=(.*)$/;
@@ -199,6 +244,11 @@ function createInstrumentationOutput() {
       Record<'resultCode' | 'statusCode', number>
   > = {};
   let open: MessageField | undefined;
+  const withheld = new Set<MessageField | 'aborted'>();
+  const checked = (field: MessageField | 'aborted', text: string) => {
+    if (holdsSnapshotMarker(text)) withheld.add(field);
+    return text;
+  };
   const readFailed = (line: string, cut: boolean): boolean => {
     if (cut) return false;
     for (const envelope of FAILED_ENVELOPES) {
@@ -216,7 +266,7 @@ function createInstrumentationOutput() {
     } else if (PROTOCOL_RECORD_RE.test(line)) {
       open = readProtocolRecord(line);
     } else if (open) {
-      fields[open] = appendLine(fields[open], line);
+      fields[open] = appendLine(fields[open], checked(open, line));
     }
   };
   /** Reads one protocol record; answers the message field whose value it opens, if any. */
@@ -231,13 +281,13 @@ function createInstrumentationOutput() {
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
-      fields.aborted ??= (aborted[1] ?? '').trim();
+      fields.aborted ??= checked('aborted', (aborted[1] ?? '').trim());
       return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
     const field = record ? messageFieldOf(record[1]!) : undefined;
     if (!field || fields[field] !== undefined) return undefined;
-    fields[field] = (record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS);
+    fields[field] = checked(field, record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS);
     return field;
   };
   const stdout = createLineAssembler(readStdoutLine);
@@ -255,7 +305,9 @@ function createInstrumentationOutput() {
         stdout.end();
         stderr.end();
       }
-      const { aborted, failed, shortMsg, longMsg, error, stack, resultCode, statusCode } = fields;
+      const shown = { ...fields };
+      for (const field of withheld) delete shown[field];
+      const { aborted, failed, shortMsg, longMsg, error, stack, resultCode, statusCode } = shown;
       return {
         exitCode: exitCode ?? null,
         ...(signal ? { signal } : {}),
@@ -267,6 +319,7 @@ function createInstrumentationOutput() {
         ...(longMsg !== undefined ? { longMsg: longMsg.trimEnd() } : {}),
         ...(error !== undefined ? { error: error.trimEnd() } : {}),
         ...(stack !== undefined ? { stack: stack.trimEnd() } : {}),
+        ...(withheld.size > 0 ? { withheldFields: [...withheld].sort() } : {}),
       };
     },
   };

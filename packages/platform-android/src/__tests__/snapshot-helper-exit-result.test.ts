@@ -15,6 +15,7 @@ import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-l
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
@@ -55,6 +56,7 @@ const CRASHED_RUN = [
 type FailedRun = { exitCode: number; stdout: string; stderr?: string; signal?: string };
 
 type ExitResultFields = {
+  withheldFields?: string[];
   exitCode: number | null;
   signal?: string;
   resultCode?: number;
@@ -139,6 +141,10 @@ function diagnosticData(log: string, phase: string): Record<string, unknown> {
     .find((entry) => entry.phase === phase);
   assert.ok(event, `expected a ${phase} diagnostic`);
   return event.data ?? {};
+}
+
+function helperOf(error: AppError): Record<string, string> {
+  return (error.details?.helper ?? {}) as Record<string, string>;
 }
 
 function exitResultOf(fields: Record<string, unknown>): ExitResultFields {
@@ -336,10 +342,21 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
     },
     // A tagless fragment as a free line.
     { exitCode: 1, stdout: `ret" text="${SECRET}" bounds="[0,0][1,1]" />\n` },
+    // A fragment as a continuation of an open message, and inline in each retained value.
+    {
+      exitCode: 0,
+      stdout: `INSTRUMENTATION_RESULT: longMsg=UiAutomation failed\nret" role-description="${SECRET}" />\nINSTRUMENTATION_CODE: 0\n`,
+    },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=<node text="${SECRET}" />\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_STATUS: Error=<node text="${SECRET}" />\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_STATUS: stack=boom\n\tat x hint="${SECRET}"\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: <node text="${SECRET}" />\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: ret" content-desc="${SECRET}"\n` },
   ];
   for (const run of onStdout) {
     const error = await captureError({ ...run, stderr: 'am: Killed' });
     assertPrivate(JSON.stringify(normalizeError(error)));
+    // Stderr exposure stays as on main (#4026); this PR asserts privacy on everything it adds.
     const { log } = await withLog(async (logPath) => {
       await inScope(logPath, async () => {
         await assert.rejects(
@@ -498,7 +515,77 @@ test('stderr chunks do not disturb a partial stdout record', async () => {
   assert.equal(exit.resultCode, 0);
 });
 
-test('a helper failure that reports its own result keeps that report without a second record', async () => {
+test('a message holding snapshot markers is withheld whole and named', async () => {
+  const result = await captureExitResult({
+    exitCode: 0,
+    stdout: [
+      'INSTRUMENTATION_RESULT: shortMsg=Process crashed.',
+      'INSTRUMENTATION_RESULT: longMsg=UiAutomation failed',
+      `ret" role-description="${SECRET}" />`,
+      'INSTRUMENTATION_STATUS: stack=java.lang.IllegalStateException',
+      '\tat com.callstack.Main.<init>(Main.java:7)',
+      'INSTRUMENTATION_ABORTED: <node text="x" />',
+      'INSTRUMENTATION_CODE: 0',
+    ].join('\n'),
+  });
+
+  assert.equal(result.shortMsg, 'Process crashed.');
+  assert.equal(result.longMsg, undefined);
+  assert.equal(result.aborted, undefined);
+  assert.equal(
+    result.stack,
+    'java.lang.IllegalStateException\n\tat com.callstack.Main.<init>(Main.java:7)',
+  );
+  assert.deepEqual(result.withheldFields, ['aborted', 'longMsg']);
+});
+
+test('a streamed session withholds a message whose fragment arrives in chunks', async () => {
+  const { exit, log } = await sessionExit(async (process) => {
+    process.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation failed\nret" role-descr');
+    await pause();
+    process.stdout.write(`iption="${SECRET}" />\nINSTRUMENTATION_CODE: 0\n`);
+  });
+
+  assertPrivate(log);
+  assert.equal(exit.longMsg, undefined);
+  assert.deepEqual(exit.withheldFields, ['longMsg']);
+  assert.equal(exit.resultCode, 0);
+});
+
+test('a helper report without ok keeps the message, metadata and typed reason it had on main', async () => {
+  const error = await captureError({
+    exitCode: 0,
+    stdout: [
+      'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+      'INSTRUMENTATION_RESULT: errorType=java.util.concurrent.TimeoutException',
+      'INSTRUMENTATION_RESULT: message=uiautomator unavailable',
+    ].join('\n'),
+  });
+
+  assert.equal(error.message, 'uiautomator unavailable');
+  assert.equal(readAndroidCaptureFailureReason(error), 'accessibility-timeout');
+  assert.equal(helperOf(error).message, 'uiautomator unavailable');
+  assert.equal('stderr' in (error.details ?? {}), false);
+  assert.equal(exitResultOf(error.details ?? {}).exitCode, 0);
+});
+
+test('an ok=true report with no XML chunks keeps main message and gains the instrumentation detail', async () => {
+  const error = await captureError({
+    exitCode: 1,
+    stdout: [
+      'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+      'INSTRUMENTATION_RESULT: ok=true',
+      'INSTRUMENTATION_CODE: -1',
+    ].join('\n'),
+    stderr: 'am: Killed',
+  });
+
+  assert.equal(error.message, 'Android snapshot helper did not return XML chunks');
+  assert.equal('stderr' in (error.details ?? {}), false);
+  assert.equal(exitResultOf(error.details ?? {}).resultCode, -1);
+});
+
+test('a helper failure that reports its own result keeps that report and gains the instrumentation detail', async () => {
   const error = await captureError({
     exitCode: 0,
     stdout: [
@@ -509,7 +596,8 @@ test('a helper failure that reports its own result keeps that report without a s
     ].join('\n'),
   });
 
-  assert.equal(error.details?.instrumentation, undefined);
+  assert.equal(helperOf(error).ok, 'false');
+  assert.equal(exitResultOf(error.details ?? {}).resultCode, -1);
 });
 
 test('a session that exits before it is ready records its exit status and the output it printed', async () => {
@@ -639,22 +727,6 @@ test('a malformed helper report names its size, never the snapshot text it held'
       return error instanceof AppError && typeof error.details?.xmlLength === 'number';
     },
   );
-});
-
-test('a helper report with ok=true but no XML chunks still carries the instrumentation result', async () => {
-  const error = await captureError({
-    exitCode: 1,
-    stdout: [
-      'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
-      'INSTRUMENTATION_RESULT: ok=true',
-      'INSTRUMENTATION_CODE: -1',
-    ].join('\n'),
-    stderr: 'am: Killed',
-  });
-
-  const result = exitResultOf(error.details ?? {});
-  assert.equal(result.exitCode, 1);
-  assert.equal(result.resultCode, -1);
 });
 
 test('a ready timeout in the middle of a record leaves the final fields intact', async () => {
