@@ -10,7 +10,10 @@ import {
 
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { SELECT_FOCUSED_CONTENT_EVAL_SCRIPT } from './agent-browser-select-content.ts';
+import {
+  buildSelectFocusedContentEvalScript,
+  readSelectFocusedContentOutcome,
+} from './agent-browser-select-content.ts';
 import {
   buildAudioProbeEvalScript,
   normalizeAgentBrowserAudioProbeResult,
@@ -109,7 +112,10 @@ export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptio
       const sends = createAgentBrowserSendLedger(runJson);
       try {
         await clickCoordinates(sends.send, x, y);
-        await sends.send(['eval', SELECT_FOCUSED_CONTENT_EVAL_SCRIPT]);
+        const outcome = readSelectFocusedContentOutcome(
+          await sends.send(['eval', buildSelectFocusedContentEvalScript(x, y)]),
+        );
+        if (!outcome.selected) throw textEntryFocusNotObservedError(x, y, outcome.cause);
         if (text.length === 0) {
           // The clear-field request (#2063): typing zero characters over the selection would
           // leave the old value selected but intact, so the selection must be deleted instead.
@@ -176,8 +182,9 @@ function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unkno
   let dispatchedSteps = 0;
   return {
     send: async (args) => {
-      await runJson(args);
+      const data = await runJson(args);
       dispatchedSteps += 1;
+      return data;
     },
     discloseDispatch(error: unknown): unknown {
       return discloseDispatchAfterSteps(error, dispatchedSteps);
@@ -740,6 +747,23 @@ function agentBrowserCliRefusalDispatch(parsed: JsonObject): {
   return type !== undefined && AGENT_BROWSER_PRE_DISPATCH_REFUSAL_TYPES.has(type)
     ? { dispatched: 'no' }
     : {};
+}
+
+/**
+ * The click reached the page but no editable field there took focus, so typing would go to nothing
+ * or to whatever else holds focus. The fill is refused before it sends any text or key.
+ */
+function textEntryFocusNotObservedError(x: number, y: number, cause: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `fill clicked (${x}, ${y}) but no editable text field there took focus (${cause}), so the text was not sent`,
+    {
+      reason: 'text_entry_focus_not_observed',
+      x,
+      y,
+      hint: 'The click most likely missed the field, or the field is read-only, not a text input, or inside a frame or closed shadow root this backend cannot reach. Re-check the target with snapshot -i and fill the element it reports, rather than retrying the same coordinates.',
+    },
+  );
 }
 
 function browserRefSelector(ref: string): string {

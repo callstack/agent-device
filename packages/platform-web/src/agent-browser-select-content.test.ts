@@ -1,70 +1,175 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { SELECT_FOCUSED_CONTENT_EVAL_SCRIPT } from './agent-browser-select-content.ts';
+import {
+  buildSelectFocusedContentEvalScript,
+  readSelectFocusedContentOutcome,
+} from './agent-browser-select-content.ts';
 
-class FakeTextControl {
-  selected = false;
-  select(): void {
-    this.selected = true;
-  }
+// A fake DOM proves the script's decisions only. That the browser really selects the content, in
+// shadow roots and frames, is proved by test/integration/smoke-web-fill.test.ts.
+
+type FakeElement = Record<string, any>;
+type FakeSelection = { ranges: { selectedNode: unknown }[]; selection: Record<string, any> };
+
+function fakeSelection(): FakeSelection {
+  const state: FakeSelection = { ranges: [], selection: {} };
+  state.selection = {
+    removeAllRanges: () => (state.ranges = []),
+    addRange: (range: { selectedNode: unknown }) => state.ranges.push(range),
+    get rangeCount() {
+      return state.ranges.length;
+    },
+    toString: () => '',
+  };
+  return state;
 }
 
-type FakePage = {
-  activeElement: unknown;
-  ranges: unknown[];
-  result: unknown;
-};
+function fakeDocument(selection = fakeSelection()): Record<string, any> {
+  const doc: Record<string, any> = {
+    activeElement: null,
+    hit: null,
+    elementFromPoint: () => doc.hit,
+    createRange: () => {
+      const range: Record<string, any> = { toString: () => '' };
+      range.selectNodeContents = (node: unknown) => (range.selectedNode = node);
+      return range;
+    },
+    defaultView: { getSelection: () => selection.selection },
+  };
+  return doc;
+}
 
-function runInPage(
-  activeElement: unknown,
-  classes: { input: unknown; textarea: unknown } = { input: FakeTextControl, textarea: class {} },
-): FakePage {
-  const page: FakePage = { activeElement, ranges: [], result: undefined };
-  const selection = {
-    removeAllRanges: () => (page.ranges = []),
-    addRange: (range: unknown) => page.ranges.push(range),
+function fakeElement(doc: Record<string, any>, props: FakeElement): FakeElement {
+  const element: FakeElement = {
+    contains: (other: unknown) => other === element,
+    getRootNode: () => doc,
+    ...props,
   };
-  const document = {
-    activeElement,
-    createRange: () => ({
-      selectNodeContents: (node: unknown) => ({ selectedNode: node }),
-    }),
-  };
-  const run = new Function(
-    'document',
-    'window',
-    'HTMLInputElement',
-    'HTMLTextAreaElement',
-    `return ${SELECT_FOCUSED_CONTENT_EVAL_SCRIPT}`,
+  return element;
+}
+
+function runInPage(doc: Record<string, any>): string {
+  const run = new Function('document', `return ${buildSelectFocusedContentEvalScript(5, 6)}`);
+  return run(doc);
+}
+
+function pageWithFocusedAndHit(
+  props: FakeElement,
+  hitIsFocused = true,
+): {
+  doc: Record<string, any>;
+  focused: FakeElement;
+  selection: FakeSelection;
+} {
+  const selection = fakeSelection();
+  const doc = fakeDocument(selection);
+  const focused = fakeElement(doc, props);
+  doc.activeElement = focused;
+  doc.hit = hitIsFocused ? focused : fakeElement(doc, { tagName: 'DIV' });
+  return { doc, focused, selection };
+}
+
+test('page script selects the content of a clicked text control', () => {
+  let selected = 0;
+  const { doc } = pageWithFocusedAndHit({
+    tagName: 'INPUT',
+    type: 'text',
+    value: 'old',
+    selectionStart: 0,
+    selectionEnd: 3,
+    select: () => (selected += 1),
+  });
+  assert.equal(runInPage(doc), 'selected');
+  assert.equal(selected, 1);
+});
+
+test('page script selects exactly the content of a clicked contenteditable', () => {
+  const { doc, focused, selection } = pageWithFocusedAndHit({
+    tagName: 'DIV',
+    isContentEditable: true,
+  });
+  assert.equal(runInPage(doc), 'selected');
+  assert.deepEqual(
+    selection.ranges.map((range) => range.selectedNode),
+    [focused],
   );
-  page.result = run(document, { getSelection: () => selection }, classes.input, classes.textarea);
-  return page;
-}
-
-test('page selection script selects the content of a focused text control', () => {
-  const input = new FakeTextControl();
-  const page = runInPage(input);
-  assert.equal(page.result, true);
-  assert.equal(input.selected, true);
 });
 
-test('page selection script selects the content of a focused contenteditable', () => {
-  const editable = { isContentEditable: true };
-  const page = runInPage(editable);
-  assert.equal(page.result, true);
-  assert.equal(page.ranges.length, 1);
+test('page script selects through the focused same-origin frame own selection', () => {
+  const frameSelection = fakeSelection();
+  const frameDoc = fakeDocument(frameSelection);
+  const field = fakeElement(frameDoc, { tagName: 'DIV', isContentEditable: true });
+  frameDoc.activeElement = field;
+  frameDoc.hit = field;
+  const topSelection = fakeSelection();
+  const doc = fakeDocument(topSelection);
+  const frame = fakeElement(doc, {
+    tagName: 'IFRAME',
+    contentDocument: frameDoc,
+    clientLeft: 0,
+    clientTop: 0,
+    getBoundingClientRect: () => ({ left: 1, top: 2 }),
+  });
+  doc.activeElement = frame;
+  doc.hit = frame;
+  assert.equal(runInPage(doc), 'selected');
+  assert.deepEqual(
+    frameSelection.ranges.map((range) => range.selectedNode),
+    [field],
+  );
+  assert.deepEqual(topSelection.ranges, []);
 });
 
-test('page selection script follows focus into a shadow root', () => {
-  const input = new FakeTextControl();
-  const page = runInPage({ shadowRoot: { activeElement: input } });
-  assert.equal(page.result, true);
-  assert.equal(input.selected, true);
+test('page script refuses a focused field the click did not reach', () => {
+  const { doc, selection } = pageWithFocusedAndHit(
+    { tagName: 'DIV', isContentEditable: true },
+    false,
+  );
+  assert.equal(runInPage(doc), 'not-clicked');
+  assert.deepEqual(selection.ranges, []);
 });
 
-test('page selection script does nothing when focus is not on an editable element', () => {
-  const body = { isContentEditable: false };
-  const page = runInPage(body);
-  assert.equal(page.result, false);
-  assert.equal(page.ranges.length, 0);
+test('page script refuses focus it cannot reach inside a cross-origin frame', () => {
+  const doc = fakeDocument();
+  const frame = fakeElement(doc, { tagName: 'IFRAME', contentDocument: null });
+  doc.activeElement = frame;
+  doc.hit = frame;
+  assert.equal(runInPage(doc), 'frame-unreachable');
+});
+
+test('page script refuses a focused element that is not a text-entry field', () => {
+  const unsupported: FakeElement[] = [
+    { tagName: 'INPUT', type: 'date' },
+    { tagName: 'INPUT', type: 'color' },
+    { tagName: 'INPUT', type: 'range' },
+    { tagName: 'INPUT', type: 'checkbox' },
+    { tagName: 'INPUT', type: 'text', readOnly: true },
+    { tagName: 'INPUT', type: 'text', disabled: true },
+    { tagName: 'TEXTAREA', readOnly: true },
+    { tagName: 'SELECT' },
+    { tagName: 'BUTTON' },
+    { tagName: 'DIV', isContentEditable: false },
+  ];
+  for (const props of unsupported) {
+    const { doc } = pageWithFocusedAndHit({ select: () => {}, ...props });
+    assert.equal(runInPage(doc), 'not-editable', JSON.stringify(props));
+  }
+});
+
+test('page script reports a selection the browser did not keep', () => {
+  const { doc, selection } = pageWithFocusedAndHit({ tagName: 'DIV', isContentEditable: true });
+  selection.selection.addRange = () => {};
+  assert.equal(runInPage(doc), 'selection-failed');
+});
+
+test('selection outcome reads the backend result and treats anything else as no answer', () => {
+  assert.deepEqual(readSelectFocusedContentOutcome({ result: 'selected' }), {
+    selected: true,
+    cause: 'selected',
+  });
+  assert.deepEqual(readSelectFocusedContentOutcome({ result: 'not-clicked' }), {
+    selected: false,
+    cause: 'not-clicked',
+  });
+  assert.deepEqual(readSelectFocusedContentOutcome({}), { selected: false, cause: 'no-answer' });
 });

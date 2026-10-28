@@ -560,9 +560,15 @@
     "dispatched": "unknown"
   },
   {
-    "id": "web-agent-browser.fill-selection-press-refused",
+    "id": "web-agent-browser.fill-selection-refused",
     "producer": "web-agent-browser",
-    "trigger": "a coordinate fill whose click (move, down, up) returned and whose select-all press the backend refused: the page already took the click, so the failure reports unknown with details.dispatchedSteps 3",
+    "trigger": "a coordinate fill whose click (move, down, up) returned and whose in-page selection the backend refused: the page already took the click, so the failure reports unknown with details.dispatchedSteps 3",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "web-agent-browser.fill-focus-not-observed",
+    "producer": "web-agent-browser",
+    "trigger": "a coordinate fill whose click returned and whose in-page selection found no editable field the click reached: the fill is refused before any text is sent, and the failure reports unknown with details.dispatchedSteps 4",
     "dispatched": "unknown"
   }
 ]

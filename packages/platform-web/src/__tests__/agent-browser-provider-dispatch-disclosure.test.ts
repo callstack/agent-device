@@ -113,6 +113,20 @@ async function fillRefusedAfterClick(): Promise<void> {
   );
 }
 
+/** Coordinate `fill`: the whole click landed, but the in-page selection found no field it reached. */
+async function fillFocusNotObservedAfterClick(): Promise<void> {
+  await withScriptedBackend(
+    (cliArgs) =>
+      agentBrowserJsonResult(
+        { success: true, data: cliArgs[0] === 'eval' ? { result: 'not-clicked' } : {} },
+        0,
+      ),
+    async (provider) => {
+      await provider.fill(20, 30, 'Ada');
+    },
+  );
+}
+
 /** `scroll --duration` long enough to pace into steps: two landed, the third was refused. */
 async function scrollRefusedOnThirdStep(): Promise<void> {
   let scrollSteps = 0;
@@ -165,9 +179,13 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
     drive: scrollRefusedOnThirdStep,
     dispatchedSteps: 2,
   },
-  'web-agent-browser.fill-selection-press-refused': {
+  'web-agent-browser.fill-selection-refused': {
     drive: fillRefusedAfterClick,
     dispatchedSteps: 3,
+  },
+  'web-agent-browser.fill-focus-not-observed': {
+    drive: fillFocusNotObservedAfterClick,
+    dispatchedSteps: 4,
   },
 };
 
