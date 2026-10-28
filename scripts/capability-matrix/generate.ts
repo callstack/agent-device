@@ -2,8 +2,9 @@
 // `website/docs/docs/capabilities.md` from the collected matrix.
 //
 // Table cells, column sets, and the partial-support notes all come from
-// `collect.ts`; this file adds the labels and links from `annotations.ts` and the
-// header's version stamp. Columns whose command sets are identical print once.
+// `collect.ts`; this file adds the labels and links from `annotations.ts`. Columns
+// whose command sets are identical print once. The page carries no version or date,
+// so it changes only when the facts or the annotations do.
 // Without `--write` the script compares the page on disk against the generated
 // page and fails when they differ, which is what the drift guard runs.
 
@@ -25,21 +26,14 @@ function targetById(id: string): Target {
 }
 
 export type MatrixData = Readonly<{
-  version: string;
-  generatedAt: string;
   commands: readonly string[];
   support: ReadonlyMap<string, ReadonlySet<string>>;
   operations: ReadonlyMap<string, ReadonlySet<string>>;
 }>;
 
 async function collectPageData(): Promise<MatrixData> {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')) as {
-    version: string;
-  };
   const { commands, support, operations } = await collectMatrix();
   return {
-    version: packageJson.version,
-    generatedAt: new Date().toISOString().slice(0, 10),
     commands,
     support: new Map(Object.entries(support).map(([id, list]) => [id, new Set<string>(list)])),
     operations: new Map(
@@ -271,7 +265,6 @@ export function renderPage(data: MatrixData): string {
     '---',
     '',
     'The target tables below are generated from the runtime command-admission facts that back the `capabilities` command: a command that leaves the code leaves this page. Labels, limits, and integration rows are maintained beside the generator, and command availability does not establish support for every operation, subcommand, or device model.',
-    `It covers agent-device ${data.version}, generated ${data.generatedAt}.`,
     '',
     '**Yes** means the facts admit every command in that row on the target and every operation the row advertises. **No** means at least one is refused. A qualified cell names the operations that answer there. Targets that share the same available operations print as one column.',
     '',
@@ -294,7 +287,9 @@ export function renderPage(data: MatrixData): string {
     lines.push(`## ${section.title}`, '');
     for (const { caption, group } of GROUPS) {
       const groupColumns = columns.get(group) as Column[];
-      lines.push(`### ${caption}`, '');
+      // Section and group in one heading, so search results and anchors stay distinct.
+      const groupLabel = caption.replace(/^[A-Z][a-z]/, (word) => word.toLowerCase());
+      lines.push(`### ${section.title}: ${groupLabel}`, '');
       lines.push(...tableFor(section.rows, groupColumns, data), '');
     }
     const limits = rowLimits(section.rows);
@@ -334,38 +329,14 @@ function firstDifference(committed: string, generated: string): string {
 }
 
 /**
- * The generation date in the page header's provenance line; see
- * {@link withNeutralProvenance}. Matching the full line structure keeps every
- * other word in the comparison: a change to the sentence, a different version,
- * or text appended after the date no longer matches and shows as drift.
- */
-const PROVENANCE_LINE = /^(It covers agent-device [0-9][^,\n]*, generated )\d{4}-\d{2}-\d{2}(\.)$/m;
-
-/**
- * The header's generation date is provenance, not a fact: it moves with every
- * new day the page is written. Drift comparison masks that one date so the
- * facts can be re-collected without a diff, while the version stays compared:
- * a page stamped with an older version than package.json is stale and fails
- * until it is regenerated. The pattern demands the exact shape the renderer
- * writes, so edited or appended text around the stamp still shows as drift.
- */
-function withNeutralProvenance(page: string): string {
-  return page.replace(PROVENANCE_LINE, '$1<date>$2');
-}
-
-/**
  * The drift report between the committed page and the generated one, or null
- * when they agree. Both are date-masked: the header's generation date moves
- * with every regeneration, while the version stamp and every table cell stay
- * compared exactly.
+ * when they agree. The page carries no date or version, so it is compared whole.
  */
 export function driftReport(committed: string, generated: string): string | null {
-  const a = withNeutralProvenance(committed);
-  const b = withNeutralProvenance(generated);
-  if (a === b) return null;
+  if (committed === generated) return null;
   return (
     `${PAGE_PATH} is stale. Run \`pnpm generate:capabilities\`.\nFirst difference:\n` +
-    firstDifference(a, b)
+    firstDifference(committed, generated)
   );
 }
 

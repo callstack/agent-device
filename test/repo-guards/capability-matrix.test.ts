@@ -25,10 +25,8 @@ import type { CollectedMatrix } from '../../scripts/capability-matrix/run.ts';
 // exactly the commands the registry derives from device facts, and every
 // qualified cell still names facts that hold. All three are checked, so a
 // capability cannot be added, renamed, or removed without an edit under
-// scripts/capability-matrix/ and a regenerated page. The page's generation-date
-// is provenance rather than a fact, so it is masked before the comparison — and
-// negative tests pin what the mask does and does not hide: the version is a
-// fact about the tree and stays compared.
+// scripts/capability-matrix/ and a regenerated page. The page carries no version
+// or date, so the comparison is exact.
 //
 // The facts are collected in a child process on purpose: the provider runtimes
 // need `node:module` loader hooks to keep their third-party SDKs out of the run,
@@ -62,14 +60,7 @@ function toSets(
 const support = toSets(matrix.support);
 const operations = toSets(matrix.operations);
 const committed = fs.readFileSync(path.join(REPO_ROOT, PAGE_PATH), 'utf8');
-// The real package version, so this guard also proves the committed page is
-// stamped with the version the tree builds; the generated page must agree.
-const packageVersion = (
-  JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')) as { version: string }
-).version;
 const data: MatrixData = {
-  version: packageVersion,
-  generatedAt: '2000-01-01',
   commands: matrix.commands,
   support,
   operations,
@@ -119,30 +110,15 @@ describe('capabilities page matches runtime facts', () => {
   });
 
   test('drift detection proves itself', () => {
-    // The committed page is current, so every mutation below must report drift —
-    // including one inside the masked provenance line's surroundings.
+    // The committed page is current, so every mutation below must report drift.
     assert.notEqual(
       driftReport(committed.replace(/Yes \| Yes \| No/, 'Yes | No | No'), committed),
       null,
     );
-    const dated = committed.replace(/generated \d{4}-\d{2}-\d{2}\./, 'generated 2000-01-01.');
-    assert.equal(driftReport(dated, committed), null, 'the generation date is provenance');
-    const versioned = committed.replace(
-      /It covers agent-device [^,]+,/,
-      'It covers agent-device 9.9.9,',
-    );
     assert.notEqual(
-      driftReport(versioned, committed),
+      driftReport(committed.replace(/tables below/, 'tables here'), committed),
       null,
-      'a page stamped with another version than the tree must read as stale',
-    );
-    assert.notEqual(
-      driftReport(
-        committed.replace(/generated [^.]+\./, 'generated 2000-01-01 and hand edited.'),
-        committed,
-      ),
-      null,
-      'text appended to the provenance sentence must not be masked',
+      'any edit to the prose reads as drift',
     );
     assert.notEqual(
       driftReport(committed.replace(/\n## Inspect and verify the UI/, ''), committed),
@@ -315,10 +291,10 @@ describe('capabilities page matches runtime facts', () => {
         `Target "${target.id}" (label "${target.label}") is not named in any column header on the page.`,
       );
     }
-    // The committed page carries the real stamp, not the mask.
-    assert.match(
-      committed,
-      /^It covers agent-device \d+\.\d+\.\d+[^,\n]*, generated \d{4}-\d{2}-\d{2}\.$/m,
-    );
+    // No version or date: the page changes only with the facts.
+    assert.doesNotMatch(committed, /It covers agent-device|generated \d{4}-\d{2}-\d{2}/);
+    // Every heading is distinct, so search results and anchors name one table each.
+    const headings = committed.split('\n').filter((line) => line.startsWith('#'));
+    assert.deepEqual(headings, [...new Set(headings)], 'the page repeats a heading');
   });
 });
