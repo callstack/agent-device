@@ -272,6 +272,35 @@ describe('press CLI output', () => {
 });
 
 describe('fill CLI output', () => {
+  // A sensitive fill replaces the line text whole, ref prefix included. The structured ref still
+  // has to reach the CLI caller, or a new target in the diff is unreachable.
+  test('renders a pinned ref for a redacted fill settle line whose text carries no ref prefix', () => {
+    const output = formatFill({
+      message: 'Filled 9 chars',
+      settle: {
+        settled: true,
+        waitedMs: 300,
+        refsGeneration: 3,
+        diff: {
+          summary: { additions: 1, removals: 1, unchanged: 8 },
+          lines: [
+            { kind: 'removed', text: '${CODE}' },
+            { kind: 'added', text: '${CODE}', ref: 'e4' },
+          ],
+        },
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Filled 9 chars',
+        'settled after 300ms: +1 -1 (~8 unchanged)',
+        '- ${CODE}',
+        '+ @e4~s3 ${CODE}',
+      ].join('\n'),
+    );
+  });
+
   test('prints the fill success message without settle details by default', () => {
     const output = formatFill({
       text: 'alpenglow',

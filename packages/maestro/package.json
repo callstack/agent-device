@@ -33,7 +33,7 @@
     }
   },
   "devDependencies": {
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "yaml": "^2.9.0"
   }
 }

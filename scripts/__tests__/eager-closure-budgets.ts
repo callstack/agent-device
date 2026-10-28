@@ -159,6 +159,13 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The startup phase record owner the #3791 review asked for. The daemon entry records its earliest `modules-loaded` marker at module load, so the owner must be eager there; the entry pays for the record it writes first.',
     owner: 'thymikee',
   },
+  {
+    module: 'packages/contracts/src/snapshot-private-evidence.ts',
+    issue: '#3881',
+    reason:
+      'The iOS snapshot presenter attaches the text-input geometry it measured before projection to the nodes it publishes, so the tap probe can skip on fresh evidence. The owner of capture-private evidence is one WeakMap and its accessors, imported through its own subpath.',
+    owner: 'thymikee',
+  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */

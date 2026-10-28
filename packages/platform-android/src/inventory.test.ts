@@ -145,6 +145,7 @@ test.each([
 test.each([
   ['feature:android.software.leanback_only\nfeature:android.hardware.wifi\n', 'tv'],
   ['feature:android.hardware.type.television=1\n', 'tv'],
+  ['feature:android.hardware.wifi\nfeature:amazon.hardware.fire_tv\n', 'tv'],
   ['feature:android.software.leanback_extra\nfeature:android.hardware.wifi\n', 'mobile'],
 ] as const)(
   'Android inventory reads the feature list %j as a %s target',
@@ -167,6 +168,36 @@ test.each([
     assert.equal(device?.target, target);
   },
 );
+
+test('Android inventory classifies a device by has-feature amazon.hardware.fire_tv before the feature list', async () => {
+  // The characteristics probe says nothing, no AOSP leanback/television feature answers, and
+  // only the Amazon Fire TV feature answers true: the device must be a tv target from the
+  // has-feature probe, without the pm list features fallback deciding it.
+  const featureListProbeCalls: string[] = [];
+  const host = createHost(async (request) => {
+    const key = request.args.join('\0');
+    if (key === 'devices\0-l')
+      return result('List of devices attached\nAFTKMST12 device model:AFTKMST12\n');
+    if (key.includes('pm\0list\0features')) {
+      featureListProbeCalls.push(key);
+      return result('feature:android.hardware.wifi\n');
+    }
+    if (key.includes('has-feature')) {
+      return result(key.includes('amazon.hardware.fire_tv') ? 'true\n' : 'false\n');
+    }
+    const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+    if (probe) return result(probe[1]);
+    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+  });
+
+  const [device] = await createAndroidInventory(host).discover(
+    { androidAvdSelection: 'running-only' },
+    scope,
+  );
+
+  assert.equal(device?.target, 'tv');
+  assert.deepEqual(featureListProbeCalls, []);
+});
 
 test('Android inventory fails closed when adb is unavailable', async () => {
   const host = createHost(async () => result(''), { adb: undefined });

@@ -36,6 +36,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const fixture = createAdapterHost();
   const source = createSimulatorSnapshotSource({
     host: fixture.host,
@@ -138,6 +139,7 @@ test('the Simulator AX source refuses a tree that ends at content another proces
     'SnapshotBridgeRuntime.h',
     'SnapshotBridgeCapture.h',
     'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
   ]) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
@@ -188,6 +190,7 @@ test('a capture reports a cold preparation instead of spending its deadline on i
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const fixture = createAdapterHost(300);
   const source = createSimulatorSnapshotSource({ host: fixture.host, sourceRoot, cacheRoot });
   const hint = deriveIosCaptureHint(createIosSnapshotRequest());
@@ -232,6 +235,7 @@ test('the Simulator AX source learns a hint only from a validated acquisition', 
     'SnapshotBridgeRuntime.h',
     'SnapshotBridgeCapture.h',
     'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
   ]) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
@@ -433,6 +437,7 @@ test('the Simulator AX source follows the shared hint contract', async () => {
     'SnapshotBridgeRuntime.h',
     'SnapshotBridgeCapture.h',
     'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
   ]) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }
@@ -726,6 +731,7 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
     'SnapshotBridgeRuntime.h',
     'SnapshotBridgeCapture.h',
     'SnapshotBridgeCapture.m',
+    'ForegroundApplicationGeometry.h',
   ]) {
     await writeFile(path.join(sourceRoot, name), 'native source');
   }

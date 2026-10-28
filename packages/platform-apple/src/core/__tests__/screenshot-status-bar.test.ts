@@ -1,11 +1,13 @@
 import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   prepareSimulatorStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
+import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
 // The fake tool provider installs through the production withAppleToolProvider
 // scope, so `calls` records the flat invocations the PATH-stub scripts saw.
@@ -96,4 +98,71 @@ test('prepareSimulatorStatusBarForScreenshot still normalizes when snapshotting 
       );
     },
   );
+});
+
+test('a failed status bar snapshot logs snapshot_failed with the tool failure', async () => {
+  const events = await statusBarDiagnosticEvents(async () => {
+    await withFakeAppleTool(
+      statusBarScript(() => ({ stderr: 'list failed', exitCode: 1 })),
+      async () => {
+        const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
+        await restore();
+      },
+    );
+  });
+
+  assert.deepEqual(events, [
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_snapshot_failed',
+      data: {
+        platform: 'apple',
+        deviceKind: 'simulator',
+        deviceId: 'sim-1',
+        errorCode: 'COMMAND_FAILED',
+        reason: 'Failed to read simulator status bar overrides',
+        exitCode: 1,
+        stderr: 'list failed',
+      },
+    },
+  ]);
+});
+
+test('a failed status bar override logs prepare_failed and the step stays best-effort', async () => {
+  const events = await statusBarDiagnosticEvents(async () => {
+    await withFakeAppleTool(
+      (args) => {
+        if (args[3] === 'list')
+          return 'Current Status Bar Overrides:\n=============================';
+        if (args[3] === 'override') {
+          return new AppError('COMMAND_FAILED', 'override rejected', {
+            exitCode: 7,
+            stderr: 'override rejected',
+          });
+        }
+        return '';
+      },
+      async ({ calls }) => {
+        const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
+        await restore();
+        assert.equal(calls.at(-1)?.join(' '), 'simctl status_bar sim-1 clear');
+      },
+    );
+  });
+
+  assert.deepEqual(events, [
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_prepare_failed',
+      data: {
+        platform: 'apple',
+        deviceKind: 'simulator',
+        deviceId: 'sim-1',
+        errorCode: 'COMMAND_FAILED',
+        reason: 'override rejected',
+        exitCode: 7,
+        stderr: 'override rejected',
+      },
+    },
+  ]);
 });

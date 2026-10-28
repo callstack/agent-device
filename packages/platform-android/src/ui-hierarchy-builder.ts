@@ -15,7 +15,7 @@ import type {
   SnapshotOptions,
   SnapshotQualityNote,
 } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, pickLargestRect, rectContains } from '@agent-device/kernel/rect';
 import {
   isAgentTarget,
   readAndroidSiblingOrder,
@@ -72,6 +72,10 @@ type AndroidSnapshotBuildState = {
   interactiveDescendantMemo: Map<AndroidNode, boolean>;
   /** Subtrees the regular projection hides (invisible / stale window). Empty for raw. */
   hidden: ReadonlySet<AndroidNode>;
+  /** Compose containers mapped to the role node whose class they publish. Empty for raw. */
+  composeRoleFolds: ReadonlyMap<AndroidNode, AndroidNode>;
+  /** The role nodes those containers absorb, which the regular projection omits. */
+  foldedComposeRoleNodes: ReadonlySet<AndroidNode>;
   /** Largest helper-reported application/window frame, used as the regular viewport fallback. */
   viewport?: Rect;
   presentationBudget: AndroidSnapshotPresentationBudget;
@@ -106,6 +110,8 @@ export function buildUiHierarchySnapshot(
     // C3: raw is the acquired tree (normalization only); regular additionally hides what Android
     // marks invisible and stale application windows. Daemon publication alone owns occlusion.
     hidden: new Set(),
+    composeRoleFolds: new Map(),
+    foldedComposeRoleNodes: new Set(),
     presentationBudget,
     presentationNodes: [],
     truncated: false,
@@ -115,6 +121,10 @@ export function buildUiHierarchySnapshot(
     presentationBudget.check('work');
     state.viewport = resolveAndroidSnapshotViewport(tree, presentationBudget);
     state.hidden = options.raw ? new Set() : collectAndroidHiddenNodes(tree, presentationBudget);
+    state.composeRoleFolds = options.raw
+      ? new Map()
+      : collectComposeRoleFolds(tree, presentationBudget);
+    state.foldedComposeRoleNodes = new Set(state.composeRoleFolds.values());
     for (const root of tree.children) {
       walkUiHierarchyNode(state, root, 0);
       if (state.truncated) break;
@@ -287,6 +297,7 @@ function appendAndroidNodeIfPresented(
   windowRect: Rect | undefined,
   systemBar: RawSnapshotNode['systemBar'],
 ): number | undefined {
+  if (state.foldedComposeRoleNodes.has(node)) return parentIndex;
   if (
     !state.options.raw &&
     isPositiveFiniteRect(node.rect) &&
@@ -399,7 +410,7 @@ function createAndroidRawSnapshotNode(
 ): AndroidRawSnapshotNode {
   return {
     index: state.nodes.length,
-    type: node.type ?? undefined,
+    type: (state.composeRoleFolds.get(node) ?? node).type ?? undefined,
     label: node.label ?? undefined,
     value: node.value ?? undefined,
     ...node.passiveFacts,
@@ -540,4 +551,56 @@ function analyzeAndroidTree(root: AndroidNode): AndroidSnapshotAnalysis {
     stack.push(...node.children);
   }
   return { rawNodeCount, maxDepth };
+}
+
+// Compose's `SemanticsNode.emitFakeNodes` gives a merging node that has a role and children an
+// extra childless child, which alone carries the role's legacy class name. That child takes no
+// touch and lies inside its parent, which stays a generic `android.view.View`. A native
+// `android.view.View` is not a `ViewGroup`, so only a virtual hierarchy gives one children.
+const COMPOSE_ROLE_CLASS_NAMES = new Set([
+  'android.widget.button',
+  'android.widget.checkbox',
+  'android.widget.radiobutton',
+  'android.widget.spinner',
+  'android.widget.numberpicker',
+]);
+const COMPOSE_CONTAINER_CLASS_NAME = 'android.view.view';
+
+/** Each Compose container the regular projection publishes with its role node's class. */
+function collectComposeRoleFolds(
+  root: AndroidUiHierarchy,
+  presentationBudget?: AndroidSnapshotPresentationBudget,
+): ReadonlyMap<AndroidNode, AndroidNode> {
+  const folds = new Map<AndroidNode, AndroidNode>();
+  const visit = (node: AndroidNode): void => {
+    presentationBudget?.check('work');
+    const roleNode = composeRoleNodeOf(node);
+    if (roleNode) folds.set(node, roleNode);
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return folds;
+}
+
+function composeRoleNodeOf(node: AndroidNode): AndroidNode | undefined {
+  if (!isAgentTarget(node) || node.type?.toLowerCase() !== COMPOSE_CONTAINER_CLASS_NAME) {
+    return undefined;
+  }
+  return node.children.find((child) => isComposeRoleNode(child, node));
+}
+
+function isComposeRoleNode(child: AndroidNode, parent: AndroidNode): boolean {
+  return (
+    COMPOSE_ROLE_CLASS_NAMES.has(child.type?.toLowerCase() ?? '') &&
+    child.children.length === 0 &&
+    child.visibleToUser !== false &&
+    !isAgentTarget(child) &&
+    !child.label &&
+    !child.identifier &&
+    liesInside(child.rect, parent.rect)
+  );
+}
+
+function liesInside(inner: Rect | undefined, outer: Rect | undefined): boolean {
+  return isPositiveFiniteRect(inner) && outer !== undefined && rectContains(outer, inner);
 }

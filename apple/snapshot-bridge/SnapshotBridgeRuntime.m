@@ -67,12 +67,7 @@ typedef bool (*AutomationEnabledFn)(void);
 + (nullable XCAccessibilityElement *)elementWithProcessIdentifier:(pid_t)pid;
 @end
 
-@protocol AXForegroundElement <NSObject>
-+ (nullable id<AXForegroundElement>)primaryApp;
-+ (nullable id<AXForegroundElement>)systemApplication;
-- (pid_t)pid;
-- (CGRect)frame;
-@end
+#import "ForegroundApplicationGeometry.h"
 
 static NSNumber *finiteNumber(double value)
 {
@@ -183,10 +178,11 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 
 - (BOOL)isPrimaryForegroundProcess:(pid_t)pid
 {
-  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
   if (![elementClass respondsToSelector:@selector(primaryApp)]) return NO;
-  id<AXForegroundElement> application = [elementClass primaryApp];
-  return [application respondsToSelector:@selector(pid)] && [application pid] == pid;
+  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
+  return [application respondsToSelector:@selector(pid)] &&
+      [application pid] == pid;
 }
 
 // The snapshot API reports the frames of an app that runs in an iPadOS window relative to that
@@ -195,23 +191,22 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 // is refused; a runtime that cannot report either frame keeps the capture.
 - (BOOL)primaryAppWindowDiffersFromScreen
 {
-  Class<AXForegroundElement> elementClass = (Class<AXForegroundElement>)objc_lookUpClass("AXElement");
+  Class<AgentDeviceForegroundElement> elementClass = (Class<AgentDeviceForegroundElement>)objc_lookUpClass("AXElement");
   if (![elementClass respondsToSelector:@selector(primaryApp)] ||
       ![elementClass respondsToSelector:@selector(systemApplication)]) {
     return NO;
   }
-  id<AXForegroundElement> application = [elementClass primaryApp];
-  id<AXForegroundElement> system = [elementClass systemApplication];
+  id<AgentDeviceForegroundElement> application = [elementClass primaryApp];
+  id<AgentDeviceForegroundElement> system = [elementClass systemApplication];
   if (![application respondsToSelector:@selector(frame)] || ![system respondsToSelector:@selector(frame)]) {
     return NO;
   }
   CGRect window = [application frame];
   CGRect screen = [system frame];
-  if (CGRectIsEmpty(window) || CGRectIsEmpty(screen)) return NO;
-  return fabs(CGRectGetMinX(window) - CGRectGetMinX(screen)) > 0.5 ||
-      fabs(CGRectGetMinY(window) - CGRectGetMinY(screen)) > 0.5 ||
-      fabs(CGRectGetWidth(window) - CGRectGetWidth(screen)) > 0.5 ||
-      fabs(CGRectGetHeight(window) - CGRectGetHeight(screen)) > 0.5;
+  // The documented unknown-frame fallback: a frame that is not a usable measurement is a runtime
+  // that reported nothing, not a window that differs from the screen, so the capture is kept.
+  if (!AgentDeviceForegroundFramesAreMeasurable(window, screen)) return NO;
+  return !AgentDeviceForegroundWindowFillsScreen(window, screen);
 }
 
 - (nullable id)jsonValue:(id)value name:(NSString *)name
@@ -229,7 +224,6 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     CGRect rect = CGRectZero;
     if (_valueGetValue(raw, 3, &rect)) return rectDictionary(rect);
   }
-  if ([name isEqualToString:kAttributeFrame]) return nil;
   return nil;
 }
 

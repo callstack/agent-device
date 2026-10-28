@@ -87,6 +87,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
   // Each platform build is its own gate in its own lane, so a Swift change owns both.
   // (The Apple device lanes ride along: the runner is what those lanes boot — device-lanes.ts.)
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
+    'native-dupes',
     'swift-runner-ios',
     'swift-runner-macos',
     'packaged-runner-swift',
@@ -104,6 +105,7 @@ test('a runner XCTest source also selects the test-list and package-source check
   assert.deepEqual(
     ids(['apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Alert.swift']),
     [
+      'native-dupes',
       'swift-runner-ios',
       'swift-runner-macos',
       'xctest-selection',
@@ -136,12 +138,25 @@ test('the scripts that rewrite runner Swift select the packaged-source check', (
   assert.ok(ids(['apple/runner/Sources/Runner/Main.swift']).includes('packaged-runner-swift'));
 });
 
+test('the shared foreground geometry header selects the Apple runner builds', () => {
+  // The runner's event bridge includes this bridge header by relative path, so its bytes change
+  // the compiled runner on both platform lanes; a change nothing builds cannot be reviewed safely.
+  for (const check of ['swift-runner-ios', 'swift-runner-macos', 'packaged-runner-swift']) {
+    assert.ok(
+      ids(['apple/snapshot-bridge/ForegroundApplicationGeometry.h']).includes(check),
+      check,
+    );
+  }
+});
+
 test('Android helper change selects the android-helpers build', () => {
   assert.deepEqual(ids(['android/snapshot-helper/src/Main.kt']), [
+    'native-dupes',
     'android-helpers',
     'replay-android',
   ]);
   assert.deepEqual(ids(['android/ime-helper/AndroidManifest.xml']), [
+    'native-dupes',
     'android-helpers',
     'replay-android',
   ]);
@@ -221,6 +236,13 @@ test('user docs pages and README select the docs-links and docs-prose checks', (
   }
   assert.deepEqual(plan(['website/docs/docs/commands.md']).checks, [
     'command-docs',
+    'docs-links',
+    'docs-prose',
+  ]);
+  // The capabilities page carries generated facts as well as prose, so it owns the
+  // drift gate on top of the prose and link gates.
+  assert.deepEqual(plan(['website/docs/docs/capabilities.md']).checks, [
+    'capabilities-matrix',
     'docs-links',
     'docs-prose',
   ]);
@@ -432,3 +454,27 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
 });
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+test('every configured scan root selects native duplication regardless of extension', () => {
+  const config: { path: string[] } = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, '.jscpd-native.json'), 'utf8'),
+  );
+  for (const root of config.path) {
+    for (const extension of ['mm', 'future']) {
+      const file = path.posix.join(root, 'duplication-probe', `Source.${extension}`);
+      assert.ok(
+        plan([file]).reasons.some(
+          (entry) => entry.check === 'native-dupes' && entry.rule === 'own:native-dupes',
+        ),
+        file,
+      );
+    }
+    const neighbor = path.posix.join(`${root}-neighbor`, 'Source.mm');
+    assert.ok(!plan([neighbor]).reasons.some((entry) => entry.rule === 'own:native-dupes'));
+  }
+  assert.ok(!ids(['packages/platform-apple/src/core/app-resolution.ts']).includes('native-dupes'));
+  for (const file of ['.jscpd-native.json', 'native-dupes-baseline.json']) {
+    assert.equal(plan([file]).failOpen, true);
+    assert.ok(ids([file]).includes('native-dupes-model'), file);
+  }
+});

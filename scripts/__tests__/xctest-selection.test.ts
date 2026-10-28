@@ -86,6 +86,11 @@ describe('the real tree', () => {
     expect(reachedAnywhere.size).toBe(declared - 1);
     expect(reachedAnywhere.has(ENTRY_POINT)).toBe(false);
     for (const id of report.reach.pr) expect(report.reach.nightly.has(id)).toBe(true);
+    // The iPad leg is a named selection inside the nightly's whole-bundle reach: every test it
+    // names must exist, compile for iOS, and stay small enough to be a selection, not a suite.
+    expect(report.reach['nightly-ipad'].size).toBeGreaterThan(0);
+    expect(report.reach['nightly-ipad'].size).toBeLessThanOrEqual(5);
+    for (const id of report.reach['nightly-ipad']) expect(report.reach.nightly.has(id)).toBe(true);
     expect([...report.reach.pr].sort()).toEqual([...report.sharedPlatformBranchIds].sort());
     expect(iosPrTestIdentifiers(report.declaredTests, report.sharedPlatformBranchIds)).toEqual([
       ...report.reach.pr,
@@ -170,6 +175,12 @@ describe('the real tree', () => {
     const packageManifestPath = path.join(root, 'apple/snapshot-presentation/Package.runner.swift');
     fs.mkdirSync(path.dirname(packageManifestPath), { recursive: true });
     fs.writeFileSync(packageManifestPath, '// fixture package manifest\n');
+    const sharedHeaderPath = path.join(
+      root,
+      'apple/snapshot-bridge/ForegroundApplicationGeometry.h',
+    );
+    fs.mkdirSync(path.dirname(sharedHeaderPath), { recursive: true });
+    fs.writeFileSync(sharedHeaderPath, '#pragma once\n');
     const sourcePath = path.join(
       root,
       'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Fixture.swift',
@@ -488,12 +499,12 @@ describe('the blind-parse guards', () => {
 describe('the summary line', () => {
   test('reports the per-lane reach a reader needs to see the partition', () => {
     const report = loadReport(repoRoot);
-    const { declared, host, pr, nightly, dark } = counts(report);
+    const { declared, host, pr, nightly, nightlyIpad, dark } = counts(report);
     const summary = formatSummary(report);
     expect(summary).toContain(`${declared} declared`);
     expect(summary).toContain(`reaches ${host}, PR iOS branch lane`);
     expect(summary).toContain(`selects ${pr}, nightly`);
-    expect(summary).toContain(`reaches ${nightly};`);
+    expect(summary).toContain(`reaches ${nightly}, its iPad leg selects ${nightlyIpad};`);
     expect(summary).toContain(`${dark} reachable by no lane`);
   });
 });

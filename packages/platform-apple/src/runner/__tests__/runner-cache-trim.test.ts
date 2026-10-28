@@ -7,7 +7,6 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import { resolveRunnerCacheMetadataPath } from '../runner-cache.ts';
 import { trimRunnerBuildScratch } from '../runner-cache-trim.ts';
 import { ensureXctestrunArtifact } from '../runner-xctestrun.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -198,7 +197,6 @@ function mockRunnerBuild() {
     return { exitCode: 0, stdout: '', stderr: '' };
   });
   appleRunnerTestHost.update({
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     runCmdStreaming,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',

@@ -7,6 +7,7 @@ export {
 export type { RecordingExportQuality } from '../recording-export-quality.ts';
 export {
   RECORDING_SCOPE_VALUES,
+  TRACE_ACTION_REQUIRED_MESSAGE,
   parseTraceAction,
   isRecordingScope,
   isWholeScreenRecordingScope,

@@ -19,12 +19,6 @@ export function createDaemonPlatformServices(): DaemonPlatformServices {
     appleSessionObservation,
     deviceBootObservation,
     ensureLocalDeviceReady: ensureLocalPlatformDeviceReady,
-    inspectSessionTeardownResources: async (device) => {
-      if (device.platform !== 'android') return [];
-      const { inspectAndroidSessionTeardownResources } =
-        await import('@agent-device/platform-android/mechanics');
-      return inspectAndroidSessionTeardownResources(device);
-    },
     resolveRequestedOpenSurface,
     validateOpenRelaunchTarget,
     resolveSessionAppBundleIdForTarget,

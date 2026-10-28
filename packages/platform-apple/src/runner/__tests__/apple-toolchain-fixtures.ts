@@ -1,9 +1,8 @@
 import { beforeEach, vi } from 'vitest';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
-import { appleRunnerTestHost } from '../test-host.ts';
-import { XCODE_SELECT_LINK_PATH } from '../apple-runner-platform.ts';
-import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
+import path from 'node:path';
+import { XCODE_SELECT_LINK_PATH } from '../runner-toolchain-identity.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export const STUBBED_APPLE_TOOLCHAIN = {
   xcodeVersion: '26.2',
@@ -12,120 +11,92 @@ export const STUBBED_APPLE_TOOLCHAIN = {
   sdkBuildVersion: '23C53',
 } as const;
 
-const STUBBED_SELECTED_DEVELOPER_DIR = '/Applications/Xcode-Stub.app/Contents/Developer';
+type StubbedToolchain = { [Key in keyof typeof STUBBED_APPLE_TOOLCHAIN]: string };
 
-export function selectedDeveloperDirResult(developerDir: string): ExecResult {
-  return { exitCode: 0, stdout: `${developerDir}\n`, stderr: '' };
-}
+const SDK_DIRECTORY_NAMES = [
+  'iPhoneSimulator',
+  'iPhoneOS',
+  'AppleTVSimulator',
+  'AppleTVOS',
+  'MacOSX',
+  'XRSimulator',
+  'XROS',
+];
 
-export function appleToolchainProbeResult(command: string, args: readonly string[]): ExecResult {
-  if (command === 'xcode-select' && args[0] === '-p') {
-    return selectedDeveloperDirResult(STUBBED_SELECTED_DEVELOPER_DIR);
-  }
-  if (command === 'xcodebuild' && args[0] === '-version') {
-    return {
-      exitCode: 0,
-      stdout: `Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}\nBuild version ${STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion}\n`,
-      stderr: '',
-    };
-  }
-  if (command === 'xcrun' && args.includes('--show-sdk-build-version')) {
-    return { exitCode: 0, stdout: `${STUBBED_APPLE_TOOLCHAIN.sdkBuildVersion}\n`, stderr: '' };
-  }
-  if (command === 'xcrun' && args.includes('--show-sdk-version')) {
-    return { exitCode: 0, stdout: `${STUBBED_APPLE_TOOLCHAIN.sdkVersion}\n`, stderr: '' };
-  }
-  throw new Error(`Unexpected Apple toolchain probe: ${command} ${args.join(' ')}`);
+function plist(entries: Record<string, string>): string {
+  const body = Object.entries(entries)
+    .map(([key, value]) => `\t<key>${key}</key>\n\t<string>${value}</string>`)
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${body}\n</dict>\n</plist>\n`;
 }
 
 /**
- * Answers the runner cache's toolchain probes from a fixed toolchain, so cases that key the cache
- * neither read the host's Xcode nor depend on one existing. No client chooses a `DEVELOPER_DIR`, so
- * the selection a key probe resolves is the one the case scripts. Returns the mock so a case can
- * make a probe fail.
+ * An `Xcode.app` under `root` carrying the files the toolchain identity reads, for every SDK the
+ * runner keys on. Returns its developer dir.
  */
-export function stubAppleToolchainProbes(): ReturnType<typeof vi.fn> {
-  stubAppleSelectionLink();
-  const runCmdSync = vi.fn(appleToolchainProbeResult);
-  beforeEach(() => {
-    runCmdSync.mockImplementation(appleToolchainProbeResult);
-    appleRunnerTestHost.update({
-      runCmdSync,
-      commandDeveloperDir: () => undefined,
-    });
-  });
-  return runCmdSync;
+export function writeXcodeFixture(
+  root: string,
+  toolchain: StubbedToolchain = STUBBED_APPLE_TOOLCHAIN,
+): string {
+  const contents = path.join(root, 'Xcode.app', 'Contents');
+  const developerDir = path.join(contents, 'Developer');
+  fs.mkdirSync(developerDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(contents, 'version.plist'),
+    plist({
+      CFBundleShortVersionString: toolchain.xcodeVersion,
+      ProductBuildVersion: toolchain.xcodeBuildVersion,
+    }),
+  );
+  for (const name of SDK_DIRECTORY_NAMES) {
+    const sdk = path.join(developerDir, 'Platforms', `${name}.platform/Developer/SDKs/${name}.sdk`);
+    fs.mkdirSync(path.join(sdk, 'System/Library/CoreServices'), { recursive: true });
+    fs.writeFileSync(
+      path.join(sdk, 'SDKSettings.json'),
+      JSON.stringify({ Version: toolchain.sdkVersion }),
+    );
+    fs.writeFileSync(
+      path.join(sdk, 'System/Library/CoreServices/SystemVersion.plist'),
+      plist({ ProductBuildVersion: toolchain.sdkBuildVersion }),
+    );
+  }
+  return developerDir;
+}
+
+let stubbedDeveloperDir: string | undefined;
+
+/** One {@link STUBBED_APPLE_TOOLCHAIN} Xcode per worker, so a case never reads the host's Xcode. */
+export function stubbedAppleDeveloperDir(): string {
+  stubbedDeveloperDir ??= writeXcodeFixture(mkdtempForTestSync('apple-toolchain-'));
+  return stubbedDeveloperDir;
 }
 
 /**
- * The host's default selection link as the Apple toolchain probes see it. Undefined keeps the link
- * unreadable, which sends every read down the `xcode-select -p` fallback a case already scripts; a
- * case that owns a link points it at a path it created.
+ * The host's default selection link as the toolchain identity sees it. Undefined keeps the link
+ * unreadable; a case that owns a link points it at a path it created.
  */
 export const appleSelectionLink: { target: string | undefined } = { target: undefined };
 
 /**
  * Hides the selection link of the machine running the suite, so a case decides the host's selection
- * rather than inheriting it. The real host has one, and where it points is not this suite's business.
+ * rather than inheriting it.
  */
 export function stubAppleSelectionLink(): void {
   const realRealpathSync = fs.realpathSync;
+  const realReadlinkSync = fs.readlinkSync;
+  const absent = () =>
+    Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
   beforeEach(() => {
     appleSelectionLink.target = undefined;
+    vi.spyOn(fs, 'readlinkSync').mockImplementation(((target: fs.PathLike) => {
+      if (String(target) !== XCODE_SELECT_LINK_PATH) return realReadlinkSync(target);
+      if (appleSelectionLink.target === undefined) throw absent();
+      return appleSelectionLink.target;
+    }) as typeof fs.readlinkSync);
     vi.spyOn(fs, 'realpathSync').mockImplementation((target: fs.PathLike) => {
       if (String(target) !== XCODE_SELECT_LINK_PATH) return realRealpathSync(target);
-      if (appleSelectionLink.target === undefined) {
-        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-      }
+      if (appleSelectionLink.target === undefined) throw absent();
       return realRealpathSync(appleSelectionLink.target);
     });
   });
-}
-
-/**
- * The fingerprint budget's clock, advanced only by an exec that blocks for the whole timeout it was
- * handed. Without it a mock that throws immediately proves nothing about a deadline: no time passes,
- * so every budget looks untouched however many attempts run.
- */
-export function installToolchainProbeClock(): { nowMs: number } {
-  const clock = { nowMs: 0 };
-  appleRunnerTestHost.update({
-    deadlineFromTimeoutMs: (timeoutMs: number) => {
-      const startedAtMs = clock.nowMs;
-      const expiresAtMs = startedAtMs + Math.max(0, timeoutMs);
-      return {
-        remainingMs: () => Math.max(0, expiresAtMs - clock.nowMs),
-        elapsedMs: () => Math.max(0, clock.nowMs - startedAtMs),
-        isExpired: () => expiresAtMs - clock.nowMs <= 0,
-      };
-    },
-  });
-  return clock;
-}
-
-/** An exec that blocked for its whole timeout and was then killed, as the exec layer reports it. */
-export function blockForWholeTimeout(
-  clock: { nowMs: number },
-  command: string,
-  args: readonly string[],
-  options: ExecOptions,
-): AppError {
-  const timeoutMs = options.timeoutMs ?? 0;
-  clock.nowMs += timeoutMs;
-  return new AppError('COMMAND_FAILED', `${command} timed out after ${timeoutMs}ms`, {
-    cmd: command,
-    args,
-    timeoutMs,
-  });
-}
-
-/**
- * The execs that read the toolchain itself, as opposed to the `xcode-select -p` a read runs to
- * decide which fingerprint entry it belongs to. A case that says a cache hit must not re-read the
- * toolchain says nothing about that one exec, so it asserts through this.
- */
-export function valueProbeCommands(calls: readonly (readonly unknown[])[]): string[] {
-  return calls
-    .filter(([command]) => command !== 'xcode-select')
-    .map(([command]) => String(command));
 }

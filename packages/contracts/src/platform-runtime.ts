@@ -108,7 +108,13 @@ export type RuntimeOperationUnavailability = Readonly<{
     | 'unsupported-device-backend'
     | 'unsupported-device-scope'
     | 'unsupported-provider-mode'
-    | 'owner-capability-missing';
+    | 'owner-capability-missing'
+    /**
+     * A hosted provider owns the network path for its session, so a live `network dump` has no
+     * source to read. Where the provider records traffic at all, it publishes that report only
+     * after its own session ends, on the provider's side.
+     */
+    | 'network-capture-post-session';
   hint?: string;
 }>;
 
@@ -346,7 +352,8 @@ function isRuntimeOperationUnavailabilityReason(
     value === 'unsupported-device-backend' ||
     value === 'unsupported-device-scope' ||
     value === 'unsupported-provider-mode' ||
-    value === 'owner-capability-missing'
+    value === 'owner-capability-missing' ||
+    value === 'network-capture-post-session'
   );
 }
 

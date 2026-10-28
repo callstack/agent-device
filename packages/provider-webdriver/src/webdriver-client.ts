@@ -191,6 +191,23 @@ export class WebDriverClient {
     return typeof value === 'boolean' ? value : 'unsupported';
   }
 
+  /** Focus identity without geometry, for comparisons that do not consume the rect. */
+  async activeElementReference(
+    timeoutMs?: number,
+  ): Promise<Pick<WebDriverActiveElement, 'id'> | 'none' | 'unsupported'> {
+    const deadline = timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
+    try {
+      const id = readW3CElementId(
+        await this.sessionRequest('GET', '/element/active', undefined, requestBudget(deadline)),
+      );
+      return id === undefined ? 'unsupported' : { id };
+    } catch (error) {
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
+      if (isNoSuchElementError(error)) return 'none';
+      throw error;
+    }
+  }
+
   /**
    * Which element holds text-entry focus and where it sits, `none` when nothing
    * does, or `unsupported` when this driver has no active-element route.
@@ -219,17 +236,10 @@ export class WebDriverClient {
     // overrun the deadline it was derived from. One deadline, and the second
     // request gets only what the first left.
     const deadline = timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
-    let elementId: string | undefined;
-    try {
-      elementId = readW3CElementId(
-        await this.sessionRequest('GET', '/element/active', undefined, requestBudget(deadline)),
-      );
-    } catch (error) {
-      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
-      if (isNoSuchElementError(error)) return 'none';
-      throw error;
-    }
-    if (elementId === undefined) return 'unsupported';
+    // The ID lookup receives only the outer operation's remaining budget.
+    const reference = await this.activeElementReference(requestBudget(deadline).timeoutMs);
+    if (typeof reference === 'string') return reference;
+    const elementId = reference.id;
     try {
       const value = await this.sessionRequest(
         'GET',

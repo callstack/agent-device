@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { simulatorAddressFor } from './host.ts';
-import { memoizedRunnerXcodeVersion } from './runner-toolchain-probe.ts';
+import { readRunnerXcodeVersion } from './runner-toolchain-identity.ts';
 
 /** The scoped simulator set that holds this runner's simulator, or undefined for the default set. */
 export function runnerSimulatorSetPath(device: DeviceInfo): string | undefined {
@@ -30,15 +30,15 @@ export function xcodebuildDestinationArgs(device: DeviceInfo, destination: strin
 type RunnerSimulatorSetFailureDetails = { simulatorSetPath?: string; xcodeVersion?: string };
 
 /**
- * The scoped set a runner xcodebuild phase resolved its destination in, with the selected Xcode when
- * the runner cache decision already read it; empty for the default set.
+ * The scoped set a runner xcodebuild phase resolved its destination in, with the selected Xcode's
+ * version when it is readable; empty for the default set.
  */
 export function runnerSimulatorSetFailureDetails(
   device: DeviceInfo,
 ): RunnerSimulatorSetFailureDetails {
   const simulatorSetPath = runnerSimulatorSetPath(device);
   if (simulatorSetPath === undefined) return {};
-  const xcodeVersion = memoizedRunnerXcodeVersion(device);
+  const xcodeVersion = readRunnerXcodeVersion();
   return xcodeVersion === undefined ? { simulatorSetPath } : { simulatorSetPath, xcodeVersion };
 }
 

@@ -1,10 +1,10 @@
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+import { createUnsupportedInteractor } from '@agent-device/contracts/unsupported-interactor';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { resolveWebProviderForHost, type WebProvider } from './index.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { createUnsupportedInteractor } from './unsupported-interactor.ts';
 
 export async function createWebInteractor(
   host: HostEnvironment,

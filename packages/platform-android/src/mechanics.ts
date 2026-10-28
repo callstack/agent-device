@@ -165,7 +165,6 @@ export {
   restoreAndroidTestIme,
   restoreOrphanedAndroidTestImeOnDaemonStartup,
   isAndroidTestImeActive,
-  inspectAndroidSessionTeardownResources,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from './ime-lifecycle.ts';
@@ -308,7 +307,12 @@ export {
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
-export { snapshotAndroid, type AndroidSnapshotOptions } from './snapshot.ts';
+export {
+  ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+  ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
+  snapshotAndroid,
+  type AndroidSnapshotOptions,
+} from './snapshot.ts';
 export { screenshotAndroid, type AndroidScreenshotOptions } from './screenshot.ts';
 export {
   ANDROID_SNAPSHOT_PRESENTATION_DEFAULT_DEADLINE_MS,
@@ -337,6 +341,7 @@ export { ensureAndroidSdkPathConfigured } from './sdk.ts';
 export { fillAndroid, typeAndroid } from './text-input.ts';
 export { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
 export {
+  ANDROID_TOUCH_HELPER_GESTURE_PHASE,
   ANDROID_TOUCH_PLAN_PROTOCOL,
   executeAndroidTouchHelperPlan,
   normalizeAndroidTouchHelperGestureRequest,

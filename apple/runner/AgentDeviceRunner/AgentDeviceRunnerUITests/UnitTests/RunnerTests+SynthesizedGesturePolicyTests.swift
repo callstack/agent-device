@@ -26,84 +26,66 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
-  func testSynthesizedFallbackPolicyRequiresPrivateSynthesisForScrollWhenAxUnavailableOrUnknown() {
-    XCTAssertFalse(
-      SynthesizedFallbackPolicy.privateSynthesisRequired
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .unavailable)
-    )
-    XCTAssertFalse(
-      SynthesizedFallbackPolicy.privateSynthesisRequired
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .unknown)
-    )
-    XCTAssertFalse(
-      SynthesizedFallbackPolicy.privateSynthesisRequired
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .healthy)
-    )
+  /// The whole fallback decision: which gesture kind may take the call site's XCTest coordinate
+  /// gesture, at each accessibility health.
+  func testSynthesizedCoordinateFallbackFollowsItsKindAndAccessibilityHealth() {
+    let cases: [(kind: SynthesizedGesturePolicyKind, health: RunnerAccessibilityHealth, allowed: Bool)] = [
+      (.coordinateTap, .unknown, true),
+      (.coordinateTap, .healthy, true),
+      (.coordinateTap, .unavailable, true),
+      (.coordinateLongPress, .unknown, true),
+      (.coordinateLongPress, .healthy, true),
+      (.coordinateLongPress, .unavailable, false),
+      (.scroll, .unknown, false),
+      (.scroll, .healthy, false),
+      (.scroll, .unavailable, false),
+      (.synthesizedDrag, .unknown, true),
+      (.synthesizedDrag, .healthy, true),
+      (.synthesizedDrag, .unavailable, false),
+    ]
+    for testCase in cases {
+      XCTAssertEqual(
+        testCase.kind.allowsXCTestCoordinateFallback(accessibilityHealth: testCase.health),
+        testCase.allowed,
+        "kind=\(testCase.kind.rawValue) axHealth=\(testCase.health.rawValue)"
+      )
+    }
   }
 
-  func testSynthesizedDragCoordinateFallbackAllowsUnknownButNotUnavailableAccessibility() {
-    XCTAssertTrue(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .healthy)
-    )
-    XCTAssertFalse(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .unavailable)
-    )
-    XCTAssertTrue(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
-        .allowsXCTestCoordinateFallback(accessibilityHealth: .unknown)
-    )
-  }
-
-  /// Keyboard-policy semantics only. Which command gets which policy is the table below; a probe
-  /// that is merely permitted still costs a live AX fetch, so the two questions stay separate.
-  func testSynthesizedKeyboardPolicyAllowsProbeOnlyWhenAccessibilityPermitsIt() {
-    XCTAssertFalse(SynthesizedKeyboardPolicy.never.allowsProbe(accessibilityHealth: .healthy))
-    XCTAssertTrue(
-      SynthesizedKeyboardPolicy.requiredWhenAvailable
-        .allowsProbe(accessibilityHealth: .unknown)
-    )
-    XCTAssertFalse(
-      SynthesizedKeyboardPolicy.requiredWhenAvailable
-        .allowsProbe(accessibilityHealth: .unavailable)
-    )
-  }
-
-  func testSynthesizedGesturePoliciesMatchCommandContracts() {
-    XCTAssertEqual(
-      synthesizedGesturePolicy(.coordinateTap),
-      SynthesizedGesturePolicy(
-        keyboardPolicy: .never,
-        fallbackPolicy: .xctestCoordinateAllowed
-      )
-    )
-    XCTAssertEqual(
-      synthesizedGesturePolicy(.scroll),
-      SynthesizedGesturePolicy(
-        keyboardPolicy: .requiredWhenAvailable,
-        fallbackPolicy: .privateSynthesisRequired
-      )
-    )
-    XCTAssertEqual(
-      synthesizedGesturePolicy(.synthesizedDrag),
-      SynthesizedGesturePolicy(
-        keyboardPolicy: .requiredWhenAvailable,
-        fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
-      )
-    )
+  func testKeyboardProbeIsAllowedAtEveryAccessibilityHealthExceptUnavailable() {
+    let cases: [(health: RunnerAccessibilityHealth, allowsProbe: Bool)] = [
+      (.unknown, true),
+      (.healthy, true),
+      (.unavailable, false),
+    ]
+    for testCase in cases {
+      let context = synthesizedGestureTestContext(accessibilityHealth: testCase.health)
+      XCTAssertEqual(context.allowsKeyboardProbe, testCase.allowsProbe, "axHealth=\(testCase.health.rawValue)")
+    }
   }
 
   func testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel() {
-    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false))
-    XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true))
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false, evidence: nil, point: nil, targetBundleId: nil))
+    XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true, evidence: nil, point: nil, targetBundleId: nil))
   }
 
   func testOnlySynthesizedSequenceTapStepsTakeTheCoordinateTapPolicy() {
     XCTAssertEqual(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true)), .coordinateTap)
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: nil)))
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("doubleTap", synthesized: true)))
-    XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: true)))
+  }
+
+  func testSequenceLongPressStepsTakeTheLongPressPolicyWithoutARequestFlag() {
+    for synthesized in [nil, true] as [Bool?] {
+#if os(iOS)
+      XCTAssertEqual(
+        synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: synthesized)),
+        .coordinateLongPress
+      )
+#else
+      XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: synthesized)))
+#endif
+    }
   }
 
   @MainActor
@@ -144,6 +126,8 @@ extension RunnerTests {
       (.synthesizedDrag, unavailable, "refused"),
       (.synthesizedDrag, unknown, "xctestFallback"),
       (.coordinateTap, unavailable, "xctestFallback"),
+      (.coordinateLongPress, unavailable, "refused"),
+      (.coordinateLongPress, unknown, "xctestFallback"),
     ]
     for (kind, context, expected) in cases {
       let attempt = performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)
@@ -178,13 +162,43 @@ extension RunnerTests {
     SynthesizedCoordinateContext(
       referenceFrame: CGRect(x: 0, y: 0, width: 390, height: 844),
       resolvedWindow: app.windows.firstMatch,
-      keyboardPolicy: .never,
       accessibilityHealth: accessibilityHealth
     )
   }
 
   private func sequenceStep(_ kind: String, synthesized: Bool?) -> SequenceStep {
     SequenceStep(kind: kind, x: 10, y: 20, durationMs: nil, pauseMs: nil, synthesized: synthesized)
+  }
+}
+#endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+private struct CoordinateTapTextInputFixture: Decodable {
+  let name: String
+  let point: RunnerGesturePoint
+  let dispatchPoint: RunnerGesturePoint?
+  let activeBundleId: String
+  let expectedEvidence: CoordinateTapTextInputEvidence?
+  let probe: Bool
+}
+
+extension RunnerTests {
+  func testCoordinateTapTextInputAdmissionMatchesGoldenTable() throws {
+    var root = URL(fileURLWithPath: #filePath)
+    for _ in 0..<6 { root.deleteLastPathComponent() }
+    let fixtures = try JSONDecoder().decode([CoordinateTapTextInputFixture].self, from:
+      Data(contentsOf: root.appendingPathComponent("contracts/fixtures/coordinate-tap-text-input.json")))
+    XCTAssertFalse(fixtures.isEmpty)
+    for fixture in fixtures {
+      let point = fixture.dispatchPoint ?? fixture.point
+      XCTAssertEqual(shouldProbeCoordinateTapTextInput(
+        xCTestChannelPenalized: false,
+        evidence: fixture.expectedEvidence,
+        point: CGPoint(x: point.x, y: point.y),
+        targetBundleId: fixture.activeBundleId
+      ), fixture.probe, fixture.name)
+    }
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false, evidence: nil, point: nil, targetBundleId: nil), "raw coordinates keep probing")
   }
 }
 #endif

@@ -40,15 +40,10 @@ import {
   type ShardSpec,
 } from './modules.ts';
 import { shardFiles, type Shard } from './sharding.ts';
-import { derivedAffectedModules } from './ownership.ts';
+import { derivedAffectedModules, mutationTestFiles } from './ownership.ts';
 import { renderReport, type Provenance } from './report.ts';
 import { mergeReports, summarizeReport, type ModuleScore, type StrykerReport } from './score.ts';
-import {
-  expandMutateFiles,
-  relatedTestFiles,
-  TEST_SCOPE_ENV,
-  writeTestScope,
-} from './test-scope.ts';
+import { expandMutateFiles, TEST_SCOPE_ENV, writeTestScope } from './test-scope.ts';
 
 const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
 
@@ -244,18 +239,14 @@ function changedFiles(base: string): string[] {
   return result.stdout.split('\n').filter(Boolean);
 }
 
-async function mutationTestScope(
-  modules: readonly ModuleId[],
-  sources: readonly string[],
-  options: Args,
-) {
+function mutationTestScope(modules: readonly ModuleId[], options: Args) {
   const pilot = options.scopeProbe || Boolean(options.scopeIndex);
   if (pilot)
     assertCoveragePolicy(JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8')));
   const index: CoverageScope | undefined = options.scopeIndex
     ? JSON.parse(fs.readFileSync(path.resolve(repoRoot, options.scopeIndex), 'utf8'))
     : undefined;
-  const candidates = await relatedTestFiles(sources, repoRoot);
+  const candidates = mutationTestFiles(modules, repoRoot);
   const identity = pilot
     ? {
         module: modules[0]!,
@@ -267,21 +258,17 @@ async function mutationTestScope(
   const testFiles = options.scopeIndex
     ? scopedTestFiles(index!, identity!, candidates)
     : candidates;
-  if (!testFiles.length) throw new Error(`No related mutation tests for ${modules.join(', ')}`);
+  if (!testFiles.length) throw new Error(`No owned mutation tests for ${modules.join(', ')}`);
   return { candidates, identity, index, testFiles };
 }
 
 async function mutationSourceScope(modules: readonly ModuleId[], shard: Shard | undefined) {
   const globs = mutateGlobs(modules);
   const all = expandMutateFiles(globs, repoRoot);
-  if (!shard) return { mutate: globs, sources: all, sourceCount: all.length };
+  if (!shard) return { mutate: globs, sourceCount: all.length };
   const config = JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8'));
   const mutate = await shardFiles(all, shard, repoRoot, config.mutator?.excludedMutations ?? []);
-  return {
-    mutate,
-    sources: [...new Set(mutate.map((file) => file.split(':')[0]!))],
-    sourceCount: mutate.length,
-  };
+  return { mutate, sourceCount: mutate.length };
 }
 
 function finishScopeProbe(
@@ -329,19 +316,15 @@ async function runStryker(
     fs.rmSync(capturePath, { force: true });
     fs.rmSync(path.join(repoRoot, COVERAGE_SCOPE_PATH), { force: true });
   }
-  // The suite Stryker replays per mutant is derived from Vitest's module graph
-  // over the mutated files, not hand-listed; see scripts/mutation/test-scope.ts.
-  const { mutate, sources, sourceCount } = await mutationSourceScope(modules, shard);
+  // The suite Stryker replays per mutant is each module's owned tests, derived
+  // from the import graph rather than hand-listed; see scripts/mutation/ownership.ts.
+  const { mutate, sourceCount } = await mutationSourceScope(modules, shard);
   const scopePath = path.join(repoRoot, TEST_SCOPE_PATH);
-  const { candidates, identity, index, testFiles } = await mutationTestScope(
-    modules,
-    sources,
-    options,
-  );
+  const { candidates, identity, index, testFiles } = mutationTestScope(modules, options);
   writeTestScope(testFiles, scopePath);
   process.stdout.write(
     `mutation: ${modules.join(', ')}${shard ? ` shard ${shard.index}/${shard.count}` : ''} -> ` +
-      `${sourceCount} source(s), ${testFiles.length} related test file(s)\n`,
+      `${sourceCount} source(s), ${testFiles.length} owned test file(s)\n`,
   );
 
   // Stryker's `--mutate` takes one comma-separated value, not repeated args.
@@ -380,7 +363,7 @@ async function runStryker(
   if (identity && scopeFingerprint(repoRoot) !== identity.fingerprint)
     throw new Error('Execution inputs changed during the scoped mutation run');
   return {
-    mode: index ? 'coverage' : 'related',
+    mode: index ? 'coverage' : 'owned',
     candidates: candidates.length,
     selected: testFiles.length,
     producerMs: index?.producerMs ?? null,
@@ -411,7 +394,7 @@ type Stage = 'setup' | 'select' | 'stryker' | 'report' | 'score' | 'complete';
  */
 const UNKNOWN_PROVENANCE: Provenance = { strykerVersion: 'unknown', configHash: 'unknown' };
 type ScopeMeasurement = {
-  mode: 'probe' | 'coverage' | 'related';
+  mode: 'probe' | 'coverage' | 'owned';
   candidates: number;
   selected: number;
   producerMs: number | null;

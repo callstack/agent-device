@@ -14,6 +14,8 @@ on:
       - 'scripts/__tests__/check-doc-links.test.ts'
       - 'scripts/check-doc-prose.ts'
       - 'scripts/__tests__/check-doc-prose.test.ts'
+      - 'scripts/capability-matrix/**'
+      - 'test/repo-guards/capability-matrix.test.ts'
       - 'scripts/check-affected/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -32,6 +34,8 @@ on:
       - 'scripts/__tests__/check-doc-links.test.ts'
       - 'scripts/check-doc-prose.ts'
       - 'scripts/__tests__/check-doc-prose.test.ts'
+      - 'scripts/capability-matrix/**'
+      - 'test/repo-guards/capability-matrix.test.ts'
       - 'scripts/check-affected/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -63,6 +67,12 @@ jobs:
       - name: Check docs prose
         uses: ./.github/actions/run-gate
         with: { gate: docs-prose }
+
+      # The page's cells are generated from runtime facts; the guard regenerates,
+      # diffs, and proves its own negative cases before anything reads the page.
+      - name: Check the capabilities page against runtime facts
+        uses: ./.github/actions/run-gate
+        with: { gate: capabilities-matrix }
 
       # Builds the site (root install covers the website workspace), then checks it.
       - name: Check docs links

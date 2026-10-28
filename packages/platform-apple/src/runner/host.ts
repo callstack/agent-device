@@ -10,7 +10,6 @@ import type * as KernelDeviceShell from '@agent-device/kernel/device-shell';
 import type * as KernelKeyedLock from '@agent-device/kernel/keyed-lock';
 import type * as KernelRecord from '@agent-device/kernel/record';
 import type * as KernelSourceValue from '@agent-device/kernel/source-value';
-import type * as KernelTtlMemo from '@agent-device/kernel/ttl-memo';
 import type * as BootDiagnostics from '@agent-device/provision-kit/boot-diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { IosPhysicalDeviceRunnerControl } from '../core/physical-device-routing.ts';
@@ -54,7 +53,6 @@ import type * as AppleToolProvider from '../core/tool-provider.ts';
 export type AppleRunnerHost = Pick<
   typeof HostCommand,
   | 'runCmdStreaming'
-  | 'runCmdSync'
   | 'runCmdBackground'
   | 'requireExecSuccess'
   | 'isCommandTimeoutError'
@@ -77,7 +75,6 @@ export type AppleRunnerHost = Pick<
   Pick<typeof HostFile, 'acquireProcessLock' | 'withProcessLock' | 'publishFileSync'> &
   Pick<typeof HostRequest, 'emitRequestProgress' | 'getRequestSignal' | 'isRequestCanceled'> &
   Pick<typeof KernelKeyedLock, 'withKeyedLock'> &
-  Pick<typeof KernelTtlMemo, 'createTtlMemo'> &
   Pick<typeof KernelRecord, 'isRecord'> &
   Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
   Pick<typeof KernelDeviceShell, 'shellQuote'> &
@@ -164,7 +161,6 @@ function delegate<Name extends keyof AppleRunnerHost>(name: Name): AppleRunnerHo
 }
 
 export const runCmdStreaming = delegate('runCmdStreaming');
-export const runCmdSync = delegate('runCmdSync');
 export const runCmdBackground = delegate('runCmdBackground');
 export const requireExecSuccess = delegate('requireExecSuccess');
 export const isCommandTimeoutError = delegate('isCommandTimeoutError');
@@ -193,7 +189,6 @@ export const emitRequestProgress = delegate('emitRequestProgress');
 export const getRequestSignal = delegate('getRequestSignal');
 export const isRequestCanceled = delegate('isRequestCanceled');
 export const withKeyedLock = delegate('withKeyedLock');
-export const createTtlMemo = delegate('createTtlMemo');
 export const isRecord = delegate('isRecord');
 export const parseBooleanLiteral = delegate('parseBooleanLiteral');
 export const classifyBootFailure = delegate('classifyBootFailure');

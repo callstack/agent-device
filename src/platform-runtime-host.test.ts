@@ -49,6 +49,27 @@ test('inventory host loads scoped Apple mechanics only on first Apple tool use',
   expect(toolchains.appleRuns).toEqual([{ args: ['devicectl', 'list', 'devices'], signal }]);
 });
 
+test.skipIf(process.platform === 'win32')(
+  'inventory command lookup uses the supplied host PATH',
+  async () => {
+    const directory = mkdtempForTestSync('inventory-host-command-path-');
+    const executable = path.join(directory, 'inventory-host-only-probe');
+    writeFileSync(executable, '#!/bin/sh\nexit 0\n');
+    chmodSync(executable, 0o755);
+
+    await expect(
+      createDeviceInventoryHost({ env: { PATH: directory }, cwd: directory }).commands.which(
+        'inventory-host-only-probe',
+      ),
+    ).resolves.toBe('inventory-host-only-probe');
+    await expect(
+      createDeviceInventoryHost({ env: { PATH: '' }, cwd: directory }).commands.which(
+        'inventory-host-only-probe',
+      ),
+    ).resolves.toBeUndefined();
+  },
+);
+
 test('vega inventory resolves the CLI from the host home, not the process home', async () => {
   // The rule: every Vega executable lookup in one runtime resolves from that runtime host's
   // PATH and home. This host's HOME differs from the process HOME and names a default-install

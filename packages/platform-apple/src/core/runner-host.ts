@@ -7,7 +7,6 @@ import {
   requireExecSuccess,
   runCmdBackground,
   runCmdStreaming,
-  runCmdSync,
 } from '@agent-device/host-kit/command';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
@@ -31,7 +30,6 @@ import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { isRecord } from '@agent-device/kernel/record';
 import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
   getRequestSignal,
@@ -70,7 +68,6 @@ import {
  */
 export const appleRunnerHost: AppleRunnerHost = {
   runCmdStreaming,
-  runCmdSync,
   runCmdBackground,
   requireExecSuccess,
   isCommandTimeoutError,
@@ -104,7 +101,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   publishFileSync,
   classifyOwnerLiveness,
   readHostCpuArchSync,
-  createTtlMemo,
   parseBooleanLiteral,
   isRecord,
   emitRequestProgress,

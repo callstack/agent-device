@@ -6,6 +6,7 @@ import { test } from 'vitest';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { createSnapshotSourceHost } from './host.ts';
 import { buildSnapshotBridgeCompileArgv, ensureSnapshotBridgeBinary } from './cache.ts';
+import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
 import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
@@ -26,6 +27,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header v1');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule v1');
 
   let builds = 0;
   let xcodeVersion = 'Xcode 16.4\nBuild version 16F6';
@@ -110,6 +112,21 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
     assert.notEqual(sourceChanged.sourceHash, first.sourceHash);
     assert.equal(builds, 3);
 
+    // The shared full-screen header is compiled into the bridge (SnapshotBridgeRuntime.m includes
+    // it), so changing only the header must bust the cache — a build kept across a rule edit would
+    // ship the old refusal from bytes the fingerprint never read.
+    await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule v2');
+    const headerChanged = await ensureSnapshotBridgeBinary({
+      host,
+      runtime: 'iOS 26.2',
+      limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+      deadline: testDeadline(),
+      sourceRoot,
+      cacheRoot,
+    });
+    assert.notEqual(headerChanged.sourceHash, sourceChanged.sourceHash);
+    assert.equal(builds, 4);
+
     xcodeVersion = 'Xcode 16.5\nBuild version 16F5';
     const toolchainChanged = await ensureSnapshotBridgeBinary({
       host,
@@ -120,7 +137,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
       cacheRoot,
     });
     assert.notEqual(toolchainChanged.cacheKey, sourceChanged.cacheKey);
-    assert.equal(builds, 4);
+    assert.equal(builds, 5);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -135,6 +152,46 @@ test('the runtime clang build never uses -Werror', () => {
   assert.ok(!argv.includes('-Werror'));
 });
 
+test('the bridge source root resolves at the project root and otherwise reports native-source-missing', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-source-root-');
+  const bridgeRoot = path.join(root, 'apple', 'snapshot-bridge');
+  await mkdir(bridgeRoot, { recursive: true });
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(bridgeRoot, name), 'native source');
+  }
+  const host = createFakeBuildHost('binary');
+  const options = {
+    host,
+    runtime: 'iOS 26.2',
+    limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+    deadline: testDeadline(),
+    cacheRoot: path.join(root, 'cache'),
+  };
+
+  try {
+    const prepared = await ensureSnapshotBridgeBinary({
+      ...options,
+      host: { ...host, projectRoot: () => root },
+    });
+    assert.ok(prepared.path);
+
+    await assert.rejects(
+      ensureSnapshotBridgeBinary({
+        ...options,
+        host: { ...host, projectRoot: () => path.join(root, 'empty') },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SnapshotSourceError);
+        assert.equal(error.failureKind, 'unsupported');
+        assert.equal(error.failureCode, 'native-source-missing');
+        return true;
+      },
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-source-concurrent-');
   const sourceRoot = path.join(root, 'source');
@@ -145,6 +202,7 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   let builds = 0;
   const host = createFakeBuildHost(async () => {
     builds += 1;
@@ -183,6 +241,7 @@ test('an aborted cache waiter does not cancel an independent preparation', async
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   let builds = 0;
   let buildStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -235,6 +294,7 @@ test('a bridge build that failed is reported over a cache lock that could not be
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const buildHost = createFakeBuildHost('unused');
   const host: SnapshotSourceHost = {
     ...buildHost,
@@ -287,6 +347,7 @@ test('a compile exec killed at its budget reports the bridge build, not the exec
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  await writeFile(path.join(sourceRoot, 'ForegroundApplicationGeometry.h'), 'shared rule');
   const buildHost = createFakeBuildHost('binary');
   let compileTimeoutMs = 0;
   const host: SnapshotSourceHost = {

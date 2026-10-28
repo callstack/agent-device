@@ -35,13 +35,15 @@ extension RunnerTests {
       }
     }
 
-    // Touch frame resolves from the first step's coords so recording-gestures works unchanged.
+    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
+
+    // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
+    // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
     let firstFrame = (firstStep.x != nil && firstStep.y != nil)
-      ? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
+      ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
+        ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
-
-    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     let execution = assembleSequenceExecution(steps: steps) { _, step in
       performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
@@ -145,9 +147,17 @@ extension RunnerTests {
   ) -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
+    let longPressDurationMs = min(max(step.durationMs ?? 800, 16), 10000)
     if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
       switch performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
-        synthesizedTapAt(app: activeApp, x: x, y: y, context: synthesizedContext)
+        synthesizedSequenceStep(
+          policyKind,
+          app: activeApp,
+          x: x,
+          y: y,
+          longPressDurationMs: longPressDurationMs,
+          context: synthesizedContext
+        )
       }) {
       case .performed(let timing):
         return finishedSequenceStep(step, timing: timing, outcome: .performed)
@@ -167,13 +177,37 @@ extension RunnerTests {
         // doubleTapAt per step, matching the behavior of the retired tapSeries doubleTap path.
         return doubleTapAt(app: activeApp, x: x, y: y)
       case "longPress":
-        let duration = min(max(step.durationMs ?? 800, 16), 10000) / 1000.0
-        return longPressAt(app: activeApp, x: x, y: y, duration: duration)
+        return longPressAt(app: activeApp, x: x, y: y, duration: longPressDurationMs / 1000.0)
       default:
         return tapAt(app: activeApp, x: x, y: y)
       }
     }
     return finishedSequenceStep(step, timing: timing, outcome: outcome)
+  }
+
+  @MainActor
+  private func synthesizedSequenceStep(
+    _ policyKind: SynthesizedGesturePolicyKind,
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    longPressDurationMs: Double,
+    context: SynthesizedCoordinateContext?
+  ) -> RunnerInteractionOutcome? {
+    switch policyKind {
+#if os(iOS)
+    case .coordinateLongPress:
+      return synthesizedLongPressAt(
+        app: app,
+        x: x,
+        y: y,
+        durationMs: longPressDurationMs,
+        context: context
+      )
+#endif
+    default:
+      return synthesizedTapAt(app: app, x: x, y: y, context: context)
+    }
   }
 
   private func finishedSequenceStep(

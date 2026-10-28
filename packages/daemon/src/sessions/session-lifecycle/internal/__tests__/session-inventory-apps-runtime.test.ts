@@ -42,7 +42,9 @@ const MACOS_DEVICE = {
 const appsAvailable = { available: true } as const;
 const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
 
-function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
+function runtimeFacts(
+  overrides: Partial<RuntimeFacts<PlatformRuntimeOperations>['operations']> = {},
+): RuntimeFacts<PlatformRuntimeOperations> {
   return {
     device: {
       family: 'apple',
@@ -78,11 +80,15 @@ function runtimeFacts(): RuntimeFacts<PlatformRuntimeOperations> {
         prepareAppleRunner: unavailable,
         configureProviderPortReverse: unavailable,
       }),
+      // Last, so a caller can override any cell above. Earlier it sat before the two fixed fact
+      // maps, which quietly dropped an override for a cell either map already stated.
+      ...overrides,
     },
   };
 }
 
 const inspectFactsImpl: InspectDeviceRuntimeFacts = async () => runtimeFacts();
+
 const inspectFacts = vi.fn(inspectFactsImpl);
 const ensureReady = vi.fn(async () => MACOS_DEVICE);
 const listApps = vi.fn(async () => [{ id: 'com.example.app', name: 'Example' }]);
@@ -109,6 +115,13 @@ beforeEach(() => {
   ensureReady.mockClear();
   listApps.mockClear();
   bindCount = 0;
+});
+
+test('a runtimeFacts override reaches a cell the fixed fact maps state', () => {
+  // `unavailableDeploymentSnapshotAndShutdownOperationFacts` states findText. An override spread
+  // before that map was dropped, which is how the helper came to lie about its own parameter.
+  const overridden = { available: true } as const;
+  expect(runtimeFacts({ findText: overridden }).operations.findText).toBe(overridden);
 });
 
 test('macOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
@@ -138,6 +151,49 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   expect(bindCount).toBe(1);
   expect(ensureReady).toHaveBeenCalledOnce();
   expect(listApps).toHaveBeenCalledOnce();
+});
+
+test('apps reports the refused operation fact typed reason on the wire', async () => {
+  const sessionName = 'macos-apps-unsupported';
+  const sessionStore = makeSessionStore();
+  sessionStore.publish(sessionName, makeSession(sessionName, MACOS_DEVICE));
+  inspectFacts.mockResolvedValueOnce(
+    runtimeFacts({
+      listApps: {
+        available: false,
+        reason: 'owner-capability-missing',
+        hint: 'WebDriver provider runtimes do not expose app inventory.',
+      },
+    }),
+  );
+
+  const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 'test-token',
+      session: sessionName,
+      command: 'apps',
+      positionals: [],
+      flags: { appsFilter: 'all' },
+    },
+    sessionName,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+  });
+
+  expect(response).toEqual({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'apps is not supported on this device',
+      hint: 'WebDriver provider runtimes do not expose app inventory.',
+      details: { reason: 'owner-capability-missing' },
+    },
+  });
+  expect(bindCount).toBe(0);
+  expect(listApps).not.toHaveBeenCalled();
 });
 
 test('deferred provider apps returns uploaded assets without resolving a device', async () => {

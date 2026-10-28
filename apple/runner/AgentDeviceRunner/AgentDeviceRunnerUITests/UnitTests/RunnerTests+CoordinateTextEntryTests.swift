@@ -6,7 +6,7 @@ extension RunnerTests {
   /// cannot answer. A fixture that does not expose its own field is a broken lane, not a refusal.
   @MainActor
   func requireTextInputAtPoint(app: XCUIApplication, x: Double, y: Double) throws -> TextInputAtPoint {
-    switch coordinateTapTextInputIdentityAt(app: app, x: x, y: y) {
+    switch coordinateTapTextInputIdentityAt(app: app, x: x, y: y, contentTranslation: liveContentTranslation(app: app)) {
     case .input(let input):
       return input
     case .absent:

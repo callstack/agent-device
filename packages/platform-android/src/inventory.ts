@@ -29,10 +29,14 @@ const DEVICE_DESCRIPTION_TIMEOUT_MS = 2_000;
 const DEVICE_DESCRIPTION_PROBE = shellFragment(
   'getprop ro.product.model; getprop ro.build.version.release',
 );
+// Fire OS devices declare amazon.hardware.fire_tv and may not declare the AOSP leanback
+// features, so TV detection must read it as a TV signal too (Amazon: "Identify Fire TV
+// Devices", adb shell pm list features).
 const TV_FEATURES = [
   'android.software.leanback',
   'android.software.leanback_only',
   'android.hardware.type.television',
+  'amazon.hardware.fire_tv',
 ] as const;
 
 type AndroidInventoryContext = Readonly<{

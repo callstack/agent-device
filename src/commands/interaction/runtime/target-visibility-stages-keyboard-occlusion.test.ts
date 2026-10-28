@@ -31,15 +31,7 @@ function tappedDevice(snapshot: SnapshotState, calls: Point[]) {
   });
 }
 
-/** The same tree with its keyboard hoisted above the docking budget, so the tree rule stops measuring. */
-function lifted(nodes: SnapshotState['nodes']): SnapshotState['nodes'] {
-  return nodes.map((node) =>
-    node.rect && (node.type === 'Keyboard' || node.type === 'Key')
-      ? { ...node, rect: { ...node.rect, y: node.rect.y - 560 } }
-      : node,
-  );
-}
-
+/** One capture as the producer would hand it over: the tree, plus the band it measured when there is one. */
 function captured(params: {
   nodes: SnapshotState['nodes'];
   keyboard?: SnapshotKeyboardBandFact;
@@ -151,16 +143,16 @@ test('a coordinate behind the keyboard taps anyway and discloses the reason', as
   );
 
   assert.deepEqual(calls, [{ x: 200, y: 810 }]);
-  assert.match(result.warning ?? '', /behind the visible keyboard/);
+  assert.match(result.warning ?? '', /\(200, 810\) is behind the visible keyboard/);
   assert.match(result.warning ?? '', /tap_keyboard_occludes_target/);
 });
 
 test('the guard reads the point the interaction dispatches, not the rect center', async () => {
   // The Form button's own center sits 3 pt above the key plane, and its interactive child owns that
   // upper region, so the point the tap dispatches is pushed down into the keyboard's band.
-  const aimShifted = makeSnapshotState(
+  const aimShiftedTree = (base: SnapshotState['nodes']) =>
     [
-      ...keyboardCoveredTabBarSnapshot().nodes,
+      ...base,
       {
         index: 7,
         depth: 3,
@@ -172,8 +164,8 @@ test('the guard reads the point the interaction dispatches, not the rect center'
       },
     ].map((node) =>
       node.index === 1 ? { ...node, rect: { x: 148, y: 500, width: 104, height: 160 } } : node,
-    ),
-  );
+    );
+  const aimShifted = makeSnapshotState(aimShiftedTree(keyboardCoveredTabBarSnapshot().nodes));
 
   const calls: Point[] = [];
   await assert.rejects(
@@ -182,13 +174,16 @@ test('the guard reads the point the interaction dispatches, not the rect center'
   );
   assert.deepEqual(calls, []);
 
-  // The same tree with its keyboard hauled off the bottom edge shows where that tap was aiming: below
-  // the key plane, which is what makes this the dispatched point's refusal rather than the center's.
+  // The same tree with its keyboard hauled off the bottom edge — via the shared fixture's lifted
+  // variant, the one owner of that hoist — shows where that tap was aiming: below the key plane,
+  // which is what makes this the dispatched point's refusal rather than the center's.
   const aim: Point[] = [];
-  await tappedDevice(makeSnapshotState(lifted(aimShifted.nodes)), aim).interactions.click(
-    ref('@e2'),
-    { session: 'default' },
-  );
+  await tappedDevice(
+    makeSnapshotState(
+      aimShiftedTree(keyboardCoveredTabBarSnapshot({ keyboardLifted: true }).nodes),
+    ),
+    aim,
+  ).interactions.click(ref('@e2'), { session: 'default' });
   assert.equal(aim.length, 1);
   assert.ok((aim[0]?.y ?? 0) > 583, `expected the dispatched point below 583, got ${aim[0]?.y}`);
 });

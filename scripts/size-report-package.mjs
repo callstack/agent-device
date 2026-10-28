@@ -7,6 +7,7 @@ export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridgeRuntime.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.m',
+  'apple/snapshot-bridge/ForegroundApplicationGeometry.h',
 ]);
 
 export function assertSnapshotBridgeAssets(presentPaths, context) {
@@ -27,6 +28,18 @@ export function readMacosHelperTestTargets(manifestSource) {
     (match) => match[1],
   );
 }
+
+/**
+ * The macOS helper's pack stubs: the only paths under a `Tests/` directory the package may carry.
+ * SwiftPM refuses to resolve a declared test target without sources, so `files` ships exactly one
+ * stub per target; a new target's stub must be declared here, in the failing direction. One owner
+ * for both decisions this list governs: the publish check in this file, and the package-wide
+ * no-test-code path guard, which imports it (scripts/lib/shipped-test-code.ts).
+ */
+export const DOCUMENTED_PACK_STUBS = Object.freeze([
+  'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
+  'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
+]);
 
 export function collectNpmPack(root) {
   const cachePath = path.join(root, '.tmp', 'npm-cache');
@@ -90,13 +103,14 @@ export function assertPublishPackageContents(entries, options = {}) {
   }
   // The macOS helper ships as buildable source. Its manifest declares the test targets, so the
   // packed tree must hold at least one source per target or the install-time `swift build` dies;
-  // `files` ships exactly one PackStub.swift per target and excludes every other test source.
-  // Anything else under Tests/ in the pack means the exclusion list leaked real tests.
+  // `files` ships exactly the stubs DOCUMENTED_PACK_STUBS declares and excludes every other test
+  // source. Anything else under Tests/ in the pack means the exclusion list leaked real tests.
+  const documentedStubPaths = new Set(DOCUMENTED_PACK_STUBS);
   const shippedSwiftTests = paths.filter(
     (entryPath) =>
       (entryPath === 'apple/macos-helper/Tests' ||
         entryPath.startsWith('apple/macos-helper/Tests/')) &&
-      !entryPath.endsWith('/PackStub.swift'),
+      !documentedStubPaths.has(entryPath),
   );
   if (shippedSwiftTests.length > 0) {
     throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
@@ -117,15 +131,27 @@ export function assertPublishPackageContents(entries, options = {}) {
         path.join(options.repoRoot ?? process.cwd(), 'apple/macos-helper/Package.swift'),
         'utf8',
       );
-    const testTargets = readMacosHelperTestTargets(manifestSource);
-    const missingStubs = testTargets.filter(
-      (target) => !paths.includes(`apple/macos-helper/Tests/${target}/PackStub.swift`),
+    const expectedStubs = new Set(
+      readMacosHelperTestTargets(manifestSource).map(
+        (target) => `apple/macos-helper/Tests/${target}/PackStub.swift`,
+      ),
     );
+    const missingStubs = [...expectedStubs].filter((stubPath) => !paths.includes(stubPath));
     if (missingStubs.length > 0) {
       throw new Error(
-        `npm pack is missing macOS helper test-target pack stubs: ${missingStubs
-          .map((target) => `apple/macos-helper/Tests/${target}/PackStub.swift`)
-          .join(', ')}`,
+        `npm pack is missing macOS helper test-target pack stubs: ${missingStubs.join(', ')}`,
+      );
+    }
+    // The other direction: a declared stub whose target left the manifest stays exempt from the
+    // path guard above, so compare against the manifest set here. A target removed or renamed
+    // without retiring its package.json `files` entry and its DOCUMENTED_PACK_STUBS declaration
+    // would otherwise ship a dead stub forever.
+    const staleStubs = [...documentedStubPaths].filter(
+      (stubPath) => paths.includes(stubPath) && !expectedStubs.has(stubPath),
+    );
+    if (staleStubs.length > 0) {
+      throw new Error(
+        `npm pack ships documented pack stubs no test target declares: ${staleStubs.join(', ')}`,
       );
     }
   }

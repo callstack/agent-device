@@ -24,6 +24,32 @@ async function withMockedAdbScript(script: string, run: () => Promise<void>): Pr
   }
 }
 
+test('listAndroidAppsWithAdb queries both launcher categories for a TV target', async () => {
+  // Fire OS apps register under either launcher category, so a TV listing merges both queries.
+  const calls: (readonly string[])[] = [];
+  const adb: AndroidAdbExecutor = async (args) => {
+    calls.push(args);
+    if (args.includes('query-activities')) {
+      return {
+        exitCode: 0,
+        stdout: args.includes('android.intent.category.LAUNCHER')
+          ? 'com.example.fireosapp/.MainActivity\n'
+          : '',
+        stderr: '',
+      };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  };
+
+  const apps = await listAndroidAppsWithAdb(adb, { filter: 'all', target: 'tv' });
+
+  assert.deepEqual(apps, [{ package: 'com.example.fireosapp', name: 'Fireosapp' }]);
+  assert.deepEqual(calls.map((call) => call.at(-1)).sort(), [
+    'android.intent.category.LAUNCHER',
+    'android.intent.category.LEANBACK_LAUNCHER',
+  ]);
+});
+
 test('listAndroidAppsWithAdb uses an injected executor', async () => {
   const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {

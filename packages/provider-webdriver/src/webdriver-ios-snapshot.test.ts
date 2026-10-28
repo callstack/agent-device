@@ -140,38 +140,41 @@ test.each([
   '_UIRemoteKeyboardPlaceholderView',
   'TUISystemInputAssistantView',
   'TUISystemInputAssistantPageView',
-])('app controls under %s remain unowned through projection and state assembly', async (role) => {
-  const source = SOURCE.replace(
-    '</XCUIElementTypeApplication>',
-    `<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeOther class="${role}"><XCUIElementTypeButton name="Save draft" x="200" y="600" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeOther class="UIKeyboardLayoutStar"><XCUIElementTypeButton name="Done" x="0" y="600" width="100" height="40" /></XCUIElementTypeOther></XCUIElementTypeKeyboard></XCUIElementTypeApplication>`,
-  );
-  const result = acquireWebDriverIosSnapshot(source);
-  const acquired = result.acquisition;
-  const appControl = acquired.nodes.find((node) => node.label === 'Save draft')!;
-  const projected = [{}, { interactiveOnly: true }, { raw: true }, { scope: 'Save draft' }].map(
-    (options) =>
-      buildSnapshotState(presentIosSnapshotAcquisition(result, options), {
-        snapshotRaw: options.raw,
-        snapshotInteractiveOnly: options.interactiveOnly,
-      }).nodes,
-  );
-  for (const nodes of [acquired.nodes, [appControl], ...projected]) {
-    const node = nodes.find((candidate) => candidate.label === 'Save draft')!;
-    assert.equal(
-      resolveKeyboardTapOcclusion({
-        nodes,
-        node,
-        viewport: null,
-        point: { x: 250, y: 620 },
-        keyboard: acquired.keyboard,
-      }).kind,
-      'occluded',
+])(
+  'app controls hosted under %s remain tappable through projection and state assembly',
+  async (role) => {
+    const source = SOURCE.replace(
+      '</XCUIElementTypeApplication>',
+      `<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeOther class="${role}"><XCUIElementTypeButton name="Save draft" x="200" y="600" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeOther class="UIKeyboardLayoutStar"><XCUIElementTypeButton name="Done" x="0" y="600" width="100" height="40" /></XCUIElementTypeOther></XCUIElementTypeKeyboard></XCUIElementTypeApplication>`,
     );
-  }
-  assert.equal(appControl.keyboardOwned, false);
-  assert.equal(acquired.nodes.find((node) => node.role === role)?.keyboardOwned, true);
-  assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
-});
+    const result = acquireWebDriverIosSnapshot(source);
+    const acquired = result.acquisition;
+    const appControl = acquired.nodes.find((node) => node.label === 'Save draft')!;
+    const projected = [{}, { interactiveOnly: true }, { raw: true }, { scope: 'Save draft' }].map(
+      (options) =>
+        buildSnapshotState(presentIosSnapshotAcquisition(result, options), {
+          snapshotRaw: options.raw,
+          snapshotInteractiveOnly: options.interactiveOnly,
+        }).nodes,
+    );
+    for (const nodes of [acquired.nodes, [appControl], ...projected]) {
+      const node = nodes.find((candidate) => candidate.label === 'Save draft')!;
+      assert.equal(
+        resolveKeyboardTapOcclusion({
+          nodes,
+          node,
+          viewport: null,
+          point: { x: 250, y: 620 },
+          keyboard: acquired.keyboard,
+        }).kind,
+        'clear',
+      );
+    }
+    assert.equal(appControl.keyboardOwned, true);
+    assert.equal(acquired.nodes.find((node) => node.role === role)?.keyboardOwned, true);
+    assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
+  },
+);
 
 test.each([true, false, 'failed'] as const)(
   'Appium iOS probe %s without a viewport preserves later tree derivation',

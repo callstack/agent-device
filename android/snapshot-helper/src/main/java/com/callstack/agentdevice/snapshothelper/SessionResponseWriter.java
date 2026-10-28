@@ -24,13 +24,23 @@ final class SessionResponseWriter {
     writeSessionResponse(output, result, "");
   }
 
-  static void writeSessionError(
-      OutputStream output, String requestId, String errorType, String message) throws IOException {
+  static void writeSessionError(OutputStream output, String requestId, Throwable error)
+      throws IOException {
     Bundle result = sessionResponseBundle(requestId);
+    putSessionError(result, error);
+    writeSessionResponse(output, result, "");
+  }
+
+  /**
+   * Marks a session result as a failed attempt. `errorType` is the class the helper threw, which the
+   * host classifies on. A null message repeats it; an empty message stays empty.
+   */
+  static void putSessionError(Bundle result, Throwable error) {
+    String errorType = error.getClass().getName();
+    String message = error.getMessage();
     result.putString("ok", "false");
     result.putString("errorType", errorType);
-    result.putString("message", message);
-    writeSessionResponse(output, result, "");
+    result.putString("message", message == null ? errorType : message);
   }
 
   static void writeSessionResponse(OutputStream output, Bundle result, String body)

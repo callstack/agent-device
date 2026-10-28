@@ -16,7 +16,6 @@ import {
   markRunnerXctestrunArtifactBadForRun,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-xctestrun.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { digestFile } from './digest-file.ts';
 import {
   REPO_ROOT_FOR_TEST as repoRoot,
@@ -87,7 +86,6 @@ beforeEach(() => {
   vi.resetAllMocks();
   appleRunnerTestHost.update({
     runCmdStreaming: mockRunCmdStreaming,
-    runCmdSync: appleToolchainProbeResult,
     readProcessStartTime: () => 'test-process-start',
   });
   mockRunCmdStreaming.mockResolvedValue(undefined);

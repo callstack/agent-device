@@ -147,3 +147,51 @@ test('no rescue hook wired (e.g. non-iOS backend) -> refuses exactly as before',
   );
   assert.equal(calls.length, 0);
 });
+
+test('a rescued tap carries no point observation, because the live read measured its point', async () => {
+  for (const target of [selector('id="shipping-pickup"'), ref(STALE_TARGET_REF)]) {
+    const tapOptions: unknown[] = [];
+    const device = createInteractionDevice(frozenTreeStaleTargetSnapshot(), {
+      tap: async (_context, _point, options) => {
+        tapOptions.push(options);
+      },
+      confirmOffscreenTargetVisible: async () => LIVE_RECT,
+    });
+
+    const result = await device.interactions.click(target, { session: 'default' });
+
+    assert.deepEqual(result.point, LIVE_CENTER);
+    assert.equal(tapOptions.length, 1);
+    assert.equal((tapOptions[0] as { pointObservation?: unknown }).pointObservation, undefined);
+  }
+});
+
+test('an on-screen tap carries the capture that measured its point', async () => {
+  const snapshot = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Pickup',
+      identifier: 'shipping-pickup',
+      rect: LIVE_RECT,
+      hittable: true,
+    },
+  ]);
+  const tapOptions: unknown[] = [];
+  const device = createInteractionDevice(snapshot, {
+    tap: async (_context, _point, options) => {
+      tapOptions.push(options);
+    },
+    confirmOffscreenTargetVisible: async () => {
+      throw new Error('an on-screen target needs no rescue');
+    },
+  });
+
+  await device.interactions.click(selector('id="shipping-pickup"'), { session: 'default' });
+
+  const observation = (tapOptions[0] as { pointObservation?: { nodes: unknown } }).pointObservation;
+  assert.equal(observation?.nodes, snapshot.nodes);
+});

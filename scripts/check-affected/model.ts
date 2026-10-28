@@ -19,6 +19,7 @@
 // non-.ts fixture whose owning suite cannot be derived). Existing GitHub CI
 // remains authoritative; this only optimizes local/agent feedback.
 
+import nativeDupesConfig from '../../.jscpd-native.json' with { type: 'json' };
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 import { deviceLaneOwnership } from './device-lanes.ts';
 
@@ -38,6 +39,8 @@ export const ALL_CHECKS = [
   'layering',
   'di-seams',
   'fallow',
+  'native-dupes',
+  'native-dupes-model',
   'mcp-metadata',
   'build',
   'package',
@@ -75,6 +78,7 @@ export const ALL_CHECKS = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'capabilities-matrix',
   'docs-links',
   'docs-prose',
   'agent-guidance',
@@ -137,6 +141,8 @@ const ROOT_TOOLING = new Set([
   'tsdown.config.ts',
   'vitest.config.ts',
   '.fallowrc.json',
+  '.jscpd-native.json',
+  'native-dupes-baseline.json',
   'oxlint.config.ts',
   '.oxfmtrc.json',
   '.npmrc',
@@ -158,7 +164,7 @@ function isWorkflowTooling(file: string): boolean {
   );
 }
 
-export function isDocs(file: string): boolean {
+function isDocs(file: string): boolean {
   // skills/ Markdown is agent guidance prose with no owning suite (the
   // SkillGym harness was removed), so it classifies as docs like the rest.
   return (
@@ -386,8 +392,21 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
 const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.startsWith('apple/runner/') ||
   file.startsWith('apple/snapshot-presentation/') ||
+  file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
   (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
   file.endsWith('.swift');
+
+const nativeDupesOwnership: OwnershipRule = ({ file }) =>
+  nativeDupesConfig.path.some((root) => file.startsWith(`${root}/`))
+    ? [
+        reason(
+          'native-dupes',
+          file,
+          'own:native-dupes',
+          'jscpd compares native code against the clone baseline',
+        ),
+      ]
+    : [];
 
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
@@ -439,6 +458,7 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'packaged runner Swift must still parse and keep the checkout line numbering',
     owns: (file) =>
       file.startsWith('apple/runner/') ||
+      file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
       file === 'scripts/package-apple-runner-source.mjs' ||
       file === 'scripts/strip-swift-comments.mjs',
   },
@@ -550,6 +570,10 @@ function isAgentGuidance(file: string): boolean {
 // built site renders change.
 const SITE_BUILD_INPUTS = new Set(['website/package.json', 'website/rspress.config.ts']);
 
+// The generated capabilities page. Its cells are a read of the runtime facts, so the
+// page and the generator that renders it share one drift gate.
+const CAPABILITIES_PAGE = 'website/docs/docs/capabilities.md';
+
 function isUserDocPage(file: string): boolean {
   return file === 'README.md' || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
 }
@@ -573,6 +597,16 @@ const docsOwnership: OwnershipRule = ({ file }) => {
         file,
         'own:command-docs',
         'the command reference is asserted against the CLI in both directions',
+      ),
+    );
+  }
+  if (file === CAPABILITIES_PAGE) {
+    selections.push(
+      reason(
+        'capabilities-matrix',
+        file,
+        'own:capabilities-matrix',
+        'the capabilities page is generated from runtime facts and must match them',
       ),
     );
   }
@@ -616,6 +650,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   replayCompatOwnership,
   daemonWireCompatOwnership,
   buildOwnership,
+  nativeDupesOwnership,
   deviceLaneRule,
 ];
 

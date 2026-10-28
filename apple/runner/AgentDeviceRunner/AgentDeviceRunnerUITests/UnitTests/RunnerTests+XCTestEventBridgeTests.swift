@@ -203,5 +203,49 @@ extension RunnerTests {
     XCTAssertNil(screen)
     XCTAssertEqual(displayID, 0)
   }
+  /// The sole-screen rule's decision, at the seam the production probe feeds: the values the
+  /// AXRuntime probe reads in, never a device list. The windowed/unknown rows below fail without
+  /// the fills-screen proof, on any family and on the macOS host lane, and each keeps its exact
+  /// typed outcome — `not fills-screen` alone cannot tell windowed from unknown.
+  func testFullScreenEvidenceDecidesFromForegroundValues() {
+    let screen = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    let cases: [(name: String, targetPid: pid_t, primaryPid: pid_t, window: CGRect, screen: CGRect, expected: RunnerFullScreenEvidence)] = [
+      ("same frame", 100, 100, screen, screen, .fillsScreen),
+      // Sub-pixel layout rounding is not a window; it stays inside the 0.5 tolerance.
+      ("0.4-pt displacement", 100, 100, screen.offsetBy(dx: 0.4, dy: -0.4), screen, .fillsScreen),
+      // A window that shows the app in part of the screen (Windowed Apps or Stage Manager).
+      ("placed window", 100, 100, CGRect(x: 224, y: 128, width: 386, height: 954), screen, .windowed),
+      // Each component alone, so no comparison can be dropped for an equal-size shortcut.
+      ("1-pt minX past the tolerance", 100, 100, screen.offsetBy(dx: 1, dy: 0), screen, .windowed),
+      ("1-pt minY past the tolerance", 100, 100, screen.offsetBy(dx: 0, dy: 1), screen, .windowed),
+      ("1-pt narrower", 100, 100, screen.insetBy(dx: 0.5, dy: 0), screen, .windowed),
+      ("1-pt shorter", 100, 100, screen.insetBy(dx: 0, dy: 0.5), screen, .windowed),
+      // A window at the origin is still potentially windowed: the origin proves nothing alone.
+      ("smaller window at (0,0)", 100, 100, CGRect(x: 0, y: 0, width: 834, height: 600), screen, .windowed),
+      // A different app owns the foreground, so the screen is not this app's to fill.
+      ("foreign primary pid", 100, 77, screen, screen, .notPrimaryApp),
+      // An unreadable pid or frame proves nothing, and the answer is Unknown, never a guess.
+      ("unreadable target pid", 0, 100, screen, screen, .unknown),
+      ("unreadable primary pid", 100, 0, screen, screen, .unknown),
+      ("null window", 100, 100, .null, screen, .unknown),
+      ("empty window", 100, 100, .zero, screen, .unknown),
+      ("null screen", 100, 100, screen, .null, .unknown),
+      ("empty screen", 100, 100, screen, .zero, .unknown),
+      // The infinite sentinel is the framework's own "no measurement" marker (CGRectInfinite's
+      // components are finite extremes), so the predicate refuses it and the answer is Unknown.
+      ("infinite window", 100, 100, .infinite, screen, .unknown),
+      // A non-finite frame component is a runtime that said nothing, not a window that differs:
+      // the answer is Unknown, never the Windowed a comparison of the numbers would read as.
+      ("NaN window origin", 100, 100, CGRect(x: CGFloat.nan, y: 0, width: 834, height: 1210), screen, .unknown),
+      ("infinite screen width", 100, 100, screen, CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 1210), .unknown),
+    ]
+    for (name, targetPid, primaryPid, window, screenFrame, expected) in cases {
+      XCTAssertEqual(
+        RunnerFullScreenEvidenceFromForeground(targetPid, primaryPid, window, screenFrame),
+        expected,
+        name
+      )
+    }
+  }
 }
 #endif

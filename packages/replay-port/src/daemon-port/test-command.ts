@@ -14,13 +14,18 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import {
   runReplayTestSuite,
+  type ReplayTestAttemptOutcome,
   type ReplayTestBindAttemptCancellation,
   type ReplayTestShardContext,
   type ReplayTestSuiteRequest,
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  asAppError,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+} from '@agent-device/kernel/errors';
 import {
   emitRequestProgress,
   clearRequestCanceled,
@@ -264,7 +269,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
           return response;
         },
       });
-      return toReplayTestAttemptOutcome(replayResponse);
+      return withOriginalTestRefusalGuidance(toReplayTestAttemptOutcome(replayResponse));
     },
     finalizeAttempt: async ({
       sessionName: testSessionName,
@@ -292,6 +297,53 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
   return outcome.status === 'completed'
     ? { ok: true, data: attachRemoteReplayTestArtifacts(outcome.data, req) }
     : errorResponse(outcome.error.code, outcome.error.message);
+}
+
+function withOriginalTestRefusalGuidance(
+  attempt: ReplayTestAttemptOutcome,
+): ReplayTestAttemptOutcome {
+  if (
+    attempt.status !== 'failed' ||
+    attempt.error.details?.reason !== BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON
+  )
+    return attempt;
+  const details = attempt.error.details;
+  const hint =
+    'Run the original test directly with its original paths and options in the live outer session, using the same --session value and private CLI context.';
+  const divergence = details.divergence;
+  const cause =
+    divergence && typeof divergence === 'object' && 'cause' in divergence
+      ? divergence.cause
+      : undefined;
+  const screen =
+    divergence && typeof divergence === 'object' && 'screen' in divergence
+      ? divergence.screen
+      : undefined;
+  const correctedDivergence =
+    divergence && typeof divergence === 'object' && cause && typeof cause === 'object'
+      ? {
+          ...divergence,
+          cause: { ...cause, hint },
+          ...(screen &&
+          typeof screen === 'object' &&
+          'state' in screen &&
+          screen.state === 'unavailable'
+            ? { screen: { ...screen, hint } }
+            : {}),
+        }
+      : divergence;
+  return {
+    ...attempt,
+    error: {
+      ...attempt.error,
+      hint,
+      details: {
+        ...details,
+        divergence: correctedDivergence,
+        standaloneCommandName: 'test',
+      },
+    },
+  };
 }
 
 /**

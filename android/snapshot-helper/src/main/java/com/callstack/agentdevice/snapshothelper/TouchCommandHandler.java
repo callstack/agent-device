@@ -41,11 +41,7 @@ final class TouchCommandHandler {
       populateViewport(result, automation);
       SessionResponseWriter.writeSessionResponse(output, result, "");
     } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(
-          output,
-          requestId,
-          error.getClass().getName(),
-          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      SessionResponseWriter.writeSessionError(output, requestId, error);
     }
   }
 
@@ -57,11 +53,7 @@ final class TouchCommandHandler {
       populateGesture(result, automation, payloadBase64);
       SessionResponseWriter.writeSessionResponse(output, result, "");
     } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(
-          output,
-          requestId,
-          error.getClass().getName(),
-          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      SessionResponseWriter.writeSessionError(output, requestId, error);
     }
   }
 

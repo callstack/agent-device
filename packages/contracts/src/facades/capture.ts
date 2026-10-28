@@ -59,6 +59,8 @@ export type {
   ScreenshotResultData,
 } from '../snapshot-types.ts';
 export {
+  attachSnapshotTextInputGeometry,
+  readSnapshotTextInputGeometry,
   attachSnapshotClickabilityEvidence,
   attachSnapshotOcclusionContextEvidence,
   copySnapshotClickabilityEvidence,
@@ -66,6 +68,7 @@ export {
   readSnapshotOcclusionContextEvidence,
 } from '../snapshot-private-evidence.ts';
 export type {
+  SnapshotTextInputGeometry,
   AndroidSiblingOrderEvidence,
   SnapshotClickabilityEvidence,
   SnapshotOcclusionContextEvidence,

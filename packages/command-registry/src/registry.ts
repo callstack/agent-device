@@ -96,6 +96,7 @@ import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-r
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
+  CompositeResourceTrait,
   CommandFrameworkTier,
   DeviceClaimPolicy,
   RecordingEffect,
@@ -1297,10 +1298,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     timeoutPolicy: {
       ...SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
-      // Android's cold path may inspect/install the helper, hand off a running
-      // snapshot helper, hold for 120 seconds, then use 15 seconds of helper
-      // completion overhead. Keep that complete route inside the envelope.
-      envelopeMs: 210_000,
+      // Android cold-helper worst case at the maximum hold plus the daemon-result margin, applied
+      // to every platform. Proven by the ledger test:
+      // test/integration/provider-scenarios/android-longpress-ledger.test.ts.
+      envelopeMs: 320_000,
     },
     postActionObservation: postActionObservation('longpress'),
     batchable: true,
@@ -1988,9 +1989,22 @@ export function listRuntimeFactCommands(): string[] {
     .sort();
 }
 
-const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<string, CommandDescriptor> = new Map(
-  commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
-);
+const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<
+  string,
+  CommandDescriptor & { standaloneCommandProjection: StandaloneCommandProjection | undefined }
+> = new Map(commandDescriptors.map((descriptor) => [descriptor.name, descriptor]));
+
+export function resolveCommandCompositeResourceTrait(
+  command: string,
+): CompositeResourceTrait | undefined {
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.compositeResource;
+}
+
+export function resolveCommandStandaloneProjection(
+  command: string,
+): StandaloneCommandProjection | undefined {
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.standaloneCommandProjection;
+}
 
 function isCliCommandName(command: string): command is DescriptorCliCommandName {
   return CLI_COMMAND_NAMES.has(command);

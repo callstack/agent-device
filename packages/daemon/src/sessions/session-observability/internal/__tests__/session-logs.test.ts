@@ -7,6 +7,7 @@ import { applicationLifecycleOperationFacts } from '@agent-device/contracts/appl
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import {
   type DeviceBinding,
+  type RuntimeOperationFact,
   localRuntimeOwner,
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
@@ -72,12 +73,37 @@ test('logs preserves whole-command unsupported precedence before parsing the act
   runtime = createRuntimeHarness({ inspectAvailable: false });
   const { sessionStore, sessionName } = openSession();
   const response = await runLogs(sessionStore, sessionName, ['invalid'], {}, runtime.bindDevice);
-  expect(response).toMatchObject({
+  expect(response).toEqual({
     ok: false,
     error: {
       code: 'UNSUPPORTED_OPERATION',
       message: 'logs is not supported on this device',
       hint: 'Use a runtime with app-log support.',
+      details: { reason: 'owner-capability-missing' },
+    },
+  });
+  expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
+});
+
+test('logs reports a refused provider app-log fact with its typed reason', async () => {
+  runtime = createRuntimeHarness({
+    inspectFact: {
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'The provider owns this device, so its app log is not readable here.',
+    },
+  });
+  const { sessionStore, sessionName } = openSession();
+
+  const response = await runLogs(sessionStore, sessionName, ['path'], {}, runtime.bindDevice);
+
+  expect(response).toEqual({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'logs is not supported on this device',
+      hint: 'The provider owns this device, so its app log is not readable here.',
+      details: { reason: 'unsupported-provider-mode' },
     },
   });
   expect(runtime.boundUses()).toEqual([{ required: [], preferred: ['appLogInspect'] }]);
@@ -325,7 +351,12 @@ function readRecord(sessionStore: SessionStore, sessionName: string) {
   );
 }
 
-function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
+function createRuntimeHarness(
+  options: {
+    inspectAvailable?: boolean;
+    inspectFact?: RuntimeOperationFact;
+  } = {},
+) {
   const owner = localRuntimeOwner('apple');
   const inspect = vi.fn(async () => ({ backend: 'ios-simulator' as const }));
   const doctor = vi.fn(async () => ({
@@ -408,13 +439,14 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
         },
         operations: {
           appLogInspect:
-            options.inspectAvailable === false
+            options.inspectFact ??
+            (options.inspectAvailable === false
               ? {
                   available: false,
                   reason: 'owner-capability-missing',
                   hint: 'Use a runtime with app-log support.',
                 }
-              : { available: true },
+              : { available: true }),
           appLogDoctor: { available: true },
           appLogStart: { available: true },
           appLogReattach: { available: true },

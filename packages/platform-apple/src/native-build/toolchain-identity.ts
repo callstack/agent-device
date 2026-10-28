@@ -1,9 +1,18 @@
 import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { nativeBuildError, NativeBuildError } from './errors.ts';
 import { remainingNativeBuildMs, type NativeBuildDeadline } from './deadline.ts';
 import type { NativeBuildHost } from './host.ts';
+
+/**
+ * Ceiling on one toolchain probe attempt (`xcodebuild -version`, run through the Apple tool
+ * provider). On a fresh macOS host Apple's syspolicyd signature scan blocks the first
+ * `xcodebuild`/`xcrun` exec after boot for roughly 18 to 19 seconds at 0% CPU, and the next exec of
+ * the same tool is instant; a budget sized for a warm toolchain (the old 10 s / 5 s split) trips on
+ * that stall and reports a toolchain timeout that says nothing about the toolchain (#2422). The
+ * build deadlines around this probe add it for the same reason.
+ */
+export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
 
 /**
  * The host's active toolchain, independent of any simulator runtime: which Xcode `xcrun` resolves

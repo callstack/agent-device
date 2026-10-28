@@ -89,6 +89,38 @@ test('provider-owned iOS simulators relaunch without local CoreSimulator refresh
   );
 });
 
+test('provider-owned relaunch refuses launch-console without closing the running app', async () => {
+  await withProviderScenarioResource(
+    async () => await createFakeProviderWorld('ios'),
+    async ({ daemon, runtime }) => {
+      const lease = await allocateIosFakeProviderLease(daemon);
+      const flags = iosLeaseFlags(lease.leaseId);
+      const options = { meta: iosLeaseMeta(lease.leaseId) };
+      assertRpcOk(await daemon.callCommand('open', ['com.example.demo'], flags, options));
+      const before = runtime.calls.length;
+      const error = assertRpcError(
+        await daemon.callCommand(
+          'open',
+          ['com.example.demo'],
+          { ...flags, relaunch: true, launchConsole: '/tmp/app.log' },
+          options,
+        ),
+        500,
+        'UNSUPPORTED_OPERATION',
+        /local iOS simulator/,
+      );
+      assert.equal(
+        (error.details as Record<string, unknown>).reason,
+        'launch-console-owner-unadmitted',
+      );
+      assert.deepEqual(
+        runtime.calls.slice(before).filter((call) => call.type === 'open' || call.type === 'close'),
+        [],
+      );
+    },
+  );
+});
+
 test('provider lease allocation is refused when no registered runtime claims the provider', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],

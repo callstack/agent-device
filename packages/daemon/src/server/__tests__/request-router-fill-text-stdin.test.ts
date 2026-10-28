@@ -7,6 +7,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   localRuntimeOwner,
@@ -38,11 +39,13 @@ function fillWithStdinText(
   flags: Record<string, unknown> = {},
   fillFails?: (text: string) => Error,
   text = SECRET,
+  fillResult?: Record<string, unknown>,
 ) {
   return sendToWebSession(
     session,
     { command: 'fill', positionals: ['10', '20', text], flags: { textStdin: true, ...flags } },
     fillFails,
+    fillResult,
   );
 }
 
@@ -50,6 +53,7 @@ function sendToWebSession(
   session: SessionState,
   request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>,
   fillFails?: (text: string) => Error,
+  fillResult?: Record<string, unknown>,
 ) {
   const sessionStore = makeSessionStore('agent-device-router-fill-text-stdin-');
   sessionStore.publish(session.name, session);
@@ -57,6 +61,7 @@ function sendToWebSession(
   const fillPoint = async (input: FillPointInput) => {
     typed.push(input.text);
     if (fillFails) throw fillFails(input.text);
+    return fillResult;
   };
   const owner = localRuntimeOwner('web');
   const baseFacts = createUnavailableRuntimeFactsForTest(WEB_DESKTOP_DEVICE, owner);
@@ -312,3 +317,162 @@ test('a whitespace-only --text-stdin value collapses the error text it appears i
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.error.message).toBe('[REDACTED]');
 });
+
+const FILL_TARGET = {
+  resourceId: 'otp',
+  className: 'android.widget.EditText',
+  packageName: 'com.test',
+  rect: { x: 0, y: 0, width: 100, height: 40 },
+};
+
+test.each([
+  ['an unrecorded', {}, '[REDACTED]', makeSession],
+  ['a --record-as', { recordAs: 'CODE' }, '${CODE}', makeAuthoringSession],
+])(
+  '%s --text-stdin fill that settles on a formatted value returns no read-back of it',
+  async (_name, flags, placeholder, sessionFor) => {
+    const { response } = fillWithStdinText(
+      sessionFor('web', { device: WEB_DESKTOP_DEVICE }),
+      flags,
+      undefined,
+      '000629177',
+      {
+        verification: 'unconfirmed',
+        requested: '000629177',
+        before: '000 62',
+        after: '00 062 91 77',
+        target: FILL_TARGET,
+      },
+    );
+
+    const result = await response;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({
+      verification: 'unconfirmed',
+      requested: placeholder,
+      before: placeholder,
+      after: placeholder,
+      target: FILL_TARGET,
+    });
+    expect(JSON.stringify(result)).not.toContain('062 91');
+    expect(JSON.stringify(result)).not.toContain('000 62');
+  },
+);
+
+test('an unrecorded fill that settles on a formatted value still returns its read-back', async () => {
+  const { response } = sendToWebSession(
+    makeSession('web', { device: WEB_DESKTOP_DEVICE }),
+    { command: 'fill', positionals: ['10', '20', '000629177'] },
+    undefined,
+    {
+      verification: 'unconfirmed',
+      requested: '000629177',
+      before: null,
+      after: '00 062 91 77',
+      target: FILL_TARGET,
+    },
+  );
+
+  const result = await response;
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.data).toMatchObject({ after: '00 062 91 77' });
+});
+
+const ALTERED_READ_BACK_FAILURE = (text: string) =>
+  new AppError('COMMAND_FAILED', 'Android fill verification failed', {
+    failureReason: 'text_mismatch',
+    expected: text,
+    actual: '00 062 91 77',
+    targetInput: { text: '000 62', className: 'android.widget.EditText' },
+    actualInput: { text: '00 062 91 77', className: 'android.widget.EditText' },
+  });
+
+test.each([
+  ['an unrecorded', {}, '[REDACTED]', makeSession],
+  ['a --record-as', { recordAs: 'CODE' }, '${CODE}', makeAuthoringSession],
+])(
+  '%s --text-stdin fill failure that reports an altered read-back returns no part of it',
+  async (_name, flags, placeholder, sessionFor) => {
+    const { response } = fillWithStdinText(
+      sessionFor('web', { device: WEB_DESKTOP_DEVICE }),
+      flags,
+      ALTERED_READ_BACK_FAILURE,
+      '000629177',
+    );
+
+    const result = await response;
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.details).toMatchObject({
+      failureReason: 'text_mismatch',
+      expected: placeholder,
+      actual: placeholder,
+      targetInput: { text: placeholder, className: 'android.widget.EditText' },
+      actualInput: { text: placeholder, className: 'android.widget.EditText' },
+    });
+    expect(JSON.stringify(result)).not.toContain('062 91');
+  },
+);
+
+test('an empty --record-as fill that fails to clear returns no part of the residual field text', async () => {
+  const { response } = sendToWebSession(
+    makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+    { command: 'fill', positionals: ['10', '20', ''], flags: { recordAs: 'CODE' } },
+    () =>
+      new AppError('COMMAND_FAILED', 'Android fill verification failed', {
+        failureReason: 'text_mismatch',
+        expected: '',
+        actual: 'residual-4471',
+        targetInput: { text: 'residual-4471', className: 'android.widget.EditText' },
+        actualInput: { text: 'residual-4471', className: 'android.widget.EditText' },
+      }),
+  );
+
+  const result = await response;
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.details).toMatchObject({
+    actual: '${CODE}',
+    targetInput: { text: '${CODE}' },
+    actualInput: { text: '${CODE}' },
+  });
+  expect(JSON.stringify(result)).not.toContain('residual-4471');
+});
+
+test.each([
+  ['a one-letter value', 'a'],
+  ['a value that is the verification discriminator', 'unconfirmed'],
+  ['a value that is a response key', 'target'],
+])(
+  'a --record-as fill of %s keeps the unconfirmed structure and redacts its read-back',
+  async (_name, text) => {
+    const { response, sessionStore } = fillWithStdinText(
+      makeAuthoringSession('web', { device: WEB_DESKTOP_DEVICE }),
+      { recordAs: 'CODE' },
+      undefined,
+      text,
+      {
+        verification: 'unconfirmed',
+        requested: text,
+        before: 'zq7',
+        after: 'Q7z',
+        target: FILL_TARGET,
+      },
+    );
+
+    const result = await response;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const unconfirmed = {
+      verification: 'unconfirmed',
+      requested: '${CODE}',
+      before: '${CODE}',
+      after: '${CODE}',
+      target: FILL_TARGET,
+    };
+    expect(result.data).toMatchObject(unconfirmed);
+    expect(sessionStore.get('web')?.actions[0]?.result).toMatchObject(unconfirmed);
+    expect(JSON.stringify(sessionStore.get('web')?.actions)).not.toMatch(/zq7|Q7z/);
+  },
+);

@@ -1,4 +1,4 @@
-import { test, vi, beforeEach } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -14,20 +14,8 @@ import {
 import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
 import { writeXctestrunFixture } from './runner-xctestrun.fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { stubbedAppleDeveloperDir } from './apple-toolchain-fixtures.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
-
-// The toolchain probes reach the exec layer through `execFileSync`, which the package's host
-// seam does not wrap; the module mock keeps a test from shelling out to a real Xcode.
-const { mockExecFileSync } = vi.hoisted(() => ({
-  mockExecFileSync: vi.fn(),
-}));
-
-vi.mock('node:child_process', async () => {
-  const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
-  return { ...actual, execFileSync: mockExecFileSync };
-});
-
-const mockRunCmdSync = vi.fn();
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { findXctestrun, scoreXctestrunCandidate } from '../runner-artifact.ts';
@@ -62,28 +50,6 @@ const iosDevice: DeviceInfo = {
 };
 
 const runnerPortEnv = { AGENT_DEVICE_RUNNER_PORT: '12345' };
-
-function appleToolFingerprintOutput(command: string, args: readonly string[]): string {
-  if (command === 'xcodebuild' && args[0] === '-version') {
-    return 'Xcode 26.2\nBuild version 17C52\n';
-  }
-  if (command === 'xcrun' && args.includes('--show-sdk-version')) return '26.2\n';
-  if (command === 'xcrun' && args.includes('--show-sdk-build-version')) return '23C53\n';
-  throw new Error(`Unexpected Apple fingerprint command: ${command} ${args.join(' ')}`);
-}
-
-mockExecFileSync.mockImplementation((command: string, args: readonly string[]) =>
-  appleToolFingerprintOutput(command, args),
-);
-mockRunCmdSync.mockImplementation((command: string, args: string[]) => ({
-  exitCode: 0,
-  stdout: appleToolFingerprintOutput(command, args),
-  stderr: '',
-}));
-
-beforeEach(() => {
-  appleRunnerTestHost.update({ runCmdSync: mockRunCmdSync });
-});
 
 /**
  * `prepareXctestrunWithEnv` reads/writes the xctestrun plist via
@@ -230,7 +196,6 @@ test('the build script and the metadata writer publish one iOS simulator identit
       project.derivedPath,
       project.destination,
       project.buildLogPath,
-      project.bin,
     ]);
     assert.equal(written.status, 0, written.stderr);
 
@@ -314,7 +279,6 @@ test('the metadata writer refuses a build log whose recipe it did not record', a
       project.derivedPath,
       project.destination,
       project.buildLogPath,
-      project.bin,
     ]);
     assert.notEqual(written.status, 0);
     assert.match(written.stderr, /did not use the settings its cache identity records/);
@@ -327,7 +291,6 @@ test('the metadata writer refuses a build log whose recipe it did not record', a
 
 type RunnerBuildFixture = {
   root: string;
-  bin: string;
   derivedPath: string;
   buildLogPath: string;
   destination: string;
@@ -397,7 +360,6 @@ function seedRunnerBuildFixture(root: string): RunnerBuildFixture {
   fs.mkdirSync(path.dirname(buildLogPath), { recursive: true });
   return {
     root: projectRoot,
-    bin: fakeAppleToolchainBin(root),
     derivedPath,
     buildLogPath,
     destination: 'generic/platform=iOS Simulator',
@@ -407,44 +369,11 @@ function seedRunnerBuildFixture(root: string): RunnerBuildFixture {
   };
 }
 
-/**
- * The three tools the scripts exec: `xcodebuild -version` and two `xcrun --sdk` probes, answering
- * exactly what this suite's fingerprint stub reports so the child and parent identities agree.
- */
-function fakeAppleToolchainBin(root: string): string {
-  const bin = path.join(root, 'bin');
-  fs.mkdirSync(bin, { recursive: true });
-  writeFakeTool(
-    bin,
-    'xcodebuild',
-    String.raw`{ printf 'Xcode 26.2
-'; printf 'Build version 17C52
-'; }`,
-  );
-  writeFakeTool(
-    bin,
-    'xcrun',
-    String.raw`{ for arg in "$@"; do
-  if [ "$arg" = "--show-sdk-build-version" ]; then printf "23C53
-"; exit 0; fi
-done
-printf "26.2
-"; }`,
-  );
-  return bin;
-}
-
-function writeFakeTool(bin: string, name: string, body: string): void {
-  fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`);
-  fs.chmodSync(path.join(bin, name), 0o755);
-}
-
 /** The recipe the emitter hands `xcodebuild`, read the way the build script reads it. */
 function runBuildSettings(project: RunnerBuildFixture): string[] {
   const emitted = runScript(project.root, 'xcuitest-build-settings.ts', [
     'ios',
     project.destination,
-    project.bin,
   ]);
   assert.equal(emitted.status, 0, emitted.stderr);
   return emitted.stdout.split('\n').filter((line: string) => line !== '');
@@ -460,15 +389,14 @@ function runScript(
   stdout: string;
   stderr: string;
 } {
-  const fakeBin = args.at(-1)!;
-  const rest = args.slice(0, -1);
   const result = spawnSync(
     process.execPath,
-    ['--experimental-strip-types', path.join(repoRoot, 'scripts', script), ...rest],
+    ['--experimental-strip-types', path.join(repoRoot, 'scripts', script), ...args],
     {
       cwd,
       encoding: 'utf8',
-      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}` },
+      // The script keys its cache on the stubbed Xcode, as the parent suite does.
+      env: { ...process.env, DEVELOPER_DIR: stubbedAppleDeveloperDir() },
     },
   );
   return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };

@@ -1,10 +1,7 @@
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
-import type {
-  HostCommandRequest,
-  OwnedProcessRecordWriter,
-} from '@agent-device/contracts/platform-runtime-host';
+import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
 import type {
@@ -16,8 +13,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
-import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
+import { createHostCommandRunner } from './platform-runtime-host-command-runner.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
 import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
@@ -68,20 +64,7 @@ export function createPlatformRuntimeHost(options: {
   const processes = createManagedAppLogProcesses(options.sessionsDir, env);
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
   const appleTools = createAppleToolHost();
-  const commands = Object.freeze({
-    which: async (executable: string) =>
-      (await whichCmd(executable, env)) ? executable : undefined,
-    run: async (request: HostCommandRequest, signal?: AbortSignal) => {
-      const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
-        allowFailure: request.allowFailure,
-        cwd: request.cwd,
-        env: request.env ? { ...env, ...request.env } : undefined,
-        signal,
-        timeoutMs: request.timeoutMs,
-      });
-      return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
-    },
-  });
+  const commands = createHostCommandRunner(host);
   const network = createNetworkRuntimeHost({
     resolveSessionArtifacts: options.resolveSessionArtifacts,
     processes,

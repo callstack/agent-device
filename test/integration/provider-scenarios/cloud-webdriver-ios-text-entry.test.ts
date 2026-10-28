@@ -237,6 +237,34 @@ test('cloud iOS fill sends no keys when a keyboard-up tap misses the second fiel
   });
 }, 15_000);
 
+test('cloud iOS fill does not read the previous field geometry before tapping its target', async () => {
+  await withProviderScenarioResource(createCloudIosWorld, async ({ daemon, server }) => {
+    const lease = await openCloudIosSession(daemon);
+    server.focusField('password', 'unchanged');
+    server.rectFailureField = 'password';
+
+    assertRpcOk(
+      await daemon.callCommand('fill', ['label=Email', 'replacement'], leaseFlags(lease.leaseId), {
+        meta: leaseMeta(lease.leaseId),
+      }),
+    );
+
+    assert.equal(server.fieldValues.email, 'replacement');
+    assert.equal(server.fieldValues.password, 'unchanged');
+    assert.equal(
+      server.calls.some((call) => call.path === '/wd/hub/session/wd-1/element/password/rect'),
+      false,
+    );
+    const tap = server.calls.findIndex(
+      (call) => call.method === 'POST' && call.path === '/wd/hub/session/wd-1/actions',
+    );
+    const rect = server.calls.findIndex(
+      (call) => call.path === '/wd/hub/session/wd-1/element/email/rect',
+    );
+    assert.ok(tap >= 0 && rect > tap, 'the target geometry must still be checked after the tap');
+  });
+}, 15_000);
+
 /** The tap/keys/keyboard requests in the order the driver received them. */
 function textEntryTranscript(server: FakeIosWebDriverServer): string[] {
   const labels: Record<string, string> = {
@@ -319,6 +347,7 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
   fieldValues: Record<FieldName, string> = { email: '', password: '' };
   focused: FieldName | undefined;
   sourceOverride: string | undefined;
+  rectFailureField: FieldName | undefined;
 
   private pollsRemaining = Number.POSITIVE_INFINITY;
   private pendingFocus: FieldName | undefined;
@@ -393,6 +422,12 @@ class FakeIosWebDriverServer extends CloudWebDriverTestServer {
   }
 
   private elementRect(elementId: string): CloudWebDriverTestResponse {
+    if (elementId === this.rectFailureField) {
+      return cloudWebDriverTestJson(
+        { value: { error: 'unknown error', message: 'previous field geometry unavailable' } },
+        503,
+      );
+    }
     const rect = FIELDS[elementId as FieldName];
     if (!rect) {
       return cloudWebDriverTestJson(

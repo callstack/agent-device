@@ -56,12 +56,8 @@ extension RunnerTests {
     ) {
       self.safeSnapshotViewport(app: app, readingOrientation: true)
     }
-    // Read after the tree, so the band is never older than the tree it will be compared against: a
-    // keyboard that appeared while the tree was being captured would otherwise publish `absent`
-    // beside key nodes that the tap guard would then have to trust less than the absence (#2660).
-    // It keeps its own hop and slice rather than joining the geometry pair above, because a keyboard
-    // this capture cannot measure must cost the fact and not the tree tier behind it.
-    let keyboardBand = captureKeyboardBandFact(app: app, deadline: captureDeadline)
+    // Use the same tree for keyboard coverage so a later dismissal cannot invalidate the band.
+    let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, viewport: viewport, deadline: captureDeadline)
 
     return SnapshotTraversalContext(
       queryRoot: app,
@@ -511,6 +507,11 @@ extension RunnerTests {
 
   func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
     return focusBool(snapshot as! NSObject)
+  }
+
+  /// `hasKeyboardFocus` alone: whether the snapshot's element is the one a keyboard types into.
+  func snapshotHasKeyboardFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
+    return kvcBool(snapshot as! NSObject, forKey: "hasKeyboardFocus")
   }
 
   /// Either focus is focus. `hasFocus` is the focus engine's answer (tvOS, keyboard navigation);

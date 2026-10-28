@@ -39,6 +39,22 @@ describe('canonical device identity', () => {
     });
   });
 
+  test('omits absent optional ownership fields from both canonical projections', () => {
+    const minimal: DeviceInfo = {
+      id: 'android-1',
+      platform: 'android',
+      name: 'Android',
+      kind: 'device',
+    };
+
+    expect(deviceIdentity(minimal)).toStrictEqual({
+      id: 'android-1',
+      family: 'android',
+      kind: 'device',
+    });
+    expect(deviceShape(minimal)).toStrictEqual({ family: 'android', kind: 'device' });
+  });
+
   test.each([
     ['family', { ...DEVICE, platform: 'android' as const }],
     ['apple OS', { ...DEVICE, appleOs: 'ipados' as const }],

@@ -1,73 +1,134 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Measurement, RunResult, Stat } from './types.ts';
+import type { Measurement, PerfSummary, Stat } from './types.ts';
 
-function ms(n: number | undefined): string {
+export const SUMMARY_FILE = 'summary.json';
+export const REPORT_FILE = 'report.md';
+
+function ms(n: number | null | undefined): string {
   return typeof n === 'number' && Number.isFinite(n) ? n.toFixed(0) : '–';
 }
 
+function pct(n: number | undefined): string {
+  return typeof n === 'number' && Number.isFinite(n) ? `${(n * 100).toFixed(0)}%` : '–';
+}
+
+function keys(counts: Record<string, number> | undefined): string {
+  const entries = Object.entries(counts ?? {});
+  return entries.length === 0 ? '–' : entries.map(([key, n]) => `${key}×${n}`).join(', ');
+}
+
 function wallCells(s: Stat | null): string {
-  if (!s) return '– | – | – | –';
-  return `${ms(s.min)} | ${ms(s.median)} | ${ms(s.p95)} | ${ms(s.max)}`;
+  if (!s) return '– | – | – | – | – | –';
+  return `${ms(s.mean)} ± ${ms(s.stddev)} | ${ms(s.median)} | ${ms(s.p95)} | ${ms(s.min)} | ${ms(s.max)} | ${pct(s.cv)}`;
 }
 
-function stampName(platform: string, startedAt: string): string {
-  return `perf-${platform}-${startedAt.replaceAll(/[:.]/g, '-')}`;
+function cell(text: string): string {
+  return text.replaceAll('|', String.raw`\|`);
 }
 
-function measurementRow(m: Measurement): string {
-  const daemon = m.daemonDuration ? ms(m.daemonDuration.median) : '–';
-  const elements = m.elementCount ? ms(m.elementCount.median) : '–';
-  const n = m.wallClock?.n ?? 0;
-  return `| ${m.label} | ${m.command} | ${m.execMode} | ${n} | ${wallCells(m.wallClock)} | ${daemon} | ${elements} | ${m.notes.join('; ')} |`;
+function timingRow(m: Measurement): string {
+  return [
+    m.id.slice(m.scenario.length + 1),
+    `\`${cell(m.label)}\`${m.execMode === 'sdk' ? ' (SDK, in process; daemon = log span)' : ''}`,
+    String(m.samples.length),
+    wallCells(m.wallClock),
+    ms(m.daemon?.median),
+    String(m.failures),
+  ].join(' | ');
 }
 
-function toMarkdown(run: RunResult): string {
-  const lines: string[] = [];
-  lines.push(`# agent-device command perf — ${run.platform}`);
-  lines.push('');
-  lines.push(`- **Device**: ${run.device.name} (${run.device.udid ?? run.device.serial ?? '?'})`);
-  lines.push(`- **agent-device**: ${run.agentDeviceVersion}`);
-  lines.push(`- **Rounds**: ${run.config.rounds} (warmup ${run.config.warmup} dropped)`);
-  lines.push(`- **Started**: ${run.startedAt}`);
-  lines.push(`- **Finished**: ${run.finishedAt}`);
-  lines.push('');
-  lines.push('All times in milliseconds. `wall-clock` includes process spawn + socket overhead;');
-  lines.push(
-    '`daemon` is the batch step round-trip (spawn overhead ≈ wall-median − daemon-median).',
+function profileRow(m: Measurement): string {
+  const p = m.profile;
+  return [
+    m.id.slice(m.scenario.length + 1),
+    ms(p?.runnerMs),
+    p?.spawnCount == null ? '–' : `${p.spawnCount} / ${ms(p.spawnMs)}`,
+    ms(p?.snapshotSourceMs),
+    ms(p?.settleWaitMs),
+    ms(p?.stabilizationMs),
+    String(p?.retries ?? '–'),
+    cell(keys(p?.producers)),
+    cell(p?.topPhases.map((t) => `${t.phase} ${ms(t.medianMs)}`).join(', ') || '–'),
+  ].join(' | ');
+}
+
+/** Renders the human report for one run. */
+export function renderReport(summary: PerfSummary): string {
+  const meta = summary.metadata;
+  const lines: string[] = [
+    `# agent-device perf — ${summary.platform}`,
+    '',
+    `- **Commit**: ${meta.commit.slice(0, 12)}${meta.dirty ? ' (dirty)' : ''}${meta.ref ? ` (${meta.ref})` : ''}${meta.runId ? ` · run ${meta.runId}` : ''}`,
+    `- **Device**: ${meta.device.name}${meta.device.runtime ? ` · ${meta.device.runtime}` : ''}`,
+    `- **Toolchain**: ${meta.xcode ?? 'no Xcode'} · Node ${meta.node} · agent-device ${meta.agentDeviceVersion}`,
+    `- **Host**: ${meta.host.os} · ${meta.host.cpu} · ${meta.host.cores} cores · ${meta.host.memoryGb} GB`,
+    `- **Rounds**: ${summary.config.rounds} measured after ${summary.config.warmup} warmup · ${summary.startedAt} → ${summary.finishedAt}`,
+    '',
+    'Times are milliseconds. See scripts/perf/README.md for each metric. The second table of each',
+    'scenario holds per-request medians from the daemon `--debug` request logs.',
+    '',
+  ];
+  const scenarios = [...new Set(summary.measurements.map((m) => m.scenario))];
+  for (const scenario of scenarios) {
+    const measurements = summary.measurements.filter((m) => m.scenario === scenario);
+    lines.push(
+      `## ${scenario}`,
+      '',
+      '| step | command | n | wall mean ± sd | median | p95 | min | max | cv | daemon | fail |',
+      '|---|---|---|---|---|---|---|---|---|---|---|',
+      ...measurements.map((m) => `| ${timingRow(m)} |`),
+      '',
+      '| step | runner | spawns | snapshot source | settle wait | stabilization | retries | producer | top phases |',
+      '|---|---|---|---|---|---|---|---|---|',
+      ...measurements.map((m) => `| ${profileRow(m)} |`),
+      '',
+    );
+  }
+  const degraded = summary.measurements.filter(
+    (m) =>
+      Object.keys(m.profile?.fallbacks ?? {}).length > 0 ||
+      Object.keys(m.profile?.backends ?? {}).length > 0,
   );
-  lines.push('`elements` = node count in the snapshot payload (tree-size proxy).');
-  lines.push('An untimed warmup interaction runs after each open/relaunch, so measured commands');
-  lines.push('do not pay the one-time iOS-runner startup or post-relaunch first-AX-query cost.');
-  lines.push('');
-  lines.push(
-    '| command | cli | mode | n | wall min | wall median | wall p95 | wall max | daemon median | elements | notes |',
-  );
-  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
-  for (const m of run.measurements) lines.push(measurementRow(m));
-  lines.push('');
-
-  const failed = run.measurements.filter((m) => m.failures > 0);
-  if (failed.length > 0) {
-    lines.push('## Failures');
-    lines.push('');
-    for (const m of failed) {
-      const sample = m.samples.find((s) => !s.ok);
+  if (degraded.length > 0) {
+    lines.push('## Backends and fallbacks', '');
+    for (const m of degraded) {
       lines.push(
-        `- **${m.label}** — ${m.notes.join('; ')}${sample?.errorMessage ? ` — ${sample.errorMessage}` : ''}`,
+        `- **${m.id}** — backends ${keys(m.profile?.backends)}; fallbacks ${keys(m.profile?.fallbacks)}`,
       );
     }
     lines.push('');
   }
+  const failed = summary.measurements.filter((m) => m.failures > 0);
+  if (failed.length > 0) {
+    lines.push('## Failures', '');
+    for (const m of failed) {
+      const sample = m.samples.find((s) => !s.ok);
+      lines.push(
+        `- **${m.id}** — ${m.notes.join('; ')}${sample?.errorMessage ? ` — ${sample.errorMessage}` : ''}`,
+      );
+    }
+    lines.push('');
+  }
+  lines.push(
+    '## Coverage',
+    '',
+    `Measured commands (${summary.coverage.measured.length}): ${summary.coverage.measured.join(', ')}.`,
+    '',
+    ...summary.coverage.excluded.map((e) => `- \`${e.command}\` not measured: ${e.reason}`),
+    '',
+  );
   return lines.join('\n');
 }
 
-export function writeReports(run: RunResult, outDir: string): { jsonPath: string; mdPath: string } {
+export function writeRunOutput(
+  summary: PerfSummary,
+  outDir: string,
+): { jsonPath: string; mdPath: string } {
   fs.mkdirSync(outDir, { recursive: true });
-  const base = stampName(run.platform, run.startedAt);
-  const jsonPath = path.join(outDir, `${base}.json`);
-  const mdPath = path.join(outDir, `${base}.md`);
-  fs.writeFileSync(jsonPath, JSON.stringify(run, null, 2));
-  fs.writeFileSync(mdPath, toMarkdown(run));
+  const jsonPath = path.join(outDir, SUMMARY_FILE);
+  const mdPath = path.join(outDir, REPORT_FILE);
+  fs.writeFileSync(jsonPath, `${JSON.stringify(summary, null, 2)}\n`);
+  fs.writeFileSync(mdPath, renderReport(summary));
   return { jsonPath, mdPath };
 }

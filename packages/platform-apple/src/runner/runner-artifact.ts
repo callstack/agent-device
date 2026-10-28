@@ -479,9 +479,8 @@ type RunnerXctestrunBuildOptions = {
    */
   startAdmission?: RunnerStartAdmission;
   /**
-   * The build phase's one budget, opened by whoever owns the build: the cache decision's
-   * blocking toolchain probes and `xcodebuild` spend the same clock, and the owning
-   * request cancels both (#2422).
+   * The build phase's one budget, opened by whoever owns the build: `xcodebuild` spends its
+   * clock, and the owning request cancels the cache decision and the build (#2422).
    */
   budget?: RunnerPhaseBudget;
 };

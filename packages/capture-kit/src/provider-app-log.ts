@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   APP_LOG_RESOURCE_KIND,
@@ -174,16 +174,7 @@ export function createProviderAppLogEnvelope<Descriptor extends ProviderAppLogTa
   return createDurableResourceEnvelope({
     resourceKind: APP_LOG_RESOURCE_KIND,
     sessionId: input.sessionId,
-    device: {
-      id: device.id,
-      family: device.platform,
-      ...(device.appleOs === undefined ? {} : { appleOs: device.appleOs }),
-      kind: device.kind,
-      ...(device.target === undefined ? {} : { target: device.target }),
-      ...(device.iosPhysicalDeviceBackend === undefined
-        ? {}
-        : { iosPhysicalDeviceBackend: device.iosPhysicalDeviceBackend }),
-    },
+    device: deviceIdentity(device),
     owner: input.owner,
     fence: input.fence,
     lifecycle: 'open',

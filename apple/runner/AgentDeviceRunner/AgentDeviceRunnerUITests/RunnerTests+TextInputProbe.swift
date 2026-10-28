@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 final class TextInputProbeIssues {
   let thread = Thread.current
@@ -17,18 +18,18 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> ResolvedTextEntryInput? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y)).first
+  func textInputAt(app: XCUIApplication, x: Double, y: Double, contentTranslation: TextEntryContentTranslation) -> ResolvedTextEntryInput? {
+    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
   }
 
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [ResolvedTextEntryInput] {
+  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> [ResolvedTextEntryInput] {
     safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, shouldStop: { false })
+      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: { false })
     }
   }
 
   func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y)) {
+    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: liveContentTranslation(app: app)) {
     case .matches(let inputs):
       return inputs.first?.element
     case .absent:
@@ -53,11 +54,14 @@ extension RunnerTests {
   func coordinateTapTextInputIdentityAt(
     app: XCUIApplication,
     x: Double,
-    y: Double
+    y: Double,
+    contentTranslation: TextEntryContentTranslation
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
-      guard let input = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first else {
+      guard let input = queryTextInputs(
+        app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation, shouldStop: shouldStop
+      ).first else {
         return .absent
       }
       guard let identity = input.identity else {
@@ -75,9 +79,12 @@ extension RunnerTests {
 
   /// `input`'s handle, read again, when it still resolves to the input it named when found, read
   /// inside the same issue containment. A read that cannot answer counts as no.
-  func textInputIfStillResolves(_ input: TextInputAtPoint) -> ResolvedTextEntryInput? {
+  func textInputIfStillResolves(
+    _ input: TextInputAtPoint,
+    contentTranslation: TextEntryContentTranslation
+  ) -> ResolvedTextEntryInput? {
     let probed = containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?) { _ in
-      ResolvedTextEntryInput(reading: input.element).flatMap { $0.identity == input.identity ? $0 : nil }
+      ResolvedTextEntryInput(reading: input.element, contentTranslation: contentTranslation).flatMap { $0.identity == input.identity ? $0 : nil }
     }
     guard case .success(let read) = probed else { return nil }
     return read
@@ -93,9 +100,9 @@ extension RunnerTests {
     return read
   }
 
-  func probeTextInputs(app: XCUIApplication, point: CGPoint) -> TextInputProbeOutcome {
+  func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> TextInputProbeOutcome {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
-      queryTextInputs(app: app, point: point, shouldStop: shouldStop)
+      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
     }) {
     case .success(let inputs):
       return inputs.isEmpty ? .absent : .matches(inputs)
@@ -150,6 +157,7 @@ extension RunnerTests {
   private func queryTextInputs(
     app: XCUIApplication,
     point: CGPoint,
+    contentTranslation: TextEntryContentTranslation,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
@@ -166,14 +174,27 @@ extension RunnerTests {
       // cannot be snapshotted is read live, so its failure still reaches the caller's issue handling.
       for element in candidates {
         if shouldStop() { break }
-        guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
-        let attributes = candidate.attributes
-        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
+        guard let candidate = ResolvedTextEntryInput(readingListed: element, contentTranslation: contentTranslation) else { continue }
+        // Matching dispatches nothing, so a read with no screen box compares its live frame.
+        let frame = candidate.frameOnScreen ?? candidate.element.frame
+        if isCoordinateTextInputCandidate(enabled: candidate.attributes.isEnabled, frame: frame, point: point) {
           inputs.append(candidate)
         }
       }
     }
     guard !shouldStop() else { return [] }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+  }
+
+  /// The command's one content-vector read: the resolved window's screen origin when it is placed off
+  /// the screen origin (#3899). A read that cannot answer is `.unknown`, never `.none`.
+  func liveContentTranslation(app: XCUIApplication) -> TextEntryContentTranslation {
+    let read = containingTextInputProbeIssues(fallback: TextEntryContentTranslation.unknown) { _ in
+      guard let window = resolveRunnerWindowElement(app: app)?.frame else { return .unknown }
+      return SnapshotContentTranslation.offset(reportedBox: CGRect(origin: .zero, size: window.size), viewportBox: window)
+        .map { .known($0) } ?? TextEntryContentTranslation.none
+    }
+    guard case .success(let translation) = read else { return .unknown }
+    return translation
   }
 }

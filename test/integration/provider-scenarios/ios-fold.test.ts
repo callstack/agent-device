@@ -39,6 +39,11 @@ afterEach(() => {
   fs.rmSync(isolatedHome, { recursive: true, force: true });
 });
 
+/** The fold helper's `hinge` mode output for one valid guest sample. */
+function guestHingeReading(angleDegrees: number): string {
+  return `${JSON.stringify({ version: 1, angleDegrees, angleValid: true })}\n`;
+}
+
 /** Writes the `devicectl … displays --json-output <path>` result both fold fakes below answer. */
 function writeDisplayInventoryFixture(jsonOutputPath: string): void {
   const displays = [0, 1].map((displayId) => ({
@@ -93,13 +98,14 @@ test('timed fold keyframes reach simulator HID through the public client and dae
       if (args[0] === 'launch') return ok;
       assert.equal(args[0], 'spawn');
       assert.equal(args[1], PROVIDER_SCENARIO_IOS_SIMULATOR.id);
-      assert.deepEqual(JSON.parse(args[3]!), trajectory);
+      if (args[3] === 'hinge') return { ...ok, stdout: guestHingeReading(angle) };
+      assert.equal(args[3], 'set');
+      assert.deepEqual(JSON.parse(args[4]!), trajectory);
       assert.equal(options?.timeoutMs, 15000);
       angle = 100;
       return ok;
     },
     devicectl: async (args) => {
-      if (args.includes('hinge-angle')) return { ...ok, stdout: `Angle: ${angle}°`, exitCode: 1 };
       assert.ok(args.includes('displays'));
       writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
       return ok;
@@ -147,8 +153,8 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     assert.equal(replayed.hingeAngleDegrees, 100);
     // The second fold call reuses the cached fold helper binary instead of rebuilding (#2796).
     assert.equal(builds, 1);
-    assert.equal(tool.calls.filter((call) => call.includes('spawn')).length, 2);
-    assert.equal(tool.calls.filter((call) => call.includes('hinge-angle')).length, 4);
+    assert.equal(tool.calls.filter((call) => call.includes('set')).length, 2);
+    assert.equal(tool.calls.filter((call) => call.includes('hinge')).length, 4);
   } finally {
     await daemon.close();
   }
@@ -181,7 +187,7 @@ function createFoldLedgerAppleToolProvider(params: {
   const ledger: FoldLedgerCall[] = [];
   let hingeReads = 0;
   const ok = { stdout: '', stderr: '', exitCode: 0 };
-  // Every real call on the fold route (packages/platform-apple/src/foldable/simulator-hid.ts,
+  // Every real call on the fold route (packages/platform-apple/src/foldable/fold-helper.ts,
   // core/tool-provider.ts, core/simctl.ts) carries a bounded timeoutMs. A call reaching this fake
   // with none is not a worst case the envelope assertion below can see, so it must fail the test
   // rather than cost 0 virtual ms.
@@ -221,15 +227,15 @@ function createFoldLedgerAppleToolProvider(params: {
       }
       if (args[0] === 'launch') return ok;
       await record('simctl', args, options);
+      if (args[0] === 'spawn' && args[3] === 'hinge') {
+        const angle = params.hingeAngleAt(hingeReads);
+        hingeReads += 1;
+        return { ...ok, stdout: guestHingeReading(angle) };
+      }
       return ok;
     },
     devicectl: async (args, options) => {
       await record('devicectl', args, options);
-      if (args.includes('hinge-angle')) {
-        const angle = params.hingeAngleAt(hingeReads);
-        hingeReads += 1;
-        return { ...ok, stdout: `Angle: ${angle}°`, exitCode: 1 };
-      }
       assert.ok(args.includes('displays'), `unexpected devicectl call: ${args.join(' ')}`);
       writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
       return ok;
@@ -337,9 +343,10 @@ async function runFoldLedgerScenario(params: {
 function assertFoldLedgerPhaseCoverage(ledger: readonly FoldLedgerCall[]): void {
   const isBuild = (call: FoldLedgerCall) =>
     call.tool === 'runCommand' && call.args.includes('clang');
-  const isSpawn = (call: FoldLedgerCall) => call.tool === 'simctl' && call.args.includes('spawn');
+  const isSpawn = (call: FoldLedgerCall) =>
+    call.tool === 'simctl' && call.args[0] === 'spawn' && call.args[3] === 'set';
   const isHingeRead = (call: FoldLedgerCall) =>
-    call.tool === 'devicectl' && call.args.includes('hinge-angle');
+    call.tool === 'simctl' && call.args[0] === 'spawn' && call.args[3] === 'hinge';
   const isDisplayInventory = (call: FoldLedgerCall) =>
     call.tool === 'devicectl' && call.args.includes('displays');
 

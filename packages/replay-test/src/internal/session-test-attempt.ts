@@ -267,6 +267,7 @@ function shouldStopReplayTestAttempts(
     outcome.status === 'passed' ||
     params.isCanceled() ||
     outcome.infrastructure ||
+    (outcome.status === 'failed' && outcome.stopRetries === true) ||
     attemptIndex >= params.retries
   );
 }

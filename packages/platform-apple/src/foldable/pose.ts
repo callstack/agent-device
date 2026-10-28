@@ -9,29 +9,32 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import { IOS_FOLD_POSE_SETTLE_ATTEMPTS, IOS_FOLD_POSE_STABLE_DEGREES } from '../core/config.ts';
+import {
+  IOS_FOLD_POSE_READ_INTERVAL_MS,
+  IOS_FOLD_POSE_SETTLE_ATTEMPTS,
+  IOS_FOLD_POSE_STABLE_DEGREES,
+} from '../core/config.ts';
 import {
   queryAppleDisplayInventory,
   type AppleDeviceDisplay,
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
-import { HINGE_ANGLE_NO_SAMPLE_REASON, readAppleHingeAngle } from '../core/hinge-angle.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
-import { sendSimulatorFoldPose } from './simulator-hid.ts';
+import { HINGE_ANGLE_NO_SAMPLE_REASON, createFoldHelper, type FoldHelper } from './fold-helper.ts';
 
 const FOLDABLE_REQUIRED_HINT =
   'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
 
 const INVENTORY_REQUIRED_HINT =
-  "fold needs 'devicectl device info displays' to tell a foldable from a single-panel simulator; update Xcode to a version that ships the display-information feature.";
+  "fold needs the simulator's panel table to tell a foldable from a single-panel simulator: 'devicectl device info displays' in the default device set, or the fold helper's guest panel read in a scoped set. The apple_display_inventory_unresolved diagnostic names why the read failed.";
 
 const DISPATCHED_UNVERIFIED_HINT =
   'The pose request was sent and the device may have followed it, but the first hinge-angle read returned no sample, so fold cannot confirm it. Take a screenshot or snapshot to see which panel is lit; hingeReadFailure names why the read failed.';
 
 const POSE_UNSETTLED_HINT =
-  'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold, then read the angle directly with xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5 to see whether the simulator holds the pose.';
+  'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold to see whether the simulator holds the pose.';
 
-/** Sets a simulator hinge through guest HID and verifies the pose through CoreDevice. */
+/** Sets a simulator hinge through guest HID and verifies the pose with separate guest hinge reads. */
 export async function setAppleFoldPose(
   device: DeviceInfo,
   input: SetFoldPoseInput,
@@ -42,18 +45,24 @@ export async function setAppleFoldPose(
   const intent = input;
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
-  const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
+  // One helper serves the scoped panel reads, the dispatch, and every hinge read. It builds on its
+  // first use, so a default-set device that cannot fold is refused before any build.
+  const helper = createFoldHelper(device);
+  const inventory = await queryAppleDisplayInventory(device, {
+    signal: options.signal,
+    foldHelper: helper,
+  });
   requireFoldableInventory(device, inventory);
 
-  await sendSimulatorFoldPose(device, intent.keyframes ?? pose, options.signal);
+  await helper.setPose(intent.keyframes ?? pose, options.signal);
   emitDiagnostic({
     level: 'info',
     phase: 'apple_fold_pose_dispatched',
     data: { deviceId: device.id, pose },
   });
 
-  const hingeAngleDegrees = await awaitHingePose(device, pose, options.signal, targetAngle);
-  const litPanel = await readLitPanel(device, options.signal);
+  const hingeAngleDegrees = await awaitHingePose(device, helper, pose, options.signal, targetAngle);
+  const litPanel = await readLitPanel(device, helper, options.signal);
   return {
     pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
     hingeAngleDegrees,
@@ -73,12 +82,13 @@ function isHingeNoSample(error: unknown): boolean {
  */
 async function dispatchedUnverifiedPoseError(
   device: DeviceInfo,
+  helper: FoldHelper,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle: number | undefined,
   cause: unknown,
 ): Promise<AppError> {
-  const litPanel = await readLitPanel(device, signal);
+  const litPanel = await readLitPanel(device, helper, signal);
   return new AppError(
     'COMMAND_FAILED',
     `${device.name} received the ${pose} pose request, but the first hinge-angle read returned no sample to verify it`,
@@ -97,14 +107,10 @@ async function dispatchedUnverifiedPoseError(
 
 function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInventory): void {
   if (inventory.unresolved) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'CoreDevice reported no display table for this simulator',
-      {
-        deviceId: device.id,
-        hint: INVENTORY_REQUIRED_HINT,
-      },
-    );
+    throw new AppError('COMMAND_FAILED', 'The simulator reported no panel table', {
+      deviceId: device.id,
+      hint: INVENTORY_REQUIRED_HINT,
+    });
   }
   if (!inventory.multiScreen) {
     throw new AppError(
@@ -116,9 +122,10 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
 }
 
 /**
- * Reads the hinge until it reports the requested pose. Each read costs one bounded devicectl
- * stream, so the attempt count is the whole settle budget. HID delivery alone cannot prove
- * the runtime accepted the requested hinge state.
+ * Reads the hinge until it reports the requested pose. Each read is a fresh guest CoreMotion
+ * subscription; every read after the first reports its latest sample after a fixed window, so two
+ * reads are spaced apart and the attempt count bounds the settle budget. HID delivery alone cannot
+ * prove the runtime accepted the requested hinge state.
  *
  * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. A
  * `half-open` angle proves only the category, because a hinge travelling between the stops passes
@@ -127,6 +134,7 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
  */
 async function awaitHingePose(
   device: DeviceInfo,
+  helper: FoldHelper,
   pose: FoldPose,
   signal: AbortSignal | undefined,
   targetAngle?: number,
@@ -137,10 +145,13 @@ async function awaitHingePose(
     signal?.throwIfAborted();
     previous = observed;
     try {
-      observed = await readAppleHingeAngle(device, { signal });
+      observed = await helper.readHingeAngle({
+        signal,
+        windowMs: attempt > 1 ? IOS_FOLD_POSE_READ_INTERVAL_MS : 0,
+      });
     } catch (error) {
       if (observed !== undefined || !isHingeNoSample(error)) throw error;
-      throw await dispatchedUnverifiedPoseError(device, pose, signal, targetAngle, error);
+      throw await dispatchedUnverifiedPoseError(device, helper, pose, signal, targetAngle, error);
     }
     if (isVerifiedHingePose(observed, previous, pose, targetAngle)) return observed;
   }
@@ -232,7 +243,7 @@ function hingePoseDetails(device: DeviceInfo, pose: FoldPose, observed: number |
 function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: number | undefined) {
   return new AppError(
     'COMMAND_FAILED',
-    `${device.name} did not reach the ${pose} pose: CoreDevice still reports a hinge angle of ${observed}°`,
+    `${device.name} did not reach the ${pose} pose: the simulator still reports a hinge angle of ${observed}°`,
     {
       ...hingePoseDetails(device, pose, observed),
       reason: 'fold-pose-unverified',
@@ -262,9 +273,10 @@ function unsettledPoseError(
 
 async function readLitPanel(
   device: DeviceInfo,
+  foldHelper: FoldHelper,
   signal: AbortSignal | undefined,
 ): Promise<AppleDeviceDisplay | undefined> {
-  const inventory = await queryAppleDisplayInventory(device, { signal });
+  const inventory = await queryAppleDisplayInventory(device, { signal, foldHelper });
   if (inventory.unresolved || inventory.ambiguous) return undefined;
   return inventory.activeDisplay;
 }

@@ -14,18 +14,15 @@ public enum RunnerInterfaceOrientation {
 }
 
 public enum CoordinateSpaceRotation {
-  // Dispatch rotates a point about the reference frame's top-left. The origin is localized away
-  // and never added back: an XCUIApplication session observes only its own scene surface, so its
-  // windows report (0,0)-anchored frames (measured on iPhone landscape both ways and on every
-  // system window in window-coordinate-space.json), and displacement between panels or panes is
-  // carried by the record's displayID, not by an origin.
+  // Dispatch turns a point's axes and never moves its origin: the digitizer's origin is the
+  // display's own, where a placed window's screen points are already measured from (#3899).
   public static func native(
     point: CGPoint,
     in frame: CGRect,
     interfaceOrientation: Int
   ) -> CGPoint {
-    let localX = Double(point.x) - Double(frame.minX)
-    let localY = Double(point.y) - Double(frame.minY)
+    let localX = Double(point.x)
+    let localY = Double(point.y)
     let width = Double(frame.width)
     let height = Double(frame.height)
     switch interfaceOrientation {
@@ -37,19 +34,6 @@ public enum CoordinateSpaceRotation {
       return CGPoint(x: width - localX, y: height - localY)
     default:
       return CGPoint(x: localX, y: localY)
-    }
-  }
-
-  public static func native(vector: CGVector, interfaceOrientation: Int) -> CGVector {
-    switch interfaceOrientation {
-    case RunnerInterfaceOrientation.landscapeRight:
-      return CGVector(dx: -vector.dy, dy: vector.dx)
-    case RunnerInterfaceOrientation.landscapeLeft:
-      return CGVector(dx: vector.dy, dy: -vector.dx)
-    case RunnerInterfaceOrientation.portraitUpsideDown:
-      return CGVector(dx: -vector.dx, dy: -vector.dy)
-    default:
-      return vector
     }
   }
 
@@ -76,7 +60,7 @@ public enum CoordinateSpaceRotation {
       localX = Double(point.x)
       localY = Double(point.y)
     }
-    return CGPoint(x: localX + Double(frame.minX), y: localY + Double(frame.minY))
+    return CGPoint(x: localX, y: localY)
   }
 
   public static func oriented(
@@ -103,9 +87,27 @@ public enum CoordinateSpaceRotation {
   }
 }
 
+/// A placed iPad window reports its subtree from its own top-left (#3899, ADR 0004). Its carrier is a
+/// `(0,0)`-anchored copy of a viewport box that starts elsewhere; the viewport origin is the offset.
+public enum SnapshotContentTranslation {
+  public static func offset(reportedBox: CGRect, viewportBox: CGRect) -> CGSize? {
+    let tolerance = SnapshotGeometrySpace.quarterTurnTolerance
+    func near(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= tolerance }
+    guard SnapshotGeometry.isPositiveFinite(reportedBox), SnapshotGeometry.isPositiveFinite(viewportBox),
+      near(reportedBox.minX, 0), near(reportedBox.minY, 0),
+      !near(viewportBox.minX, 0) || !near(viewportBox.minY, 0),
+      near(reportedBox.width, viewportBox.width), near(reportedBox.height, viewportBox.height)
+    else {
+      return nil
+    }
+    return CGSize(width: viewportBox.minX, height: viewportBox.minY)
+  }
+}
+
 public enum SnapshotGeometrySpace: Equatable {
   case appOrientation
   case deviceNative(appFrame: SnapshotViewport.Box, interfaceOrientation: Int)
+  case windowContent(offset: CGSize)
 
   public static let quarterTurnTolerance: Double = 1
 
@@ -119,10 +121,13 @@ public enum SnapshotGeometrySpace: Equatable {
         in: appFrame.rect,
         interfaceOrientation: interfaceOrientation
       )
+    case .windowContent(let offset):
+      return reportedFrame.offsetBy(dx: offset.width, dy: offset.height)
     }
   }
 
-  /// Only a `.reported` viewport carries an orientation, so only it can anchor a rotation.
+  /// Only a `.reported` viewport is anchored on the screen, so only it can anchor a rotation or a
+  /// translation.
   public static func space(
     reportedBySurfaceHost isSurfaceHost: Bool,
     reportedFrame: CGRect,
@@ -130,13 +135,16 @@ public enum SnapshotGeometrySpace: Equatable {
     viewport: SnapshotViewport
   ) -> SnapshotGeometrySpace {
     guard isSurfaceHost else { return inherited }
-    guard case .reported(let appFrame, let interfaceOrientation) = viewport,
-      namesQuarterTurn(interfaceOrientation),
-      isQuarterTurned(reportedFrame, relativeTo: appFrame.rect)
-    else {
+    guard case .reported(let appFrame, let interfaceOrientation) = viewport else {
       return .appOrientation
     }
-    return .deviceNative(appFrame: appFrame, interfaceOrientation: interfaceOrientation)
+    if namesQuarterTurn(interfaceOrientation), isQuarterTurned(reportedFrame, relativeTo: appFrame.rect) {
+      return .deviceNative(appFrame: appFrame, interfaceOrientation: interfaceOrientation)
+    }
+    // A system window under a placed one (the keyboard, a SpringBoard overlay) reports the screen's
+    // own box, so it names no offset and keeps its frames.
+    return SnapshotContentTranslation.offset(reportedBox: reportedFrame, viewportBox: appFrame.rect)
+      .map { .windowContent(offset: $0) } ?? .appOrientation
   }
 
   public static func namesQuarterTurn(_ interfaceOrientation: Int) -> Bool {
@@ -146,6 +154,25 @@ public enum SnapshotGeometrySpace: Equatable {
 
   public static func isSurfaceHost(isWindow: Bool, parentIsWindow: Bool) -> Bool {
     isWindow || parentIsWindow
+  }
+
+  public static func space(
+    reportedType: String,
+    parentType: String?,
+    reportedFrame: CGRect,
+    inheritedFrom inherited: SnapshotGeometrySpace,
+    viewport: SnapshotViewport
+  ) -> SnapshotGeometrySpace {
+    let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
+    return space(
+      reportedBySurfaceHost: isSurfaceHost(
+        isWindow: carriers.contains(reportedType),
+        parentIsWindow: parentType.map { carriers.contains($0) } ?? false
+      ),
+      reportedFrame: reportedFrame,
+      inheritedFrom: inherited,
+      viewport: viewport
+    )
   }
 
   private static func isQuarterTurned(_ frame: CGRect, relativeTo appFrame: CGRect) -> Bool {
@@ -164,17 +191,14 @@ extension SnapshotGeometrySpace {
     nodes: [RawAXNode],
     viewport: SnapshotViewport
   ) -> [RawAXNode] {
-    let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
     var spaces = [SnapshotGeometrySpace](repeating: .appOrientation, count: nodes.count)
     var result: [RawAXNode] = []
     result.reserveCapacity(nodes.count)
     for (position, node) in nodes.enumerated() {
       let parentIndex = node.parentIndex.flatMap { $0 >= 0 && $0 < position ? $0 : nil }
       let nodeSpace = space(
-        reportedBySurfaceHost: isSurfaceHost(
-          isWindow: carriers.contains(node.type),
-          parentIsWindow: parentIndex.map { carriers.contains(nodes[$0].type) } ?? false
-        ),
+        reportedType: node.type,
+        parentType: parentIndex.map { nodes[$0].type },
         reportedFrame: node.rect.cgRect,
         inheritedFrom: parentIndex.map { spaces[$0] } ?? .appOrientation,
         viewport: viewport

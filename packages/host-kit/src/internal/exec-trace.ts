@@ -9,6 +9,9 @@ import {
   updateDiagnosticsScope,
 } from './diagnostics.ts';
 
+/** The diagnostic phase of each host process lifecycle event. */
+export const EXEC_COMMAND_PHASE = 'exec_command';
+
 export type ExecSettlementReason =
   | 'success'
   | 'exit_failure'
@@ -52,7 +55,7 @@ export function createExecTraceContext(
       pid = data.pid ?? pid;
       emitDiagnostic({
         level: 'debug',
-        phase: 'exec_command',
+        phase: EXEC_COMMAND_PHASE,
         durationMs: performance.now() - started,
         data: { execId, command, event, pid, timeoutMs, ...data },
       });

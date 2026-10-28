@@ -146,6 +146,44 @@ extension RunnerTests {
     XCTAssertFalse(result.repaired)
   }
 
+  func testReplacementMismatchWaitsForCorrectTextOrDeadline() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    let unidentified = TextEntryElementIdentity(
+      identifier: nil, elementType: "TextField", frame: Self.otpFieldIdentity.frame
+    )
+    let shifted = TextEntryElementIdentity(
+      identifier: nil, elementType: "TextField", frame: unidentified.frame.offsetBy(dx: 0, dy: 60)
+    )
+    let cases: [(String, TextEntryObservation, TextEntryObservation)] = [
+      ("partial value", Self.otpObservation(""), Self.otpObservation("123")),
+      (
+        "empty moved field",
+        TextEntryObservation(value: "", identity: unidentified, isFocused: true),
+        TextEntryObservation(value: "", identity: shifted, isFocused: true)
+      ),
+    ]
+    for (name, baseline, mismatch) in cases {
+      var confirmation = ReplacementTextEntryConfirmation(requested: "123456", baseline: baseline, startedAt: startedAt)
+      XCTAssertNil(confirmation.observe(mismatch, at: startedAt.addingTimeInterval(0.1)), name)
+      XCTAssertNil(confirmation.observe(mismatch, at: startedAt.addingTimeInterval(0.31)), name)
+      let correct = TextEntryObservation(value: "123456", identity: mismatch.identity, isFocused: mismatch.isFocused)
+      XCTAssertNil(confirmation.observe(correct, at: startedAt.addingTimeInterval(0.5)), name)
+      let success = try XCTUnwrap(confirmation.observe(correct, at: startedAt.addingTimeInterval(0.71)), name)
+      XCTAssertEqual(success.verified, true, name)
+      XCTAssertNil(success.failure, name)
+      XCTAssertFalse(success.repaired, name)
+
+      var persistent = ReplacementTextEntryConfirmation(requested: "123456", baseline: baseline, startedAt: startedAt)
+      XCTAssertNil(persistent.observe(mismatch, at: startedAt.addingTimeInterval(0.1)), name)
+      XCTAssertNil(persistent.observe(mismatch, at: startedAt.addingTimeInterval(0.31)), name)
+      let failure = try XCTUnwrap(persistent.observe(mismatch, at: startedAt.addingTimeInterval(1.1)), name)
+      XCTAssertEqual(failure.verified, false, name)
+      XCTAssertEqual(failure.observedText, mismatch.value, name)
+      XCTAssertNil(failure.failure, name)
+      XCTAssertFalse(failure.repaired, name)
+    }
+  }
+
   func testReplacementSubmitDoesNotTreatMultilineContentAsASubmitKey() {
     for after in ["", "hllo", "submitted"] {
       let submitted = Self.replacementTextEntryResult(
@@ -264,6 +302,7 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
+    XCTAssertEqual(response.error?.message, "text entry read-back did not match the requested text")
     XCTAssertEqual(field.value as? String, "a")
     let counters = app.staticTexts["agent-device-text-entry-write-backs"].label.split(separator: " ")
     XCTAssertTrue(counters.contains("total-edits=11"))

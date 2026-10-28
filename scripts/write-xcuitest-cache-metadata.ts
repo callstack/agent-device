@@ -3,6 +3,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { normalizeError } from '@agent-device/kernel/errors';
 import type { RunnerXctestrunCacheMetadata } from '@agent-device/platform-apple/runner/operations';
 import {
   findRunnerXctestrun,
@@ -80,10 +82,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     setAppleRunnerHostEnvironment(host);
     await withCommandHost(
       { host, requestEnv: undefined },
-      async () => await writeXcuitestCacheMetadata(process.argv.slice(2), host.cwd),
+      async () =>
+        await withDiagnosticsScope(
+          { debug: true },
+          async () => await writeXcuitestCacheMetadata(process.argv.slice(2), host.cwd),
+        ),
     );
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(JSON.stringify(normalizeError(error)));
     process.exit(1);
   }
 }

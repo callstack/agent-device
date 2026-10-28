@@ -234,12 +234,28 @@ On heavy or animating screens, the recursive tree capture can work for many seco
 This pushes the chained plan past the runner's main-thread watchdog and fills the main queue with retries.
 The plan now carries its umbrella deadline into the query-sweep and private-AX tiers.
 When the budget is spent, later ladder rungs stop.
-A slow, timed-out, or watchdog-abandoned XCTest-backed capture penalizes the XCTest accessibility channel for that bundle for a bounded window.
+A slow XCTest acquisition, a timed-out XCTest tier, or watchdog-abandoned system-modal work penalizes the XCTest accessibility channel for that bundle for a bounded window.
 Subsequent regular plans derive the next step from backend traits (`effectiveSnapshotCapturePlan`).
 If a runnable non-XCTest backend exists, they defer to that independent tier.
 If it does not exist, as on physical iOS devices today, they run a short XCTest probe instead of the full tree slice.
 Thus, healthy screens can recover without another long capture of the hostile screen.
 The raw diagnostic plan is exempt and keeps tree-first error propagation.
+
+Issue #3844 showed that the bounded recovery probe could renew its own penalty.
+A bounded recovery probe now leaves the penalty deadline unchanged when it fails.
+Its short slice tests recovery under a known penalty, so its timeout supplies no new evidence about the channel.
+A completed tree probe clears the penalty early only when its acquisition fits the probe slice and its quality is accepted.
+Thirty seconds after the penalty is armed, and thirty seconds after each probe starts, a recovery probe is due.
+A regular plan with a due probe runs the bounded tree before the independent backend, in the same capture.
+The runner starts no XCTest main-thread work after it answers a command.
+Probe work that outlives its slice is charged to the capture that started it, so that response reports the main thread as busy.
+Physical-device plans probe on every capture already. Explicit backend pins and the raw plan keep their order.
+After the iPad amendment below, a Simulator capture meets this policy only when the bridge sends it to XCTest, for example for a windowed app or a presented system surface.
+The interval limits hostile-screen probe cost while giving healthy screens a recovery opportunity before penalty expiry.
+A normal-plan query-sweep timeout rejects the partial capture and penalizes the channel.
+Its short slice is evidence of a hostile tree, and deferral prevents repeated slow sweeps on that tree.
+A normal-plan XCTest acquisition above the existing three-second threshold also remains penalty evidence.
+The plan deadline and abandoned-main-thread-work gate remain in force on every attempt, including physical-device probes (#1105, #1156, #2621).
 
 A third shape followed on the same app class after the plan recovered reliably.
 On that app class, each of the query-sweep tier's 19 `allElementsBoundByIndex` reads fails with `kAXErrorIllegalArgument`.
@@ -610,6 +626,37 @@ The rule detects un-normalized arrival, not a standing fact about iOS.
 The producers that the earlier sections of this ADR describe do normalize.
 A band taller than it is wide is what the output of a producer that did not normalize looks like.
 
+## Amendment: a window that does not fill the screen (issue #3899)
+
+An iPad window that does not fill the screen (Windowed Apps; Stage Manager is unmeasured) reports its subtree from its own top-left.
+Measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window at screen `(224,207,386x682)`: the root reads `(0,0,386,682)` and `Add` reads `(335,14,37,36)` but draws at `(559,221)`.
+The runner's live window read, the keyboard window, and a SpringBoard overlay report screen boxes.
+Published as reported, the capture mixed two spaces: the fold clipped nodes (`regular-node-outside-cumulative-clip`), rects named no screenshot position, and taps landed at the point minus the window origin.
+
+Decision: a placed window publishes screen space in points, because its viewport, its screenshot, and the digitizer already use that space.
+`SnapshotContentTranslation.offset` is the one rule, applied in the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
+A carrier declares an offset only when its box is a `(0,0)`-anchored copy of the reported viewport box and the viewport starts elsewhere; the offset is the viewport origin.
+Any other carrier keeps its frames, so the screen-space system windows above do not move.
+A full-screen window, an iPhone, and each ADR 0025 foldable panel start at `(0,0)`, so they read no offset and publish unchanged.
+`contracts/fixtures/window-coordinate-space.json` replays the rule in Swift only, because the bridge guest refuses a windowed tree (`app-window-not-full-screen`) before the host decoder reads one.
+
+Rotation and translation stay separate.
+`CoordinateSpaceRotation` turns axes and never moves an origin: the old localization of a frame origin was dead code at every measured full-screen origin and the dispatch bug here.
+A synthesized turn swaps the sole display's side lengths, as the digitizer does, not a placed window's; a multi-screen host keeps the window box of its panel.
+
+Dispatch takes screen points.
+`XCUIElement.frame` and the app-anchored `XCUICoordinate` are screen space on a placed window; `XCUIElementSnapshot.frame` is window content space.
+The text-entry probe therefore owns one screen box, `ResolvedTextEntryInput.frameOnScreen`.
+A command reads the vector from the resolved window's box once, where it builds its target, and the readiness retap reads it again on its own branch.
+The vector is `TextEntryContentTranslation` (`known`, `none`, or `unknown` when the read failed), with no default, so a failed read never passes for full screen.
+The target and each read it produces carry that vector.
+`frameOnScreen` is nil without a snapshot (#3060) or with `unknown`.
+On nil, the focus tap dispatches the caller's own point, and the refresh point, the caret tap, and the readiness retap dispatch nothing.
+Probe matching then compares the live `element.frame`, because a comparison dispatches nothing.
+
+Open gaps: landscape under Windowed Apps (fixture arithmetic only), Stage Manager, and a window partly off screen are unmeasured.
+A window moved between the command's vector read and its dispatch drifts like any live read.
+
 ## Amendment: modal containment in the presentation cut
 
 The bridge reads one window and reports every container attached to it.
@@ -698,6 +745,15 @@ XCTest types an element with that trait as `Button`.
 The decoder does the same.
 Otherwise, a `role=button` tab selector that matches the runner tree does not match the bridge tree.
 
+A custom-drawn text input, such as a Compose Multiplatform text field, reports the automation type `Other`.
+It carries the private text-entry trait (bit 18).
+XCTest types such an element as a text input, and the runner tree reports it editable.
+The decoder types an `Other` that carries the text-entry trait as `SecureTextField` with bit 24, else `SearchField` with bit 10, else `TextView` with bit 47, else `TextField`.
+A declared automation type is kept.
+Otherwise, the bridge tree reports the input as not editable, and a `fill` client refuses it.
+Only the `TextView` word (bits 18, 33, and 47, from a Compose Multiplatform 1.12 `BasicTextField` on iOS 27) was captured live.
+The other three branches and their precedence follow the trait names and are not captured yet.
+
 The snapshot API reports the frames of a windowed app relative to its window, not to the screen.
 Windowed Apps and Stage Manager both put an app in such a window.
 A tap at a published point then misses the app.
@@ -706,11 +762,10 @@ Both frames use the native space of the screen, also in landscape.
 If the frames differ, the guest refuses the capture (`app-window-not-full-screen`) before acquisition.
 This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
 If the runtime cannot report either frame, the guest keeps the capture.
+The runner's synthesized-gesture route compares the same two frames for the same question (`RunnerFullScreenEvidenceFromForeground`).
+An iPad app that proves it fills its sole screen may use that screen as its gesture reference frame when XCTest cannot resolve its window; one that does not, keeps requiring a window.
 
-The XCTest fallback is not correct for a windowed app either.
-The runner clips window-relative element frames against the screen-relative app frame.
-That is a runner gap.
-It is not a reason to publish a bridge tree that is known to be wrong.
+The bridge still refuses and converts nothing; the XCTest fallback publishes a windowed app in screen space (#3899 amendment above).
 
 Rejected alternatives:
 

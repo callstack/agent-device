@@ -464,10 +464,9 @@ test.each([...Object.entries(leaves), ['ios physical device', appleDevice({ kind
   },
 );
 
-// A simulator scoped to a non-default set is refused by the owner's own fact, before any display
-// probe or HID effect: CoreDevice's display inventory and hinge-angle readback cannot resolve it,
-// so ADR 0025's post-dispatch verification is impossible. The default-set iOS leaf stays admitted.
-test('refuses the fold fact for a scoped simulator set and binds no pose operation', async () => {
+// A simulator in a scoped set is admitted by the owner's own fact: the HID send and the guest hinge
+// and panel reads all run through `simctl --set`, so ADR 0025's post-dispatch verification holds.
+test('admits the fold fact for a scoped simulator set and binds the pose operation', async () => {
   const scoped = appleDevice({ simulatorSetPath: '/tmp/scoped-set' });
   const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
     device: scoped,
@@ -478,12 +477,8 @@ test('refuses the fold fact for a scoped simulator set and binds no pose operati
       progress: { report: () => {} },
     },
   });
-  expect(binding.facts.operations.setFoldPose).toMatchObject({
-    available: false,
-    reason: 'unsupported-device-scope',
-    hint: expect.stringContaining('/tmp/scoped-set'),
-  });
-  expect(binding.operations.setFoldPose).toBeUndefined();
+  expect(binding.facts.operations.setFoldPose).toEqual({ available: true });
+  expect(binding.operations.setFoldPose).toEqual(expect.any(Function));
 });
 
 /**

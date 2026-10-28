@@ -5,7 +5,7 @@ description: Learn what agent-device is, where it fits in agentic mobile, TV, de
 
 # Introduction
 
-`agent-device` is a CLI that lets coding agents verify and QA apps on iOS, Android, HarmonyOS, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
+`agent-device` is a CLI that lets coding agents verify and QA apps on iOS, Android, HarmonyOS, tvOS, Android TV, Fire TV devices running Fire OS, Amazon Vega OS TV apps in the Vega Virtual Device, macOS (including Electron apps), Linux desktop targets, and a limited managed web browser. Which interactions, structured UI, evidence, performance, and replay features you get depends on what each target supports.
 
 Use it when an agent needs to inspect and operate a running app, not only reason about source code or screenshots.
 
@@ -55,7 +55,7 @@ Use [AI Agent Setup](/docs/agent-setup) for Cursor, Codex, Claude Code, Windsurf
 
 `agent-device` is for agents, but humans still install it, grant permissions, review artifacts, and decide what ships.
 
-It complements scripted test frameworks such as Appium, Maestro, Detox, XCTest, and Espresso. Keep those for stable human-authored coverage. Use `agent-device` when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
+For stable, repeatable test suites, use [e2e](https://e2e.tester.army/), a TypeScript testing framework for web and mobile apps. Use `agent-device` when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
 
 MCP clients can drive devices directly through the `agent-device mcp` server, which exposes the installed commands as structured tools. See [MCP server](/docs/agent-setup#mcp-server).
 

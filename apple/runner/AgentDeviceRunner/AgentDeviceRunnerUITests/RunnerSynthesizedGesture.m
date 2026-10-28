@@ -29,7 +29,6 @@ typedef id (*RunnerDragPointerPathFactory)(
   CGPoint,
   double
 );
-typedef double (*RunnerDragProgressFunction)(double);
 
 static NSString * _Nullable RunnerResolveGestureEventBridge(
   id application,
@@ -57,14 +56,6 @@ static id RunnerControlledScrollPointerPath(
   CGPoint start,
   CGPoint end,
   double durationMs
-);
-static id RunnerSampledDragPointerPath(
-  const RunnerGestureEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs,
-  RunnerDragProgressFunction progress,
-  NSInteger frameCount
 );
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
@@ -332,8 +323,10 @@ static NSString * _Nullable RunnerCreateEventRecord(
 
   NSUInteger displayID = 0;
   // A nil window is the caller's sole-screen route: the app tree could not name its window.
+  // Re-asking here, at dispatch, is what keeps the record's display the one the app fills now.
+  id soleScreen = nil;
   NSString *displayError = resolvedWindow == nil
-    ? RunnerResolveSoleScreenDisplayID(&displayID)
+    ? RunnerResolveSoleScreen(application, &soleScreen, &displayID)
     : RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
   if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =
@@ -418,34 +411,17 @@ static id RunnerControlledScrollPointerPath(
   // A stationary hold is not a reliable zero-velocity release in XCTest. Cubic ease-out decreases
   // velocity from the first movement and reaches near zero before lift. Profiles that accelerate
   // after pan recognition can still be classified as flings despite a slow final sample.
-  return RunnerSampledDragPointerPath(
-    bridge,
-    start,
-    end,
-    durationMs,
-    RunnerControlledScrollProgress,
-    RunnerControlledScrollFrameCount(durationMs)
-  );
-}
-
-static id RunnerSampledDragPointerPath(
-  const RunnerGestureEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs,
-  RunnerDragProgressFunction progress,
-  NSInteger frameCount
-) {
   id path =
     ((RunnerMsgSendInitPath)objc_msgSend)([bridge->core.pathClass alloc], bridge->initPathSelector, start, 0.0);
   if (path == nil) {
     return nil;
   }
 
+  NSInteger frameCount = RunnerControlledScrollFrameCount(durationMs);
   NSTimeInterval durationSeconds = durationMs / 1000.0;
   for (NSInteger index = 1; index <= frameCount; index += 1) {
     double t = (double)index / (double)frameCount;
-    double easedT = progress(t);
+    double easedT = RunnerControlledScrollProgress(t);
     CGPoint point = CGPointMake(
       start.x + (end.x - start.x) * easedT,
       start.y + (end.y - start.y) * easedT

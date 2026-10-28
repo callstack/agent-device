@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseLocalStates, parseRtt, parseSampleCount, parseScreenIds } from './definitions.ts';
-import { resolveRepoRoot } from './host.ts';
+import { resolveRepoRoot } from '../lib/bench-host.ts';
 import {
   assertBenchmarkOwner,
   assertOwnedDerivedPath,

@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_DEVICE, IOS_SIMULATOR, TVOS_SIMULATOR } from './device-fixtures.ts';
-import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+import { STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import {
   isSameRunnerSimulator,
   runnerSimulatorSetFailureDetails,
   xcodebuildDestinationArgs,
 } from '../runner-device-set.ts';
-import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
-const toolchainProbe = stubAppleToolchainProbes();
 beforeEach(resetAllProcessMemosForTests);
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,23 +49,19 @@ test('the default set, a blank set path and a physical device leave the destinat
 });
 
 test('a failure reports the scoped set and the selected Xcode only for a scoped-set simulator', () => {
-  const scoped = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulators' };
-  resolveExpectedRunnerCacheMetadata(scoped);
-
-  assert.deepEqual(runnerSimulatorSetFailureDetails(scoped), {
-    simulatorSetPath: '/tmp/tenant-a/simulators',
-    xcodeVersion: STUBBED_APPLE_TOOLCHAIN.xcodeVersion,
-  });
+  assert.deepEqual(
+    runnerSimulatorSetFailureDetails({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/sims' }),
+    { simulatorSetPath: '/tmp/tenant-a/sims', xcodeVersion: STUBBED_APPLE_TOOLCHAIN.xcodeVersion },
+  );
   assert.deepEqual(runnerSimulatorSetFailureDetails(IOS_SIMULATOR), {});
 });
 
-test('a failure before any cache decision read the Xcode names the scoped set, never probing', () => {
-  toolchainProbe.mockClear();
+test('a failure under an unreadable Xcode names the scoped set alone', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => mkdtempForTestSync('no-xcode-') });
   assert.deepEqual(
     runnerSimulatorSetFailureDetails({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/sims' }),
     { simulatorSetPath: '/tmp/tenant-a/sims' },
   );
-  assert.equal(toolchainProbe.mock.calls.length, 0);
 });
 
 test('one udid in two simulator sets names two simulators', () => {

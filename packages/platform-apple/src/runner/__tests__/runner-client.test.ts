@@ -18,7 +18,6 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
-import { stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 import {
   REPO_ROOT_FOR_TEST,
   makeScratchDir,
@@ -73,7 +72,6 @@ const repoRoot = REPO_ROOT_FOR_TEST;
 
 // These cases key the cache without building it, so they answer the cache's toolchain probes
 // from a fixed Xcode instead of the host's.
-stubAppleToolchainProbes();
 
 test('resolveRunnerDestination uses simulator destination for simulators', () => {
   assert.equal(resolveRunnerDestination(iosSimulator), 'platform=iOS Simulator,id=sim-1');

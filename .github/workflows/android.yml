@@ -41,13 +41,27 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: Fetch the PR base for Android smoke selection
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch origin "$BASE_SHA" --depth=1 || echo "Base fetch failed; Android smoke selection will fail open."
+
+      - name: Select Android smoke tests
+        id: impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node --experimental-strip-types scripts/device-lane-impact.ts replay-android android-helpers
+
       - name: Setup Android replay host
+        if: steps.impact.outputs.run != 'false'
         id: android-replay-host
         uses: ./.github/actions/setup-android-replay-host
         with:
           package-helpers: 'true'
 
       - name: Restore fixture APK
+        if: steps.impact.outputs.run != 'false'
         id: fixture-app
         uses: ./.github/actions/setup-fixture-app
         with:
@@ -56,12 +70,15 @@ jobs:
           wait-for-artifact-seconds: '1800'
 
       - name: Report fixture cache source
+        if: steps.impact.outputs.run != 'false'
         run: echo "Android fixture APK source=${{ steps.fixture-app.outputs.source }}"
 
       - name: Run Android emulator catalog coverage contract
+        if: steps.impact.outputs.run != 'false'
         run: node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator-coverage.test.ts
 
       - name: Run Android smoke checks
+        if: steps.impact.outputs.run != 'false'
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
           api-level: 36
@@ -79,7 +96,7 @@ jobs:
             node --experimental-strip-types src/bin.ts test test/integration/replays/android/emulator/01-settings.ad --retries 2 --report-junit test/artifacts/replays-android-smoke.junit.xml
 
       - name: Upload Android artifacts
-        if: always()
+        if: always() && steps.impact.outputs.run != 'false'
         uses: ./.github/actions/upload-agent-device-artifacts
         with:
           artifact-name: android-artifacts

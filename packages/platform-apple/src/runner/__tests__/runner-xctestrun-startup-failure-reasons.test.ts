@@ -22,7 +22,7 @@ import {
   type RunnerStartupFailureReason,
 } from '../runner-error-classification.ts';
 import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security.ts';
-import { appleToolchainProbeResult, STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
+import { STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import { IOS_DEVICE } from './device-fixtures.ts';
 import {
   CAPTURED_SCOPED_SIMULATOR,
@@ -76,7 +76,6 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, string> = {
   build_failed_unclassified: 'clean:xcuitest',
 };
 
-const runCmdSync = vi.fn();
 const runCmdStreaming = vi.fn();
 const runAppleToolCommand = vi.fn();
 const DIAGNOSTIC_ID = 'diag-build-failure-1';
@@ -95,7 +94,6 @@ beforeEach(() => {
   derivedPath = mkdtempForTestSync('agent-device-startup-failure-derived-');
   logPath = path.join(derivedPath, 'runner.log');
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derivedPath;
-  runCmdSync.mockReset().mockImplementation(appleToolchainProbeResult);
   runCmdStreaming.mockReset().mockImplementation(async (): Promise<ExecResult> => ({
     exitCode: 0,
     stdout: '',
@@ -103,7 +101,6 @@ beforeEach(() => {
   }));
   runAppleToolCommand.mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   appleRunnerTestHost.update({
-    runCmdSync,
     runCmdStreaming,
     runAppleToolCommand,
     findProjectRoot: () => projectRoot,

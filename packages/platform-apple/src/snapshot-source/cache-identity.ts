@@ -2,6 +2,7 @@ import {
   readHostToolchainIdentity,
   type HostToolchainIdentity,
 } from '../native-build/toolchain-identity.ts';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '../runner/apple-runner-platform.ts';
 import { fromNativeBuildError, snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -17,6 +18,9 @@ export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridgeRuntime.h',
   'SnapshotBridgeCapture.h',
   'SnapshotBridgeCapture.m',
+  // Not a compile unit: the clang argv lists translation units only, and an included header
+  // belongs in the fingerprint, not argv.
+  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
 ] as const;
 export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridge.m',

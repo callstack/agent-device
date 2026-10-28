@@ -12,6 +12,7 @@ import {
   type DaemonResponse,
 } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
 import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -46,7 +47,7 @@ export async function handleNetworkCommand(params: NetworkHandlerParams): Promis
     const bindDevice = requireNetworkBindDevice(params.bindDevice);
     const admission = await bindDevice(session.device, networkAdmissionUse);
     const networkFact = admission.facts.networkDump;
-    if (!networkFact.available) return unsupportedNetworkResponse(networkFact.hint);
+    if (!networkFact.available) return unsupportedOperationResponse('network', networkFact);
 
     const request = resolveNetworkRequest(params.req);
     if (!request.ok) return request;
@@ -131,17 +132,6 @@ function resolveNetworkIncludeMode(
     return errorResponse('INVALID_ARGS', NETWORK_INCLUDE_MESSAGE);
   }
   return { ok: true, include: requestedInclude as NetworkIncludeMode };
-}
-
-function unsupportedNetworkResponse(hint: string | undefined): DaemonFailureResponse {
-  return {
-    ok: false,
-    error: {
-      code: 'UNSUPPORTED_OPERATION',
-      message: 'network is not supported on this device',
-      hint,
-    },
-  };
 }
 
 function networkDumpResponse(

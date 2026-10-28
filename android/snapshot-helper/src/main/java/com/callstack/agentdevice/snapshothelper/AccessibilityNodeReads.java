@@ -30,17 +30,30 @@ final class AccessibilityNodeReads {
     return window.getRoot();
   }
 
+  interface Read<T> {
+    T read();
+  }
+
   /**
    * The child, or null when it is gone. When the child's window closes during the read, the
    * framework can throw a NullPointerException from its result integrity check instead of answering
    * null (seen on API 35 while an alert dialog closed), so that throw means the same as null.
+   *
+   * <p>A null {@code node} is a programmer error, but the same catch hides its NullPointerException
+   * as a gone child.
    */
   static AccessibilityNodeInfo child(AccessibilityNodeInfo node, int index) {
+    return nullIfGone(
+        () ->
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                ? node.getChild(index, PREFETCH_STRATEGY)
+                : node.getChild(index));
+  }
+
+  /** Runs a framework read that answers null for a vanished node and can throw instead. */
+  static <T> T nullIfGone(Read<T> read) {
     try {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        return node.getChild(index, PREFETCH_STRATEGY);
-      }
-      return node.getChild(index);
+      return read.read();
     } catch (NullPointerException vanished) {
       return null;
     }

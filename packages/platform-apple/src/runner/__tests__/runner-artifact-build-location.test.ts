@@ -6,7 +6,6 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { ensureXctestrunArtifact } from '../runner-xctestrun.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -31,7 +30,6 @@ beforeEach(() => {
   process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = derived;
   runCmdStreaming.mockReset().mockImplementation(xcodebuildHonoringCustomBuildLocation);
   appleRunnerTestHost.update({
-    runCmdSync: vi.fn().mockImplementation(appleToolchainProbeResult),
     runCmdStreaming,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',

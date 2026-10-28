@@ -251,7 +251,8 @@ test('open <app> <url> --relaunch hands the lifecycle both positionals', async (
 test.each([
   {
     reason: 'alert-unrecognized' as const,
-    warning: /did not recognize \(alert-unrecognized\)[\s\S]*alert get[\s\S]*alert accept/,
+    warning:
+      /did not recognize \(alert-unrecognized\)[\s\S]*alert get[\s\S]*`alert accept` only when it is the launch confirmation/,
   },
   {
     reason: 'url-owner-unresolved' as const,
