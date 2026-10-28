@@ -5,10 +5,19 @@ name: Deploy docs redirects
 # The script copies the Markdown and llms files from agent-device.dev and fails until that site
 # serves them, so the old docs stay published until the domain points at the new site.
 
+# Only changes to what it publishes run it, so an outage at agent-device.dev cannot fail unrelated
+# commits on main. Run it by hand to republish, for example right after the cutover.
 on:
   push:
     branches:
       - main
+    paths:
+      - 'website/docs/**'
+      - 'website/scripts/oss-redirects.mjs'
+      - 'website/src/site/content.ts'
+      - 'website/src/site/llms.ts'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
