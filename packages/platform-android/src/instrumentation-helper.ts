@@ -298,10 +298,13 @@ function createInstrumentationOutput() {
     writeStderr: stderr.write,
     result(
       exitCode: number | null | undefined,
-      signal?: string | null,
+      signal: string | null | undefined,
+      final: boolean,
     ): AndroidInstrumentationExitResult {
-      stdout.end();
-      stderr.end();
+      if (final) {
+        stdout.end();
+        stderr.end();
+      }
       const text = redactDiagnosticText(stderrKept);
       const { aborted, failed, shortMsg, longMsg, error, stack, resultCode, statusCode } = fields;
       return {
@@ -343,7 +346,7 @@ export function readInstrumentationExitResult(run: {
   const output = createInstrumentationOutput();
   output.writeStdout(run.stdout);
   output.writeStderr(run.stderr);
-  return output.result(run.exitCode, run.signal);
+  return output.result(run.exitCode, run.signal, true);
 }
 
 /** The exit of a spawned helper process and what it printed, kept to a bounded recent window. */
@@ -352,7 +355,10 @@ export type AndroidInstrumentationProcessRecord = {
   closed: Promise<void>;
   /** The process's exit result once its streams have closed, or `undefined` before that. */
   exitResult(): AndroidInstrumentationExitResult | undefined;
-  /** What the process has printed so far, for a process that is still running. */
+  /**
+   * What the process has printed so far, for a process that is still running. A line still being
+   * written is left out, and the record keeps reading it.
+   */
   current(): AndroidInstrumentationExitResult;
 };
 
@@ -377,8 +383,9 @@ export function recordInstrumentationProcess(
   });
   return {
     closed,
-    exitResult: () => (isClosed ? output.result(child.exitCode, child.signalCode) : undefined),
-    current: () => output.result(child.exitCode, child.signalCode),
+    exitResult: () =>
+      isClosed ? output.result(child.exitCode, child.signalCode, true) : undefined,
+    current: () => output.result(child.exitCode, child.signalCode, false),
   };
 }
 

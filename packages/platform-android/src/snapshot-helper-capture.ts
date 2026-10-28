@@ -221,10 +221,10 @@ function readAndroidSnapshotHelperOutput(
     // The helper can report structured ok=false details even when am exits non-zero.
     return parseAndroidSnapshotHelperOutput(`${result.stdout}\n${result.stderr}`);
   } catch (error) {
-    const helperFailure = error instanceof AppError && error.details?.helper ? error : undefined;
     // `am instrument` exits 0 after a helper that reported its own failure, so that report is the
-    // answer.
-    if (helperFailure) throw helperFailure;
+    // answer. Any other parse failure, including a report of success with no XML, has no report of
+    // its own and falls through to the instrumentation result below.
+    if (error instanceof AppError && isExplicitHelperFailure(error.details?.helper)) throw error;
     // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
     // message already branches on the exit code.
     // The raw output is not copied into the details: it can hold the snapshot the helper was
@@ -246,6 +246,12 @@ function readAndroidSnapshotHelperOutput(
       error,
     );
   }
+}
+
+function isExplicitHelperFailure(helper: unknown): boolean {
+  return (
+    typeof helper === 'object' && helper !== null && (helper as { ok?: unknown }).ok === 'false'
+  );
 }
 
 export function parseAndroidSnapshotHelperOutput(output: string): AndroidSnapshotHelperOutput {

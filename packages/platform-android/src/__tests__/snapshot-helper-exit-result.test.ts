@@ -745,3 +745,38 @@ test('a malformed helper report names its size, never the snapshot text it held'
     },
   );
 });
+
+test('a helper report with ok=true but no XML chunks still carries the instrumentation result', async () => {
+  const error = await captureError({
+    exitCode: 1,
+    stdout: [
+      'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+      'INSTRUMENTATION_RESULT: ok=true',
+      'INSTRUMENTATION_CODE: -1',
+    ].join('\n'),
+    stderr: 'am: Killed',
+  });
+
+  const result = exitResultOf(error.details ?? {});
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.resultCode, -1);
+  assert.equal(result.stderrTail, 'am: Killed');
+});
+
+test('a ready timeout in the middle of a record leaves the final fields intact', async () => {
+  const child = new FakeAndroidProcess();
+  const record = recordInstrumentationProcess(child);
+  const failure = rejection(waitForAndroidSnapshotHelperSessionReady(child, 30, undefined, record));
+  child.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
+  const timedOut = await failure;
+
+  assert.equal(exitResultOf(timedOut.details ?? {}).longMsg, undefined);
+
+  child.stdout.write('led\nCaused by: binder has died\nINSTRUMENTATION_CODE: 0\n');
+  await pause();
+  child.emitExit(1, null);
+  await record.closed;
+  const final = record.exitResult();
+  assert.equal(final?.longMsg, 'UiAutomation failed\nCaused by: binder has died');
+  assert.equal(final?.resultCode, 0);
+});
