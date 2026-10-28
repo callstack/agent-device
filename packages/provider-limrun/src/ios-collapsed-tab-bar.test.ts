@@ -145,6 +145,37 @@ test('Limrun reports a tab bar the probe budget could not reach', async () => {
   });
 });
 
+test('Limrun reports no miss for a strip too wide to probe without a tab bar height', async () => {
+  const screen = { width: 1194, height: 834 };
+  const { session, probes } = createLimrunHitTestSession(
+    limrunScreenTree([limrunEmptyGroup({ x: 0, y: 814, width: 1194, height: 20 })], screen),
+    [],
+    { screen },
+  );
+  const result = await captureLimrunIosSnapshot(session);
+
+  expect(probes).toEqual([]);
+  expect(result.acquisition.residue).not.toContainEqual(
+    expect.objectContaining({ kind: 'collapsed-tab-bar-probe-failed' }),
+  );
+});
+
+test('Limrun reports a bar with a tab bar height that is too wide to probe', async () => {
+  const screen = { width: 1194, height: 834 };
+  const { session, probes } = createLimrunHitTestSession(
+    limrunScreenTree([limrunEmptyGroup({ x: 0, y: 784, width: 1194, height: 50 })], screen),
+    [],
+    { screen },
+  );
+  const result = await captureLimrunIosSnapshot(session);
+
+  expect(probes).toEqual([]);
+  expect(result.acquisition.residue).toContainEqual({
+    kind: 'collapsed-tab-bar-probe-failed',
+    reason: 'budget-exhausted',
+  });
+});
+
 test('Limrun probes no childless group that is not docked along the bottom edge', async () => {
   const { session, probes } = createLimrunHitTestSession(
     limrunCollapsedTabBarTree({ x: 0, y: 62, width: 402, height: 83 }),

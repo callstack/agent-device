@@ -126,7 +126,7 @@ export type IosProviderPrunedField = 'nodes' | 'depth' | 'scope' | 'interactive-
 
 /**
  * Why a provider left a collapsed tab bar unexpanded: a hit-test across it did not answer, or the
- * hit-test budget ran out before every candidate bar was checked.
+ * hit-test budget ran out before a candidate with a tab bar's height was checked.
  */
 export type IosCollapsedTabBarProbeFailure = 'rejected' | 'timed-out' | 'budget-exhausted';
 

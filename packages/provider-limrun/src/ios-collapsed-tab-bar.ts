@@ -32,8 +32,8 @@ const TAB_PROBE_TIMEOUT_MS = 1_500;
  * Candidates are probed most tab-bar-like first (a tab bar's height, then the lowest top edge)
  * until one yields tabs, each with an even share of what is left of the budget but never fewer
  * probes than reach every tab. Expansion is all or nothing: when a candidate's hit-test fails, or
- * the budget runs out before a candidate is confirmed, the tree keeps its reported shape and
- * `probeFailure` says why. A partial tab set would look complete.
+ * the budget runs out before a candidate with a tab bar's height is checked, the tree keeps its
+ * reported shape and `probeFailure` says why. A partial tab set would look complete.
  */
 export async function expandLimrunCollapsedTabBar(
   tree: IosTreeNode | IosTreeNode[],
@@ -46,7 +46,10 @@ export async function expandLimrunCollapsedTabBar(
   let remaining = MAX_TAB_PROBES;
   for (const [index, bar] of bars.entries()) {
     const points = tabProbePoints(bar.frame, remaining, bars.length - index);
-    if (!points) return { tree: roots, probeFailure: 'budget-exhausted' };
+    if (!points) {
+      const missed = bars.slice(index).some(({ frame }) => hasTabBarHeight(frame));
+      return missed ? { tree: roots, probeFailure: 'budget-exhausted' } : { tree: roots };
+    }
     remaining -= points.length;
     const outcome = await probe(points, hitTest);
     if ('failure' in outcome) return { tree: roots, probeFailure: outcome.failure };
@@ -80,10 +83,13 @@ function collapsedTabBars(roots: IosTreeNode[], viewport: Rect) {
   return bars;
 }
 
+function hasTabBarHeight(frame: Rect): boolean {
+  return frame.height >= TAB_BAR_HEIGHT.min && frame.height <= TAB_BAR_HEIGHT.max;
+}
+
 function byTabBarLikeness(left: { frame: Rect }, right: { frame: Rect }): number {
-  const sized = (frame: Rect) =>
-    frame.height >= TAB_BAR_HEIGHT.min && frame.height <= TAB_BAR_HEIGHT.max ? 0 : 1;
-  return sized(left.frame) - sized(right.frame) || right.frame.y - left.frame.y;
+  const rank = (frame: Rect) => (hasTabBarHeight(frame) ? 0 : 1);
+  return rank(left.frame) - rank(right.frame) || right.frame.y - left.frame.y;
 }
 
 /** The runner's wide childless container, in the shape Limrun reports an iPhone tab bar. */

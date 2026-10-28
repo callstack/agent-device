@@ -108,7 +108,7 @@ function snapshotWarnings(residue: readonly IosAcquisitionResidue[]): { warnings
       }
       if (entry.kind === 'collapsed-tab-bar-probe-failed') {
         return [
-          `iOS snapshot could not read the tabs of a collapsed tab bar (${entry.reason}); the bar is listed without its tabs. Retry the snapshot.`,
+          `iOS snapshot could not read the tabs of a collapsed tab bar (${entry.reason}); the bar is listed without its tabs.${entry.reason === 'budget-exhausted' ? '' : ' Retry the snapshot.'}`,
         ];
       }
       if (entry.kind !== 'unavailable-fact') return [];

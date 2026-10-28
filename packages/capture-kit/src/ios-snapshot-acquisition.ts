@@ -109,7 +109,7 @@ export function createIosSnapshotAcquisition(
     lineage: IosSnapshotLineage;
     /**
      * Set when the provider left a collapsed tab bar unexpanded: a hit-test was rejected or timed
-     * out, or the hit-test budget ran out before every candidate bar was checked.
+     * out, or the hit-test budget ran out before a candidate with a tab bar's height was checked.
      */
     collapsedTabBarProbeFailure?: IosCollapsedTabBarProbeFailure;
   }>,
