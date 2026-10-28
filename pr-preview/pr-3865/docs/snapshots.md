@@ -328,7 +328,9 @@ keyboard band as unmeasurable rather than absent. An older helper omits it.
 
 The response-level `keyboard` field tells you what the capture observed:
 
-- `visible` carries a directly measured `frame` in the same coordinates as node bounds.
+- `visible` carries a `frame` observed by the producer in the same coordinates as node bounds.
+  On iOS XCTest, it comes from the capture's complete pre-projection root snapshot, includes the input
+  assistant bar, and uses the same coordinate normalization as the nodes.
 - `derived` carries a `frame` inferred from a docked keyboard tree, with `derivation: "docked-tree"`.
 - `visibility-only` carries a boolean `visible` from a provider probe, without a frame.
 - `tree-rejected` means the full tree was checked with a usable viewport but could not establish a
@@ -342,17 +344,23 @@ or the capture before `fill`, adds one sequential probe with a 500 ms timeout. A
 probe unknown; it does not discard the tree. Appium iOS and limrun iOS can also report a derived docked
 band during capture. Android Appium can derive the band when a tap resolves the tree's viewport.
 
-Missing keyboard nodes never mean the keyboard is hidden. A positive probe establishes presence but
+On iOS XCTest, a successful scan of the complete pre-projection root snapshot with no keyboard
+is the explicit observation that establishes `absent`. A failed or timed-out capture does not
+establish absence. Missing keyboard nodes in a projected or partial tree never mean the keyboard is hidden. A positive probe establishes presence but
 cannot locate the covered area. A negative probe establishes absence only when the tree also resolves
 no docked band. Neither probe result overrides a resolvable docked tree. Element taps use measured or
-derived frames to refuse an app target whose dispatched tap point is behind the keyboard.
+derived frames to refuse an app target whose dispatched tap point is behind the keyboard. Keyboard
+chrome and app controls hosted on the keyboard surface remain tappable; those app controls still
+participate in settle observations.
 Run `snapshot -i` again after ending editing before retrying a refused target.
 
 Android Appium nodes carry the reported native package in `bundleId`.
-Provider snapshot nodes include `keyboardOwned`: `true` identifies a keyboard-owned node; `false`
-means capture evaluated the node and found no keyboard ownership. Both decisions survive filtering
-and scoping. An omitted field means ownership was not evaluated. App-filled assistant hosts do not
-pass keyboard ownership to their descendants.
+Snapshot nodes can include `keyboardOwned`: `true` means the node belongs to the keyboard tap
+surface, including app controls hosted there; `false` means capture evaluated the node and found
+no membership. Both decisions survive filtering and scoping. An omitted field means membership
+was not evaluated. On native XCTest captures, an `Other` node identified as
+`SystemInputAssistantView` and its descendants belong to that surface even when the tree has no
+`Keyboard` node. App controls in the assistant remain part of settle observations.
 
 The Android keyboard band is the input method window's bounds, the box around the area it takes
 touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.

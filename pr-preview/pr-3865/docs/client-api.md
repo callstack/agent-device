@@ -142,8 +142,8 @@ await main();
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
 
-For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
-stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
+For direct local iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
+stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens, provider-owned simulators, or non-simulator targets.
 
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory without starting
 or contacting the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
@@ -382,7 +382,7 @@ If the wait times out, check the selector and app state with a fresh snapshot. A
 
 `tvRemote` is TV-only. Android TV accepts the navigation buttons, named volume, power, media, channel, and color keys, and `android-keycode:N`. tvOS and Vega OS accept only `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`; other buttons fail with `UNSUPPORTED_OPERATION`. Phones and WebDriver sessions are unsupported. See [TV targets](/agent-device/pr-preview/pr-3865/docs/commands.md#tv-targets) for the full button list and hold behavior.
 
-Vega OS client support is VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
+Vega OS client support is VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Vega OS devices, capture, selector, install, logging, and performance methods report unsupported for Vega targets. Fire TV devices that run Fire OS use the Android client methods as Android TV devices.
 
 Supported command methods:
 

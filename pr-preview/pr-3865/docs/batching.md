@@ -15,6 +15,20 @@ ignores cancellation beyond the remaining 30 seconds, the client may report a tr
 For a daemon that does not respond, the client's existing liveness check can reset it. Split
 longer sequences into separate requests.
 
+Some resource operations cannot run as bounded steps. The failed step returns
+`details.reason: bounded_composite_resource_unsupported`, `details.shape`,
+`details.dispatched: no`, and `details.standaloneCommandName` for a known public command. The name
+is not a complete command. Affected commands include `perf`, `audio`, `record`, `trace`, and some
+`logs` operations. A `close` that would dispose an owned resource or release a provider lease, and
+acquisition that would recover another session's durable resources, can also be refused. Opening
+another app in the same session keeps its owned resource handles. An Android test IME alone is
+restored by ordinary `close`, including a bounded step. Restoration may settle after the remaining
+batch time. If it fails, the session retires and the device claim stays for recovery; inspect the
+device and claim before acting. Run a refused step separately with its original arguments and options, the same `--session` value, and
+the same private CLI context. Inspect `details.partialResults` and
+`details.dispatchedSteps` before retrying the batch: earlier steps may already have changed the app.
+The batch still authenticates and renews its own lease while it runs.
+
 ## Run a batch from the CLI
 
 From a file:
@@ -119,7 +133,7 @@ Failure:
 - Treat earlier refs and snapshots as stale after the UI changes.
 - Prefer `--steps-file` over inline JSON.
 - Keep batches to about 5-20 steps.
-- When a batch fails, use `details.step` and `details.partialResults` to replan from the failing step.
+- When a batch fails, inspect `details.step`, `details.partialResults`, and `details.dispatchedSteps` before retrying.
 
 ## Example recipes
 

@@ -6,7 +6,7 @@
 
 ## Features
 
-- **One CLI, many app surfaces**: Control iOS, Android, HarmonyOS, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, Linux desktop targets, and a limited managed web browser through one CLI.
+- **One CLI, many app surfaces**: Control iOS, Android, HarmonyOS, tvOS, Android TV, Fire TV (Fire OS), Amazon Vega OS TV apps in the Vega Virtual Device, macOS, Linux desktop targets, and a limited managed web browser through one CLI.
 - **Accessibility-first snapshots**: On supported targets, agents read the accessibility tree instead of reasoning from screenshots alone.
 - **Interactions by ref, selector, or finder**: Tap, pan, fling, pinch, rotate, scroll, focus, type, assert, and find visible UI through refs, selectors, and semantic finders.
 - **Debugging and profiling**: Collect logs, inspect network traffic, capture screenshots and recordings, and sample performance where the target supports it.
