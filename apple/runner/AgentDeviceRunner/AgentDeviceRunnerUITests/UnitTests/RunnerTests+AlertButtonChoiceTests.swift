@@ -24,13 +24,13 @@ extension RunnerTests {
     XCTAssertFalse(fixtures.isEmpty)
     for fixture in fixtures {
       XCTAssertEqual(
-        RunnerAlertButtonChoice.buttonIndex(for: fixture.labels, action: fixture.action),
+        RunnerAlertButtonChoice.buttonIndex(for: fixture.labels, action: fixture.action, vocabulary: .english),
         fixture.expected, fixture.name
       )
       if fixture.xctestPopupMarker == true {
         XCTAssertEqual(
           RunnerAlertButtonChoice.buttonIndex(
-            for: fixture.labels, action: fixture.action, popupMarkerSurface: true
+            for: fixture.labels, action: fixture.action, popupMarkerSurface: true, vocabulary: .english
           ),
           fixture.xctestPopupMarkerExpected, fixture.name
         )
@@ -41,17 +41,17 @@ extension RunnerTests {
   func testAlertDismissPicksTheTrackingPromptDeclineLabel() {
     // The App Tracking Transparency prompt, as iOS words it in English (#3627).
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Allow"], action: "dismiss"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Allow"], action: "dismiss", vocabulary: .english),
       0
     )
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Allow"], action: "accept"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Allow"], action: "accept", vocabulary: .english),
       1
     )
     // The list entry alone decides this shape: without it neither label is a recognized decline
     // and the choice must refuse rather than guess.
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Learn More"], action: "dismiss"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Learn More"], action: "dismiss", vocabulary: .english),
       0
     )
   }
@@ -70,19 +70,20 @@ extension RunnerTests {
       ["Accept terms", "Continue"]
     ] {
       XCTAssertNil(
-        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
+        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss", vocabulary: .english),
         "dismiss must fail without a tap rather than guess through \(labels)"
       )
     }
   }
 
   func testAlertDismissRefusesAPromptWhoseLabelsNeitherListRecognizes() {
-    // A fully localized prompt: iOS localizes both buttons, so no label is claimed by either
-    // list, no position identifies the decline, and a guess could authorize (#3627).
+    // A localized prompt outside the vocabulary: no label is claimed by either list, no
+    // position identifies the decline, and a guess could authorize (#3627). Only the OS's own
+    // translations in `RunnerAlertLabelVocabulary` make localized labels known.
     XCTAssertNil(
       RunnerAlertButtonChoice.buttonIndex(
         for: ["Demander à l’app de ne pas suivre", "Autoriser le suivi"],
-        action: "dismiss"
+        action: "dismiss", vocabulary: .english
       ),
       "dismiss must fail without a tap rather than guess through a localized prompt"
     )
@@ -93,17 +94,17 @@ extension RunnerTests {
     // surface keeps base's close-by-last-element behavior. No consent prompt can carry it, so
     // nothing else gains a positional tap.
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: true),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: true, vocabulary: .english),
       0
     )
     XCTAssertEqual(
       RunnerAlertButtonChoice.buttonIndex(
-        for: ["Details", "Close popover"], action: "dismiss", popupMarkerSurface: true
+        for: ["Details", "Close popover"], action: "dismiss", popupMarkerSurface: true, vocabulary: .english
       ),
       1
     )
     XCTAssertNil(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: false),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: false, vocabulary: .english),
       "an unlabeled-by-the-list prompt without the marker still refuses"
     )
   }
@@ -111,7 +112,7 @@ extension RunnerTests {
   func testAlertDismissRefusesAPromptWhoseEveryButtonIsAffirmative() {
     for labels in [["Allow"], ["Allow", "OK"], ["Yes", "Continue", "Done"]] {
       XCTAssertNil(
-        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
+        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss", vocabulary: .english),
         "dismiss must fail without a tap rather than authorize through \(labels)"
       )
     }
@@ -121,15 +122,15 @@ extension RunnerTests {
   /// accept takes the label its own list claims even when a decline is present.
   func testAlertDismissStillPicksTheKnownCancelLabelAndAcceptStillTakesOK() {
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "dismiss"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "dismiss", vocabulary: .english),
       0
     )
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Don’t Allow", "Allow"], action: "dismiss"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Don’t Allow", "Allow"], action: "dismiss", vocabulary: .english),
       0
     )
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "accept"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "accept", vocabulary: .english),
       1
     )
   }
@@ -139,10 +140,10 @@ extension RunnerTests {
   func testAlertAcceptKeepsItsGuardsOnTheDeclineLabelsItMustNotTake() {
     // A lone declining button is not an acceptance, and with a choice, accept takes the first
     // label the accept list claims.
-    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track"], action: "accept"))
-    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Cancel"], action: "accept"))
+    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track"], action: "accept", vocabulary: .english))
+    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Cancel"], action: "accept", vocabulary: .english))
     XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Not now", "Confirm purchase"], action: "accept"),
+      RunnerAlertButtonChoice.buttonIndex(for: ["Not now", "Confirm purchase"], action: "accept", vocabulary: .english),
       1
     )
   }
