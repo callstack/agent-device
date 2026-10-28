@@ -6,108 +6,146 @@
  * The script answers `selected` only when the element at the click point is the focused text-entry
  * field (or inside it) and its content is selected. Any other answer names why nothing was selected,
  * and the caller refuses the fill before typing.
+ *
+ * Each function below is serialized into the page, so it may use only the others and page globals.
  */
+
 type PageElement = Record<string, any>;
 type PageDocument = Record<string, any>;
+type FocusedField = { element: PageElement; document: PageDocument };
 
 declare const document: PageDocument;
 
-function selectFocusedContentInPage(clickX: number, clickY: number): string {
-  const TEXT_ENTRY_INPUT_TYPES = ['text', 'search', 'email', 'url', 'tel', 'password', 'number'];
+function isFrameElement(element: PageElement): boolean {
+  return element.tagName === 'IFRAME' || element.tagName === 'FRAME';
+}
 
-  const isFrame = (element: PageElement): boolean =>
-    element.tagName === 'IFRAME' || element.tagName === 'FRAME';
+/** Cross-origin frames answer null: their document is not reachable from this script. */
+function readFrameDocument(frame: PageElement): PageDocument | null {
+  try {
+    return frame.contentDocument ?? null;
+  } catch {
+    return null;
+  }
+}
 
-  // Cross-origin frames answer null: their document is not reachable from this script.
-  const frameDocument = (frame: PageElement): PageDocument | null => {
-    try {
-      return frame.contentDocument ?? null;
-    } catch {
-      return null;
-    }
-  };
+function isTextEntryField(element: PageElement): boolean {
+  if (element.tagName === 'TEXTAREA') return !element.readOnly && !element.disabled;
+  if (element.tagName === 'INPUT') {
+    const type = String(element.type).toLowerCase();
+    return (
+      !element.readOnly &&
+      !element.disabled &&
+      ['text', 'search', 'email', 'url', 'tel', 'password', 'number'].includes(type)
+    );
+  }
+  return element.isContentEditable === true;
+}
 
-  const isTextEntry = (element: PageElement): boolean => {
-    if (element.tagName === 'TEXTAREA') return !element.readOnly && !element.disabled;
-    if (element.tagName === 'INPUT') {
-      return (
-        !element.readOnly &&
-        !element.disabled &&
-        TEXT_ENTRY_INPUT_TYPES.includes(String(element.type).toLowerCase())
-      );
-    }
-    return element.isContentEditable === true;
-  };
-
-  // The focused element, resolved through open shadow roots and same-origin frames.
+/** The focused element, resolved through open shadow roots and same-origin frames. */
+function resolveFocusedField(): FocusedField | string {
   let focusedDocument: PageDocument = document;
-  let focused: PageElement | null = document.activeElement;
-  while (focused) {
-    const shadowFocus = focused.shadowRoot?.activeElement;
+  let element: PageElement | null = document.activeElement;
+  while (element) {
+    const shadowFocus: PageElement | null | undefined = element.shadowRoot?.activeElement;
     if (shadowFocus) {
-      focused = shadowFocus;
-    } else if (isFrame(focused)) {
-      const inner = frameDocument(focused);
+      element = shadowFocus;
+    } else if (isFrameElement(element)) {
+      const inner = readFrameDocument(element);
       if (!inner) return 'frame-unreachable';
       focusedDocument = inner;
-      focused = inner.activeElement;
+      element = inner.activeElement;
     } else {
       break;
     }
   }
-  if (!focused || !isTextEntry(focused)) return 'not-editable';
+  return element && isTextEntryField(element)
+    ? { element, document: focusedDocument }
+    : 'not-editable';
+}
 
-  // The element under the click point, resolved the same way.
+/** The element under the click point, resolved through open shadow roots and same-origin frames. */
+function resolveClickedElement(clickX: number, clickY: number): PageElement | string | null {
   let pointX = clickX;
   let pointY = clickY;
   let hit: PageElement | null = document.elementFromPoint(pointX, pointY);
   while (hit) {
-    const shadowHit = hit.shadowRoot?.elementFromPoint(pointX, pointY);
+    const shadowHit: PageElement | null | undefined = hit.shadowRoot?.elementFromPoint(
+      pointX,
+      pointY,
+    );
     if (shadowHit && shadowHit !== hit) {
       hit = shadowHit;
-    } else if (isFrame(hit)) {
-      const inner = frameDocument(hit);
+    } else if (isFrameElement(hit)) {
+      const inner = readFrameDocument(hit);
       if (!inner) return 'frame-unreachable';
       const box = hit.getBoundingClientRect();
       pointX -= box.left + hit.clientLeft;
       pointY -= box.top + hit.clientTop;
-      const innerHit = inner.elementFromPoint(pointX, pointY);
-      if (!innerHit) return 'not-clicked';
-      hit = innerHit;
+      hit = inner.elementFromPoint(pointX, pointY);
     } else {
       break;
     }
   }
-  const clickedFocused =
-    hit !== null &&
-    (focused.contains(hit) ||
-      (typeof hit.closest === 'function' && hit.closest('label')?.control === focused));
-  if (!clickedFocused) return 'not-clicked';
+  return hit;
+}
 
-  if (focused.tagName !== 'INPUT' && focused.tagName !== 'TEXTAREA') {
-    const root = focused.getRootNode();
-    const selection =
-      root !== focusedDocument && typeof root.getSelection === 'function'
-        ? root.getSelection()
-        : focusedDocument.defaultView.getSelection();
-    const range = focusedDocument.createRange();
-    range.selectNodeContents(focused);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    return selection.rangeCount === 1 && selection.toString() === range.toString()
-      ? 'selected'
-      : 'selection-failed';
-  }
-  focused.select();
-  // Inputs without a text selection (email, number) report a null selectionStart.
-  return typeof focused.selectionStart !== 'number' ||
-    (focused.selectionStart === 0 && focused.selectionEnd === focused.value.length)
+function isClickOnField(hit: PageElement, field: PageElement): boolean {
+  if (field.contains(hit)) return true;
+  return typeof hit.closest === 'function' && hit.closest('label')?.control === field;
+}
+
+function selectEditingHostContent(host: PageElement, hostDocument: PageDocument): string {
+  const root = host.getRootNode();
+  const selection =
+    root !== hostDocument && typeof root.getSelection === 'function'
+      ? root.getSelection()
+      : hostDocument.defaultView.getSelection();
+  const range = hostDocument.createRange();
+  range.selectNodeContents(host);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return selection.rangeCount === 1 && selection.toString() === range.toString()
     ? 'selected'
     : 'selection-failed';
 }
 
+function selectControlContent(control: PageElement): string {
+  control.select();
+  // Inputs without a text selection (email, number) report a null selectionStart.
+  const covered =
+    typeof control.selectionStart !== 'number' ||
+    (control.selectionStart === 0 && control.selectionEnd === control.value.length);
+  return covered ? 'selected' : 'selection-failed';
+}
+
+function selectFocusedContent(clickX: number, clickY: number): string {
+  const field = resolveFocusedField();
+  if (typeof field === 'string') return field;
+  const hit = resolveClickedElement(clickX, clickY);
+  if (typeof hit === 'string') return hit;
+  if (!hit || !isClickOnField(hit, field.element)) return 'not-clicked';
+  const tag = field.element.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA'
+    ? selectControlContent(field.element)
+    : selectEditingHostContent(field.element, field.document);
+}
+
+const PAGE_SCRIPT_FUNCTIONS = [
+  isFrameElement,
+  readFrameDocument,
+  isTextEntryField,
+  resolveFocusedField,
+  resolveClickedElement,
+  isClickOnField,
+  selectEditingHostContent,
+  selectControlContent,
+  selectFocusedContent,
+] as const;
+
 export function buildSelectFocusedContentEvalScript(x: number, y: number): string {
-  return `(${selectFocusedContentInPage.toString()})(${Math.round(x)},${Math.round(y)})`;
+  const body = PAGE_SCRIPT_FUNCTIONS.map((fn) => `${fn.toString()};`).join('');
+  return `(()=>{${body}return ${selectFocusedContent.name}(${Math.round(x)},${Math.round(y)})})()`;
 }
 
 /** The page script's answer to `eval`, read from the backend's `{ result }` envelope. */
