@@ -245,42 +245,39 @@ function createInstrumentationOutput() {
   const readStdoutLine = (line: string, snapshot: boolean) => {
     if (readFailed(line)) {
       open = undefined;
-      return;
+    } else if (PROTOCOL_RECORD_RE.test(line)) {
+      open = readProtocolRecord(line, snapshot);
+    } else if (!open) {
+      snapshotContentRemoved ||= snapshot;
+    } else if (accept(line, snapshot) !== undefined) {
+      fields[open] = appendLine(fields[open], line);
     }
-    if (!PROTOCOL_RECORD_RE.test(line)) {
-      if (!open) snapshotContentRemoved ||= snapshot;
-      else if (accept(line, snapshot) !== undefined) {
-        fields[open] = appendLine(fields[open], line);
-      }
-      return;
-    }
-    open = undefined;
+  };
+  /** Reads one protocol record; answers the message field its value opens, if any. */
+  const readProtocolRecord = (line: string, snapshot: boolean): MessageField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
-      if (!Number.isSafeInteger(value)) return;
+      if (!Number.isSafeInteger(value)) return undefined;
       if (code[1] === 'CODE') fields.resultCode ??= value;
       else fields.statusCode = value;
-      return;
+      return undefined;
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
       fields.aborted ??= accept((aborted[1] ?? '').trim(), snapshot);
-      return;
+      return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
-    const field =
-      record && Object.hasOwn(MESSAGE_FIELDS, record[1]!)
-        ? (MESSAGE_FIELDS[record[1] as keyof typeof MESSAGE_FIELDS] as MessageField)
-        : undefined;
+    const field = record ? messageFieldOf(record[1]!) : undefined;
     if (!field || fields[field] !== undefined) {
       snapshotContentRemoved ||= snapshot;
-      return;
+      return undefined;
     }
     const value = accept((record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS), snapshot);
-    if (value === undefined) return;
+    if (value === undefined) return undefined;
     fields[field] = value;
-    open = field;
+    return field;
   };
   const readStderrLine = (line: string, snapshot: boolean, cut: boolean) => {
     readFailed(line);
@@ -324,6 +321,12 @@ function createInstrumentationOutput() {
       };
     },
   };
+}
+
+function messageFieldOf(key: string): MessageField | undefined {
+  return Object.hasOwn(MESSAGE_FIELDS, key)
+    ? (MESSAGE_FIELDS[key as keyof typeof MESSAGE_FIELDS] as MessageField)
+    : undefined;
 }
 
 function appendLine(value: string | undefined, line: string): string | undefined {
