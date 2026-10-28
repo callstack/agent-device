@@ -12,7 +12,11 @@ type RequestCancelState = {
   requestAbortControllers: Map<string, RequestAbortController>;
 };
 
-type RequestAbortController = AbortController & { executionDeadlineMs?: number };
+type RequestAbortController = AbortController & {
+  executionDeadlineMs?: number;
+  /** When the transport admitted the request; its client envelope started at the same moment. */
+  admittedAtMs?: number;
+};
 
 const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
 const requestCancelState = (): RequestCancelState =>
@@ -90,6 +94,7 @@ export function registerRequestAbort(
   }
   evictOldestEntries(requestAbortControllers());
   const controller: RequestAbortController = new AbortController();
+  controller.admittedAtMs = Date.now();
   controller.executionDeadlineMs = parentRequestId
     ? requestAbortControllers().get(parentRequestId)?.executionDeadlineMs
     : undefined;
@@ -152,6 +157,11 @@ export function getRequestSignal(requestId: string | undefined): AbortSignal | u
 /** The original bounded composite cutoff, inherited by nested test attempts. */
 export function getRequestExecutionDeadlineMs(requestId: string | undefined): number | undefined {
   return requestId ? requestAbortControllers().get(requestId)?.executionDeadlineMs : undefined;
+}
+
+/** When the transport admitted the request, or `undefined` for a request it never admitted. */
+export function getRequestAdmittedAtMs(requestId: string | undefined): number | undefined {
+  return requestId ? requestAbortControllers().get(requestId)?.admittedAtMs : undefined;
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {

@@ -75,7 +75,12 @@ export async function readAppleAlert(
   options: AlertInteractorOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  return await runAppleAlert(device, runnerOptions, options, env)('get', DEFAULT_ALERT_TIMEOUT_MS);
+  return await runAppleAlert(
+    device,
+    runnerOptions,
+    options,
+    env,
+  )('get', cappedAtDeadline(DEFAULT_ALERT_TIMEOUT_MS, options));
 }
 
 /**
@@ -89,7 +94,7 @@ export async function awaitAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
+  const timeout = cappedAtDeadline(options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS, options);
   const start = Date.now();
   let firstAttempt = true;
   let lastAbsence: AppError | undefined;
@@ -123,15 +128,17 @@ export async function actOnAppleAlert(
   env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   const runAlert = runAppleAlert(device, runnerOptions, options, env);
-  const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
+  const runnerTimeoutMs = cappedAtDeadline(
+    isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS,
+    options,
+  );
+  const retryWindowMs = cappedAtDeadline(ALERT_ACTION_RETRY_MS, options);
   const start = Date.now();
   let lastError: unknown;
   let firstAttempt = true;
-  while (Date.now() - start < ALERT_ACTION_RETRY_MS) {
+  while (Date.now() - start < retryWindowMs) {
     try {
-      const budgetMs = firstAttempt
-        ? runnerTimeoutMs
-        : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+      const budgetMs = firstAttempt ? runnerTimeoutMs : remainingBudgetMs(start, retryWindowMs);
       firstAttempt = false;
       return await runAlert(action, budgetMs);
     } catch (error) {
@@ -141,6 +148,16 @@ export async function actOnAppleAlert(
     await sleep(ALERT_POLL_INTERVAL_MS);
   }
   throw withAlertFallbackHint(lastError);
+}
+
+function cappedAtDeadline(budgetMs: number, options: AlertInteractorOptions | undefined): number {
+  return capAtDeadline(budgetMs, options?.deadlineAtMs);
+}
+
+/** A step's own budget, capped at the time the caller's deadline still leaves (at least 1 ms). */
+export function capAtDeadline(budgetMs: number, deadlineAtMs: number | undefined): number {
+  if (deadlineAtMs === undefined) return budgetMs;
+  return Math.max(1, Math.min(budgetMs, deadlineAtMs - Date.now()));
 }
 
 function remainingBudgetMs(start: number, timeoutMs: number): number {

@@ -11,7 +11,10 @@ import {
   resolveCommandDeviceClaimPolicy,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
-import { resolveCommandDaemonTimeoutMs } from '@agent-device/command-registry/timeout-policy';
+import {
+  resolveCommandDaemonBudgetMs,
+  resolveCommandDaemonTimeoutMs,
+} from '@agent-device/command-registry/timeout-policy';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from './daemon-request.ts';
 
@@ -35,6 +38,11 @@ const DAEMON_COMMAND_REGISTRY = buildDaemonCommandRegistry(DAEMON_COMMAND_DESCRI
 
 export function resolveDaemonRequestTimeoutMs(req: DaemonRequest): number | undefined {
   return resolveCommandDaemonTimeoutMs(resolveCommandTimeoutPolicy(req.command), req);
+}
+
+/** How long the daemon may work on this request before its client gives up on the result. */
+export function resolveDaemonRequestBudgetMs(req: DaemonRequest): number | undefined {
+  return resolveCommandDaemonBudgetMs(resolveCommandTimeoutPolicy(req.command), req);
 }
 
 export function getDaemonCommandRoute(command: string): DaemonCommandRoute {

@@ -327,6 +327,7 @@ function confirmationAnswer(
       confirmation,
       binding.resolveInteractor(input.execution, confirmation.appBundleId),
       binding.signal,
+      input.execution.requestDeadlineAtMs,
     );
   };
 }

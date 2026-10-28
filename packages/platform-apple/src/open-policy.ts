@@ -198,8 +198,8 @@ export async function settleAppleOpen(
  * process is a launch that was lost, so the URL is handed over again and read once more.
  *
  * Every step keeps the bound it already had: `openurl` at `IOS_SIMULATOR_OPENURL_TIMEOUT_MS`, the
- * read and accept at the runner's alert timeouts (an accept the runner watchdog abandoned is pressed
- * again only within the answer's accept budget), and the observation at the discovery deadline and
+ * read and accept at the runner's alert timeouts, capped at the request's deadline (an accept the
+ * runner watchdog abandoned is pressed again only while that deadline holds another press), and the observation at the discovery deadline and
  * the bridge's own launch-transition windows. Nothing here adds an unbounded wait.
  */
 async function answerHeldLaunch(

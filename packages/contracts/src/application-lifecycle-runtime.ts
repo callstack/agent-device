@@ -33,6 +33,12 @@ export type ApplicationLifecycleExecution = Readonly<{
    * means the platform's default boot wait; `prepare` derives its own deadline from `timeoutMs`.
    */
   startupDeadlineAtMs?: number;
+  /**
+   * Absolute time by which the request must have its result: its enforced daemon deadline, or its
+   * admission plus what its client envelope leaves the daemon. Absent for a request no transport
+   * admitted.
+   */
+  requestDeadlineAtMs?: number;
   requestId?: string;
   logPath?: string;
   traceLogPath?: string;

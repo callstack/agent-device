@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
-import { awaitAppleAlert, readAppleAlert } from './alert.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -60,6 +60,7 @@ function port(
   legs: Readonly<{
     resolveUrlOwner?: () => Promise<string | undefined>;
     acceptAlert?: () => Promise<unknown>;
+    deadlineAtMs?: number;
   }> = {},
 ) {
   const acceptAlert = vi.fn(legs.acceptAlert ?? (async () => ({})));
@@ -70,6 +71,7 @@ function port(
     readAlert: vi.fn(readAlert),
     acceptAlert,
     resolveUrlOwner,
+    deadlineAtMs: legs.deadlineAtMs,
   };
   return { port: value, acceptAlert, resolveUrlOwner };
 }
@@ -291,6 +293,7 @@ test.each([
           { url: 'example://automation', appBundleId: 'com.example.app' },
           Promise.resolve(interactor),
           new AbortController().signal,
+          undefined,
         ).then((value) => (answered = value)),
       );
 
@@ -331,6 +334,7 @@ test('a hung URL owner lookup leaves the open unanswered within the launch budge
         { url: 'example://automation', appBundleId: 'com.example.app' },
         Promise.resolve(interactor),
         new AbortController().signal,
+        undefined,
       ).then((value) => (answered = value)),
     );
 
@@ -358,6 +362,7 @@ test.each([
       { url: 'example://automation', appBundleId: 'com.example.app' },
       Promise.resolve(interactor),
       open.signal,
+      undefined,
     ),
   );
 
@@ -383,6 +388,7 @@ test('the launch confirmation waits for a system prompt that is still appearing'
       { url: 'example://automation', appBundleId: 'com.example.app' },
       interactor,
       new AbortController().signal,
+      undefined,
     );
     const pending = device.awaitAlert();
     await vi.advanceTimersByTimeAsync(500);
@@ -408,6 +414,7 @@ test('an expired confirmation wait retains typed absence instead of an unreadabl
         acceptAlert: vi.fn(),
       },
       new AbortController().signal,
+      undefined,
     );
     const pending = answerLaunchConfirmation(device);
     await vi.advanceTimersByTimeAsync(11_000);
@@ -442,6 +449,7 @@ test('a failed accept checks presence once without waiting for the dismissed pro
       { url: 'example://automation', appBundleId: 'com.example.app' },
       interactor,
       new AbortController().signal,
+      undefined,
     );
     let settled: LaunchConfirmationAttempt | undefined;
     const pending = answerLaunchConfirmation(device).then((value) => {
@@ -475,6 +483,7 @@ test('a no-prompt presentation probe completes within a few seconds', async () =
       { url: 'example://automation', appBundleId: 'com.example.app' },
       interactor,
       new AbortController().signal,
+      undefined,
     );
     let settled: LaunchConfirmationAttempt | undefined;
     const pending = answerLaunchConfirmation(device).then((value) => {
@@ -505,6 +514,7 @@ test('the port reads and accepts the alert for the session app and asks the sche
     { url: 'example://automation', appBundleId: 'com.example.app' },
     interactor,
     signal,
+    undefined,
   );
   await device.awaitAlert();
   await device.readAlert();
@@ -537,6 +547,7 @@ test('the port reads a typed absence as no alert and keeps any other failure', a
     { url: 'example://automation', appBundleId: 'com.example.app' },
     interactor,
     new AbortController().signal,
+    undefined,
   );
 
   await expect(device.awaitAlert()).resolves.toBeUndefined();
@@ -550,6 +561,7 @@ test('a runner that cannot be resolved reports an unreadable attempt', async () 
       { url: 'example://automation', appBundleId: 'com.example.app' },
       Promise.reject(new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 })),
       new AbortController().signal,
+      undefined,
     ),
   ).resolves.toEqual({ outcome: 'unreadable', step: 'runner' });
 });
@@ -593,27 +605,66 @@ function runnerMainThreadTimeout(): AppError {
   });
 }
 
-test('an accept the runner watchdog abandoned is pressed again while the confirmation is up', async () => {
+const STILL_PRESENT = { outcome: 'unanswered', reason: 'alert-still-present' };
+
+/**
+ * One more press costs its preflight and press watchdog, then the verification read's preflight
+ * and watchdog: 1 s + 10 s + 1 s + 10 s.
+ */
+const NEXT_PRESS_COST_MS = 22_000;
+
+/** Runs `body` on a fake clock, so each leg spends exactly the time it advances. */
+async function onFakeClock(body: () => Promise<void>): Promise<void> {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    await body();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+/** An accept the runner watchdog abandons after `spentMs` of preflight and press. */
+function abandonedPress(spentMs: number = DEFAULT_ALERT_TIMEOUT_MS) {
+  return vi.fn(async () => {
+    vi.advanceTimersByTime(spentMs);
+    throw runnerMainThreadTimeout();
+  });
+}
+
+test('an accept the runner watchdog abandoned is pressed again while the request has time for it', async () => {
   const acceptAlert = vi
     .fn<() => Promise<unknown>>()
     .mockRejectedValueOnce(runnerMainThreadTimeout())
     .mockResolvedValueOnce({});
-  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+  const { port: device } = port(async () => CONFIRMATION, {
+    acceptAlert,
+    deadlineAtMs: Date.now() + 60_000,
+  });
 
   await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'accepted' });
   expect(acceptAlert).toHaveBeenCalledTimes(2);
+});
+
+test('an abandoned accept is not pressed again when the request has no deadline', async () => {
+  const acceptAlert = vi.fn(async () => {
+    throw runnerMainThreadTimeout();
+  });
+  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
+  expect(acceptAlert).toHaveBeenCalledOnce();
 });
 
 test('the watchdog message without the runner code is not pressed again', async () => {
   const acceptAlert = vi.fn(async () => {
     throw new AppError('COMMAND_FAILED', 'main thread execution timed out');
   });
-  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
-
-  await expect(answerLaunchConfirmation(device)).resolves.toEqual({
-    outcome: 'unanswered',
-    reason: 'alert-still-present',
+  const { port: device } = port(async () => CONFIRMATION, {
+    acceptAlert,
+    deadlineAtMs: Date.now() + 60_000,
   });
+
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
   expect(acceptAlert).toHaveBeenCalledOnce();
 });
 
@@ -621,7 +672,10 @@ test('an abandoned accept that removed the confirmation is not pressed again', a
   const acceptAlert = vi.fn(async () => {
     throw runnerMainThreadTimeout();
   });
-  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+  const { port: device } = port(async () => CONFIRMATION, {
+    acceptAlert,
+    deadlineAtMs: Date.now() + 60_000,
+  });
   vi.mocked(device.readAlert).mockResolvedValue(undefined);
 
   await expect(answerLaunchConfirmation(device)).resolves.toEqual({
@@ -631,21 +685,92 @@ test('an abandoned accept that removed the confirmation is not pressed again', a
   expect(acceptAlert).toHaveBeenCalledOnce();
 });
 
-test('abandoned accepts stop once the answer budget cannot hold another press', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  try {
-    const acceptAlert = vi.fn(async () => {
-      vi.advanceTimersByTime(DEFAULT_ALERT_TIMEOUT_MS);
+test('a request budget mostly spent before the first press keeps the existing failure', async () => {
+  await onFakeClock(async () => {
+    const acceptAlert = abandonedPress();
+    const { port: device } = port(async () => CONFIRMATION, {
+      acceptAlert,
+      deadlineAtMs: Date.now() + 15_000,
+    });
+
+    await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
+    expect(acceptAlert).toHaveBeenCalledOnce();
+  });
+});
+
+test('a delayed preflight leaves too little time for another press', async () => {
+  await onFakeClock(async () => {
+    const acceptAlert = abandonedPress(800 + DEFAULT_ALERT_TIMEOUT_MS);
+    const { port: device } = port(async () => CONFIRMATION, {
+      acceptAlert,
+      deadlineAtMs: Date.now() + 800 + DEFAULT_ALERT_TIMEOUT_MS + NEXT_PRESS_COST_MS - 1,
+    });
+
+    await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
+    expect(acceptAlert).toHaveBeenCalledOnce();
+  });
+});
+
+test('a delayed verification read leaves too little time for another press', async () => {
+  await onFakeClock(async () => {
+    const acceptAlert = abandonedPress();
+    const { port: device } = port(async () => CONFIRMATION, {
+      acceptAlert,
+      deadlineAtMs: Date.now() + DEFAULT_ALERT_TIMEOUT_MS + 4_000 + NEXT_PRESS_COST_MS - 1,
+    });
+    vi.mocked(device.readAlert).mockImplementation(async () => {
+      vi.advanceTimersByTime(4_000);
+      return CONFIRMATION;
+    });
+
+    await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
+    expect(acceptAlert).toHaveBeenCalledOnce();
+  });
+});
+
+test('abandoned accepts stop once the request cannot hold another press', async () => {
+  await onFakeClock(async () => {
+    const acceptAlert = abandonedPress();
+    const { port: device } = port(async () => CONFIRMATION, {
+      acceptAlert,
+      deadlineAtMs: Date.now() + DEFAULT_ALERT_TIMEOUT_MS + NEXT_PRESS_COST_MS,
+    });
+
+    await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
+    expect(acceptAlert).toHaveBeenCalledTimes(2);
+  });
+});
+
+test('every runner alert command of the answer is capped at the request time left', async () => {
+  await onFakeClock(async () => {
+    const sent: Array<Readonly<{ action: unknown; timeoutMs: unknown }>> = [];
+    vi.mocked(runAppleRunnerCommand).mockImplementation(async (_device, command) => {
+      const { action, timeoutMs } = command as { action?: string; timeoutMs?: number };
+      sent.push({ action, timeoutMs });
+      if (action !== 'accept') return CONFIRMATION;
+      vi.advanceTimersByTime(timeoutMs ?? 0);
       throw runnerMainThreadTimeout();
     });
-    const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+    vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
+    const interactor = {
+      awaitAlert: async (options) => await awaitAppleAlert(simulator, {}, options, {}),
+      readAlert: async (options) => await readAppleAlert(simulator, {}, options, {}),
+      acceptAlert: async (options) => await actOnAppleAlert(simulator, {}, 'accept', options, {}),
+    } satisfies Pick<Interactor, 'awaitAlert' | 'readAlert' | 'acceptAlert'>;
 
-    await expect(answerLaunchConfirmation(device)).resolves.toEqual({
-      outcome: 'unanswered',
-      reason: 'alert-still-present',
-    });
-    expect(acceptAlert).toHaveBeenCalledTimes(2);
-  } finally {
-    vi.useRealTimers();
-  }
+    await expect(
+      answerSimulatorLaunchConfirmation(
+        simulator,
+        { url: 'example://automation', appBundleId: 'com.example.app' },
+        Promise.resolve(interactor as Interactor),
+        new AbortController().signal,
+        Date.now() + 6_000,
+      ),
+    ).resolves.toEqual(STILL_PRESENT);
+    expect(sent).toEqual([
+      { action: 'get', timeoutMs: 3_000 },
+      { action: 'accept', timeoutMs: 6_000 },
+      { action: 'get', timeoutMs: 1 },
+    ]);
+  });
 });

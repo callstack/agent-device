@@ -103,6 +103,19 @@ export function resolveCommandRequestTimeoutMs(
   );
 }
 
+/**
+ * How long the daemon may work on a request before its client envelope expires, less the margin
+ * that lets the daemon's own result win that race. For a command with an enforced daemon deadline
+ * this is that deadline.
+ */
+export function resolveCommandDaemonBudgetMs(
+  policy: CommandTimeoutPolicy,
+  input: RequestTimeoutInput,
+): number | undefined {
+  const envelopeMs = resolveCommandRequestTimeoutMs(policy, input);
+  return envelopeMs === undefined ? undefined : envelopeMs - REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
+}
+
 /** Resolves an enforced daemon request deadline, when the command declares one. */
 export function resolveCommandDaemonTimeoutMs(
   policy: CommandTimeoutPolicy,

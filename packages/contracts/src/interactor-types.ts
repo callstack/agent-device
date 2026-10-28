@@ -541,6 +541,8 @@ export type Interactor = {
  */
 export type AlertInteractorOptions = {
   timeoutMs?: number;
+  /** Absolute time no runner alert command may outlast; each leg caps its own budget at it. */
+  deadlineAtMs?: number;
   /** The daemon request's cancellation; owners whose transport can abort thread it into the legs. */
   signal?: AbortSignal;
   appBundleId?: string;

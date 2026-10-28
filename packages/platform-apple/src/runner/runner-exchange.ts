@@ -12,6 +12,7 @@ import {
   decodeRunnerResponseBody,
   isRunnerResponseOk,
   readRunnerResponseData,
+  RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
@@ -50,7 +51,6 @@ type RunnerExchangeSession = RunnerConnectionSession &
     | 'launchDeadline'
   >;
 
-const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 const RUNNER_PREFLIGHT_SKIP_FRESHNESS_MS = 5_000;
 const CANCELED_COMMAND_STATUS_TIMEOUT_MS = 1_000;
 const CANCELED_COMMAND_POLL_INTERVAL_MS = 100;

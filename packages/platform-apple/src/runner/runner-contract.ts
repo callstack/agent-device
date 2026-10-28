@@ -38,6 +38,9 @@ export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
  */
 export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
 
+/** The longest readiness preflight a ready runner session pays before a conservative command. */
+export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
+
 /**
  * The runner's own code for a command it refused because abandoned main-thread work has occupied it
  * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
