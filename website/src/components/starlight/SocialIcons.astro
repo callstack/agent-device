@@ -1,5 +1,7 @@
 ---
-// Header links: mono, uppercase, text only. The nav links from content.ts that leave the docs.
+// Header links: mono, uppercase, text only. The nav links from content.ts that leave the docs,
+// then the GitHub stars.
+import GitHubStars from '../site/GitHubStars.astro';
 import { nav } from '../../site/content';
 
 const links = nav
@@ -15,9 +17,10 @@ const links = nav
     </a>
   ))
 }
+<GitHubStars class="cs-header-link" />
 
 <style>
-  .cs-header-link {
+  :global(.cs-header-link) {
     font-family: var(--cs-font-mono);
     font-size: 0.75rem;
     letter-spacing: 0.055em;
@@ -26,7 +29,7 @@ const links = nav
     text-decoration: none;
     white-space: nowrap;
   }
-  .cs-header-link:hover {
+  :global(.cs-header-link:hover) {
     color: var(--sl-color-white);
   }
   .cs-header-link span {

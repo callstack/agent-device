@@ -93,7 +93,6 @@ export const nav: Link[] = [
   { text: 'Showcase', href: '/showcase' },
   { text: 'Cloud', href: '/cloud' },
   { text: 'Templates', href: '/templates' },
-  { text: 'GitHub', href: site.repo },
 ];
 
 /** The footer row, right of the copyright, on every page and in the docs. */

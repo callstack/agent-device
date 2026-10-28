@@ -1,0 +1,85 @@
+---
+// The GitHub link with the repository's star count, top right in the landing and docs headers.
+// The count is baked in when the site is built, so it renders at once and without scripts. Once
+// the page is idle, the browser refreshes it from the GitHub API, at most once per session every
+// ten minutes (sessionStorage); when GitHub refuses, the built figure stays.
+import { site } from '../../site/content';
+import { buildStars, formatStars, starsApi } from '../../site/github';
+import PixelIcon from './PixelIcon.astro';
+
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+const stars = await buildStars(site.repo);
+const label = (count?: string) =>
+  count ? `${site.name} on GitHub, ${count} stars` : `${site.name} on GitHub`;
+---
+
+<a
+  class:list={['gh-stars', className]}
+  href={site.repo}
+  data-stars-api={starsApi(site.repo)}
+  aria-label={label(stars?.toLocaleString('en'))}
+>
+  <PixelIcon name="star" size={14} />
+  <span data-stars-count>{stars === undefined ? 'GitHub' : formatStars(stars)}</span>
+</a>
+
+<script>
+  import { formatStars, readStars } from '../../site/github';
+
+  const KEY = 'agent-device:github-stars';
+  const FRESH = 10 * 60_000;
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('[data-stars-api]')];
+
+  const show = (stars: number) => {
+    for (const link of links) {
+      const count = link.querySelector('[data-stars-count]');
+      if (count) count.textContent = formatStars(stars);
+      link.setAttribute('aria-label', `agent-device on GitHub, ${stars.toLocaleString('en')} stars`);
+    }
+  };
+
+  const cached = (): number | undefined => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as { stars: number; at: number } | null;
+      return saved && Date.now() - saved.at < FRESH ? saved.stars : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const refresh = async (api: string) => {
+    const saved = cached();
+    if (saved !== undefined) return show(saved);
+    const stars = await fetch(api, { headers: { accept: 'application/vnd.github+json' } })
+      .then(readStars)
+      .catch(() => undefined);
+    if (stars === undefined) return;
+    show(stars);
+    try {
+      sessionStorage.setItem(KEY, JSON.stringify({ stars, at: Date.now() }));
+    } catch {
+      // Storage can be off (private windows); the next page asks again.
+    }
+  };
+
+  const api = links[0]?.dataset.starsApi;
+  if (api) (window.requestIdleCallback ?? setTimeout)(() => void refresh(api));
+</script>
+
+<style>
+  .gh-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    text-decoration: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .gh-stars svg {
+    flex: none;
+    color: var(--accent);
+  }
+</style>

@@ -1,7 +1,9 @@
 ---
-// Sticky, blurred, a hairline under it: the lockup left, mono links centred, GET STARTED right.
+// Sticky, blurred, a hairline under it: the lockup left, mono links centred, the GitHub stars and
+// GET STARTED right.
 // Below 52rem the links move into a Menu disclosure, which works without JavaScript.
 import { docs, nav } from '../../site/content';
+import GitHubStars from './GitHubStars.astro';
 import Lockup from './Lockup.astro';
 ---
 
@@ -17,6 +19,7 @@ import Lockup from './Lockup.astro';
         {nav.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
       </nav>
     </details>
+    <GitHubStars class="label nav-stars" />
     <a class="btn btn--dark" href={docs.start}>Get started</a>
   </div>
 </header>
@@ -44,13 +47,15 @@ import Lockup from './Lockup.astro';
   }
   .links a,
   .menu a,
-  .menu summary {
+  .menu summary,
+  .nav-inner > :global(.nav-stars) {
     color: var(--muted);
     text-decoration: none;
     transition: color 120ms;
   }
   .links a:hover,
   .menu a:hover,
+  .nav-inner > :global(.nav-stars:hover),
   .menu summary:hover,
   .menu[open] summary {
     color: var(--text);
@@ -88,6 +93,12 @@ import Lockup from './Lockup.astro';
     .menu {
       display: block;
       margin-inline-start: auto;
+    }
+  }
+  /* Phones: the hero opens with its own GET STARTED, so the header keeps the stars. */
+  @media (max-width: 30rem) {
+    .nav-inner > .btn {
+      display: none;
     }
   }
 </style>
