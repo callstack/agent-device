@@ -210,10 +210,17 @@ function pulseGlow(at: number, t: number, speed: number, width: number, gain: nu
 // it. Pulses travel round the track and each station lights as a pulse reaches it. On the 404
 // page (`hollow`) the main track and its stations are missing: a dashed outline marks where the
 // track should be, and flares as the pulses pass along it.
-function loopScene(cols: number, rows: number, focus: number, hollow = false): Scene {
+/** `maxUnit` caps the size of the loop, in cells, on tall and wide scenes. */
+function loopScene(
+  cols: number,
+  rows: number,
+  focus: number,
+  hollow = false,
+  maxUnit = 280,
+): Scene {
   const out = new Float32Array(cols * rows);
   const rock = backdrop(cols, rows, focus, 0.5);
-  const unit = Math.min(rows, cols * 0.8, 280);
+  const unit = Math.min(rows, cols * 0.8, maxUnit);
   const cx = focus * cols;
   const cy = rows * 0.5;
   const cells: LoopCells = {
@@ -270,7 +277,7 @@ function loopScene(cols: number, rows: number, focus: number, hollow = false): S
 
 const scenes = {
   // The signature scene: the agent's loop (run, read, act, verify) around the product visual.
-  loop: (cols, rows, focus) => loopScene(cols, rows, focus),
+  loop: (cols, rows, focus) => loopScene(cols, rows, focus, false, 340),
   // The 404 page: the loop with its main track missing.
   'loop-hollow': (cols, rows, focus) => loopScene(cols, rows, focus, true),
 

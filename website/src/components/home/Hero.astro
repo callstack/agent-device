@@ -2,11 +2,13 @@
 // The home page hero, in one centred column: the motto in two beats, a lede, the install command
 // beside the GitHub stars and npm downloads, then the session on the loop scene: a tab per kind
 // of job (build, verify, profile), each the prompt a developer gives, every agent-device call the
-// agent makes as its own card with the output nested inside, and the agent's reply.
+// agent makes as its own card with the output nested inside, and the agent's reply. Behind it
+// all, the dimmed loop scene and accent sparkles over the top.
 import CopyCommand from '../site/CopyCommand.astro';
 import Dither from '../site/Dither.astro';
 import GitHubStars from '../site/GitHubStars.astro';
 import PixelIcon from '../site/PixelIcon.astro';
+import Sparkles from '../site/Sparkles.astro';
 import { docs, jobs, site } from '../../site/content';
 import type { Line } from '../../site/content';
 import { compact, monthlyDownloads } from '../../site/npm';
@@ -23,6 +25,10 @@ const calls = (lines: Line[]) =>
 ---
 
 <section class="hero" aria-labelledby="hero-title">
+  <div class="hero-bg" aria-hidden="true">
+    <Dither scene="loop" focus={0.5} />
+    <Sparkles />
+  </div>
   <div class="hero-top hero-center">
     <h1 class="h1" id="hero-title">{site.headline[0]} <em>{site.headline[1]}</em></h1>
     <p class="lede">{site.lede}</p>
@@ -52,7 +58,6 @@ const calls = (lines: Line[]) =>
     role="region"
     aria-label="Prompts a developer gives a coding agent, and the agent-device commands the agent runs for each"
   >
-    <Dither scene="loop" focus={0.5} />
     <!-- The tabs need hero.ts; without scripts the first job stays as a still frame. -->
     <noscript><style is:inline>.jobs-tabs { display: none; }</style></noscript>
     <!-- HERO VISUAL -->
@@ -111,6 +116,31 @@ const calls = (lines: Line[]) =>
 </script>
 
 <style>
+  .hero {
+    position: relative;
+    overflow: hidden;
+  }
+  /* One scene behind the copy and the session, so it rises above the fold. */
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* Starts below the headline, so the main track sits just above the tabs; the top edge fades
+     out under the lede and the sparkles carry the accent above it. */
+  .hero-bg :global(.dither) {
+    top: 22rem;
+    height: calc(100% - 22rem);
+    opacity: 0.45;
+    mask-image: linear-gradient(to bottom, transparent, #000 16rem);
+  }
+  .hero-top,
+  .viz {
+    position: relative;
+  }
+  .viz {
+    border-top: 0;
+  }
   .hero-center {
     justify-items: center;
     gap: 1.25rem;
@@ -132,6 +162,7 @@ const calls = (lines: Line[]) =>
     min-height: 2.625rem;
     padding-inline: 0.875rem;
     border: 1px solid var(--line-strong);
+    background: var(--bg);
     color: var(--muted);
     text-decoration: none;
     white-space: nowrap;

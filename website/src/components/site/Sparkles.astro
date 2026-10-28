@@ -1,0 +1,78 @@
+---
+// Accent pixels scattered over the top of the home hero, twinkling in steps. Placed once at
+// build time from a fixed seed, so every visit gets the same sky with no script and no layout
+// shift. None over the centre, where the headline and lede sit; still under reduced motion.
+interface Props {
+  /** How many pixels. */
+  count?: number;
+  /** How far down the parent they reach, in percent. */
+  depth?: number;
+}
+const { count = 48, depth = 46 } = Astro.props;
+
+// mulberry32: a small seeded generator, so the layout is the same on every build.
+let seed = 0x5eed;
+const random = () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const sparks = Array.from({ length: count * 2 }, () => ({
+  x: 2 + random() * 96,
+  y: 2 + random() * (depth - 2),
+  size: random() < 0.6 ? 2 : 4,
+  opacity: 0.35 + random() * 0.55,
+  duration: 2.4 + random() * 3.6,
+  delay: -random() * 6,
+}))
+  // None over the centred text column.
+  .filter((s) => s.x < 24 || s.x > 76)
+  .slice(0, count);
+---
+
+<div class="sparkles" aria-hidden="true">
+  {
+    sparks.map((s) => (
+      <i
+        style={`left:${s.x.toFixed(2)}%;top:${s.y.toFixed(2)}%;--size:${s.size}px;--o:${s.opacity.toFixed(2)};--d:${s.duration.toFixed(2)}s;--delay:${s.delay.toFixed(2)}s`}
+      />
+    ))
+  }
+</div>
+
+<style>
+  .sparkles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  i {
+    position: absolute;
+    width: var(--size);
+    height: var(--size);
+    background: var(--accent);
+    opacity: var(--o);
+    animation: twinkle var(--d) steps(4, end) var(--delay) infinite;
+  }
+  @keyframes twinkle {
+    50% {
+      opacity: 0.08;
+    }
+  }
+  /* Narrow screens: the text spans the width, so fewer and fainter. */
+  @media (max-width: 48rem) {
+    .sparkles {
+      opacity: 0.5;
+    }
+    i:not(:nth-child(3n)) {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    i {
+      animation: none;
+    }
+  }
+</style>
