@@ -107,7 +107,10 @@ export function createIosSnapshotAcquisition(
     viewport: IosViewportEvidence;
     keyboard?: SnapshotKeyboardBandFact;
     lineage: IosSnapshotLineage;
-    /** Set when the provider left a collapsed tab bar unexpanded because a hit-test failed. */
+    /**
+     * Set when the provider left a collapsed tab bar unexpanded: a hit-test was rejected or timed
+     * out, or the hit-test budget ran out before every candidate bar was checked.
+     */
     collapsedTabBarProbeFailure?: IosCollapsedTabBarProbeFailure;
   }>,
 ): SnapshotRuntimeAcquiredResult {
