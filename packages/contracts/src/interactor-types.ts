@@ -543,8 +543,8 @@ export type AlertInteractorOptions = {
   timeoutMs?: number;
   /**
    * Absolute deadline for each runner alert command's native timeout. Right before the send, after
-   * the readiness preflight, the timeout becomes the time left; a command left too little is not
-   * sent. Runner startup and transport overhead are outside this bound.
+   * the readiness preflight, the timeout is capped at the time left; a command left too little is
+   * not sent. Runner startup and transport overhead are outside this bound.
    */
   deadlineAtMs?: number;
   /** The daemon request's cancellation; owners whose transport can abort thread it into the legs. */
