@@ -10,6 +10,8 @@
 // - index.md: a short note with the new URLs.
 // - Any other path: 404.html sends it to the same path on agent-device.dev.
 // - Static assets (docs/public): copied, so pages that embed the old image URLs keep working.
+// - website/vercel.json: turns off Vercel deployments of gh-pages. The Vercel project builds every
+//   branch from its website/ root, and gh-pages has no site to build.
 //
 // Usage: node scripts/oss-redirects.mjs <output dir>
 import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
@@ -76,6 +78,7 @@ const files = {
   'index.html': stub(`${site.url}/`),
   'index.md': `# Moved\n\nagent-device moved to ${site.url}. Its docs index for LLMs is ${site.url}/llms.txt\n`,
   '404.html': notFound,
+  'website/vercel.json': `${JSON.stringify({ git: { deploymentEnabled: false } }, null, 2)}\n`,
   ...Object.fromEntries(
     pages.map((page) => [`docs/${page}.html`, stub(`${site.url}/docs/${page}`)]),
   ),
