@@ -14,7 +14,7 @@ export async function captureLimrunIosSnapshot(
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const reported = (await session.client.elementTree()) as IosTreeNode | IosTreeNode[];
   const viewport = readLimrunViewport(reported, session.client.deviceInfo);
-  const { tree, residue } = await expandLimrunCollapsedTabBar(
+  const { tree, probeFailure } = await expandLimrunCollapsedTabBar(
     reported,
     viewport.kind === 'missing' ? null : viewport.rect,
     async (point) => (await session.client.elementTree(point)) as IosTreeNode | IosTreeNode[],
@@ -28,7 +28,7 @@ export async function captureLimrunIosSnapshot(
     }),
     viewport,
     lineage: { targetId: session.instanceId },
-    residue,
+    ...(probeFailure ? { collapsedTabBarProbeFailure: probeFailure } : {}),
   });
 }
 

@@ -1,6 +1,7 @@
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type {
   IosAcquisitionResidue,
+  IosCollapsedTabBarProbeFailure,
   IosProviderAcquisitionCapabilities,
   IosProviderAcquisitionProducer,
   IosSnapshotEvidenceAvailability,
@@ -75,6 +76,7 @@ export function iosSnapshotTruncationEvidence(
 function deriveIosSnapshotAcquisitionResidue(
   producer: IosProviderAcquisitionCapabilities,
   viewport: IosViewportEvidence,
+  collapsedTabBarProbeFailure: IosCollapsedTabBarProbeFailure | undefined,
 ): readonly IosAcquisitionResidue[] {
   const residue: IosAcquisitionResidue[] = [];
   if (producer.hittabilityEvidence === 'unavailable') {
@@ -92,6 +94,9 @@ function deriveIosSnapshotAcquisitionResidue(
   if (viewport.kind === 'missing') {
     residue.push({ kind: 'missing-viewport', reason: viewport.reason });
   }
+  if (collapsedTabBarProbeFailure) {
+    residue.push({ kind: 'collapsed-tab-bar-probe-failed', reason: collapsedTabBarProbeFailure });
+  }
   return Object.freeze(residue);
 }
 
@@ -102,8 +107,8 @@ export function createIosSnapshotAcquisition(
     viewport: IosViewportEvidence;
     keyboard?: SnapshotKeyboardBandFact;
     lineage: IosSnapshotLineage;
-    /** What the provider itself observed it could not acquire. */
-    residue?: readonly IosAcquisitionResidue[];
+    /** Set when the provider left a collapsed tab bar unexpanded because a hit-test failed. */
+    collapsedTabBarProbeFailure?: IosCollapsedTabBarProbeFailure;
   }>,
 ): SnapshotRuntimeAcquiredResult {
   const producer = IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES[input.producer];
@@ -116,10 +121,11 @@ export function createIosSnapshotAcquisition(
       viewport: input.viewport,
       ...(input.keyboard ? { keyboard: input.keyboard } : {}),
       lineage: input.lineage,
-      residue: Object.freeze([
-        ...deriveIosSnapshotAcquisitionResidue(producer, input.viewport),
-        ...(input.residue ?? []),
-      ]),
+      residue: deriveIosSnapshotAcquisitionResidue(
+        producer,
+        input.viewport,
+        input.collapsedTabBarProbeFailure,
+      ),
     },
   };
 }

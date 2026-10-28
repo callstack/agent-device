@@ -47,7 +47,16 @@ test('Limrun publishes the tabs its hit-tests find inside a collapsed iOS tab ba
   );
 });
 
-test('Limrun moves past a bottom group whose hit-tests find no tabs to the tab bar', async () => {
+const FIVE_TABS = ['Home', 'Catalog', 'Form', 'Audio', 'Settings'];
+const LANDSCAPE = { width: 874, height: 402 };
+
+function landscapeTabs(y: number, height: number) {
+  return FIVE_TABS.map((label, index) =>
+    limrunTabButton(label, { x: 187 + index * 100, y, width: 100, height }, index === 0),
+  );
+}
+
+test('Limrun probes the tab bar before a home indicator strip that precedes it', async () => {
   const { session, probes } = createLimrunHitTestSession(
     limrunScreenTree([
       limrunEmptyGroup({ x: 0, y: 854, width: 402, height: 20 }, 'Home Indicator Area'),
@@ -57,34 +66,83 @@ test('Limrun moves past a bottom group whose hit-tests find no tabs to the tab b
   );
   const result = await captureLimrunIosSnapshot(session);
 
-  expect(tabsOf(result).map((tab) => tab.label)).toEqual([
-    'Home',
-    'Catalog',
-    'Form',
-    'Audio',
-    'Settings',
-  ]);
+  expect(tabsOf(result).map((tab) => tab.label)).toEqual(FIVE_TABS);
   expect(tabsOf(result, 'Home Indicator Area')).toEqual([]);
+  expect(new Set(probes.map((point) => point.y))).toEqual(new Set([832.5]));
+});
+
+test('Limrun moves past a lower bar-sized group whose hit-tests find no tabs', async () => {
+  const { session, probes } = createLimrunHitTestSession(
+    limrunScreenTree([
+      limrunEmptyGroup({ x: 0, y: 830, width: 402, height: 44 }, 'Toolbar'),
+      limrunEmptyGroup(IPHONE_TAB_BAR_FRAME, 'Tab Bar'),
+    ]),
+    LIMRUN_TAB_BUTTONS,
+  );
+  const result = await captureLimrunIosSnapshot(session);
+
+  expect(tabsOf(result).map((tab) => tab.label)).toEqual(FIVE_TABS);
+  expect(tabsOf(result, 'Toolbar')).toEqual([]);
+  // Both candidates were hit-tested along their own midlines, inside one budget.
+  expect(new Set(probes.map((point) => point.y))).toEqual(new Set([852, 832.5]));
   expect(probes.length).toBeLessThanOrEqual(24);
 });
 
 test('Limrun finds the tabs of a landscape iPhone tab bar', async () => {
-  const screen = { width: 874, height: 402 };
-  const labels = ['Home', 'Catalog', 'Form', 'Audio', 'Settings'];
   const { session, probes } = createLimrunHitTestSession(
     limrunScreenTree(
       [limrunEmptyGroup({ x: 0, y: 350, width: 874, height: 52 }, 'Tab Bar')],
-      screen,
+      LANDSCAPE,
     ),
-    labels.map((label, index) =>
-      limrunTabButton(label, { x: 187 + index * 100, y: 352, width: 100, height: 44 }, index === 0),
-    ),
-    { screen },
+    landscapeTabs(352, 44),
+    { screen: LANDSCAPE },
   );
   const result = await captureLimrunIosSnapshot(session);
 
-  expect(tabsOf(result).map((tab) => tab.label)).toEqual(labels);
+  expect(tabsOf(result).map((tab) => tab.label)).toEqual(FIVE_TABS);
   expect(probes.length).toBeLessThanOrEqual(24);
+});
+
+test('Limrun finds a landscape tab bar behind a full-width decoy that precedes it', async () => {
+  const { session, probes } = createLimrunHitTestSession(
+    limrunScreenTree(
+      [
+        limrunEmptyGroup({ x: 0, y: 252, width: 874, height: 150 }, 'Backdrop'),
+        limrunEmptyGroup({ x: 0, y: 350, width: 874, height: 52 }, 'Tab Bar'),
+      ],
+      LANDSCAPE,
+    ),
+    landscapeTabs(352, 44),
+    { screen: LANDSCAPE },
+  );
+  const result = await captureLimrunIosSnapshot(session);
+
+  expect(tabsOf(result).map((tab) => tab.label)).toEqual(FIVE_TABS);
+  expect(probes.length).toBeLessThanOrEqual(24);
+});
+
+test('Limrun reports a tab bar the probe budget could not reach', async () => {
+  // Both groups are bar-sized; the lower one is probed first, finds nothing, and leaves too few
+  // probes to cover the 874-point bar above it.
+  const { session, probes } = createLimrunHitTestSession(
+    limrunScreenTree(
+      [
+        limrunEmptyGroup({ x: 0, y: 330, width: 874, height: 72 }, 'Tab Bar'),
+        limrunEmptyGroup({ x: 0, y: 356, width: 874, height: 46 }, 'Toolbar'),
+      ],
+      LANDSCAPE,
+    ),
+    landscapeTabs(334, 40),
+    { screen: LANDSCAPE },
+  );
+  const result = await captureLimrunIosSnapshot(session);
+
+  expect(tabsOf(result)).toEqual([]);
+  expect(probes.length).toBeLessThan(24);
+  expect(result.acquisition.residue).toContainEqual({
+    kind: 'collapsed-tab-bar-probe-failed',
+    reason: 'budget-exhausted',
+  });
 });
 
 test('Limrun probes no childless group that is not docked along the bottom edge', async () => {
