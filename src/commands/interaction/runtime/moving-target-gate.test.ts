@@ -745,7 +745,10 @@ test('Android still refuses a full-tree @ref that keeps moving after a navigatio
     (error: unknown) => {
       const details = (error as AppError).details;
       assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.dispatched, 'no');
       assert.ok(details?.movedToRect, 'each look measured the target, so the refusal names where');
+      assert.match(String(details?.hint), /snapshot -i/);
+      assert.match(String(details?.hint), /ref frame/);
       return true;
     },
   );

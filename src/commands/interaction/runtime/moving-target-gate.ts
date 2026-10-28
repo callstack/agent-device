@@ -303,8 +303,9 @@ type MovingTargetMeasured = {
  * ADR 0014's reconciliation adopt the capture's coordinates for a same-identity node, which is the
  * sanctioned way a ref's position moves. `measureRefObservation` then asks whether that adoption is
  * what actually got dispatched — a resolution that kept its authorized frame node measured nothing
- * here, and the gate refuses rather than comparing one stale rect to itself. The observation is
- * taken in the frame's own presentation, because reconciliation reads `@eN` by its ordinal.
+ * here, and the gate refuses rather than comparing one stale rect to itself. Reconciliation reads
+ * `@eN` by its ordinal, so a plain full-tree frame is re-observed full-tree; every other frame,
+ * including depth, scope, raw, and custom-action captures, is re-observed interactive-only.
  */
 async function reObserveTarget(
   runtime: AgentDeviceRuntime,
@@ -360,7 +361,7 @@ const FULL_TREE_PRESENTATION_KEY = buildSnapshotPresentationKey({ interactiveOnl
  * Whether a ref re-observation captures interactive-only. Refs number a capture densely, so an
  * interactive-only look at a full-tree frame names other nodes by the same refs, and a still target
  * reads as unmeasured (#3981). A frame in a presentation the gate cannot reproduce (depth, scope,
- * raw) keeps the interactive look and stays fail-closed.
+ * raw, custom actions) keeps the interactive look and stays fail-closed.
  */
 async function refFrameIsInteractiveOnly(
   runtime: AgentDeviceRuntime,
