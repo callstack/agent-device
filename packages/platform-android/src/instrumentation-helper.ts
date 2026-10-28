@@ -160,7 +160,7 @@ const FAILED_ENVELOPES = [
 // attribute-like assignment, any markup or entity, or a payload record. The accepted cost is that a
 // crash message with an ordinary `key="value"` is withheld too; `withheldFields` still says it existed.
 const ATTRIBUTE_LIKE_RE = /[A-Za-z][\w:-]*\s*=\s*["']/;
-const MARKUP_RE = /[<>]|&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#x[0-9A-Fa-f]+);|&#|payloadBase64/i;
+const MARKUP_RE = /[<>]|&[A-Za-z][A-Za-z0-9]*;|&#|payloadBase64/i;
 
 /** Only the JVM tokens `<init>` and `<clinit>` are exempt from the markup rule. */
 function holdsSnapshotMarker(text: string): boolean {
