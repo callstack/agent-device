@@ -14,6 +14,8 @@ export const FILL_FIXTURE_POINTS = {
   closedShadowInput: [120, 315],
   sameOriginFrame: [100, 370],
   crossOriginFrame: [100, 430],
+  scaledHalfFrame: [650, 58],
+  scaledDoubleFrame: [650, 130],
   readonlyInput: [400, 35],
   dateInput: [320, 85],
   checkbox: [310, 130],
@@ -34,6 +36,8 @@ export type FillFixtureState = {
   closedShadowInput: string;
   sameOriginFrame: string;
   crossOriginFrame: string;
+  scaledHalfFrame: string;
+  scaledDoubleFrame: string;
   readonlyInput: string;
   dateInput: string;
   checkbox: boolean;
@@ -71,10 +75,12 @@ export async function startFillFixtureServer(): Promise<{ server: Server; port: 
 
 function frameHtml(): string {
   return `<!doctype html><meta charset="utf-8">
-<body style="margin:0"><input id="field" value="old" style="width:240px;height:30px;box-sizing:border-box">
+<body style="margin:0"><input id="field" value="old" style="width:100%;height:30px;box-sizing:border-box">
 <script>
   const field = document.getElementById('field');
-  const name = new URLSearchParams(location.search).get('name');
+  const params = new URLSearchParams(location.search);
+  const name = params.get('name');
+  field.style.marginTop = (params.get('top') ?? '0') + 'px';
   field.addEventListener('input', () => parent.postMessage({ name, value: field.value }, '*'));
 </script>`;
 }
@@ -92,6 +98,8 @@ function pageHtml(): string {
 <div id="shadow-rich-host" class="at" style="left:20px;top:250px;width:200px;height:30px"></div>
 <div id="closed-host" class="at" style="left:20px;top:300px;width:200px;height:30px"></div>
 <iframe id="same" class="at" style="left:20px;top:350px;width:250px;height:40px;border:0"></iframe>
+<iframe id="half" class="at" style="left:600px;top:20px;width:300px;height:100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe>
+<iframe id="double" class="at" style="left:600px;top:100px;width:100px;height:40px;border:0;transform:scale(2);transform-origin:0 0"></iframe>
 <iframe id="cross" class="at" style="left:20px;top:410px;width:250px;height:40px;border:0"></iframe>
 <input id="readonly" class="at" value="old" readonly style="left:300px;top:20px;width:150px;height:30px">
 <input id="date" class="at" type="date" value="2020-01-01" style="left:300px;top:70px;width:150px;height:30px">
@@ -107,8 +115,15 @@ function pageHtml(): string {
   const crossOrigin = 'http://localhost:' + location.port;
   document.getElementById('same').src = sameOrigin + '/frame?name=sameOriginFrame';
   document.getElementById('cross').src = crossOrigin + '/frame?name=crossOriginFrame';
+  document.getElementById('half').src = sameOrigin + '/frame?name=scaledHalfFrame&top=60';
+  document.getElementById('double').src = sameOrigin + '/frame?name=scaledDoubleFrame';
 
-  const reported = { sameOriginFrame: 'old', crossOriginFrame: 'old' };
+  const reported = {
+    sameOriginFrame: 'old',
+    crossOriginFrame: 'old',
+    scaledHalfFrame: 'old',
+    scaledDoubleFrame: 'old',
+  };
   const shadowInputRoot = document.getElementById('shadow-input-host').attachShadow({ mode: 'open' });
   shadowInputRoot.innerHTML = '<input value="old" style="width:100%;height:100%;box-sizing:border-box">';
   const shadowRichRoot = document.getElementById('shadow-rich-host').attachShadow({ mode: 'open' });
@@ -137,6 +152,8 @@ function pageHtml(): string {
       closedShadowInput: closedInput.value,
       sameOriginFrame: reported.sameOriginFrame,
       crossOriginFrame: reported.crossOriginFrame,
+      scaledHalfFrame: reported.scaledHalfFrame,
+      scaledDoubleFrame: reported.scaledDoubleFrame,
       readonlyInput: document.getElementById('readonly').value,
       dateInput: document.getElementById('date').value,
       checkbox: document.getElementById('checkbox').checked,

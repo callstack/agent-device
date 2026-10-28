@@ -761,7 +761,7 @@ function textEntryFocusNotObservedError(x: number, y: number, cause: string): Ap
       reason: 'text_entry_focus_not_observed',
       x,
       y,
-      hint: 'The click most likely missed the field, or the field is read-only, not a text input, or inside a frame or closed shadow root this backend cannot reach. Re-check the target with snapshot -i and fill the element it reports, rather than retrying the same coordinates.',
+      hint: 'The click most likely missed the field, or the field is read-only, not a text input, or inside a frame or closed shadow root this backend cannot reach. Run snapshot -i again and fill the field it reports by ref (fill @eN <text>), rather than retrying the same coordinates or a selector.',
     },
   );
 }

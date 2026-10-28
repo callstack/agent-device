@@ -84,13 +84,21 @@ function textControl(type: string, extra: Fake = {}): Fake {
   };
 }
 
-function frameElement(doc: Fake, frameDoc: Fake | null, tagName = 'IFRAME'): Fake {
+function frameElement(
+  doc: Fake,
+  frameDoc: Fake | null,
+  layout: Fake = {},
+  tagName = 'IFRAME',
+): Fake {
   return fakeElement(doc, {
     tagName,
     contentDocument: frameDoc,
     clientLeft: 0,
     clientTop: 0,
-    getBoundingClientRect: () => ({ left: 1, top: 2 }),
+    offsetWidth: 100,
+    offsetHeight: 100,
+    getBoundingClientRect: () => ({ left: 1, top: 2, width: 100, height: 100 }),
+    ...layout,
   });
 }
 
@@ -195,6 +203,36 @@ test('page script selects through the focused same-origin frame own selection', 
     [field],
   );
   assert.deepEqual(topSelection.ranges, []);
+});
+
+test('page script maps the click into a scaled frame by its rendered-to-layout ratio', () => {
+  // [rendered size, layout size, border, expected local point for viewport (11, 12) with the frame at (1, 2)]
+  const cases = [
+    [50, 100, 0, [20, 20]],
+    [200, 100, 0, [5, 5]],
+    [100, 100, 3, [7, 7]],
+    [0, 0, 0, [10, 10]],
+  ] as const;
+  for (const [rendered, layout, border, expected] of cases) {
+    const frameDoc = fakeDocument();
+    const field = fakeElement(frameDoc, { tagName: 'DIV', isContentEditable: true });
+    frameDoc.activeElement = field;
+    const pointsSeen: number[][] = [];
+    frameDoc.elementFromPoint = (x: number, y: number) => (pointsSeen.push([x, y]), field);
+    const doc = fakeDocument();
+    const frame = frameElement(doc, frameDoc, {
+      offsetWidth: layout,
+      offsetHeight: layout,
+      clientLeft: border,
+      clientTop: border,
+      getBoundingClientRect: () => ({ left: 1, top: 2, width: rendered, height: rendered }),
+    });
+    doc.activeElement = frame;
+    doc.hit = frame;
+    vi.stubGlobal('document', doc);
+    assert.equal(selectFocusedContent(11, 12), 'selected');
+    assert.deepEqual(pointsSeen, [[...expected]]);
+  }
 });
 
 test('page script refuses a focused frame it cannot read', () => {

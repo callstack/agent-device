@@ -64,6 +64,24 @@ function resolveFocusedField(): FocusedField | string {
     : 'not-editable';
 }
 
+/**
+ * The point in the frame's own coordinates. A CSS scale on the frame makes its rendered size differ
+ * from its layout size (offsetWidth), so the offset into the rendered box is divided by that ratio.
+ */
+function mapPointIntoFrame(
+  frame: PageElement,
+  pointX: number,
+  pointY: number,
+): { x: number; y: number } {
+  const box = frame.getBoundingClientRect();
+  const scaleX = frame.offsetWidth > 0 ? box.width / frame.offsetWidth : 1;
+  const scaleY = frame.offsetHeight > 0 ? box.height / frame.offsetHeight : 1;
+  return {
+    x: (pointX - box.left) / scaleX - frame.clientLeft,
+    y: (pointY - box.top) / scaleY - frame.clientTop,
+  };
+}
+
 /** The element under the click point, resolved through open shadow roots and same-origin frames. */
 function resolveClickedElement(clickX: number, clickY: number): PageElement | string | null {
   let pointX = clickX;
@@ -79,9 +97,9 @@ function resolveClickedElement(clickX: number, clickY: number): PageElement | st
     } else if (isFrameElement(hit)) {
       const inner = readFrameDocument(hit);
       if (!inner) return 'frame-unreachable';
-      const box = hit.getBoundingClientRect();
-      pointX -= box.left + hit.clientLeft;
-      pointY -= box.top + hit.clientTop;
+      const local = mapPointIntoFrame(hit, pointX, pointY);
+      pointX = local.x;
+      pointY = local.y;
       hit = inner.elementFromPoint(pointX, pointY);
     } else {
       break;
@@ -138,7 +156,8 @@ function selectEditingHostContent(host: PageElement, hostDocument: PageDocument)
 function selectControlContent(control: PageElement): string {
   control.select();
   // Email and number inputs have no selection API (selectionStart is null), so select() is the
-  // only step there; test/integration/smoke-web-fill.test.ts proves it replaces their value.
+  // only step there; the live fill scenario (test/integration/web-e2e/fill-scenario.ts, run from
+  // smoke-web-platform.test.ts) proves it replaces their value.
   const hasSelectionApi = !['email', 'number'].includes(String(control.type).toLowerCase());
   const covered =
     !hasSelectionApi ||
@@ -163,6 +182,7 @@ const PAGE_SCRIPT_FUNCTIONS = [
   readFrameDocument,
   isTextEntryField,
   resolveFocusedField,
+  mapPointIntoFrame,
   resolveClickedElement,
   isClickOnField,
   readInnermostBoundary,

@@ -25,6 +25,9 @@ const EDITABLE_FIELDS: readonly Field[] = [
   { name: 'shadowInput', stateKey: 'shadowInput' },
   { name: 'shadowContenteditable', stateKey: 'shadowContenteditable' },
   { name: 'sameOriginFrame', stateKey: 'sameOriginFrame' },
+  // Frame-local coordinates are the click point divided by the frame's rendered scale.
+  { name: 'scaledHalfFrame', stateKey: 'scaledHalfFrame' },
+  { name: 'scaledDoubleFrame', stateKey: 'scaledDoubleFrame' },
   { name: 'emailInput', stateKey: 'emailInput', text: 'new@example.test' },
   { name: 'numberInput', stateKey: 'numberInput', text: '42' },
   // Several paragraphs and a hidden span: the selection must cover all of it, though the text the
