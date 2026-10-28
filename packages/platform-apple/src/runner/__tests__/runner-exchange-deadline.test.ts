@@ -99,3 +99,25 @@ test('the runner timeout is what the deadline leaves after the preflight', async
   assert.equal(sentAlerts()[0]?.timeoutMs, 4_200);
   assert.equal('deadline' in (sentAlerts()[0] ?? {}), false, 'the deadline stays on the host');
 });
+
+test.each([
+  ['exactly the shortest timeout it needs is sent', 10_000, true],
+  ['1 ms below the shortest timeout it needs is refused unsent', 9_999, false],
+] as const)('a press left %s', async (_case, leftMs, sent) => {
+  const outcome = await exchange({
+    command: 'alert',
+    action: 'accept',
+    timeoutMs: 10_000,
+    deadline: { atMs: NOW_MS + leftMs, minTimeoutMs: 10_000 },
+  });
+
+  if (sent) {
+    assert.deepEqual(outcome, { handled: true });
+    assert.equal(sentAlerts()[0]?.timeoutMs, 10_000);
+  } else {
+    assert.ok(outcome instanceof AppError);
+    assert.equal(outcome.details?.reason, 'runner_command_deadline_spent');
+    assert.equal(outcome.details?.dispatched, 'no');
+    assert.deepEqual(sentAlerts(), []);
+  }
+});
