@@ -184,6 +184,8 @@ export type SessionProviderOptions = {
   forceStopDelayMs?: number;
   recoveryFailure?: boolean;
   stalledCleanup?: boolean;
+  /** How many `forward --remove` calls hang until their cleanup budget aborts them. */
+  stalledForwardRemovals?: number;
   stalledSnapshots?: number;
   /** Whether `adb features` advertises the shell protocol that forwards device exit status. */
   shellProtocolV2?: boolean;
@@ -370,8 +372,14 @@ async function stallSessionCleanupIfConfigured(
   signal: AbortSignal | undefined,
   forceStopsRuntime: boolean,
 ): Promise<void> {
-  const removesForward = args[0] === 'forward' && args[1] === '--remove';
-  if (!options.stalledCleanup || !signal || (!removesForward && !forceStopsRuntime)) return;
+  const removesForward = isAndroidHelperForwardRemoval(args);
+  const stalledForwardRemovals = options.stalledForwardRemovals ?? 0;
+  const stallsForwardRemoval = removesForward && stalledForwardRemovals > 0;
+  // Only a call with a cleanup signal can actually hang, so only it consumes a stall.
+  if (stallsForwardRemoval && signal) options.stalledForwardRemovals = stalledForwardRemovals - 1;
+  const stalls =
+    stallsForwardRemoval || (options.stalledCleanup && (removesForward || forceStopsRuntime));
+  if (!stalls || !signal) return;
   await new Promise<never>((_resolve, reject) => {
     const onAbort = () => {
       options.cleanupAborts?.push(args);

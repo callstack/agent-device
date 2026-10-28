@@ -227,20 +227,22 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   forceStopRuntime: boolean;
 }): Promise<{ timedOut: boolean }> {
   const signal = AbortSignal.timeout(params.timeoutMs);
-  await Promise.all([
-    ...(params.forceStopRuntime
-      ? [
-          stopAndroidSnapshotHelperRuntime({
-            adb: params.adb,
-            packageName: params.packageName,
-            timeoutMs: params.timeoutMs,
-            signal,
-          }),
-        ]
-      : []),
-    removeAndroidSnapshotHelperSessionForward({ ...params, signal }),
-  ]);
-  return { timedOut: signal.aborted };
+  const forwardRemoved = (
+    await Promise.all([
+      ...(params.forceStopRuntime
+        ? [
+            stopAndroidSnapshotHelperRuntime({
+              adb: params.adb,
+              packageName: params.packageName,
+              timeoutMs: params.timeoutMs,
+              signal,
+            }),
+          ]
+        : []),
+      removeAndroidSnapshotHelperSessionForward({ ...params, signal }),
+    ])
+  ).at(-1);
+  return { timedOut: signal.aborted || forwardRemoved !== true };
 }
 
 /**
@@ -367,13 +369,20 @@ async function removeAndroidSnapshotHelperSessionForward(params: {
   port: number;
   timeoutMs: number;
   signal: AbortSignal;
-}): Promise<void> {
+}): Promise<boolean> {
   params.process.stdin?.end();
   params.process.stdout?.destroy();
   params.process.stderr?.destroy();
-  await params.adb(['forward', '--remove', `tcp:${params.port}`], {
-    allowFailure: true,
-    timeoutMs: params.timeoutMs,
-    signal: params.signal,
-  });
+  // `allowFailure` already absorbs an adb error, so a rejection is a removal that ran out of budget
+  // or was aborted: report it as a timed-out cleanup rather than failing the teardown.
+  return await params
+    .adb(['forward', '--remove', `tcp:${params.port}`], {
+      allowFailure: true,
+      timeoutMs: params.timeoutMs,
+      signal: params.signal,
+    })
+    .then(
+      () => true,
+      () => false,
+    );
 }

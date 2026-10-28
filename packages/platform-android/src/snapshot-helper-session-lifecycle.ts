@@ -33,6 +33,7 @@ import {
 } from './snapshot-helper-session-protocol.ts';
 import {
   type AndroidSnapshotHelperProcessExit,
+  type AndroidSnapshotHelperRuntimeRelease,
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
@@ -255,12 +256,27 @@ export async function retireFailedAndroidSnapshotHelperSession(params: {
   signal?: AbortSignal;
   cause: unknown;
 }): Promise<void> {
-  await stopAndroidSnapshotHelperSession(params.deviceKey, {
+  const retirement = await stopAndroidSnapshotHelperSession(params.deviceKey, {
     force: true,
     signal: params.signal,
     cause: params.cause,
   });
   if (params.signal?.aborted) return;
+  // CONSERVATIVE: a frozen helper can stall adb on its next start (#3929), so a retirement that did
+  // not prove release keeps this build one-shot until reset. `unknown` may be one slow `pidof` read.
+  if (retirement && (retirement.release !== 'released' || retirement.cleanupTimedOut)) {
+    failedSessions().set(params.identity, Number.POSITIVE_INFINITY);
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_snapshot_helper_persistent_session_disabled',
+      data: {
+        deviceKey: params.deviceKey,
+        release: retirement.release,
+        externalCleanupTimedOut: retirement.cleanupTimedOut,
+      },
+    });
+    return;
+  }
   failedSessions().set(
     params.identity,
     Date.now() +
@@ -459,9 +475,15 @@ export async function stopAndroidSnapshotHelperSession(
     signal?: AbortSignal;
     cause?: unknown;
   } = {},
-): Promise<boolean> {
+): Promise<
+  | {
+      release: AndroidSnapshotHelperRuntimeRelease;
+      cleanupTimedOut: boolean;
+    }
+  | undefined
+> {
   const session = sessions().get(deviceKey);
-  if (!session) return false;
+  if (!session) return undefined;
   sessions().delete(deviceKey);
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
@@ -530,7 +552,7 @@ export async function stopAndroidSnapshotHelperSession(
       externalCleanupTimedOut: cleanup.timedOut,
     },
   });
-  return true;
+  return { release, cleanupTimedOut: cleanup.timedOut };
 }
 
 async function requestGracefulSessionExit(
