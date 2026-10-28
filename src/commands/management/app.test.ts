@@ -67,6 +67,25 @@ describe('open startup budget', () => {
   });
 });
 
+describe('open device spec input', () => {
+  test('structured open input reads the spec as readLeaseDeviceSpec decides it', () => {
+    expect(
+      openCommandFacet.metadata.readInput({
+        app: 'Settings',
+        osVersion: '18',
+        imageTag: '',
+        physical: false,
+      }),
+    ).toEqual({ app: 'Settings', osVersion: '18' });
+    expect(() => openCommandFacet.metadata.readInput({ app: 'Settings', physical: 'yes' })).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: { reason: 'device-spec-invalid', keys: ['physical'] },
+      }),
+    );
+  });
+});
+
 describe('open command metro session hints', () => {
   test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {
     const parsed = parseArgs(
