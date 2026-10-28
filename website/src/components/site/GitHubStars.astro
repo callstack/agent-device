@@ -2,7 +2,7 @@
 // The GitHub link with the repository's star count, top right in the landing and docs headers.
 // The count is baked in when the site is built, so it renders at once and without scripts. Once
 // the page is idle, the browser refreshes it from the GitHub API, at most once per session every
-// ten minutes (sessionStorage); when GitHub refuses, the built figure stays.
+// ten minutes (sessionStorage). A refusal is remembered as long, and the built figure stays.
 import { site } from '../../site/content';
 import { buildStars, formatStars, starsApi } from '../../site/github';
 import PixelIcon from './PixelIcon.astro';
@@ -12,15 +12,15 @@ interface Props {
 }
 const { class: className } = Astro.props;
 const stars = await buildStars(site.repo);
-const label = (count?: string) =>
-  count ? `${site.name} on GitHub, ${count} stars` : `${site.name} on GitHub`;
+const label = `${site.name} on GitHub`;
 ---
 
 <a
   class:list={['gh-stars', className]}
   href={site.repo}
   data-stars-api={starsApi(site.repo)}
-  aria-label={label(stars?.toLocaleString('en'))}
+  data-stars-label={label}
+  aria-label={stars === undefined ? label : `${label}, ${stars.toLocaleString('en')} stars`}
 >
   <PixelIcon name="star" size={14} />
   <span data-stars-count>{stars === undefined ? 'GitHub' : formatStars(stars)}</span>
@@ -37,29 +37,33 @@ const label = (count?: string) =>
     for (const link of links) {
       const count = link.querySelector('[data-stars-count]');
       if (count) count.textContent = formatStars(stars);
-      link.setAttribute('aria-label', `agent-device on GitHub, ${stars.toLocaleString('en')} stars`);
+      link.setAttribute('aria-label', `${link.dataset.starsLabel}, ${stars.toLocaleString('en')} stars`);
     }
   };
 
-  const cached = (): number | undefined => {
+  /** The last answer while it is fresh: a count, or null when GitHub refused. */
+  type Saved = { stars: number | null; at: number };
+  const recent = (): Saved | undefined => {
     try {
-      const saved = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as { stars: number; at: number } | null;
-      return saved && Date.now() - saved.at < FRESH ? saved.stars : undefined;
+      const saved = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as Saved | null;
+      return saved && Date.now() - saved.at < FRESH ? saved : undefined;
     } catch {
       return undefined;
     }
   };
 
   const refresh = async (api: string) => {
-    const saved = cached();
-    if (saved !== undefined) return show(saved);
+    const saved = recent();
+    if (saved) {
+      if (saved.stars !== null) show(saved.stars);
+      return;
+    }
     const stars = await fetch(api, { headers: { accept: 'application/vnd.github+json' } })
       .then(readStars)
       .catch(() => undefined);
-    if (stars === undefined) return;
-    show(stars);
+    if (stars !== undefined) show(stars);
     try {
-      sessionStorage.setItem(KEY, JSON.stringify({ stars, at: Date.now() }));
+      sessionStorage.setItem(KEY, JSON.stringify({ stars: stars ?? null, at: Date.now() }));
     } catch {
       // Storage can be off (private windows); the next page asks again.
     }

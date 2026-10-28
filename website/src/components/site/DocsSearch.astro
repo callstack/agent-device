@@ -27,30 +27,44 @@ import PixelIcon from './PixelIcon.astro';
   // Pages are served without .html or a trailing slash (vercel.json).
   const cleanUrl = (url: string) => url.replace(/\.html(#|$)/, '$1').replace(/(.)\/(#.*)?$/, '$1$2');
 
-  let loading: Promise<void> | undefined;
-  const loadUi = (element: HTMLElement) =>
-    (loading ??= new Promise<void>((resolve, reject) => {
+  const loadScript = () =>
+    new Promise<void>((resolve, reject) => {
       const css = Object.assign(document.createElement('link'), {
         rel: 'stylesheet',
         href: `${PAGEFIND}pagefind-ui.css`,
       });
       const js = Object.assign(document.createElement('script'), { src: `${PAGEFIND}pagefind-ui.js` });
       js.addEventListener('load', () => resolve());
-      js.addEventListener('error', () => reject(new Error('docs search: the Pagefind UI did not load')));
-      document.head.append(css, js);
-    }).then(() => {
-      const { PagefindUI } = window as unknown as { PagefindUI: new (options: object) => unknown };
-      new PagefindUI({
-        element,
-        bundlePath: PAGEFIND,
-        showImages: false,
-        showSubResults: true,
-        processResult: (result: PagefindResult) => {
-          result.url = cleanUrl(result.url);
-          for (const sub of result.sub_results) sub.url = cleanUrl(sub.url);
-        },
+      js.addEventListener('error', () => {
+        css.remove();
+        js.remove();
+        reject(new Error('docs search: the Pagefind UI did not load'));
       });
-    }));
+      document.head.append(css, js);
+    });
+
+  // One load at a time; a failed one is forgotten, so the next open tries again.
+  let loading: Promise<void> | undefined;
+  const loadUi = (element: HTMLElement) =>
+    (loading ??= loadScript().then(
+      () => {
+        const { PagefindUI } = window as unknown as { PagefindUI: new (options: object) => unknown };
+        new PagefindUI({
+          element,
+          bundlePath: PAGEFIND,
+          showImages: false,
+          showSubResults: true,
+          processResult: (result: PagefindResult) => {
+            result.url = cleanUrl(result.url);
+            for (const sub of result.sub_results) sub.url = cleanUrl(sub.url);
+          },
+        });
+      },
+      (error: unknown) => {
+        loading = undefined;
+        throw error;
+      },
+    ));
 
   class DocsSearch extends HTMLElement {
     connectedCallback() {
@@ -65,23 +79,26 @@ import PixelIcon from './PixelIcon.astro';
         open.setAttribute('aria-keyshortcuts', 'Meta+K');
       }
 
-      const prepare = () => void loadUi(target).catch((error: unknown) => console.error(error));
-      // A link in the results, or a click outside the frame, closes the dialog.
+      const prepare = () =>
+        loadUi(target).catch((error: unknown) => {
+          console.error(error);
+        });
+      // A click on a result link (or anything inside one), or outside the frame, closes the dialog.
       const onClick = (event: MouseEvent) => {
-        const node = event.target as Node;
-        if ('href' in node || !frame.contains(node)) dialog.close();
+        const node = event.target as Element;
+        if (node.closest?.('a[href]') || !frame.contains(node)) dialog.close();
       };
       const show = (event?: Event) => {
-        prepare();
+        const ready = prepare();
         dialog.showModal();
         document.body.toggleAttribute('data-search-open', true);
-        void loading?.then(() => target.querySelector('input')?.focus());
+        void ready.then(() => target.querySelector('input')?.focus());
         event?.stopPropagation();
         addEventListener('click', onClick);
       };
 
-      open.addEventListener('pointerenter', prepare, { once: true });
-      open.addEventListener('focus', prepare, { once: true });
+      open.addEventListener('pointerenter', () => void prepare(), { once: true });
+      open.addEventListener('focus', () => void prepare(), { once: true });
       open.addEventListener('click', show);
       close.addEventListener('click', () => dialog.close());
       dialog.addEventListener('close', () => {
