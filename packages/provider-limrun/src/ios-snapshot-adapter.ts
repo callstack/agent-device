@@ -6,13 +6,19 @@ import {
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { LimrunIosSession } from './ios.ts';
 import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
+import { expandLimrunCollapsedTabBar } from './ios-collapsed-tab-bar.ts';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
-  const tree = (await session.client.elementTree()) as IosTreeNode[];
-  const viewport = readLimrunViewport(tree, session.client.deviceInfo);
+  const reported = (await session.client.elementTree()) as IosTreeNode | IosTreeNode[];
+  const viewport = readLimrunViewport(reported, session.client.deviceInfo);
+  const tree = await expandLimrunCollapsedTabBar(
+    reported,
+    viewport.kind === 'missing' ? null : viewport.rect,
+    async (point) => (await session.client.elementTree(point)) as IosTreeNode | IosTreeNode[],
+  );
   const nodes = flattenIosTree(tree).map((node) => interpretIosNode(node));
   return createIosSnapshotAcquisition({
     producer: 'limrun-ios-tree',

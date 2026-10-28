@@ -4,7 +4,10 @@ import { expect, test, vi } from 'vitest';
 import { captureLimrunIosSnapshot } from './ios-snapshot-adapter.ts';
 import {
   LIMRUN_SNAPSHOT_SCREEN,
+  LIMRUN_TAB_BUTTONS,
+  createLimrunHitTestSession,
   createLimrunSnapshotSession,
+  limrunCollapsedTabBarTree,
   limrunSnapshotTree,
 } from './ios-snapshot-adapter.fixtures.ts';
 
@@ -211,4 +214,51 @@ test('limrun acquisition shares RN interpretation and preserves native values', 
   expect(field).toMatchObject({ type: 'TextField', value: 'checkbox, checked' });
   expect(field).not.toHaveProperty('iosValueSemantics');
   expect(field).not.toHaveProperty('checked');
+});
+
+test('Limrun publishes the tabs its hit-tests find inside a collapsed iOS tab bar', async () => {
+  const { session, probes } = createLimrunHitTestSession(
+    limrunCollapsedTabBarTree(),
+    LIMRUN_TAB_BUTTONS,
+  );
+  const { nodes } = (await captureLimrunIosSnapshot(session)).acquisition;
+
+  const bar = nodes.find((node) => node.label === 'Tab Bar')!;
+  const tabs = nodes.filter((node) => node.parentIndex === bar.index);
+  expect(tabs).toEqual([
+    expect.objectContaining({
+      type: 'RadioButton',
+      label: 'Home',
+      rect: { x: 25, y: 795, width: 78, height: 54 },
+      selected: true,
+      depth: (bar.depth ?? 0) + 1,
+    }),
+    expect.objectContaining({ label: 'Catalog', rect: { x: 140, y: 795, width: 78, height: 54 } }),
+    expect.objectContaining({ label: 'Settings', rect: { x: 299, y: 795, width: 78, height: 54 } }),
+  ]);
+  expect(tabs.filter((tab) => tab.selected).map((tab) => tab.label)).toEqual(['Home']);
+  expect(probes.length).toBeLessThanOrEqual(24);
+});
+
+test('Limrun probes no childless group that is not docked along the bottom edge', async () => {
+  const { session, probes } = createLimrunHitTestSession(
+    limrunCollapsedTabBarTree({ x: 0, y: 62, width: 402, height: 83 }),
+    LIMRUN_TAB_BUTTONS.map((tab) => ({ ...tab, frame: { ...tab.frame, y: 66 } })),
+  );
+  const { nodes } = (await captureLimrunIosSnapshot(session)).acquisition;
+
+  const bar = nodes.find((node) => node.label === 'Tab Bar')!;
+  expect(nodes.filter((node) => node.parentIndex === bar.index)).toEqual([]);
+  expect(probes).toEqual([]);
+});
+
+test('Limrun publishes no hit-test result that is not a tab button', async () => {
+  const { session } = createLimrunHitTestSession(
+    limrunCollapsedTabBarTree(),
+    LIMRUN_TAB_BUTTONS.map((tab) => ({ ...tab, type: 'Button', traits: ['Button'] })),
+  );
+  const { nodes } = (await captureLimrunIosSnapshot(session)).acquisition;
+
+  const bar = nodes.find((node) => node.label === 'Tab Bar')!;
+  expect(nodes.filter((node) => node.parentIndex === bar.index)).toEqual([]);
 });
