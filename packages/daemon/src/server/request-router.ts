@@ -34,6 +34,7 @@ import type {
 import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from '../core/session-store.ts';
+import { redactFillFailureReadBack } from '../core/fill-read-back-redaction.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
 import {
   countDiagnosticEventsByPhase,
@@ -590,7 +591,8 @@ function registerParameterizedFillDiagnosticValue(req: DaemonRequest): void {
 const ERROR_TEXT_FIELDS: ReadonlySet<string> = new Set(['message', 'hint', 'cause', 'details']);
 
 /**
- * A backend error can quote the text a sensitive fill failed to type. Only that fill's own text is
+ * A backend error can quote the text a sensitive fill failed to type, or the altered text it read
+ * back, which `redactFillFailureReadBack` replaces whole. Only that fill's own text is otherwise
  * redacted, and only in the error's text fields: `logPath`, `diagnosticId` and the other
  * daemon-owned fields come back as they are, and so does every other request's error.
  */
@@ -602,7 +604,12 @@ function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError):
   return Object.fromEntries(
     Object.entries(error).map(([field, value]) => [
       field,
-      ERROR_TEXT_FIELDS.has(field) ? mapErrorStrings(value, replace) : value,
+      ERROR_TEXT_FIELDS.has(field)
+        ? mapErrorStrings(
+            field === 'details' ? redactFillFailureReadBack(value, placeholder) : value,
+            replace,
+          )
+        : value,
     ]),
   ) as DaemonError;
 }

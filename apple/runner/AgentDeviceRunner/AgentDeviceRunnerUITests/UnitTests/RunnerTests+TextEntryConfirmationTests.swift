@@ -302,6 +302,7 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
+    XCTAssertFalse(response.error?.message.contains(text) ?? true)
     XCTAssertEqual(field.value as? String, "a")
     let counters = app.staticTexts["agent-device-text-entry-write-backs"].label.split(separator: " ")
     XCTAssertTrue(counters.contains("total-edits=11"))

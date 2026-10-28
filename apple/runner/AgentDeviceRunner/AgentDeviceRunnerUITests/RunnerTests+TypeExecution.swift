@@ -112,13 +112,11 @@ extension RunnerTests {
       )
     }
     if textResult.verified == false {
-      let expected = textResult.expectedText ?? ""
-      let observed = textResult.observedText ?? ""
       return Response(
         ok: false,
         error: ErrorPayload(
           code: "TEXT_ENTRY_MISMATCH",
-          message: "text entry read-back did not match: expected \"\(expected)\", observed \"\(observed)\"",
+          message: "text entry read-back did not match the requested text",
           hint: textEntryMode == .replacement
             ? "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."
             : nil

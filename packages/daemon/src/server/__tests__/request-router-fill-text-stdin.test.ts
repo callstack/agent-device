@@ -7,6 +7,7 @@
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   localRuntimeOwner,
@@ -38,11 +39,13 @@ function fillWithStdinText(
   flags: Record<string, unknown> = {},
   fillFails?: (text: string) => Error,
   text = SECRET,
+  fillResult?: Record<string, unknown>,
 ) {
   return sendToWebSession(
     session,
     { command: 'fill', positionals: ['10', '20', text], flags: { textStdin: true, ...flags } },
     fillFails,
+    fillResult,
   );
 }
 
@@ -50,6 +53,7 @@ function sendToWebSession(
   session: SessionState,
   request: Pick<DaemonRequest, 'command' | 'positionals' | 'flags'>,
   fillFails?: (text: string) => Error,
+  fillResult?: Record<string, unknown>,
 ) {
   const sessionStore = makeSessionStore('agent-device-router-fill-text-stdin-');
   sessionStore.publish(session.name, session);
@@ -57,6 +61,7 @@ function sendToWebSession(
   const fillPoint = async (input: FillPointInput) => {
     typed.push(input.text);
     if (fillFails) throw fillFails(input.text);
+    return fillResult;
   };
   const owner = localRuntimeOwner('web');
   const baseFacts = createUnavailableRuntimeFactsForTest(WEB_DESKTOP_DEVICE, owner);
@@ -311,4 +316,93 @@ test('a whitespace-only --text-stdin value collapses the error text it appears i
   const result = await response;
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.error.message).toBe('[REDACTED]');
+});
+
+const FILL_TARGET = {
+  resourceId: 'otp',
+  className: 'android.widget.EditText',
+  packageName: 'com.example',
+  rect: { x: 0, y: 0, width: 100, height: 40 },
+};
+
+test.each([
+  ['an unrecorded', {}, '[REDACTED]', makeSession],
+  ['a --record-as', { recordAs: 'CODE' }, '${CODE}', makeAuthoringSession],
+])(
+  '%s --text-stdin fill that settles on a formatted value returns no read-back of it',
+  async (_name, flags, placeholder, sessionFor) => {
+    const { response } = fillWithStdinText(
+      sessionFor('web', { device: WEB_DESKTOP_DEVICE }),
+      flags,
+      undefined,
+      '000629177',
+      {
+        verification: 'unconfirmed',
+        requested: '000629177',
+        before: '000 62',
+        after: '00 062 91 77',
+        target: FILL_TARGET,
+      },
+    );
+
+    const result = await response;
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({
+      verification: 'unconfirmed',
+      requested: placeholder,
+      before: placeholder,
+      after: placeholder,
+      target: FILL_TARGET,
+    });
+    expect(JSON.stringify(result)).not.toContain('062 91');
+    expect(JSON.stringify(result)).not.toContain('000 62');
+  },
+);
+
+test('an unrecorded fill that settles on a formatted value still returns its read-back', async () => {
+  const { response } = sendToWebSession(
+    makeSession('web', { device: WEB_DESKTOP_DEVICE }),
+    { command: 'fill', positionals: ['10', '20', '000629177'] },
+    undefined,
+    {
+      verification: 'unconfirmed',
+      requested: '000629177',
+      before: null,
+      after: '00 062 91 77',
+      target: FILL_TARGET,
+    },
+  );
+
+  const result = await response;
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.data).toMatchObject({ after: '00 062 91 77' });
+});
+
+test('a --text-stdin fill failure that reports an altered read-back returns no part of it', async () => {
+  const { response } = fillWithStdinText(
+    makeSession('web', { device: WEB_DESKTOP_DEVICE }),
+    {},
+    (text) =>
+      new AppError('COMMAND_FAILED', 'Android fill verification failed', {
+        failureReason: 'text_mismatch',
+        expected: text,
+        actual: '00 062 91 77',
+        targetInput: { text: '000 62', className: 'android.widget.EditText' },
+        actualInput: { text: '00 062 91 77', className: 'android.widget.EditText' },
+      }),
+    '000629177',
+  );
+
+  const result = await response;
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.details).toMatchObject({
+    failureReason: 'text_mismatch',
+    expected: '[REDACTED]',
+    actual: '[REDACTED]',
+    targetInput: { text: '[REDACTED]', className: 'android.widget.EditText' },
+    actualInput: { text: '[REDACTED]', className: 'android.widget.EditText' },
+  });
+  expect(JSON.stringify(result)).not.toContain('062 91');
 });

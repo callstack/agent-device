@@ -14,6 +14,7 @@ import {
   sensitiveFillPlaceholder,
 } from '@agent-device/ad-script';
 import { parameterizeRecordedFillPayload } from '@agent-device/selectors/parameterized-recorded-fill';
+import { redactUnconfirmedFillReadBack } from '../../../core/fill-read-back-redaction.ts';
 import type { InteractionFinalizationOperations } from '../../../core/interaction/internal/types.ts';
 
 export function finalizeTouchInteraction(params: {
@@ -124,8 +125,10 @@ function parameterizeFillPayloads(params: {
     result: params.result,
   });
   const placeholder = sensitiveFillPlaceholder(params.flags);
-  return [
-    parameterizeRecordedFillPayload(params.result, literal, placeholder),
-    parameterizeRecordedFillPayload(params.responseData, literal, placeholder),
-  ];
+  const redact = (payload: Record<string, unknown>) =>
+    redactUnconfirmedFillReadBack(
+      parameterizeRecordedFillPayload(payload, literal, placeholder),
+      placeholder,
+    );
+  return [redact(params.result), redact(params.responseData)];
 }
