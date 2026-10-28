@@ -1,3 +1,4 @@
+import { intersectRects, rectArea } from './rect.ts';
 import type { Rect } from './snapshot.ts';
 
 export type ImageDimensions = { width: number; height: number };
@@ -16,10 +17,6 @@ export function normalizedRect(rect: Rect): NormalizedRect {
 }
 
 export function intersectArea(left: Rect, right: Rect): number {
-  const minX = Math.max(left.x, right.x);
-  const minY = Math.max(left.y, right.y);
-  const maxX = Math.min(left.x + left.width, right.x + right.width);
-  const maxY = Math.min(left.y + left.height, right.y + right.height);
-  if (maxX <= minX || maxY <= minY) return 0;
-  return (maxX - minX) * (maxY - minY);
+  const overlap = intersectRects(left, right);
+  return overlap ? rectArea(overlap) : 0;
 }

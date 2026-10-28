@@ -1,3 +1,4 @@
+import { intersectRects } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import {
   isJsonObject,
@@ -100,32 +101,45 @@ async function attachDraftRects(
   const rects = await geometry.rects(
     drafts.flatMap((draft) => (draft.ref === undefined ? [] : [draft.ref])),
   );
-  const frameIndexes = drafts.map((draft) => findFrameAncestorIndex(drafts, draft));
+  const frameIndexes = drafts.map((draft) =>
+    findAncestorIndex(drafts, draft.node.parentIndex, isFrameDraft),
+  );
   const frameRefs = [...new Set(frameIndexes.flatMap((index) => drafts[index ?? -1]?.ref ?? []))];
-  const insets = frameRefs.length > 0 ? await geometry.frameContentInsets(frameRefs) : new Map();
-  // Drafts list a parent before its children, so a frame's own rect is already in page
-  // coordinates when its descendants read it.
+  const insets =
+    frameRefs.length > 0
+      ? await geometry.frameContentInsets(frameRefs)
+      : new Map<string, FrameContentInset>();
+  // The backend measures a node inside an iframe against that frame's viewport. Drafts list a
+  // parent before its children, so each frame's viewport is known before its content is placed.
+  const frameViewports = new Map<number, FrameViewport>();
   for (const [index, draft] of drafts.entries()) {
-    const ref = draft.ref;
-    const rect = ref === undefined ? undefined : rects.get(ref);
-    if (!rect) continue;
+    const measured = draft.ref === undefined ? undefined : rects.get(draft.ref);
+    if (!measured) continue;
     const frameIndex = frameIndexes[index];
-    if (frameIndex === undefined) {
-      draft.node.rect = rect;
-      continue;
-    }
-    // The backend measures a node inside an iframe against that frame's viewport. A frame whose
-    // position cannot be read leaves its content without a rect rather than with a wrong one.
-    const frame = drafts[frameIndex]!;
-    const frameRect = frame.node.rect;
-    const inset = frame.ref === undefined ? undefined : insets.get(frame.ref);
-    if (!frameRect || !inset) continue;
-    const viewport = frameViewportRect(frameRect, inset);
-    const placed = clipRect({ ...rect, x: rect.x + viewport.x, y: rect.y + viewport.y }, viewport);
+    const parent = frameIndex === undefined ? undefined : frameViewports.get(frameIndex);
+    // A frame whose position cannot be read leaves its content without a rect rather than with a
+    // wrong one.
+    if (frameIndex !== undefined && !parent) continue;
+    const rect = parent ? translateRect(measured, parent.origin) : measured;
     // Content scrolled out of its frame has no point a press could reach: the page around the
     // frame renders there instead.
-    if (placed) draft.node.rect = placed;
+    const visible = parent ? intersectRects(rect, parent.visible) : rect;
+    if (!visible) continue;
+    draft.node.rect = visible;
+    const inset = draft.ref === undefined ? undefined : insets.get(draft.ref);
+    if (!inset) continue;
+    // Content lines up with the frame's unclipped viewport and shows only where the frame does.
+    const viewport = frameViewportRect(rect, inset);
+    const viewportVisible = intersectRects(viewport, visible);
+    if (viewportVisible) frameViewports.set(index, { origin: viewport, visible: viewportVisible });
   }
+}
+
+/** Where a frame's document renders on the page, and the part of it the page shows. */
+type FrameViewport = { origin: Rect; visible: Rect };
+
+function translateRect(rect: Rect, origin: Rect): Rect {
+  return { ...rect, x: rect.x + origin.x, y: rect.y + origin.y };
 }
 
 function frameViewportRect(frameRect: Rect, inset: FrameContentInset): Rect {
@@ -137,25 +151,22 @@ function frameViewportRect(frameRect: Rect, inset: FrameContentInset): Rect {
   };
 }
 
-function clipRect(rect: Rect, bounds: Rect): Rect | undefined {
-  const x = Math.max(rect.x, bounds.x);
-  const y = Math.max(rect.y, bounds.y);
-  const right = Math.min(rect.x + rect.width, bounds.x + bounds.width);
-  const bottom = Math.min(rect.y + rect.height, bounds.y + bounds.height);
-  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : undefined;
+function isFrameDraft(draft: SnapshotDraftNode): boolean {
+  return draft.node.type?.toLowerCase() === 'iframe';
 }
 
-/** The nearest iframe the draft renders inside, by index. */
-function findFrameAncestorIndex(
+/** The index of the nearest kept draft, from `parentIndex` upwards, that matches. */
+function findAncestorIndex(
   drafts: readonly SnapshotDraftNode[],
-  draft: SnapshotDraftNode,
+  parentIndex: number | undefined,
+  matches: (draft: SnapshotDraftNode) => boolean,
 ): number | undefined {
-  let index = draft.node.parentIndex;
+  let index = parentIndex;
   while (index !== undefined) {
-    const ancestor = drafts[index];
-    if (!ancestor) return undefined;
-    if (ancestor.node.type?.toLowerCase() === 'iframe') return index;
-    index = ancestor.node.parentIndex;
+    const draft = drafts[index];
+    if (!draft) return undefined;
+    if (matches(draft)) return index;
+    index = draft.node.parentIndex;
   }
   return undefined;
 }
@@ -273,14 +284,8 @@ function findAddressedAncestor(
   drafts: readonly SnapshotDraftNode[],
   parentIndex: number | undefined,
 ): SnapshotDraftNode | undefined {
-  let index = parentIndex;
-  while (index !== undefined) {
-    const draft = drafts[index];
-    if (!draft) return undefined;
-    if (draft.ref !== undefined) return draft;
-    index = draft.node.parentIndex;
-  }
-  return undefined;
+  const index = findAncestorIndex(drafts, parentIndex, (draft) => draft.ref !== undefined);
+  return index === undefined ? undefined : drafts[index];
 }
 
 /** The node a line reports: the addressable one parsed up front, or the ref-less text it carries. */

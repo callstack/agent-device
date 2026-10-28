@@ -4,7 +4,7 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
-import { containsPoint } from '@agent-device/kernel/rect';
+import { containsPoint, intersectRects } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
@@ -42,8 +42,8 @@ export function resolveInteractionTouchPoint(
     return { kind: 'resolved', point: center, strategy: 'center' };
   }
 
-  const searchRect = (options.bounds ?? []).reduce<Rect | null>(
-    (current, bound) => (current ? intersectRects(current, bound) : null),
+  const searchRect = (options.bounds ?? []).reduce<Rect | undefined>(
+    (current, bound) => (current ? intersectRects(current, bound) : undefined),
     targetRect,
   );
   const point = searchRect
@@ -81,9 +81,7 @@ function collectInteractiveDescendantRects(
         const rect = normalizeRect(candidate.rect);
         if (!rect || areRectsApproximatelyEqual(rect, targetRect)) return [];
         const clipped = intersectRects(rect, targetRect);
-        return clipped && clipped.width > 0 && clipped.height > 0
-          ? [{ ref: candidate.ref, index: candidate.index, rect: clipped }]
-          : [];
+        return clipped ? [{ ref: candidate.ref, index: candidate.index, rect: clipped }] : [];
       })
       .sort((left, right) => left.index - right.index)
   );
@@ -104,15 +102,6 @@ function isDescendantOf(
     current = parent;
   }
   return false;
-}
-
-function intersectRects(left: Rect, right: Rect): Rect | null {
-  const x = Math.max(left.x, right.x);
-  const y = Math.max(left.y, right.y);
-  const maxX = Math.min(left.x + left.width, right.x + right.width);
-  const maxY = Math.min(left.y + left.height, right.y + right.height);
-  if (maxX <= x || maxY <= y) return null;
-  return { x, y, width: maxX - x, height: maxY - y };
 }
 
 /**

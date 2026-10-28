@@ -514,6 +514,23 @@ test('agent-browser provider clips frame content to the frame viewport', async (
   });
 });
 
+test('agent-browser provider places content of a clipped nested frame from its unclipped viewport', async () => {
+  await withWebProvider(async (provider) => {
+    const snapshot = await withCommandExecutorOverride(
+      // The outer frame is scrolled so the nested frame starts 20px above the outer viewport.
+      frameGeometryExecutor([], {
+        boxes: { ...FRAME_BOXES, '@e4': { x: 10, y: -20, width: 200, height: 50 } },
+      }),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    const rects = snapshotRects(snapshot);
+    assert.deepEqual(rects.e4, { x: 36, y: 772, width: 200, height: 30 });
+    // The nested viewport starts at 772 - 20 + 6, so the button's top 12px of 20 are hidden.
+    assert.deepEqual(rects.e5, { x: 46, y: 772, width: 80, height: 12 });
+  });
+});
+
 async function withWebProvider(
   testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
 ): Promise<void> {
@@ -538,23 +555,38 @@ async function withWebProvider(
  * box. `@e1`/`@e2`/`@e4` report the boxes `boxRect` describes.
  */
 function geometryExecutor(calls: AgentBrowserCall[]) {
+  return batchExecutor(calls, snapshotPayload, ([, , ref]) =>
+    ref === '@e3' ? undefined : boxRect(ref),
+  );
+}
+
+/**
+ * A backend that answers `snapshot` with `snapshot()` and each batch command with `answer`; a
+ * command `answer` returns nothing for comes back as a failed entry.
+ */
+function batchExecutor(
+  calls: AgentBrowserCall[],
+  snapshot: () => ExecResult,
+  answer: (command: string[]) => unknown,
+) {
   return async (
     cmd: string,
     args: readonly string[],
     options: { allowFailure?: boolean; stdin?: string | Buffer },
   ): Promise<ExecResult> => {
     const cliArgs = recordCall(calls, cmd, args, options.stdin);
-    if (cliArgs[0] === 'snapshot') return snapshotPayload();
+    if (cliArgs[0] === 'snapshot') return snapshot();
     if (cliArgs[0] === 'batch') {
       const commands = readBatchCommands(options.stdin);
       assert.equal(options.allowFailure, true);
       assert.ok(!cliArgs.includes('--bail'), 'a bailed batch drops the refs after a failed one');
       return jsonResult(
-        commands.map((command) =>
-          command.slice(0, 3).join(' ') === 'get box @e3'
-            ? { command, success: false, error: 'No box for element', result: null }
-            : { command, success: true, error: null, result: boxRect(command[2]) },
-        ),
+        commands.map((command) => {
+          const result = answer(command);
+          return result === undefined
+            ? { command, success: false, error: 'No element', result: null }
+            : { command, success: true, error: null, result };
+        }),
         1,
       );
     }
@@ -597,45 +629,33 @@ function frameGeometryExecutor(
     boxes = FRAME_BOXES,
   }: { styles?: FrameStyles; boxes?: typeof FRAME_BOXES } = {},
 ) {
-  return async (
-    cmd: string,
-    args: readonly string[],
-    options: { stdin?: string | Buffer },
-  ): Promise<ExecResult> => {
-    const cliArgs = recordCall(calls, cmd, args, options.stdin);
-    if (cliArgs[0] === 'snapshot') {
-      return jsonResult({
-        success: true,
-        data: {
-          refs: {
-            e1: { role: 'button', name: 'Page button' },
-            e2: { role: 'Iframe', name: 'Outer frame' },
-            e3: { role: 'button', name: 'Outer frame button' },
-            e4: { role: 'Iframe', name: 'Inner frame' },
-            e5: { role: 'button', name: 'Inner frame button' },
-          },
-          snapshot: [
-            '- button "Page button" [ref=e1]',
-            '- Iframe "Outer frame" [ref=e2]',
-            '  - button "Outer frame button" [ref=e3]',
-            '  - Iframe "Inner frame" [ref=e4]',
-            '    - button "Inner frame button" [ref=e5]',
-          ].join('\n'),
-        },
-      });
-    }
-    const commands = readBatchCommands(options.stdin);
-    return jsonResult(
-      commands.map((command) => {
-        const [, kind, ref] = command;
-        const frameStyles = styles[ref!];
-        const result = kind === 'box' ? boxes[ref!] : frameStyles && { styles: frameStyles };
-        return result
-          ? { command, success: true, error: null, result }
-          : { command, success: false, error: 'No element', result: null };
-      }),
-    );
-  };
+  return batchExecutor(calls, frameSnapshotPayload, ([, property, ref]) => {
+    if (property === 'box') return boxes[ref!];
+    const frameStyles = styles[ref!];
+    return frameStyles ? { styles: frameStyles } : undefined;
+  });
+}
+
+function frameSnapshotPayload(): ExecResult {
+  return jsonResult({
+    success: true,
+    data: {
+      refs: {
+        e1: { role: 'button', name: 'Page button' },
+        e2: { role: 'Iframe', name: 'Outer frame' },
+        e3: { role: 'button', name: 'Outer frame button' },
+        e4: { role: 'Iframe', name: 'Inner frame' },
+        e5: { role: 'button', name: 'Inner frame button' },
+      },
+      snapshot: [
+        '- button "Page button" [ref=e1]',
+        '- Iframe "Outer frame" [ref=e2]',
+        '  - button "Outer frame button" [ref=e3]',
+        '  - Iframe "Inner frame" [ref=e4]',
+        '    - button "Inner frame button" [ref=e5]',
+      ].join('\n'),
+    },
+  });
 }
 
 function snapshotRects(snapshot: WebSnapshotResult) {

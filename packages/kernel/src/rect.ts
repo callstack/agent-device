@@ -91,6 +91,15 @@ export function rectContains(container: Rect, nested: Rect): boolean {
   );
 }
 
+/** The overlap of two rects, or nothing when they share no area. */
+export function intersectRects(left: Rect, right: Rect): Rect | undefined {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const width = Math.min(left.x + left.width, right.x + right.width) - x;
+  const height = Math.min(left.y + left.height, right.y + right.height) - y;
+  return width > 0 && height > 0 ? { x, y, width, height } : undefined;
+}
+
 export function rectArea(rect: Rect): number {
   return rect.width * rect.height;
 }

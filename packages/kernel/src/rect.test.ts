@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { Rect } from './snapshot.ts';
 import {
   containsPoint,
+  intersectRects,
   isGeometricallyActionable,
   isPositiveFiniteRect,
   isRectVisibleInViewport,
@@ -220,4 +221,21 @@ test('isGeometricallyActionable matches the Swift runner predicate', () => {
     false,
     'a center on the bottom edge is not hittable',
   );
+});
+
+test('intersectRects returns the shared area and nothing for rects that only touch', () => {
+  assert.deepEqual(intersectRects({ x: 10, y: 20, width: 100, height: 50 }, VIEWPORT), {
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 50,
+  });
+  assert.deepEqual(intersectRects({ x: -20, y: 480, width: 40, height: 40 }, VIEWPORT), {
+    x: 0,
+    y: 480,
+    width: 20,
+    height: 20,
+  });
+  assert.equal(intersectRects({ x: 300, y: 0, width: 10, height: 10 }, VIEWPORT), undefined);
+  assert.equal(intersectRects({ x: 0, y: -10, width: 10, height: 10 }, VIEWPORT), undefined);
 });

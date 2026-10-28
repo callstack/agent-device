@@ -5,7 +5,7 @@ import {
   isViewportRootNode,
   normalizeType,
 } from '@agent-device/contracts/snapshot';
-import { isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
+import { intersectRects, isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
@@ -71,12 +71,7 @@ export function intersectScreenshotRect(
   imageWidth: number,
   imageHeight: number,
 ): Rect | null {
-  const x = Math.max(rect.x, 0);
-  const y = Math.max(rect.y, 0);
-  const right = Math.min(rect.x + rect.width, imageWidth);
-  const bottom = Math.min(rect.y + rect.height, imageHeight);
-  if (right <= x || bottom <= y) return null;
-  return { x, y, width: right - x, height: bottom - y };
+  return intersectRects(rect, { x: 0, y: 0, width: imageWidth, height: imageHeight }) ?? null;
 }
 
 /**

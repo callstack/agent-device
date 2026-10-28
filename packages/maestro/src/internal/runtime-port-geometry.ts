@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { buildInPageSwipeGesturePlan } from '@agent-device/contracts/scroll-gesture';
-import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
+import { intersectRects, isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { pointInsideRect } from './shared.ts';
 import {
@@ -121,14 +121,6 @@ function findLargestPositiveRect(
     }
   }
   return largest;
-}
-
-function intersectRects(left: Rect, right: Rect): Rect | undefined {
-  const x = Math.max(left.x, right.x);
-  const y = Math.max(left.y, right.y);
-  const width = Math.min(left.x + left.width, right.x + right.width) - x;
-  const height = Math.min(left.y + left.height, right.y + right.height) - y;
-  return width > 0 && height > 0 ? { x, y, width, height } : undefined;
 }
 
 function compareViewportAreaDescending(
