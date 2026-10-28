@@ -1,7 +1,7 @@
 // Route data for docs pages: a meta description per page, and BreadcrumbList structured data.
 // Docs pages have no `description` frontmatter, so Starlight would give every page the
 // site-wide one; the first paragraph of the page says what the page is about, so use it.
-import { defineRouteMiddleware } from '@astrojs/starlight/route-data';
+import { defineRouteMiddleware, type StarlightRouteData } from '@astrojs/starlight/route-data';
 
 import { docs, site as meta } from './site/content';
 import { fullTitle } from './site/meta';
@@ -9,7 +9,7 @@ import { fullTitle } from './site/meta';
 const MAX = 160;
 
 /** The first prose paragraph of a Markdown body, as plain text, cut to fit a description. */
-export function describe(body: string): string | undefined {
+function describe(body: string): string | undefined {
   const blocks = body
     .replaceAll(/```[\s\S]*?```/g, '')
     .split(/\n\s*\n/)
@@ -21,13 +21,42 @@ export function describe(body: string): string | undefined {
   const text = prose
     .replaceAll(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replaceAll(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replaceAll(/[`*_]/g, '')
+    .replaceAll(/[`*]/g, '')
     .replaceAll(/\s+/g, ' ')
     .trim();
   if (text.length <= MAX) return text;
   const cut = text.slice(0, MAX);
   const sentence = cut.lastIndexOf('. ');
   return sentence > 80 ? cut.slice(0, sentence + 1) : `${cut.slice(0, cut.lastIndexOf(' '))}…`;
+}
+
+type Head = StarlightRouteData['head'];
+
+/** Sets the content of every meta tag `matches` picks. */
+function setMeta(
+  head: Head,
+  matches: (attrs: Record<string, unknown>) => boolean,
+  content: string,
+) {
+  for (const tag of head) {
+    if (tag.tag === 'meta' && tag.attrs && matches(tag.attrs)) tag.attrs.content = content;
+  }
+}
+
+/**
+ * Pages are built as files (`build.format: 'file'`), so Starlight's canonical and og:url end in
+ * .html; Vercel serves them without it (`cleanUrls`), so point both at the clean URL.
+ */
+function dropHtmlSuffix(head: Head) {
+  for (const tag of head) {
+    const attrs = tag.attrs;
+    if (tag.tag === 'link' && attrs?.rel === 'canonical' && typeof attrs.href === 'string') {
+      attrs.href = attrs.href.replace(/\.html$/, '');
+    }
+    if (tag.tag === 'meta' && attrs?.property === 'og:url' && typeof attrs.content === 'string') {
+      attrs.content = attrs.content.replace(/\.html$/, '');
+    }
+  }
 }
 
 export const onRequest = defineRouteMiddleware((context) => {
@@ -38,40 +67,19 @@ export const onRequest = defineRouteMiddleware((context) => {
   // The same social titles as the landing pages (Site.astro): og:title is the full title, not the
   // page title alone, and Twitter gets its own title and description too.
   const title = fullTitle(entry.data.title);
-  for (const tag of head) {
-    if (tag.tag === 'meta' && tag.attrs?.property === 'og:title') tag.attrs.content = title;
-  }
+  setMeta(head, (attrs) => attrs.property === 'og:title', title);
   head.push({ tag: 'meta', attrs: { name: 'twitter:title', content: title } });
+  dropHtmlSuffix(head);
 
-  // Pages are built as files (`build.format: 'file'`), so Starlight's canonical and og:url end
-  // in .html; Vercel serves them without it (`cleanUrls`), so point both at the clean URL.
-  for (const tag of head) {
-    if (
-      tag.tag === 'link' &&
-      tag.attrs?.rel === 'canonical' &&
-      typeof tag.attrs.href === 'string'
-    ) {
-      tag.attrs.href = tag.attrs.href.replace(/\.html$/, '');
-    }
-    if (
-      tag.tag === 'meta' &&
-      tag.attrs?.property === 'og:url' &&
-      typeof tag.attrs.content === 'string'
-    ) {
-      tag.attrs.content = tag.attrs.content.replace(/\.html$/, '');
-    }
-  }
-
-  if (!entry.data.description && 'body' in entry && typeof entry.body === 'string') {
-    const description = describe(entry.body);
-    if (description) {
-      entry.data.description = description;
-      for (const tag of head) {
-        if (tag.tag !== 'meta') continue;
-        if (tag.attrs?.name === 'description' || tag.attrs?.property === 'og:description')
-          tag.attrs.content = description;
-      }
-    }
+  const body = 'body' in entry && typeof entry.body === 'string' ? entry.body : undefined;
+  const description = !entry.data.description && body ? describe(body) : undefined;
+  if (description) {
+    entry.data.description = description;
+    setMeta(
+      head,
+      (attrs) => attrs.name === 'description' || attrs.property === 'og:description',
+      description,
+    );
   }
 
   // After the description is settled above, so Twitter shows the same one as search and og.

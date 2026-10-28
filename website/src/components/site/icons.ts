@@ -1,6 +1,6 @@
 // 9x9 pixel icons, one square per pixel. PixelIcon.astro draws them as a single path, so they
 // stay crisp at any multiple of 9px and take their colour from `currentColor`. Add the
-// product's own on the same 9x9 grid; never squeeze the mark into it.
+// product's own icons on the same 9x9 grid; never squeeze the mark into it.
 export const icons = {
   network: [
     '.#.....#.',

@@ -43,6 +43,8 @@ const calls = (lines: Line[]) =>
     aria-label="Prompts a developer gives a coding agent, and the agent-device commands the agent runs for each"
   >
     <Dither scene="loop" focus={0.5} />
+    <!-- The tabs need hero.ts; without scripts the first job stays as a still frame. -->
+    <noscript><style is:inline>.jobs-tabs { display: none; }</style></noscript>
     <!-- HERO VISUAL -->
     <div class="rig">
       <div class="session">

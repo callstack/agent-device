@@ -8,20 +8,34 @@ const { command, class: className } = Astro.props;
 ---
 
 <div class:list={['cmd', className]}>
-  <code class="cmd-text"><span class="cmd-prompt" aria-hidden="true">$</span>{command}</code>
+  <code class="cmd-text"><span class="cmd-prompt" aria-hidden="true">$</span><span class="cmd-value">{command}</span></code>
   <button class="cmd-copy label" type="button" data-copy={command} aria-label={`Copy ${command}`}>Copy</button>
+  <span class="sr-only" role="status"></span>
 </div>
 
 <script>
+  // The button's aria-label names the command, so a status region announces the result.
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘C' : 'Ctrl+C';
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+    const status = button.nextElementSibling;
     button.addEventListener('click', async () => {
+      let message: string;
       try {
         await navigator.clipboard.writeText(button.dataset.copy ?? '');
         button.textContent = 'Copied';
+        message = 'Copied to the clipboard';
       } catch {
-        button.textContent = 'Press ⌘C';
+        // Without clipboard access, select the command so the shortcut copies it.
+        const value = button.parentElement?.querySelector('.cmd-value');
+        if (value) getSelection()?.selectAllChildren(value);
+        button.textContent = `Press ${shortcut}`;
+        message = `Command selected. Press ${shortcut} to copy it.`;
       }
-      setTimeout(() => (button.textContent = 'Copy'), 1600);
+      if (status) status.textContent = message;
+      setTimeout(() => {
+        button.textContent = 'Copy';
+        if (status) status.textContent = '';
+      }, 1600);
     });
   }
 </script>

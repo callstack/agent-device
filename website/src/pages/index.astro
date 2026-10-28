@@ -2,8 +2,10 @@
 // The home page: the hero, who uses it, then the product story in numbered sections: the
 // bottleneck in shipping with agents, the delivery loop and the step agent-device owns, three
 // stages of that loop (while building, on every pull request, back from production) with one
-// picture and a proof point each, three adopter stories, where it runs, the FAQ and the close. The words and code come
-// from src/site/content.ts; this file only lays them out. To reorder, edit `order`.
+// picture and a proof point each, three adopter stories, where it runs, the FAQ and the close.
+// The section copy and code come from src/site/content.ts; the section labels and headings stay
+// in this markup. The markup sets the section order; `order` only numbers the sections, so
+// update it when you move one.
 import Site from '../layouts/Site.astro';
 import Closing from '../components/site/Closing.astro';
 import Faq from '../components/site/Faq.astro';
@@ -17,13 +19,12 @@ import AdopterLogo from '../components/site/AdopterLogo.astro';
 import Hero from '../components/home/Hero.astro';
 import { adopters, cloud, docs, faq, home, site } from '../site/content';
 import { compact, monthlyDownloads } from '../site/npm';
+import { inlineCode } from '../site/markup';
 
 // Section numbers, [01] onwards, in page order.
 const order = ['bottleneck', 'loop', 'inner', 'outer', 'feedback', 'stories', 'anywhere', 'watch', 'faq'] as const;
 const num = (id: (typeof order)[number]) => String(order.indexOf(id) + 1).padStart(2, '0');
 
-// Inline `code` in copy.
-const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
 
 // Structured data: the site, Callstack, the product as an application and as source code, and
 // the FAQ on this page.
@@ -148,10 +149,10 @@ const downloads = await monthlyDownloads();
       <div class="split">
         <div class="split-copy">
           <h2 class="h2" id="inner-title">{inner.headline[0]} <em>{inner.headline[1]}</em></h2>
-          <p class="lede" set:html={md(inner.lede)} />
+          <p class="lede" set:html={inlineCode(inner.lede)} />
           <div class="proof">
             <AdopterLogo adopter={innerProof} size="1.25rem" />
-            <p class="body" set:html={md(innerProof.how)} />
+            <p class="body" set:html={inlineCode(innerProof.how)} />
             <a class="label more" href={innerProof.sources.at(-1)!.href}>Read the case study <span aria-hidden="true">↗</span></a>
           </div>
           <a class="label more" href={inner.link.href}>{inner.link.text} <span aria-hidden="true">→</span></a>
@@ -184,7 +185,7 @@ const downloads = await monthlyDownloads();
       <div class="split split--flip">
         <div class="split-copy">
           <h2 class="h2" id="outer-title">{outer.headline[0]} <em>{outer.headline[1]}</em></h2>
-          <p class="lede" set:html={md(outer.lede)} />
+          <p class="lede" set:html={inlineCode(outer.lede)} />
           <div class="proof">
             <span class="label proof-label">Start from</span>
             <a class="proof-link" href={outer.proof.href}>{outer.proof.text} <span aria-hidden="true">↗</span></a>
@@ -211,7 +212,7 @@ const downloads = await monthlyDownloads();
       <div class="split">
         <div class="split-copy">
           <h2 class="h2" id="feedback-title">{feedback.headline[0]} <em>{feedback.headline[1]}</em></h2>
-          <p class="lede" set:html={md(feedback.lede)} />
+          <p class="lede" set:html={inlineCode(feedback.lede)} />
           <a class="label more" href={feedback.link.href}>{feedback.link.text} <span aria-hidden="true">→</span></a>
         </div>
         <div class="stage">
@@ -239,7 +240,7 @@ const downloads = await monthlyDownloads();
           stories.map((a) => (
             <li class="story">
               <AdopterLogo adopter={a} size="1.75rem" class="story-name" />
-              <p class="body" set:html={md(a.how)} />
+              <p class="body" set:html={inlineCode(a.how)} />
               <ul class="story-sources">
                 {a.sources.map((src) => (
                   <li><a class="label more" href={src.href}>{src.text} <span aria-hidden="true">↗</span></a></li>
@@ -265,7 +266,7 @@ const downloads = await monthlyDownloads();
               <span class="label path-num">{String(i + 1).padStart(2, '0')}</span>
               <div>
                 <h3 class="h3">{p.title}</h3>
-                <p class="body" set:html={md(p.body)} />
+                <p class="body" set:html={inlineCode(p.body)} />
               </div>
               <code class="path-cmd">{p.cmd}</code>
             </li>

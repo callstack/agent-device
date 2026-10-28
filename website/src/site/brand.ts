@@ -19,11 +19,11 @@
 /** Brand, primary actions, the second beat of headlines, strings in code. */
 export const accent = '#a47bff';
 /** Hover on accent fills: the accent mixed about halfway to white. */
-export const accentHover = '#cab2ff';
+const accentHover = '#cab2ff';
 /** Light-mode docs: accent text and links. Must be at least 4.5:1 on white (this is 5.6:1). */
 export const accentDeep = '#7740f0';
 /** Light-mode docs: rules, borders, the current sidebar item. */
-export const accentRule = '#8e62f2';
+const accentRule = '#8e62f2';
 
 // ---------- Derived values: nothing below needs editing ----------
 
@@ -31,13 +31,13 @@ const BG = '#0a0a0a';
 const WHITE = '#ffffff';
 
 /** `#rrggbb` as [r, g, b]. */
-export function rgbOf(hex: string): [number, number, number] {
+function rgbOf(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 /** `a` mixed toward `b` by `t` (0..1), as `#rrggbb`. */
-export function mix(a: string, b: string, t: number): string {
+function mix(a: string, b: string, t: number): string {
   const x = rgbOf(a);
   const y = rgbOf(b);
   return `#${x

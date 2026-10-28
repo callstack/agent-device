@@ -112,7 +112,8 @@ export default defineEcConfig({
     frames: {
       shadowColor: 'transparent',
       frameBoxShadowCssValue: 'none',
-      editorActiveTabIndicatorTopColor: accent,
+      editorActiveTabIndicatorTopColor: ({ theme }) =>
+        theme.type === 'dark' ? accent : accentDeep,
       editorActiveTabIndicatorBottomColor: 'transparent',
       editorTabBarBackground: ({ theme }) => (theme.type === 'dark' ? '#0a0a0a' : '#efefed'),
       editorActiveTabBackground: ({ theme }) => (theme.type === 'dark' ? '#111111' : '#f6f6f5'),

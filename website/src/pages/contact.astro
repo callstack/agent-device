@@ -29,7 +29,7 @@ const reasons = [
       </div>
     </section>
 
-    <form class="contact" data-contact novalidate>
+    <form class="contact" method="post" data-contact novalidate>
       <fieldset class="reasons">
         <legend class="label">What is it about?</legend>
         {
@@ -201,12 +201,19 @@ const reasons = [
     margin: 0;
     color: var(--muted);
   }
+  /* Item borders draw the inner grid lines only; the fieldset draws the outer edge. */
   @media (max-width: 64rem) {
     .reasons {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .reason {
       border-bottom: 1px solid var(--line);
+    }
+    .reason:nth-last-of-type(-n + 2) {
+      border-bottom-width: 0;
+    }
+    .reason:nth-of-type(2n) {
+      border-right: 0;
     }
   }
   @media (max-width: 48rem) {
@@ -216,6 +223,9 @@ const reasons = [
     }
     .reason {
       border-right: 0;
+    }
+    .reason:not(:last-of-type) {
+      border-bottom-width: 1px;
     }
   }
 </style>

@@ -1,7 +1,8 @@
 // The hero animation, loaded on demand by Hero.astro. There is a tab per job (build, verify,
 // profile); the loop plays each in turn: the prompt appears, then the agent's tool calls land one
-// by one. Choosing a tab stops the loop and shows that job in full. The page renders every job in
-// full (the still frame); under reduced motion only the tabs work.
+// by one. Choosing a tab stops the loop and shows that job in full. The page renders the first job
+// in full (the still frame) and hides the tabs when scripts are off; under reduced motion only the
+// tabs work.
 import { sleep, whenVisible } from '../site/anim';
 
 export default function runHero(viz: HTMLElement) {
@@ -44,7 +45,10 @@ export default function runHero(viz: HTMLElement) {
     if (stopped) return sleep(1000);
     select(current);
     const own = steps[current]!;
-    own.forEach((step) => step.classList.add('is-hidden'));
+    own.forEach((step) => {
+      step.classList.remove('is-in');
+      step.classList.add('is-hidden');
+    });
     await sleep(400);
     for (const [i, step] of own.entries()) {
       if (stopped) return;

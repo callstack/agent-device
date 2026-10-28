@@ -1,5 +1,5 @@
 // Renders og/og.html twice, as the social card (docs/public/og-image.jpg, 1200x630) and the README
-// banner (docs/public/banner.jpg, 1660x512), and writes the icons (docs/public/favicon.svg,
+// banner (docs/public/agent-device-banner.jpg, 1660x512), and writes the icons (docs/public/favicon.svg,
 // favicon-32.png, apple-touch-icon.png) from the mark. Run `pnpm og` after changing
 // src/site/content.ts, src/site/brand.ts, og/og.html or the signature scene.
 //
@@ -33,12 +33,13 @@ const types = {
 // What the card shows, all from content.ts and brand.ts.
 const card = {
   name: site.name,
+  owner: site.owner,
   wordmark: site.wordmark,
   headline: site.headline,
   install: site.install,
   platforms: site.platforms,
   mark: site.mark ?? [],
-  transcript: jobs[1].transcript,
+  transcript: jobs.find((job) => job.id === 'verify')?.transcript ?? [],
   rgb: accentRgb.split(' ').map(Number),
 };
 
@@ -84,7 +85,7 @@ try {
       width: 1245,
       height: 384,
       scale: 4 / 3,
-      path: 'docs/public/banner.jpg',
+      path: 'docs/public/agent-device-banner.jpg',
     },
   ];
   for (const { query, width, height, scale, path } of shots) {
@@ -149,4 +150,6 @@ for (const [name, size, pad, background] of [
       .toBuffer(),
   );
 }
-console.log('Wrote docs/public/og-image.jpg, banner.jpg, favicon.svg and the PNG icons');
+console.log(
+  'Wrote docs/public/og-image.jpg, agent-device-banner.jpg, favicon.svg and the PNG icons',
+);

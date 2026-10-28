@@ -44,7 +44,12 @@ import { docs, notFound, site } from '../site/content';
   // The path the visitor asked for, as text only.
   const box = document.querySelector<HTMLElement>('[data-path]');
   const text = document.querySelector<HTMLElement>('[data-path-text]');
-  const path = decodeURIComponent(location.pathname);
+  let path = location.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Not valid percent-encoding: show the raw path.
+  }
   if (box && text && path && path !== '/404' && path !== '/404.html') {
     text.textContent = path.length > 80 ? `${path.slice(0, 77)}...` : path;
     box.hidden = false;

@@ -48,5 +48,5 @@ export function giantSize(word: string): string {
     (sum, c) => sum + (ADVANCE[c] ?? (/\d/.test(c) ? DIGIT : 0.65)) + TRACKING,
     0,
   );
-  return `${(FILL / Math.max(em, 1)).toFixed(2)}cqi`;
+  return `${(FILL / Math.max(em, 0.01)).toFixed(2)}cqi`;
 }

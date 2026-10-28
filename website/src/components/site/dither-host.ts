@@ -5,9 +5,25 @@ import type { DitherOptions } from './dither';
 let worker: Worker | undefined;
 let next = 0;
 
+/** The shared worker, or undefined where workers are unavailable or cannot start. */
+function startWorker(): Worker | undefined {
+  if (worker || typeof Worker === 'undefined') return worker;
+  try {
+    worker = new Worker(new URL('./dither.worker.ts', import.meta.url), { type: 'module' });
+  } catch (error) {
+    console.error('dither: the worker cannot start; drawing on the page instead.', error);
+    return undefined;
+  }
+  // The canvases already belong to the worker, so a failed load can only be reported.
+  worker.addEventListener('error', (event) =>
+    console.error('dither: the worker failed.', event.message),
+  );
+  return worker;
+}
+
 export async function host(canvas: HTMLCanvasElement) {
   const options: DitherOptions = {
-    scene: canvas.dataset.scene ?? 'mark',
+    scene: canvas.dataset.scene ?? 'loop',
     focus: Number(canvas.dataset.focus ?? 0.72),
     cell: Number(canvas.dataset.cell ?? 2),
     rgb: getComputedStyle(document.documentElement)
@@ -16,15 +32,12 @@ export async function host(canvas: HTMLCanvasElement) {
       .split(/\s+/)
       .map(Number),
     still: matchMedia('(prefers-reduced-motion: reduce)').matches,
-    // The mark's rows, joined with "/" by Dither.astro.
-    mark: canvas.dataset.mark ? canvas.dataset.mark.split('/') : [],
   };
 
   let setSize: (width: number, height: number) => void;
   let setVisible: (on: boolean) => void;
-  if ('transferControlToOffscreen' in canvas) {
-    worker ??= new Worker(new URL('./dither.worker.ts', import.meta.url), { type: 'module' });
-    const w = worker;
+  const w = 'transferControlToOffscreen' in canvas ? startWorker() : undefined;
+  if (w) {
     const id = next++;
     const offscreen = canvas.transferControlToOffscreen();
     w.postMessage({ type: 'init', id, canvas: offscreen, ...options }, [offscreen]);

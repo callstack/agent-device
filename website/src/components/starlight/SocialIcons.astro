@@ -9,7 +9,7 @@ const links = nav
 
 {
   links.map(({ label, href, external }) => (
-    <a href={href} class="cs-header-link" rel={external ? 'me noopener' : undefined}>
+    <a href={href} class="cs-header-link">
       {label}
       {external && <span aria-hidden="true">↗</span>}
     </a>

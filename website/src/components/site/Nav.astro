@@ -1,5 +1,6 @@
 ---
 // Sticky, blurred, a hairline under it: the lockup left, mono links centred, GET STARTED right.
+// Below 52rem the links move into a Menu disclosure, which works without JavaScript.
 import { docs, nav } from '../../site/content';
 import Lockup from './Lockup.astro';
 ---
@@ -10,6 +11,12 @@ import Lockup from './Lockup.astro';
     <nav class="links" aria-label="Main">
       {nav.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
     </nav>
+    <details class="menu">
+      <summary class="label">Menu</summary>
+      <nav aria-label="Main">
+        {nav.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
+      </nav>
+    </details>
     <a class="btn btn--dark" href={docs.start}>Get started</a>
   </div>
 </header>
@@ -35,19 +42,51 @@ import Lockup from './Lockup.astro';
     gap: 1.75rem;
     margin-inline: auto;
   }
-  .links a {
+  .links a,
+  .menu a,
+  .menu summary {
     color: var(--muted);
     text-decoration: none;
     transition: color 120ms;
   }
-  .links a:hover {
+  .links a:hover,
+  .menu a:hover,
+  .menu summary:hover,
+  .menu[open] summary {
     color: var(--text);
+  }
+  .menu {
+    display: none;
+    position: relative;
+  }
+  .menu summary {
+    padding-block: 0.5rem;
+    list-style: none;
+    cursor: pointer;
+  }
+  .menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu nav {
+    position: absolute;
+    top: calc(100% + 0.75rem);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 12rem;
+    padding-block: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+  }
+  .menu a {
+    padding: 0.75rem 1.25rem;
   }
   @media (max-width: 52rem) {
     .links {
       display: none;
     }
-    .nav-inner > .btn {
+    .menu {
+      display: block;
       margin-inline-start: auto;
     }
   }

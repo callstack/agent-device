@@ -2,7 +2,7 @@
 <!--
   The social card (1200x630) and, with ?format=banner, the README banner (1660x512).
   scripts/og.mjs serves the website folder, opens this page in Chromium and saves screenshots
-  to public/og-image.jpg and public/banner.jpg. Edit the layout here, then run `pnpm og`.
+  to public/og-image.jpg and public/agent-device-banner.jpg. Edit the layout here, then run `pnpm og`.
 
   Facts and colours are not written here: the script serves content.ts as /og/site.json and
   brand.ts as /og/brand.css, and the page fills itself in from them.
@@ -211,7 +211,7 @@
           <path />
         </svg>
         <span class="wordmark" data-wordmark></span>
-        <span class="by mono">by Callstack</span>
+        <span class="by mono" data-owner></span>
       </div>
       <h1><span data-beat="0"></span> <em data-beat="1"></em></h1>
       <div class="band">
@@ -238,6 +238,7 @@
       for (const el of document.querySelectorAll('[data-beat]'))
         el.textContent = site.headline[el.dataset.beat];
       document.querySelector('[data-platforms]').textContent = site.platforms.join(' · ');
+      document.querySelector('[data-owner]').textContent = `by ${site.owner}`;
 
       // The mark, on its own step grid, when the product has one.
       if (site.mark.length) {
@@ -290,7 +291,7 @@
       const canvas = document.getElementById('dither');
       const cols = Math.round(canvas.clientWidth / 2);
       const rows = Math.round(canvas.clientHeight / 2);
-      drawDither(canvas, 'loop', 9, site.rgb, cols, rows, banner ? 0.86 : 0.9, site.mark);
+      drawDither(canvas, 'loop', 9, site.rgb, cols, rows, banner ? 0.86 : 0.9);
       window.ogReady = true;
     </script>
   </body>

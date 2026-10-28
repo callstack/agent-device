@@ -1,7 +1,8 @@
 ---
 // The mark: the pixel bitmap from content.ts on its own step grid, in currentColor, with crisp
 // edges. The height is rounded down to whole steps, so every step stays a whole number of
-// pixels. Renders nothing when the product has no mark.
+// pixels. Renders nothing when the product has no mark, or when `height` is under one pixel
+// per row.
 import { site } from '../../site/content';
 import { bitmapPath } from './icons';
 
@@ -12,14 +13,14 @@ interface Props {
   label?: string;
 }
 const { height = 20, class: className, label } = Astro.props;
-const mark = site.mark;
-const rows = mark?.length ?? 0;
-const cols = Math.max(0, ...(mark ?? []).map((r) => r.length));
-const step = rows ? Math.max(1, Math.floor(height / rows)) : 0;
+const mark = site.mark ?? [];
+const rows = mark.length;
+const cols = Math.max(0, ...mark.map((r) => r.length));
+const step = rows ? Math.floor(height / rows) : 0;
 ---
 
 {
-  mark && (
+  step > 0 && (
     <svg
       class={className}
       width={step * cols}

@@ -8,8 +8,7 @@ import Footer from '../components/site/Footer.astro';
 import Nav from '../components/site/Nav.astro';
 import PixelIcon from '../components/site/PixelIcon.astro';
 import { cloud, docs } from '../site/content';
-
-const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
+import { inlineCode } from '../site/markup';
 ---
 
 <Site
@@ -35,12 +34,12 @@ const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
             </span>
             <span class="label cell-num">{p.label}</span>
             <h2 class="h3">{p.title}</h2>
-            <p class="body" set:html={md(p.body)} />
+            <p class="body" set:html={inlineCode(p.body)} />
             <code class="cmdline">
               <span class="p">$</span> {p.cmd}
             </code>
             <a class="label more" href={p.href}>
-              Read the guide <span aria-hidden="true">→</span>
+              Read the guide<span class="sr-only">: {p.title}</span> <span aria-hidden="true">→</span>
             </a>
           </li>
         ))

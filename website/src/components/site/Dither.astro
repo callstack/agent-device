@@ -1,20 +1,19 @@
 ---
 // A dithered pixel scene in the accent, drawn on a canvas. It fills its positioned parent. The
-// scenes live in dither.ts: `mark` (the default signature: a druse of the product's pixel mark
-// on dark rock), `hollow` (the same with one stone missing, for the 404 page) and `flow` (soft
-// bands of light, for quiet backdrops behind code). Add the product's own signature scene there.
-import { site } from '../../site/content';
+// scenes live in dither.ts: `loop` (the product's signature, in the hero), `loop-hollow` (the
+// loop with its main track missing, on the 404 page) and `flow` (soft bands of light, for
+// quiet backdrops behind code).
 import type { SceneName } from './dither';
 
 interface Props {
   /** Size of one dither cell in CSS pixels. */
   cell?: number;
   class?: string;
-  /** Where the cluster stands, 0..1 across: put it behind the product visual. */
+  /** Where the scene centres, 0..1 across: put it behind the product visual. */
   focus?: number;
   scene?: SceneName;
 }
-const { scene = 'mark', focus = 0.72, cell = 2, class: className } = Astro.props;
+const { scene = 'loop', focus = 0.72, cell = 2, class: className } = Astro.props;
 ---
 
 <canvas
@@ -22,7 +21,6 @@ const { scene = 'mark', focus = 0.72, cell = 2, class: className } = Astro.props
   data-scene={scene}
   data-focus={focus}
   data-cell={cell}
-  data-mark={site.mark?.join('/')}
   aria-hidden="true"></canvas>
 
 <script>

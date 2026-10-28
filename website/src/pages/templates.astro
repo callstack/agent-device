@@ -6,8 +6,7 @@ import Footer from '../components/site/Footer.astro';
 import Nav from '../components/site/Nav.astro';
 import PixelIcon from '../components/site/PixelIcon.astro';
 import { templates } from '../site/content';
-
-const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
+import { inlineCode } from '../site/markup';
 ---
 
 <Site
@@ -35,7 +34,7 @@ const md = (s: string) => s.replaceAll(/`([^`]+)`/g, '<code>$1</code>');
               <PixelIcon name={t.icon} size={27} class="accent" />
             </span>
             <h2 class="h3">{t.title}</h2>
-            <p class="body" set:html={md(t.body)} />
+            <p class="body" set:html={inlineCode(t.body)} />
             <ul class="tags">
               {t.tags.map((tag) => (
                 <li class="label">{tag}</li>
