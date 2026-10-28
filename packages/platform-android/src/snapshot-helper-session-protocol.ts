@@ -124,7 +124,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
-          output,
+          instrumentation: record.current(),
           timeoutMs,
           reason: SESSION_READY_TIMEOUT_REASON,
         }),
@@ -161,7 +161,6 @@ export function waitForAndroidSnapshotHelperSessionReady(
       void record.closed.then(() =>
         reject(
           new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
-            output,
             exitCode: code,
             signal: exitSignal,
             instrumentation: record.exitResult(),
@@ -229,7 +228,7 @@ export function parseAndroidSnapshotHelperSessionSnapshotResponse(
     throw new AppError(
       'COMMAND_FAILED',
       'Android snapshot helper session returned malformed output',
-      { response },
+      { responseLength: response.length },
     );
   }
   const headers = parseHeaders(response.slice(0, separator));
@@ -283,7 +282,7 @@ function validateSnapshotXml(headers: Record<string, string>, xml: string): void
   if (!xml.includes('<hierarchy') || !xml.includes('</hierarchy>')) {
     throw new AppError('COMMAND_FAILED', 'Android snapshot helper session did not return XML', {
       headers,
-      xml,
+      xmlLength: xml.length,
     });
   }
 }

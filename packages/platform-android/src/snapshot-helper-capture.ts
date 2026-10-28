@@ -108,10 +108,14 @@ export async function captureAndroidSnapshotWithHelper(
   }
   const output = readAndroidSnapshotHelperOutput(result);
   if (result.exitCode !== 0) {
+    const instrumentation = readInstrumentationExitResult(result);
     throw new AppError(
       'COMMAND_FAILED',
       'Android snapshot helper failed',
-      execFailureDetails(result, { helper: output.metadata }),
+      execFailureDetails(
+        { stdout: '', stderr: instrumentation.stderrTail, exitCode: result.exitCode },
+        { helper: output.metadata, instrumentation },
+      ),
     );
   }
   return output;
@@ -315,7 +319,7 @@ function decodeHelperXml(
   ).toString('utf8');
   if (!xml.includes('<hierarchy') || !xml.includes('</hierarchy>')) {
     throw new AppError('COMMAND_FAILED', 'Android snapshot helper output did not contain XML', {
-      xml,
+      xmlLength: xml.length,
     });
   }
   return xml;

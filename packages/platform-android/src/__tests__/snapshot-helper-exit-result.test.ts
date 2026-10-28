@@ -3,8 +3,13 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
-import { captureAndroidSnapshotWithHelper } from '../snapshot-helper-capture.ts';
+import {
+  captureAndroidSnapshotWithHelper,
+  parseAndroidSnapshotHelperOutput,
+} from '../snapshot-helper-capture.ts';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
+import { waitForAndroidSnapshotHelperSessionReady } from '../snapshot-helper-session-protocol.ts';
+import { recordInstrumentationProcess } from '../instrumentation-helper.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 import { snapshotAndroid } from '../snapshot.ts';
@@ -378,6 +383,104 @@ test('a session exit never leaks a sensitive value split across chunks', async (
   assert.ok(exit.stderrTail.endsWith('am: Killed'), exit.stderrTail);
 });
 
+test('a startup failure attaches no raw helper stream to its details or the log', async () => {
+  const printed = (process: FakeAndroidProcess) => {
+    process.stdout.write(`${encodedPayload(SECRET_XML)}\n`);
+    process.stdout.write(`INSTRUMENTATION_STATUS: stream=${SECRET_XML}\n`);
+    process.stdout.write(`ret" text="${SECRET}" bounds="[0,0][1,1]" />\n`);
+    process.stderr.write(`ret" content-desc="${SECRET}" bounds="[0,0][1,1]" />\nam: Killed\n`);
+  };
+  const waitFor = (process: FakeAndroidProcess, timeoutMs: number) =>
+    waitForAndroidSnapshotHelperSessionReady(
+      process,
+      timeoutMs,
+      undefined,
+      recordInstrumentationProcess(process),
+    );
+
+  const exited = new FakeAndroidProcess();
+  const exitedFailure = waitFor(exited, 5_000).catch((error: AppError) => error);
+  printed(exited);
+  await pause();
+  exited.emitExit(1, null);
+  const exitedError = await exitedFailure;
+  assertPrivate(JSON.stringify(normalizeError(exitedError)));
+  assert.equal('output' in (exitedError.details ?? {}), false);
+  assert.equal(exitResultOf(exitedError.details ?? {}).exitCode, 1);
+  assert.ok(exitResultOf(exitedError.details ?? {}).stderrTail.endsWith('am: Killed'));
+
+  const stalled = new FakeAndroidProcess();
+  const stalledFailure = waitFor(stalled, 50).catch((error: AppError) => error);
+  printed(stalled);
+  const stalledError = await stalledFailure;
+  assertPrivate(JSON.stringify(normalizeError(stalledError)));
+  assert.equal('output' in (stalledError.details ?? {}), false);
+  assert.equal(exitResultOf(stalledError.details ?? {}).exitCode, null);
+
+  const { log } = await withLog(async (logPath) => {
+    const base = createSessionProvider({ calls: [], processes: [] });
+    const provider: AndroidAdbProvider = {
+      ...base,
+      spawn: () => {
+        const process = new FakeAndroidProcess();
+        setImmediate(() => {
+          printed(process);
+          process.emitExit(1, null);
+        });
+        return process;
+      },
+    };
+    await inScope(logPath, async () => {
+      await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+    });
+  });
+  assertPrivate(log);
+  assert.equal(
+    exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_start_failed'))
+      .snapshotContentRemoved,
+    true,
+  );
+});
+
+test('a nonzero exit after parseable helper output keeps no raw stream in its details', async () => {
+  const xml = `<hierarchy rotation="0"><node text="${SECRET}" bounds="[0,0][1,1]" /></hierarchy>`;
+  const stdout = [
+    'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+    'INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml',
+    'INSTRUMENTATION_STATUS: chunkIndex=0',
+    'INSTRUMENTATION_STATUS: chunkCount=1',
+    `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(xml).toString('base64')}`,
+    'INSTRUMENTATION_STATUS_CODE: 1',
+    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+    'INSTRUMENTATION_RESULT: ok=true',
+    'INSTRUMENTATION_CODE: -1',
+  ].join('\n');
+  const error = await captureError({ exitCode: 1, stdout, stderr: 'am: Killed' });
+
+  assertPrivate(JSON.stringify(normalizeError(error)));
+  assert.equal(error.details?.stdout, '');
+  assert.equal(error.details?.stderr, 'am: Killed');
+  assert.equal(error.details?.exitCode, 1);
+});
+
+test('an unbroken stderr line that is cut is flagged as truncated', async () => {
+  const unbroken = await captureExitResult({ exitCode: 1, stdout: '', stderr: 'x'.repeat(5_000) });
+  assert.equal(unbroken.stderrTruncated, true);
+
+  const snapshot = await captureExitResult({
+    exitCode: 1,
+    stdout: '',
+    stderr: `<node text="${SECRET}" ${'x'.repeat(5_000)}`,
+  });
+  assert.equal(snapshot.stderrTruncated, true);
+  assert.equal(snapshot.snapshotContentRemoved, true);
+  assert.ok(!snapshot.stderrTail.includes(SECRET));
+});
+
 test('stderr chunks do not disturb a partial stdout record', async () => {
   const { exit } = await sessionExit(async (process) => {
     process.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
@@ -610,4 +713,24 @@ test('the request log entry for a failed capture carries the instrumentation res
   const logged = exitResultOf(diagnosticData(log, 'android_snapshot_helper_failed'));
   assert.equal(logged.exitCode, 1);
   assert.equal(logged.aborted, 'System has crashed.');
+});
+
+test('a malformed helper report names its size, never the snapshot text it held', () => {
+  const stdout = [
+    'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+    'INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml',
+    'INSTRUMENTATION_STATUS: chunkIndex=0',
+    'INSTRUMENTATION_STATUS: chunkCount=1',
+    `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(`<node text="${SECRET}" />`).toString('base64')}`,
+    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+    'INSTRUMENTATION_RESULT: ok=true',
+  ].join('\n');
+
+  assert.throws(
+    () => parseAndroidSnapshotHelperOutput(stdout),
+    (error: unknown) => {
+      assertPrivate(JSON.stringify(normalizeError(error)));
+      return error instanceof AppError && typeof error.details?.xmlLength === 'number';
+    },
+  );
 });

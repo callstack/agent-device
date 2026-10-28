@@ -212,7 +212,7 @@ function createLineAssembler(
       append(rest);
     },
     end() {
-      if (pending) flush();
+      if (pending || cut || snapshot) flush();
     },
   };
 }
@@ -352,6 +352,8 @@ export type AndroidInstrumentationProcessRecord = {
   closed: Promise<void>;
   /** The process's exit result once its streams have closed, or `undefined` before that. */
   exitResult(): AndroidInstrumentationExitResult | undefined;
+  /** What the process has printed so far, for a process that is still running. */
+  current(): AndroidInstrumentationExitResult;
 };
 
 export function recordInstrumentationProcess(
@@ -376,6 +378,7 @@ export function recordInstrumentationProcess(
   return {
     closed,
     exitResult: () => (isClosed ? output.result(child.exitCode, child.signalCode) : undefined),
+    current: () => output.result(child.exitCode, child.signalCode),
   };
 }
 
