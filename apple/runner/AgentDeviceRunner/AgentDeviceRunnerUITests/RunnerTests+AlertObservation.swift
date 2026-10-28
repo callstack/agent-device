@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   func captureAlertPresentation(_ element: XCUIElement) -> RunnerAlertPresentation? {
@@ -53,7 +54,7 @@ extension RunnerTests {
     viewport: CGRect
   ) -> [XCUIElementSnapshot] {
     let frame = snapshot.frame
-    let visible = !frame.isNull && !frame.isEmpty && viewport.contains(CGPoint(x: frame.midX, y: frame.midY))
+    let hostWindow = snapshot.elementType == .window && SnapshotGeometry.isPositiveFinite(frame) ? frame : viewport
     let matches: Bool
     switch source {
     case .blockingSystemModal:
@@ -63,11 +64,8 @@ extension RunnerTests {
     case .dismissPopup:
       matches = snapshot.elementType == .window && containsDismissPopupMarker(snapshot)
     }
-    if matches && visible { return [snapshot] }
-    // A window is the viewport of what it hosts: a foldable's SpringBoard has a window on each
-    // panel, and the application frame names only one of them.
-    let childViewport = snapshot.elementType == .window && !frame.isNull && !frame.isEmpty ? frame : viewport
-    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: childViewport) }
+    if matches && Self.isPlaced(frame, in: hostWindow) { return [snapshot] }
+    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: hostWindow) }
   }
 
   private func containsDismissPopupMarker(_ snapshot: XCUIElementSnapshot) -> Bool {

@@ -159,17 +159,14 @@ extension RunnerTests {
   }
 
   private func isBlockingSystemModal(_ element: XCUIElement, in window: XCUIElement) -> Bool {
-    guard element.exists else { return false }
-    let frame = element.frame
-    if frame.isNull || frame.isEmpty { return false }
+    element.exists && Self.isPlaced(element.frame, in: window.frame)
+  }
 
-    let viewport = window.frame
-    if viewport.isNull || viewport.isEmpty { return false }
-
-    let center = CGPoint(x: frame.midX, y: frame.midY)
-    if !viewport.contains(center) { return false }
-
-    return true
+  /// Whether a modal is on screen in the window that hosts it. A foldable's SpringBoard has a
+  /// window on each panel, and the application frame names only one of them.
+  static func isPlaced(_ frame: CGRect, in hostWindow: CGRect) -> Bool {
+    SnapshotGeometry.isPositiveFinite(frame) && SnapshotGeometry.isPositiveFinite(hostWindow)
+      && hostWindow.contains(CGPoint(x: frame.midX, y: frame.midY))
   }
 
   func actionableElements(in element: XCUIElement) -> [XCUIElement] {

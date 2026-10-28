@@ -198,11 +198,7 @@ extension SynthesizedCoordinateContext {
     resolvedWindow: XCUIElement?,
     accessibilityHealth: RunnerAccessibilityHealth
   ) {
-    guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
-      referenceFrame.width > 0, referenceFrame.height > 0
-    else {
-      return nil
-    }
+    guard SnapshotGeometry.isPositiveFinite(referenceFrame) else { return nil }
     self.init(
       referenceFrame: referenceFrame,
       resolvedWindow: resolvedWindow,
