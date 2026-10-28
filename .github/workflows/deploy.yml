@@ -1,0 +1,39 @@
+name: Deploy docs redirects
+
+# The docs moved from oss.callstack.com/agent-device (GitHub Pages) to agent-device.dev (Vercel).
+# This publishes stubs that send every old page to its new URL (website/scripts/oss-redirects.mjs).
+# The script copies the Markdown and llms files from agent-device.dev and fails until that site
+# serves them, so the old docs stay published until the domain points at the new site.
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: true
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: 'false'
+
+      - name: Write the redirect pages
+        run: node website/scripts/oss-redirects.mjs website/oss-redirects
+
+      # Replaces the whole branch, including the old pr-preview/ deploys.
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
+        with:
+          folder: website/oss-redirects
+          branch: gh-pages
+          force: false
