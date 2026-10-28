@@ -129,8 +129,11 @@ function importIndex(repoRoot: string): ImportIndex {
 
 /**
  * Support code only tests import: a file under `__tests__/`, or a `*.fixtures.ts` / `*-fixtures.ts`
- * file. A test runs whatever its support code calls, so ownership looks through it. Shared packages
- * such as `@agent-device/test-kit` stay opaque, or every kernel would own the whole suite again.
+ * file. A test runs whatever its support code calls, so ownership looks through it. The rule reads
+ * the file name only, so a fixtures subpath a workspace package exports (for example
+ * `@agent-device/capture-kit/audio-probe-descriptor-fixtures`) is looked through as well. Any other
+ * module stays opaque: `@agent-device/test-kit` is reached through its barrel, which matches neither
+ * pattern, or every kernel would own the whole suite again.
  */
 function isTestSupportModule(file: string): boolean {
   return file.includes('/__tests__/') || /[.-]fixtures\.ts$/.test(file);
