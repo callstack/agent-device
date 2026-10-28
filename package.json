@@ -1,7 +1,7 @@
 {
   "name": "agent-device",
   "version": "0.21.34-dev",
-  "description": "Mobile app automation and verification for AI coding agents. CLI, MCP server, and typed Node.js API for iOS, Android, HarmonyOS, TV, web, macOS, and Linux.",
+  "description": "Open source device layer for AI coding agents: a CLI, MCP server, and typed Node.js API to control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud.",
   "mcpName": "io.github.callstack/agent-device",
   "license": "MIT",
   "author": "Callstack",
