@@ -113,7 +113,7 @@ export async function captureAndroidSnapshotWithHelper(
       'COMMAND_FAILED',
       'Android snapshot helper failed',
       execFailureDetails(
-        { stdout: '', stderr: '', exitCode: result.exitCode },
+        { stdout: '', stderr: result.stderr, exitCode: result.exitCode },
         { helper: output.metadata, instrumentation },
       ),
     );
@@ -122,15 +122,13 @@ export async function captureAndroidSnapshotWithHelper(
 }
 
 /**
- * An executor failure (a deadline, a spawn error) carries the helper's raw streams, which can hold
- * the snapshot it was printing. They are replaced by the parsed instrumentation result; the typed
- * failure metadata stays.
+ * An executor failure (a deadline, a spawn error) carries the helper's raw stdout, which can hold the
+ * snapshot it was printing. It is replaced by the parsed instrumentation result; `stderr` and the
+ * typed failure metadata stay.
  */
 function withoutRawStreams(error: unknown): unknown {
-  if (!(error instanceof AppError) || !error.details) return error;
-  const { stdout, stderr, ...details } = error.details;
-  if (stdout === undefined && stderr === undefined) return error;
-  const exitCode = typeof details.exitCode === 'number' ? details.exitCode : null;
+  if (!(error instanceof AppError) || error.details?.stdout === undefined) return error;
+  const { stdout, ...details } = error.details;
   return new AppError(
     error.code,
     error.message,
@@ -138,8 +136,8 @@ function withoutRawStreams(error: unknown): unknown {
       ...details,
       instrumentation: readInstrumentationExitResult({
         stdout: typeof stdout === 'string' ? stdout : '',
-        stderr: typeof stderr === 'string' ? stderr : '',
-        exitCode,
+        stderr: typeof details.stderr === 'string' ? details.stderr : '',
+        exitCode: typeof details.exitCode === 'number' ? details.exitCode : null,
       }),
     },
     error.cause,
@@ -252,8 +250,8 @@ function readAndroidSnapshotHelperOutput(
     if (error instanceof AppError && isExplicitHelperFailure(error.details?.helper)) throw error;
     // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
     // message already branches on the exit code.
-    // The raw output is not copied into the details: it can hold the snapshot the helper was
-    // printing, so only the parsed instrumentation result is kept.
+    // Stdout is not copied into the details: it can hold the snapshot the helper was printing.
+    // The new `instrumentation` detail is parsed fields only; `stderr` stays as it always was.
     const instrumentation = readInstrumentationExitResult(result);
     throw new AppError(
       'COMMAND_FAILED',
@@ -261,6 +259,7 @@ function readAndroidSnapshotHelperOutput(
         ? 'Android snapshot helper output could not be parsed'
         : 'Android snapshot helper failed before returning parseable output',
       {
+        stderr: result.stderr,
         exitCode: result.exitCode,
         instrumentation,
         ...androidCaptureFailureReasonDetail(

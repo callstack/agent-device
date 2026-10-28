@@ -473,24 +473,7 @@ export async function stopAndroidSnapshotHelperSession(
   const session = sessions().get(deviceKey);
   if (!session) return false;
   sessions().delete(deviceKey);
-  // Read before teardown, once the streams have drained: a process this stop ends has no cause of
-  // its own to report, and one that already exited may still be flushing its last output.
-  if (hasAndroidSnapshotHelperProcessEnded(session.process)) {
-    await waitForAndroidSnapshotHelperProcessExit(
-      session.processRecord.closed,
-      ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
-    );
-  }
-  const exitedOnItsOwn = hasAndroidSnapshotHelperProcessEnded(session.process)
-    ? (session.processRecord.exitResult() ?? session.processRecord.current())
-    : undefined;
-  if (exitedOnItsOwn) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_snapshot_helper_session_exited',
-      data: { deviceKey, capturedCount: session.capturedCount, instrumentation: exitedOnItsOwn },
-    });
-  }
+  await reportSessionExitedOnItsOwn(deviceKey, session);
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
   const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
@@ -559,6 +542,32 @@ export async function stopAndroidSnapshotHelperSession(
     },
   });
   return true;
+}
+
+/**
+ * Records the exit result of a session whose helper process ended before this stop. Read before
+ * teardown, so a process this stop ends has no cause of its own to report; a process that exited may
+ * still be flushing its last output, so its streams get a short drain. A running process costs
+ * nothing here.
+ */
+async function reportSessionExitedOnItsOwn(
+  deviceKey: string,
+  session: AndroidSnapshotHelperSession,
+): Promise<void> {
+  if (!hasAndroidSnapshotHelperProcessEnded(session.process)) return;
+  await waitForAndroidSnapshotHelperProcessExit(
+    session.processRecord.closed,
+    ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
+  );
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_snapshot_helper_session_exited',
+    data: {
+      deviceKey,
+      capturedCount: session.capturedCount,
+      instrumentation: session.processRecord.exitResult() ?? session.processRecord.current(),
+    },
+  });
 }
 
 async function requestGracefulSessionExit(

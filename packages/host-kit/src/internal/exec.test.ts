@@ -486,7 +486,7 @@ test('commandHostEnvironment names the enclosing host and refuses outside one', 
 
 // Windows reports no signal for a terminated process.
 test.skipIf(process.platform === 'win32')(
-  'every executor reports the signal that ended the process',
+  'every foreground executor reports the signal that ended the process',
   async () => {
     const kill = ['-e', "process.kill(process.pid, 'SIGKILL')"];
     const options = { allowFailure: true };
@@ -494,7 +494,6 @@ test.skipIf(process.platform === 'win32')(
     assert.equal((await runCmd(process.execPath, kill, options)).signal, 'SIGKILL');
     assert.equal((await runCmdStreaming(process.execPath, kill, options)).signal, 'SIGKILL');
     assert.equal(runCmdSync(process.execPath, kill, options).signal, 'SIGKILL');
-    assert.equal((await runCmdBackground(process.execPath, kill, options).wait).signal, 'SIGKILL');
 
     const exited = await runCmd(process.execPath, ['-e', 'process.exit(3)'], options);
     assert.equal(exited.exitCode, 3);

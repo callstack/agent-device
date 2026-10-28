@@ -907,7 +907,7 @@ test('snapshotAndroid emits helper failure diagnostics', async () => {
     }
     if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop')
       return { exitCode: 0, stdout: '', stderr: '' };
-    return { exitCode: 1, stdout: 'INSTRUMENTATION_ABORTED: helper unavailable', stderr: '' };
+    return { exitCode: 1, stdout: '', stderr: 'helper unavailable' };
   };
 
   const diagnostics = await captureDiagnostics(
@@ -1134,7 +1134,7 @@ test('snapshotAndroid re-probes helper install after helper capture failure', as
     (error: unknown) => {
       assert(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
-      assert.match(error.message, /failed before returning parseable output/);
+      assert.match(error.message, /instrumentation failed/);
       return true;
     },
   );

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import {
   captureAndroidSnapshotWithHelper,
@@ -322,9 +322,9 @@ test('stdout is never copied: only parsed protocol fields reach the details', as
   assert.ok(!JSON.stringify(error.details).includes('some unrelated stdout line'));
 });
 
-test('a sensitive value never reaches the details or the log wherever the helper printed it', async () => {
+test('a sensitive value never reaches the instrumentation detail or the log wherever the helper printed it', async () => {
   const quoted = `${'p'.repeat(1_015)}password="${SECRET}" trailing`;
-  const runs: FailedRun[] = [
+  const onStdout: FailedRun[] = [
     // A complete encoded payload.
     { exitCode: 1, stdout: `${encodedPayload(SECRET_XML)}\nINSTRUMENTATION_STATUS_CODE: 1` },
     // An unknown status key carrying raw XML.
@@ -336,36 +336,15 @@ test('a sensitive value never reaches the details or the log wherever the helper
     },
     // A tagless fragment as a free line.
     { exitCode: 1, stdout: `ret" text="${SECRET}" bounds="[0,0][1,1]" />\n` },
-    // Fragments on stderr, including a role-description attribute and a quoted value whose key a
-    // line cut would have removed.
-    { exitCode: 1, stdout: '', stderr: `ret" text="${SECRET}" bounds="[0,0][1,1]" />` },
-    { exitCode: 1, stdout: '', stderr: `ret" role-description="${SECRET}" />` },
-    { exitCode: 1, stdout: '', stderr: quoted },
-    { exitCode: 1, stdout: '', stderr: `${'a'.repeat(30_000)}${SECRET_XML}` },
-    // A hierarchy cut off in front of a startup-failure marker.
-    {
-      exitCode: 1,
-      stdout: '',
-      stderr: `<hierarchy><node text="${SECRET}" INSTRUMENTATION_FAILED: ${SECRET}`,
-    },
-    {
-      exitCode: 1,
-      stdout: '',
-      stderr: `android.util.AndroidException: INSTRUMENTATION_FAILED: <node text="${SECRET}"`,
-    },
   ];
-  for (const run of runs) {
-    const withKill = { ...run, stderr: `${run.stderr ?? ''}\nam: Killed` };
-    const error = await captureError(withKill);
-    const wire = JSON.stringify(normalizeError(error));
-    assertPrivate(wire);
-    assert.equal(exitResultOf(normalizeError(error).details ?? {}).failed, undefined);
-
+  for (const run of onStdout) {
+    const error = await captureError({ ...run, stderr: 'am: Killed' });
+    assertPrivate(JSON.stringify(normalizeError(error)));
     const { log } = await withLog(async (logPath) => {
       await inScope(logPath, async () => {
         await assert.rejects(
           snapshotAndroid(emulator, {
-            helperAdb: helperFailingWith(withKill),
+            helperAdb: helperFailingWith({ ...run, stderr: 'am: Killed' }),
             helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
           }),
         );
@@ -373,6 +352,38 @@ test('a sensitive value never reaches the details or the log wherever the helper
     });
     assert.ok(log.includes('android_snapshot_helper_failed'));
     assertPrivate(log);
+  }
+
+  // The failure message and `stderr` detail are unchanged from before this diagnostic existed, so
+  // for stderr only the new `instrumentation` detail and its request-log entry are asserted.
+  const onStderr = [
+    `ret" text="${SECRET}" bounds="[0,0][1,1]" />`,
+    `ret" role-description="${SECRET}" />`,
+    quoted,
+    `${'a'.repeat(30_000)}${SECRET_XML}`,
+    `<hierarchy><node text="${SECRET}" INSTRUMENTATION_FAILED: ${SECRET}`,
+    `android.util.AndroidException: INSTRUMENTATION_FAILED: <node text="${SECRET}"`,
+  ];
+  for (const stderr of onStderr) {
+    const run = { exitCode: 1, stdout: '', stderr: `${stderr}\nam: Killed` };
+    const error = await captureError(run);
+    const instrumentation = exitResultOf(normalizeError(error).details ?? {});
+    assertPrivate(JSON.stringify(instrumentation));
+    assert.equal(instrumentation.failed, undefined);
+
+    const { log } = await withLog(async (logPath) => {
+      await inScope(logPath, async () => {
+        await assert.rejects(
+          snapshotAndroid(emulator, {
+            helperAdb: helperFailingWith(run),
+            helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+          }),
+        );
+      });
+    });
+    assertPrivate(
+      JSON.stringify(diagnosticData(log, 'android_snapshot_helper_failed').instrumentation),
+    );
   }
 });
 
@@ -471,7 +482,7 @@ test('a nonzero exit after parseable helper output keeps no raw stream in its de
 
   assertPrivate(JSON.stringify(normalizeError(error)));
   assert.equal(error.details?.stdout, '');
-  assert.equal(error.details?.stderr, '');
+  assert.equal(error.details?.stderr, 'am: Killed');
   assert.equal(error.details?.exitCode, 1);
 });
 
@@ -703,9 +714,9 @@ test('a helper that prints chunks and then times out in the executor leaks no st
 
   assert.ok(caught instanceof AppError);
   const wire = normalizeError(caught);
-  assertPrivate(JSON.stringify(wire));
+  assertPrivate(JSON.stringify({ ...wire.details, stderr: undefined }));
   assert.equal('stdout' in (caught.details ?? {}), false);
-  assert.equal('stderr' in (caught.details ?? {}), false);
+  assert.ok(typeof caught.details?.stderr === 'string');
   assert.equal(caught.details?.timeoutMs, 600);
   assert.equal(exitResultOf(caught.details ?? {}).statusCode, 1);
 });
@@ -734,17 +745,21 @@ test('a session that exits while its streams stay open still fails startup promp
   assert.equal(exitResultOf(error.details ?? {}).aborted, 'System has crashed.');
 });
 
-test('a failed live session is retired without waiting for an exit', async () => {
+test('a failed live session is retired without waiting on a timer for an exit', async () => {
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls: [], processes, responseMode: 'malformed' });
 
-  const startedAt = Date.now();
-  const output = await captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5556',
-  });
-
-  assert.equal(output, undefined);
-  assert.ok(Date.now() - startedAt < 200, `retirement took ${Date.now() - startedAt}ms`);
+  // With timers frozen, any retirement step that waits on a timer for exit evidence never ends.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const output = await captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5556',
+    });
+    assert.equal(output, undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+  assert.equal(processes[0]?.killed, true);
 });

@@ -701,14 +701,14 @@ test('captureAndroidSnapshotWithHelper gives adb command overhead beyond helper 
   assert.equal(commandTimeoutMs, 13000);
 });
 
-test('captureAndroidSnapshotWithHelper wraps unparseable failed output with the instrumentation result', async () => {
+test('captureAndroidSnapshotWithHelper wraps unparseable failed output with adb details', async () => {
   await assert.rejects(
     () =>
       captureAndroidSnapshotWithHelper({
         adb: async () => ({
           exitCode: 1,
-          stdout: 'INSTRUMENTATION_ABORTED: instrumentation failed',
-          stderr: 'raw stderr text',
+          stdout: '',
+          stderr: 'instrumentation failed',
         }),
       }),
     (error) => {
@@ -716,13 +716,11 @@ test('captureAndroidSnapshotWithHelper wraps unparseable failed output with the 
         (error as Error).message,
         'Android snapshot helper failed before returning parseable output',
       );
-      const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.exitCode, 1);
-      assert.deepEqual(details?.instrumentation, {
-        exitCode: 1,
-        aborted: 'instrumentation failed',
-      });
-      assert.equal('stderr' in (details ?? {}), false);
+      assert.equal((error as { details?: Record<string, unknown> }).details?.exitCode, 1);
+      assert.equal(
+        (error as { details?: Record<string, unknown> }).details?.stderr,
+        'instrumentation failed',
+      );
       return true;
     },
   );
