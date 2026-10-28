@@ -116,6 +116,9 @@ export function WebViewScreen(props: { onClose: () => void }) {
             setLoadState((current) => (current.kind === 'error' ? current : { kind: 'loaded' }))
           }
           onLoadStart={() => setLoadState({ kind: 'loading' })}
+          // The default whitelist also gates iframe loads, which blocks the fixture's
+          // `about:srcdoc` and `data:` frames.
+          originWhitelist={['*']}
           source={site.source}
           startInLoadingState
           style={styles.webView}

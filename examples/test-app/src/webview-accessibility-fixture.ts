@@ -66,6 +66,16 @@ export const WEBVIEW_ACCESSIBILITY_FIXTURE = `
         alt="Blue accessibility test square"
         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect width='48' height='48' fill='%230078d4'/%3E%3C/svg%3E"
       />
+      <h2>Embedded frames</h2>
+      <iframe
+        title="Same-origin frame"
+        srcdoc="<h3>Same-origin frame heading</h3><button>Same-origin frame button</button>"
+      ></iframe>
+      <iframe
+        title="Opaque-origin frame"
+        src="data:text/html,%3Ch3%3EOpaque-origin frame heading%3C/h3%3E%3Cbutton%3EOpaque-origin frame button%3C/button%3E"
+      ></iframe>
+      <iframe title="Cross-site frame" src="https://example.com/"></iframe>
     </main>
     <footer>Fixture footer text</footer>
   </body>

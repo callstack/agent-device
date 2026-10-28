@@ -46,15 +46,31 @@ const LABEL_ELEMENT_ROLES = new Set(['labeltext']);
  */
 export type SnapshotRectFetch = (refs: readonly string[]) => Promise<Map<string, Rect>>;
 
+/** The border and padding between an iframe's border box and the viewport its document renders into. */
+export type FrameContentInset = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * The content inset of every iframe ref asked for, in one call. A frame the backend could not
+ * measure is absent from the returned map.
+ */
+type FrameContentInsetFetch = (
+  frameRefs: readonly string[],
+) => Promise<Map<string, FrameContentInset>>;
+
+type SnapshotGeometryFetch = {
+  rects: SnapshotRectFetch;
+  frameContentInsets: FrameContentInsetFetch;
+};
+
 export async function normalizeAgentBrowserSnapshot(
   data: unknown,
-  fetchRects?: SnapshotRectFetch,
+  geometry?: SnapshotGeometryFetch,
 ): Promise<WebSnapshotResult> {
   const snapshotText = readStringProperty(data, 'snapshot') ?? '';
   const refs = collectSnapshotRefs(readProperty(data, 'refs'));
   const drafts = parseSnapshotDraftNodes(snapshotText, refs);
 
-  if (fetchRects) await attachDraftRects(drafts, fetchRects);
+  if (geometry) await attachDraftRects(drafts, geometry);
 
   return {
     // Preserve each draft's backend ref as the node's `ref`. agent-browser resolves
@@ -77,18 +93,71 @@ export async function normalizeAgentBrowserSnapshot(
 
 async function attachDraftRects(
   drafts: SnapshotDraftNode[],
-  fetchRects: SnapshotRectFetch,
+  geometry: SnapshotGeometryFetch,
 ): Promise<void> {
   // One fetch for the whole capture. A capture of nothing addressable still comes through, and the
   // fetcher decides not to call the backend for it: that decision belongs with the refusal below.
-  const rects = await fetchRects(
+  const rects = await geometry.rects(
     drafts.flatMap((draft) => (draft.ref === undefined ? [] : [draft.ref])),
   );
-  for (const draft of drafts) {
+  const frameIndexes = drafts.map((draft) => findFrameAncestorIndex(drafts, draft));
+  const frameRefs = [...new Set(frameIndexes.flatMap((index) => drafts[index ?? -1]?.ref ?? []))];
+  const insets = frameRefs.length > 0 ? await geometry.frameContentInsets(frameRefs) : new Map();
+  // Drafts list a parent before its children, so a frame's own rect is already in page
+  // coordinates when its descendants read it.
+  for (const [index, draft] of drafts.entries()) {
     const ref = draft.ref;
     const rect = ref === undefined ? undefined : rects.get(ref);
-    if (rect) draft.node.rect = rect;
+    if (!rect) continue;
+    const frameIndex = frameIndexes[index];
+    if (frameIndex === undefined) {
+      draft.node.rect = rect;
+      continue;
+    }
+    // The backend measures a node inside an iframe against that frame's viewport. A frame whose
+    // position cannot be read leaves its content without a rect rather than with a wrong one.
+    const frame = drafts[frameIndex]!;
+    const frameRect = frame.node.rect;
+    const inset = frame.ref === undefined ? undefined : insets.get(frame.ref);
+    if (!frameRect || !inset) continue;
+    const viewport = frameViewportRect(frameRect, inset);
+    const placed = clipRect({ ...rect, x: rect.x + viewport.x, y: rect.y + viewport.y }, viewport);
+    // Content scrolled out of its frame has no point a press could reach: the page around the
+    // frame renders there instead.
+    if (placed) draft.node.rect = placed;
   }
+}
+
+function frameViewportRect(frameRect: Rect, inset: FrameContentInset): Rect {
+  return {
+    x: frameRect.x + inset.left,
+    y: frameRect.y + inset.top,
+    width: frameRect.width - inset.left - inset.right,
+    height: frameRect.height - inset.top - inset.bottom,
+  };
+}
+
+function clipRect(rect: Rect, bounds: Rect): Rect | undefined {
+  const x = Math.max(rect.x, bounds.x);
+  const y = Math.max(rect.y, bounds.y);
+  const right = Math.min(rect.x + rect.width, bounds.x + bounds.width);
+  const bottom = Math.min(rect.y + rect.height, bounds.y + bounds.height);
+  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : undefined;
+}
+
+/** The nearest iframe the draft renders inside, by index. */
+function findFrameAncestorIndex(
+  drafts: readonly SnapshotDraftNode[],
+  draft: SnapshotDraftNode,
+): number | undefined {
+  let index = draft.node.parentIndex;
+  while (index !== undefined) {
+    const ancestor = drafts[index];
+    if (!ancestor) return undefined;
+    if (ancestor.node.type?.toLowerCase() === 'iframe') return index;
+    index = ancestor.node.parentIndex;
+  }
+  return undefined;
 }
 
 /** One snapshot line, with the node it reports when the backend issued a ref for it. */

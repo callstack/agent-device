@@ -436,6 +436,84 @@ test('agent-browser provider asks the backend nothing for a capture of only ref-
   });
 });
 
+test('agent-browser provider places nodes inside nested iframes in page coordinates', async () => {
+  // Measured on agent-browser 0.39: a node inside an iframe reports its box against that frame's
+  // viewport, so a press at the reported point lands on the page around the frame.
+  await withWebProvider(async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const snapshot = await withCommandExecutorOverride(
+      frameGeometryExecutor(calls),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    const stylesBatch = calls.find((call) => call.stdin?.includes('"styles"'));
+    assert.deepEqual(readBatchCommands(stylesBatch?.stdin), [
+      ['get', 'styles', '@e2'],
+      ['get', 'styles', '@e4'],
+    ]);
+    assert.deepEqual(snapshotRects(snapshot), {
+      e1: { x: 8, y: 400, width: 640, height: 44 },
+      e2: { x: 24, y: 770, width: 304, height: 154 },
+      e3: { x: 24 + 2 + 8, y: 770 + 2 + 59, width: 166, height: 21 },
+      e4: { x: 24 + 2 + 10, y: 770 + 2 + 90, width: 200, height: 50 },
+      e5: { x: 36 + 1 + 5 + 4, y: 862 + 1 + 5 + 6, width: 80, height: 20 },
+    });
+  });
+});
+
+test('agent-browser provider leaves a frame without a measurable inset with unplaced content', async () => {
+  await withWebProvider(async (provider) => {
+    const snapshot = await withCommandExecutorOverride(
+      frameGeometryExecutor([], { styles: { ...FRAME_STYLES, '@e4': null } }),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    const rects = snapshotRects(snapshot);
+    // The nested frame itself sits in a measured frame; only the content it renders stays unplaced.
+    assert.deepEqual(rects.e4, { x: 36, y: 862, width: 200, height: 50 });
+    assert.equal(rects.e5, undefined);
+    assert.deepEqual(rects.e3, { x: 34, y: 831, width: 166, height: 21 });
+  });
+});
+
+test('agent-browser provider leaves a frame without a measurable box with unplaced content', async () => {
+  await withWebProvider(async (provider) => {
+    const snapshot = await withCommandExecutorOverride(
+      frameGeometryExecutor([], { boxes: { ...FRAME_BOXES, '@e2': undefined } }),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    const rects = snapshotRects(snapshot);
+    assert.deepEqual(rects.e1, { x: 8, y: 400, width: 640, height: 44 });
+    assert.equal(rects.e2, undefined);
+    assert.equal(rects.e3, undefined);
+    assert.equal(rects.e4, undefined);
+    assert.equal(rects.e5, undefined);
+  });
+});
+
+test('agent-browser provider clips frame content to the frame viewport', async () => {
+  // A frame scrolled by its own document reports content above or below its viewport. The page
+  // around the frame renders at those points, so a press there must not target the content.
+  await withWebProvider(async (provider) => {
+    const snapshot = await withCommandExecutorOverride(
+      frameGeometryExecutor([], {
+        boxes: {
+          ...FRAME_BOXES,
+          '@e3': { x: 8, y: -40, width: 166, height: 21 },
+          '@e4': { x: 10, y: 130, width: 200, height: 50 },
+        },
+      }),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    const rects = snapshotRects(snapshot);
+    assert.equal(rects.e3, undefined, 'content scrolled above the frame has no reachable point');
+    // The outer frame's viewport ends at 770 + 154 - 2: the visible part of the nested frame.
+    assert.deepEqual(rects.e4, { x: 36, y: 902, width: 200, height: 20 });
+  });
+});
+
 async function withWebProvider(
   testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
 ): Promise<void> {
@@ -482,6 +560,86 @@ function geometryExecutor(calls: AgentBrowserCall[]) {
     }
     return jsonResult({ success: true, data: {} });
   };
+}
+
+type BackendBox = { x: number; y: number; width: number; height: number };
+
+/** Each frame's computed styles, as `get styles` reports them; `null` is a frame it cannot read. */
+type FrameStyles = Record<string, Record<string, string> | null>;
+
+const FRAME_STYLES: FrameStyles = {
+  '@e2': frameStyles({ border: 2, padding: 0 }),
+  '@e4': frameStyles({ border: 1, padding: 5 }),
+};
+
+function frameStyles({ border, padding }: { border: number; padding: number }) {
+  const styles: Record<string, string> = {};
+  for (const side of ['left', 'top', 'right', 'bottom']) {
+    styles[`border-${side}-width`] = `${border}px`;
+    styles[`padding-${side}`] = `${padding}px`;
+  }
+  return styles;
+}
+
+/** Boxes as the backend reports them: `@e3`-`@e5` against the viewport of the frame they render in. */
+const FRAME_BOXES: Record<string, BackendBox | undefined> = {
+  '@e1': { x: 8, y: 400, width: 640, height: 44 },
+  '@e2': { x: 24, y: 770, width: 304, height: 154 },
+  '@e3': { x: 8, y: 59, width: 166, height: 21 },
+  '@e4': { x: 10, y: 90, width: 200, height: 50 },
+  '@e5': { x: 4, y: 6, width: 80, height: 20 },
+};
+
+function frameGeometryExecutor(
+  calls: AgentBrowserCall[],
+  {
+    styles = FRAME_STYLES,
+    boxes = FRAME_BOXES,
+  }: { styles?: FrameStyles; boxes?: typeof FRAME_BOXES } = {},
+) {
+  return async (
+    cmd: string,
+    args: readonly string[],
+    options: { stdin?: string | Buffer },
+  ): Promise<ExecResult> => {
+    const cliArgs = recordCall(calls, cmd, args, options.stdin);
+    if (cliArgs[0] === 'snapshot') {
+      return jsonResult({
+        success: true,
+        data: {
+          refs: {
+            e1: { role: 'button', name: 'Page button' },
+            e2: { role: 'Iframe', name: 'Outer frame' },
+            e3: { role: 'button', name: 'Outer frame button' },
+            e4: { role: 'Iframe', name: 'Inner frame' },
+            e5: { role: 'button', name: 'Inner frame button' },
+          },
+          snapshot: [
+            '- button "Page button" [ref=e1]',
+            '- Iframe "Outer frame" [ref=e2]',
+            '  - button "Outer frame button" [ref=e3]',
+            '  - Iframe "Inner frame" [ref=e4]',
+            '    - button "Inner frame button" [ref=e5]',
+          ].join('\n'),
+        },
+      });
+    }
+    const commands = readBatchCommands(options.stdin);
+    return jsonResult(
+      commands.map((command) => {
+        const [, kind, ref] = command;
+        const frameStyles = styles[ref!];
+        const result = kind === 'box' ? boxes[ref!] : frameStyles && { styles: frameStyles };
+        return result
+          ? { command, success: true, error: null, result }
+          : { command, success: false, error: 'No element', result: null };
+      }),
+    );
+  };
+}
+
+function snapshotRects(snapshot: WebSnapshotResult) {
+  return Object.fromEntries(snapshot.nodes.map((node) => [node.ref, node.rect]));
 }
 
 function assertGeometryRects(snapshot: WebSnapshotResult): void {

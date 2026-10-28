@@ -15,10 +15,11 @@ import {
   normalizeAgentBrowserAudioProbeResult,
 } from './agent-browser-audio-probe.ts';
 import { normalizeAgentBrowserNetworkRequests } from './agent-browser-network.ts';
-import { normalizeAgentBrowserSnapshot } from './agent-browser-snapshot.ts';
+import { normalizeAgentBrowserSnapshot, type FrameContentInset } from './agent-browser-snapshot.ts';
 import {
   isJsonObject,
   readNumberProperty,
+  readProperty,
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
@@ -271,7 +272,12 @@ async function captureAgentBrowserSnapshot(
   const data = await runJson(buildSnapshotArgs(options));
   return await normalizeAgentBrowserSnapshot(
     data,
-    options?.includeRects ? (refs) => fetchRefRects(runJson, refs) : undefined,
+    options?.includeRects
+      ? {
+          rects: (refs) => fetchRefRects(runJson, refs),
+          frameContentInsets: (frameRefs) => fetchFrameContentInsets(runJson, frameRefs),
+        }
+      : undefined,
   );
 }
 
@@ -351,6 +357,57 @@ async function fetchRefRects(
     );
   }
   return rects;
+}
+
+/**
+ * The border and padding between each iframe's border box and the viewport its document renders
+ * into, in `batch` round trips. The backend reports the box of a node inside an iframe against that
+ * viewport, so the projection needs this inset to place the node on the page.
+ */
+async function fetchFrameContentInsets(
+  runJson: (args: string[], run?: AgentBrowserRunOptions) => Promise<unknown>,
+  frameRefs: readonly string[],
+): Promise<Map<string, FrameContentInset>> {
+  const insets = new Map<string, FrameContentInset>();
+  for (let start = 0; start < frameRefs.length; start += MAX_REFS_PER_RECT_BATCH) {
+    const group = frameRefs.slice(start, start + MAX_REFS_PER_RECT_BATCH);
+    const commands = group.map((ref) => ['get', 'styles', browserRefSelector(ref)]);
+    const entries = parseBatchEntries(
+      await runJson(['batch'], { stdin: JSON.stringify(commands) }),
+      commands,
+      frameRefs.length,
+    );
+    for (const [index, entry] of entries.entries()) {
+      const ref = group[index];
+      const inset = entry.success === true ? parseFrameContentInset(entry.result) : undefined;
+      if (inset && ref !== undefined) insets.set(ref, inset);
+    }
+  }
+  return insets;
+}
+
+function parseFrameContentInset(data: unknown): FrameContentInset | undefined {
+  const styles = readProperty(data, 'styles');
+  if (!isJsonObject(styles)) return undefined;
+  const left = sumPixelStyles(styles, ['border-left-width', 'padding-left']);
+  const top = sumPixelStyles(styles, ['border-top-width', 'padding-top']);
+  const right = sumPixelStyles(styles, ['border-right-width', 'padding-right']);
+  const bottom = sumPixelStyles(styles, ['border-bottom-width', 'padding-bottom']);
+  return left === undefined || top === undefined || right === undefined || bottom === undefined
+    ? undefined
+    : { left, top, right, bottom };
+}
+
+function sumPixelStyles(styles: JsonObject, keys: readonly string[]): number | undefined {
+  let total = 0;
+  for (const key of keys) {
+    const value = styles[key];
+    const pixels =
+      typeof value === 'string' ? value.match(/^(-?\d+(?:\.\d+)?)px$/)?.[1] : undefined;
+    if (pixels === undefined) return undefined;
+    total += Number(pixels);
+  }
+  return total;
 }
 
 type AgentBrowserBatchEntry = {

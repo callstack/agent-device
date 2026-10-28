@@ -25,7 +25,10 @@ Navigation uses Expo Router native bottom tabs, so the tab bar itself is also pa
 
 The deterministic WebView fixture is the stable accessibility oracle. On iOS, an interactive
 snapshot should expose its root as `webview`, both titles as `heading`, paragraph and label content
-as `text`, and the form controls as `text-field`, `switch`, and `button`. The live-site buttons are
+as `text`, and the form controls as `text-field`, `switch`, and `button`. Its `Embedded frames`
+section adds a same-origin `srcdoc` frame, an opaque-origin `data:` frame, and a cross-site frame
+(`https://example.com/`, needs network); the frame headings and buttons appear inline under the
+`WebView` on iOS, Android, and web. The live-site buttons are
 exploratory smoke coverage for real-world WebKit trees, not stable assertion targets.
 Use an unscoped snapshot for this oracle: XCTest can detach a scoped WebKit document subtree from
 its `WebView` ancestor, leaving insufficient evidence for safe semantic projection.
