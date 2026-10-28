@@ -633,3 +633,56 @@ test('Android refuses to adopt matching identity from another application', asyn
   );
   assert.deepEqual(device.taps(), []);
 });
+
+test('a ref from a full-tree frame is re-observed in that presentation, not renumbered', async () => {
+  // A static caption ahead of the target holds `e2`, so the target is `e3` in the full tree and `e2`
+  // in an interactive-only one. Looking the ref up in a renumbered tree finds nothing to adopt.
+  function fullTree(x: number): SnapshotState {
+    const tree = slideTree(x);
+    tree.nodes[1]!.index = 2;
+    tree.nodes[1]!.ref = 'e3';
+    tree.nodes.splice(1, 0, {
+      ref: 'e2',
+      index: 1,
+      type: 'Text',
+      label: 'Caption',
+      parentIndex: 0,
+      depth: 1,
+    });
+    return { ...tree, presentation: { interactiveOnly: false } };
+  }
+  const interactiveTree = slideTree(RESTING_X);
+  const frame = fullTree(MID_FLIGHT_X);
+  const clock = createFakeClock();
+  const taps: Point[] = [];
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async (_context, options) => ({
+        snapshot: options?.interactiveOnly === true ? interactiveTree : fullTree(RESTING_X),
+      }),
+      tap: async (_context, point) => {
+        taps.push(point);
+        return { ok: true };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([
+      {
+        name: 'default',
+        snapshot: frame,
+        refFrameSnapshot: frame,
+        movingTargetBaseline: {
+          finishedAt: clock.now() - DISTURBING_HISTORY.baselineAgeMs,
+          tree: { nodes: DISTURBING_HISTORY.baselineTree.nodes },
+        },
+      },
+    ]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  await device.interactions.press(ref('@e3'), { session: 'default' });
+
+  assert.deepEqual(taps, [centerOf(RESTING_X)]);
+});

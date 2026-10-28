@@ -213,7 +213,6 @@ export const SNAPSHOT_CAPTURE_OPTION_KEYS = [
 ] as const;
 
 /** Option keys that identify a presentation; see {@link buildSnapshotPresentationKey}. */
-// fallow-ignore-next-line unused-export
 export const SNAPSHOT_PRESENTATION_OPTION_KEYS = [
   'depth',
   'interactiveOnly',
@@ -249,6 +248,11 @@ export function snapshotFlagsFromOptions<const TKeys extends readonly SnapshotOp
 }
 
 export type SnapshotPresentationFlagInput = SnapshotOptionFlagFields<
+  (typeof SNAPSHOT_PRESENTATION_OPTION_KEYS)[number]
+>;
+
+/** The options that decide a capture's node set, and so the refs minted on it. */
+export type SnapshotPresentation = SnapshotOptionFields<
   (typeof SNAPSHOT_PRESENTATION_OPTION_KEYS)[number]
 >;
 
@@ -744,6 +748,8 @@ export type SnapshotState = {
   snapshotQualityNotes?: SnapshotQualityNote[];
   comparisonSafe?: boolean;
   presentationKey?: string;
+  /** The presentation this capture was taken with; absent means the default full tree. */
+  presentation?: SnapshotPresentation;
   /** Opaque equality key for iOS acquisition and presentation lineage. */
   comparisonKey?: string;
   /**
@@ -983,13 +989,6 @@ export function buildSnapshotPresentationKey(flags: SnapshotOptions | undefined)
     // still screen reports 'unchanged' and never delivers what was asked for.
     customActions: flags?.customActions === true,
   });
-}
-
-export function snapshotPresentationOptionsFromFlags(
-  flags: SnapshotPresentationFlagInput | undefined,
-): SnapshotOptions | undefined {
-  if (!flags) return undefined;
-  return snapshotOptionsFromFlags(flags, SNAPSHOT_PRESENTATION_OPTION_KEYS);
 }
 
 export function centerOfRect(rect: Rect): Point {

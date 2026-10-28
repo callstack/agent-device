@@ -3,9 +3,9 @@ import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import {
   buildSnapshotPresentationKey,
   inheritPostGestureOutcome,
-  snapshotPresentationOptionsFromFlags,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import { snapshotPresentationOptionsFromFlags } from '@agent-device/capture-kit/snapshot-state';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';

@@ -17,6 +17,7 @@ import type {
 import { nodeRectByIdentity } from '@agent-device/ad-script';
 import { now, sleep } from '../../runtime-common.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
+import { requireSnapshotSession } from './selector-read-shared.ts';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
@@ -316,7 +317,14 @@ async function reObserveTarget(
       ? { measured: true, resolved, rect, surfaceBundleId }
       : { measured: false, resolved, rect: undefined };
   }
-  const { snapshot } = await captureInteractionSnapshot(runtime, options, true);
+  // A ref names its node by index in the frame tree, so the observation has to mint refs over the
+  // same node set: an interactive-only look at a full-tree frame renumbers every node it drops.
+  const { snapshot: frameTree } = await requireSnapshotSession(runtime, options.session);
+  const { snapshot } = await captureInteractionSnapshot(
+    runtime,
+    options,
+    frameTree.presentation?.interactiveOnly === true,
+  );
   const resolved = await resolveInteractionTarget(runtime, options, params);
   return { resolved, ...measureRefObservation(surfaceScopedNodes(snapshot), resolved) };
 }

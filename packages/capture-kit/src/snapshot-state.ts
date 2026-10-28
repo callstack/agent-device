@@ -10,7 +10,10 @@ import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-
 import {
   attachRefs,
   buildSnapshotPresentationKey,
-  snapshotPresentationOptionsFromFlags,
+  SNAPSHOT_PRESENTATION_OPTION_KEYS,
+  snapshotOptionsFromFlags,
+  type SnapshotPresentation,
+  type SnapshotPresentationFlagInput,
   snapshotRefMinting,
   type IosTargetActivation,
   type PresentedSurface,
@@ -33,6 +36,13 @@ import { normalizeSnapshotTree, pruneGroupNodes } from './snapshot-tree-ingestio
 import { iosSnapshotComparisonIdentityKey } from './ios-snapshot-planning.ts';
 import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-snapshot';
+
+/** The presentation `flags` capture with; absent flags read as the default full tree. */
+export function snapshotPresentationOptionsFromFlags(
+  flags: SnapshotPresentationFlagInput | undefined,
+): SnapshotPresentation {
+  return snapshotOptionsFromFlags(flags, SNAPSHOT_PRESENTATION_OPTION_KEYS);
+}
 
 /**
  * The ONE daemon assembly of a captured tree (ADR 0004 / #1797): normalize, group prune,
@@ -87,6 +97,7 @@ export function buildSnapshotState(
       ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
       : normalizedNodes;
   const annotations = snapshotCaptureAnnotationsFrom(data);
+  const presentation = snapshotPresentationOptionsFromFlags(flags);
   const nodes = attachRefs(
     snapshotRaw
       ? scopedNodes
@@ -112,7 +123,8 @@ export function buildSnapshotState(
     ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),
     ...(data.viewport ? { viewport: data.viewport } : {}),
-    presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
+    presentationKey: buildSnapshotPresentationKey(presentation),
+    presentation,
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
     // or filtered view, preserve that output contract but avoid pretending it is safe for
     // route-level comparisons on the next capture.

@@ -3,6 +3,7 @@ import {
   buildSnapshotPresentationKey,
   type Rect,
   type SnapshotNode,
+  type SnapshotPresentation,
   type SnapshotState,
   type SnapshotUnchanged,
 } from '@agent-device/kernel/snapshot';
@@ -17,9 +18,17 @@ export function ensureSnapshotPresentationKey(
   options: SnapshotCommandOptions,
 ): SnapshotState {
   if (snapshot.presentationKey) return snapshot;
+  const presentation: SnapshotPresentation = {
+    interactiveOnly: options.interactiveOnly,
+    depth: options.depth,
+    scope: options.scope,
+    raw: options.raw,
+    customActions: options.customActions,
+  };
   return {
     ...snapshot,
-    presentationKey: buildSnapshotPresentationKey(options),
+    presentationKey: buildSnapshotPresentationKey(presentation),
+    presentation,
   };
 }
 
