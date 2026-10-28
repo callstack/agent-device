@@ -439,6 +439,18 @@ test('the real cause past the redaction cap survives in the error and the reques
   assert.equal(logged.stderrTruncated, true);
 });
 
+test('stderr beyond the retained window keeps the newest lines', async () => {
+  const lines = Array.from({ length: 100 }, (_, index) => `${index} ${'w'.repeat(400)}`);
+  const result = await captureExitResult({
+    exitCode: 1,
+    stdout: '',
+    stderr: `${lines.join('\n')}\nam: Killed`,
+  });
+
+  assert.ok(result.stderrTail.endsWith('am: Killed'));
+  assert.equal(result.stderrTruncated, true);
+});
+
 test('a long stderr diagnostic line keeps its end and a long snapshot line is dropped', async () => {
   const diagnostic = `${'frame '.repeat(5_000)}Caused by: binder has died`;
   const kept = await captureExitResult({ exitCode: 1, stdout: '', stderr: diagnostic });
