@@ -12,7 +12,6 @@ import {
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
   readInstrumentationExitResult,
-  withoutSnapshotContent,
 } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
@@ -224,16 +223,18 @@ function readAndroidSnapshotHelperOutput(
     if (helperFailure) throw helperFailure;
     // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
     // message already branches on the exit code.
+    // The raw output is not copied into the details: it can hold the snapshot the helper was
+    // printing, so only the parsed instrumentation result and its filtered stderr tail are kept.
+    const instrumentation = readInstrumentationExitResult(result);
     throw new AppError(
       'COMMAND_FAILED',
       result.exitCode === 0
         ? 'Android snapshot helper output could not be parsed'
         : 'Android snapshot helper failed before returning parseable output',
       {
-        stdout: withoutSnapshotContent(result.stdout),
-        stderr: withoutSnapshotContent(result.stderr),
+        stderr: instrumentation.stderrTail,
         exitCode: result.exitCode,
-        instrumentation: readInstrumentationExitResult(result),
+        instrumentation,
         ...androidCaptureFailureReasonDetail(
           androidCaptureFailureReasonFromExitCode(result.exitCode),
         ),

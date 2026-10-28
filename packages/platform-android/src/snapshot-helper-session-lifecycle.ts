@@ -310,6 +310,7 @@ async function startAndroidSnapshotHelperSession(params: {
     allowFailure: true,
     captureOutput: false,
   });
+  const processRecord = recordInstrumentationProcess(childProcess);
   const session: AndroidSnapshotHelperSession = {
     identity: params.identity,
     deviceKey: params.deviceKey,
@@ -323,7 +324,7 @@ async function startAndroidSnapshotHelperSession(params: {
     port,
     adb: params.options.adb,
     process: childProcess,
-    processRecord: recordInstrumentationProcess(childProcess),
+    processRecord,
     startedAtMs: Date.now(),
     capturedCount: 0,
     commands: new Set(),
@@ -337,6 +338,7 @@ async function startAndroidSnapshotHelperSession(params: {
       childProcess,
       params.startBudgetMs,
       params.options.signal,
+      processRecord,
     );
     sessions().set(params.deviceKey, session);
     failedSessions().delete(params.identity);

@@ -46,28 +46,34 @@ const CRASHED_RUN = [
   '',
 ].join('\n');
 
-const TRUNCATED_XML_RUN = [
-  'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-  'INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml',
-  'INSTRUMENTATION_STATUS: chunkIndex=0',
-  'INSTRUMENTATION_STATUS: chunkCount=1',
-  `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from('<hierarchy rotation="0"><node text="Hel').toString('base64')}`,
-  'INSTRUMENTATION_STATUS_CODE: 1',
-  '',
-].join('\n');
-
 type FailedRun = { exitCode: number; stdout: string; stderr?: string; signal?: string };
 
 type ExitResultFields = {
   exitCode: number | null;
   signal?: string;
   resultCode?: number;
+  statusCode?: number;
   aborted?: string;
   failed?: string;
   shortMsg?: string;
   longMsg?: string;
-  outputTail: string;
-  outputTruncated: boolean;
+  error?: string;
+  stack?: string;
+  stderrTail: string;
+  stderrTruncated: boolean;
+  snapshotContentRemoved?: true;
+};
+
+const SECRET = 'hunter2-account-number';
+const SECRET_XML = `<hierarchy rotation="0"><node text="${SECRET}" bounds="[0,0][10,10]" /></hierarchy>`;
+const SECRET_BASE64 = Buffer.from(SECRET_XML).toString('base64');
+
+const emulator: DeviceInfo = {
+  platform: 'android',
+  id: 'emulator-5556',
+  name: 'Pixel',
+  kind: 'emulator',
+  booted: true,
 };
 
 async function captureError(run: FailedRun): Promise<AppError> {
@@ -80,23 +86,105 @@ async function captureError(run: FailedRun): Promise<AppError> {
 }
 
 async function captureExitResult(run: FailedRun): Promise<ExitResultFields> {
-  const error = await captureError(run);
-  return error.details?.instrumentation as ExitResultFields;
+  return (await captureError(run)).details?.instrumentation as ExitResultFields;
 }
 
 function encodedPayload(xml: string): string {
   return `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(xml).toString('base64')}`;
 }
 
-const SECRET = 'hunter2-account-number';
-const SECRET_XML = `<hierarchy rotation="0"><node text="${SECRET}" bounds="[0,0][10,10]" /></hierarchy>`;
+function helperFailingWith(run: FailedRun): AndroidAdbExecutor {
+  return async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return {
+        exitCode: 0,
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
+        stderr: '',
+      };
+    }
+    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
+    if (isAndroidHelperRuntimeForceStop(args)) return { exitCode: 0, stdout: '', stderr: '' };
+    return { stderr: '', ...run };
+  };
+}
 
-test('an aborted instrumentation run reports the abort and the exit status', async () => {
+async function withLog<T>(
+  run: (logPath: string) => Promise<T>,
+): Promise<{ result: T; log: string }> {
+  const tmpDir = await mkdtempForTest('agent-device-android-exit-result-');
+  const logPath = path.join(tmpDir, 'diag.ndjson');
+  try {
+    const result = await run(logPath);
+    return { result, log: await fs.readFile(logPath, 'utf8') };
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function inScope<T>(logPath: string, body: () => Promise<T>): Promise<T> {
+  return withDiagnosticsScope(
+    { debug: true, logPath, session: 'android-test', requestId: 'req-1', command: 'snapshot' },
+    body,
+  );
+}
+
+function diagnosticData(log: string, phase: string): Record<string, unknown> {
+  const event = log
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { phase?: string; data?: Record<string, unknown> })
+    .find((entry) => entry.phase === phase);
+  assert.ok(event, `expected a ${phase} diagnostic`);
+  return event.data ?? {};
+}
+
+function exitResultOf(fields: Record<string, unknown>): ExitResultFields {
+  return fields.instrumentation as ExitResultFields;
+}
+
+/** Runs a ready session whose helper process prints through `print` and then exits with 1. */
+async function sessionExit(
+  print: (process: FakeAndroidProcess) => Promise<void>,
+): Promise<{ exit: ExitResultFields; log: string }> {
+  const { result, log } = await withLog(async (logPath) => {
+    const processes: FakeAndroidProcess[] = [];
+    const provider = createSessionProvider({ calls: [], processes });
+    const capture = () =>
+      captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+    await inScope(logPath, async () => {
+      assert.ok(await capture());
+      await print(processes[0]!);
+      await pause();
+      processes[0]!.emitExit(1, null);
+      await capture();
+    });
+    return undefined;
+  });
+  void result;
+  return {
+    exit: exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_exited')),
+    log,
+  };
+}
+
+const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+function assertPrivate(text: string): void {
+  assert.ok(!text.includes(SECRET), text.slice(-800));
+  assert.ok(!text.includes(SECRET_BASE64.slice(0, 24)), text.slice(-800));
+}
+
+test('an aborted instrumentation run reports the abort, the status code and the exit status', async () => {
   assert.deepEqual(await captureExitResult({ exitCode: 1, stdout: ABORTED_RUN }), {
     exitCode: 1,
+    statusCode: 1,
     aborted: 'System has crashed.',
-    outputTail: ABORTED_RUN.trimEnd(),
-    outputTruncated: false,
+    stderrTail: '',
+    stderrTruncated: false,
   });
 });
 
@@ -106,28 +194,34 @@ test('a crashed instrumentation run reports shortMsg, longMsg and the result cod
     resultCode: 0,
     shortMsg: 'java.lang.IllegalStateException',
     longMsg: 'java.lang.IllegalStateException: UiAutomation not connected',
-    outputTail: CRASHED_RUN.trimEnd(),
-    outputTruncated: false,
+    stderrTail: '',
+    stderrTruncated: false,
   });
 });
 
 test('the host signal that ended the run reaches the details', async () => {
-  const result = await captureExitResult({ exitCode: 1, stdout: '', signal: 'SIGKILL' });
-
-  assert.equal(result.signal, 'SIGKILL');
+  assert.equal(
+    (await captureExitResult({ exitCode: 1, stdout: '', signal: 'SIGKILL' })).signal,
+    'SIGKILL',
+  );
 });
 
-test('an empty INSTRUMENTATION_CODE is not recorded as a zero result', async () => {
-  const result = await captureExitResult({
+test('an empty or out-of-range INSTRUMENTATION_CODE is not recorded as a result code', async () => {
+  const empty = await captureExitResult({
     exitCode: 1,
     stdout: 'INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: \n',
   });
+  assert.equal(empty.resultCode, undefined);
+  assert.equal(empty.shortMsg, 'Process crashed.');
 
-  assert.equal(result.resultCode, undefined);
-  assert.equal(result.shortMsg, 'Process crashed.');
+  const huge = await captureExitResult({
+    exitCode: 1,
+    stdout: `INSTRUMENTATION_CODE: ${'9'.repeat(400)}\n`,
+  });
+  assert.equal(huge.resultCode, undefined);
 });
 
-test('multiline result values keep their continuation lines', async () => {
+test('multiline protocol values keep their continuation lines until the next record', async () => {
   const crlf = await captureExitResult({
     exitCode: 0,
     stdout: [
@@ -145,20 +239,23 @@ test('multiline result values keep their continuation lines', async () => {
   const stack = await captureExitResult({
     exitCode: 0,
     stdout: [
-      'INSTRUMENTATION_RESULT: longMsg=java.lang.IllegalStateException: no root',
+      'INSTRUMENTATION_STATUS: Error=java.lang.IllegalStateException: no root',
+      'INSTRUMENTATION_STATUS: stack=java.lang.IllegalStateException: no root',
       '\tat android.app.UiAutomation.connect(UiAutomation.java:12)',
       '\tat com.callstack.agentdevice.snapshothelper.Main.<init>(Main.java:7)',
-      'INSTRUMENTATION_CODE: 0',
+      'INSTRUMENTATION_STATUS_CODE: -2',
     ].join('\n'),
   });
+  assert.equal(stack.error, 'java.lang.IllegalStateException: no root');
   assert.equal(
-    stack.longMsg,
+    stack.stack,
     [
       'java.lang.IllegalStateException: no root',
       '\tat android.app.UiAutomation.connect(UiAutomation.java:12)',
       '\tat com.callstack.agentdevice.snapshothelper.Main.<init>(Main.java:7)',
     ].join('\n'),
   );
+  assert.equal(stack.statusCode, -2);
 
   const interleaved = await captureExitResult({
     exitCode: 0,
@@ -166,12 +263,20 @@ test('multiline result values keep their continuation lines', async () => {
       'INSTRUMENTATION_RESULT: longMsg=first line',
       'second line',
       encodedPayload(SECRET_XML),
-      'INSTRUMENTATION_STATUS_CODE: 1',
       'not part of the message',
-      'INSTRUMENTATION_CODE: 0',
     ].join('\n'),
   });
   assert.equal(interleaved.longMsg, 'first line\nsecond line');
+});
+
+test('single-line and multiline messages are held to the message cap', async () => {
+  const result = await captureExitResult({
+    exitCode: 0,
+    stdout: `INSTRUMENTATION_RESULT: shortMsg=${'s'.repeat(10_000)}\nINSTRUMENTATION_RESULT: longMsg=${'l'.repeat(2_000)}\n${'m'.repeat(2_000)}\nINSTRUMENTATION_CODE: 0`,
+  });
+
+  assert.equal(result.shortMsg?.length, 2_048);
+  assert.ok((result.longMsg?.length ?? 0) <= 2_048);
 });
 
 test('startup failures are recognized in every envelope AOSP prints', async () => {
@@ -188,312 +293,186 @@ test('startup failures are recognized in every envelope AOSP prints', async () =
     ['INSTRUMENTATION_FAILED:', ''],
   ] as const;
   for (const [line, expected] of forms) {
-    const result = await captureExitResult({ exitCode: 1, stdout: `${line}\n` });
-    assert.equal(result.failed, expected, line);
-  }
-});
-
-test('a truncated XML exit keeps its exit status and drops the snapshot payload', async () => {
-  const details = (
-    await captureError({
-      exitCode: 1,
-      stdout: `${'x'.repeat(20_000)}\n${TRUNCATED_XML_RUN}`,
-      stderr: 'am: Killed',
-    })
-  ).details as { instrumentation: ExitResultFields };
-
-  const instrumentation = details.instrumentation;
-  assert.equal(instrumentation.exitCode, 1);
-  assert.equal(instrumentation.outputTruncated, true);
-  assert.ok(instrumentation.outputTail.length <= 400);
-  assert.ok(instrumentation.outputTail.endsWith('am: Killed'));
-  assert.ok(instrumentation.outputTail.includes('payloadBase64=<omitted>'));
-});
-
-test('encoded and raw snapshot content never reaches the error details', async () => {
-  const runs = [
-    {
-      exitCode: 1,
-      stdout: [
-        'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-        encodedPayload(SECRET_XML),
-        'INSTRUMENTATION_STATUS_CODE: 1',
-      ].join('\n'),
-      stderr: 'am: Killed',
-    },
-    {
-      exitCode: 1,
-      stdout: `INSTRUMENTATION_STATUS: stream=${SECRET_XML}\nINSTRUMENTATION_STATUS_CODE: 1`,
-      stderr: '',
-    },
-    // An incomplete raw fragment, cut inside an attribute.
-    { exitCode: 1, stdout: `<hierarchy rotation="0"><node text="${SECRET}`, stderr: 'am: Killed' },
-  ];
-  for (const run of runs) {
-    const error = await captureError(run);
-    const wire = JSON.stringify(normalizeError(error));
-    assert.ok(!wire.includes(SECRET), wire);
-    assert.ok(!wire.includes(Buffer.from(SECRET).toString('base64')), wire);
-    assert.ok(!wire.includes(Buffer.from(SECRET_XML).toString('base64').slice(0, 24)), wire);
-    assert.ok(wire.includes('am: Killed') || run.stderr === '', wire);
-  }
-});
-
-test('a large one-line XML report never leaves a sensitive value in the details or the request log', async () => {
-  const nodes = Array.from(
-    { length: 400 },
-    (_, index) => `<node index="${index}" text="row ${index}" bounds="[0,0][1,1]" />`,
-  ).join('');
-  const lateSecret = `<node text="${SECRET}" content-desc="account" bounds="[0,0][1,1]" />`;
-  const stdouts = [
-    `<hierarchy rotation="0">${nodes}${lateSecret}</hierarchy>`,
-    // Cut so that the kept end of the report has no opening tag left.
-    `${'a'.repeat(30_000)} text="${SECRET}" content-desc="account" bounds="[0,0][1,1]" />`,
-    `INSTRUMENTATION_STATUS: stream=<hierarchy rotation="0">${nodes}${lateSecret}`,
-  ];
-  for (const stdout of stdouts) {
-    const error = await captureError({ exitCode: 1, stdout, stderr: 'am: Killed' });
-    const wire = JSON.stringify(normalizeError(error));
-    assert.ok(!wire.includes(SECRET), wire.slice(-600));
-    assert.ok(wire.includes('am: Killed'));
-
-    const tmpDir = await mkdtempForTest('agent-device-android-capture-xml-diag-');
-    const logPath = path.join(tmpDir, 'diag.ndjson');
-    try {
-      await withDiagnosticsScope(
-        { debug: true, logPath, session: 'android-test', requestId: 'req-7', command: 'snapshot' },
-        async () => {
-          await assert.rejects(
-            snapshotAndroid(emulator, {
-              helperAdb: helperFailingWith({ exitCode: 1, stdout, stderr: 'am: Killed' }),
-              helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-            }),
-          );
-        },
-      );
-      const log = await fs.readFile(logPath, 'utf8');
-      assert.ok(log.includes('android_snapshot_helper_failed'));
-      assert.ok(!log.includes(SECRET), log.slice(-600));
-    } finally {
-      await fs.rm(tmpDir, { recursive: true, force: true });
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const run =
+        stream === 'stdout' ? { stdout: `${line}\n` } : { stdout: '', stderr: `${line}\n` };
+      const result = await captureExitResult({ exitCode: 1, ...run });
+      assert.equal(result.failed, expected, `${stream}: ${line}`);
     }
   }
 });
 
-test('ordinary quoted assignments are kept while snapshot attributes are dropped', async () => {
+test('stdout is never copied: only parsed protocol fields reach the details', async () => {
   const error = await captureError({
     exitCode: 1,
-    stdout: [
-      'E AndroidRuntime: java.lang.IllegalStateException message="binder died" code="7"',
-      `ret-value" text="${SECRET}" bounds="[0,0][1,1]" />`,
-    ].join('\n'),
-    stderr: 'am: Killed',
+    stdout: `${CRASHED_RUN}some unrelated stdout line\n`,
   });
 
-  const result = error.details?.instrumentation as ExitResultFields & {
-    snapshotContentRemoved?: true;
-  };
-  assert.ok(result.outputTail.includes('message="binder died" code="7"'), result.outputTail);
-  assert.ok(!result.outputTail.includes(SECRET));
-  assert.equal(result.snapshotContentRemoved, true);
-  assert.equal(result.outputTruncated, true);
+  assert.equal('stdout' in (error.details ?? {}), false);
+  assert.ok(!JSON.stringify(error.details).includes('some unrelated stdout line'));
 });
 
-test('a long diagnostic line keeps its end and a long snapshot line is dropped', async () => {
-  const diagnostic = `${'frame '.repeat(5_000)}Caused by: binder has died`;
-  const kept = (await captureError({ exitCode: 1, stdout: diagnostic })).details
-    ?.instrumentation as ExitResultFields & { snapshotContentRemoved?: true };
-  assert.ok(kept.outputTail.endsWith('Caused by: binder has died'), kept.outputTail);
-  assert.equal(kept.outputTruncated, true);
-  assert.equal(kept.snapshotContentRemoved, undefined);
+test('a sensitive value never reaches the details wherever the helper printed it', async () => {
+  const runs: FailedRun[] = [
+    // A complete encoded payload.
+    { exitCode: 1, stdout: `${encodedPayload(SECRET_XML)}\nINSTRUMENTATION_STATUS_CODE: 1` },
+    // An unknown status key carrying raw XML.
+    { exitCode: 1, stdout: `INSTRUMENTATION_STATUS: stream=${SECRET_XML}\n` },
+    // A protocol record holding an attribute with no opening tag.
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_STATUS: detail=ret" text="${SECRET}" bounds="[0,0][1,1]" />\n`,
+    },
+    // A tagless fragment as a free line, and as a message continuation.
+    { exitCode: 1, stdout: `ret" text="${SECRET}" bounds="[0,0][1,1]" />\n` },
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: longMsg=boom\nret" text="${SECRET}" bounds="[0,0][1,1]" />\n`,
+    },
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: shortMsg=ret" content-desc="${SECRET}" bounds="[0,0][1,1]" />\n`,
+    },
+    // A fragment on stderr, raw and as a one-line report with a late secret.
+    { exitCode: 1, stdout: '', stderr: `ret" text="${SECRET}" bounds="[0,0][1,1]" />` },
+    { exitCode: 1, stdout: '', stderr: `${'a'.repeat(30_000)}${SECRET_XML}` },
+  ];
+  for (const run of runs) {
+    const error = await captureError({ ...run, stderr: `${run.stderr ?? ''}\nam: Killed` });
+    const wire = JSON.stringify(normalizeError(error));
+    assertPrivate(wire);
+    assert.ok(wire.includes('am: Killed'), wire.slice(-400));
+    assert.equal(exitResultOf(normalizeError(error).details ?? {}).snapshotContentRemoved, true);
 
-  const snapshot = `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>`;
-  const dropped = (await captureError({ exitCode: 1, stdout: snapshot, stderr: 'am: Killed' }))
-    .details?.instrumentation as ExitResultFields & { snapshotContentRemoved?: true };
-  assert.ok(!dropped.outputTail.includes(SECRET));
-  assert.ok(dropped.outputTail.endsWith('am: Killed'));
-  assert.equal(dropped.snapshotContentRemoved, true);
-  assert.equal(dropped.outputTruncated, true);
-});
-
-test('a session exit result keeps a long diagnostic line and drops a long snapshot line', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-long-line-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    const processes: FakeAndroidProcess[] = [];
-    const provider = createSessionProvider({ calls: [], processes });
-    const capture = () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb: provider.exec,
-        adbProvider: provider,
-        deviceKey: 'android:emulator-5556',
-      });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-9', command: 'snapshot' },
-      async () => {
-        assert.ok(await capture());
-        // The line arrives in pieces, so it outgrows the window before it completes.
-        processes[0]!.stdout.write('frame '.repeat(4_000));
-        await new Promise<void>((resolve) => setTimeout(resolve, 5));
-        processes[0]!.stdout.write('frame '.repeat(1_000) + 'Caused by: binder has died\n');
-        processes[0]!.stdout.write(
-          `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>\n`,
+    const { log } = await withLog(async (logPath) => {
+      await inScope(logPath, async () => {
+        await assert.rejects(
+          snapshotAndroid(emulator, {
+            helperAdb: helperFailingWith({ ...run, stderr: `${run.stderr ?? ''}\nam: Killed` }),
+            helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+          }),
         );
-        processes[0]!.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        processes[0]!.emitExit(1, null);
-        await capture();
-      },
-    );
-
-    const log = await fs.readFile(logPath, 'utf8');
-    assert.ok(!log.includes(SECRET));
-    const exit = readExitResult(
-      (await readDiagnostic(logPath, 'android_snapshot_helper_session_exited')).data ?? {},
-    ) as Partial<ExitResultFields> & { snapshotContentRemoved?: true };
-    assert.equal(exit.aborted, 'System has crashed.');
-    assert.equal(exit.snapshotContentRemoved, true);
-    assert.equal(exit.outputTruncated, true);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('a session exit result keeps the end of a long diagnostic line', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-long-diag-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    const processes: FakeAndroidProcess[] = [];
-    const provider = createSessionProvider({ calls: [], processes });
-    const capture = () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb: provider.exec,
-        adbProvider: provider,
-        deviceKey: 'android:emulator-5556',
       });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-10', command: 'snapshot' },
-      async () => {
-        assert.ok(await capture());
-        // The line arrives in pieces, so it outgrows the window before it completes.
-        processes[0]!.stdout.write('frame '.repeat(4_000));
-        await new Promise<void>((resolve) => setTimeout(resolve, 5));
-        processes[0]!.stdout.write('frame '.repeat(1_000) + 'Caused by: binder has died\n');
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        processes[0]!.emitExit(1, null);
-        await capture();
-      },
-    );
-
-    const exit = readExitResult(
-      (await readDiagnostic(logPath, 'android_snapshot_helper_session_exited')).data ?? {},
-    );
-    assert.ok(exit.outputTail?.endsWith('Caused by: binder has died'), exit.outputTail);
-    assert.equal(exit.outputTruncated, true);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+    assert.ok(log.includes('android_snapshot_helper_failed'));
+    assertPrivate(log);
   }
 });
 
-test('a single-line shortMsg or longMsg is held to the message cap', async () => {
-  const result = await captureExitResult({
-    exitCode: 0,
-    stdout: `INSTRUMENTATION_RESULT: shortMsg=${'s'.repeat(10_000)}\nINSTRUMENTATION_RESULT: longMsg=${'l'.repeat(10_000)}\nINSTRUMENTATION_CODE: 0`,
+test('a session exit never leaks a sensitive value split across chunks', async () => {
+  const { exit, log } = await sessionExit(async (process) => {
+    // The payload and the sensitive key arrive in pieces, with stderr interleaved.
+    process.stdout.write(`INSTRUMENTATION_STATUS: payloadBase64=${SECRET_BASE64.slice(0, 20)}`);
+    process.stderr.write('pass');
+    await pause();
+    process.stdout.write(`${SECRET_BASE64.slice(20)}\nINSTRUMENTATION_STATUS_CODE: 1\n`);
+    process.stderr.write(`word=${SECRET}\n`);
+    process.stderr.write(`ret" text="${SECRET}"`);
+    process.stderr.write(' bounds="[0,0][1,1]" />\nam: Killed\n');
+    process.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
   });
 
-  assert.equal(result.shortMsg?.length, 2_048);
-  assert.equal(result.longMsg?.length, 2_048);
+  assertPrivate(log);
+  assert.equal(exit.aborted, 'System has crashed.');
+  assert.equal(exit.snapshotContentRemoved, true);
+  assert.ok(exit.stderrTail.endsWith('am: Killed'), exit.stderrTail);
 });
 
-test('an INSTRUMENTATION_CODE beyond the safe integer range is not recorded', async () => {
+test('stderr chunks do not disturb a partial stdout record', async () => {
+  const { exit } = await sessionExit(async (process) => {
+    process.stdout.write('INSTRUMENTATION_RESULT: longMsg=UiAutomation fai');
+    process.stderr.write('am: warning\n');
+    await pause();
+    process.stdout.write('led\nCaused by: binder has died\nINSTRUMENTATION_CODE: 0\n');
+  });
+
+  assert.equal(exit.longMsg, 'UiAutomation failed\nCaused by: binder has died');
+  assert.equal(exit.resultCode, 0);
+  assert.equal(exit.stderrTail, 'am: warning');
+});
+
+test('ordinary quoted assignments on stderr are kept while snapshot attributes are dropped', async () => {
   const result = await captureExitResult({
     exitCode: 1,
-    stdout: `INSTRUMENTATION_CODE: ${'9'.repeat(400)}\n`,
+    stdout: '',
+    stderr: [
+      'E AndroidRuntime: java.lang.IllegalStateException message="binder died" code="7"',
+      `ret" text="${SECRET}" bounds="[0,0][1,1]" />`,
+    ].join('\n'),
   });
 
-  assert.equal(result.resultCode, undefined);
-});
-
-test('a session exit result includes output that arrives after the exit event', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-drain-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    const processes: FakeAndroidProcess[] = [];
-    const provider = createSessionProvider({ calls: [], processes });
-    const capture = () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb: provider.exec,
-        adbProvider: provider,
-        deviceKey: 'android:emulator-5556',
-      });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-8', command: 'snapshot' },
-      async () => {
-        assert.ok(await capture());
-        const process = processes[0]!;
-        process.exitCode = 1;
-        process.emit('exit', 1, null);
-        const second = capture();
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        process.stdout.write(CRASHED_RUN);
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-        process.emit('close', 1, null);
-        await second;
-      },
-    );
-
-    const event = await readDiagnostic(logPath, 'android_snapshot_helper_session_exited');
-    const exit = readExitResult(event.data ?? {});
-    assert.equal(exit.exitCode, 1);
-    assert.equal(exit.shortMsg, 'java.lang.IllegalStateException');
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  assert.ok(result.stderrTail.includes('message="binder died" code="7"'), result.stderrTail);
+  assert.ok(!result.stderrTail.includes(SECRET));
+  assert.equal(result.snapshotContentRemoved, true);
+  assert.equal(result.stderrTruncated, true);
 });
 
 test('the real cause past the redaction cap survives in the error and the request log', async () => {
   const filler = Array.from({ length: 40 }, (_, index) => `line ${index} of helper output`).join(
     '\n',
   );
-  const stdout = `${filler}\nam: Killed by the low memory killer`;
-  const error = await captureError({ exitCode: 1, stdout });
+  const stderr = `${filler}\nam: Killed by the low memory killer`;
+  const error = await captureError({ exitCode: 1, stdout: '', stderr });
 
-  const wire = normalizeError(error).details?.instrumentation as ExitResultFields;
-  assert.ok(wire.outputTail.endsWith('am: Killed by the low memory killer'), wire.outputTail);
-  assert.ok(wire.outputTail.length <= 400);
-  assert.equal(wire.outputTruncated, true);
+  const wire = exitResultOf(normalizeError(error).details ?? {});
+  assert.ok(wire.stderrTail.endsWith('am: Killed by the low memory killer'), wire.stderrTail);
+  assert.ok(wire.stderrTail.length <= 400);
+  assert.equal(wire.stderrTruncated, true);
 
-  const short = await captureError({ exitCode: 1, stdout: `${'y'.repeat(500)} done` });
-  const shortWire = normalizeError(short).details?.instrumentation as ExitResultFields;
-  assert.equal(shortWire.outputTruncated, true);
-  assert.ok(shortWire.outputTail.endsWith('done'));
+  const short = await captureError({ exitCode: 1, stdout: '', stderr: `${'y'.repeat(500)} done` });
+  const shortWire = exitResultOf(normalizeError(short).details ?? {});
+  assert.equal(shortWire.stderrTruncated, true);
+  assert.ok(shortWire.stderrTail.endsWith('done'));
 
-  const tmpDir = await mkdtempForTest('agent-device-android-exit-tail-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-3', command: 'snapshot' },
-      async () => {
-        const helperAdb = helperFailingWith({ exitCode: 1, stdout, stderr: '' });
-        await assert.rejects(
-          snapshotAndroid(emulator, {
-            helperAdb,
-            helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-          }),
-        );
-      },
-    );
-    const logged = readExitResult(
-      (await readDiagnostic(logPath, 'android_snapshot_helper_failed')).data ?? {},
-    );
-    assert.ok(
-      logged.outputTail?.endsWith('am: Killed by the low memory killer'),
-      logged.outputTail,
-    );
-    assert.equal(logged.outputTruncated, true);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  const { log } = await withLog(async (logPath) => {
+    await inScope(logPath, async () => {
+      await assert.rejects(
+        snapshotAndroid(emulator, {
+          helperAdb: helperFailingWith({ exitCode: 1, stdout: '', stderr }),
+          helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+        }),
+      );
+    });
+  });
+  const logged = exitResultOf(diagnosticData(log, 'android_snapshot_helper_failed'));
+  assert.ok(logged.stderrTail.endsWith('am: Killed by the low memory killer'), logged.stderrTail);
+  assert.equal(logged.stderrTruncated, true);
+});
+
+test('a long stderr diagnostic line keeps its end and a long snapshot line is dropped', async () => {
+  const diagnostic = `${'frame '.repeat(5_000)}Caused by: binder has died`;
+  const kept = await captureExitResult({ exitCode: 1, stdout: '', stderr: diagnostic });
+  assert.ok(kept.stderrTail.endsWith('Caused by: binder has died'), kept.stderrTail);
+  assert.equal(kept.stderrTruncated, true);
+  assert.equal(kept.snapshotContentRemoved, undefined);
+
+  const snapshot = `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>`;
+  const dropped = await captureExitResult({
+    exitCode: 1,
+    stdout: '',
+    stderr: `${snapshot}\nam: Killed`,
+  });
+  assert.ok(!dropped.stderrTail.includes(SECRET));
+  assert.ok(dropped.stderrTail.endsWith('am: Killed'));
+  assert.equal(dropped.snapshotContentRemoved, true);
+  assert.equal(dropped.stderrTruncated, true);
+});
+
+test('a session exit keeps a long diagnostic line and flags a chunked snapshot line it dropped', async () => {
+  const { exit, log } = await sessionExit(async (process) => {
+    // Lines arrive in pieces and outgrow the window before they complete.
+    process.stderr.write('frame '.repeat(4_000));
+    await pause();
+    process.stderr.write(`${'frame '.repeat(1_000)}Caused by: binder has died\n`);
+    process.stderr.write(`<hierarchy><node text="${SECRET}" />`);
+    await pause();
+    process.stderr.write(`${`<node text="${SECRET}" />`.repeat(1_000)}</hierarchy>\n`);
+  });
+
+  assertPrivate(log);
+  assert.ok(exit.stderrTail.includes('Caused by: binder has died'), exit.stderrTail);
+  assert.equal(exit.snapshotContentRemoved, true);
+  assert.equal(exit.stderrTruncated, true);
 });
 
 test('a helper failure that reports its own result keeps that report without a second record', async () => {
@@ -510,10 +489,8 @@ test('a helper failure that reports its own result keeps that report without a s
   assert.equal(error.details?.instrumentation, undefined);
 });
 
-test('a session that exits before it is ready records its exit status and output tail', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-exit-diag-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
+test('a session that exits before it is ready records its exit status and the output it printed', async () => {
+  const { log } = await withLog(async (logPath) => {
     const base = createSessionProvider({ calls: [], processes: [] });
     const provider: AndroidAdbProvider = {
       ...base,
@@ -521,39 +498,45 @@ test('a session that exits before it is ready records its exit status and output
         const process = new FakeAndroidProcess();
         setImmediate(() => {
           process.stdout.write(ABORTED_RUN);
+          process.stderr.write('am: Killed\n');
           process.emitExit(1, null);
         });
         return process;
       },
     };
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-1', command: 'snapshot' },
-      async () => {
-        const output = await captureAndroidSnapshotWithHelperSession({
-          adb: provider.exec,
-          adbProvider: provider,
-          deviceKey: 'android:emulator-5556',
-        });
-        assert.equal(output, undefined);
-      },
-    );
-
-    const event = await readDiagnostic(logPath, 'android_snapshot_helper_session_start_failed');
-    assert.deepEqual(event.data?.instrumentation, {
-      exitCode: 1,
-      aborted: 'System has crashed.',
-      outputTail: ABORTED_RUN.trimEnd(),
-      outputTruncated: false,
+    await inScope(logPath, async () => {
+      const output = await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+      assert.equal(output, undefined);
     });
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  });
+
+  assert.deepEqual(
+    exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_start_failed')),
+    {
+      exitCode: 1,
+      statusCode: 1,
+      aborted: 'System has crashed.',
+      stderrTail: 'am: Killed',
+      stderrTruncated: false,
+    },
+  );
 });
 
-test('a session that exits after it was ready records its exit result and the output it printed', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-late-exit-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
+test('a session that exits after it was ready records its exit result', async () => {
+  const { exit } = await sessionExit(async (process) => {
+    process.stdout.write(CRASHED_RUN);
+  });
+
+  assert.equal(exit.exitCode, 1);
+  assert.equal(exit.shortMsg, 'java.lang.IllegalStateException');
+});
+
+test('a session exit result includes output that arrives after the exit event', async () => {
+  const { log } = await withLog(async (logPath) => {
     const processes: FakeAndroidProcess[] = [];
     const provider = createSessionProvider({ calls: [], processes });
     const capture = () =>
@@ -562,145 +545,57 @@ test('a session that exits after it was ready records its exit result and the ou
         adbProvider: provider,
         deviceKey: 'android:emulator-5556',
       });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-4', command: 'snapshot' },
-      async () => {
-        assert.ok(await capture());
-        processes[0]!.stdout.write(CRASHED_RUN);
-        processes[0]!.emitExit(1, null);
-        await capture();
-      },
-    );
+    await inScope(logPath, async () => {
+      assert.ok(await capture());
+      const process = processes[0]!;
+      process.exitCode = 1;
+      process.emit('exit', 1, null);
+      const second = capture();
+      await pause();
+      process.stdout.write(CRASHED_RUN);
+      await pause();
+      process.emit('close', 1, null);
+      await second;
+    });
+  });
 
-    const event = await readDiagnostic(logPath, 'android_snapshot_helper_session_exited');
-    const exit = readExitResult(event.data ?? {});
-    assert.equal(exit.exitCode, 1);
-    assert.equal(exit.shortMsg, 'java.lang.IllegalStateException');
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  const exit = exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_exited'));
+  assert.equal(exit.exitCode, 1);
+  assert.equal(exit.shortMsg, 'java.lang.IllegalStateException');
 });
 
 test('a session that is stopped while it is still running records no invented cause', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-session-live-stop-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
+  const { log } = await withLog(async (logPath) => {
     const provider = createSessionProvider({ calls: [], processes: [] });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-5', command: 'snapshot' },
-      async () => {
-        await captureAndroidSnapshotWithHelperSession({
-          adb: provider.exec,
-          adbProvider: provider,
-          deviceKey: 'android:emulator-5556',
-        });
-        await resetAndroidSnapshotHelperSessions();
-      },
-    );
+    await inScope(logPath, async () => {
+      await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+      await resetAndroidSnapshotHelperSessions();
+    });
+  });
 
-    const log = await fs.readFile(logPath, 'utf8');
-    assert.ok(!log.includes('android_snapshot_helper_session_exited'));
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  assert.ok(!log.includes('android_snapshot_helper_session_exited'));
 });
-
-const emulator: DeviceInfo = {
-  platform: 'android',
-  id: 'emulator-5556',
-  name: 'Pixel',
-  kind: 'emulator',
-  booted: true,
-};
-
-function helperFailingWith(run: FailedRun): AndroidAdbExecutor {
-  return async (args) => {
-    if (args.includes('--show-versioncode')) {
-      return {
-        exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
-        stderr: '',
-      };
-    }
-    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
-    if (isAndroidHelperRuntimeForceStop(args)) return { exitCode: 0, stdout: '', stderr: '' };
-    return { stderr: '', ...run };
-  };
-}
 
 test('the request log entry for a failed capture carries the instrumentation result', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-capture-exit-diag-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    const helperAdb = helperFailingWith({ exitCode: 1, stdout: ABORTED_RUN });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-2', command: 'snapshot' },
-      async () => {
-        await assert.rejects(
-          snapshotAndroid(emulator, {
-            helperAdb,
-            helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-          }),
-          (error) => {
-            const details = (error as { details: Record<string, unknown> }).details;
-            assert.equal(readExitResult(details).aborted, 'System has crashed.');
-            return true;
-          },
-        );
-      },
-    );
-
-    const event = await readDiagnostic(logPath, 'android_snapshot_helper_failed');
-    const logged = readExitResult(event.data ?? {});
-    assert.equal(logged.exitCode, 1);
-    assert.equal(logged.aborted, 'System has crashed.');
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
-});
-
-test('encoded snapshot content never reaches the request log', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-android-capture-payload-diag-');
-  const logPath = path.join(tmpDir, 'diag.ndjson');
-  try {
-    const helperAdb = helperFailingWith({
-      exitCode: 1,
-      stdout: `${encodedPayload(SECRET_XML)}\nINSTRUMENTATION_STATUS_CODE: 1`,
+  const { result: caught, log } = await withLog(async (logPath) => {
+    return await inScope(logPath, async () => {
+      let thrown: unknown;
+      await snapshotAndroid(emulator, {
+        helperAdb: helperFailingWith({ exitCode: 1, stdout: ABORTED_RUN }),
+        helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      }).catch((error: unknown) => {
+        thrown = error;
+      });
+      return thrown as AppError;
     });
-    await withDiagnosticsScope(
-      { debug: true, logPath, session: 'android-test', requestId: 'req-6', command: 'snapshot' },
-      async () => {
-        await assert.rejects(
-          snapshotAndroid(emulator, {
-            helperAdb,
-            helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-          }),
-        );
-      },
-    );
-    const log = await fs.readFile(logPath, 'utf8');
-    assert.ok(log.includes('android_snapshot_helper_failed'));
-    assert.ok(!log.includes(Buffer.from(SECRET_XML).toString('base64').slice(0, 24)), log);
-    assert.ok(!log.includes(SECRET));
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
+  });
+
+  assert.equal(exitResultOf(caught.details ?? {}).aborted, 'System has crashed.');
+  const logged = exitResultOf(diagnosticData(log, 'android_snapshot_helper_failed'));
+  assert.equal(logged.exitCode, 1);
+  assert.equal(logged.aborted, 'System has crashed.');
 });
-
-function readExitResult(fields: Record<string, unknown>): Partial<ExitResultFields> {
-  return (fields.instrumentation ?? {}) as Partial<ExitResultFields>;
-}
-
-async function readDiagnostic(
-  logPath: string,
-  phase: string,
-): Promise<{ data?: Record<string, unknown> }> {
-  const log = await fs.readFile(logPath, 'utf8');
-  const event = log
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as { phase?: string; data?: Record<string, unknown> })
-    .find((entry) => entry.phase === phase);
-  assert.ok(event, `expected a ${phase} diagnostic`);
-  return event;
-}

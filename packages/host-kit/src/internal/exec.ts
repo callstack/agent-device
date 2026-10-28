@@ -339,7 +339,7 @@ function runSpawnedCommand(
   });
 }
 
-/** The `signal` field of an `ExecResult` for a child a signal ended; empty for any other exit. */
+/** Returns the `signal` field when a signal terminated the child process. */
 function endedBySignal(child: { signalCode: NodeJS.Signals | null }): Pick<ExecResult, 'signal'> {
   return child.signalCode ? { signal: child.signalCode } : {};
 }

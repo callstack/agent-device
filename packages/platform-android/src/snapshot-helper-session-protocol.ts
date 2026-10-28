@@ -5,8 +5,7 @@ import {
   androidCaptureFailureReasonFromHelperResult,
 } from './snapshot-capture-failure-reason.ts';
 import {
-  readInstrumentationExitResult,
-  withoutSnapshotContent,
+  type AndroidInstrumentationProcessRecord,
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
@@ -116,7 +115,8 @@ const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exit
 export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  record: AndroidInstrumentationProcessRecord,
 ): Promise<ReadonlySet<string>> {
   return new Promise((resolve, reject) => {
     let output = '';
@@ -124,7 +124,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
-          output: withoutSnapshotContent(output),
+          output,
           timeoutMs,
           reason: SESSION_READY_TIMEOUT_REASON,
         }),
@@ -157,19 +157,17 @@ export function waitForAndroidSnapshotHelperSessionReady(
     childProcess.once('exit', (code, exitSignal) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
-      reject(
-        new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
-          output: withoutSnapshotContent(output),
-          exitCode: code,
-          signal: exitSignal,
-          instrumentation: readInstrumentationExitResult({
-            stdout: output,
-            stderr: '',
+      // The exit result is read once the streams have drained, so it carries the last output.
+      void record.closed.then(() =>
+        reject(
+          new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
+            output,
             exitCode: code,
             signal: exitSignal,
+            instrumentation: record.exitResult(),
+            reason: SESSION_EXITED_BEFORE_READY_REASON,
           }),
-          reason: SESSION_EXITED_BEFORE_READY_REASON,
-        }),
+        ),
       );
     });
     childProcess.on('error', (error) => {
