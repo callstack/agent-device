@@ -1,0 +1,60 @@
+---
+// The trackers the site loads in production only: Vercel Analytics, Google Analytics and Common
+// Room. Vercel sets VERCEL_ENV at build time, so previews, CI and local builds load none of them.
+// Vercel Analytics uses Vercel's plain HTML snippet: its Astro component renders a custom element,
+// which would end <head> early.
+import { analytics } from '../../site/content';
+
+const production = process.env.VERCEL_ENV === 'production';
+const { googleAnalyticsId, commonRoomSiteId } = analytics;
+---
+
+{
+  production && (
+    <>
+      <script is:inline>
+        window.va =
+          window.va ||
+          function va() {
+            (window.vaq = window.vaq || []).push(arguments);
+          };
+      </script>
+      <script is:inline defer src="/_vercel/insights/script.js" />
+      <script
+        is:inline
+        async
+        src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`}
+      />
+      <script is:inline data-id={googleAnalyticsId}>
+        window.dataLayer = window.dataLayer || [];
+        // gtag.js reads each queued call as an Arguments object, so this cannot take rest params.
+        window.gtag = function gtag() {
+          window.dataLayer.push(arguments);
+        };
+        window.gtag('js', new Date());
+        window.gtag('config', document.currentScript.dataset.id);
+      </script>
+      <script is:inline data-id={commonRoomSiteId}>
+        if (window.signals === undefined) {
+          const script = document.createElement('script');
+          script.src = `https://cdn.cr-relay.com/v1/site/${document.currentScript.dataset.id}/signals.js`;
+          script.async = true;
+          window.signals = Object.assign(
+            [],
+            { _opts: { apiHost: 'https://api.cr-relay.com' } },
+            Object.fromEntries(
+              ['page', 'identify', 'form'].map((method) => [
+                method,
+                (...args) => {
+                  window.signals.push([method, args]);
+                  return window.signals;
+                },
+              ]),
+            ),
+          );
+          document.head.append(script);
+        }
+      </script>
+    </>
+  )
+}

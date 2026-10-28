@@ -110,6 +110,12 @@ export const footer: Link[] = [
 /** Paths kept out of the sitemap. Pages rendered with `noindex` belong here too. */
 export const noindexPaths = ['/404'];
 
+/** The production trackers (components/site/Analytics.astro); both IDs are public in the page. */
+export const analytics = {
+  googleAnalyticsId: 'G-0HE866FCRN',
+  commonRoomSiteId: 'b4585d93-5d45-4fff-bca4-177537b94e27',
+};
+
 /** The marquee under the hero: targets, then the app frameworks it drives. */
 export const marquee = [...site.platforms, 'React Native', 'Expo', 'Flutter'];
 

@@ -48,6 +48,7 @@ export default defineConfig({
       // The same tokens, fonts and lockup as the landing pages.
       customCss: ['./src/fonts/font-face.css', './src/styles/theme.css', './src/styles/docs.css'],
       components: {
+        Head: './src/components/starlight/Head.astro',
         ThemeProvider: './src/components/starlight/ThemeProvider.astro',
         SiteTitle: './src/components/starlight/SiteTitle.astro',
         SocialIcons: './src/components/starlight/SocialIcons.astro',

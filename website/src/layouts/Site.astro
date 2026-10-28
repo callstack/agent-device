@@ -5,6 +5,7 @@
 import '../fonts/font-face.css';
 import '../styles/landing.css';
 
+import Analytics from '../components/site/Analytics.astro';
 import geistMono from '../fonts/GeistMono-Regular.woff2?url';
 import switzerMedium from '../fonts/Switzer-Medium.woff2?url';
 import switzerRegular from '../fonts/Switzer-Regular.woff2?url';
@@ -79,6 +80,7 @@ const ogImage = new URL('/og-image.jpg', Astro.site).href;
     <link rel="preload" href={switzerRegular} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={geistMono} as="font" type="font/woff2" crossorigin />
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+    <Analytics />
   </head>
   <body>
     <slot />
