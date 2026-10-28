@@ -80,7 +80,7 @@ Logs:
   On iOS physical devices, logs clear --restart relaunches the session app through devicectl process launch --console so stdout/stderr can be captured.
   For iOS simulator launch-time stdout/stderr, use --launch-console on the direct app launch:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
-  --launch-console is only for direct iOS simulator app launches, not URL opens.
+  --launch-console is only for local iOS simulator app launches, not URL opens.
 
 Events:
   Use events for a compact session timeline without dumping full app logs.

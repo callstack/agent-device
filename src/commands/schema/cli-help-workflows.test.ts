@@ -16,7 +16,7 @@ test('usageForCommand resolves debugging help topic', async () => {
   assert.match(help, /agent-device alert wait 3000/);
   assert.match(help, /iOS support is runner-derived/);
   assert.match(help, /resolved app executable/);
-  assert.match(help, /--launch-console is only for direct iOS simulator app launches/);
+  assert.match(help, /--launch-console is only for local iOS simulator app launches/);
   assert.match(help, /runnerLogPath and requestLogPath/);
   assert.match(
     help,

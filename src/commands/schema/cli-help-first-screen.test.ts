@@ -65,7 +65,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   debugging: [
     'Do not cat a full stale log into agent context',
     'logs clear --restart is the compact command to clear old logs and start a fresh capture; do not split it into logs stop, logs clear, logs start',
-    '--launch-console is only for direct iOS simulator app launches, not URL opens',
+    '--launch-console is only for local iOS simulator app launches, not URL opens',
     'network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers',
   ],
   'react-devtools': [
