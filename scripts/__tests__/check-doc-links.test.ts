@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { checkDocLinks } from '../check-doc-links.ts';
+import { builtBase, checkDocLinks } from '../check-doc-links.ts';
 
 const BASE = '/agent-device/';
 
@@ -13,23 +13,31 @@ const SESSIONS = [
   '<img id="logo" src="/agent-device/logo-light.svg"/><img id="logo" src="/agent-device/logo-dark.svg"/>',
 ].join('\n');
 
-function plant(pages: Record<string, string>, readme = ''): string[] {
+function build(files: Record<string, string>): string {
   const buildDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-build-'));
-  const tree = {
-    'index.html': '<a href="/agent-device/">home</a>',
-    'docs/sessions.html': SESSIONS,
-    'logo.svg': '<svg/>',
-    ...pages,
-  };
-  for (const [name, body] of Object.entries(tree)) {
+  for (const [name, body] of Object.entries(files)) {
     fs.mkdirSync(path.join(buildDir, path.dirname(name)), { recursive: true });
     fs.writeFileSync(path.join(buildDir, name), body);
   }
+  return buildDir;
+}
+
+function plant(pages: Record<string, string>, readme = ''): string[] {
+  const buildDir = build({
+    'index.html': '<a href="/agent-device/">home</a>',
+    'docs/sessions.html': SESSIONS,
+    'docs/sessions.md': '# Sessions',
+    'logo.svg': '<svg/>',
+    ...pages,
+  });
   return checkDocLinks(buildDir, readme, BASE).map(({ where, message }) => `${where}: ${message}`);
 }
 
 function guide(body: string): Record<string, string> {
-  return { 'docs/guide.html': `<h1 id="guide">Guide</h1>\n${body}` };
+  return {
+    'docs/guide.html': `<h1 id="guide">Guide</h1>\n${body}`,
+    'docs/guide.md': '# Guide',
+  };
 }
 
 test('links to rendered pages and IDs pass', () => {
@@ -98,11 +106,24 @@ test('README links into the published docs are checked against the built pages',
     'Read [sessions](https://agent-device.dev/docs/sessions#find-a-sessions-logs-and-artifacts).',
     'Bare: https://agent-device.dev/docs/sessions#gone',
     '[Missing](https://agent-device.dev/docs/retired) and [repo](CONTRIBUTING.md).',
-    'Elsewhere: https://agent-device.dev-old/docs/retired',
+    'Elsewhere: https://agent-device.dev/docs-old/retired',
     'End of sentence: https://agent-device.dev/docs/sessions.',
   ].join('\n');
   assert.deepEqual(plant({}, readme), [
     'README.md:2: link "https://agent-device.dev/docs/sessions#gone" → no heading "gone"',
     'README.md:3: link "https://agent-device.dev/docs/retired" → no such page',
   ]);
+});
+
+test('a docs page without its Markdown twin fails', () => {
+  assert.deepEqual(plant({ 'docs/orphan.html': '<h1 id="orphan">Orphan</h1>' }), [
+    'docs/orphan: no Markdown twin "docs/orphan.md"',
+  ]);
+});
+
+test('the base is read from the asset paths and proven by the home link', () => {
+  const page = (home: string) =>
+    build({ 'index.html': `<script src="/agent-device/_astro/page.js"></script>${home}` });
+  assert.equal(builtBase(page('<a href="/agent-device/">home</a>')), BASE);
+  assert.throws(() => builtBase(page('<a href="/">home</a>')), /cannot read the site base/);
 });

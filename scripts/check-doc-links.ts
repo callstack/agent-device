@@ -2,6 +2,7 @@
 // element ID that Astro actually rendered, and README.md's links into the published docs do too.
 // It reads website/dist after `pnpm --dir website build`, so Starlight's own slugger, link
 // rewriting, and clean URLs are what get checked. External URLs are skipped (no network).
+// Every docs page also needs its Markdown twin (`docs/<page>.md`), which LLM clients fetch.
 //
 // The HTML is parsed with regexes on purpose: it is Astro's generated output, which always
 // writes attributes double-quoted with `&`, `"`, `<`, `>` entity-escaped, so `id="…"` and
@@ -14,8 +15,6 @@ import { pathToFileURL } from 'node:url';
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 const BUILD_DIR = path.join(REPO_ROOT, 'website/dist');
 const DOCS_SOURCE_DIR = 'website/docs';
-// The site is built at the domain root (astro.config.mjs sets no `base`).
-const BASE = '/';
 // README links to the published site, whose root is this URL.
 const PUBLISHED_SITE = 'https://agent-device.dev/';
 const README_DOCS_URL = /https:\/\/agent-device\.dev\/docs\/[\w./-]*(?:#[\w%.-]+)?/g;
@@ -54,6 +53,15 @@ function listHtml(buildDir: string): string[] {
     .map((entry) => entry.split(path.sep).join('/'))
     .filter((entry) => entry.endsWith('.html'))
     .sort();
+}
+
+/** Every built docs page (`docs/x.html`) has its Markdown twin (`docs/x.md`). */
+function missingMarkdownTwins(buildDir: string, htmlFiles: readonly string[]): DocLinkViolation[] {
+  return htmlFiles
+    .filter((file) => file.startsWith('docs/'))
+    .map((file) => file.replace(/\.html$/, ''))
+    .filter((route) => !fs.existsSync(path.join(buildDir, `${route}.md`)))
+    .map((route) => ({ where: route, message: `no Markdown twin "${route}.md"` }));
 }
 
 function duplicateHeadingIds(route: string, html: string): DocLinkViolation[] {
@@ -143,8 +151,9 @@ export function checkDocLinks(
   base: string,
 ): DocLinkViolation[] {
   const pages = new Map<string, BuiltPage>();
-  const violations: DocLinkViolation[] = [];
-  for (const file of listHtml(buildDir)) {
+  const htmlFiles = listHtml(buildDir);
+  const violations = missingMarkdownTwins(buildDir, htmlFiles);
+  for (const file of htmlFiles) {
     const html = fs.readFileSync(path.join(buildDir, file), 'utf8');
     const ids = new Set(
       [...html.matchAll(ATTRIBUTE('id'))].map(([, id]) => decodeEntities(id ?? '')),
@@ -160,6 +169,20 @@ export function checkDocLinks(
   return [...violations, ...readmeViolations(site, readmeText)];
 }
 
+/**
+ * The base the site was built with, read from the build rather than restated: Astro emits its
+ * assets under `<base>_astro/`.
+ */
+export function builtBase(buildDir: string): string {
+  const home = fs.readFileSync(path.join(buildDir, 'index.html'), 'utf8');
+  const base = /\s(?:src|href)="(\/[^"]*?)_astro\//.exec(home)?.[1];
+  // A wrong base would make every internal link look external and pass; the home link proves it.
+  if (!base || !home.includes(`href="${base}"`)) {
+    throw new Error('doc links: cannot read the site base from dist/index.html.');
+  }
+  return base;
+}
+
 function sourceHint(where: string): string {
   const source = `${DOCS_SOURCE_DIR}/${where}.md`;
   return fs.existsSync(path.join(REPO_ROOT, source)) ? ` (${source})` : '';
@@ -172,17 +195,18 @@ function main(): number {
     );
     return 1;
   }
+  const base = builtBase(BUILD_DIR);
   const readme = fs.readFileSync(path.join(REPO_ROOT, 'README.md'), 'utf8');
-  const violations = checkDocLinks(BUILD_DIR, readme, BASE);
+  const violations = checkDocLinks(BUILD_DIR, readme, base);
   if (violations.length === 0) {
-    process.stdout.write('doc links: every internal link resolves.\n');
+    process.stdout.write(`doc links: every internal link resolves (base ${base}).\n`);
     return 0;
   }
   for (const { where, message } of violations) {
     process.stderr.write(`${where}: ${message}${sourceHint(where)}\n`);
   }
   process.stderr.write(
-    `doc links: ${violations.length} broken link(s) or duplicate heading ID(s).\n`,
+    `doc links: ${violations.length} broken link(s), duplicate heading ID(s) or missing Markdown twin(s).\n`,
   );
   return 1;
 }
