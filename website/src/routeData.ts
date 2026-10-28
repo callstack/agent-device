@@ -59,8 +59,25 @@ function dropHtmlSuffix(head: Head) {
   }
 }
 
+type SidebarEntry = StarlightRouteData['sidebar'][number];
+
+/**
+ * Starlight writes sidebar and prev/next hrefs as built files (`/docs/x.html`); Vercel serves
+ * `/docs/x` (`cleanUrls`), so link there directly instead of through a redirect.
+ */
+function dropHtmlLinks(entries: SidebarEntry[]) {
+  for (const entry of entries) {
+    if (entry.type === 'link') entry.href = entry.href.replace(/\.html(#|$)/, '$1');
+    else dropHtmlLinks(entry.entries);
+  }
+}
+
 export const onRequest = defineRouteMiddleware((context) => {
   const route = context.locals.starlightRoute;
+  dropHtmlLinks(route.sidebar);
+  for (const link of [route.pagination.prev, route.pagination.next]) {
+    if (link) link.href = link.href.replace(/\.html(#|$)/, '$1');
+  }
   const { entry, head } = route;
   const site = context.site?.href ?? `${meta.url}/`;
 

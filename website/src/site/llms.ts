@@ -40,11 +40,11 @@ The capabilities page is generated from the runtime's own capability facts, so i
 
 - [Installation](https://agent-device.dev/docs/installation): \`npm install -g agent-device\` (Node.js 22.12 or newer), then \`agent-device doctor\` to check the setup.
 - [Introduction](https://agent-device.dev/docs/introduction): Scope, supported workflows, and responsibility boundaries.
-- [AI Agent Setup](https://agent-device.dev/docs/agent-setup): CLI, skills, MCP, and coding-agent setup.
-- [Quick Start](https://agent-device.dev/docs/quick-start): First app-verification workflow.
+- [AI agent setup](https://agent-device.dev/docs/agent-setup): CLI, skills, MCP, and coding-agent setup.
+- [Quick start](https://agent-device.dev/docs/quick-start): First app-verification workflow.
 - [Commands](https://agent-device.dev/docs/commands): Command groups and platform behavior.
-- [Security and Trust](https://agent-device.dev/docs/security-trust): Local execution, permissions, credentials, and artifacts.
-- [Known Limitations](https://agent-device.dev/docs/known-limitations): Current platform and capability constraints.
+- [Security and trust](https://agent-device.dev/docs/security-trust): Local execution, permissions, credentials, and artifacts.
+- [Known limitations](https://agent-device.dev/docs/known-limitations): Current platform and capability constraints.
 - [Node.js API](https://agent-device.dev/docs/client-api): Typed deterministic integration.`;
 
 export const llmsOptionalLinks = [

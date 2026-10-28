@@ -1,5 +1,5 @@
 ---
-title: AI Agent Setup
+title: AI agent setup
 description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, iOS Simulator and Android Emulator skills, and MCP for agent-device app verification.
 ---
 

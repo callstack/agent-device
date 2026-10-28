@@ -1,5 +1,5 @@
 ---
-title: Debugging & Profiling
+title: Debugging and profiling
 ---
 
 When UI automation is not enough, use these commands to collect runtime evidence from the app or device.

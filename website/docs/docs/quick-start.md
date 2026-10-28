@@ -1,5 +1,5 @@
 ---
-title: Quick Start
+title: Quick start
 ---
 
 Open an app, read its UI, and interact with it from the command line.

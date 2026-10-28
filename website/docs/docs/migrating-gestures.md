@@ -1,5 +1,5 @@
 ---
-title: Rewrite Old Gesture Commands
+title: Rewrite old gesture commands
 ---
 
 `swipe`, `gesture fling`, and `gesture swipe` don't take a duration, and `gesture rotate` doesn't

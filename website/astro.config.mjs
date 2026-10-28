@@ -15,8 +15,8 @@ const description = meta.description;
 // Where this site lives inside the repo, for the docs' "Edit page" links.
 const siteDir = 'website';
 
-const doc = (name, label) => ({ label, slug: `docs/${name}` });
-const group = (label, items) => ({ label, items: items.map(([name, text]) => doc(name, text)) });
+// Sidebar entries take the page's own title, so a page has one name everywhere.
+const group = (label, names) => ({ label, items: names.map((name) => `docs/${name}`) });
 
 export default defineConfig({
   site,
@@ -79,41 +79,37 @@ export default defineConfig({
       ],
       sidebar: [
         group('Getting started', [
-          ['introduction', 'Introduction'],
-          ['installation', 'Installation'],
-          ['plugins', 'Provider plugins'],
-          ['agent-setup', 'AI agent setup'],
-          ['quick-start', 'Quick start'],
+          'introduction',
+          'installation',
+          'plugins',
+          'agent-setup',
+          'quick-start',
         ]),
         group('Usage', [
-          ['capabilities', 'Capabilities'],
-          ['commands', 'Commands'],
-          ['configuration', 'Configuration'],
-          ['selectors', 'Selectors'],
-          ['sessions', 'Sessions'],
-          ['batching', 'Batching'],
-          ['snapshots', 'Snapshots'],
-          ['replay-e2e', 'Replay and E2E testing'],
-          ['run-maestro-flows', 'Run Maestro flows'],
-          ['debugging-profiling', 'Debugging and profiling'],
+          'capabilities',
+          'commands',
+          'configuration',
+          'selectors',
+          'sessions',
+          'batching',
+          'snapshots',
+          'replay-e2e',
+          'run-maestro-flows',
+          'debugging-profiling',
         ]),
         group('Integrations', [
-          ['client-api', 'Node.js API'],
-          ['build-an-integration', 'Build an integration'],
-          ['ai-sdk', 'AI SDK'],
-          ['eve', 'Eve'],
-          ['remote-proxy', 'Remote proxy'],
-          ['device-clouds', 'Device clouds'],
-          ['browserstack', 'BrowserStack'],
-          ['aws-device-farm', 'AWS Device Farm'],
-          ['testmu', 'TestMu AI'],
-          ['limrun', 'Limrun'],
+          'client-api',
+          'build-an-integration',
+          'ai-sdk',
+          'eve',
+          'remote-proxy',
+          'device-clouds',
+          'browserstack',
+          'aws-device-farm',
+          'testmu',
+          'limrun',
         ]),
-        group('Reference', [
-          ['security-trust', 'Security and trust'],
-          ['known-limitations', 'Known limitations'],
-          ['migrating-gestures', 'Rewrite old gesture commands'],
-        ]),
+        group('Reference', ['security-trust', 'known-limitations', 'migrating-gestures']),
       ],
       plugins: [
         starlightLlmsTxt({
@@ -121,6 +117,15 @@ export default defineConfig({
           description: llmsDescription,
           details: llmsDetails,
           optionalLinks: llmsOptionalLinks,
+          // llms-small.txt leaves out the reference pages an agent reads from the installed CLI
+          // (`agent-device help`, `agent-device capabilities`) or only when it needs them; their
+          // tables also flatten badly there. llms-full.txt keeps every page.
+          exclude: [
+            'docs/commands',
+            'docs/capabilities',
+            'docs/client-api',
+            'docs/migrating-gestures',
+          ],
         }),
       ],
     }),

@@ -1,5 +1,5 @@
 ---
-title: Remote Proxy
+title: Remote proxy
 description: Run agent-device on a Mac with simulator or device access and control it from another machine through an HTTP tunnel.
 ---
 

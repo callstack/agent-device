@@ -1,5 +1,5 @@
 ---
-title: Security & Trust
+title: Security and trust
 description: Security and trust guidance for agent-device local app automation, device permissions, screenshots, recordings, logs, network dumps, audio probes, traces, and reports.
 ---
 

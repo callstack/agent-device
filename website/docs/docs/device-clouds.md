@@ -1,5 +1,5 @@
 ---
-title: Device Clouds
+title: Device clouds
 description: Choose a hosted device provider for agent and CI workflows.
 ---
 
