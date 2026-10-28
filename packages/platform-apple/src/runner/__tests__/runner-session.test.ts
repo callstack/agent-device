@@ -19,6 +19,7 @@ import {
   RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { MACOS_PKILL_COMMAND } from '../runner-disposal.ts';
 
 const {
   mockCleanupTempFile,
@@ -227,10 +228,7 @@ test('runner session invalidates after runner-fatal ok payloads', async () => {
   assert.equal(result.runnerFatal, true);
   assert.equal(result.runnerFatalReason, 'ax_snapshot_unavailable');
   assert.equal(readRunnerSessionLiveness(device.id), null);
-  assert.equal(
-    mockRunAppleToolCommand.mock.calls.some((call) => call[0] === '/usr/bin/pkill'),
-    true,
-  );
+  assert.equal(pkillWasSpawned(), true);
 });
 
 test('runner session invalidates after XCTest recorded mutation failures', async () => {
@@ -263,10 +261,7 @@ test('runner session invalidates after XCTest recorded mutation failures', async
     },
   );
   assert.equal(readRunnerSessionLiveness(device.id), null);
-  assert.equal(
-    mockRunAppleToolCommand.mock.calls.some((call) => call[0] === '/usr/bin/pkill'),
-    true,
-  );
+  assert.equal(pkillWasSpawned(), true);
 });
 
 test('runner session starts xcodebuild through provider seams and reuses an alive session', async () => {
@@ -467,10 +462,7 @@ test('runner session startup rejects live foreign runner lease', async () => {
       /Current daemon state dir/,
     );
     assert.equal(mockRunCmdBackground.mock.calls.length, 0);
-    assert.equal(
-      mockRunAppleToolCommand.mock.calls.some((call) => call[0] === '/usr/bin/pkill'),
-      false,
-    );
+    assert.equal(pkillWasSpawned(), false);
   } finally {
     fs.rmSync('/tmp/agent-device-owner', { recursive: true, force: true });
     if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
@@ -1009,9 +1001,13 @@ test('runner session abort removes owned lease for in-memory sessions', async ()
   ]);
 });
 
+function pkillWasSpawned(): boolean {
+  return mockRunAppleToolCommand.mock.calls.some((call) => call[0] === MACOS_PKILL_COMMAND);
+}
+
 function isXcodebuildPkillCall(call: unknown[]): boolean {
   const args = call[1];
-  return call[0] === '/usr/bin/pkill' && Array.isArray(args) && args.includes('-f');
+  return call[0] === MACOS_PKILL_COMMAND && Array.isArray(args) && args.includes('-f');
 }
 
 function isDevToolsSecurityStatusCall(call: unknown[]): boolean {
@@ -1040,10 +1036,7 @@ test('runner session invalidation skips graceful shutdown and removes stale sess
   await invalidateRunnerSession(session, 'transport_error_after_command_send');
 
   assert.equal(mockWaitForRunner.mock.calls.length, 0);
-  assert.equal(
-    mockRunAppleToolCommand.mock.calls.some((call) => call[0] === '/usr/bin/pkill'),
-    true,
-  );
+  assert.equal(pkillWasSpawned(), true);
   assert.deepEqual(mockCleanupTempFile.mock.calls, [
     ['/tmp/session-runner.xctestrun'],
     ['/tmp/session-runner.json'],

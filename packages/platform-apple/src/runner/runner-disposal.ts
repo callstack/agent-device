@@ -39,7 +39,7 @@ const MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS = 5_000;
 const MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS = 2_000;
 const RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS = 2_000;
 // macOS ships pkill here; a PATH lookup can resolve to a pkill whose `-P` matches every process.
-const MACOS_PKILL_COMMAND = '/usr/bin/pkill';
+export const MACOS_PKILL_COMMAND = '/usr/bin/pkill';
 const RUNNER_SIMULATOR_TERMINATE_TIMEOUT_MS = 2_000;
 
 export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {

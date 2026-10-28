@@ -16,6 +16,7 @@ vi.mock('../runner-io.ts', async (importOriginal) => {
 });
 
 import {
+  MACOS_PKILL_COMMAND,
   abortRunnerSessionsAndPrepProcesses,
   disposeRunnerSession,
   runnerLeaseCleanupAdapter,
@@ -121,6 +122,7 @@ test('runner cleanup spawns pkill by absolute path so a PATH-shadowing pkill nev
     xctestrunPath: makeRunnerLease({ deviceId: IOS_SIMULATOR.id }).xctestrunPath,
   });
 
+  expect(MACOS_PKILL_COMMAND).toBe('/usr/bin/pkill');
   const spawnedTools = mockRunAppleToolCommand.mock.calls.map(([tool]) => String(tool));
   expect(spawnedTools.filter((tool) => tool.endsWith('pkill'))).not.toEqual([]);
   expect(
@@ -239,7 +241,7 @@ test('a lease artifact outside the runner session name signals no xcodebuild', a
 
 function runnerXcodebuildPkillPatterns(): string[] {
   return mockRunAppleToolCommand.mock.calls
-    .filter(([tool, args]) => tool === '/usr/bin/pkill' && (args as string[]).includes('-f'))
+    .filter(([tool, args]) => tool === MACOS_PKILL_COMMAND && (args as string[]).includes('-f'))
     .map(([, args]) => String((args as string[])[2]));
 }
 

@@ -14,6 +14,7 @@ import {
 } from './runner-session-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { MACOS_PKILL_COMMAND } from '../runner-disposal.ts';
 
 /**
  * The live incident of #3220, as a control: a start holds the runner session lock through a cold
@@ -195,7 +196,7 @@ test.each([false, true])('cold close (retain=%s) fences replacement builds', asy
   mockRunAppleToolCommand.mockImplementation(async (tool: string, args: string[]) => {
     // `killRunnerProcessTree` is the only pkill that signals by parent pid (`-P`); the lease
     // cleanup's stale-launch sweep matches argv (`-f`), so only the prep tree-kill parks.
-    if (tool === '/usr/bin/pkill' && args.includes('-P')) {
+    if (tool === MACOS_PKILL_COMMAND && args.includes('-P')) {
       signalAttempted();
       await prepStopParked;
     }
