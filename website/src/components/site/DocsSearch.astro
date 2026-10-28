@@ -1,0 +1,204 @@
+---
+// The docs search on the landing pages: the same Pagefind index and UI the docs header opens
+// (Starlight builds both into /pagefind/), in a dialog styled like the docs one. The UI loads
+// when the reader first reaches for it (hover, focus, ⌘K or Ctrl+K), not with the page.
+import PixelIcon from './PixelIcon.astro';
+---
+
+<docs-search>
+  <button class="search-open label" type="button" aria-label="Search the docs" aria-keyshortcuts="Control+K">
+    <PixelIcon name="search" size={14} />
+    <span class="search-word">Search</span>
+    <kbd class="search-key" aria-hidden="true">Ctrl K</kbd>
+  </button>
+  <dialog class="search-dialog" aria-label="Search the docs">
+    <div class="search-frame">
+      <button class="search-close label" type="button">Close</button>
+      <div id="docs-search"></div>
+    </div>
+  </dialog>
+</docs-search>
+
+<script>
+  // Mirrors Starlight's search (components/Search.astro): the same options, loaded from the
+  // Pagefind bundle the docs build writes.
+  type PagefindResult = { url: string; sub_results: { url: string }[] };
+  const PAGEFIND = '/pagefind/';
+  // Pages are served without .html or a trailing slash (vercel.json).
+  const cleanUrl = (url: string) => url.replace(/\.html(#|$)/, '$1').replace(/(.)\/(#.*)?$/, '$1$2');
+
+  let loading: Promise<void> | undefined;
+  const loadUi = (element: HTMLElement) =>
+    (loading ??= new Promise<void>((resolve, reject) => {
+      const css = Object.assign(document.createElement('link'), {
+        rel: 'stylesheet',
+        href: `${PAGEFIND}pagefind-ui.css`,
+      });
+      const js = Object.assign(document.createElement('script'), { src: `${PAGEFIND}pagefind-ui.js` });
+      js.addEventListener('load', () => resolve());
+      js.addEventListener('error', () => reject(new Error('docs search: the Pagefind UI did not load')));
+      document.head.append(css, js);
+    }).then(() => {
+      const { PagefindUI } = window as unknown as { PagefindUI: new (options: object) => unknown };
+      new PagefindUI({
+        element,
+        bundlePath: PAGEFIND,
+        showImages: false,
+        showSubResults: true,
+        processResult: (result: PagefindResult) => {
+          result.url = cleanUrl(result.url);
+          for (const sub of result.sub_results) sub.url = cleanUrl(sub.url);
+        },
+      });
+    }));
+
+  class DocsSearch extends HTMLElement {
+    connectedCallback() {
+      const open = this.querySelector<HTMLButtonElement>('.search-open')!;
+      const close = this.querySelector<HTMLButtonElement>('.search-close')!;
+      const dialog = this.querySelector('dialog')!;
+      const frame = this.querySelector<HTMLElement>('.search-frame')!;
+      const target = this.querySelector<HTMLElement>('#docs-search')!;
+
+      if (/Mac|iPhone|iPad/.test(navigator.platform)) {
+        this.querySelector('.search-key')!.textContent = '⌘K';
+        open.setAttribute('aria-keyshortcuts', 'Meta+K');
+      }
+
+      const prepare = () => void loadUi(target).catch((error: unknown) => console.error(error));
+      // A link in the results, or a click outside the frame, closes the dialog.
+      const onClick = (event: MouseEvent) => {
+        const node = event.target as Node;
+        if ('href' in node || !frame.contains(node)) dialog.close();
+      };
+      const show = (event?: Event) => {
+        prepare();
+        dialog.showModal();
+        document.body.toggleAttribute('data-search-open', true);
+        void loading?.then(() => target.querySelector('input')?.focus());
+        event?.stopPropagation();
+        addEventListener('click', onClick);
+      };
+
+      open.addEventListener('pointerenter', prepare, { once: true });
+      open.addEventListener('focus', prepare, { once: true });
+      open.addEventListener('click', show);
+      close.addEventListener('click', () => dialog.close());
+      dialog.addEventListener('close', () => {
+        document.body.toggleAttribute('data-search-open', false);
+        removeEventListener('click', onClick);
+      });
+      addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+          event.preventDefault();
+          if (dialog.open) dialog.close();
+          else show();
+        }
+      });
+    }
+  }
+  customElements.define('docs-search', DocsSearch);
+</script>
+
+<style>
+  .search-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 0.5rem 0.4375rem 0.625rem;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      color 120ms,
+      border-color 120ms;
+  }
+  .search-open:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .search-key {
+    padding: 0.0625rem 0.3125rem;
+    border: 1px solid var(--line);
+    font: inherit;
+    font-size: 0.625rem;
+  }
+  /* Narrow headers: the icon alone. */
+  @media (max-width: 64rem) {
+    .search-word,
+    .search-key {
+      display: none;
+    }
+    .search-open {
+      padding: 0.5rem;
+    }
+  }
+  .search-dialog {
+    margin: 4rem auto auto;
+    width: min(90%, 40rem);
+    max-height: calc(100% - 8rem);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .search-dialog::backdrop {
+    background: rgb(0 0 0 / 0.6);
+    backdrop-filter: blur(4px);
+  }
+  .search-frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 15rem;
+    padding: 1.5rem;
+  }
+  .search-close {
+    align-self: flex-end;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .search-close:hover {
+    color: var(--accent);
+  }
+  #docs-search {
+    --pagefind-ui-scale: 0.8;
+    --pagefind-ui-primary: var(--accent);
+    --pagefind-ui-text: var(--muted);
+    --pagefind-ui-font: var(--font-display);
+    --pagefind-ui-background: var(--bg);
+    --pagefind-ui-border: var(--line-strong);
+    --pagefind-ui-border-width: 1px;
+    --pagefind-ui-border-radius: 0;
+    --pagefind-ui-tag: var(--surface);
+  }
+  #docs-search :global(.pagefind-ui__search-input:focus) {
+    outline: 1px solid var(--accent);
+    outline-offset: -1px;
+  }
+  #docs-search :global(.pagefind-ui__result-link) {
+    color: var(--text);
+  }
+  #docs-search :global(mark) {
+    background: transparent;
+    color: var(--accent);
+  }
+  @media (max-width: 50rem) {
+    .search-dialog {
+      margin: 0;
+      width: 100%;
+      max-width: 100%;
+      height: 100%;
+      max-height: 100%;
+    }
+  }
+  :global(body[data-search-open]) {
+    overflow: hidden;
+  }
+</style>
