@@ -33,7 +33,10 @@ const PAYLOAD_OMITTED = 'payloadBase64=<omitted>';
 const XML_OMITTED = '<snapshot xml omitted>';
 const PAYLOAD_BASE64_RE = /payloadBase64=\S*/g;
 const XML_START_RE = /<(?:\?xml|hierarchy|node)\b.*/g;
-const XML_ELEMENT_LINE_RE = /^\s*<\/?(?:hierarchy|node)\b/;
+const XML_MARKER_RE = /<\/?(?:\?xml|hierarchy|node)\b/;
+// An attribute such as `text="…"` or `content-desc="…"` is snapshot content even when the
+// element's opening tag was cut off or never printed.
+const XML_ATTRIBUTE_RE = /\s[\w:.-]+="/;
 // `android.util.AndroidException: INSTRUMENTATION_FAILED: <component>` and
 // `onError: ... message=INSTRUMENTATION_FAILED: <component>` carry the marker mid-line.
 const FAILED_RE = /INSTRUMENTATION_FAILED:[ \t]?(.*)$/;
@@ -43,16 +46,20 @@ const CODE_PREFIX = 'INSTRUMENTATION_CODE: ';
 const PROTOCOL_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|STATUS_CODE|RESULT|CODE|ABORTED|FAILED):/;
 
 /**
- * Removes the app content a helper run may have printed: encoded snapshot payloads and raw XML,
- * including a fragment cut off mid-element. Instrumentation records and every other line stay.
+ * Removes the app content a helper run may have printed: encoded snapshot payloads and XML in any
+ * shape, including a fragment whose opening tag is missing. Instrumentation records and every other
+ * line stay. This runs on the whole output, before any tail is cut from it.
  */
 export function withoutSnapshotContent(output: string): string {
   return output
     .split(/\r?\n/)
-    .filter((line) => !XML_ELEMENT_LINE_RE.test(line))
-    .map((line) =>
-      line.replace(PAYLOAD_BASE64_RE, PAYLOAD_OMITTED).replace(XML_START_RE, XML_OMITTED),
-    )
+    .map((line) => {
+      if (PROTOCOL_RECORD_RE.test(line)) {
+        return line.replace(PAYLOAD_BASE64_RE, PAYLOAD_OMITTED).replace(XML_START_RE, XML_OMITTED);
+      }
+      if (XML_MARKER_RE.test(line) || XML_ATTRIBUTE_RE.test(line)) return XML_OMITTED;
+      return line.replace(PAYLOAD_BASE64_RE, PAYLOAD_OMITTED);
+    })
     .join('\n');
 }
 
@@ -123,12 +130,14 @@ function readProtocolRecord(line: string, fields: InstrumentationFields): Messag
     const separator = record.indexOf('=');
     const key = record.slice(0, separator);
     if ((key !== 'shortMsg' && key !== 'longMsg') || fields[key] !== undefined) return undefined;
-    fields[key] = record.slice(separator + 1);
+    fields[key] = record.slice(separator + 1, separator + 1 + MESSAGE_FIELD_MAX_CHARS);
     return key;
   }
   if (line.startsWith(CODE_PREFIX)) {
     const code = line.slice(CODE_PREFIX.length).trim();
-    if (/^-?\d+$/.test(code)) fields.resultCode ??= Number(code);
+    if (/^-?\d+$/.test(code) && Number.isSafeInteger(Number(code))) {
+      fields.resultCode ??= Number(code);
+    }
     return undefined;
   }
   const aborted = ABORTED_RE.exec(line);
@@ -143,28 +152,54 @@ function appendLine(value: string | undefined, line: string): string | undefined
 
 /** The exit of a spawned helper process and what it printed, kept to a bounded recent window. */
 export type AndroidInstrumentationProcessRecord = {
-  /** The process's exit result, or `undefined` while it is running. */
+  /** Settles when the process's output streams have closed, the point its output is complete. */
+  closed: Promise<void>;
+  /** The process's exit result once its streams have closed, or `undefined` before that. */
   exitResult(): AndroidInstrumentationExitResult | undefined;
 };
 
 export function recordInstrumentationProcess(
-  process: AndroidAdbProcess,
+  child: AndroidAdbProcess,
 ): AndroidInstrumentationProcessRecord {
-  let output = '';
-  const onData = (chunk: Buffer | string) => {
-    output = (output + chunk.toString()).slice(-OUTPUT_SCAN_MAX_CHARS);
+  // Snapshot content is removed per line as it completes, so the bounded window never holds a
+  // line whose opening tag was cut away. A line too long to hold is dropped as snapshot content.
+  let kept = '';
+  let pending = '';
+  let pendingDropped = false;
+  const keep = (line: string) => {
+    kept = `${kept}${withoutSnapshotContent(line)}\n`.slice(-OUTPUT_SCAN_MAX_CHARS);
   };
-  process.stdout?.on('data', onData);
-  process.stderr?.on('data', onData);
+  const onData = (chunk: Buffer | string) => {
+    const lines = (pending + chunk.toString()).split('\n');
+    pending = lines.pop() ?? '';
+    for (const line of lines) {
+      keep(pendingDropped ? XML_OMITTED : line);
+      pendingDropped = false;
+    }
+    if (pending.length > OUTPUT_SCAN_MAX_CHARS) {
+      pending = '';
+      pendingDropped = true;
+    }
+  };
+  child.stdout?.on('data', onData);
+  child.stderr?.on('data', onData);
+  let isClosed = false;
+  const closed = new Promise<void>((resolve) => {
+    child.once('close', () => {
+      isClosed = true;
+      resolve();
+    });
+  });
   return {
+    closed,
     exitResult: () =>
-      process.exitCode == null && process.signalCode == null
-        ? undefined
-        : readInstrumentationExitResult({
-            stdout: output,
+      isClosed
+        ? readInstrumentationExitResult({
+            stdout: pendingDropped ? `${kept}${XML_OMITTED}` : `${kept}${pending}`,
             stderr: '',
-            exitCode: process.exitCode,
-            signal: process.signalCode,
-          }),
+            exitCode: child.exitCode,
+            signal: child.signalCode,
+          })
+        : undefined,
   };
 }

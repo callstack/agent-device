@@ -471,7 +471,14 @@ export async function stopAndroidSnapshotHelperSession(
   const session = sessions().get(deviceKey);
   if (!session) return false;
   sessions().delete(deviceKey);
-  // Read before teardown: a process this stop ends has no cause of its own to report.
+  // Read before teardown, once the streams have drained: a process this stop ends has no cause of
+  // its own to report, and one that already exited may still be flushing its last output.
+  if (hasAndroidSnapshotHelperProcessEnded(session.process)) {
+    await waitForAndroidSnapshotHelperProcessExit(
+      session.processRecord.closed,
+      ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
+    );
+  }
   const exitedOnItsOwn = session.processRecord.exitResult();
   if (exitedOnItsOwn) {
     emitDiagnostic({

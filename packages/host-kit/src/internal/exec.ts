@@ -452,7 +452,13 @@ export function runCmdSync(
     throw createExitError(executable, cmd, args, exitCode, stdout, stderr);
   }
 
-  return { stdout, stderr, exitCode, stdoutBuffer };
+  return {
+    stdout,
+    stderr,
+    exitCode,
+    stdoutBuffer,
+    ...(result.signal ? { signal: result.signal } : {}),
+  };
 }
 
 export function runCmdDetached(
@@ -563,7 +569,12 @@ export function runCmdBackground(
         reject(failure);
         return;
       }
-      resolve({ stdout, stderr, exitCode: finalExitCode });
+      resolve({
+        stdout,
+        stderr,
+        exitCode: finalExitCode,
+        ...(child.signalCode ? { signal: child.signalCode } : {}),
+      });
     }
     const settlement = createCommandKillSettlement({
       killProcessTree: () => killProcessTree(child, options),

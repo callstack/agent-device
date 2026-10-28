@@ -239,6 +239,103 @@ test('encoded and raw snapshot content never reaches the error details', async (
   }
 });
 
+test('a large one-line XML report never leaves a sensitive value in the details or the request log', async () => {
+  const nodes = Array.from(
+    { length: 400 },
+    (_, index) => `<node index="${index}" text="row ${index}" bounds="[0,0][1,1]" />`,
+  ).join('');
+  const lateSecret = `<node text="${SECRET}" content-desc="account" bounds="[0,0][1,1]" />`;
+  const stdouts = [
+    `<hierarchy rotation="0">${nodes}${lateSecret}</hierarchy>`,
+    // Cut so that the kept end of the report has no opening tag left.
+    `${'a'.repeat(30_000)} text="${SECRET}" content-desc="account" bounds="[0,0][1,1]" />`,
+    `INSTRUMENTATION_STATUS: stream=<hierarchy rotation="0">${nodes}${lateSecret}`,
+  ];
+  for (const stdout of stdouts) {
+    const error = await captureError({ exitCode: 1, stdout, stderr: 'am: Killed' });
+    const wire = JSON.stringify(normalizeError(error));
+    assert.ok(!wire.includes(SECRET), wire.slice(-600));
+    assert.ok(wire.includes('am: Killed'));
+
+    const tmpDir = await mkdtempForTest('agent-device-android-capture-xml-diag-');
+    const logPath = path.join(tmpDir, 'diag.ndjson');
+    try {
+      await withDiagnosticsScope(
+        { debug: true, logPath, session: 'android-test', requestId: 'req-7', command: 'snapshot' },
+        async () => {
+          await assert.rejects(
+            snapshotAndroid(emulator, {
+              helperAdb: helperFailingWith({ exitCode: 1, stdout, stderr: 'am: Killed' }),
+              helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+            }),
+          );
+        },
+      );
+      const log = await fs.readFile(logPath, 'utf8');
+      assert.ok(log.includes('android_snapshot_helper_failed'));
+      assert.ok(!log.includes(SECRET), log.slice(-600));
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  }
+});
+
+test('a single-line shortMsg or longMsg is held to the message cap', async () => {
+  const result = await captureExitResult({
+    exitCode: 0,
+    stdout: `INSTRUMENTATION_RESULT: shortMsg=${'s'.repeat(10_000)}\nINSTRUMENTATION_RESULT: longMsg=${'l'.repeat(10_000)}\nINSTRUMENTATION_CODE: 0`,
+  });
+
+  assert.equal(result.shortMsg?.length, 2_048);
+  assert.equal(result.longMsg?.length, 2_048);
+});
+
+test('an INSTRUMENTATION_CODE beyond the safe integer range is not recorded', async () => {
+  const result = await captureExitResult({
+    exitCode: 1,
+    stdout: `INSTRUMENTATION_CODE: ${'9'.repeat(400)}\n`,
+  });
+
+  assert.equal(result.resultCode, undefined);
+});
+
+test('a session exit result includes output that arrives after the exit event', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-android-session-drain-');
+  const logPath = path.join(tmpDir, 'diag.ndjson');
+  try {
+    const processes: FakeAndroidProcess[] = [];
+    const provider = createSessionProvider({ calls: [], processes });
+    const capture = () =>
+      captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: 'android:emulator-5556',
+      });
+    await withDiagnosticsScope(
+      { debug: true, logPath, session: 'android-test', requestId: 'req-8', command: 'snapshot' },
+      async () => {
+        assert.ok(await capture());
+        const process = processes[0]!;
+        process.exitCode = 1;
+        process.emit('exit', 1, null);
+        const second = capture();
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        process.stdout.write(CRASHED_RUN);
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        process.emit('close', 1, null);
+        await second;
+      },
+    );
+
+    const event = await readDiagnostic(logPath, 'android_snapshot_helper_session_exited');
+    const exit = readExitResult(event.data ?? {});
+    assert.equal(exit.exitCode, 1);
+    assert.equal(exit.shortMsg, 'java.lang.IllegalStateException');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('the real cause past the redaction cap survives in the error and the request log', async () => {
   const filler = Array.from({ length: 40 }, (_, index) => `line ${index} of helper output`).join(
     '\n',
