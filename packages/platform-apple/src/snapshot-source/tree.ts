@@ -149,6 +149,18 @@ const KEYBOARD_FOCUS_TRAIT = 1n << 21n;
 const TAB_BUTTON_TRAIT = 1n << 28n;
 
 /**
+ * The traits UIKit sets on a text input: the private text entry (bit 18), secure text field (bit 24),
+ * and text area (bit 47), and the public search field (bit 10). A custom-drawn input, such as a
+ * Compose Multiplatform text field, reports the automation type of a plain view (`Other`), and
+ * XCTest types it from these bits, so the runner path answers `TextField`, `SecureTextField`,
+ * `TextView`, or `SearchField` for it. The bridge derives the type from them for an `Other` to match.
+ */
+const SEARCH_FIELD_TRAIT = 1n << 10n;
+const TEXT_ENTRY_TRAIT = 1n << 18n;
+const SECURE_TEXT_FIELD_TRAIT = 1n << 24n;
+const TEXT_AREA_TRAIT = 1n << 47n;
+
+/**
  * Two hosts put another process's UI into this one's tree as an `AXRemoteElement`, with the
  * children in that other process:
  *
@@ -312,8 +324,17 @@ function elementTypeName(
   if (elementClass !== undefined && ELEMENT_TYPE_NAMES.includes(elementClass)) {
     return elementClass;
   }
-  if (automationType === undefined) return undefined;
-  return ELEMENT_TYPE_NAMES[automationType] ?? 'Other';
+  const automationTypeName =
+    automationType === undefined ? undefined : (ELEMENT_TYPE_NAMES[automationType] ?? 'Other');
+  if (automationTypeName !== undefined && automationTypeName !== 'Other') return automationTypeName;
+  return textEntryTypeName(traits) ?? automationTypeName;
+}
+
+function textEntryTypeName(traits: bigint | undefined): string | undefined {
+  if (traits === undefined || (traits & TEXT_ENTRY_TRAIT) === 0n) return undefined;
+  if ((traits & SECURE_TEXT_FIELD_TRAIT) !== 0n) return 'SecureTextField';
+  if ((traits & SEARCH_FIELD_TRAIT) !== 0n) return 'SearchField';
+  return (traits & TEXT_AREA_TRAIT) !== 0n ? 'TextView' : 'TextField';
 }
 
 function isRemoteContentHost(node: RawSnapshotNode): boolean {

@@ -745,6 +745,12 @@ XCTest types an element with that trait as `Button`.
 The decoder does the same.
 Otherwise, a `role=button` tab selector that matches the runner tree does not match the bridge tree.
 
+A custom-drawn text input, such as a Compose Multiplatform text field, reports the automation type `Other`.
+It carries the private text-entry trait (bit 18), and also the secure-text-field trait (bit 24) or the text-area trait (bit 47) where they apply.
+XCTest types such an element as `TextField`, `SecureTextField`, or `TextView`.
+The decoder does the same for an `Other`, and types a search-field-trait (bit 10) input as `SearchField`.
+Otherwise, the bridge tree reports the input as not editable, and a `fill` client refuses it.
+
 The snapshot API reports the frames of a windowed app relative to its window, not to the screen.
 Windowed Apps and Stage Manager both put an app in such a window.
 A tap at a published point then misses the app.
