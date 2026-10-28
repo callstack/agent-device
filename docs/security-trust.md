@@ -62,4 +62,4 @@ Network inspection commands collect only the traffic that the active app or sess
 
 ## Report a vulnerability
 
-Report security issues privately to Callstack at [hello@callstack.com](mailto:hello@callstack.com). Do not open a public issue for a vulnerability that exposes user data, credentials, device access, or remote execution risk.
+Report security issues privately to Callstack at hello@callstack.com. Do not open a public issue for a vulnerability that exposes user data, credentials, device access, or remote execution risk.

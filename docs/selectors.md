@@ -48,10 +48,10 @@ agent-device find "Follow" click --first
 Tips:
 
 - `find role <value>` and the `role=` selector key use the same role names that snapshots show. See
-  [Structured node fields](/agent-device/docs/snapshots.md#structured-node-fields---json).
+  [Structured node fields](/docs/snapshots#structured-node-fields---json).
 - Use `find ... wait <timeoutMs>` to wait for an element to appear.
 - Pair `find` with a scoped snapshot (`snapshot -s "<label>"`) for speed.
-- \[Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor.
+- [Android] If the matched node is not hittable, agent-device clicks or focuses the nearest hittable ancestor.
 - Use `fill` to find a field and replace its text in one step. To append to the text in the focused field, use `click` or `press`, then `type`.
 
 ## Selector syntax
@@ -71,15 +71,15 @@ agent-device find 'role=button label="Follow"' list
 
 Text keys:
 
-| Key           | Matches                                                                             |
-| ------------- | ----------------------------------------------------------------------------------- |
-| `id`          | The element's identifier (test ID, resource ID, accessibility identifier)           |
-| `label`       | The accessibility label                                                             |
-| `value`       | The accessibility value                                                             |
-| `text`        | The first non-empty of label, value, and identifier                                 |
+| Key           | Matches                                                                            |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `id`          | The element's identifier (test ID, resource ID, accessibility identifier)          |
+| `label`       | The accessibility label                                                            |
+| `value`       | The accessibility value                                                            |
+| `text`        | The first non-empty of label, value, and identifier                                |
 | `role`        | The role shown in brackets in snapshot output (`button`, `text-field`, `switch`, …) |
-| `appname`     | The owning app's name, on desktop targets that report it                            |
-| `windowtitle` | The owning window's title, on desktop targets that report it                        |
+| `appname`     | The owning app's name, on desktop targets that report it                           |
+| `windowtitle` | The owning window's title, on desktop targets that report it                       |
 
 Text values match the whole field, ignoring case and extra whitespace: `label="sign in"` matches
 `Sign In` but not `Sign In Now`. For partial matches, use `find`.

@@ -25,7 +25,7 @@ agent-device connect browserstack \
 
 `connect` verifies the BrowserStack credentials and the exact device/OS pair. It checks a `bs://` reference against recent uploads, and confirms that a local app file exists before saving its absolute path. A public URL is saved as-is; BrowserStack validates it when the session starts. `open` takes the app's installed package or bundle identifier, not its upload name.
 
-If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/agent-device/docs/device-clouds.md#change-credentials-while-the-daemon-runs).
+If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
 Optional labels:
 
@@ -78,7 +78,7 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To drive BrowserStack only through MCP, see [Use a provider only through MCP](/agent-device/docs/device-clouds.md#use-a-provider-only-through-mcp).
+To drive BrowserStack only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp).
 
 ## Use the Node.js client
 
@@ -115,8 +115,8 @@ if (providerSessionId) {
 
 ## Get artifacts and troubleshoot
 
-After `close`, BrowserStack can return session video, Appium logs, device logs, dashboard URLs, and public URLs. The provider session ID is the WebDriver session ID. See [Retrieve artifacts after close](/agent-device/docs/device-clouds.md#retrieve-artifacts-after-close).
+After `close`, BrowserStack can return session video, Appium logs, device logs, dashboard URLs, and public URLs. The provider session ID is the WebDriver session ID. See [Retrieve artifacts after close](/docs/device-clouds#retrieve-artifacts-after-close).
 
 BrowserStack errors distinguish rejected credentials, an unavailable device/OS pair, a missing `bs://` upload, and a missing local app file.
 
-To enter text, see [Fill text on hosted WebDriver sessions](/agent-device/docs/device-clouds.md#fill-text-on-hosted-webdriver-sessions).
+To enter text, see [Fill text on hosted WebDriver sessions](/docs/device-clouds#fill-text-on-hosted-webdriver-sessions).

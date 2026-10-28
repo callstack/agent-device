@@ -136,7 +136,7 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To drive TestMu AI only through MCP, see [Use a provider only through MCP](/agent-device/docs/device-clouds.md#use-a-provider-only-through-mcp).
+To drive TestMu AI only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp).
 
 ## Use the Node.js client
 
@@ -146,7 +146,7 @@ releases the lease. Keep `leases.release()` in `finally`: it does nothing after 
 and releases the lease when a command fails first. Add `providerDeviceType: 'real'` to
 `leases.allocate` to run on a real device.
 
-The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment, unless a JavaScript host passes the plugin `testmu({ credentials })` instead. If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/agent-device/docs/device-clouds.md#change-credentials-while-the-daemon-runs).
+The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment, unless a JavaScript host passes the plugin `testmu({ credentials })` instead. If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -190,7 +190,7 @@ if (providerSessionId) {
 
 After `close`, TestMu AI can return session video, Appium logs, device logs, network and command
 logs, a screenshot archive, and the App Automation dashboard link. The provider session ID is the
-WebDriver session ID. See [Retrieve artifacts after close](/agent-device/docs/device-clouds.md#retrieve-artifacts-after-close).
+WebDriver session ID. See [Retrieve artifacts after close](/docs/device-clouds#retrieve-artifacts-after-close).
 
 To use a staging or private TestMu AI deployment, redirect the WebDriver, upload, and
 catalog/session-detail endpoints with `TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual
@@ -198,4 +198,4 @@ devices), `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_A
 app list that `connect` uses to check credentials always comes from
 `https://manual-api.lambdatest.com/app/data`.
 
-To enter text, see [Fill text on hosted WebDriver sessions](/agent-device/docs/device-clouds.md#fill-text-on-hosted-webdriver-sessions).
+To enter text, see [Fill text on hosted WebDriver sessions](/docs/device-clouds#fill-text-on-hosted-webdriver-sessions).

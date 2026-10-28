@@ -19,10 +19,10 @@ Requests agent-device makes with your API key, including instance creation, star
 
 An agent in a sandbox can drive an instance that someone else created, such as the instance behind a live preview, without your organization's API key. Create the instance where the API key lives, then give the sandbox that instance's URL and token from its `status`:
 
-| Platform | Environment variables                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| iOS      | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`)                                                                    |
-| Android  | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
+| Platform | Environment variables |
+| --- | --- |
+| iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
+| Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
 The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`.
 
@@ -40,7 +40,7 @@ agent-device disconnect
 
 On an attached Android instance, agent-device does not replace an existing port reverse mapping. If the owner already maps a device port, such as `tcp:8081` for their Metro server, a reverse to that port fails and the owner's mapping stays in place. The error has `details.reason: 'android_port_reverse_rebind_refused'` when `adb reverse --list` shows the mapping; otherwise it is a plain ADB failure.
 
-If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/agent-device/docs/device-clouds.md#change-credentials-while-the-daemon-runs).
+If your shell's account variables, or its instance variables for the platform you lease, differ from the ones the daemon started with, the first `install` or `open` refuses before it creates or attaches to an instance. See [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
 `install`, and `apps` before the first `open`, need `LIMRUN_API_KEY` because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install your app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
 
@@ -72,7 +72,7 @@ On iOS, `settings` supports `appearance`, `permission`, `location`, and `clear-a
 
 On iOS, `fill` taps the target, waits for that field to take text-entry focus, and only then types. Apps that never report a globally focused element, such as Flutter forms, still fill and report `textEntryReadiness: "focused-element"`. If the tap does not focus a field, `fill` fails with `text_entry_focus_not_observed` instead of typing into an unknown field. Use `type` to send text to whichever field already has focus.
 
-To drive Limrun only through MCP, see [Use a provider only through MCP](/agent-device/docs/device-clouds.md#use-a-provider-only-through-mcp). Limrun returns no provider artifacts, so `artifacts` has nothing to fetch.
+To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). Limrun returns no provider artifacts, so `artifacts` has nothing to fetch.
 
 ## Embed the Node.js runtime
 

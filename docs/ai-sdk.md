@@ -6,7 +6,7 @@ Use `agent-device/ai-sdk` to give an [AI SDK](https://ai-sdk.dev/) agent a typed
 pnpm add agent-device ai
 ```
 
-Make an iOS simulator or device [available to agent-device](/agent-device/docs/agent-setup.md), then configure an AI SDK model. String model IDs use AI Gateway by default:
+Make an iOS simulator or device [available to agent-device](/docs/agent-setup), then configure an AI SDK model. String model IDs use AI Gateway by default:
 
 ```dotenv
 AI_GATEWAY_API_KEY=your_api_key
@@ -53,4 +53,4 @@ Set `AI_MODEL` to a model available through your configured AI SDK provider. The
 - Pass `set: 'all'` when the agent also needs device-management or observability commands.
 - Pass `approval: { close: 'user-approval' }` to require user approval before a command runs. `createAgentDeviceTools()` returns the map as `toolApproval`, ready to pass to [`ToolLoopAgent`](https://ai-sdk.dev/docs/agents/tool-approvals).
 
-Use the [Node.js API](/agent-device/docs/client-api.md) when your application needs deterministic setup or other direct device control outside the agent loop. See the AI SDK reference for [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent).
+Use the [Node.js API](/docs/client-api) when your application needs deterministic setup or other direct device control outside the agent loop. See the AI SDK reference for [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent).

@@ -2,7 +2,7 @@
 
 Open an app, read its UI, and interact with it from the command line.
 
-Before you start, [install `agent-device`](/agent-device/docs/installation.md) and the platform tools for your target: Xcode for iOS, the Android SDK and ADB for Android, or the HarmonyOS Command Line Tools for HarmonyOS. To set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent, see [AI Agent Setup](/agent-device/docs/agent-setup.md). To give an agent the whole documentation as one text file, use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt).
+Before you start, [install `agent-device`](/docs/installation) and the platform tools for your target: Xcode for iOS, the Android SDK and ADB for Android, or the HarmonyOS Command Line Tools for HarmonyOS. To set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent, see [AI Agent Setup](/docs/agent-setup). To give an agent the whole documentation as one text file, use [llms-full.txt](https://agent-device.dev/llms-full.txt).
 
 Device automation follows this pattern:
 
@@ -68,7 +68,7 @@ agent-device shutdown --platform android --device Pixel_9_Pro_XL
 agent-device close
 ```
 
-`install` and `reinstall` accept `.apk` and `.aab` on Android, `.app` and `.ipa` on iOS, and `.hap` on HarmonyOS. For `.aab` requirements, `.ipa` archives with several apps, and installing from a URL, see [App install](/agent-device/docs/commands.md#app-install-in-place).
+`install` and `reinstall` accept `.apk` and `.aab` on Android, `.app` and `.ipa` on iOS, and `.hap` on HarmonyOS. For `.aab` requirements, `.ipa` archives with several apps, and installing from a URL, see [App install](/docs/commands#app-install-in-place).
 
 If `open` fails because no simulator, emulator, or device is booted, run `boot --platform ios|android` and retry.
 If `open` fails because the app ID is wrong or missing, run `apps` and retry with the package name or bundle ID it lists.
@@ -105,7 +105,7 @@ Example batch payload for a known chat flow:
 ]
 ```
 
-See [Batching](/agent-device/docs/batching.md) for the payload format, failure handling, and best practices.
+See [Batching](/docs/batching) for the payload format, failure handling, and best practices.
 
 ## Find elements without refs
 
@@ -119,7 +119,7 @@ agent-device find role button click
 
 ## Replay a flow
 
-To record and replay deterministic scripts, see [Replay & E2E](/agent-device/docs/replay-e2e.md).
+To record and replay deterministic scripts, see [Replay & E2E](/docs/replay-e2e).
 
 ## Scroll
 
@@ -132,6 +132,7 @@ agent-device scroll down --pixels 320   # Scroll down by a fixed distance
 ```
 
 ## Change device settings
+
 
 ```bash
 agent-device settings wifi on

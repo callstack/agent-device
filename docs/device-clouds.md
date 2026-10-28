@@ -2,23 +2,23 @@
 
 Use a device cloud or farm when an agent needs to drive a hosted mobile device without an interactive login. Pick the provider whose account and devices you use:
 
-- [BrowserStack](/agent-device/docs/browserstack.md): Android and iOS App Automate sessions over WebDriver.
-- [AWS Device Farm](/agent-device/docs/aws-device-farm.md): Android and iOS remote-access sessions through AWS.
-- [TestMu AI](/agent-device/docs/testmu.md): Android emulator, iOS simulator, and real-device sessions over WebDriver.
-- [Limrun](/agent-device/docs/limrun.md): direct iOS simulator and Android emulator instances.
+- [BrowserStack](/docs/browserstack): Android and iOS App Automate sessions over WebDriver.
+- [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS.
+- [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
+- [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
 
 ## Compare providers
 
-|                         | BrowserStack                                                    | AWS Device Farm                                                                                                       | TestMu AI                                                                                        | Limrun                                                                                      |
-| ----------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Devices                 | Android and iOS real devices                                    | Android and iOS real devices                                                                                          | Android emulators and iOS simulators by default; real devices with `--provider-device-type real` | Android emulators and iOS simulators                                                        |
-| Ships as                | Built in                                                        | Built in; needs the AWS CLI                                                                                           | The `@agent-device/testmu` plugin                                                                | Built in                                                                                    |
-| Credentials             | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY`              | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY`                                                                   | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance |
-| Device allocated on     | `open`                                                          | `open`                                                                                                                | `open`                                                                                           | First device command, such as `install` or `open`                                           |
-| App source              | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation                                                               | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path                                  | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset                  |
-| Artifacts after `close` | Video, Appium and device logs, dashboard and public links       | Video and log files, once AWS finalizes them                                                                          | Video, Appium, device, network, and command logs, screenshots, dashboard link                    | None                                                                                        |
-| Port reverse            | No; use BrowserStack Local                                      | No                                                                                                                    | No                                                                                               | Android over ADB; not on iOS                                                                |
-| Live `network dump`     | No; the provider owns the network path                          | No; the provider owns the network path                                                                                | No; the provider owns the network path                                                           | Yes                                                                                         |
+| | BrowserStack | AWS Device Farm | TestMu AI | Limrun |
+| --- | --- | --- | --- | --- |
+| Devices | Android and iOS real devices | Android and iOS real devices | Android emulators and iOS simulators by default; real devices with `--provider-device-type real` | Android emulators and iOS simulators |
+| Ships as | Built in | Built in; needs the AWS CLI | The `@agent-device/testmu` plugin | Built in |
+| Credentials | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY` | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY` | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance |
+| Device allocated on | `open` | `open` | `open` | First device command, such as `install` or `open` |
+| App source | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset |
+| Artifacts after `close` | Video, Appium and device logs, dashboard and public links | Video and log files, once AWS finalizes them | Video, Appium, device, network, and command logs, screenshots, dashboard link | None |
+| Port reverse | No; use BrowserStack Local | No | No | Android over ADB; not on iOS |
+| Live `network dump` | No; the provider owns the network path | No; the provider owns the network path | No; the provider owns the network path | Yes |
 
 ## Shared workflow
 
@@ -58,3 +58,14 @@ agent-device artifacts <provider-session-id> --provider <provider> --json
 ```
 
 Providers finalize video and log URLs after the session ends. If the lookup reports artifacts as pending right after `close`, retry it a little later.
+
+## Expo Simulators
+
+[Expo Simulators](https://docs.expo.dev/preview/simulators/introduction/) runs Android Emulators and iOS Simulators on EAS. It is not an `agent-device` provider: an Expo Simulators session provisions its own `agent-device` daemon, and you run the same commands inside the session through `eas simulator:exec`:
+
+```bash
+eas simulator:exec npx agent-device@latest open com.example.app --platform ios
+eas simulator:exec npx agent-device@latest snapshot -i
+```
+
+Expo Simulators is a limited-access preview. For session setup, see Expo's [agent-device guide](https://docs.expo.dev/agents/agent-device/) and [Drive the device](https://docs.expo.dev/preview/simulators/how-to/drive-the-device/).

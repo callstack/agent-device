@@ -2,18 +2,18 @@
 
 This page is for developers who drive devices from their own Node.js code. Use `createAgentDeviceClient()` for typed, deterministic device automation instead of shelling out to the CLI.
 
-Building an agent? Start with the dedicated [AI SDK](/agent-device/docs/ai-sdk.md) or [Eve](/agent-device/docs/eve.md) integration. Building a bridge, remote daemon, or device-cloud backend that owns device access or command dispatch? See [Build an integration](/agent-device/docs/build-an-integration.md).
+Building an agent? Start with the dedicated [AI SDK](/docs/ai-sdk) or [Eve](/docs/eve) integration. Building a bridge, remote daemon, or device-cloud backend that owns device access or command dispatch? See [Build an integration](/docs/build-an-integration).
 
 ## Runnable examples
 
 The repository includes [runnable, typechecked Node.js examples](https://github.com/callstack/agent-device/tree/main/examples/sdk). They import the same published `agent-device/*` entry points your code uses:
 
-| Example                                                                                                       | Demonstrates                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| [`client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts)     | Open, snapshot, interact, handle typed errors, and always close the session                                                     |
-| [`contracts-result.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/contracts-result.ts) | Consume snapshot results with helpers from [`agent-device/contracts`](/agent-device/docs/build-an-integration.md#api-reference) |
+| Example | Demonstrates |
+| --- | --- |
+| [`client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts) | Open, snapshot, interact, handle typed errors, and always close the session |
+| [`contracts-result.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/contracts-result.ts) | Consume snapshot results with helpers from [`agent-device/contracts`](/docs/build-an-integration#api-reference) |
 
-Examples for custom transports and Metro are on [Build an integration](/agent-device/docs/build-an-integration.md#runnable-examples).
+Examples for custom transports and Metro are on [Build an integration](/docs/build-an-integration#runnable-examples).
 
 Each example typechecks against the SDK through its own [`tsconfig.json`](https://github.com/callstack/agent-device/blob/main/examples/sdk/tsconfig.json). Build the package with `pnpm build`, then run an example with Node:
 
@@ -58,86 +58,6 @@ Entry points for driving devices from Node.js:
 This example opens an app, takes a snapshot, interacts, handles typed errors, and always closes the session. Run it from [`examples/sdk/client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts).
 
 ```ts file="<root>/../examples/sdk/client-session.ts"
-/**
- * Root client session: create a client, open an app, capture a snapshot, tap
- * a node, then close the session — with typed error handling via the
- * exported error helpers.
- *
- * Demonstrates: `createAgentDeviceClient`, `AppError`, `isAgentDeviceError`,
- * and `normalizeAgentDeviceError` from the `agent-device` root export.
- *
- * Prerequisites: an `agent-device` daemon target (a booted iOS simulator).
- * This file typechecks without one; running it for real also requires
- * `pnpm build` first, so the package resolves at runtime.
- *
- * Run: node --experimental-strip-types examples/sdk/client-session.ts
- */
-import {
-  AppError,
-  createAgentDeviceClient,
-  isAgentDeviceError,
-  normalizeAgentDeviceError,
-} from 'agent-device';
-import type { AgentDeviceClient, AgentDeviceDevice } from 'agent-device';
-
-async function resolveSnapshotCapableIosDevice(
-  client: AgentDeviceClient,
-): Promise<AgentDeviceDevice> {
-  const devices = await client.devices.list({ platform: 'ios' });
-  const device = devices[0];
-  if (!device) {
-    throw new AppError('DEVICE_NOT_FOUND', 'No iOS device available');
-  }
-
-  const capabilities = await client.devices.capabilities({ platform: 'ios' });
-  if (!capabilities.availableCommands.includes('snapshot')) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Selected target does not support snapshots');
-  }
-
-  return device;
-}
-
-function reportAgentDeviceError(error: unknown): void {
-  const normalized = normalizeAgentDeviceError(error);
-  console.error(`agent-device error [${normalized.code}]: ${normalized.message}`);
-  if (normalized.hint) {
-    console.error(`hint: ${normalized.hint}`);
-  }
-  process.exitCode = 1;
-}
-
-async function main(): Promise<void> {
-  const client = createAgentDeviceClient({
-    session: 'sdk-example',
-    lockPolicy: 'reject',
-    lockPlatform: 'ios',
-  });
-
-  try {
-    const device = await resolveSnapshotCapableIosDevice(client);
-
-    await client.apps.open({
-      app: 'com.apple.Preferences',
-      platform: 'ios',
-      udid: device.id,
-    });
-
-    const snapshot = await client.capture.snapshot({ interactiveOnly: true });
-    const target = snapshot.nodes.find((node) => node.role === 'button');
-    // A node carries a ref only when something can address it, and press needs that address.
-    if (target?.ref !== undefined) {
-      await client.interactions.press({ ref: target.ref });
-    }
-  } catch (error) {
-    if (!isAgentDeviceError(error)) throw error;
-    reportAgentDeviceError(error);
-  } finally {
-    await client.sessions.close();
-  }
-}
-
-await main();
-
 ```
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
@@ -172,10 +92,10 @@ Close an embedded runtime in its host process with the handle returned by `start
 
 A `'managed'` client reuses a matching embedded runtime. Takeover, drain, and timeout recovery refuse a live embedded or unrecognized owner without a signal. A provably exited owner is retired so you can reuse the state directory.
 
-| Mode                  | What the client does with the daemon                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Mode | What the client does with the daemon |
+| --- | --- |
 | `'managed'` (default) | Starts a missing daemon, replaces one that does not match the client, and retires an unresponsive one after a timeout. |
-| `'attach'`            | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout.                             |
+| `'attach'` | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout. |
 
 `'managed'` stays the default until 0.22. Use `'attach'` when your code, or another process, owns the daemon, and call `ensureDaemon()` to start or replace it deliberately:
 
@@ -195,15 +115,15 @@ const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
 
 These failures carry a typed `error.details.reason`:
 
-| Reason                      | Meaning                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `daemon-not-running`        | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`.                                                                                                                                                                                                                                                                                                                    |
-| `daemon-incompatible`       | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
-| `daemon-busy`               | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry.                                                                                                                                                                                                          |
-| `daemon-drain-timeout`      | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a detached daemon. It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`.                                                                        |
-| `daemon-owner-embedded`     | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Close the runtime in its host process with its `close()` handle.                                                                                                                                                |
-| `daemon-owner-unrecognized` | The record on `stateDir` states an owner this version cannot read, so this client replaced nothing and signaled nothing. Update agent-device if the record comes from a newer build. Otherwise check what owns that process: a host that started it closes it with its own close, and otherwise remove `daemon.json` once that process is gone.                                               |
-| `daemon-binding-mismatch`   | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own.                                                                                                               |
+| Reason | Meaning |
+| --- | --- |
+| `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. For an embedded runtime, close it in its host process. For a detached daemon, use `agent-device daemon stop --state-dir <path>`. Then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
+| `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a detached daemon. It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
+| `daemon-owner-embedded` | A live host process owns the daemon on `stateDir`, so this client neither replaced it nor retired it, and signaled nothing. A daemon that matches the client is still usable. Close the runtime in its host process with its `close()` handle. |
+| `daemon-owner-unrecognized` | The record on `stateDir` states an owner this version cannot read, so this client replaced nothing and signaled nothing. Update agent-device if the record comes from a newer build. Otherwise check what owns that process: a host that started it closes it with its own close, and otherwise remove `daemon.json` once that process is gone. |
+| `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 
 `ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
 
@@ -264,7 +184,7 @@ from an explicit selector, an existing session, one local booted/bootable candid
 simulator with the app installed, or one provider-owned candidate. Ambiguous requests fail with
 structured retry selectors instead of silently retargeting.
 
-To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/agent-device/docs/browserstack.md), [AWS Device Farm](/agent-device/docs/aws-device-farm.md), [TestMu AI](/agent-device/docs/testmu.md), and [Limrun](/agent-device/docs/limrun.md) guides for provider-specific setup.
+To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [TestMu AI](/docs/testmu), and [Limrun](/docs/limrun) guides for provider-specific setup.
 
 ## Web sessions
 
@@ -293,13 +213,14 @@ MCP tools use the same command contracts, so they can also target `platform: 'we
 setup and doctor stay CLI-only. Web network inspection returns the standard network result shape
 without request or response bodies.
 
+
 ## Command methods
 
 Use `client.command.<method>()` for command-level device actions. These calls go through the same daemon transport as the higher-level client methods, so they carry session metadata and tenant/run/lease fields, return normalized daemon errors, and handle remote artifacts.
 
 Results are daemon-shaped objects with typed known fields and follow the CLI's command semantics.
 
-A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Retry after a failed command](/agent-device/docs/commands.md#retry-after-a-failed-command) explains the values.
+A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Retry after a failed command](/docs/commands#retry-after-a-failed-command) explains the values.
 
 Every client call that dispatches to the daemon accepts `signal?: AbortSignal` to cancel that one call:
 
@@ -380,7 +301,7 @@ await client.interactions.press({ selector: 'label="Continue"' });
 
 If the wait times out, check the selector and app state with a fresh snapshot. A covered, off-screen, or ambiguous target still fails the interaction.
 
-`tvRemote` is TV-only. Android TV accepts the navigation buttons, named volume, power, media, channel, and color keys, and `android-keycode:N`. tvOS and Vega OS accept only `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`; other buttons fail with `UNSUPPORTED_OPERATION`. Phones and WebDriver sessions are unsupported. See [TV targets](/agent-device/docs/commands.md#tv-targets) for the full button list and hold behavior.
+`tvRemote` is TV-only. Android TV accepts the navigation buttons, named volume, power, media, channel, and color keys, and `android-keycode:N`. tvOS and Vega OS accept only `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`; other buttons fail with `UNSUPPORTED_OPERATION`. Phones and WebDriver sessions are unsupported. See [TV targets](/docs/commands#tv-targets) for the full button list and hold behavior.
 
 Vega OS client support is VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Vega OS devices, capture, selector, install, logging, and performance methods report unsupported for Vega targets. Fire TV devices that run Fire OS use the Android client methods as Android TV devices.
 
@@ -424,7 +345,7 @@ Domain client methods:
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
 
-Use `client.interactions.gesture()` with a `kind` and the corresponding [gesture inputs](/agent-device/docs/commands.md#pointer-and-gestures):
+Use `client.interactions.gesture()` with a `kind` and the corresponding [gesture inputs](/docs/commands#pointer-and-gestures):
 
 ```ts
 await client.interactions.gesture({ kind: 'pan', origin: { x: 100, y: 200 }, delta: { x: 40, y: -20 } });
@@ -433,14 +354,14 @@ await client.interactions.gesture({ kind: 'pan', origin: { x: 100, y: 200 }, del
 If the daemon returns a missing or non-object lease, or a lease without a non-empty string for `leaseId`, `tenantId`, `runId`, or `backend`, `client.leases.allocate()` and `client.leases.heartbeat()` reject with `COMMAND_FAILED` and `details.reason: "INVALID_LEASE_RESPONSE"`.
 The original daemon response is available in `error.details.response`.
 
-`client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/agent-device/docs/commands.md#device-discovery) for the sources.
+`client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
 
-`client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/agent-device/docs/snapshots.md#coordinates-and-viewport) for what each producer answers with.
+`client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/docs/snapshots#coordinates-and-viewport) for what each producer answers with.
 
-It also carries an optional `presentedSurface: 'presented' | 'absent' | 'unknown'` on iOS captures: whether the capture saw a modal presentation over your app's content. `'absent'` is a reading that was earned, so it is safe to act on; `'unknown'` says the capture could not tell and is not `'absent'`. The field is absent on other platforms. See [Presented surface](/agent-device/docs/snapshots.md#presented-surface).
+It also carries an optional `presentedSurface: 'presented' | 'absent' | 'unknown'` on iOS captures: whether the capture saw a modal presentation over your app's content. `'absent'` is a reading that was earned, so it is safe to act on; `'unknown'` says the capture could not tell and is not `'absent'`. The field is absent on other platforms. See [Presented surface](/docs/snapshots#presented-surface).
 
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
-The timeline leaves out user-entered content such as typed text, selector values, and payloads; see [Sessions](/agent-device/docs/sessions.md#find-a-sessions-logs-and-artifacts) for what it keeps.
+The timeline leaves out user-entered content such as typed text, selector values, and payloads; see [Sessions](/docs/sessions#find-a-sessions-logs-and-artifacts) for what it keeps.
 
 `client.observability.audio()` mirrors `audio probe start|status|stop`. Use it to collect compact RMS/peak dBFS buckets while other session actions continue:
 
@@ -461,7 +382,7 @@ const audio = await client.observability.audio({
 await client.observability.audio({ platform: 'web', action: 'probe', probeAction: 'stop' });
 ```
 
-Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulators on macOS hosts). See [Audio probes](/agent-device/docs/debugging-profiling.md#audio-probes) for what each platform samples, permissions, and unsupported targets.
+Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulators on macOS hosts). See [Audio probes](/docs/debugging-profiling#audio-probes) for what each platform samples, permissions, and unsupported targets.
 
 `client.observability.perf()` requires an options object with an explicit `area`; a call without one fails with an error that names the replacement. The option shapes mirror the `perf` CLI forms:
 
@@ -472,7 +393,7 @@ Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulato
 
 To start an xctrace capture, also pass a `template` such as `'Time Profiler'` or `'Animation Hitches'`.
 
-On Android, each successful `perf({ area: 'frames' })` read and each `open` of an app resets the frame window, so call it, perform a transition or gesture, then call it again to inspect that window. See [Performance snapshots](/agent-device/docs/debugging-profiling.md#performance-snapshots) for result fields and platform support.
+On Android, each successful `perf({ area: 'frames' })` read and each `open` of an app resets the frame window, so call it, perform a transition or gesture, then call it again to inspect that window. See [Performance snapshots](/docs/debugging-profiling#performance-snapshots) for result fields and platform support.
 
 `client.recording.record({ action: 'start', path, quality: 'medium' })` starts a recording with medium output quality.
 
@@ -482,7 +403,7 @@ On Android, each successful `perf({ area: 'frames' })` read and each `open` of a
 `{ command: 'open', input: { app: 'settings' } }`. Step `input` uses the same fields as the
 matching client command. Daemon-shaped `positionals`/`flags` steps are internal to the daemon and not
 part of the client API. To run daemon-shaped batches through your own dispatcher, see
-[Batch orchestration for custom transports](/agent-device/docs/build-an-integration.md#batch-orchestration-for-custom-transports).
+[Batch orchestration for custom transports](/docs/build-an-integration#batch-orchestration-for-custom-transports).
 
 ## Android `installFromSource()`
 

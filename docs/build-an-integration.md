@@ -2,16 +2,16 @@
 
 This page is for developers who build a bridge, remote daemon, device-cloud backend, or in-process runner on top of agent-device. These entry points let your server own device access, command dispatch, or Metro while reusing agent-device's behavior.
 
-To drive devices from your own Node.js code, use the [Node.js API](/agent-device/docs/client-api.md) instead.
+To drive devices from your own Node.js code, use the [Node.js API](/docs/client-api) instead.
 
 ## Runnable examples
 
 The repository includes [runnable, typechecked examples](https://github.com/callstack/agent-device/tree/main/examples/sdk) for these entry points:
 
-| Example                                                                                                             | Demonstrates                                              |
-| ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`batch-orchestration.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts) | Run a batch through a custom transport                    |
-| [`metro-runtime.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/metro-runtime.ts)             | Normalize a Metro URL and resolve runtime transport hints |
+| Example | Demonstrates |
+| --- | --- |
+| [`batch-orchestration.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts) | Run a batch through a custom transport |
+| [`metro-runtime.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/metro-runtime.ts) | Normalize a Metro URL and resolve runtime transport hints |
 
 Build the package with `pnpm build`, then run an example with Node:
 
@@ -81,7 +81,7 @@ Entry points for integrations:
 - `agent-device/plugins/webdriver`
   - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
-  - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](/agent-device/docs/plugins.md).
+  - experimental plugin contract: `AgentDevicePluginFactory` and `ProviderPluginHost`; see [provider plugins](./plugins.md).
 
 ## Android ADB providers
 
@@ -133,68 +133,6 @@ Use `agent-device/batch` when a bridge or in-process runner receives daemon-shap
 Full example from [`examples/sdk/batch-orchestration.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts):
 
 ```ts file="<root>/../examples/sdk/batch-orchestration.ts"
-/**
- * Batch orchestration for a custom transport: `runBatch` keeps step
- * validation, inherited flags, serial execution, partial results, and
- * daemon-shaped error envelopes aligned with the CLI's `batch` command, so a
- * bridge that owns command dispatch itself does not have to reimplement them.
- *
- * Demonstrates: `runBatch` from `agent-device/batch`, consumed against the
- * `DaemonResponse` result type from `agent-device/contracts`.
- *
- * Prerequisites: none — `dispatch` below is a stub; a real integration would
- * replace it with a call into the bridge's own command dispatcher.
- *
- * Run: node --experimental-strip-types examples/sdk/batch-orchestration.ts
- */
-import { runBatch } from 'agent-device/batch';
-import type { DaemonResponse } from 'agent-device/contracts';
-
-type BatchRequest = Parameters<typeof runBatch>[0];
-
-async function dispatch(stepReq: unknown): Promise<Record<string, unknown>> {
-  console.log('dispatching step', stepReq);
-  return { handled: true };
-}
-
-function bridgeErrorToDaemonResponse(error: unknown): Extract<DaemonResponse, { ok: false }> {
-  return {
-    ok: false,
-    error: {
-      code: 'COMMAND_FAILED',
-      message: error instanceof Error ? error.message : 'Unknown bridge error',
-    },
-  };
-}
-
-async function handleBatch(req: BatchRequest): Promise<DaemonResponse> {
-  return await runBatch(req, req.session ?? 'default', async (stepReq) => {
-    try {
-      return { ok: true, data: await dispatch(stepReq) };
-    } catch (error) {
-      return bridgeErrorToDaemonResponse(error);
-    }
-  });
-}
-
-const result = await handleBatch({
-  command: 'batch',
-  positionals: [],
-  flags: {
-    batchSteps: [
-      { command: 'wait', input: { text: 'Welcome' } },
-      { command: 'back', input: {} },
-    ],
-  },
-});
-
-if (result.ok) {
-  console.log(`batch completed: ${JSON.stringify(result.data)}`);
-} else {
-  console.error(`batch failed [${result.error.code}]: ${result.error.message}`);
-  process.exitCode = 1;
-}
-
 ```
 
 ## Remote Metro helpers
@@ -239,7 +177,7 @@ Use `agent-device/remote-config` for profile loading and path resolution, `agent
 
 ## Selector helpers
 
-Use `agent-device/selectors` to parse and match selector expressions in a remote daemon or bridge. The `role=` term matches the platform-neutral `kind` vocabulary that `snapshot --json` publishes (see [Snapshots](/agent-device/docs/snapshots.md#structured-node-fields---json)): pass the nodes as captured, and a node whose `kind` is `text` always matches `role=text`. Separately, the deprecated raw leaf spellings (`statictext`, `edittext`, `textview`, …) also match, each on the nodes that actually carried that class. A leaf spelling matches beside such a node's `kind`, not in place of it — `role=webarea` resolves a macOS-helper `AXWebArea` node whose `kind` is `axwebarea`, for example. Matching stays platform-aware because editability checks differ by backend.
+Use `agent-device/selectors` to parse and match selector expressions in a remote daemon or bridge. The `role=` term matches the platform-neutral `kind` vocabulary that `snapshot --json` publishes (see [Snapshots](./snapshots.md#structured-node-fields---json)): pass the nodes as captured, and a node whose `kind` is `text` always matches `role=text`. Separately, the deprecated raw leaf spellings (`statictext`, `edittext`, `textview`, …) also match, each on the nodes that actually carried that class. A leaf spelling matches beside such a node's `kind`, not in place of it — `role=webarea` resolves a macOS-helper `AXWebArea` node whose `kind` is `axwebarea`, for example. Matching stays platform-aware because editability checks differ by backend.
 
 `listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a later alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `findSelectorChainMatch` and `listSelectorChainMatches` take `{ platform, requireRect? }`; `resolveSelectorChain` also takes `requireUnique?` (default `true`) and `disambiguateAmbiguous?`. The matched `SnapshotNode` objects are the ones passed in.
 

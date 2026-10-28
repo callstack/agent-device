@@ -71,7 +71,7 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To drive AWS Device Farm only through MCP, see [Use a provider only through MCP](/agent-device/docs/device-clouds.md#use-a-provider-only-through-mcp).
+To drive AWS Device Farm only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp).
 
 ## Use the Node.js client
 
@@ -95,10 +95,10 @@ const closed = await client.sessions.close();
 
 ## Get artifacts and troubleshoot
 
-After `close`, AWS Device Farm can return remote-access video and log artifacts once it finalizes them. The provider session ID is the remote-access session ARN. See [Retrieve artifacts after close](/agent-device/docs/device-clouds.md#retrieve-artifacts-after-close).
+After `close`, AWS Device Farm can return remote-access video and log artifacts once it finalizes them. The provider session ID is the remote-access session ARN. See [Retrieve artifacts after close](/docs/device-clouds#retrieve-artifacts-after-close).
 
 If `connect` fails, use the reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. A failed `connect` has not allocated a device yet.
 
-To enter text, see [Fill text on hosted WebDriver sessions](/agent-device/docs/device-clouds.md#fill-text-on-hosted-webdriver-sessions).
+To enter text, see [Fill text on hosted WebDriver sessions](/docs/device-clouds#fill-text-on-hosted-webdriver-sessions).
 
-On a screen that never goes still, such as a looping video, a live ticker, or continuous animation, `snapshot -i` can time out while `screenshot` of the same screen still returns. On a metered device every second of that read is billed, so do not retry the snapshot in a loop. Take a screenshot instead and drive from `@refs` an earlier snapshot captured. `--depth` trims the tree after it arrives, so it cannot shorten a read that never finishes. See [Snapshots](/agent-device/docs/snapshots.md) for details.
+On a screen that never goes still, such as a looping video, a live ticker, or continuous animation, `snapshot -i` can time out while `screenshot` of the same screen still returns. On a metered device every second of that read is billed, so do not retry the snapshot in a loop. Take a screenshot instead and drive from `@refs` an earlier snapshot captured. `--depth` trims the tree after it arrives, so it cannot shorten a read that never finishes. See [Snapshots](/docs/snapshots) for details.

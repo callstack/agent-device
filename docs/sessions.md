@@ -81,7 +81,7 @@ AGENT_DEVICE_SESSION=qa-ios AGENT_DEVICE_SESSION_LOCK=strip agent-device snapsho
 - The daemon enforces the lock, so CLI, Node.js client, and direct RPC requests get the same conflict
   handling. Direct RPC callers pass `meta.lockPolicy` and optional `meta.lockPlatform` on
   `agent_device.command` requests.
-- `batch` steps keep the batch's `--platform` under a lock; see [Batching](/agent-device/docs/batching.md).
+- `batch` steps keep the batch's `--platform` under a lock; see [Batching](/docs/batching).
 
 ## Drive two platforms from one checkout
 
@@ -190,7 +190,7 @@ To free a device:
 
 - `open <app>` in an existing session switches the active app and updates the session's bundle id.
   On iOS, to see whether the session app held the foreground during a command, read the
-  [`targetActivation` disclosure](/agent-device/docs/commands.md#foreground-repairs-on-ios).
-- For remote `connect --remote-config` sessions, see [Commands](/agent-device/docs/commands.md#remote-metro-workflow).
+  [`targetActivation` disclosure](/docs/commands#foreground-repairs-on-ios).
+- For remote `connect --remote-config` sessions, see [Commands](/docs/commands#remote-metro-workflow).
 
-For replay scripts and deterministic E2E guidance, see [Replay & E2E](/agent-device/docs/replay-e2e.md).
+For replay scripts and deterministic E2E guidance, see [Replay & E2E](/docs/replay-e2e).

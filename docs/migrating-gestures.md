@@ -8,7 +8,7 @@ Find your surface below — CLI, Node.js, MCP, or saved `.ad` recordings — and
 
 ## Throws and drags
 
-Gesture commands separate a _throw_ from a _deliberate drag_:
+Gesture commands separate a *throw* from a *deliberate drag*:
 
 - `swipe` and `gesture fling` are quick, fixed-duration directional throws. They do not take a
   duration; a timed movement is a drag, which is `gesture pan`.
@@ -19,12 +19,12 @@ Gesture commands separate a _throw_ from a _deliberate drag_:
 
 ## CLI
 
-| Old form                                            | Use instead                              |
-| --------------------------------------------------- | ---------------------------------------- |
-| `swipe x1 y1 x2 y2 durationMs`                      | `gesture pan x1 y1 dx dy durationMs`     |
-| `gesture fling <direction> x y distance durationMs` | `gesture fling <direction> x y distance` |
-| `gesture swipe <preset> durationMs`                 | `gesture swipe <preset>`                 |
-| `gesture rotate degrees x y velocity`               | `gesture rotate degrees x y`             |
+| Old form                                     | Use instead                                     |
+| -------------------------------------------- | ----------------------------------------------- |
+| `swipe x1 y1 x2 y2 durationMs`               | `gesture pan x1 y1 dx dy durationMs`            |
+| `gesture fling <direction> x y distance durationMs` | `gesture fling <direction> x y distance`  |
+| `gesture swipe <preset> durationMs`          | `gesture swipe <preset>`                        |
+| `gesture rotate degrees x y velocity`        | `gesture rotate degrees x y`                    |
 
 `gesture pan` takes an origin plus a **delta**, where `swipe` took two absolute points, so
 `dx = x2 - x1` and `dy = y2 - y1`:

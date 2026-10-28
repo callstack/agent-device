@@ -6,7 +6,7 @@
 - Flows run on iOS and Android only.
 - `runScript`, `evalScript`, and JavaScript conditions execute flow code on the machine running the agent-device daemon, without a security sandbox. Run only flows you trust to run there.
 
-For recording and replaying native `.ad` scripts, see [Replay & E2E testing](/agent-device/docs/replay-e2e.md).
+For recording and replaying native `.ad` scripts, see [Replay & E2E testing](/docs/replay-e2e).
 
 ## Run a Maestro flow
 
@@ -41,7 +41,7 @@ Keep the target binding, such as `--platform ios`, on the `replay` or `test` com
 
 ## Resume a failed Maestro flow
 
-A failed Maestro step returns the same replay divergence report as an `.ad` script, including the resume information, and `replay --from <n> --plan-digest <sha256>` resumes it the same way. See [Resume a failed replay](/agent-device/docs/replay-e2e.md#resume-a-failed-replay) for the workflow.
+A failed Maestro step returns the same replay divergence report as an `.ad` script, including the resume information, and `replay --from <n> --plan-digest <sha256>` resumes it the same way. See [Resume a failed replay](/docs/replay-e2e#resume-a-failed-replay) for the workflow.
 
 For Maestro flows, `--from` counts steps in the top-level plan. A `runFlow` with no condition, or with
 a condition that resolves before the run, is flattened into its commands (or dropped when the condition

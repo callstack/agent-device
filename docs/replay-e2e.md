@@ -35,7 +35,7 @@ when you configured retries. Other test failures can still retry. An authored `.
 without a resource classification fails closed with `details.shape: <command>:unclassified`
 and the same original-input guidance.
 
-To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/agent-device/docs/run-maestro-flows.md).
+To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 
 ## How it works
 
@@ -402,7 +402,7 @@ agent-device replay ./flow.ad
 agent-device replay ./flow.ad --from 4 --plan-digest ab12...
 ```
 
-For how `--from` counts steps in a Maestro flow, see [Resume a failed Maestro flow](/agent-device/docs/run-maestro-flows.md#resume-a-failed-maestro-flow).
+For how `--from` counts steps in a Maestro flow, see [Resume a failed Maestro flow](/docs/run-maestro-flows#resume-a-failed-maestro-flow).
 
 Passing `--plan-digest` that no longer matches the current script — because you edited it, an include changed, or platform-conditioned expansion differs — fails `INVALID_ARGS` before any action; run a fresh full replay to get a new digest. `--from` is `replay`-only; `test` rejects it (a suite run must stay full and deterministic).
 

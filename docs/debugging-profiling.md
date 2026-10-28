@@ -55,16 +55,16 @@ React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
 1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object) 480x, onSelect (function) 480x from ContactList -> wrap those props in useCallback/useMemo in ContactList
 ```
 
-| Finding           | Meaning                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------- |
-| `slow-render`     | The component's own render is expensive.                                                        |
-| `memo-defeated`   | A memoized component often re-renders because props change identity.                            |
-| `parent-cascade`  | The component often re-renders with unchanged props, state, and context when its owner renders. |
-| `context-cascade` | Most of the component's renders come from context changes.                                      |
-| `effect-chain`    | The component triggers a follow-up commit right after rendering, likely state set in an effect. |
-| `render-storm`    | One component commits many times per second.                                                    |
-| `eager-mount`     | Hundreds of instances of one component mount in a single commit.                                |
-| `slow-commit`     | A commit took three frames or more, and other findings leave most of it unexplained.            |
+| Finding | Meaning |
+| --- | --- |
+| `slow-render` | The component's own render is expensive. |
+| `memo-defeated` | A memoized component often re-renders because props change identity. |
+| `parent-cascade` | The component often re-renders with unchanged props, state, and context when its owner renders. |
+| `context-cascade` | Most of the component's renders come from context changes. |
+| `effect-chain` | The component triggers a follow-up commit right after rendering, likely state set in an effect. |
+| `render-storm` | One component commits many times per second. |
+| `eager-mount` | Hundreds of instances of one component mount in a single commit. |
+| `slow-commit` | A commit took three frames or more, and other findings leave most of it unexplained. |
 
 To dig into a finding, use the saved profile:
 
@@ -87,7 +87,7 @@ For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to pro
 
 React Native warning and error overlays come from the app. Treat them as findings or blockers: capture them, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
 
-For permission prompts and other alerts already on screen, see [Wait and alerts](/agent-device/docs/commands.md#wait-and-alerts).
+For permission prompts and other alerts already on screen, see [Wait and alerts](/docs/commands#wait-and-alerts).
 
 ## React Native JS memory through CDP
 
@@ -128,7 +128,7 @@ agent-device logs path
 
 This flow gives you logs, recent network activity, and a quick metrics sample from the active app session, starting from an empty log.
 
-`open` prints `Session state: <path>`. That directory holds the run's request diagnostics, Apple runner output, and app logs; see [Find a session's logs and artifacts](/agent-device/docs/sessions.md#find-a-sessions-logs-and-artifacts).
+`open` prints `Session state: <path>`. That directory holds the run's request diagnostics, Apple runner output, and app logs; see [Find a session's logs and artifacts](/docs/sessions#find-a-sessions-logs-and-artifacts).
 
 When a command fails, use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
 
@@ -219,8 +219,8 @@ agent-device network dump 25 --include all
 - On iOS, `network dump` can return zero entries for real traffic when the app does not log request metadata to Unified Logging. The response notes tell an empty repro window apart from a log window with no network lines.
 - On iOS, the system logs a request URL only when it opens a connection. Requests that reuse a keep-alive connection are reported against that connection's origin with `pathUnavailable: true`, their status, and timing. Requests whose connection opened before the scanned window are only counted in `unnamedRequests`. Treat an endpoint missing from an iOS dump as unproven, not as never called.
 - On web, request and response bodies are not available; use `agent-browser` HAR capture directly when you need them.
-- On BrowserStack, AWS Device Farm, and TestMu AI sessions, `network dump` refuses with `UNSUPPORTED_OPERATION` and `details.reason: "network-capture-post-session"`. Those providers own the network path, so the session has no live source to read. Where the provider records traffic at all, it publishes the report on its own dashboard after its session ends. Limrun keeps live `network dump`. See [Device clouds](/agent-device/docs/device-clouds.md).
-- For the alias and scan limits, see [Media and logs](/agent-device/docs/commands.md#media-and-logs).
+- On BrowserStack, AWS Device Farm, and TestMu AI sessions, `network dump` refuses with `UNSUPPORTED_OPERATION` and `details.reason: "network-capture-post-session"`. Those providers own the network path, so the session has no live source to read. Where the provider records traffic at all, it publishes the report on its own dashboard after its session ends. Limrun keeps live `network dump`. See [Device clouds](/docs/device-clouds).
+- For the alias and scan limits, see [Media and logs](/docs/commands#media-and-logs).
 
 ### Audio probes
 
@@ -277,6 +277,6 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 
 ## Where to go deeper
 
-- Full command reference: [Commands](/agent-device/docs/commands.md)
-- Node.js observability APIs: [Node.js API](/agent-device/docs/client-api.md)
-- Session behavior and lifecycle: [Sessions](/agent-device/docs/sessions.md)
+- Full command reference: [Commands](/docs/commands)
+- Node.js observability APIs: [Node.js API](/docs/client-api)
+- Session behavior and lifecycle: [Sessions](/docs/sessions)

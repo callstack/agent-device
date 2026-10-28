@@ -30,13 +30,13 @@ agent-device help
 Run `agent-device doctor` yourself after installing to check that local devices, toolchains, and
 dev servers are ready before you hand the CLI to an agent.
 
-A global install gives agents a stable `agent-device` command. Start with the core workflow guide; [Commands](/agent-device/docs/commands.md) lists the other help topics:
+A global install gives agents a stable `agent-device` command. Start with the core workflow guide; [Commands](/docs/commands) lists the other help topics:
 
 ```bash
 agent-device help workflow
 ```
 
-For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/agent-device/docs/agent-setup.md); to expose commands as MCP tools with `agent-device mcp`, see [MCP server](/agent-device/docs/agent-setup.md#mcp-server). If an agent can't find `agent-device` after a global install, see [Fix a missing agent-device command](/agent-device/docs/agent-setup.md#fix-a-missing-agent-device-command). For the first app automation commands, see [Quick Start](/agent-device/docs/quick-start.md).
+For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/docs/agent-setup); to expose commands as MCP tools with `agent-device mcp`, see [MCP server](/docs/agent-setup#mcp-server). If an agent can't find `agent-device` after a global install, see [Fix a missing agent-device command](/docs/agent-setup#fix-a-missing-agent-device-command). For the first app automation commands, see [Quick Start](/docs/quick-start).
 
 ## Update the CLI
 
@@ -84,7 +84,7 @@ vega device list
 
 - Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
 - Appium is optional. You don't need it for device discovery, app lifecycle, or remote-button control.
-- For selecting the VVD and what Vega OS supports, see [TV targets](/agent-device/docs/commands.md#tv-targets).
+- For selecting the VVD and what Vega OS supports, see [TV targets](/docs/commands#tv-targets).
 
 ## Fire TV prerequisites
 
@@ -96,7 +96,7 @@ agent-device devices --platform android
 agent-device open <package> --platform android --target tv
 ```
 
-Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device; see [Vega OS TV prerequisites](#vega-os-tv-prerequisites). For what a Fire TV gets on the Android TV backend, see [TV targets](/agent-device/docs/commands.md#tv-targets).
+Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device; see [Vega OS TV prerequisites](#vega-os-tv-prerequisites). For what a Fire TV gets on the Android TV backend, see [TV targets](/docs/commands#tv-targets).
 
 ## macOS desktop notes
 

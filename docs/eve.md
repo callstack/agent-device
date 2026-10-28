@@ -72,8 +72,8 @@ In CI or another short-lived host, also close the named `agent-device` session i
 
 ## Choose where the tool runs
 
-Run the tool in Eve's app runtime when it needs local access to simulators, emulators, platform tooling, and daemon state. If Eve is hosted separately from the devices, connect through an [agent-device remote proxy](/agent-device/docs/remote-proxy.md) instead.
+Run the tool in Eve's app runtime when it needs local access to simulators, emulators, platform tooling, and daemon state. If Eve is hosted separately from the devices, connect through an [agent-device remote proxy](/docs/remote-proxy) instead.
 
 Eve is in beta; check the [Eve documentation](https://eve.dev/) when you upgrade it. For a production example, read [Building Mobile QA Agents With Vercel Eve](https://www.callstack.com/blog/building-reviewable-mobile-qa-agents-with-vercel-eve), which covers a PR QA agent using an `agent_device` tool and a deterministic CI runner.
 
-See [Node.js API](/agent-device/docs/client-api.md) for the complete client surface.
+See [Node.js API](/docs/client-api) for the complete client surface.

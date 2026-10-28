@@ -10,7 +10,7 @@ In short: install the CLI, let the agent start with the requested app, and have 
 npm install -g agent-device@latest
 ```
 
-Use a global or project-local install so every agent command runs the same version. For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, and for when one-off `npx` use is safe, see [Installation](/agent-device/docs/installation.md).
+Use a global or project-local install so every agent command runs the same version. For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, and for when one-off `npx` use is safe, see [Installation](/docs/installation).
 
 ## Install the skills
 
@@ -94,12 +94,12 @@ Some agent clients run commands with a different `PATH` than your normal shell, 
 
 Each client reads the [recommended agent rule](#recommended-agent-rule) from its own location:
 
-| Client                             | Where the rule goes                               | Client-specific wrapper                                                     |
-| ---------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------- |
-| Cursor                             | `.cursor/rules/agent-device.mdc`                  | Required `.mdc` frontmatter above the rule                                  |
-| Codex                              | `AGENTS.md` in the project root                   | None                                                                        |
-| Claude Code                        | `CLAUDE.md` in the project root                   | None; an `# agent-device` heading keeps it separate from other instructions |
-| Windsurf, Cline, Goose, and others | The client's project rules or custom instructions | Whatever the client requires for a rules file                               |
+| Client | Where the rule goes | Client-specific wrapper |
+| --- | --- | --- |
+| Cursor | `.cursor/rules/agent-device.mdc` | Required `.mdc` frontmatter above the rule |
+| Codex | `AGENTS.md` in the project root | None |
+| Claude Code | `CLAUDE.md` in the project root | None; an `# agent-device` heading keeps it separate from other instructions |
+| Windsurf, Cline, Goose, and others | The client's project rules or custom instructions | Whatever the client requires for a rules file |
 
 The sections below cover each client, including MCP setup.
 
@@ -119,7 +119,7 @@ description: Use agent-device for app and device automation
 alwaysApply: true
 ---
 
-REPLACE THIS LINE with the recommended agent rule from https://oss.callstack.com/agent-device/docs/agent-setup#recommended-agent-rule
+REPLACE THIS LINE with the recommended agent rule from https://agent-device.dev/docs/agent-setup#recommended-agent-rule
 EOF
 ```
 
@@ -236,13 +236,13 @@ If the client supports project rules or custom instructions, paste the [recommen
 
 ## Related pages
 
-For supported targets, evidence features, and how `agent-device` differs from scripted test frameworks, see [Introduction](/agent-device/docs/introduction.md). For command groups and platform behavior, see [Commands](/agent-device/docs/commands.md).
+For supported targets, evidence features, and how `agent-device` differs from scripted test frameworks, see [Introduction](/docs/introduction). For command groups and platform behavior, see [Commands](/docs/commands).
 
-For the local execution model, permissions, artifacts, and sensitive data guidance, see [Security & Trust](/agent-device/docs/security-trust.md).
+For the local execution model, permissions, artifacts, and sensitive data guidance, see [Security & Trust](/docs/security-trust).
 
 ## Agent-readable docs
 
-Use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt) when an agent needs the whole documentation as one text file. For exact command syntax, the installed CLI help is authoritative:
+Use [llms-full.txt](https://agent-device.dev/llms-full.txt) when an agent needs the whole documentation as one text file. For exact command syntax, the installed CLI help is authoritative:
 
 ```bash
 agent-device help

@@ -1,6 +1,6 @@
 # Provider plugins
 
-Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/agent-device/docs/testmu.md). Installing one requires npm on your host:
+Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/docs/testmu). Installing one requires npm on your host:
 
 ```bash
 agent-device plugins add @example/agent-device-provider
