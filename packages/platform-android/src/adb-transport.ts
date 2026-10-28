@@ -32,6 +32,8 @@ export type AndroidAdbExecutorResult = {
   stdout: string;
   stderr: string;
   stdoutBuffer?: Buffer;
+  /** The signal that ended the process, when one did. */
+  signal?: string;
 };
 
 /** Structural mirror of node's StdioOptions; R13 bars the child_process import that names it. */

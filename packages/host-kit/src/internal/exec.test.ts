@@ -483,3 +483,14 @@ test('commandHostEnvironment names the enclosing host and refuses outside one', 
     assert.equal(commandHostEnvironment(), host);
   });
 });
+
+test('runCmd reports the signal that ended the process', async () => {
+  const killed = await runCmd(process.execPath, ['-e', "process.kill(process.pid, 'SIGKILL')"], {
+    allowFailure: true,
+  });
+  assert.equal(killed.signal, 'SIGKILL');
+
+  const exited = await runCmd(process.execPath, ['-e', 'process.exit(3)'], { allowFailure: true });
+  assert.equal(exited.exitCode, 3);
+  assert.equal('signal' in exited, false);
+});

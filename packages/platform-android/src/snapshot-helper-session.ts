@@ -20,6 +20,10 @@ import {
   sendAndroidSnapshotHelperSessionCommand,
 } from './snapshot-helper-session-protocol.ts';
 import {
+  observeAndroidSnapshotHelperProcessExit,
+  waitForAndroidSnapshotHelperProcessExit,
+} from './snapshot-helper-retirement.ts';
+import {
   acquireAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
@@ -27,6 +31,8 @@ import {
   type AndroidSnapshotHelperSession,
   type AndroidSnapshotHelperSessionHelperIdentity,
 } from './snapshot-helper-session-lifecycle.ts';
+
+const SESSION_EXIT_EVIDENCE_GRACE_MS = 250;
 
 export async function captureAndroidSnapshotWithHelperSession(
   options: AndroidSnapshotHelperCaptureOptions,
@@ -68,6 +74,13 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       },
     };
   } catch (error) {
+    // A helper that died mid-request closes the socket before its host process reports the exit, so
+    // the exit result the retirement below records is only there if the exit is given a moment.
+    await waitForAndroidSnapshotHelperProcessExit(
+      observeAndroidSnapshotHelperProcessExit(session.process).ended,
+      SESSION_EXIT_EVIDENCE_GRACE_MS,
+      options.signal,
+    );
     await retireFailedAndroidSnapshotHelperSession({
       deviceKey,
       identity: session.identity,

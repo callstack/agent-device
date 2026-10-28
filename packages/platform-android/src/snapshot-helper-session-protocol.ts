@@ -6,6 +6,9 @@ import {
 } from './snapshot-capture-failure-reason.ts';
 import {
   readInstrumentationExitResult,
+  withoutSnapshotContent,
+} from './instrumentation-exit-result.ts';
+import {
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
@@ -123,7 +126,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
-          output,
+          output: withoutSnapshotContent(output),
           timeoutMs,
           reason: SESSION_READY_TIMEOUT_REASON,
         }),
@@ -158,7 +161,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
       signal?.removeEventListener('abort', onAbort);
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
-          output,
+          output: withoutSnapshotContent(output),
           exitCode: code,
           signal: exitSignal,
           instrumentation: readInstrumentationExitResult({

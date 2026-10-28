@@ -8,11 +8,14 @@ import {
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import {
   parseInstrumentationRecords,
-  readInstrumentationExitResult,
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
+import {
+  readInstrumentationExitResult,
+  withoutSnapshotContent,
+} from './instrumentation-exit-result.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,
@@ -229,8 +232,8 @@ function readAndroidSnapshotHelperOutput(
         ? 'Android snapshot helper output could not be parsed'
         : 'Android snapshot helper failed before returning parseable output',
       {
-        stdout: result.stdout,
-        stderr: result.stderr,
+        stdout: withoutSnapshotContent(result.stdout),
+        stderr: withoutSnapshotContent(result.stderr),
         exitCode: result.exitCode,
         instrumentation: readInstrumentationExitResult(result),
         ...androidCaptureFailureReasonDetail(

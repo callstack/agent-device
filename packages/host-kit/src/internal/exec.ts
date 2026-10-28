@@ -14,6 +14,8 @@ export type ExecResult = {
   stderr: string;
   exitCode: number;
   stdoutBuffer?: Buffer;
+  /** The signal that ended the process, when one did. */
+  signal?: string;
 };
 
 export type ExecOptions = {
@@ -273,6 +275,7 @@ function runSpawnedCommand(
         stderr,
         exitCode: finalExitCode,
         stdoutBuffer: stdoutChunks ? Buffer.concat(stdoutChunks) : undefined,
+        ...(child.signalCode ? { signal: child.signalCode } : {}),
       });
     }
     // A deadline that fires after the child exited on its own still has to settle: the
