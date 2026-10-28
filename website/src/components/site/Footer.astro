@@ -1,13 +1,12 @@
 ---
 // One line: the copyright on the left, mono links on the right.
 import { footer, site } from '../../site/content';
-import NameCase from './NameCase.astro';
 
 const year = new Date().getFullYear();
 ---
 
 <footer class="frame footer">
-  <p class="label"><NameCase text={`© ${year} ${site.name} by ${site.owner}`} /></p>
+  <p class="label">© {year} {site.owner}</p>
   <nav class="links" aria-label="Footer">
     {footer.map(({ text, href }) => <a class="label" href={href}>{text}</a>)}
   </nav>
