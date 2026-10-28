@@ -235,7 +235,21 @@ stop that daemon first. A denied request fails with `UNAUTHORIZED` and
 
 ## What the proxy exposes
 
-The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token.
+The proxy serves only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token. `GET /artifacts` lists the caller tenant's downloadable artifacts. An entry has `sessionName` when the daemon registered it outside a request reply, for example a recording kept when its leased session ended.
+
+The proxy passes the daemon's HTTP status through. Most failed upload and artifact requests answer
+a JSON body `{ "ok": false, "error": "...", "code": "..." }`. When the daemon writes this body, it
+also carries a `hint`, and `reason` when the error has one. An artifact, upload, or materialized-path
+id that was already consumed, has expired, or never existed answers `404` with
+`code: "COMMAND_FAILED"` and `reason: "RESOURCE_EXPIRED"`. A `/rpc` call that names the same id
+answers `404` when it does not stream progress. A call that streams progress, as the CLI does
+without `--json`, can already have answered `200`; its final envelope carries the failure.
+
+Other failures answer a `4xx` or `5xx` status that depends on the route and the error. For example,
+invalid arguments answer `400`, a bad token answers `401`, and a human-control hold answers `423`.
+The proxy answers its own failures, such as an unreachable daemon, with `500` and no `reason`. The
+daemon and the proxy share error codes. Read `code` and `reason` to interpret an error. Do not use
+them to tell whether the daemon or the proxy answered.
 
 The proxy checks the client token and forwards authorized requests with the local daemon token. Remote clients never see the daemon token.
 

@@ -142,8 +142,8 @@ await main();
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
 
-For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
-stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
+For direct local iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
+stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens, provider-owned simulators, or non-simulator targets.
 
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory without starting
 or contacting the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
