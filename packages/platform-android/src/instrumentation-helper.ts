@@ -139,8 +139,11 @@ export type AndroidInstrumentationExitResult = {
   longMsg?: string;
   error?: string;
   stack?: string;
-  /** Fields dropped whole because their value held a snapshot marker. */
-  withheldFields?: Array<OpenField>;
+  /**
+   * Fields dropped whole because their value looked like snapshot content (markup, an
+   * attribute-like assignment, a payload record) or because a line of it was cut at the line limit.
+   */
+  withheldFields?: Array<MessageField | 'aborted'>;
 };
 
 const LINE_MAX_CHARS = 4_096;
@@ -157,7 +160,7 @@ const FAILED_ENVELOPES = [
 // attribute-like assignment, any markup or entity, or a payload record. The accepted cost is that a
 // crash message with an ordinary `key="value"` is withheld too; `withheldFields` still says it existed.
 const ATTRIBUTE_LIKE_RE = /[A-Za-z][\w:-]*\s*=\s*["']/;
-const MARKUP_RE = /[<>]|&lt;|&gt;|&quot;|&#|payloadBase64/i;
+const MARKUP_RE = /[<>]|&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#x[0-9A-Fa-f]+);|&#|payloadBase64/i;
 
 /** Only the JVM tokens `<init>` and `<clinit>` are exempt from the markup rule. */
 function holdsSnapshotMarker(text: string): boolean {
@@ -174,8 +177,6 @@ const CODE_RE = /^INSTRUMENTATION_(STATUS_CODE|CODE): (-?\d+)\s*$/;
 // The protocol keys whose values are text, by the field they fill.
 const MESSAGE_FIELDS = { shortMsg: 'shortMsg', longMsg: 'longMsg', Error: 'error', stack: 'stack' };
 type MessageField = 'shortMsg' | 'longMsg' | 'error' | 'stack';
-/** A field whose value can continue on the lines after its record. */
-type OpenField = MessageField | 'aborted';
 
 type LineAssembler = { write(chunk: string): void; end(): void };
 
@@ -213,12 +214,13 @@ function createLineAssembler(onLine: (line: string, cut: boolean) => void): Line
 /** One run's output, read as two streams with a parser state each. */
 function createInstrumentationOutput() {
   const fields: Partial<
-    Record<OpenField | 'failed', string> & Record<'resultCode' | 'statusCode', number>
+    Record<MessageField | 'aborted' | 'failed', string> &
+      Record<'resultCode' | 'statusCode', number>
   > = {};
-  let open: OpenField | undefined;
-  const withheld = new Set<OpenField>();
+  let open: MessageField | undefined;
+  const withheld = new Set<MessageField | 'aborted'>();
   /** A line the limit cut cannot be proven clean, so its field is withheld like a marked one. */
-  const checked = (field: OpenField, text: string, cut: boolean) => {
+  const checked = (field: MessageField | 'aborted', text: string, cut: boolean) => {
     if (cut || holdsSnapshotMarker(text)) withheld.add(field);
     return text;
   };
@@ -242,8 +244,8 @@ function createInstrumentationOutput() {
       fields[open] = appendLine(fields[open], checked(open, line, cut));
     }
   };
-  /** Reads one protocol record; answers the field whose value it opens, if any. */
-  const readProtocolRecord = (line: string, cut: boolean): OpenField | undefined => {
+  /** Reads one protocol record; answers the message field whose value it opens, if any. */
+  const readProtocolRecord = (line: string, cut: boolean): MessageField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
@@ -255,8 +257,9 @@ function createInstrumentationOutput() {
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
       if (fields.aborted !== undefined) return undefined;
+      // The abort message is one line; whatever follows it is not part of it.
       fields.aborted = checked('aborted', aborted[1] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
-      return 'aborted';
+      return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
     const field = record ? messageFieldOf(record[1]!) : undefined;

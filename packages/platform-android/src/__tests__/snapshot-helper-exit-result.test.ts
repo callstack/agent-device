@@ -366,8 +366,12 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
       stdout: `INSTRUMENTATION_RESULT: shortMsg=&lt;node text=&quot;${SECRET}&quot;&gt;\n`,
     },
     { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=&#60;${SECRET}\n` },
-    // The abort message continues on the next line.
+    // Text after the one-line abort message is not part of it.
     { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: crashed\nret" text="${SECRET}" />\n` },
+    // Entities of any kind.
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=a &amp; ${SECRET}\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=it&apos;s ${SECRET}\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=&#x27;${SECRET}\n` },
     // A private prefix in a line the 4,096-character limit cuts before any marker shows.
     {
       exitCode: 1,
@@ -584,6 +588,25 @@ test('a plain crash message and stack trace are kept', async () => {
     result.stack,
     'java.lang.IllegalStateException: binder died\n\tat com.foo.Bar.<init>(Bar.java:7)\n\tat com.foo.Bar.baz(Bar.java:12)',
   );
+});
+
+test('the abort message is one line: a plain line after it is not copied anywhere', async () => {
+  const stdout = 'INSTRUMENTATION_ABORTED: System has crashed.\nPLAIN_FOLLOWING_LINE\n';
+  const error = await captureError({ exitCode: 1, stdout });
+  const { log } = await withLog(async (logPath) => {
+    await inScope(logPath, async () => {
+      await assert.rejects(
+        snapshotAndroid(emulator, {
+          helperAdb: helperFailingWith({ exitCode: 1, stdout }),
+          helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+        }),
+      );
+    });
+  });
+
+  assert.equal(exitResultOf(error.details ?? {}).aborted, 'System has crashed.');
+  assert.ok(!JSON.stringify(normalizeError(error)).includes('PLAIN_FOLLOWING_LINE'));
+  assert.ok(!log.includes('PLAIN_FOLLOWING_LINE'));
 });
 
 test('a field is withheld when a line of it was cut by the line limit', async () => {
