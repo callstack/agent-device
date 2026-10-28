@@ -111,6 +111,23 @@ test('macOS runner abort force-kills only after both grace periods expire', asyn
   expect(runnerSignals(session)).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
 });
 
+test('runner cleanup spawns pkill by absolute path so a PATH-shadowing pkill never runs', async () => {
+  const session = makeRunnerSession(MACOS_DEVICE, new Promise<ExecResult>(() => {}));
+  const abort = abortRunnerSessionsAndPrepProcesses([session]);
+  await vi.advanceTimersByTimeAsync(7_000);
+  await abort;
+  await runnerLeaseCleanupAdapter.cleanupRunnerXcodebuildProcesses({
+    deviceId: IOS_SIMULATOR.id,
+    xctestrunPath: makeRunnerLease({ deviceId: IOS_SIMULATOR.id }).xctestrunPath,
+  });
+
+  const spawnedTools = mockRunAppleToolCommand.mock.calls.map(([tool]) => String(tool));
+  expect(spawnedTools.filter((tool) => tool.endsWith('pkill'))).not.toEqual([]);
+  expect(
+    spawnedTools.filter((tool) => tool.endsWith('pkill') && tool !== '/usr/bin/pkill'),
+  ).toEqual([]);
+});
+
 test.each([IOS_SIMULATOR, TVOS_SIMULATOR])(
   '$appleOs runner abort preserves immediate cancellation',
   async (device) => {
@@ -222,7 +239,7 @@ test('a lease artifact outside the runner session name signals no xcodebuild', a
 
 function runnerXcodebuildPkillPatterns(): string[] {
   return mockRunAppleToolCommand.mock.calls
-    .filter(([tool, args]) => tool === 'pkill' && (args as string[]).includes('-f'))
+    .filter(([tool, args]) => tool === '/usr/bin/pkill' && (args as string[]).includes('-f'))
     .map(([, args]) => String((args as string[])[2]));
 }
 

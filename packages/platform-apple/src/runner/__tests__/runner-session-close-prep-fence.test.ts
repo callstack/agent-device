@@ -195,7 +195,7 @@ test.each([false, true])('cold close (retain=%s) fences replacement builds', asy
   mockRunAppleToolCommand.mockImplementation(async (tool: string, args: string[]) => {
     // `killRunnerProcessTree` is the only pkill that signals by parent pid (`-P`); the lease
     // cleanup's stale-launch sweep matches argv (`-f`), so only the prep tree-kill parks.
-    if (tool === 'pkill' && args.includes('-P')) {
+    if (tool === '/usr/bin/pkill' && args.includes('-P')) {
       signalAttempted();
       await prepStopParked;
     }
