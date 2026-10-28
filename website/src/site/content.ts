@@ -28,8 +28,6 @@ export const site = {
   description:
     'Open-source runtime that lets AI coding agents run, read, operate and verify real iOS, Android, TV and desktop apps, and bring back evidence.',
   install: 'npm i -g agent-device',
-  /** The agent skill install, in the short owner/repo form. */
-  skill: 'npx skills add callstack/agent-device' as string | undefined,
   /** Alt text for the social card (public/og-image.jpg): the lockup, the motto, the picture. */
   ogAlt: 'agent-device by Callstack. Give your agent eyes and hands. On the real app.',
   /** Who holds the copyright in the footer: "© YEAR AGENT-DEVICE BY CALLSTACK". */
@@ -529,11 +527,10 @@ export const cloud = {
 /** The home page, section by section, in page order. index.astro only lays these out. */
 export const home = {
   /** The `zsh` window beside the hero copy (hidden below 64rem): setup in a few lines. */
-  setup: [
-    { cmd: site.install },
-    { comment: 'for you: the CLI and the MCP server' },
-    ...(site.skill ? [{ cmd: site.skill }, { comment: 'for your agent: the skill' }] : []),
-  ] as ({ cmd: string } | { comment: string })[],
+  setup: [{ cmd: site.install }, { comment: 'the CLI and the MCP server' }] as (
+    | { cmd: string }
+    | { comment: string }
+  )[],
 
   /** The strip under the hero: who uses it, by name, linking to /showcase. */
   usedBy: {
