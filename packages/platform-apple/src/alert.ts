@@ -51,26 +51,10 @@ function runAppleAlert(
     return async (action) =>
       (await runMacOsAlertAction(action, { ...target, env })) as Record<string, unknown>;
   }
-  // A press needs its whole watchdog; a read is worth sending while any time is left.
-  const deadline = (action: NativeAlertAction, timeoutMs: number) =>
-    options?.deadlineAtMs === undefined
-      ? {}
-      : {
-          deadline: {
-            atMs: options.deadlineAtMs,
-            minTimeoutMs: action === 'get' ? 1 : timeoutMs,
-          },
-        };
   return async (action, timeoutMs) =>
     (await runAppleRunnerCommand(
       device,
-      {
-        command: 'alert',
-        action,
-        appBundleId: options?.appBundleId,
-        timeoutMs,
-        ...deadline(action, timeoutMs),
-      },
+      { command: 'alert', action, appBundleId: options?.appBundleId, timeoutMs },
       runnerOptions,
     )) as Record<string, unknown>;
 }

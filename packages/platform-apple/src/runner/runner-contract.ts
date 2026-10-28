@@ -42,45 +42,6 @@ export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
 export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 
 /**
- * An absolute deadline for one command's runner work: `atMs` bounds the runner timeout, and a
- * command left less than `minTimeoutMs` is not worth sending. It bounds only that timeout; runner
- * startup, the readiness preflight and the HTTP exchange keep their own bounds.
- */
-type RunnerCommandDeadline = Readonly<{ atMs: number; minTimeoutMs: number }>;
-
-/** Why a command was refused unsent: its deadline left less time than it needs. */
-const RUNNER_COMMAND_DEADLINE_SPENT_REASON = 'runner_command_deadline_spent';
-
-export function runnerCommandDeadlineSpentError(): AppError {
-  return new AppError('COMMAND_FAILED', 'The deadline left no time to send this runner command.', {
-    reason: RUNNER_COMMAND_DEADLINE_SPENT_REASON,
-    dispatched: 'no',
-  });
-}
-
-export function isRunnerCommandDeadlineSpentError(error: unknown): boolean {
-  return (
-    error instanceof AppError && error.details?.reason === RUNNER_COMMAND_DEADLINE_SPENT_REASON
-  );
-}
-
-/**
- * The payload a command is sent with, computed right before the send: a command with a
- * `deadline` gets the time it leaves as its runner `timeoutMs`, and is refused unsent when that
- * time is below `minTimeoutMs`. The deadline itself never reaches the runner.
- */
-export function bindRunnerCommandDeadline(
-  command: RunnerCommand,
-  nowMs: number = Date.now(),
-): RunnerCommand {
-  const { deadline, ...payload } = command;
-  if (!deadline) return command;
-  const leftMs = Math.floor(deadline.atMs - nowMs);
-  if (leftMs <= 0 || leftMs < deadline.minTimeoutMs) throw runnerCommandDeadlineSpentError();
-  return { ...payload, timeoutMs: Math.min(payload.timeoutMs ?? leftMs, leftMs) };
-}
-
-/**
  * The runner's own code for a command it refused because abandoned main-thread work has occupied it
  * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
  */
@@ -167,8 +128,6 @@ export type RunnerCommand = {
   durationMs?: number;
   /** Remaining request budget for runner work that performs bounded XCTest queries. */
   timeoutMs?: number;
-  /** Host-side only, never sent: `bindRunnerCommandDeadline` turns it into `timeoutMs`. */
-  deadline?: RunnerCommandDeadline;
   direction?: ScrollDirection;
   amount?: number;
   pixels?: number;

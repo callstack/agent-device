@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
+import { awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -739,67 +739,4 @@ test('abandoned accepts stop once the request cannot hold another press', async 
     await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
     expect(acceptAlert).toHaveBeenCalledTimes(2);
   });
-});
-
-/** The Apple alert legs over the mocked runner client, as the session interactor binds them. */
-function runnerAlertLegs() {
-  return {
-    awaitAlert: async (options) => await awaitAppleAlert(simulator, {}, options, {}),
-    readAlert: async (options) => await readAppleAlert(simulator, {}, options, {}),
-    acceptAlert: async (options) => await actOnAppleAlert(simulator, {}, 'accept', options, {}),
-  } satisfies Pick<Interactor, 'awaitAlert' | 'readAlert' | 'acceptAlert'>;
-}
-
-test('a deadline spent by the press sends no verification read and keeps its unknown effect', async () => {
-  const runner = vi.mocked(runAppleRunnerCommand);
-  await onFakeClock(async () => {
-    const deadlineAtMs = Date.now() + 12_000;
-    const sent: unknown[] = [];
-    runner.mockImplementation(async (_device, command) => {
-      sent.push(command);
-      if ((command as { action?: string }).action !== 'accept') return CONFIRMATION;
-      vi.advanceTimersByTime(12_000);
-      throw runnerMainThreadTimeout();
-    });
-    vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
-
-    await expect(
-      answerSimulatorLaunchConfirmation(
-        simulator,
-        { url: 'example://automation', appBundleId: 'com.example.app' },
-        Promise.resolve(runnerAlertLegs() as Interactor),
-        new AbortController().signal,
-        deadlineAtMs,
-      ),
-    ).resolves.toEqual({ outcome: 'unreadable', step: 'alert-accept' });
-    expect(sent).toEqual([
-      expect.objectContaining({
-        action: 'get',
-        timeoutMs: 3_000,
-        deadline: { atMs: deadlineAtMs, minTimeoutMs: 1 },
-      }),
-      expect.objectContaining({
-        action: 'accept',
-        timeoutMs: DEFAULT_ALERT_TIMEOUT_MS,
-        deadline: { atMs: deadlineAtMs, minTimeoutMs: DEFAULT_ALERT_TIMEOUT_MS },
-      }),
-    ]);
-  }).finally(() => runner.mockReset());
-});
-
-test('a press the runner client refused unsent leaves the confirmation unanswered unread', async () => {
-  const acceptAlert = vi.fn(async () => {
-    throw new AppError('COMMAND_FAILED', 'The deadline left no time to send this runner command.', {
-      reason: 'runner_command_deadline_spent',
-      dispatched: 'no',
-    });
-  });
-  const { port: device } = port(async () => CONFIRMATION, {
-    acceptAlert,
-    deadlineAtMs: Date.now() + 60_000,
-  });
-
-  await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
-  expect(acceptAlert).toHaveBeenCalledOnce();
-  expect(device.readAlert).not.toHaveBeenCalled();
 });

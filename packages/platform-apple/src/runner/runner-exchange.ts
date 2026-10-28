@@ -12,7 +12,6 @@ import {
   decodeRunnerResponseBody,
   isRunnerResponseOk,
   readRunnerResponseData,
-  bindRunnerCommandDeadline,
   RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
   withRunnerCommandId,
   type RunnerCommand,
@@ -282,8 +281,6 @@ async function sendRunnerCommandAfterPreflight(params: {
   if (remainingMs <= 0) {
     throw new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', { timeoutMs });
   }
-  // After the preflight and before any charge: a command whose deadline is spent is refused unsent.
-  const payload = bindRunnerCommandDeadline(runnerCommand);
   const diagnosticData = readOnlyCommand
     ? {
         command: runnerCommand.command,
@@ -310,14 +307,20 @@ async function sendRunnerCommandAfterPreflight(params: {
           return await waitForRunner(
             device,
             session.endpoint,
-            payload,
+            runnerCommand,
             logPath,
             remainingMs,
             session,
             signal,
           );
         }
-        return await sendRunnerCommandOnce(device, session.endpoint, payload, remainingMs, signal);
+        return await sendRunnerCommandOnce(
+          device,
+          session.endpoint,
+          runnerCommand,
+          remainingMs,
+          signal,
+        );
       },
       diagnosticData,
     );

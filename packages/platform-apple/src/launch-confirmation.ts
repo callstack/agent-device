@@ -6,11 +6,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
-import {
-  isRunnerCommandDeadlineSpentError,
-  RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
-  runnerCommandDeadlineSpentError,
-} from './runner/runner-contract.ts';
+import { RUNNER_READY_PREFLIGHT_TIMEOUT_MS } from './runner/runner-contract.ts';
 import { isRunnerMainThreadTimeoutError } from './runner/runner-error-classification.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
@@ -66,8 +62,8 @@ export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: stri
 export type LaunchConfirmationPort = Readonly<{
   appBundleId: string;
   /**
-   * When the enclosing request must have its result. Once it passes, no step is sent; runner
-   * timeouts are capped at it; and only a request with one has time to press `Open` again.
+   * When the enclosing request must have its result. It decides only whether `Open` is pressed
+   * again; the first press and every read keep their own runner bounds.
    */
   deadlineAtMs: number | undefined;
   /** Initial presentation wait, or `undefined` when no alert appears within its window. */
@@ -140,11 +136,6 @@ async function acceptConfirmation(
       (error: unknown) => ({ error }),
     );
     if (!failure) return accepted();
-    if (isRunnerCommandDeadlineSpentError(failure.error)) {
-      // Refused unsent: nothing was pressed, so the confirmation just seen is still up.
-      reportUnanswered('alert-still-present', { pressSent: false });
-      return { outcome: 'unanswered', reason: 'alert-still-present' };
-    }
     const attempt = await verifyFailedAcceptance(port, original, failure.error);
     if (attempt.outcome !== 'unanswered') return attempt;
     const remainingMs = timeLeft(port.deadlineAtMs);
@@ -261,37 +252,20 @@ export function createLaunchConfirmationPort(
   if (!awaitAlert || !readAlert || !acceptAlert) {
     throw invalidRuntimeContract('Apple interactor has no alert wait, read or accept leg');
   }
-  const target = { appBundleId, surface: 'app', deadlineAtMs } as const;
-  // Once the deadline has passed, a step is refused before anything is sent.
-  const beforeDeadline = async <T>(step: () => Promise<T>): Promise<T> => {
-    if (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) {
-      throw runnerCommandDeadlineSpentError();
-    }
-    return await step();
-  };
+  const target = { appBundleId, surface: 'app' } as const;
   return Object.freeze({
     appBundleId,
     deadlineAtMs,
     awaitAlert: async () =>
-      await beforeDeadline(
-        async () =>
-          await alertIfPresent(
-            awaitAlert({ ...target, timeoutMs: LAUNCH_CONFIRMATION_PRESENTATION_TIMEOUT_MS }),
-          ),
+      await alertIfPresent(
+        awaitAlert({ ...target, timeoutMs: LAUNCH_CONFIRMATION_PRESENTATION_TIMEOUT_MS }),
       ),
-    readAlert: async () =>
-      await beforeDeadline(async () => await alertIfPresent(readAlert(target))),
-    acceptAlert: async () => await beforeDeadline(async () => await acceptAlert(target)),
+    readAlert: async () => await alertIfPresent(readAlert(target)),
+    acceptAlert: async () => await acceptAlert(target),
     resolveUrlOwner: async () =>
-      await beforeDeadline(
-        async () =>
-          await resolveIosSimulatorDeepLinkBundleId(device, url, {
-            timeoutMs:
-              deadlineAtMs === undefined
-                ? URL_OWNER_LOOKUP_TIMEOUT_MS
-                : Math.min(URL_OWNER_LOOKUP_TIMEOUT_MS, deadlineAtMs - Date.now()),
-            signal,
-          }),
-      ),
+      await resolveIosSimulatorDeepLinkBundleId(device, url, {
+        timeoutMs: URL_OWNER_LOOKUP_TIMEOUT_MS,
+        signal,
+      }),
   });
 }
