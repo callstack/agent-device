@@ -15,8 +15,7 @@ import {
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
-  namedLeaseDeviceSpecKeys,
-  readLeaseDeviceSpec,
+  requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
@@ -78,7 +77,7 @@ export async function resolveProxyLeaseState(options: {
 }
 
 function hasLeaseDeviceSpec(flags: CliFlags): boolean {
-  return Object.keys(readLeaseDeviceSpec(flags)).length > 0;
+  return requireLeaseDeviceSpec(flags).keys.length > 0;
 }
 
 async function resolveProxyLeaseStateLocally(options: {
@@ -125,8 +124,7 @@ export async function bindLeaseNamedDevice(options: {
 }): Promise<{ state: RemoteConnectionState; materialized: MaterializedLease }> {
   const { client, flags, materialized } = options;
   const { lease, acquired } = materialized;
-  const spec = readLeaseDeviceSpec(flags);
-  const specKeys = namedLeaseDeviceSpecKeys(spec);
+  const { spec, keys: specKeys } = requireLeaseDeviceSpec(flags);
   const leased = parseConnectionDeviceKey(lease.deviceKey);
   if (acquired && specKeys.length > 0 && (!lease.device || !leased)) {
     throw await releaseUnhonouredSpecLease(client, options.state, lease, specKeys);
@@ -138,7 +136,7 @@ export async function bindLeaseNamedDevice(options: {
     }
     if (identityConflict) throw identityConflict;
     if (!acquired) {
-      assertLeaseSpecMatchesRequest(options.state, lease, spec, leased);
+      assertLeaseSpecMatchesRequest(options.state, lease, spec, specKeys, leased);
       await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
     }
     applyDeviceScopeSelector(flags, leased);
@@ -214,12 +212,11 @@ function assertLeaseSpecMatchesRequest(
   state: RemoteConnectionState,
   lease: Lease,
   requested: LeaseDeviceSpec,
+  requestedKeys: readonly (keyof LeaseDeviceSpec)[],
   leased: ConnectionDeviceScope,
 ): void {
   const bound = recordedLeaseDeviceSpec(state, lease.leaseId)?.spec ?? {};
-  const conflicting = namedLeaseDeviceSpecKeys(requested).filter(
-    (key) => requested[key] !== bound[key],
-  );
+  const conflicting = requestedKeys.filter((key) => requested[key] !== bound[key]);
   if (conflicting.length === 0) return;
   throw new AppError(
     'INVALID_ARGS',

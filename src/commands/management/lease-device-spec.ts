@@ -1,5 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { readLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
+import { requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
 import { optionField } from '../command-input.ts';
 
 /**
@@ -13,9 +13,9 @@ export const leaseDeviceSpecFields = {
   physical: optionField('physical'),
 };
 
-/** The spec keys the flags name; an empty version or tag and `physical: false` name none. */
+/** The spec keys the flags name, as `readLeaseDeviceSpec` decides them. */
 export function leaseDeviceSpecInputFromFlags(
   flags: CliFlags,
 ): Pick<CliFlags, 'osVersion' | 'imageTag' | 'physical'> {
-  return readLeaseDeviceSpec(flags);
+  return requireLeaseDeviceSpec(flags).spec;
 }

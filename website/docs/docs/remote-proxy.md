@@ -59,7 +59,7 @@ config, an explicit `--config` file, or protected CI environment variables.
 
 ## Lease by device spec
 
-A service in front of the daemon, such as simlock, can also pick the device by OS version, Android image tag, and physical or virtual class. Pass `--os <version|range>`, `--image-tag <tag>`, or `--physical` to `open`, `install`, `reinstall`, or `uninstall`, and the CLI sends them with `--platform`, `--target`, and `--device` on the lease request. `connect proxy` stores them as defaults like `--platform` and `--device`. agent-device does not check the values; the service does (for example, Android `--os` is an API level). `--target` stays the device class selector.
+A service in front of the daemon, such as simlock, can also pick the device by OS version, Android image tag, and physical or virtual class. Pass `--os <version|range>`, `--image-tag <tag>`, or `--physical` to `open`, `install`, `reinstall`, or `uninstall`, and the CLI sends them with `--platform`, `--target`, and `--device` on the lease request. `connect proxy` stores them as defaults like `--platform` and `--device`. agent-device does not check the values; the service does (for example, Android `--os` is an API level). On every surface, an empty or blank `osVersion` or `imageTag` and `physical: false` name nothing, and a value of another type (for example `physical: "yes"`) fails with `INVALID_ARGS` and `details.reason: "device-spec-invalid"`. `--target` stays the device class selector.
 
 ```bash
 agent-device open MyApp --platform ios --device "iPhone 17 Pro" --os ">=26"
