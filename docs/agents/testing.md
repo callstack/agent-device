@@ -10,21 +10,14 @@
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Both broad commands and heavy `pnpm gate` ids acquire the same host lock.
-Wait for the owner to finish, or cancel your waiter with Ctrl-C.
+Wait for the owner to finish.
 Do not add lock wrappers. Do not delete lock files.
-A wait ends after two hours. Nested validation fails immediately.
+A wait ends after two hours.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
-The runner prints progress and a receipt path. The receipt contains:
+The runner prints progress and a receipt path. The receipt contains refs, checkout state, command logs, exits, skips, and Vitest results.
 
-- Refs.
-- Checkout state.
-- Command logs.
-- Exits.
-- Skips.
-- Vitest results.
-
-Execution stops at the first failure. Unexecuted checks remain `not-run`.
+Execution stops at the first failure.
 
 - `pnpm check:affected`: compact plan.
 - `pnpm check:affected --verbose`: plan with selection reasons.
@@ -47,15 +40,9 @@ Do not reduce selection to get a pass.
 
 Read required-check status on the PR.
 The receipt lists skipped checks and owners in `results[].reason`.
-GitHub owns:
-
-- Full coverage.
-- Native builds.
-- Device lanes.
-- Provider integration.
-- Compatibility that uses history.
-
-Related tests do not replace those obligations.
+GitHub owns full coverage, native builds, device lanes, provider integration, and compatibility that uses history.
+Locally, related tests replace only provider integration.
+A production source change also runs the unit suite (about 3 minutes), because some unit gates read sources as text.
 Check the Integration Tests and Coverage jobs at the actual PR head.
 For docs-only changes, run the selected documentation checks.
 Do not add tests that assert prose.
@@ -73,12 +60,7 @@ Never call a failing gate passed.
 | Base comparison unavailable or inconclusive | Record the missing tool/device/evidence and next action. | Blocked, cause unproven. An authorized draft can record this. |
 | Failure source fixed, environment repaired, or new upstream commit contains the fix | Run the failing check. Then run the affected gate on the current head. | Replace blocked status only with new evidence. |
 
-Match failures by:
-
-- Check.
-- Location.
-- Diagnostic code.
-- Assertion.
+Match failures by check, location, diagnostic code, and assertion.
 
 Until a named owner or issue accepts the blocker, the implementing agent owns diagnosis.
 Do not loop on an unchanged failure.
