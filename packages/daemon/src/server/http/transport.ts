@@ -4,6 +4,7 @@ import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import { resolveDaemonRequestResultDeadlineMs } from '../../core/daemon-command-registry.ts';
 import {
   clearRequestAbortRegistration,
   isRequestCanceled,
@@ -76,7 +77,9 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
             ...req.meta,
             requestId: requestIdForCleanup,
           };
-          requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
+          requestAbortRegistration = registerRequestAbort(requestIdForCleanup, undefined, {
+            resultDeadlineMs: resolveDaemonRequestResultDeadlineMs(req),
+          });
           activeRequestIds.add(requestIdForCleanup);
           if (isRequestCanceled(requestIdForCleanup)) {
             throw createRequestCanceledError();

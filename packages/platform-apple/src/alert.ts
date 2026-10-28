@@ -136,7 +136,9 @@ export async function actOnAppleAlert(
   const start = Date.now();
   let lastError: unknown;
   let firstAttempt = true;
-  while (Date.now() - start < retryWindowMs) {
+  // The first attempt always runs, so a window a spent deadline floored to 1 ms still ends with the
+  // backend's own answer rather than with no error at all.
+  do {
     try {
       const budgetMs = firstAttempt ? runnerTimeoutMs : remainingBudgetMs(start, retryWindowMs);
       firstAttempt = false;
@@ -146,7 +148,7 @@ export async function actOnAppleAlert(
       if (!isAlertNotFoundError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
-  }
+  } while (Date.now() - start < retryWindowMs);
   throw withAlertFallbackHint(lastError);
 }
 

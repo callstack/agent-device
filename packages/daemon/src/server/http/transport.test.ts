@@ -5,7 +5,12 @@ import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
 import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
-import { getRequestSignal } from '@agent-device/host-kit/request';
+import {
+  clearRequestAbortRegistration,
+  getRequestSignal,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
+import { applicationLifecycleExecutionFromRequest } from '../../sessions/application-lifecycle-execution.ts';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 
 test('Provider-backed integration daemon socket transport frames requests and normalizes malformed input', async (t) => {
@@ -160,6 +165,90 @@ test('socket disconnect cancels only the disconnected connection in-flight reque
   }
 });
 
+/** The deadline an `open` running under `requestId` would carry. */
+function openDeadlineAtMs(requestId: string | undefined): number | undefined {
+  return applicationLifecycleExecutionFromRequest(
+    {
+      token: 'provider-scenario-token',
+      session: 'default',
+      command: 'open',
+      positionals: ['com.example.app'],
+      meta: { requestId },
+    },
+    '/tmp/request.log',
+  ).requestDeadlineAtMs;
+}
+
+test('a socket-admitted open --timeout moves its deadline with the envelope it widens', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let deadlineAtMs: number | undefined;
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+    deadlineAtMs = applicationLifecycleExecutionFromRequest(
+      req,
+      '/tmp/request.log',
+    ).requestDeadlineAtMs;
+    return { ok: true, data: {} };
+  });
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    const sentAtMs = Date.now();
+    await writeSocketRequests(
+      client,
+      [
+        JSON.stringify({
+          token: 'provider-scenario-token',
+          session: 'default',
+          command: 'open',
+          positionals: ['com.example.app'],
+          flags: { timeoutMs: 120_000 },
+          meta: { requestId: 'socket-open-widened-deadline' },
+        }),
+      ],
+      1,
+    );
+    const answeredAtMs = Date.now();
+    client.destroy();
+    assert.ok(deadlineAtMs !== undefined, 'the open must carry a deadline');
+    assert.ok(deadlineAtMs >= sentAtMs + 120_000 && deadlineAtMs <= answeredAtMs + 120_000);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('an attempt nested under a test request without a client envelope has no deadline', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let attemptDeadlineAtMs: number | undefined = Number.NaN;
+  const server = createSocketServer(async (req): Promise<DaemonResponse> => {
+    const registration = registerRequestAbort('socket-test-attempt', req.meta?.requestId);
+    try {
+      attemptDeadlineAtMs = openDeadlineAtMs('socket-test-attempt');
+    } finally {
+      clearRequestAbortRegistration(registration);
+    }
+    return { ok: true, data: {} };
+  });
+  try {
+    const client = await connectSocket(await listenNetServer(server));
+    await writeSocketRequests(
+      client,
+      [
+        JSON.stringify({
+          token: 'provider-scenario-token',
+          session: 'default',
+          command: 'test',
+          positionals: ['flows'],
+          meta: { requestId: 'socket-test-suite' },
+        }),
+      ],
+      1,
+    );
+    client.destroy();
+    assert.equal(attemptDeadlineAtMs, undefined);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 async function waitForAbort(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return;
   await new Promise<void>((resolve) => {
@@ -181,6 +270,7 @@ async function connectSocket(port: number): Promise<net.Socket> {
 async function writeSocketRequests(
   socket: net.Socket,
   lines: string[],
+  expectedResponses = 2,
 ): Promise<Array<{ ok?: boolean; data?: any; error?: any }>> {
   return await new Promise((resolve, reject) => {
     const responses: Array<{ ok?: boolean; data?: any; error?: any }> = [];
@@ -195,7 +285,7 @@ async function writeSocketRequests(
         if (line) {
           responses.push(JSON.parse(line));
         }
-        if (responses.length === 2) {
+        if (responses.length === expectedResponses) {
           resolve(responses);
           return;
         }

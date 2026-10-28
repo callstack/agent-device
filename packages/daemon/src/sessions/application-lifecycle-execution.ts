@@ -1,9 +1,8 @@
 import {
-  getRequestAdmittedAtMs,
   getRequestExecutionDeadlineMs,
+  getRequestResultDeadlineMs,
 } from '@agent-device/host-kit/request';
 import { resolvePlannedOperations } from '../core/execution-plan.ts';
-import { resolveDaemonRequestBudgetMs } from '../core/daemon-command-registry.ts';
 import type { ApplicationLifecycleExecution } from '@agent-device/contracts/application-lifecycle-runtime';
 import { resolveRunnerLogicalLeaseContext } from '../core/lease-context.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -33,15 +32,10 @@ export function applicationLifecycleExecutionFromRequest(
 }
 
 /**
- * An enforced daemon deadline is the request's deadline. Otherwise the client envelope started when
- * the transport admitted the request, so the deadline is that moment plus the envelope's daemon
- * budget.
+ * An enforced daemon deadline is the request's deadline. Otherwise it is when the client stops
+ * waiting for the result, as the transport that admitted the request (or its parent) recorded it.
  */
 function requestDeadlineAtMs(req: DaemonRequest): number | undefined {
   const requestId = req.meta?.requestId;
-  const enforcedAtMs = getRequestExecutionDeadlineMs(requestId);
-  if (enforcedAtMs !== undefined) return enforcedAtMs;
-  const admittedAtMs = getRequestAdmittedAtMs(requestId);
-  const budgetMs = resolveDaemonRequestBudgetMs(req);
-  return admittedAtMs === undefined || budgetMs === undefined ? undefined : admittedAtMs + budgetMs;
+  return getRequestExecutionDeadlineMs(requestId) ?? getRequestResultDeadlineMs(requestId);
 }

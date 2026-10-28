@@ -14,8 +14,12 @@ type RequestCancelState = {
 
 type RequestAbortController = AbortController & {
   executionDeadlineMs?: number;
-  /** When the transport admitted the request; its client envelope started at the same moment. */
-  admittedAtMs?: number;
+  /**
+   * When the client stops waiting for the result, as the transport that admitted the request
+   * computed it. An attempt registered under a parent inherits the parent's, because it runs inside
+   * the parent's client envelope.
+   */
+  resultDeadlineMs?: number;
 };
 
 const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
@@ -84,6 +88,7 @@ function evictOldestSetEntries<V>(set: Set<V>): void {
 export function registerRequestAbort(
   requestId: string | undefined,
   parentRequestId?: string,
+  admission?: Readonly<{ resultDeadlineMs?: number }>,
 ): RequestAbortRegistration | undefined {
   if (!requestId) return undefined;
   if (requestAbortControllers().has(requestId)) {
@@ -94,10 +99,11 @@ export function registerRequestAbort(
   }
   evictOldestEntries(requestAbortControllers());
   const controller: RequestAbortController = new AbortController();
-  controller.admittedAtMs = Date.now();
-  controller.executionDeadlineMs = parentRequestId
-    ? requestAbortControllers().get(parentRequestId)?.executionDeadlineMs
-    : undefined;
+  const parent = parentRequestId ? requestAbortControllers().get(parentRequestId) : undefined;
+  controller.executionDeadlineMs = parent?.executionDeadlineMs;
+  controller.resultDeadlineMs = parentRequestId
+    ? parent?.resultDeadlineMs
+    : admission?.resultDeadlineMs;
   requestAbortControllers().set(requestId, controller);
   if (canceledRequestIds().has(requestId)) {
     controller.abort(createRequestCanceledError());
@@ -159,9 +165,9 @@ export function getRequestExecutionDeadlineMs(requestId: string | undefined): nu
   return requestId ? requestAbortControllers().get(requestId)?.executionDeadlineMs : undefined;
 }
 
-/** When the transport admitted the request, or `undefined` for a request it never admitted. */
-export function getRequestAdmittedAtMs(requestId: string | undefined): number | undefined {
-  return requestId ? requestAbortControllers().get(requestId)?.admittedAtMs : undefined;
+/** When the client stops waiting for the request's result, if the admitting transport knew. */
+export function getRequestResultDeadlineMs(requestId: string | undefined): number | undefined {
+  return requestId ? requestAbortControllers().get(requestId)?.resultDeadlineMs : undefined;
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {

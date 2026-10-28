@@ -742,9 +742,10 @@ test('abandoned accepts stop once the request cannot hold another press', async 
 });
 
 test('every runner alert command of the answer is capped at the request time left', async () => {
+  const runner = vi.mocked(runAppleRunnerCommand);
   await onFakeClock(async () => {
     const sent: Array<Readonly<{ action: unknown; timeoutMs: unknown }>> = [];
-    vi.mocked(runAppleRunnerCommand).mockImplementation(async (_device, command) => {
+    runner.mockImplementation(async (_device, command) => {
       const { action, timeoutMs } = command as { action?: string; timeoutMs?: number };
       sent.push({ action, timeoutMs });
       if (action !== 'accept') return CONFIRMATION;
@@ -772,5 +773,5 @@ test('every runner alert command of the answer is capped at the request time lef
       { action: 'accept', timeoutMs: 6_000 },
       { action: 'get', timeoutMs: 1 },
     ]);
-  });
+  }).finally(() => runner.mockReset());
 });

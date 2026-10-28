@@ -3,7 +3,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
-import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
+import { postRpcCommand, postRpcRaw, startRpcServer } from './http-server-rpc.fixtures.ts';
+import { applicationLifecycleExecutionFromRequest } from '../../sessions/application-lifecycle-execution.ts';
 
 const TOKEN = 'lifetime-token';
 
@@ -29,6 +30,34 @@ test('an rpc request registers its tracking id while in flight and releases it o
       assert.equal(getRequestSignal(requestId), undefined, `${scenario}: id must be released`);
       assert.equal((await postRpcCommand(port, TOKEN, requestId)).status, 200);
     }
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('an admitted open must settle within its client envelope less the daemon result margin', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let deadlineAtMs: number | undefined;
+  const { port, server } = await startRpcServer(TOKEN, async (request) => {
+    deadlineAtMs = applicationLifecycleExecutionFromRequest(
+      request,
+      '/tmp/request.log',
+    ).requestDeadlineAtMs;
+    return { ok: true, data: {} } satisfies DaemonResponse;
+  });
+  try {
+    const sentAtMs = Date.now();
+    const requestId = 'req-open-result-deadline';
+    const body = JSON.stringify({
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'agent_device.command',
+      params: { command: 'open', positionals: ['com.example.app'], meta: { requestId } },
+    });
+    assert.equal((await postRpcRaw(port, TOKEN, body)).status, 200);
+    const answeredAtMs = Date.now();
+    assert.ok(deadlineAtMs !== undefined, 'the open must carry a deadline');
+    assert.ok(deadlineAtMs >= sentAtMs + 60_000 && deadlineAtMs <= answeredAtMs + 60_000);
   } finally {
     await closeLoopbackServer(server);
   }
