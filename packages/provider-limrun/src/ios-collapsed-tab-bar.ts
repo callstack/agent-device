@@ -31,9 +31,10 @@ const TAB_PROBE_TIMEOUT_MS = 1_500;
  *
  * Candidates are probed most tab-bar-like first (a tab bar's height, then the lowest top edge)
  * until one yields tabs, each with an even share of what is left of the budget but never fewer
- * probes than reach every tab. Expansion is all or nothing: when a candidate's hit-test fails, or
- * the budget runs out before a candidate with a tab bar's height is checked, the tree keeps its
- * reported shape and `probeFailure` says why. A partial tab set would look complete.
+ * probes than reach every tab. Expansion is all or nothing. The tree keeps its reported shape, and
+ * `probeFailure` says why, when a candidate's hit-test fails (`rejected`), when it does not answer
+ * within the timeout (`timed-out`), or when the budget runs out before a candidate with a tab
+ * bar's height is checked (`budget-exhausted`). A partial tab set would look complete.
  */
 export async function expandLimrunCollapsedTabBar(
   tree: IosTreeNode | IosTreeNode[],
