@@ -1586,8 +1586,8 @@ await main();
 
 `client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
 
-For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
-stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
+For direct local iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
+stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens, provider-owned simulators, or non-simulator targets.
 
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory without starting
 or contacting the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
@@ -2093,7 +2093,7 @@ Open apps and links:
 - `open [app|url] [url]` boots the selected device when needed and opens the target in a session. `open <url>` opens deep links on Android and iOS, and `open <app> <url>` opens a deep link in that app on iOS. See [Desktop targets](#desktop-targets) for macOS activation behavior.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom-scheme URLs need an active app in the session.
 - `open <app> --wait <ms>` waits up to that budget for a device another session holds, then fails with `DEVICE_IN_USE`. The wait extends the command's timeout, so you don't need a longer `--timeout`. A claim held by another workspace's daemon is not waited for; `open` returns its recovery command at once. Device-mutating commands like `install` and `reinstall` never wait either: a claim held by another session fails them at once, and when the caller sends a workspace, another workspace's claim under the same session name fails too. See [Sessions](/agent-device/pr-preview/pr-4017/docs/sessions.md#wait-for-a-slow-or-busy-device).
-- `open <app> --launch-console <path>` captures launch-time stdout/stderr for iOS simulator app launches. It is not valid for URL opens or other targets.
+- `open <app> --launch-console <path>` captures launch-time stdout/stderr for local iOS simulator app launches. It is not valid for URL opens or other targets.
 - `open --platform macos --surface app|frontmost-app|desktop|menubar` selects the macOS session surface; `app` is the default when you name an app. See [Desktop targets](#desktop-targets). `--save-script` records the surface so `replay` reopens it; with no surface given, replay opens an app session.
 - Android React Native: `open --relaunch` needs an installed package name. Install or reinstall the APK first; `open <apk|aab> --relaunch` is rejected. For Metro-backed JS changes, run `metro reload` before reaching for `open <app> --relaunch`.
 - Android (adb): an intent target such as `open settings` records the package that opened as `appBundleId`. `open settings --relaunch` stops and restarts that app. If the intent matches more than one activity, `--relaunch` fails.
@@ -3492,7 +3492,7 @@ On iOS simulators, `logs` scope by bundle id and the resolved app executable. Fo
 agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
 ```
 
-`--launch-console` is only for direct iOS simulator app launches, not URL opens.
+`--launch-console` is only for direct local iOS simulator app launches, not URL opens.
 
 ## Crash symbolication
 
