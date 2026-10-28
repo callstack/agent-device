@@ -57,8 +57,9 @@ import {
 } from './request-execution-scope.ts';
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import {
+  deviceSpecInvalidError,
   deviceSpecUnsupportedError,
-  namedLeaseDeviceSpecKeys,
+  readLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
 import {
   canRunReplayScopedAction,
@@ -582,7 +583,10 @@ function customActionFlagsResponse(req: DaemonRequest): DaemonResponse | undefin
 }
 
 function deviceSpecFlagsResponse(req: DaemonRequest): DaemonResponse | undefined {
-  const keys = namedLeaseDeviceSpecKeys(req.flags);
+  const { keys, invalidKeys } = readLeaseDeviceSpec(req.flags);
+  if (invalidKeys.length > 0) {
+    return { ok: false, error: normalizeError(deviceSpecInvalidError(invalidKeys)) };
+  }
   if (keys.length === 0) return undefined;
   return { ok: false, error: normalizeError(deviceSpecUnsupportedError(keys)) };
 }

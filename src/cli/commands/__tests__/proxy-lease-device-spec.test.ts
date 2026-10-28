@@ -428,3 +428,37 @@ test('connect proxy stores the device spec as profile defaults like platform and
   assert.equal(generated.physical, true);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+test('connect proxy stores no default for a spec key that names nothing', async () => {
+  const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-proxy-blank-spec-');
+
+  await withCapturedStdoutAsync(async () => {
+    await connectCommand({
+      positionals: ['proxy'],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        daemonBaseUrl: 'http://proxy.example.test/agent-device',
+        platform: 'android',
+        osVersion: '',
+        imageTag: ' ',
+        physical: false,
+      },
+      client: createTestClient(),
+    });
+  });
+
+  const state = readActiveConnectionState({ stateDir });
+  assert.ok(state);
+  const generated = JSON.parse(fs.readFileSync(state.remoteConfigPath, 'utf8')) as Record<
+    string,
+    unknown
+  >;
+  assert.equal(generated.platform, 'android');
+  assert.equal('osVersion' in generated, false);
+  assert.equal('imageTag' in generated, false);
+  assert.equal('physical' in generated, false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});

@@ -9,7 +9,7 @@ import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 // resolveRemoteConfigProfile.
 import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
-import { isInactiveLeaseError, readLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
+import { isInactiveLeaseError, requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
 import {
   narrowConnectionPlatform,
   buildRemoteConnectionDaemonState,
@@ -928,7 +928,7 @@ async function allocateOrReuseLease(
     serial: flags.serial,
     iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
     androidDeviceAllowlist: flags.androidDeviceAllowlist,
-    ...(allocateBySpec ? readLeaseDeviceSpec(flags) : {}),
+    ...(allocateBySpec ? requireLeaseDeviceSpec(flags).spec : {}),
     providerApp: initialApp ?? flags.providerApp,
     providerOsVersion: flags.providerOsVersion,
     providerDeviceType: flags.providerDeviceType,

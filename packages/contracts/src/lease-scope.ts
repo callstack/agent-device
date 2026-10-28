@@ -281,6 +281,9 @@ type LeaseDeviceSpecKey = (typeof LEASE_DEVICE_SPEC_KEYS)[number];
 /** The typed reason a request naming a device spec is refused with. */
 const DEVICE_SPEC_UNSUPPORTED_REASON = 'device-spec-unsupported';
 
+/** The typed reason a request giving a device-spec key a value of the wrong type is refused with. */
+const DEVICE_SPEC_INVALID_REASON = 'device-spec-invalid';
+
 // A Cloud provider profile field added without joining the projection would be dropped from the
 // envelope and fail `prepareSession` on the remote daemon — this makes that omission fail to build.
 type LeaseAllocateProfileKeysAreExhaustive =
@@ -295,8 +298,9 @@ type LeaseAllocateProviderFlags = Partial<
 >;
 
 /**
- * Reads the allocation flags out of a request flags bag or a lease-envelope param bag. A device-spec
- * key is carried whatever its value, so a daemon refuses a malformed one instead of never seeing it.
+ * Reads the allocation flags out of a request flags bag or a lease-envelope param bag. A named or
+ * invalid device-spec key is carried as given, so the daemon refuses an invalid one instead of never
+ * seeing it; a key that names nothing is dropped.
  */
 export function readLeaseAllocateProviderFlags(
   source: Record<string, unknown> | undefined,
@@ -306,33 +310,50 @@ export function readLeaseAllocateProviderFlags(
     const value = source?.[key];
     if (typeof value === 'string' || typeof value === 'boolean') flags[key] = value;
   }
-  for (const key of LEASE_DEVICE_SPEC_KEYS) {
-    if (source?.[key] !== undefined) flags[key] = source[key];
-  }
+  const { spec, invalidKeys } = readLeaseDeviceSpec(source);
+  Object.assign(flags, spec);
+  for (const key of invalidKeys) flags[key] = source?.[key];
   return flags as LeaseAllocateProviderFlags;
 }
 
-/** The device-spec keys a request names: every key whose value is not `undefined`. */
-export function namedLeaseDeviceSpecKeys(
-  source: Record<string, unknown> | undefined,
-): LeaseDeviceSpecKey[] {
-  return LEASE_DEVICE_SPEC_KEYS.filter((key) => source?.[key] !== undefined);
-}
+export type LeaseDeviceSpecReading = {
+  /** The keys the source names, with their values as given. */
+  spec: LeaseDeviceSpec;
+  /** The keys of `spec`, in `LEASE_DEVICE_SPEC_KEYS` order. */
+  keys: LeaseDeviceSpecKey[];
+  /** The keys whose value has the wrong type for a spec. */
+  invalidKeys: LeaseDeviceSpecKey[];
+};
 
 /**
- * The device spec a CLI flags bag or profile asks for. An empty string names no version or tag,
- * and only `physical: true` asks for a physical device.
+ * The one decision on what a device spec names, for the CLI, the SDK, MCP and the daemon alike.
+ * Each key is named, not named, or invalid: a non-blank `osVersion` or `imageTag` and
+ * `physical: true` are named, with the value as given; an absent key, a blank string and
+ * `physical: false` name nothing; any other type is invalid.
  */
-export function readLeaseDeviceSpec(source: {
-  osVersion?: unknown;
-  imageTag?: unknown;
-  physical?: unknown;
-}): LeaseDeviceSpec {
-  return stripUndefined({
-    osVersion: nonEmptyString(source.osVersion),
-    imageTag: nonEmptyString(source.imageTag),
-    physical: source.physical === true ? true : undefined,
-  });
+export function readLeaseDeviceSpec(
+  source: { osVersion?: unknown; imageTag?: unknown; physical?: unknown } | undefined,
+): LeaseDeviceSpecReading {
+  const spec: Record<string, string | boolean> = {};
+  const invalidKeys: LeaseDeviceSpecKey[] = [];
+  for (const key of LEASE_DEVICE_SPEC_KEYS) {
+    const value = source?.[key];
+    if (value === undefined) continue;
+    if (typeof value !== (key === 'physical' ? 'boolean' : 'string')) invalidKeys.push(key);
+    else if (value === true) spec[key] = true;
+    else if (typeof value === 'string' && value.trim()) spec[key] = value;
+  }
+  const keys = LEASE_DEVICE_SPEC_KEYS.filter((key) => key in spec);
+  return { spec: spec as LeaseDeviceSpec, keys, invalidKeys };
+}
+
+/** The named spec of a client-side source, which refuses an invalid key before any request. */
+export function requireLeaseDeviceSpec(
+  source: Parameters<typeof readLeaseDeviceSpec>[0],
+): Pick<LeaseDeviceSpecReading, 'spec' | 'keys'> {
+  const { spec, keys, invalidKeys } = readLeaseDeviceSpec(source);
+  if (invalidKeys.length > 0) throw deviceSpecInvalidError(invalidKeys);
+  return { spec, keys };
 }
 
 /** The granted device facts on a lease reply, or `undefined` when the reply carries none. */
@@ -363,6 +384,15 @@ export function deviceSpecUnsupportedError(
     keys: [...keys],
     hint: 'Drop --os, --image-tag and --physical, or connect through a proxy whose backend picks devices by spec.',
   });
+}
+
+/** The refusal for a request giving a device-spec key a value of the wrong type. */
+export function deviceSpecInvalidError(keys: readonly string[]): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'osVersion and imageTag take a string, and physical takes a boolean.',
+    { reason: DEVICE_SPEC_INVALID_REASON, keys: [...keys] },
+  );
 }
 
 function nonEmptyString(value: unknown): string | undefined {

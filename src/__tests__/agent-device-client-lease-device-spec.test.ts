@@ -72,6 +72,39 @@ test('a daemon refuses a lease allocate naming a device spec and records no leas
   }
 });
 
+test('a daemon reads a blank spec value and physical: false from the SDK as naming nothing, and refuses a wrong type', async () => {
+  const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });
+  try {
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: daemon.baseUrl,
+      daemonAuthToken: daemon.runtime.token,
+      daemonTransport: 'http',
+    });
+    const allocate = (spec: Record<string, unknown>) =>
+      client.leases.allocate({
+        tenant: 'proxy',
+        runId: 'run-spec',
+        leaseId: LEASE_ID,
+        leaseBackend: 'ios-instance',
+        platform: 'ios',
+        ...spec,
+      });
+    await assert.rejects(
+      allocate({ osVersion: '18', physical: 'yes' }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.details?.reason === 'device-spec-invalid' &&
+        JSON.stringify(error.details?.keys) === '["physical"]',
+    );
+    await assertNoLeaseRecorded(client);
+    const lease = await allocate({ osVersion: '', imageTag: '  ', physical: false });
+    assert.equal(lease.leaseId, LEASE_ID);
+  } finally {
+    await daemon.close();
+  }
+});
+
 test('a daemon behind agent-device proxy refuses a lease allocate naming a device spec', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const daemon = await startPublicDaemonRuntime({ serverMode: 'http' });

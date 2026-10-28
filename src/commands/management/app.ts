@@ -9,13 +9,18 @@ import {
   enumField,
   integerField,
   jsonSchemaField,
+  leaseDeviceSpecFields,
   optionField,
   stringArrayField,
   stringField,
   stringSchema,
 } from '../command-input.ts';
-import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
-import { leaseDeviceSpecFields, leaseDeviceSpecInputFromFlags } from './lease-device-spec.ts';
+import {
+  commonInputFromFlags,
+  direct,
+  leaseDeviceSpecInputFromFlags,
+  optionalString,
+} from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
 import {
   LEASE_DEVICE_SPEC_FLAGS,
@@ -83,7 +88,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
     launchUrl: stringField(
       'Launch URL for the opened app; does not select the server used by metro reload.',
     ),
-    ...leaseDeviceSpecFields,
+    ...leaseDeviceSpecFields(),
   },
 );
 

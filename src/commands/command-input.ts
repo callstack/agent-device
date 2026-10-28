@@ -12,6 +12,7 @@ import {
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
 import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';
 import {
@@ -420,6 +421,26 @@ export function repeatedFields() {
     ),
     doubleTap: booleanField('Request a double-tap action.'),
   };
+}
+
+/**
+ * The device spec a proxy lease is allocated by, on the commands that allocate one. The fields
+ * reach the daemon request; a daemon refuses them, and the CLI drops them once a proxy backend has
+ * leased a device by them.
+ */
+export function leaseDeviceSpecFields() {
+  return {
+    osVersion: leaseDeviceSpecField('osVersion'),
+    imageTag: leaseDeviceSpecField('imageTag'),
+    physical: leaseDeviceSpecField('physical'),
+  };
+}
+
+function leaseDeviceSpecField<TKey extends 'osVersion' | 'imageTag' | 'physical'>(key: TKey) {
+  return customField(
+    optionField(key).schema,
+    (record) => requireLeaseDeviceSpec({ [key]: record[key] }).spec[key],
+  );
 }
 
 export function fieldsInputSchema(fields: CommandFieldMap): JsonSchema {
