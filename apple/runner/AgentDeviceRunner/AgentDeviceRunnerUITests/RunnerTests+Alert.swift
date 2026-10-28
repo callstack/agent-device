@@ -4,6 +4,7 @@ extension RunnerTests {
   enum RunnerAlertSource {
     case blockingSystemModal
     case appAlert
+    case safariDialog
     case dismissPopup
   }
 
@@ -55,6 +56,11 @@ extension RunnerTests {
     // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
     if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
       return runnerAlert(root: alert, ownerApp: activeApp, source: .appAlert)
+    }
+    if let dialog = firstExistingElement(in: safeElementsQuery {
+      activeApp.otherElements.matching(identifier: Self.safariDialogIdentifier).allElementsBoundByIndex
+    }) {
+      return runnerAlert(root: dialog, ownerApp: activeApp, source: .safariDialog)
     }
     if let popup = firstDismissPopupWindow(in: activeApp) {
       return runnerAlert(root: popup, ownerApp: activeApp, source: .dismissPopup)
@@ -261,6 +267,10 @@ extension RunnerTests {
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {
     elements.first { isVisibleElement($0) }
   }
+
+  /// Safari draws its page prompts, such as "Open this page in …?" and JavaScript dialogs, as a
+  /// view rather than an alert, so they are found by the view's identifier.
+  static let safariDialogIdentifier = "SFDialogView"
 
   /// The marker is matched inside XCTest's query, so the screen is read once per query. Reading each
   /// descendant instead costs one round trip per element, and on a screen whose tree changes while

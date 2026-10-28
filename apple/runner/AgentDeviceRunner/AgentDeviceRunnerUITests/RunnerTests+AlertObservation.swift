@@ -61,6 +61,8 @@ extension RunnerTests {
       matches = snapshot.elementType == .alert || snapshot.elementType == .sheet
     case .appAlert:
       matches = snapshot.elementType == .alert
+    case .safariDialog:
+      matches = snapshot.identifier == Self.safariDialogIdentifier
     case .dismissPopup:
       matches = snapshot.elementType == .window && containsDismissPopupMarker(snapshot)
     }
