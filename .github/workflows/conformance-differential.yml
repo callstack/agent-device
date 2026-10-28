@@ -52,6 +52,11 @@ jobs:
       AGENT_DEVICE_XCUITEST_ARCHS: 'arm64'
       AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+      # A bounded simctl call that times out (e.g. the launchApp clearState
+      # terminate, #3944) reports only "xcrun timed out". The exec trace keeps
+      # every host subprocess's spawn, deadline, exit and close in the session
+      # diagnostics, so the uploaded run shows which call stalled and for how long.
+      AGENT_DEVICE_EXEC_TRACE: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -171,3 +176,16 @@ jobs:
             .tmp/conformance-differential/differential-report.json
             .agent-device/**/replay-timing.ndjson
           if-no-files-found: ignore
+
+      # An infrastructure failure on either engine leaves its evidence outside
+      # the report: agent-device's daemon and session diagnostics, and Maestro's
+      # own per-run log (e.g. its driver startup timeout).
+      - name: Upload engine diagnostics
+        if: always()
+        uses: ./.github/actions/upload-agent-device-artifacts
+        with:
+          artifact-name: conformance-differential-ios-diagnostics
+          agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+          runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+          additional-paths: |
+            ~/.maestro/tests/**
