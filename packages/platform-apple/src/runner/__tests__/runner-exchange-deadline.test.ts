@@ -81,6 +81,7 @@ test('a press the preflight leaves too little time for is not sent', async () =>
 
   assert.ok(outcome instanceof AppError);
   assert.equal(outcome.details?.reason, 'runner_command_deadline_spent');
+  assert.equal(outcome.details?.dispatched, 'no');
   assert.deepEqual(sentAlerts(), []);
 });
 
