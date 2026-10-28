@@ -299,7 +299,7 @@ type LeaseAllocateProviderFlags = Partial<
 
 /**
  * Reads the allocation flags out of a request flags bag or a lease-envelope param bag. A named
- * device-spec key is carried as read, and an invalid one as given, so the daemon refuses it instead
+ * device-spec key is carried trimmed, and an invalid one as given, so the daemon refuses it instead
  * of never seeing it; a key that names nothing is dropped.
  */
 export function readLeaseAllocateProviderFlags(
