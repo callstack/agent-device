@@ -180,7 +180,7 @@ test('a sensitive fill replaces the text its --settle observation read back and 
   };
   expect(response.data).toMatchObject(settled);
   expect(session.actions[0]?.result).toMatchObject(settled);
-  expect(JSON.stringify([response.data, session.actions])).not.toMatch(/062 91|000 62/);
+  expect(JSON.stringify([response.data, session.actions])).not.toMatch(/000629177|062 91|000 62/);
 });
 
 test('parameterized fill scrubs concatenated backend values and object keys through the handler route', async () => {

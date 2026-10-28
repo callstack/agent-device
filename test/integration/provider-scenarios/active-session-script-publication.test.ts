@@ -309,7 +309,18 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         assert.equal(fill.text, '${SEARCH_TERM}');
         const settleOutput = JSON.stringify(fill.settle);
         assert.equal(settleOutput.includes(secret), false, settleOutput);
-        assert.match(settleOutput, /prefix\$\{SEARCH_TERM\}suffix/);
+        // A sensitive fill's settle text is replaced whole: the field's surrounding text
+        // (`prefix`, `suffix`) is not shown either.
+        const settleLines = fill.settle?.diff?.lines ?? [];
+        assert.ok(
+          settleLines.some((line) => line.kind === 'added' && line.ref),
+          settleOutput,
+        );
+        assert.deepEqual(
+          settleLines.map((line) => line.text),
+          settleLines.map(() => '${SEARCH_TERM}'),
+        );
+        assert.equal(/prefix|suffix/.test(settleOutput), false, settleOutput);
         await client.command.wait({
           selector: 'id=android:id/title',
           ...world.selection,
