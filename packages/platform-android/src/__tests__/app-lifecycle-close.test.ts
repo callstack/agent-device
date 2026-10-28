@@ -426,13 +426,60 @@ test('closeAndroidApp refuses a new process that outlives the killed one', async
   }
 });
 
-test('closeAndroidApp refuses to force-stop when pidof cannot list the processes to wait for', async () => {
-  const calls: (readonly string[])[] = [];
+test.each([
+  ['an adb error', async () => ({ stdout: '', stderr: 'error: closed', exitCode: 255 })],
+  [
+    'non-pid output',
+    async () => ({ stdout: '/system/bin/sh: pidof: not found\n', stderr: '', exitCode: 0 }),
+  ],
+  [
+    'an exec timeout',
+    async () => {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 2000ms', { timeoutMs: 2_000 });
+    },
+  ],
+] as const)(
+  'closeAndroidApp refuses to force-stop when pidof answers with %s',
+  async (_, pidof) => {
+    const calls: (readonly string[])[] = [];
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          calls.push(args);
+          return await pidof();
+        },
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        await assert.rejects(
+          closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+          (error: unknown) =>
+            error instanceof AppError &&
+            error.details?.reason === 'android-process-probe-unavailable',
+        );
+      },
+    );
+    assert.deepEqual(calls, [['shell', 'pidof', 'com.example.app']]);
+  },
+);
+
+test('closeAndroidApp reports an unanswered pidof after force-stop instead of an exit timeout', async () => {
+  let pidofCalls = 0;
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        calls.push(args);
-        return { stdout: '', stderr: 'error: closed', exitCode: 255 };
+        if (args[1] === 'dumpsys') {
+          return {
+            stdout: 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args[1] !== 'pidof') return { stdout: '', stderr: '', exitCode: 0 };
+        pidofCalls += 1;
+        return pidofCalls === 1
+          ? { stdout: '12345\n', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: 'error: device offline', exitCode: 1 };
       },
     },
     { serial: ANDROID_EMULATOR.id },
@@ -445,5 +492,5 @@ test('closeAndroidApp refuses to force-stop when pidof cannot list the processes
       );
     },
   );
-  assert.deepEqual(calls, [['shell', 'pidof', 'com.example.app']]);
+  assert.equal(pidofCalls, 2);
 });

@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
@@ -585,7 +586,11 @@ async function resolveAndroidPackageToEnd(
 }
 
 async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
-  const killed = await readAndroidPackagePids(device, packageName);
+  const killed = await readAndroidPackagePids(
+    device,
+    packageName,
+    ANDROID_CLOSE_PROCESS_TIMEOUT_MS,
+  );
   if (!killed) {
     throw androidPidofUnavailableError(packageName);
   }
@@ -726,10 +731,11 @@ async function waitForAndroidKilledProcessesExit(
   const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_KILLED_EXIT_TIMEOUT_MS);
   while (!deadline.isExpired()) {
     const pids = await probeBeforeDeadline(deadline, () =>
-      readAndroidPackagePids(device, packageName),
+      readAndroidPackagePids(device, packageName, deadline.remainingMs()),
     );
     if (!pids) break;
-    if (pids.value && ![...pids.value].some((pid) => killed.has(pid))) return true;
+    if (!pids.value) throw androidPidofUnavailableError(packageName);
+    if (![...pids.value].some((pid) => killed.has(pid))) return true;
     await sleep(ANDROID_CLOSE_PROCESS_POLL_MS);
   }
   return false;
@@ -769,19 +775,26 @@ async function readAndroidPackageProcessState(
   return pids.size > 0 ? 'running' : 'gone';
 }
 
-/** The package's running pids, or undefined when `pidof` did not answer. */
+/** The package's running pids, or undefined when `pidof` did not answer with a pid list in time. */
 async function readAndroidPackagePids(
   device: DeviceInfo,
   packageName: string,
+  timeoutMs?: number,
 ): Promise<Set<string> | undefined> {
-  const result = await runAndroidShell(device, ['pidof', packageName], {
-    allowFailure: true,
-  });
-  const pids = (result.stdout ?? '').trim();
-  if (pids.length > 0) return new Set(pids.split(/\s+/));
-  // `pidof` exits 1 with empty streams when no process matches.
-  if ((result.exitCode === 0 || result.exitCode === 1) && (result.stderr ?? '').trim() === '') {
-    return new Set();
+  let result: AndroidAdbExecutorResult;
+  try {
+    result = await runAndroidShell(device, ['pidof', packageName], {
+      allowFailure: true,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    });
+  } catch (error) {
+    if (isCommandTimeoutError(error)) return undefined;
+    throw error;
   }
+  if ((result.stderr ?? '').trim() !== '') return undefined;
+  const pids = (result.stdout ?? '').trim();
+  if (result.exitCode === 0 && /^\d+(\s+\d+)*$/.test(pids)) return new Set(pids.split(/\s+/));
+  // `pidof` exits 1 with empty streams when no process matches.
+  if ((result.exitCode === 0 || result.exitCode === 1) && pids === '') return new Set();
   return undefined;
 }
