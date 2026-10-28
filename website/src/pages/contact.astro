@@ -1,15 +1,13 @@
 ---
 // Contact Callstack about agent-device. The form posts to the same HubSpot form as the old site,
 // with the same field names and `agent_device_reason` values (HubSpot options), so submissions
-// keep landing where they did. `?reason=<id>` preselects a reason; links from /cloud and
-// /templates use it.
+// keep landing where they did. `?reason=<id>` preselects a reason; /cloud links with it.
 import Site from '../layouts/Site.astro';
 import Footer from '../components/site/Footer.astro';
 import Nav from '../components/site/Nav.astro';
 
 const reasons = [
   { id: 'talk-to-sales', label: 'Devices and QA for my team', value: 'Talk to Consultant', note: 'Device hosts, CI setup or agent-driven QA' },
-  { id: 'request-access', label: 'Set up a template', value: 'Request Access', note: 'A QA agent in your CI and pull requests' },
   { id: 'missing-option', label: 'Missing support', value: 'Missing Option', note: 'A device cloud or agent harness we should support' },
   { id: 'general', label: 'Something else', value: 'General', note: 'Questions or feedback' },
 ];
@@ -127,7 +125,7 @@ const reasons = [
   }
   .reasons {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
     margin: 0;
     padding: 0;
@@ -201,21 +199,7 @@ const reasons = [
     margin: 0;
     color: var(--muted);
   }
-  /* Item borders draw the inner grid lines only; the fieldset draws the outer edge. */
-  @media (max-width: 64rem) {
-    .reasons {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .reason {
-      border-bottom: 1px solid var(--line);
-    }
-    .reason:nth-last-of-type(-n + 2) {
-      border-bottom-width: 0;
-    }
-    .reason:nth-of-type(2n) {
-      border-right: 0;
-    }
-  }
+  /* One column: item borders draw the inner lines only; the fieldset draws the outer edge. */
   @media (max-width: 48rem) {
     .reasons,
     .fields {
@@ -225,7 +209,7 @@ const reasons = [
       border-right: 0;
     }
     .reason:not(:last-of-type) {
-      border-bottom-width: 1px;
+      border-bottom: 1px solid var(--line);
     }
   }
 </style>

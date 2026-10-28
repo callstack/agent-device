@@ -11,6 +11,11 @@
       "source": "/docs",
       "destination": "/docs/introduction",
       "permanent": false
+    },
+    {
+      "source": "/templates",
+      "destination": "/",
+      "permanent": true
     }
   ],
   "rewrites": [

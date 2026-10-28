@@ -90,7 +90,6 @@ export const nav: Link[] = [
   { text: 'Docs', href: docs.intro },
   { text: 'Showcase', href: '/showcase' },
   { text: 'Cloud', href: '/cloud' },
-  { text: 'Templates', href: '/templates' },
 ];
 
 /** The footer row, right of the copyright, on every page and in the docs. */
@@ -135,7 +134,7 @@ export const faq = [
   },
   {
     q: 'Can it run in CI?',
-    a: 'Yes. Record a run as an `.ad` script, replay it in CI with `agent-device test`, and keep the screenshots and logs as artifacts. The EAS Workflows template is a working example.',
+    a: 'Yes. Record a run as an `.ad` script, replay it in CI with `agent-device test`, and keep the screenshots and logs as artifacts.',
   },
   {
     q: 'Can I build my own agent or QA product on it?',
@@ -421,58 +420,6 @@ export const adopters: Adopter[] = [
     ],
   },
 ];
-
-/** Examples that exist today, each linking to its code. The /templates page lists them. */
-export const templates = [
-  {
-    icon: 'flag',
-    title: 'QA agent on EAS Workflows',
-    body: 'An Expo EAS workflow that builds the app, runs an AI SDK agent on agent-device against it and keeps the evidence as artifacts.',
-    tags: ['CI', 'Expo', 'AI SDK'],
-    href: 'https://github.com/callstackincubator/eas-agent-device',
-    cta: 'Open the template',
-  },
-  {
-    icon: 'code',
-    title: 'AI SDK tools',
-    body: 'Give an AI SDK agent the agent-device commands as typed tools with `createAgentDeviceTools`.',
-    tags: ['Node.js', 'AI SDK'],
-    href: 'https://github.com/callstack/agent-device/blob/main/examples/sdk/ai-sdk-tools.ts',
-    cta: 'Read the example',
-  },
-  {
-    icon: 'stack',
-    title: 'Batch orchestration',
-    body: 'Run batches through your own transport with `runBatch`, keeping step validation, partial results and errors aligned with the CLI’s `batch` command.',
-    tags: ['Node.js'],
-    href: 'https://github.com/callstack/agent-device/blob/main/examples/sdk/batch-orchestration.ts',
-    cta: 'Read the example',
-  },
-  {
-    icon: 'panel',
-    title: 'Client session',
-    body: 'Open an app, read a snapshot and press an element with the typed client, then close the session.',
-    tags: ['Node.js'],
-    href: 'https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts',
-    cta: 'Read the example',
-  },
-  {
-    icon: 'network',
-    title: 'Metro runtime',
-    body: 'Resolve the host, port and scheme a client connects to Metro through, for React Native integrations of your own.',
-    tags: ['Node.js', 'React Native'],
-    href: 'https://github.com/callstack/agent-device/blob/main/examples/sdk/metro-runtime.ts',
-    cta: 'Read the example',
-  },
-  {
-    icon: 'test',
-    title: 'Replay scripts',
-    body: 'The `.ad` replay scripts the project runs against its own test app, as a reference for writing yours.',
-    tags: ['Replay', 'CI'],
-    href: 'https://github.com/callstack/agent-device/tree/main/examples/test-app/replays',
-    cta: 'Browse the scripts',
-  },
-] as { icon: IconName; title: string; body: string; tags: string[]; href: string; cta: string }[];
 
 /** The /cloud page: the same commands from a laptop to CI to remote devices. */
 export const cloud = {

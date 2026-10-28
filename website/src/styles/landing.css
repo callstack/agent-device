@@ -316,8 +316,7 @@ section {
   white-space: nowrap;
   transition: color 120ms;
 }
-.more:hover,
-.cell--link:hover .more {
+.more:hover {
   color: var(--accent);
 }
 .pkg {
@@ -383,13 +382,6 @@ section {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 1.25rem;
-}
-.cell--link {
-  text-decoration: none;
-  transition: background-color 120ms;
-}
-.cell--link:hover {
-  background: var(--surface);
 }
 .cell-num {
   color: var(--faint);
