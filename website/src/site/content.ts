@@ -23,10 +23,10 @@ export const site = {
   /** The motto, in two beats. Used by the hero, the social card and the banner. */
   headline: ['Open-source device layer', 'for agents.'],
   /** The hero lede: one or two sentences, naming who it is for. */
-  lede: 'agent-device gives coding agents everything they need to connect to and efficiently control mobile, web, TV and desktop devices and simulators, wherever they run: a CLI, an MCP server and a Node.js API, made to fit into your agents’ workflows.',
+  lede: 'Let coding agents control mobile, web, TV and desktop apps on devices and simulators, local or in the cloud.',
   /** The meta description: 160 characters at most. */
   description:
-    'Open-source device layer for coding agents: a CLI, MCP server and Node.js API to control mobile, web, TV and desktop devices and simulators, wherever they run.',
+    'Open-source device layer for coding agents: control mobile, web, TV and desktop apps on devices and simulators, local or in the cloud, via CLI, MCP or Node.js.',
   install: 'npm i -g agent-device',
   /** Alt text for the social card (public/og-image.jpg): the lockup, the motto, the picture. */
   ogAlt: 'agent-device by Callstack. Open-source device layer for agents.',
