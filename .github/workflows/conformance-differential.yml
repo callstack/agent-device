@@ -179,7 +179,9 @@ jobs:
 
       # An infrastructure failure on either engine leaves its evidence outside
       # the report: agent-device's daemon and session diagnostics, and Maestro's
-      # own per-run log (e.g. its driver startup timeout).
+      # own per-run log (e.g. its driver startup timeout). The step above keeps
+      # the report and replay-timing.ndjson, which the invariants are computed
+      # from; this one keeps the daemon's sessions/** with the exec trace.
       - name: Upload engine diagnostics
         if: always()
         uses: ./.github/actions/upload-agent-device-artifacts
