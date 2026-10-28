@@ -16,6 +16,7 @@ import {
   type AndroidSnapshotHelperMetadata,
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
+import { readInstrumentationExitResult } from './instrumentation-helper.ts';
 import type { AndroidAdbProcess } from './adb-executor.ts';
 
 export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
@@ -160,6 +161,12 @@ export function waitForAndroidSnapshotHelperSessionReady(
           output,
           exitCode: code,
           signal: exitSignal,
+          instrumentation: readInstrumentationExitResult({
+            stdout: output,
+            stderr: '',
+            exitCode: code,
+            signal: exitSignal,
+          }),
           reason: SESSION_EXITED_BEFORE_READY_REASON,
         }),
       );

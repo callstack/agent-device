@@ -212,6 +212,7 @@ async function tryStartAndroidSnapshotHelperSession(params: {
       data: {
         deviceKey: params.deviceKey,
         reason: error instanceof AppError ? error.details?.reason : undefined,
+        instrumentation: error instanceof AppError ? error.details?.instrumentation : undefined,
         detail: error instanceof Error ? error.message : String(error),
       },
     });

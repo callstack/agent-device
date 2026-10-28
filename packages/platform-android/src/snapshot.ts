@@ -688,7 +688,10 @@ async function rejectAndroidHelperCaptureFailure(params: {
   emitDiagnostic({
     level: 'error',
     phase: 'android_snapshot_helper_failed',
-    data: { reason: failureReason },
+    data: {
+      reason: failureReason,
+      instrumentation: normalizeError(params.error).details?.instrumentation,
+    },
   });
   await stopAndroidSnapshotHelperSession(params.helperDeviceKey);
   await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);

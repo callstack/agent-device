@@ -8,6 +8,7 @@ import {
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import {
   parseInstrumentationRecords,
+  readInstrumentationExitResult,
   readInstrumentationResultBoolean,
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
@@ -231,6 +232,7 @@ function readAndroidSnapshotHelperOutput(
         stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
+        instrumentation: readInstrumentationExitResult(result),
         ...androidCaptureFailureReasonDetail(
           androidCaptureFailureReasonFromExitCode(result.exitCode),
         ),
