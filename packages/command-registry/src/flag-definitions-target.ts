@@ -363,7 +363,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--launch-console'],
     type: 'string',
     usageLabel: '--launch-console <path>',
-    usageDescription: 'open: capture the initial iOS simulator launch console window to a file',
+    usageDescription:
+      'open: capture the initial local iOS simulator launch console window to a file',
     projectConfig: false,
     recorded: false,
   },

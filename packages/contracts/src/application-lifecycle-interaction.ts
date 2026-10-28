@@ -87,6 +87,17 @@ function bindApplicationLifecycleInteractor(
     resolveInteractor: async (execution, appBundleId) => {
       const runner = applicationLifecycleRunnerContext(execution, appBundleId, signal);
       if (ownership === 'local') return await params.resolveLocalInteractor(device, runner);
+      if (execution.launchConsole) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          '--launch-console is supported only for a local iOS simulator app launch',
+          {
+            reason: 'launch-console-owner-unadmitted',
+            deviceId: device.id,
+            hint: 'Remove --launch-console, or use a local iOS simulator for launch output.',
+          },
+        );
+      }
       const interactor = ownership.resolveInteractor(runner);
       if (interactor) return interactor;
       throw new AppError(

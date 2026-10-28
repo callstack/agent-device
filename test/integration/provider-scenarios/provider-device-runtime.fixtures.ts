@@ -19,8 +19,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   bindProviderApplicationLifecycleInteractor,
-  invokeApplicationClose,
-  invokeApplicationOpen,
+  bindDirectApplicationLifecycle,
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
@@ -201,39 +200,20 @@ function providerScenarioApplicationLifecycle(
     signal,
     resolveInteractor: (runner) => runtime.getInteractor(device, runner),
   });
+  const direct = bindDirectApplicationLifecycle({
+    binding,
+    owner: 'scenario-provider',
+    openTargetIdentity: 'bundle-id',
+    closeBeforeRelaunch: true,
+  });
   return Object.freeze({
+    ...direct,
     resolveOpenTarget: async (input) => ({
       ...(input.target?.includes('.') ? { appBundleId: input.target } : {}),
       ...(input.target === undefined ? {} : { appName: input.target }),
     }),
-    prepareApplicationOpen: async () => undefined,
-    openApplication: async (input) => {
-      if (input.relaunch && input.target) {
-        await invokeApplicationClose({
-          device,
-          interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-          positionals: [input.appBundleId ?? input.target],
-        });
-      }
-      await invokeApplicationOpen({
-        device,
-        interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-        positionals: input.positionals,
-        appBundleId: input.appBundleId,
-        execution: input.execution,
-      });
-      return { appBundleId: input.appBundleId, timing: {} };
-    },
     applyRuntimeHints: async () => undefined,
     clearRuntimeHints: async () => undefined,
-    closeApplication: async (input) => {
-      await invokeApplicationClose({
-        device,
-        interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-        positionals: input.positionals,
-      });
-    },
-    finalizeApplicationClose: async () => ({}),
     prepareAppleRunner: async () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'Fake provider does not prepare Apple runners.');
     },
