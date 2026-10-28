@@ -112,6 +112,19 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
 const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
 const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
 
+const SESSION_EXIT_DRAIN_MS = 250;
+
+/** Resolves when the process's streams have closed, or after the drain budget, whichever is first. */
+function settleAfterDrain(record: AndroidInstrumentationProcessRecord): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, SESSION_EXIT_DRAIN_MS);
+    void record.closed.then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
@@ -156,18 +169,19 @@ export function waitForAndroidSnapshotHelperSessionReady(
     childProcess.stderr?.on('data', onData);
     childProcess.once('exit', (code, exitSignal) => {
       clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      // The exit result is read once the streams have drained, so it carries the last output.
-      void record.closed.then(() =>
+      // The exit result waits for the streams to drain, but not for an adb whose forked server
+      // keeps them open; cancellation stays armed until the promise settles.
+      void settleAfterDrain(record).then(() => {
+        signal?.removeEventListener('abort', onAbort);
         reject(
           new AppError('COMMAND_FAILED', 'Android snapshot helper session exited before ready', {
             exitCode: code,
             signal: exitSignal,
-            instrumentation: record.exitResult(),
+            instrumentation: record.exitResult() ?? record.current(),
             reason: SESSION_EXITED_BEFORE_READY_REASON,
           }),
-        ),
-      );
+        );
+      });
     });
     childProcess.on('error', (error) => {
       clearTimeout(timer);

@@ -481,7 +481,9 @@ export async function stopAndroidSnapshotHelperSession(
       ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
     );
   }
-  const exitedOnItsOwn = session.processRecord.exitResult();
+  const exitedOnItsOwn = hasAndroidSnapshotHelperProcessEnded(session.process)
+    ? (session.processRecord.exitResult() ?? session.processRecord.current())
+    : undefined;
   if (exitedOnItsOwn) {
     emitDiagnostic({
       level: 'warn',

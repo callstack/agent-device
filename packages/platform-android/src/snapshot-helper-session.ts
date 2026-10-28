@@ -20,10 +20,6 @@ import {
   sendAndroidSnapshotHelperSessionCommand,
 } from './snapshot-helper-session-protocol.ts';
 import {
-  observeAndroidSnapshotHelperProcessExit,
-  waitForAndroidSnapshotHelperProcessExit,
-} from './snapshot-helper-retirement.ts';
-import {
   acquireAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
   retireFailedAndroidSnapshotHelperSession,
@@ -31,8 +27,6 @@ import {
   type AndroidSnapshotHelperSession,
   type AndroidSnapshotHelperSessionHelperIdentity,
 } from './snapshot-helper-session-lifecycle.ts';
-
-const SESSION_EXIT_EVIDENCE_GRACE_MS = 250;
 
 export async function captureAndroidSnapshotWithHelperSession(
   options: AndroidSnapshotHelperCaptureOptions,
@@ -74,13 +68,9 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       },
     };
   } catch (error) {
-    // A helper that died mid-request closes the socket before its host process reports the exit, so
-    // the exit result the retirement below records is only there if the exit is given a moment.
-    await waitForAndroidSnapshotHelperProcessExit(
-      observeAndroidSnapshotHelperProcessExit(session.process).ended,
-      SESSION_EXIT_EVIDENCE_GRACE_MS,
-      options.signal,
-    );
+    // Read before the retirement below, which ends the process: a process that is still running
+    // has no cause of its own to report, and the retirement never waits for one.
+    const instrumentation = session.processRecord.current();
     await retireFailedAndroidSnapshotHelperSession({
       deviceKey,
       identity: session.identity,
@@ -96,6 +86,7 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       data: {
         deviceKey,
         reason: error instanceof Error ? error.message : String(error),
+        instrumentation,
         // The typed reason the session protocol already published, not a second
         // comparison against the helper's error type: one owner, one taxonomy (#1983).
         uiAutomationConnectionTimeout:

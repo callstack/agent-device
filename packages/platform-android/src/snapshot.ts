@@ -7,6 +7,7 @@ import {
 import path from 'node:path';
 import { isPositiveFiniteRect, unionRects } from '@agent-device/kernel/rect';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import type { AndroidInstrumentationExitResult } from './instrumentation-helper.ts';
 import type { SnapshotOptions as InteractorSnapshotOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
@@ -710,6 +711,11 @@ function formatAndroidSnapshotHelperFailureReason(error: unknown): string {
     return `${normalized.message}: ${helperMessage}`;
   }
   if (helperMessage) return helperMessage;
+  const instrumentation = normalized.details?.instrumentation as
+    | AndroidInstrumentationExitResult
+    | undefined;
+  const cause = instrumentation?.aborted || instrumentation?.shortMsg || instrumentation?.failed;
+  if (cause) return `${normalized.message}: ${cause}`;
   const stderr =
     typeof normalized.details?.stderr === 'string' ? normalized.details.stderr.trim() : '';
   const firstLine = stderr.split(/\r?\n/).find((line) => line.trim());

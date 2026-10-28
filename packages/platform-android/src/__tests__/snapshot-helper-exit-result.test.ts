@@ -7,6 +7,7 @@ import {
   captureAndroidSnapshotWithHelper,
   parseAndroidSnapshotHelperOutput,
 } from '../snapshot-helper-capture.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { waitForAndroidSnapshotHelperSessionReady } from '../snapshot-helper-session-protocol.ts';
 import { recordInstrumentationProcess } from '../instrumentation-helper.ts';
@@ -64,9 +65,6 @@ type ExitResultFields = {
   longMsg?: string;
   error?: string;
   stack?: string;
-  stderrTail: string;
-  stderrTruncated: boolean;
-  snapshotContentRemoved?: true;
 };
 
 const SECRET = 'hunter2-account-number';
@@ -199,8 +197,6 @@ test('an aborted instrumentation run reports the abort, the status code and the 
     exitCode: 1,
     statusCode: 1,
     aborted: 'System has crashed.',
-    stderrTail: '',
-    stderrTruncated: false,
   });
 });
 
@@ -210,8 +206,6 @@ test('a crashed instrumentation run reports shortMsg, longMsg and the result cod
     resultCode: 0,
     shortMsg: 'java.lang.IllegalStateException',
     longMsg: 'java.lang.IllegalStateException: UiAutomation not connected',
-    stderrTail: '',
-    stderrTruncated: false,
   });
 });
 
@@ -328,7 +322,8 @@ test('stdout is never copied: only parsed protocol fields reach the details', as
   assert.ok(!JSON.stringify(error.details).includes('some unrelated stdout line'));
 });
 
-test('a sensitive value never reaches the details wherever the helper printed it', async () => {
+test('a sensitive value never reaches the details or the log wherever the helper printed it', async () => {
+  const quoted = `${'p'.repeat(1_015)}password="${SECRET}" trailing`;
   const runs: FailedRun[] = [
     // A complete encoded payload.
     { exitCode: 1, stdout: `${encodedPayload(SECRET_XML)}\nINSTRUMENTATION_STATUS_CODE: 1` },
@@ -339,32 +334,38 @@ test('a sensitive value never reaches the details wherever the helper printed it
       exitCode: 1,
       stdout: `INSTRUMENTATION_STATUS: detail=ret" text="${SECRET}" bounds="[0,0][1,1]" />\n`,
     },
-    // A tagless fragment as a free line, and as a message continuation.
+    // A tagless fragment as a free line.
     { exitCode: 1, stdout: `ret" text="${SECRET}" bounds="[0,0][1,1]" />\n` },
-    {
-      exitCode: 1,
-      stdout: `INSTRUMENTATION_RESULT: longMsg=boom\nret" text="${SECRET}" bounds="[0,0][1,1]" />\n`,
-    },
-    {
-      exitCode: 1,
-      stdout: `INSTRUMENTATION_RESULT: shortMsg=ret" content-desc="${SECRET}" bounds="[0,0][1,1]" />\n`,
-    },
-    // A fragment on stderr, raw and as a one-line report with a late secret.
+    // Fragments on stderr, including a role-description attribute and a quoted value whose key a
+    // line cut would have removed.
     { exitCode: 1, stdout: '', stderr: `ret" text="${SECRET}" bounds="[0,0][1,1]" />` },
+    { exitCode: 1, stdout: '', stderr: `ret" role-description="${SECRET}" />` },
+    { exitCode: 1, stdout: '', stderr: quoted },
     { exitCode: 1, stdout: '', stderr: `${'a'.repeat(30_000)}${SECRET_XML}` },
+    // A hierarchy cut off in front of a startup-failure marker.
+    {
+      exitCode: 1,
+      stdout: '',
+      stderr: `<hierarchy><node text="${SECRET}" INSTRUMENTATION_FAILED: ${SECRET}`,
+    },
+    {
+      exitCode: 1,
+      stdout: '',
+      stderr: `android.util.AndroidException: INSTRUMENTATION_FAILED: <node text="${SECRET}"`,
+    },
   ];
   for (const run of runs) {
-    const error = await captureError({ ...run, stderr: `${run.stderr ?? ''}\nam: Killed` });
+    const withKill = { ...run, stderr: `${run.stderr ?? ''}\nam: Killed` };
+    const error = await captureError(withKill);
     const wire = JSON.stringify(normalizeError(error));
     assertPrivate(wire);
-    assert.ok(wire.includes('am: Killed'), wire.slice(-400));
-    assert.equal(exitResultOf(normalizeError(error).details ?? {}).snapshotContentRemoved, true);
+    assert.equal(exitResultOf(normalizeError(error).details ?? {}).failed, undefined);
 
     const { log } = await withLog(async (logPath) => {
       await inScope(logPath, async () => {
         await assert.rejects(
           snapshotAndroid(emulator, {
-            helperAdb: helperFailingWith({ ...run, stderr: `${run.stderr ?? ''}\nam: Killed` }),
+            helperAdb: helperFailingWith(withKill),
             helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
           }),
         );
@@ -390,8 +391,6 @@ test('a session exit never leaks a sensitive value split across chunks', async (
 
   assertPrivate(log);
   assert.equal(exit.aborted, 'System has crashed.');
-  assert.equal(exit.snapshotContentRemoved, true);
-  assert.ok(exit.stderrTail.endsWith('am: Killed'), exit.stderrTail);
 });
 
 test('a startup failure attaches no raw helper stream to its details or the log', async () => {
@@ -418,7 +417,6 @@ test('a startup failure attaches no raw helper stream to its details or the log'
   assertPrivate(JSON.stringify(normalizeError(exitedError)));
   assert.equal('output' in (exitedError.details ?? {}), false);
   assert.equal(exitResultOf(exitedError.details ?? {}).exitCode, 1);
-  assert.ok(exitResultOf(exitedError.details ?? {}).stderrTail.endsWith('am: Killed'));
 
   const stalled = new FakeAndroidProcess();
   const stalledFailure = rejection(waitFor(stalled, 50));
@@ -451,9 +449,8 @@ test('a startup failure attaches no raw helper stream to its details or the log'
   });
   assertPrivate(log);
   assert.equal(
-    exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_start_failed'))
-      .snapshotContentRemoved,
-    true,
+    exitResultOf(diagnosticData(log, 'android_snapshot_helper_session_start_failed')).exitCode,
+    1,
   );
 });
 
@@ -474,22 +471,8 @@ test('a nonzero exit after parseable helper output keeps no raw stream in its de
 
   assertPrivate(JSON.stringify(normalizeError(error)));
   assert.equal(error.details?.stdout, '');
-  assert.equal(error.details?.stderr, 'am: Killed');
+  assert.equal(error.details?.stderr, '');
   assert.equal(error.details?.exitCode, 1);
-});
-
-test('an unbroken stderr line that is cut is flagged as truncated', async () => {
-  const unbroken = await captureExitResult({ exitCode: 1, stdout: '', stderr: 'x'.repeat(5_000) });
-  assert.equal(unbroken.stderrTruncated, true);
-
-  const snapshot = await captureExitResult({
-    exitCode: 1,
-    stdout: '',
-    stderr: `<node text="${SECRET}" ${'x'.repeat(5_000)}`,
-  });
-  assert.equal(snapshot.stderrTruncated, true);
-  assert.equal(snapshot.snapshotContentRemoved, true);
-  assert.ok(!snapshot.stderrTail.includes(SECRET));
 });
 
 test('stderr chunks do not disturb a partial stdout record', async () => {
@@ -502,103 +485,6 @@ test('stderr chunks do not disturb a partial stdout record', async () => {
 
   assert.equal(exit.longMsg, 'UiAutomation failed\nCaused by: binder has died');
   assert.equal(exit.resultCode, 0);
-  assert.equal(exit.stderrTail, 'am: warning');
-});
-
-test('ordinary quoted assignments on stderr are kept while snapshot attributes are dropped', async () => {
-  const result = await captureExitResult({
-    exitCode: 1,
-    stdout: '',
-    stderr: [
-      'E AndroidRuntime: java.lang.IllegalStateException message="binder died" code="7"',
-      `ret" text="${SECRET}" bounds="[0,0][1,1]" />`,
-    ].join('\n'),
-  });
-
-  assert.ok(result.stderrTail.includes('message="binder died" code="7"'), result.stderrTail);
-  assert.ok(!result.stderrTail.includes(SECRET));
-  assert.equal(result.snapshotContentRemoved, true);
-  assert.equal(result.stderrTruncated, true);
-});
-
-test('the real cause past the redaction cap survives in the error and the request log', async () => {
-  const filler = Array.from({ length: 40 }, (_, index) => `line ${index} of helper output`).join(
-    '\n',
-  );
-  const stderr = `${filler}\nam: Killed by the low memory killer`;
-  const error = await captureError({ exitCode: 1, stdout: '', stderr });
-
-  const wire = exitResultOf(normalizeError(error).details ?? {});
-  assert.ok(wire.stderrTail.endsWith('am: Killed by the low memory killer'), wire.stderrTail);
-  assert.ok(wire.stderrTail.length <= 400);
-  assert.equal(wire.stderrTruncated, true);
-
-  const short = await captureError({ exitCode: 1, stdout: '', stderr: `${'y'.repeat(500)} done` });
-  const shortWire = exitResultOf(normalizeError(short).details ?? {});
-  assert.equal(shortWire.stderrTruncated, true);
-  assert.ok(shortWire.stderrTail.endsWith('done'));
-
-  const { log } = await withLog(async (logPath) => {
-    await inScope(logPath, async () => {
-      await assert.rejects(
-        snapshotAndroid(emulator, {
-          helperAdb: helperFailingWith({ exitCode: 1, stdout: '', stderr }),
-          helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-        }),
-      );
-    });
-  });
-  const logged = exitResultOf(diagnosticData(log, 'android_snapshot_helper_failed'));
-  assert.ok(logged.stderrTail.endsWith('am: Killed by the low memory killer'), logged.stderrTail);
-  assert.equal(logged.stderrTruncated, true);
-});
-
-test('stderr beyond the retained window keeps the newest lines', async () => {
-  const lines = Array.from({ length: 100 }, (_, index) => `${index} ${'w'.repeat(400)}`);
-  const result = await captureExitResult({
-    exitCode: 1,
-    stdout: '',
-    stderr: `${lines.join('\n')}\nam: Killed`,
-  });
-
-  assert.ok(result.stderrTail.endsWith('am: Killed'));
-  assert.equal(result.stderrTruncated, true);
-});
-
-test('a long stderr diagnostic line keeps its end and a long snapshot line is dropped', async () => {
-  const diagnostic = `${'frame '.repeat(5_000)}Caused by: binder has died`;
-  const kept = await captureExitResult({ exitCode: 1, stdout: '', stderr: diagnostic });
-  assert.ok(kept.stderrTail.endsWith('Caused by: binder has died'), kept.stderrTail);
-  assert.equal(kept.stderrTruncated, true);
-  assert.equal(kept.snapshotContentRemoved, undefined);
-
-  const snapshot = `<hierarchy>${`<node text="${SECRET}" />`.repeat(2_000)}</hierarchy>`;
-  const dropped = await captureExitResult({
-    exitCode: 1,
-    stdout: '',
-    stderr: `${snapshot}\nam: Killed`,
-  });
-  assert.ok(!dropped.stderrTail.includes(SECRET));
-  assert.ok(dropped.stderrTail.endsWith('am: Killed'));
-  assert.equal(dropped.snapshotContentRemoved, true);
-  assert.equal(dropped.stderrTruncated, true);
-});
-
-test('a session exit keeps a long diagnostic line and flags a chunked snapshot line it dropped', async () => {
-  const { exit, log } = await sessionExit(async (process) => {
-    // Lines arrive in pieces and outgrow the window before they complete.
-    process.stderr.write('frame '.repeat(4_000));
-    await pause();
-    process.stderr.write(`${'frame '.repeat(1_000)}Caused by: binder has died\n`);
-    process.stderr.write(`<hierarchy><node text="${SECRET}" />`);
-    await pause();
-    process.stderr.write(`${`<node text="${SECRET}" />`.repeat(1_000)}</hierarchy>\n`);
-  });
-
-  assertPrivate(log);
-  assert.ok(exit.stderrTail.includes('Caused by: binder has died'), exit.stderrTail);
-  assert.equal(exit.snapshotContentRemoved, true);
-  assert.equal(exit.stderrTruncated, true);
 });
 
 test('a helper failure that reports its own result keeps that report without a second record', async () => {
@@ -646,8 +532,6 @@ test('a session that exits before it is ready records its exit status and the ou
       exitCode: 1,
       statusCode: 1,
       aborted: 'System has crashed.',
-      stderrTail: 'am: Killed',
-      stderrTruncated: false,
     },
   );
 });
@@ -760,7 +644,6 @@ test('a helper report with ok=true but no XML chunks still carries the instrumen
   const result = exitResultOf(error.details ?? {});
   assert.equal(result.exitCode, 1);
   assert.equal(result.resultCode, -1);
-  assert.equal(result.stderrTail, 'am: Killed');
 });
 
 test('a ready timeout in the middle of a record leaves the final fields intact', async () => {
@@ -779,4 +662,89 @@ test('a ready timeout in the middle of a record leaves the final fields intact',
   const final = record.exitResult();
   assert.equal(final?.longMsg, 'UiAutomation failed\nCaused by: binder has died');
   assert.equal(final?.resultCode, 0);
+});
+
+test('startup failures are read from stderr only through a strict whole-line envelope', async () => {
+  const component = 'com.example/.Missing$Inner';
+  for (const line of [
+    `android.util.AndroidException: INSTRUMENTATION_FAILED: ${component}`,
+    `onError: commandError=true message=INSTRUMENTATION_FAILED: ${component}`,
+  ]) {
+    const result = await captureExitResult({ exitCode: 1, stdout: '', stderr: `${line}\n` });
+    assert.equal(result.failed, component, line);
+  }
+  for (const line of [
+    `android.util.AndroidException: INSTRUMENTATION_FAILED: <node text="${SECRET}">`,
+    `<hierarchy><node text="${SECRET}" INSTRUMENTATION_FAILED: ${SECRET}`,
+    `log: android.util.AndroidException: INSTRUMENTATION_FAILED: ${component}`,
+    'android.util.AndroidException: INSTRUMENTATION_FAILED: has spaces',
+  ]) {
+    const result = await captureExitResult({ exitCode: 1, stdout: '', stderr: `${line}\n` });
+    assert.equal(result.failed, undefined, line);
+  }
+});
+
+test('a helper that prints chunks and then times out in the executor leaks no stream', async () => {
+  const script =
+    'process.stdout.write(process.env.PRINTED_STDOUT); process.stderr.write(process.env.PRINTED_STDERR); setTimeout(() => {}, 10_000);';
+  const env = {
+    ...process.env,
+    PRINTED_STDOUT: `${encodedPayload(SECRET_XML)}\nINSTRUMENTATION_STATUS_CODE: 1\n`,
+    PRINTED_STDERR: `ret" text="${SECRET}" />\n`,
+  };
+  let caught: AppError | undefined;
+  try {
+    await captureAndroidSnapshotWithHelper({
+      adb: async () => await runCmd(process.execPath, ['-e', script], { timeoutMs: 600, env }),
+    });
+  } catch (error) {
+    caught = error as AppError;
+  }
+
+  assert.ok(caught instanceof AppError);
+  const wire = normalizeError(caught);
+  assertPrivate(JSON.stringify(wire));
+  assert.equal('stdout' in (caught.details ?? {}), false);
+  assert.equal('stderr' in (caught.details ?? {}), false);
+  assert.equal(caught.details?.timeoutMs, 600);
+  assert.equal(exitResultOf(caught.details ?? {}).statusCode, 1);
+});
+
+test('a session that exits while its streams stay open still fails startup promptly', async () => {
+  const child = new FakeAndroidProcess();
+  const controller = new AbortController();
+  const failure = rejection(
+    waitForAndroidSnapshotHelperSessionReady(
+      child,
+      5_000,
+      controller.signal,
+      recordInstrumentationProcess(child),
+    ),
+  );
+  child.stdout.write('INSTRUMENTATION_ABORTED: System has crashed.\n');
+  await pause();
+  child.exitCode = 1;
+  child.emit('exit', 1, null);
+
+  const startedAt = Date.now();
+  const error = await failure;
+
+  assert.ok(Date.now() - startedAt < 2_000);
+  assert.equal(exitResultOf(error.details ?? {}).exitCode, 1);
+  assert.equal(exitResultOf(error.details ?? {}).aborted, 'System has crashed.');
+});
+
+test('a failed live session is retired without waiting for an exit', async () => {
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls: [], processes, responseMode: 'malformed' });
+
+  const startedAt = Date.now();
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5556',
+  });
+
+  assert.equal(output, undefined);
+  assert.ok(Date.now() - startedAt < 200, `retirement took ${Date.now() - startedAt}ms`);
 });

@@ -5,8 +5,7 @@ const SECRET_TOKEN_RE =
 const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
-/** The longest ordinary string a redacted diagnostic value keeps. */
-export const REDACTED_STRING_MAX_LENGTH = 400;
+const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;
 const TRUNCATION_SUFFIX = '...<truncated>';
 
@@ -54,21 +53,9 @@ function redactString(value: string, keyHint?: string): string {
   const trimmed = value.trim();
   if (!trimmed) return boundRedactedString(value, keyHint);
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
-  return boundRedactedString(redactSensitiveText(trimmed), keyHint);
-}
-
-/**
- * Redacts secrets and URL credentials in free text without the length bound
- * `redactDiagnosticData` applies, for a caller that must choose which end of the text survives.
- */
-export function redactDiagnosticText(value: string): string {
-  return redactSensitiveText(value.trim());
-}
-
-function redactSensitiveText(trimmed: string): string {
   let output = redactUrls(trimmed);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
-  return output.replace(
+  output = output.replace(
     SENSITIVE_ASSIGNMENT_RE,
     (match, key: string, separator: string, rawValue: string, offset: number, input: string) => {
       if (isSafeSetupUrlAssignment({ key, separator, rawValue, offset, input })) return match;
@@ -76,6 +63,7 @@ function redactSensitiveText(trimmed: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
+  return boundRedactedString(output, keyHint);
 }
 
 function boundRedactedString(value: string, keyHint?: string): string {

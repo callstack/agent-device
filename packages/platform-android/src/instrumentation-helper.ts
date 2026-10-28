@@ -1,4 +1,3 @@
-import { REDACTED_STRING_MAX_LENGTH, redactDiagnosticText } from '@agent-device/kernel/redaction';
 import type { AndroidAdbProcess } from './adb-executor.ts';
 // Shared primitives for the Android instrumentation helpers (snapshot + multi-touch).
 // Both helpers drive `am instrument -w` and parse the resulting
@@ -120,9 +119,9 @@ export function readInstrumentationResultBoolean(value: string | undefined): boo
 /**
  * What an `am instrument` run that returned no usable report says about its own end.
  *
- * Private by construction: stdout contributes only the protocol fields parsed below and never a line
- * of its own, so a snapshot payload or raw XML the helper printed has no way in. The only free text
- * is a bounded stderr tail, from which lines holding snapshot content are removed.
+ * Private by construction: no line of either stream is copied. The fields below are parsed from
+ * stdout protocol records, plus the startup-failure component from a strict whole-line envelope on
+ * either stream. A snapshot payload or raw XML the helper printed has no way in.
  */
 export type AndroidInstrumentationExitResult = {
   /** Host process exit status; `null` when a signal ended it. */
@@ -134,37 +133,24 @@ export type AndroidInstrumentationExitResult = {
   statusCode?: number;
   /** `INSTRUMENTATION_ABORTED`: the system ended the run before it reported. */
   aborted?: string;
-  /** `INSTRUMENTATION_FAILED`: the run never started. */
+  /** The component of `INSTRUMENTATION_FAILED`: the run never started. */
   failed?: string;
   shortMsg?: string;
   longMsg?: string;
   error?: string;
   stack?: string;
-  /**
-   * The end of stderr after secrets are redacted, held to the length a redacted diagnostic string
-   * keeps so the cause at the end is what survives the boundary.
-   */
-  stderrTail: string;
-  /** Stderr was cut, or a line of it was removed as snapshot content. */
-  stderrTruncated: boolean;
-  /** A line of either stream held snapshot content and was dropped. */
-  snapshotContentRemoved?: true;
 };
 
-const STDERR_WINDOW_MAX_CHARS = 16_384;
-const STDOUT_LINE_MAX_CHARS = 4_096;
-// A line is held to a few times the tail that survives the diagnostic boundary.
-const STDERR_LINE_MAX_CHARS = 1_024;
+const LINE_MAX_CHARS = 4_096;
 const MESSAGE_FIELD_MAX_CHARS = 2_048;
-const SNAPSHOT_OMITTED = '<snapshot content omitted>';
-// A UiAutomator hierarchy dump prints `<node` and `<hierarchy` elements whose attributes carry the
-// app's text. An attribute of the dump is snapshot content even when its element's opening tag was
-// cut off or never printed; any other quoted assignment is ordinary output.
-const SNAPSHOT_CONTENT_RE =
-  /<\/?(?:\?xml|hierarchy|node)\b|(?<![\w-])(?:text|content-desc|resource-id|bounds|hint|package|class|checkable|clickable)="|payloadBase64=/;
-// `android.util.AndroidException: INSTRUMENTATION_FAILED: <component>` and
-// `onError: ... message=INSTRUMENTATION_FAILED: <component>` carry the marker mid-line.
-const FAILED_RE = /INSTRUMENTATION_FAILED:[ \t]?(.*)$/;
+// A startup failure is read only from a whole line of one of the three shapes AOSP prints; a
+// component name has no space, quote or angle bracket, so a line holding any other text cannot match.
+const COMPONENT = '([A-Za-z0-9_.$/]*)';
+const FAILED_ENVELOPES = [
+  new RegExp(`^INSTRUMENTATION_FAILED: ?${COMPONENT}$`),
+  new RegExp(`^android\\.util\\.AndroidException: INSTRUMENTATION_FAILED: ${COMPONENT}$`),
+  new RegExp(`^onError: commandError=(?:true|false) message=INSTRUMENTATION_FAILED: ${COMPONENT}$`),
+];
 const ABORTED_RE = /^INSTRUMENTATION_ABORTED:[ \t]?(.*)$/;
 const PROTOCOL_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|STATUS_CODE|RESULT|CODE|ABORTED|FAILED):/;
 const VALUE_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|RESULT): ([^=]*)=(.*)$/;
@@ -175,30 +161,19 @@ type MessageField = 'shortMsg' | 'longMsg' | 'error' | 'stack';
 
 type LineAssembler = { write(chunk: string): void; end(): void };
 
-/**
- * Splits one stream into lines. A line longer than `maxChars` keeps its head or its tail, and is
- * reported as snapshot content if any part of it that was held at some point looked like it.
- */
-function createLineAssembler(
-  keep: 'head' | 'tail',
-  maxChars: number,
-  onLine: (line: string, snapshot: boolean, cut: boolean) => void,
-): LineAssembler {
+/** Splits one stream into lines; a line longer than `LINE_MAX_CHARS` keeps its head and is reported as cut. */
+function createLineAssembler(onLine: (line: string, cut: boolean) => void): LineAssembler {
   let pending = '';
-  let snapshot = false;
   let cut = false;
   const append = (text: string) => {
     pending += text;
-    if (pending.length <= maxChars) return;
-    snapshot ||= SNAPSHOT_CONTENT_RE.test(pending);
+    if (pending.length <= LINE_MAX_CHARS) return;
     cut = true;
-    pending = keep === 'head' ? pending.slice(0, maxChars) : startAtToken(pending.slice(-maxChars));
+    pending = pending.slice(0, LINE_MAX_CHARS);
   };
   const flush = () => {
-    const line = pending.replace(/\r$/, '');
-    onLine(line, snapshot || SNAPSHOT_CONTENT_RE.test(line), cut);
+    onLine(pending.replace(/\r$/, ''), cut);
     pending = '';
-    snapshot = false;
     cut = false;
   };
   return {
@@ -212,15 +187,9 @@ function createLineAssembler(
       append(rest);
     },
     end() {
-      if (pending || cut || snapshot) flush();
+      if (pending) flush();
     },
   };
-}
-
-/** Drops the token a tail cut landed in, so a redaction key is never left without its name. */
-function startAtToken(text: string): string {
-  const boundary = /\s/.exec(text);
-  return boundary ? text.slice(boundary.index + 1) : '';
 }
 
 /** One run's output, read as two streams with a parser state each. */
@@ -230,31 +199,28 @@ function createInstrumentationOutput() {
       Record<'resultCode' | 'statusCode', number>
   > = {};
   let open: MessageField | undefined;
-  let snapshotContentRemoved = false;
-  let stderrKept = '';
-  let stderrCut = false;
-  const accept = (text: string, snapshot: boolean): string | undefined => {
-    snapshotContentRemoved ||= snapshot;
-    return snapshot ? undefined : text;
+  const readFailed = (line: string, cut: boolean): boolean => {
+    if (cut) return false;
+    for (const envelope of FAILED_ENVELOPES) {
+      const match = envelope.exec(line);
+      if (match) {
+        fields.failed ??= match[1] ?? '';
+        return true;
+      }
+    }
+    return false;
   };
-  const readFailed = (line: string) => {
-    const failed = FAILED_RE.exec(line);
-    if (failed) fields.failed ??= accept((failed[1] ?? '').trim(), SNAPSHOT_CONTENT_RE.test(line));
-    return failed !== null;
-  };
-  const readStdoutLine = (line: string, snapshot: boolean) => {
-    if (readFailed(line)) {
+  const readStdoutLine = (line: string, cut: boolean) => {
+    if (readFailed(line, cut)) {
       open = undefined;
     } else if (PROTOCOL_RECORD_RE.test(line)) {
-      open = readProtocolRecord(line, snapshot);
-    } else if (!open) {
-      snapshotContentRemoved ||= snapshot;
-    } else if (accept(line, snapshot) !== undefined) {
+      open = readProtocolRecord(line);
+    } else if (open) {
       fields[open] = appendLine(fields[open], line);
     }
   };
-  /** Reads one protocol record; answers the message field its value opens, if any. */
-  const readProtocolRecord = (line: string, snapshot: boolean): MessageField | undefined => {
+  /** Reads one protocol record; answers the message field whose value it opens, if any. */
+  const readProtocolRecord = (line: string): MessageField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
@@ -265,37 +231,21 @@ function createInstrumentationOutput() {
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
-      fields.aborted ??= accept((aborted[1] ?? '').trim(), snapshot);
+      fields.aborted ??= (aborted[1] ?? '').trim();
       return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
     const field = record ? messageFieldOf(record[1]!) : undefined;
-    if (!field || fields[field] !== undefined) {
-      snapshotContentRemoved ||= snapshot;
-      return undefined;
-    }
-    const value = accept((record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS), snapshot);
-    if (value === undefined) return undefined;
-    fields[field] = value;
+    if (!field || fields[field] !== undefined) return undefined;
+    fields[field] = (record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS);
     return field;
   };
-  const readStderrLine = (line: string, snapshot: boolean, cut: boolean) => {
-    readFailed(line);
-    stderrCut ||= cut || snapshot;
-    snapshotContentRemoved ||= snapshot;
-    stderrKept += `${snapshot ? SNAPSHOT_OMITTED : line}\n`;
-    if (stderrKept.length > STDERR_WINDOW_MAX_CHARS) {
-      stderrCut = true;
-      stderrKept = stderrKept.slice(
-        stderrKept.indexOf('\n', stderrKept.length - STDERR_WINDOW_MAX_CHARS) + 1,
-      );
-    }
-  };
-  const stdout = createLineAssembler('head', STDOUT_LINE_MAX_CHARS, readStdoutLine);
-  const stderr = createLineAssembler('tail', STDERR_LINE_MAX_CHARS, readStderrLine);
+  const stdout = createLineAssembler(readStdoutLine);
+  const stderr = createLineAssembler(readFailed);
   return {
     writeStdout: stdout.write,
     writeStderr: stderr.write,
+    /** Finalizing reads the line still being written; a snapshot of a live process does not. */
     result(
       exitCode: number | null | undefined,
       signal: string | null | undefined,
@@ -305,7 +255,6 @@ function createInstrumentationOutput() {
         stdout.end();
         stderr.end();
       }
-      const text = redactDiagnosticText(stderrKept);
       const { aborted, failed, shortMsg, longMsg, error, stack, resultCode, statusCode } = fields;
       return {
         exitCode: exitCode ?? null,
@@ -318,9 +267,6 @@ function createInstrumentationOutput() {
         ...(longMsg !== undefined ? { longMsg: longMsg.trimEnd() } : {}),
         ...(error !== undefined ? { error: error.trimEnd() } : {}),
         ...(stack !== undefined ? { stack: stack.trimEnd() } : {}),
-        stderrTail: text.slice(-REDACTED_STRING_MAX_LENGTH),
-        stderrTruncated: stderrCut || text.length > REDACTED_STRING_MAX_LENGTH,
-        ...(snapshotContentRemoved ? { snapshotContentRemoved: true as const } : {}),
       };
     },
   };
@@ -349,7 +295,7 @@ export function readInstrumentationExitResult(run: {
   return output.result(run.exitCode, run.signal, true);
 }
 
-/** The exit of a spawned helper process and what it printed, kept to a bounded recent window. */
+/** The exit of a spawned helper process and what it printed. */
 export type AndroidInstrumentationProcessRecord = {
   /** Settles when the process's output streams have closed, the point its output is complete. */
   closed: Promise<void>;
