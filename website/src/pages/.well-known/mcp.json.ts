@@ -8,11 +8,21 @@ import type { APIRoute } from 'astro';
 import server from '../../../../server.json';
 import { site } from '../../site/content';
 
+const REGISTRY = 'https://registry.npmjs.org/agent-device/latest';
+
 async function latestVersion(): Promise<string> {
-  const response = await fetch('https://registry.npmjs.org/agent-device/latest', {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(10_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(REGISTRY, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (error) {
+    throw new Error(
+      `mcp.json: the site build reads the published version from ${REGISTRY}, which is unreachable. Without network access this is an infrastructure fault, not a site bug.`,
+      { cause: error },
+    );
+  }
   if (!response.ok) {
     throw new Error(
       `mcp.json: npm did not return the published version (HTTP ${response.status}).`,
