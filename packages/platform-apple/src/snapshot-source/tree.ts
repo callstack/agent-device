@@ -148,16 +148,18 @@ const KEYBOARD_FOCUS_TRAIT = 1n << 21n;
  */
 const TAB_BUTTON_TRAIT = 1n << 28n;
 
-/**
- * The traits UIKit sets on a text input: the private text entry (bit 18), secure text field (bit 24),
- * and text area (bit 47), and the public search field (bit 10). A custom-drawn input, such as a
- * Compose Multiplatform text field, reports the automation type of a plain view (`Other`), and
- * XCTest types it from these bits, so the runner path answers `TextField`, `SecureTextField`,
- * `TextView`, or `SearchField` for it. The bridge derives the type from them for an `Other` to match.
+/*
+ * The traits XCTest types a text input from. A custom-drawn input, such as a Compose Multiplatform
+ * text field, reports the automation type of a plain view (`Other`), so the bridge derives the type
+ * from these bits for an `Other` to match the runner path.
  */
+/** Public search field: an input is a `SearchField`. */
 const SEARCH_FIELD_TRAIT = 1n << 10n;
+/** Private text entry: the element is a text input. */
 const TEXT_ENTRY_TRAIT = 1n << 18n;
+/** Private secure text field: an input is a `SecureTextField`. */
 const SECURE_TEXT_FIELD_TRAIT = 1n << 24n;
+/** Private text area: an input is a `TextView`. */
 const TEXT_AREA_TRAIT = 1n << 47n;
 
 /**

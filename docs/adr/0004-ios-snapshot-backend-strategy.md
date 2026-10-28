@@ -746,10 +746,13 @@ The decoder does the same.
 Otherwise, a `role=button` tab selector that matches the runner tree does not match the bridge tree.
 
 A custom-drawn text input, such as a Compose Multiplatform text field, reports the automation type `Other`.
-It carries the private text-entry trait (bit 18), and also the secure-text-field trait (bit 24) or the text-area trait (bit 47) where they apply.
-XCTest types such an element as `TextField`, `SecureTextField`, or `TextView`.
-The decoder does the same for an `Other`, and types a search-field-trait (bit 10) input as `SearchField`.
+It carries the private text-entry trait (bit 18).
+XCTest types such an element as a text input, and the runner tree reports it editable.
+The decoder types an `Other` that carries the text-entry trait as `SecureTextField` with bit 24, else `SearchField` with bit 10, else `TextView` with bit 47, else `TextField`.
+A declared automation type is kept.
 Otherwise, the bridge tree reports the input as not editable, and a `fill` client refuses it.
+Only the `TextView` word (bits 18, 33, and 47, from a Compose Multiplatform 1.12 `BasicTextField` on iOS 27) was captured live.
+The other three branches and their precedence follow the trait names and are not captured yet.
 
 The snapshot API reports the frames of a windowed app relative to its window, not to the screen.
 Windowed Apps and Stage Manager both put an app in such a window.
