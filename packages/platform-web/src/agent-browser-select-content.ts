@@ -146,7 +146,7 @@ function selectControlContent(control: PageElement): string {
   return covered ? 'selected' : 'selection-failed';
 }
 
-function selectFocusedContent(clickX: number, clickY: number): string {
+export function selectFocusedContent(clickX: number, clickY: number): string {
   const field = resolveFocusedField();
   if (typeof field === 'string') return field;
   const hit = resolveClickedElement(clickX, clickY);

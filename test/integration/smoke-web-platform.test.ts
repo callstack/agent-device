@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
 import { runCleanupWithCoverageReport } from './web-e2e/coverage-report.ts';
+import { runLiveFillScenario } from './web-e2e/fill-scenario.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import {
   getManagedAgentBrowserStatus,
@@ -145,6 +146,16 @@ test(
     // linger on the runner; the shutdown lane below deliberately omits this override instead.
     await runWebSmoke(await createWebSmokeContext({ agentBrowserIdleTimeoutMs: '30000' }));
   },
+);
+
+test(
+  'live web coordinate fill selects in the page and refuses what it cannot confirm',
+  {
+    skip: WEB_E2E_ENABLED
+      ? false
+      : 'Set AGENT_DEVICE_WEB_E2E=1 to run the managed web backend smoke.',
+  },
+  runLiveFillScenario,
 );
 
 // #1868: teardownSessionResources gained a best-effort web-close step so a daemon shutdown (or

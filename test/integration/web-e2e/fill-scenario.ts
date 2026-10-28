@@ -3,15 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
-import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
+import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
 import {
   FILL_FIXTURE_POINTS,
   type FillFixtureState,
   startFillFixtureServer,
-} from './web-e2e/fill-fixture.ts';
-
-const WEB_E2E_ENABLED = process.env.AGENT_DEVICE_WEB_E2E === '1';
+} from './fill-fixture.ts';
 
 type Point = readonly [number, number];
 type Field = {
@@ -45,35 +42,31 @@ const REFUSED_FIELDS: readonly Field[] = [
   { name: 'select', stateKey: 'select' },
 ];
 
-test(
-  'live web coordinate fill selects in the page and refuses what it cannot confirm',
-  {
-    skip: WEB_E2E_ENABLED
-      ? false
-      : 'Set AGENT_DEVICE_WEB_E2E=1 to run the managed web backend smoke.',
-  },
-  async () => {
-    const live = await startLiveFill();
-    try {
-      await live.setup();
-      await live.run(['open', live.url]);
-      await live.run(['viewport', '900', '700']);
-      assert.equal((await live.readState()).plain, 'old');
+/**
+ * Live coordinate `fill` on the managed headless backend. It claims the one web device, so it runs
+ * in the web smoke file's sequence, never beside another web scenario.
+ */
+export async function runLiveFillScenario(): Promise<void> {
+  const live = await startLiveFill();
+  try {
+    await live.setup();
+    await live.run(['open', live.url]);
+    await live.run(['viewport', '900', '700']);
+    assert.equal((await live.readState()).plain, 'old');
 
-      for (const field of EDITABLE_FIELDS) {
-        await assertFillReplacesAndClears(live, field);
-      }
-      for (const field of REFUSED_FIELDS) {
-        await assertFillRefused(live, field.name, field.stateKey);
-      }
-      await assertCheckboxFillRefused(live);
-      await assertMissKeepsPreviouslyFocusedField(live);
-      await assertButtonFillSendsNoKeys(live);
-    } finally {
-      await live.close();
+    for (const field of EDITABLE_FIELDS) {
+      await assertFillReplacesAndClears(live, field);
     }
-  },
-);
+    for (const field of REFUSED_FIELDS) {
+      await assertFillRefused(live, field.name, field.stateKey);
+    }
+    await assertCheckboxFillRefused(live);
+    await assertMissKeepsPreviouslyFocusedField(live);
+    await assertButtonFillSendsNoKeys(live);
+  } finally {
+    await live.close();
+  }
+}
 
 async function assertFillReplacesAndClears(live: LiveFill, field: Field): Promise<void> {
   const text = field.text ?? 'new';
