@@ -165,7 +165,7 @@ test('runChecks passes the selector change set to Vitest related', async () => {
   );
 });
 
-test('runChecks skips CI checks, deduplicates related tests, and preserves local ordering', async () => {
+test('runChecks skips CI checks, runs every local check of a fail-open plan, and preserves local ordering', async () => {
   const executed: string[][] = [];
   const execute: CommandExecutor = async (command) => {
     executed.push(command);
@@ -214,20 +214,53 @@ test('runChecks skips CI checks, deduplicates related tests, and preserves local
     executed.some((command) => command.includes('test:coverage')),
     false,
   );
-  assert.equal(
-    executed.some((command) => command.includes('check:unit')),
-    false,
-    'related tests cover the selected unit graph without repeating the full suite',
-  );
-  assert.equal(
-    executed.some((command) => command.includes('test:integration:provider')),
-    false,
-    'related tests cover the selected provider graph without repeating the full suite',
-  );
+  // A fail-open plan could not narrow the change, so the related run stands in for nothing.
+  for (const script of ['check:unit', 'test:integration:provider']) {
+    assert.ok(
+      executed.some((command) => command.includes(script)),
+      `${script} must run when the plan fails open`,
+    );
+  }
   assert.equal(
     executed.some((command) => command.includes('check:coverage-changed')),
     false,
     'the coverage gate is GitHub-authoritative and must not run locally',
+  );
+});
+
+async function runFailingOn(script: string, changedFiles: string[]): Promise<number> {
+  const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
+  assert.equal(plan.failOpen, false, changedFiles.join(', '));
+  return await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute: async (command) => (command.includes(script) ? 23 : 0),
+    cwd: '.',
+    changedFiles,
+  });
+}
+
+// The eager-closure budget and similar unit gates read sources as text, so no related test reaches
+// them; a production change that only they reject must still fail the local run (#3995).
+test('a production source change fails on a unit-suite failure the related run cannot see', async () => {
+  for (const changedFiles of [
+    ['src/cli.ts'],
+    ['packages/selectors/src/index.ts'],
+    ['packages/platform-apple/src/runner/runner-cache-metadata.ts'],
+    ['packages/selectors/src/index.ts', 'contracts/fixtures/tap-point-policy.json'],
+  ]) {
+    assert.equal(await runFailingOn('check:unit', changedFiles), 23, changedFiles.join(', '));
+  }
+});
+
+test('a test-only change leaves the full unit suite to CI', async () => {
+  assert.equal(await runFailingOn('check:unit', ['packages/daemon/src/selectors.test.ts']), 0);
+});
+
+test('the related run still stands in for provider-integration on a narrowed plan', async () => {
+  assert.equal(
+    await runFailingOn('test:integration:provider', [
+      'packages/platform-apple/src/runner/runner-cache-metadata.ts',
+    ]),
+    0,
   );
 });
 

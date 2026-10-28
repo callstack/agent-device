@@ -212,11 +212,25 @@ const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
       ]
     : [];
 
+// Unit-suite gates such as eager-closure-budgets read production sources as text (git trees,
+// parsed module graphs) instead of importing them, so `vitest related` cannot select them. A
+// production source change therefore runs the whole unit suite, beside the related run that
+// covers the other Vitest projects.
+function textReadingUnitGates(file: string): SelectionReason {
+  return reason(
+    'unit',
+    file,
+    'own:unit-text-gates',
+    'unit-suite gates read production sources as text, which the Vitest module graph cannot trace',
+  );
+}
+
 const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   if (!isSrcProd) return [];
   return [
     reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
     reason('build', file, 'src-prod', 'production source is compiled by the build'),
+    textReadingUnitGates(file),
   ];
 };
 
@@ -265,6 +279,7 @@ const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
   if (!isTestPath(file)) {
     selections.push(
       reason('build', file, 'package-src', 'package source is bundled into the published artifact'),
+      textReadingUnitGates(file),
     );
   }
   return selections;

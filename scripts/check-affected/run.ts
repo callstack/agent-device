@@ -211,7 +211,8 @@ export async function runChecks(
   const execute = options.execute;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
-  const relatedSelected = plan.checks.includes('vitest-related');
+  // A fail-open plan could not narrow the change, so no check may stand in for another.
+  const relatedSelected = !plan.failOpen && plan.checks.includes('vitest-related');
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
     const reason = describeOwner(spec.id, ciJobs);
@@ -253,8 +254,10 @@ function describeOwner(id: CheckId, ciJobs: ReadonlyMap<CheckId, string[]>): str
   return `GitHub-authoritative (jobs: ${(ciJobs.get(id) ?? []).join(', ')})`;
 }
 
+// Only provider-integration defers to the related run. `unit` never does: its suite holds gates that
+// read sources as text, which the related module graph cannot select.
 function isCoveredByRelatedTests(spec: CheckSpec, relatedSelected: boolean): boolean {
-  return relatedSelected && (spec.id === 'unit' || spec.id === 'provider-integration');
+  return relatedSelected && spec.id === 'provider-integration';
 }
 
 async function main(argv = process.argv.slice(2)): Promise<number> {

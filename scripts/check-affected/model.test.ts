@@ -18,7 +18,7 @@ function ids(changedFiles: string[]): CheckId[] {
   return plan(changedFiles).checks;
 }
 
-test('production source selects static/build gates and delegates tests to Vitest', () => {
+test('production source selects static/build gates, related tests, and the full unit suite', () => {
   const result = plan(['packages/selectors/src/index.ts']);
   assert.equal(result.failOpen, false);
   for (const id of [
@@ -28,6 +28,7 @@ test('production source selects static/build gates and delegates tests to Vitest
     'layering',
     'build',
     'vitest-related',
+    'unit',
   ] as const) {
     assert.ok(result.checks.includes(id), `expected ${id}`);
   }
@@ -35,6 +36,22 @@ test('production source selects static/build gates and delegates tests to Vitest
   // Every selected check documents why it was chosen.
   for (const id of result.checks) {
     assert.ok(result.reasons.some((reason) => reason.check === id));
+  }
+});
+
+test('any production source selects the unit suite whose gates read sources as text', () => {
+  for (const file of [
+    'src/cli.ts',
+    'packages/daemon/src/index.ts',
+    'packages/kernel/src/errors.ts',
+  ]) {
+    const result = plan([file]);
+    assert.ok(
+      result.reasons.some(
+        (reason) => reason.check === 'unit' && reason.rule === 'own:unit-text-gates',
+      ),
+      file,
+    );
   }
 });
 
