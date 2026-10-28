@@ -4,6 +4,7 @@ import AgentDeviceSnapshotPresentation
 final class TextInputProbeIssues {
   let thread = Thread.current
   var count = 0
+  var held: [XCTIssue] = []
 }
 
 enum TextInputProbeFailure: String, Error {
@@ -117,6 +118,28 @@ extension RunnerTests {
     fallback: T,
     _ probe: (_ shouldStop: () -> Bool) -> T
   ) -> Result<T, TextInputProbeFailure> {
+    withIssueScope { issues in
+      let (value, exception) = catchingObjCException(fallback: fallback) {
+        probe({ self.hasTextInputProbeIssues(issues) })
+      }
+      if hasTextInputProbeIssues(issues) { return .failure(.recordedIssue) }
+      if exception != nil { return .failure(.exception) }
+      return .success(value)
+    }
+  }
+
+  /// Runs `body` with its XCTest issues held back instead of recorded, and hands them to the caller,
+  /// which records the ones it does not explain.
+  func holdingRecordedIssues(_ body: () -> Void) -> (issues: [XCTIssue], exception: Bool) {
+    withIssueScope { issues in
+      let (_, exception) = catchingObjCException(fallback: ()) { body() }
+      suppressedIssueLock.lock()
+      defer { suppressedIssueLock.unlock() }
+      return (issues.held, exception != nil)
+    }
+  }
+
+  private func withIssueScope<T>(_ body: (TextInputProbeIssues) -> T) -> T {
     precondition(Thread.isMainThread)
     let issues = TextInputProbeIssues()
     suppressedIssueLock.lock()
@@ -128,12 +151,7 @@ extension RunnerTests {
       textInputProbeIssues = previous
       suppressedIssueLock.unlock()
     }
-    let (value, exception) = catchingObjCException(fallback: fallback) {
-      probe({ self.hasTextInputProbeIssues(issues) })
-    }
-    if hasTextInputProbeIssues(issues) { return .failure(.recordedIssue) }
-    if exception != nil { return .failure(.exception) }
-    return .success(value)
+    return body(issues)
   }
 
   private func hasTextInputProbeIssues(_ scope: TextInputProbeIssues) -> Bool {
@@ -149,8 +167,9 @@ extension RunnerTests {
       return false
     }
     scope.count += 1
+    scope.held.append(issue)
     suppressedIssueLock.unlock()
-    NSLog("AGENT_DEVICE_RUNNER_TEXT_INPUT_PROBE_UNAVAILABLE issue=%@", issue.compactDescription)
+    NSLog("AGENT_DEVICE_RUNNER_RECORDED_ISSUE_HELD issue=%@", issue.compactDescription)
     return true
   }
 

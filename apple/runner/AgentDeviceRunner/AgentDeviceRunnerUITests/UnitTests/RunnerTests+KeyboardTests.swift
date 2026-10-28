@@ -243,5 +243,40 @@ extension RunnerTests {
       runnerScreenshotStabilitySettled([Data([1])], requiredConsecutiveMatches: 1)
     )
   }
+
+  func testNoKeyboardFocusIssueIsOnlyXCTestsRefusalToTypeUnfocused() {
+    XCTAssertTrue(Self.isNoKeyboardFocusIssue(
+      "Failed to synthesize event: Neither element nor any descendant has keyboard focus. Event dispatch snapshot: Application"
+    ))
+    XCTAssertFalse(Self.isNoKeyboardFocusIssue("Timed out while evaluating UI query."))
+  }
+
+#if os(iOS)
+  @MainActor
+  func testKeyboardReturnWithNothingFocusedFailsWithoutInvalidatingTheRunnerSession() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(
+      app.textFields["agent-device-hardware-keyboard-input"].waitForFixtureExistence(timeout: appExistenceTimeout)
+    )
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    let failures = currentXCTestFailureCount()
+    let command = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"keyboardReturn","commandId":"return-unfocused"}"#
+    )
+
+    let response = try execute(command: command)
+    let recordedFailures = currentXCTestFailureCount() - failures
+
+    XCTAssertEqual(recordedFailures, 0)
+    XCTAssertEqual(response.error?.code, "UNSUPPORTED_OPERATION")
+  }
+#endif
 }
 #endif
