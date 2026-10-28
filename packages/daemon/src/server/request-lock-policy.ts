@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import {
+  describeDeviceUdidSelectorConflict,
   formatSessionSelectorConflict,
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
@@ -118,9 +119,11 @@ function buildLockPolicyConflictMessage(
 ): string {
   const conflictList = conflicts.map(formatSessionSelectorConflict).join(', ');
   if (existingRef) {
+    const udidHint = describeDeviceUdidSelectorConflict(existingRef.session, conflicts);
     return (
       `Session "${existingRef.address}" is already bound to ${describeSessionDevice(existingRef.session)}, ` +
-      `but ${req.command} selected ${conflictList}.`
+      `but ${req.command} selected ${conflictList}.` +
+      (udidHint ? ` ${udidHint}` : '')
     );
   }
   const lockPlatform = req.meta?.lockPlatform;

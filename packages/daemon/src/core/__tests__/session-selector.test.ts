@@ -148,7 +148,7 @@ test('accepts the AVD name selector that selected the bound device', async () =>
   );
 });
 
-test('accepts the bound Apple device UDID as a device selector', () => {
+test('rejects the bound Apple device UDID as a device selector and points to --udid', () => {
   const session = makeSession({
     device: {
       platform: 'apple',
@@ -159,15 +159,21 @@ test('accepts the bound Apple device UDID as a device selector', () => {
       booted: true,
     },
   });
-  assert.doesNotThrow(() =>
-    assertSessionSelectorMatches(ref(session), { platform: 'ios', device: 'B2C1-SIM-001' }),
+  assert.throws(
+    () => assertSessionSelectorMatches(ref(session), { platform: 'ios', device: 'B2C1-SIM-001' }),
+    (err: unknown) =>
+      err instanceof AppError &&
+      err.code === 'INVALID_ARGS' &&
+      err.message.includes('--device=B2C1-SIM-001') &&
+      err.message.includes('--udid B2C1-SIM-001'),
   );
   assert.throws(
     () => assertSessionSelectorMatches(ref(session), { device: 'B2C1-SIM-002' }),
     (err: unknown) =>
       err instanceof AppError &&
       err.code === 'INVALID_ARGS' &&
-      err.message.includes('--device=B2C1-SIM-002'),
+      err.message.includes('--device=B2C1-SIM-002') &&
+      !err.message.includes('--udid'),
   );
 });
 
@@ -178,7 +184,8 @@ test('rejects an Android serial as a device selector', () => {
     (err: unknown) =>
       err instanceof AppError &&
       err.code === 'INVALID_ARGS' &&
-      err.message.includes('--device=emulator-5554'),
+      err.message.includes('--device=emulator-5554') &&
+      !err.message.includes('--udid'),
   );
 });
 

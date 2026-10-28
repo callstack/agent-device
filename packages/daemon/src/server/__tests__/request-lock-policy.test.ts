@@ -431,3 +431,24 @@ test('strips only conflicting scope selectors for existing sessions, keeping mat
   assert.equal(req.flags?.device, 'iPhone 16');
   assert.equal(req.flags?.androidDeviceAllowlist, undefined);
 });
+
+test('points a bound-session --device UDID conflict to --udid', () => {
+  assert.throws(
+    () =>
+      applyRequestLockPolicy(
+        {
+          token: 'token',
+          session: 'qa-ios',
+          command: 'snapshot',
+          positionals: [],
+          flags: { device: 'SIM-001' },
+          meta: { lockPolicy: 'reject' },
+        },
+        ref(IOS_SESSION),
+      ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message.includes('--device=SIM-001') &&
+      error.message.includes('--udid SIM-001'),
+  );
+});

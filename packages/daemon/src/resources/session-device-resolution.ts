@@ -11,7 +11,7 @@ import {
   hasDeviceSelectionInput,
   hasExplicitDeviceSelector,
 } from '../core/device/device-selector-intent.ts';
-import { isBoundAppleDeviceUdid, listSessionSelectorConflicts } from '../core/session-selector.ts';
+import { listSessionSelectorConflicts } from '../core/session-selector.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 const pinnedSessionDevices = new WeakMap<
@@ -59,28 +59,14 @@ export async function resolveCommandDevice(params: {
     pinSessionDeviceSelection(params.platformServices, params.session.device, selected);
     return selected;
   }
-  const device = await resolveTargetDevice(
-    boundUdidAsIdentitySelector(params.session, params.flags),
-    {
-      env: params.env,
-      androidAvdSelection: params.androidAvdSelection,
-    },
-  );
+  const device = await resolveTargetDevice(params.flags ?? {}, {
+    env: params.env,
+    androidAvdSelection: params.androidAvdSelection,
+  });
   // A selector that names the host of the session's app device stays on that app device: the
   // session holds one app, not the host (ADR 0035).
   const hostApp = params.session?.device.hostApp;
   return hostApp && device.id === hostApp.hostDeviceId ? params.session!.device : device;
-}
-
-function boundUdidAsIdentitySelector(
-  session: SessionState | undefined,
-  flags: DaemonRequest['flags'] | undefined,
-): NonNullable<DaemonRequest['flags']> {
-  if (!session || !flags?.device || !isBoundAppleDeviceUdid(session.device, flags.device)) {
-    return flags ?? {};
-  }
-  const { device: udid, ...rest } = flags;
-  return { ...rest, udid };
 }
 
 /** Boot and shutdown both allow a stopped Android AVD to be selected by name. */
