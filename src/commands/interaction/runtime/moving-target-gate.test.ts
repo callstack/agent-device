@@ -645,12 +645,17 @@ test('Android refuses to adopt matching identity from another application', asyn
 });
 
 /**
- * A navigation just finished, and the caller took a full-tree snapshot of the new screen to press
- * one of its refs. The previous screen's tree does not show the target, so the gate re-observes.
- * Refs number a capture densely, and an interactive-only capture drops the non-interactive
- * container: there `@e2` names the neighbouring control instead of the target (#3981).
+ * A navigation just finished, and the caller took a snapshot of the new screen to press one of its
+ * refs. The previous screen's tree does not show the target, so the gate re-observes. Refs number a
+ * capture densely, and an interactive-only capture drops the non-interactive container, so `@e2`
+ * names the target only in a capture taken in the frame's mode (#3981). `observation` is the mode
+ * of a later read-only capture that replaced the session's operational snapshot.
  */
-function navigatedFullTreeFrame(targetXs: number[]) {
+function navigatedFrame(params: {
+  frame: 'full' | 'interactive';
+  observation?: 'full' | 'interactive';
+  targetXs: number[];
+}) {
   const presentation = (interactiveOnly: boolean) => ({
     presentationKey: buildSnapshotPresentationKey({ interactiveOnly }),
   });
@@ -662,6 +667,8 @@ function navigatedFullTreeFrame(targetXs: number[]) {
     hittable: true,
   });
   const neighbour = { ...target(280), label: 'Search' };
+  const controls = (x: number) =>
+    params.frame === 'full' ? [target(x), neighbour] : [neighbour, target(x)];
   const full = (x: number) =>
     makeSnapshotState(
       [
@@ -671,25 +678,30 @@ function navigatedFullTreeFrame(targetXs: number[]) {
           type: 'android.view.View',
           rect: { x: 0, y: 0, width: 400, height: 800 },
         },
-        { index: 1, depth: 1, parentIndex: 0, ...target(x) },
-        { index: 2, depth: 1, parentIndex: 0, ...neighbour },
+        ...controls(x).map((node, offset) => ({
+          index: offset + 1,
+          depth: 1,
+          parentIndex: 0,
+          ...node,
+        })),
       ],
       presentation(false),
     );
   const interactive = (x: number) =>
     makeSnapshotState(
-      [
-        { index: 0, depth: 0, ...target(x) },
-        { index: 1, depth: 0, ...neighbour },
-      ],
+      controls(x).map((node, index) => ({ index, depth: 0, ...node })),
       presentation(true),
     );
-  const frame = full(targetXs[0]!);
+  const capture = { full, interactive };
+  const restingX = params.targetXs[0]!;
   return createGuardedDevice({
-    stored: frame,
-    refFrame: frame,
+    stored: capture[params.observation ?? params.frame](restingX),
+    refFrame: capture[params.frame](restingX),
     trees: [],
-    presentations: { interactive: targetXs.map(interactive), full: targetXs.map(full) },
+    presentations: {
+      interactive: params.targetXs.map(interactive),
+      full: params.targetXs.map(full),
+    },
     baselineAgeMs: 100,
     baselineTree: makeSnapshotState([
       { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Project Phoenix' },
@@ -698,15 +710,35 @@ function navigatedFullTreeFrame(targetXs: number[]) {
 }
 
 test('Android re-measures a still @ref in the presentation its frame was captured in (#3981)', async () => {
-  const device = navigatedFullTreeFrame([RESTING_X]);
+  const device = navigatedFrame({ frame: 'full', targetXs: [RESTING_X] });
+
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test('Android re-measures a still @ref from an interactive frame with an interactive capture', async () => {
+  // A full-tree look would name the neighbour `@e2`, so only the frame's own mode dispatches here.
+  const device = navigatedFrame({ frame: 'interactive', targetXs: [RESTING_X] });
+
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test("Android re-measures in the ref frame's mode, not the latest observation's", async () => {
+  // A read-only interactive capture after the full-tree snapshot advanced the operational
+  // observation; the ref still resolves against the frame, so the re-observation follows the frame.
+  const device = navigatedFrame({
+    frame: 'full',
+    observation: 'interactive',
+    targetXs: [RESTING_X],
+  });
 
   assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
 });
 
 test('Android still refuses a full-tree @ref that keeps moving after a navigation', async () => {
-  const device = navigatedFullTreeFrame(
-    Array.from({ length: 40 }, (_, index) => RESTING_X + (index % 2) * 40),
-  );
+  const device = navigatedFrame({
+    frame: 'full',
+    targetXs: Array.from({ length: 40 }, (_, index) => RESTING_X + (index % 2) * 40),
+  });
 
   await assert.rejects(
     () => device.press('ref'),
