@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 import { awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
@@ -19,6 +20,10 @@ import {
   URL_OWNER_LOOKUP_TIMEOUT_MS,
 } from './launch-confirmation.ts';
 import { alertNotFound, CONFIRMATION } from './launch-confirmation.fixtures.ts';
+import {
+  buildRunnerResponseError,
+  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+} from './runner/runner-contract.ts';
 
 vi.mock('./core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 
@@ -578,4 +583,69 @@ test('a matching launch title with other buttons is left unanswered on the first
   });
   expect(device.awaitAlert).toHaveBeenCalledOnce();
   expect(acceptAlert).not.toHaveBeenCalled();
+});
+
+/** The accept as the runner answers it when its main-thread watchdog abandons the press (#3861). */
+function runnerMainThreadTimeout(): AppError {
+  return buildRunnerResponseError({
+    ok: false,
+    error: { code: MAIN_THREAD_TIMEOUT_RUNNER_CODE, message: 'main thread execution timed out' },
+  });
+}
+
+test('an accept the runner watchdog abandoned is pressed again while the confirmation is up', async () => {
+  const acceptAlert = vi
+    .fn<() => Promise<unknown>>()
+    .mockRejectedValueOnce(runnerMainThreadTimeout())
+    .mockResolvedValueOnce({});
+  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'accepted' });
+  expect(acceptAlert).toHaveBeenCalledTimes(2);
+});
+
+test('the watchdog message without the runner code is not pressed again', async () => {
+  const acceptAlert = vi.fn(async () => {
+    throw new AppError('COMMAND_FAILED', 'main thread execution timed out');
+  });
+  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual({
+    outcome: 'unanswered',
+    reason: 'alert-still-present',
+  });
+  expect(acceptAlert).toHaveBeenCalledOnce();
+});
+
+test('an abandoned accept that removed the confirmation is not pressed again', async () => {
+  const acceptAlert = vi.fn(async () => {
+    throw runnerMainThreadTimeout();
+  });
+  const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+  vi.mocked(device.readAlert).mockResolvedValue(undefined);
+
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual({
+    outcome: 'unreadable',
+    step: 'alert-accept',
+  });
+  expect(acceptAlert).toHaveBeenCalledOnce();
+});
+
+test('abandoned accepts stop once the answer budget cannot hold another press', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const acceptAlert = vi.fn(async () => {
+      vi.advanceTimersByTime(DEFAULT_ALERT_TIMEOUT_MS);
+      throw runnerMainThreadTimeout();
+    });
+    const { port: device } = port(async () => CONFIRMATION, { acceptAlert });
+
+    await expect(answerLaunchConfirmation(device)).resolves.toEqual({
+      outcome: 'unanswered',
+      reason: 'alert-still-present',
+    });
+    expect(acceptAlert).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -663,7 +663,14 @@ export function isRetryableRunnerError(err: unknown): boolean {
  * `details.runnerErrorCode`), so family policy reads the typed detail rather than the message.
  */
 export function isRunnerMainThreadOccupiedError(error: unknown): boolean {
-  if (isRunnerBusyError(error)) return true;
+  return isRunnerBusyError(error) || isRunnerMainThreadTimeoutError(error);
+}
+
+/**
+ * True when the runner's execution watchdog abandoned this command's main-thread work
+ * (`MAIN_THREAD_TIMEOUT`). The command ran, so its effect is unknown, not refused.
+ */
+export function isRunnerMainThreadTimeoutError(error: unknown): boolean {
   return (
     error instanceof AppError && error.details?.runnerErrorCode === MAIN_THREAD_TIMEOUT_RUNNER_CODE
   );

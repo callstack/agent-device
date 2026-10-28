@@ -1,10 +1,13 @@
+import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
+import { isRunnerMainThreadTimeoutError } from './runner/runner-error-classification.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 
@@ -45,6 +48,15 @@ const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
  * unanswered instead of holding it.
  */
 export const URL_OWNER_LOOKUP_TIMEOUT_MS = 10_000;
+
+/**
+ * How long one answer may keep pressing `Open` after the runner's main-thread watchdog abandoned a
+ * press and the confirmation stayed up (#3861). A runner that has just started can stall its first
+ * press and serve the next. Another press starts only while the budget still holds the press's own
+ * runner bound, `DEFAULT_ALERT_TIMEOUT_MS`, so the presses end within the budget, well inside the
+ * open's request envelope.
+ */
+const LAUNCH_CONFIRMATION_ACCEPT_BUDGET_MS = 25_000;
 
 /** A custom-scheme launch URL SpringBoard may hold for the session app it was checked for. */
 export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: string }>;
@@ -101,9 +113,44 @@ export async function answerLaunchConfirmation(
       hint: `iOS is asking whether to open ${owner.owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
     });
   }
-  return await port
-    .acceptAlert()
-    .then(accepted, async (error: unknown) => await verifyFailedAcceptance(port, alert, error));
+  return await acceptConfirmation(
+    port,
+    alert,
+    Deadline.fromTimeoutMs(LAUNCH_CONFIRMATION_ACCEPT_BUDGET_MS),
+  );
+}
+
+/**
+ * Presses `Open` and verifies a failed press. Only a press the runner's watchdog abandoned, with the
+ * same confirmation still up, is pressed again, while the budget holds another whole press. Any
+ * other failure, and a confirmation that is gone, ends the answer at once.
+ */
+async function acceptConfirmation(
+  port: LaunchConfirmationPort,
+  original: Record<string, unknown>,
+  budget: Deadline,
+): Promise<LaunchConfirmationAttempt> {
+  for (;;) {
+    const failure = await port.acceptAlert().then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    if (!failure) return accepted();
+    const attempt = await verifyFailedAcceptance(port, original, failure.error);
+    if (attempt.outcome !== 'unanswered') return attempt;
+    if (
+      !isRunnerMainThreadTimeoutError(failure.error) ||
+      budget.remainingMs() < DEFAULT_ALERT_TIMEOUT_MS
+    ) {
+      reportUnanswered('alert-still-present', {});
+      return attempt;
+    }
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_launch_confirmation_reaccept',
+      data: { reason: 'runner-main-thread-timeout', remainingMs: budget.remainingMs() },
+    });
+  }
 }
 
 async function verifyFailedAcceptance(
@@ -118,7 +165,6 @@ async function verifyFailedAcceptance(
     isLaunchConfirmation(read.alert) &&
     read.alert['message'] === original['message']
   ) {
-    reportUnanswered('alert-still-present', {});
     return { outcome: 'unanswered', reason: 'alert-still-present' };
   }
   return unreadable('alert-accept')(error);
