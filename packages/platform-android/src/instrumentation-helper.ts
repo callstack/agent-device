@@ -140,7 +140,7 @@ export type AndroidInstrumentationExitResult = {
   error?: string;
   stack?: string;
   /** Fields dropped whole because their value held a snapshot marker. */
-  withheldFields?: Array<MessageField | 'aborted'>;
+  withheldFields?: Array<OpenField>;
 };
 
 const LINE_MAX_CHARS = 4_096;
@@ -153,47 +153,18 @@ const FAILED_ENVELOPES = [
   new RegExp(`^android\\.util\\.AndroidException: INSTRUMENTATION_FAILED: ${COMPONENT}$`),
   new RegExp(`^onError: commandError=(?:true|false) message=INSTRUMENTATION_FAILED: ${COMPONENT}$`),
 ];
-// Attributes `AccessibilityTreeXml` writes. A value that holds one in `name="` form, a tag
-// bracket, or a payload record is withheld whole rather than filtered.
-const SNAPSHOT_ATTRIBUTES = [
-  'bounds',
-  'checked',
-  'class',
-  'clickable',
-  'content-desc',
-  'drawing-order',
-  'editable',
-  'enabled',
-  'focusable',
-  'focused',
-  'heading',
-  'hint',
-  'hint-showing',
-  'index',
-  'package',
-  'password',
-  'resource-id',
-  'role-description',
-  'scrollable',
-  'selected',
-  'selection-end',
-  'selection-start',
-  'text',
-  'visible-to-user',
-  'window-active',
-  'window-focused',
-  'window-index',
-  'window-layer',
-  'window-region-rect',
-  'window-type',
-];
-const SNAPSHOT_MARKER_RE = new RegExp(
-  `<|/>|payloadBase64|(?<![\\w-])(?:${SNAPSHOT_ATTRIBUTES.join('|')})="`,
-);
+// A message is withheld whole, with no list of what the snapshot XML can contain: any
+// attribute-like assignment, any markup or entity, or a payload record. The accepted cost is that a
+// crash message with an ordinary `key="value"` is withheld too; `withheldFields` still says it existed.
+const ATTRIBUTE_LIKE_RE = /[A-Za-z][\w:-]*\s*=\s*["']/;
+const MARKUP_RE = /[<>]|&lt;|&gt;|&quot;|&#|payloadBase64/i;
 
-/** A JVM constructor name is not an element; every other `<` is a snapshot marker. */
+/** Only the JVM tokens `<init>` and `<clinit>` are exempt from the markup rule. */
 function holdsSnapshotMarker(text: string): boolean {
-  return SNAPSHOT_MARKER_RE.test(text.replaceAll('<init>', '').replaceAll('<clinit>', ''));
+  return (
+    ATTRIBUTE_LIKE_RE.test(text) ||
+    MARKUP_RE.test(text.replaceAll('<init>', '').replaceAll('<clinit>', ''))
+  );
 }
 
 const ABORTED_RE = /^INSTRUMENTATION_ABORTED:[ \t]?(.*)$/;
@@ -203,6 +174,8 @@ const CODE_RE = /^INSTRUMENTATION_(STATUS_CODE|CODE): (-?\d+)\s*$/;
 // The protocol keys whose values are text, by the field they fill.
 const MESSAGE_FIELDS = { shortMsg: 'shortMsg', longMsg: 'longMsg', Error: 'error', stack: 'stack' };
 type MessageField = 'shortMsg' | 'longMsg' | 'error' | 'stack';
+/** A field whose value can continue on the lines after its record. */
+type OpenField = MessageField | 'aborted';
 
 type LineAssembler = { write(chunk: string): void; end(): void };
 
@@ -240,13 +213,13 @@ function createLineAssembler(onLine: (line: string, cut: boolean) => void): Line
 /** One run's output, read as two streams with a parser state each. */
 function createInstrumentationOutput() {
   const fields: Partial<
-    Record<MessageField | 'aborted' | 'failed', string> &
-      Record<'resultCode' | 'statusCode', number>
+    Record<OpenField | 'failed', string> & Record<'resultCode' | 'statusCode', number>
   > = {};
-  let open: MessageField | undefined;
-  const withheld = new Set<MessageField | 'aborted'>();
-  const checked = (field: MessageField | 'aborted', text: string) => {
-    if (holdsSnapshotMarker(text)) withheld.add(field);
+  let open: OpenField | undefined;
+  const withheld = new Set<OpenField>();
+  /** A line the limit cut cannot be proven clean, so its field is withheld like a marked one. */
+  const checked = (field: OpenField, text: string, cut: boolean) => {
+    if (cut || holdsSnapshotMarker(text)) withheld.add(field);
     return text;
   };
   const readFailed = (line: string, cut: boolean): boolean => {
@@ -264,13 +237,13 @@ function createInstrumentationOutput() {
     if (readFailed(line, cut)) {
       open = undefined;
     } else if (PROTOCOL_RECORD_RE.test(line)) {
-      open = readProtocolRecord(line);
+      open = readProtocolRecord(line, cut);
     } else if (open) {
-      fields[open] = appendLine(fields[open], checked(open, line));
+      fields[open] = appendLine(fields[open], checked(open, line, cut));
     }
   };
-  /** Reads one protocol record; answers the message field whose value it opens, if any. */
-  const readProtocolRecord = (line: string): MessageField | undefined => {
+  /** Reads one protocol record; answers the field whose value it opens, if any. */
+  const readProtocolRecord = (line: string, cut: boolean): OpenField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
@@ -281,13 +254,14 @@ function createInstrumentationOutput() {
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
-      fields.aborted ??= checked('aborted', (aborted[1] ?? '').trim());
-      return undefined;
+      if (fields.aborted !== undefined) return undefined;
+      fields.aborted = checked('aborted', aborted[1] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+      return 'aborted';
     }
     const record = VALUE_RECORD_RE.exec(line);
     const field = record ? messageFieldOf(record[1]!) : undefined;
     if (!field || fields[field] !== undefined) return undefined;
-    fields[field] = checked(field, record![2] ?? '').slice(0, MESSAGE_FIELD_MAX_CHARS);
+    fields[field] = checked(field, record![2] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
     return field;
   };
   const stdout = createLineAssembler(readStdoutLine);
@@ -313,7 +287,7 @@ function createInstrumentationOutput() {
         ...(signal ? { signal } : {}),
         ...(resultCode !== undefined ? { resultCode } : {}),
         ...(statusCode !== undefined ? { statusCode } : {}),
-        ...(aborted !== undefined ? { aborted } : {}),
+        ...(aborted !== undefined ? { aborted: aborted.trim() } : {}),
         ...(failed !== undefined ? { failed } : {}),
         ...(shortMsg !== undefined ? { shortMsg: shortMsg.trimEnd() } : {}),
         ...(longMsg !== undefined ? { longMsg: longMsg.trimEnd() } : {}),

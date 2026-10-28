@@ -288,7 +288,7 @@ test('multiline protocol values keep their continuation lines until the next rec
 test('single-line and multiline messages are held to the message cap', async () => {
   const result = await captureExitResult({
     exitCode: 0,
-    stdout: `INSTRUMENTATION_RESULT: shortMsg=${'s'.repeat(10_000)}\nINSTRUMENTATION_RESULT: longMsg=${'l'.repeat(2_000)}\n${'m'.repeat(2_000)}\nINSTRUMENTATION_CODE: 0`,
+    stdout: `INSTRUMENTATION_RESULT: shortMsg=${'s'.repeat(3_000)}\nINSTRUMENTATION_RESULT: longMsg=${'l'.repeat(2_000)}\n${'m'.repeat(2_000)}\nINSTRUMENTATION_CODE: 0`,
   });
 
   assert.equal(result.shortMsg?.length, 2_048);
@@ -352,6 +352,31 @@ test('a sensitive value never reaches the instrumentation detail or the log wher
     { exitCode: 1, stdout: `INSTRUMENTATION_STATUS: stack=boom\n\tat x hint="${SECRET}"\n` },
     { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: <node text="${SECRET}" />\n` },
     { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: ret" content-desc="${SECRET}"\n` },
+    // Attributes the dump writes that an attribute list could miss, in any case or quoting.
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: longMsg=boom\ncan-scroll-forward="${SECRET}"\n`,
+    },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: longMsg=boom\nwindow-bounds="${SECRET}"\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=ret" TEXT="${SECRET}"\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=ret" Text="${SECRET}"\n` },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=ret text='${SECRET}'\n` },
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: shortMsg=&lt;node text=&quot;${SECRET}&quot;&gt;\n`,
+    },
+    { exitCode: 1, stdout: `INSTRUMENTATION_RESULT: shortMsg=&#60;${SECRET}\n` },
+    // The abort message continues on the next line.
+    { exitCode: 1, stdout: `INSTRUMENTATION_ABORTED: crashed\nret" text="${SECRET}" />\n` },
+    // A private prefix in a line the 4,096-character limit cuts before any marker shows.
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: longMsg=${SECRET}${'x'.repeat(4_200)} text="y"\n`,
+    },
+    {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: longMsg=boom\n${SECRET}${'x'.repeat(4_200)} text="y"\n`,
+    },
   ];
   for (const run of onStdout) {
     const error = await captureError({ ...run, stderr: 'am: Killed' });
@@ -537,6 +562,38 @@ test('a message holding snapshot markers is withheld whole and named', async () 
     'java.lang.IllegalStateException\n\tat com.callstack.Main.<init>(Main.java:7)',
   );
   assert.deepEqual(result.withheldFields, ['aborted', 'longMsg']);
+});
+
+test('a plain crash message and stack trace are kept', async () => {
+  const result = await captureExitResult({
+    exitCode: 0,
+    stdout: [
+      'INSTRUMENTATION_RESULT: shortMsg=Process crashed.',
+      'INSTRUMENTATION_RESULT: longMsg=java.lang.IllegalStateException: binder died',
+      'INSTRUMENTATION_STATUS: stack=java.lang.IllegalStateException: binder died',
+      '\tat com.foo.Bar.<init>(Bar.java:7)',
+      '\tat com.foo.Bar.baz(Bar.java:12)',
+      'INSTRUMENTATION_ABORTED: System has crashed.',
+      'INSTRUMENTATION_CODE: 0',
+    ].join('\n'),
+  });
+
+  assert.equal(result.withheldFields, undefined);
+  assert.equal(result.aborted, 'System has crashed.');
+  assert.equal(
+    result.stack,
+    'java.lang.IllegalStateException: binder died\n\tat com.foo.Bar.<init>(Bar.java:7)\n\tat com.foo.Bar.baz(Bar.java:12)',
+  );
+});
+
+test('a field is withheld when a line of it was cut by the line limit', async () => {
+  const result = await captureExitResult({
+    exitCode: 0,
+    stdout: `INSTRUMENTATION_RESULT: longMsg=${'a'.repeat(5_000)}\nINSTRUMENTATION_CODE: 0\n`,
+  });
+
+  assert.equal(result.longMsg, undefined);
+  assert.deepEqual(result.withheldFields, ['longMsg']);
 });
 
 test('a streamed session withholds a message whose fragment arrives in chunks', async () => {
