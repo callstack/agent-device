@@ -294,10 +294,14 @@ export const adopters: Adopter[] = [
   {
     name: 'Expo',
     logo: { src: '/logos/expo.svg', mode: 'mono' },
-    project: 'Orbit',
-    how: 'Agents verify Orbit on physical iPhones, iPads and Android devices with agent-device, per the repo’s agent instructions.',
+    how: 'Expo Simulators, the remote iOS Simulators and Android Emulators on EAS, are driven with agent-device, and Expo’s docs have an agent-device page. Agents also verify Orbit on physical iPhones, iPads and Android devices with it.',
     sources: [
-      { text: 'CLAUDE.md', href: 'https://github.com/expo/orbit/blob/main/CLAUDE.md' },
+      {
+        text: 'Expo Simulators docs',
+        href: 'https://docs.expo.dev/preview/simulators/introduction/',
+      },
+      { text: 'agent-device and Expo', href: 'https://docs.expo.dev/agents/agent-device/' },
+      { text: 'Orbit CLAUDE.md', href: 'https://github.com/expo/orbit/blob/main/CLAUDE.md' },
       {
         text: 'EAS Workflows QA agent on expo.dev',
         href: 'https://expo.dev/blog/build-an-ai-qa-agent-for-expo-apps-with-eas-workflows-in-minutes-today',
@@ -460,7 +464,7 @@ export const cloud = {
       icon: 'cube',
       label: 'Device clouds',
       title: 'On hosted devices',
-      body: 'The same commands drive BrowserStack, AWS Device Farm, TestMu AI and Limrun devices through provider plugins.',
+      body: 'The same commands drive BrowserStack, AWS Device Farm, TestMu AI and Limrun devices through provider plugins, and Expo Simulators on EAS.',
       cmd: 'agent-device connect limrun --platform ios',
       href: docs.clouds,
     },
@@ -470,6 +474,7 @@ export const cloud = {
     { name: 'AWS Device Farm', href: '/docs/aws-device-farm' },
     { name: 'TestMu AI', href: '/docs/testmu' },
     { name: 'Limrun', href: '/docs/limrun' },
+    { name: 'Expo Simulators', href: 'https://docs.expo.dev/preview/simulators/introduction/' },
   ],
   team: {
     headline: ['Need devices for your team?', 'Talk to Callstack.'],
@@ -579,7 +584,7 @@ wait "Order summary" 5000`,
   },
 
   /** The stories under "Who uses it", by adopter name. */
-  stories: ['Expensify', 'T3 Code', 'TesterArmy'],
+  stories: ['Expo', 'Expensify', 'T3 Code', 'TesterArmy'],
 
   /**
    * Watch and learn: talks on closing the loop with agents. Titles and channels as YouTube lists

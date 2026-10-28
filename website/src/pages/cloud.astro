@@ -55,12 +55,12 @@ import { inlineCode } from '../site/markup';
           already uses. Evidence and replay work the same way.
         </p>
       </div>
-      <ul class="cells cells--4 providers">
+      <ul class="cells cells--5 providers">
         {
           cloud.providers.map((p) => (
             <li class="cell">
               <a class="provider" href={p.href}>
-                {p.name} <span aria-hidden="true">→</span>
+                {p.name} <span aria-hidden="true">{p.href.startsWith('/') ? '→' : '↗'}</span>
               </a>
             </li>
           ))
