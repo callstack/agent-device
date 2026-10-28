@@ -526,7 +526,7 @@ test('agent-browser provider places content of a clipped nested frame from its u
 
     const rects = snapshotRects(snapshot);
     assert.deepEqual(rects.e4, { x: 36, y: 772, width: 200, height: 30 });
-    // The nested viewport starts at 772 - 20 + 6, so the button's top 12px of 20 are hidden.
+    // The nested viewport starts at 772 - 20 + 6, so the button's top 8px of 20 are hidden.
     assert.deepEqual(rects.e5, { x: 46, y: 772, width: 80, height: 12 });
   });
 });

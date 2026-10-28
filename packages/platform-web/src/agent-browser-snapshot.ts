@@ -109,46 +109,54 @@ async function attachDraftRects(
     frameRefs.length > 0
       ? await geometry.frameContentInsets(frameRefs)
       : new Map<string, FrameContentInset>();
-  // The backend measures a node inside an iframe against that frame's viewport. Drafts list a
-  // parent before its children, so each frame's viewport is known before its content is placed.
+  // Drafts list a parent before its children, so each frame's viewport is known before its
+  // content is placed.
   const frameViewports = new Map<number, FrameViewport>();
   for (const [index, draft] of drafts.entries()) {
     const measured = draft.ref === undefined ? undefined : rects.get(draft.ref);
-    if (!measured) continue;
-    const frameIndex = frameIndexes[index];
-    const parent = frameIndex === undefined ? undefined : frameViewports.get(frameIndex);
-    // A frame whose position cannot be read leaves its content without a rect rather than with a
-    // wrong one.
-    if (frameIndex !== undefined && !parent) continue;
-    const rect = parent ? translateRect(measured, parent.origin) : measured;
-    // Content scrolled out of its frame has no point a press could reach: the page around the
-    // frame renders there instead.
-    const visible = parent ? intersectRects(rect, parent.visible) : rect;
-    if (!visible) continue;
-    draft.node.rect = visible;
+    const placed = measured && placeRect(measured, frameViewports, frameIndexes[index]);
+    if (!placed) continue;
+    draft.node.rect = placed.visible;
     const inset = draft.ref === undefined ? undefined : insets.get(draft.ref);
-    if (!inset) continue;
-    // Content lines up with the frame's unclipped viewport and shows only where the frame does.
-    const viewport = frameViewportRect(rect, inset);
-    const viewportVisible = intersectRects(viewport, visible);
-    if (viewportVisible) frameViewports.set(index, { origin: viewport, visible: viewportVisible });
+    const viewport = inset && frameViewport(placed, inset);
+    if (viewport) frameViewports.set(index, viewport);
   }
 }
+
+/** Where a node sits on the page, and the part of it the page shows. */
+type PlacedRect = { rect: Rect; visible: Rect };
 
 /** Where a frame's document renders on the page, and the part of it the page shows. */
 type FrameViewport = { origin: Rect; visible: Rect };
 
-function translateRect(rect: Rect, origin: Rect): Rect {
-  return { ...rect, x: rect.x + origin.x, y: rect.y + origin.y };
+/** The backend measures a node inside an iframe against that frame's viewport. */
+function placeRect(
+  measured: Rect,
+  frameViewports: ReadonlyMap<number, FrameViewport>,
+  frameIndex: number | undefined,
+): PlacedRect | undefined {
+  if (frameIndex === undefined) return { rect: measured, visible: measured };
+  // A frame whose position cannot be read leaves its content without a rect rather than with a
+  // wrong one.
+  const frame = frameViewports.get(frameIndex);
+  if (!frame) return undefined;
+  const rect = { ...measured, x: measured.x + frame.origin.x, y: measured.y + frame.origin.y };
+  // Content scrolled out of its frame has no point a press could reach: the page around the
+  // frame renders there instead.
+  const visible = intersectRects(rect, frame.visible);
+  return visible && { rect, visible };
 }
 
-function frameViewportRect(frameRect: Rect, inset: FrameContentInset): Rect {
-  return {
-    x: frameRect.x + inset.left,
-    y: frameRect.y + inset.top,
-    width: frameRect.width - inset.left - inset.right,
-    height: frameRect.height - inset.top - inset.bottom,
+/** Content lines up with the frame's unclipped viewport and shows only where the frame does. */
+function frameViewport(frame: PlacedRect, inset: FrameContentInset): FrameViewport | undefined {
+  const origin = {
+    x: frame.rect.x + inset.left,
+    y: frame.rect.y + inset.top,
+    width: frame.rect.width - inset.left - inset.right,
+    height: frame.rect.height - inset.top - inset.bottom,
   };
+  const visible = intersectRects(origin, frame.visible);
+  return visible && { origin, visible };
 }
 
 function isFrameDraft(draft: SnapshotDraftNode): boolean {

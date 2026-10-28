@@ -266,7 +266,7 @@ async function movePointer(send: AgentBrowserSend, x: number, y: number): Promis
 }
 
 async function captureAgentBrowserSnapshot(
-  runJson: (args: string[], run?: AgentBrowserRunOptions) => Promise<unknown>,
+  runJson: AgentBrowserRunJson,
   options: WebSnapshotOptions | undefined,
 ): Promise<WebSnapshotResult> {
   const data = await runJson(buildSnapshotArgs(options));
@@ -304,7 +304,7 @@ function buildSnapshotArgs(options: WebSnapshotOptions | undefined): string[] {
  * is a DOM read of an already-loaded page rather than an interpreter boot. Raising the number is safe
  * only while that ratio holds — the stdin payload itself (~23 bytes per ref) is not the constraint.
  */
-const MAX_REFS_PER_RECT_BATCH = 200;
+const MAX_REFS_PER_BATCH = 200;
 
 type AgentBrowserRunJson = (args: string[], run?: AgentBrowserRunOptions) => Promise<unknown>;
 
@@ -326,8 +326,8 @@ async function readRefsInBatches<T>(
 ): Promise<Map<string, T>> {
   const values = new Map<string, T>();
   // No refs is an empty group list, so the loop below never runs and the backend is never called.
-  for (let start = 0; start < refs.length; start += MAX_REFS_PER_RECT_BATCH) {
-    const group = refs.slice(start, start + MAX_REFS_PER_RECT_BATCH);
+  for (let start = 0; start < refs.length; start += MAX_REFS_PER_BATCH) {
+    const group = refs.slice(start, start + MAX_REFS_PER_BATCH);
     const commands = group.map((ref) => ['get', property, browserRefSelector(ref)]);
     const entries = parseBatchEntries(
       await runJson(['batch'], { stdin: JSON.stringify(commands) }),
