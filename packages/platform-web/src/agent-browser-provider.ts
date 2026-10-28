@@ -1,6 +1,6 @@
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { hostPlatform, type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import {
   AppError,
@@ -10,6 +10,7 @@ import {
 
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { SELECT_FOCUSED_CONTENT_EVAL_SCRIPT } from './agent-browser-select-content.ts';
 import {
   buildAudioProbeEvalScript,
   normalizeAgentBrowserAudioProbeResult,
@@ -108,7 +109,7 @@ export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptio
       const sends = createAgentBrowserSendLedger(runJson);
       try {
         await clickCoordinates(sends.send, x, y);
-        await sends.send(['press', selectAllShortcut()]);
+        await sends.send(['eval', SELECT_FOCUSED_CONTENT_EVAL_SCRIPT]);
         if (text.length === 0) {
           // The clear-field request (#2063): typing zero characters over the selection would
           // leave the old value selected but intact, so the selection must be deleted instead.
@@ -743,10 +744,6 @@ function agentBrowserCliRefusalDispatch(parsed: JsonObject): {
 
 function browserRefSelector(ref: string): string {
   return ref.startsWith('@') ? ref : `@${ref}`;
-}
-
-function selectAllShortcut(): string {
-  return hostPlatform() === 'darwin' ? 'Meta+a' : 'Control+a';
 }
 
 function parseRect(data: unknown): Rect | undefined {

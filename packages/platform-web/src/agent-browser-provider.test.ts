@@ -23,6 +23,7 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => {
 });
 
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
+import { SELECT_FOCUSED_CONTENT_EVAL_SCRIPT } from './agent-browser-select-content.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
@@ -86,14 +87,14 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
-        ['press', expectedSelectAllShortcut(), '--json', '--session', 'web-session'],
+        ['eval', SELECT_FOCUSED_CONTENT_EVAL_SCRIPT, '--json', '--session', 'web-session'],
         ['keyboard', 'type', 'Ada', '--json', '--session', 'web-session'],
-        // The empty fill (#2063) deletes the select-all selection instead of typing zero
+        // The empty fill (#2063) deletes the in-page selection instead of typing zero
         // characters over it, which would leave the old value intact.
         ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
-        ['press', expectedSelectAllShortcut(), '--json', '--session', 'web-session'],
+        ['eval', SELECT_FOCUSED_CONTENT_EVAL_SCRIPT, '--json', '--session', 'web-session'],
         ['press', 'Backspace', '--json', '--session', 'web-session'],
         ['fill', '@e2', 'Grace', '--json', '--session', 'web-session'],
         ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
@@ -545,10 +546,6 @@ function snapshotPayload(): ExecResult {
   });
 }
 
-function expectedSelectAllShortcut(): string {
-  return process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
-}
-
 type AudioProbeScriptPage = {
   audio: { currentSrc: string; readyState: number; src: string; srcObject: FakeMediaStream | null };
   createdStreamSources: number;
@@ -704,6 +701,26 @@ test('a relative scroll amount reaches agent-browser as pixels, not as the fract
         ['scroll', 'down', '600', '--json', '--session', 'web-session'],
         ['scroll', 'down', '--json', '--session', 'web-session'],
       ],
+    );
+  });
+});
+
+test('agent-browser provider fill selects in the page and never presses a select-all shortcut', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.fill(11, 22, 'Ada');
+      await provider.fill(11, 22, '');
+    });
+
+    const sent = calls.map((call) => call.args.slice(0, 2));
+    // A key press can reach the host menu when the click misses an editable element (#3987).
+    const presses = sent.filter(([command]) => command === 'press').map(([, key]) => key);
+    assert.deepEqual(presses, ['Backspace']);
+    assert.deepEqual(
+      sent.map(([command]) => command),
+      ['mouse', 'mouse', 'mouse', 'eval', 'keyboard', 'mouse', 'mouse', 'mouse', 'eval', 'press'],
     );
   });
 });

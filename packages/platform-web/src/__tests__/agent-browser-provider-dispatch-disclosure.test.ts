@@ -69,7 +69,7 @@ function backendRefused(error: string): ExecResult {
 
 /** Answers the pointer sends the given way, and refuses everything else as the backend would. */
 function answerPointerSends(
-  failOn: 'down' | 'up' | 'press',
+  failOn: 'down' | 'up' | 'select',
 ): (args: readonly string[]) => ExecResult {
   return (cliArgs) => {
     const command = cliArgs.slice(0, 2).join(' ');
@@ -98,13 +98,13 @@ async function clickRefusedOnPointerDown(): Promise<void> {
   );
 }
 
-/** Coordinate `fill`: the whole click landed, the select-all press was refused. */
+/** Coordinate `fill`: the whole click landed, the in-page selection was refused. */
 async function fillRefusedAfterClick(): Promise<void> {
   let pointerSends = 0;
   await withScriptedBackend(
     (cliArgs) => {
       if (cliArgs[0] === 'mouse') pointerSends += 1;
-      return answerPointerSends('press')(cliArgs);
+      return answerPointerSends('select')(cliArgs);
     },
     async (provider) => {
       await provider.fill(20, 30, 'Ada');
