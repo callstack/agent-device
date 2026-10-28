@@ -509,7 +509,7 @@ export const home = {
       {
         n: 3,
         title: 'Verify',
-        body: 'The agent runs the app, checks the change on the device and records what it saw.',
+        body: 'The agent runs the app, checks the change on the device, runs the e2e tests and records what it saw.',
         product: true,
       },
       {
