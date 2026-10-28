@@ -298,9 +298,9 @@ type LeaseAllocateProviderFlags = Partial<
 >;
 
 /**
- * Reads the allocation flags out of a request flags bag or a lease-envelope param bag. A named
- * device-spec key is carried trimmed, and an invalid one as given, so the daemon refuses it instead
- * of never seeing it; a key that names nothing is dropped.
+ * Reads the allocation flags out of a request flags bag or a lease-envelope param bag. A named or
+ * invalid device-spec key is carried as given, so the daemon refuses an invalid one instead of never
+ * seeing it; a key that names nothing is dropped.
  */
 export function readLeaseAllocateProviderFlags(
   source: Record<string, unknown> | undefined,
@@ -317,7 +317,7 @@ export function readLeaseAllocateProviderFlags(
 }
 
 export type LeaseDeviceSpecReading = {
-  /** The keys the source names, with their values trimmed. */
+  /** The keys the source names, with their values as given. */
   spec: LeaseDeviceSpec;
   /** The keys of `spec`, in `LEASE_DEVICE_SPEC_KEYS` order. */
   keys: LeaseDeviceSpecKey[];
@@ -328,8 +328,8 @@ export type LeaseDeviceSpecReading = {
 /**
  * The one decision on what a device spec names, for the CLI, the SDK, MCP and the daemon alike.
  * Each key is named, not named, or invalid: a non-blank `osVersion` or `imageTag` and
- * `physical: true` are named; an absent key, a blank string and `physical: false` name nothing;
- * any other type is invalid.
+ * `physical: true` are named, with the value as given; an absent key, a blank string and
+ * `physical: false` name nothing; any other type is invalid.
  */
 export function readLeaseDeviceSpec(
   source: { osVersion?: unknown; imageTag?: unknown; physical?: unknown } | undefined,
@@ -341,7 +341,7 @@ export function readLeaseDeviceSpec(
     if (value === undefined) continue;
     if (typeof value !== (key === 'physical' ? 'boolean' : 'string')) invalidKeys.push(key);
     else if (value === true) spec[key] = true;
-    else if (typeof value === 'string' && value.trim()) spec[key] = value.trim();
+    else if (typeof value === 'string' && value.trim()) spec[key] = value;
   }
   const keys = LEASE_DEVICE_SPEC_KEYS.filter((key) => key in spec);
   return { spec: spec as LeaseDeviceSpec, keys, invalidKeys };

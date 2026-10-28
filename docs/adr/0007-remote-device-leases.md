@@ -305,6 +305,7 @@ Thus, a daemon refuses every request that names a non-blank `osVersion` or `imag
 The refusal is `UNSUPPORTED_OPERATION` with `details.reason: 'device-spec-unsupported'` and `details.keys`.
 This applies to a local daemon and to a daemon behind `agent-device proxy`.
 A blank `osVersion` or `imageTag` and `physical: false` name nothing, so a daemon accepts them.
+A named value is used as given, without trimming.
 A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device-spec-invalid'`, and `details.keys`.
 `readLeaseDeviceSpec` is the one decision on these rules, for the CLI, the SDK, MCP, and the daemon.
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `physical`).

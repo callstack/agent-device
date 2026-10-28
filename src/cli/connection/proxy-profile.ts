@@ -1,5 +1,6 @@
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readMetroProfileFields } from './profile-fields.ts';
@@ -36,9 +37,7 @@ export function resolveProxyConnectProfile(options: {
     device: options.flags.device,
     udid: options.flags.udid,
     serial: options.flags.serial,
-    osVersion: options.flags.osVersion,
-    imageTag: options.flags.imageTag,
-    physical: options.flags.physical,
+    ...requireLeaseDeviceSpec(options.flags).spec,
     iosSimulatorDeviceSet: options.flags.iosSimulatorDeviceSet,
     androidDeviceAllowlist: options.flags.androidDeviceAllowlist,
     session: options.flags.session,

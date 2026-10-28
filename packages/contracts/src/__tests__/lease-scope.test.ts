@@ -248,11 +248,11 @@ test('readLeaseAllocateProviderFlags carries the provider-allocation flags and d
   assert.deepEqual(readLeaseAllocateProviderFlags(undefined), {});
 });
 
-test('readLeaseAllocateProviderFlags carries a named spec key as read, an invalid one as given, and drops one that names nothing', () => {
+test('readLeaseAllocateProviderFlags carries a named or invalid spec key as given, and drops one that names nothing', () => {
   assert.deepEqual(
     readLeaseAllocateProviderFlags({
       platform: 'android',
-      osVersion: ' 34 ',
+      osVersion: '34',
       imageTag: 'google_apis_playstore',
       physical: true,
     }),
@@ -271,7 +271,7 @@ test('readLeaseAllocateProviderFlags carries a named spec key as read, an invali
 
 test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () => {
   assert.deepEqual(
-    readLeaseDeviceSpec({ osVersion: ' >=26 ', imageTag: 'google_apis', physical: true }),
+    readLeaseDeviceSpec({ osVersion: '>=26', imageTag: 'google_apis', physical: true }),
     {
       spec: { osVersion: '>=26', imageTag: 'google_apis', physical: true },
       keys: ['osVersion', 'imageTag', 'physical'],
@@ -294,6 +294,14 @@ test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () 
     spec: { osVersion: '18' },
     keys: ['osVersion'],
     invalidKeys: ['physical'],
+  });
+});
+
+test('readLeaseDeviceSpec uses a named value as given and names nothing for a blank one', () => {
+  assert.deepEqual(readLeaseDeviceSpec({ osVersion: ' 34 ', imageTag: '\t' }), {
+    spec: { osVersion: ' 34 ' },
+    keys: ['osVersion'],
+    invalidKeys: [],
   });
 });
 
