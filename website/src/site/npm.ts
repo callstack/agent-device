@@ -6,7 +6,15 @@
 const DAY = 24 * 60 * 60 * 1000;
 const day = (t: number) => new Date(t).toISOString().slice(0, 10);
 
-export async function monthlyDownloads(): Promise<number | undefined> {
+let atBuild: Promise<number | undefined> | undefined;
+
+/** Fetched once per build, however many components show the figure. */
+export function monthlyDownloads(): Promise<number | undefined> {
+  atBuild ??= fetchDownloads();
+  return atBuild;
+}
+
+async function fetchDownloads(): Promise<number | undefined> {
   const end = Date.now() - DAY;
   const range = `${day(end - 29 * DAY)}:${day(end)}`;
   try {

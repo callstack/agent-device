@@ -9,8 +9,10 @@ import PixelIcon from './PixelIcon.astro';
 
 interface Props {
   class?: string;
+  /** Writes "GitHub" before the count, for places where the star alone does not say where it links. */
+  named?: boolean;
 }
-const { class: className } = Astro.props;
+const { class: className, named = false } = Astro.props;
 const stars = await buildStars(site.repo);
 const label = `${site.name} on GitHub`;
 ---
@@ -23,7 +25,8 @@ const label = `${site.name} on GitHub`;
   aria-label={stars === undefined ? label : `${label}, ${stars.toLocaleString('en')} stars`}
 >
   <PixelIcon name="star" size={14} />
-  <span data-stars-count>{stars === undefined ? 'GitHub' : formatStars(stars)}</span>
+  {named && <span>GitHub</span>}
+  <span data-stars-count>{stars === undefined ? (named ? '' : 'GitHub') : formatStars(stars)}</span>
 </a>
 
 <script>

@@ -19,17 +19,17 @@ export const site = {
    * What it is, in a few words. The home page title is "Name: subtitle" (src/site/meta.ts),
    * 60 characters at most in all.
    */
-  subtitle: 'The device layer for AI agents',
+  subtitle: 'Open-source device layer for agents',
   /** The motto, in two beats. Used by the hero, the social card and the banner. */
-  headline: ['The device layer for AI agents.', 'Ask yours to use it.'],
+  headline: ['Open-source device layer', 'for agents.'],
   /** The hero lede: one or two sentences, naming who it is for. */
   lede: 'agent-device gives agents a CLI, MCP server and typed API for real iOS, Android, TV and desktop apps. They work from compact UI snapshots instead of screenshots, so the same task costs fewer tokens, and products like e2e and T3 Code build on it as their driver.',
   /** The meta description: 160 characters at most. */
   description:
-    'The device layer for AI agents: a CLI, MCP server and typed API that run and verify real iOS, Android, TV and desktop apps from compact UI snapshots.',
+    'Open-source device layer for AI agents: a CLI, MCP server and typed API that run and verify real iOS, Android, TV and desktop apps from compact UI snapshots.',
   install: 'npm i -g agent-device',
   /** Alt text for the social card (public/og-image.jpg): the lockup, the motto, the picture. */
-  ogAlt: 'agent-device by Callstack. The device layer for AI agents. Ask yours to use it.',
+  ogAlt: 'agent-device by Callstack. Open-source device layer for agents.',
   /** Who holds the copyright in the footer: "© YEAR AGENT-DEVICE BY CALLSTACK". */
   owner: 'Callstack',
   callstack: 'https://callstack.com/?utm_source=agent-device&utm_medium=referral',
@@ -150,9 +150,10 @@ export const faq = [
 export type Line = { kind: 'cmd' | 'out' | 'add' | 'del' | 'dim' | 'ok'; text: string };
 
 /**
- * The hero: a prompt for each kind of job, and the agent-device commands the agent runs for it.
- * Prompts come from the README; commands and the output lines come from the README and the docs
- * (the Contacts walkthrough, Debugging and profiling). Refs vary between runs.
+ * The hero: a prompt for each kind of job, the agent-device commands the agent runs for it, and
+ * the agent's reply with what it brings back. Prompts come from the README; commands and the
+ * output lines come from the README and the docs (the Contacts walkthrough, Debugging and
+ * profiling). Refs vary between runs.
  */
 export const jobs = [
   {
@@ -169,6 +170,8 @@ export const jobs = [
       { kind: 'cmd', text: 'agent-device screenshot ./onboarding-android.png' },
       { kind: 'cmd', text: 'agent-device close' },
     ] as Line[],
+    reply:
+      'The onboarding screen runs on both. Attached: onboarding-ios.png, onboarding-android.png.',
   },
   {
     id: 'verify',
@@ -188,6 +191,7 @@ export const jobs = [
       { kind: 'cmd', text: 'agent-device record stop' },
       { kind: 'cmd', text: 'agent-device close' },
     ] as Line[],
+    reply: 'Ada is saved. Attached: contact-form.png, the recording, and contacts.ad to replay it.',
   },
   {
     id: 'profile',
@@ -205,6 +209,8 @@ export const jobs = [
       { kind: 'add', text: '1. memo-defeated ContactRow: memo bypassed on 480/480 updates' },
       { kind: 'cmd', text: 'agent-device react-devtools profile report ContactRow' },
     ] as Line[],
+    reply:
+      'Yes: ContactRow re-renders on every keystroke, its memo bypassed on 480 of 480 updates. The report names the props to stabilize.',
   },
 ];
 
@@ -473,12 +479,6 @@ export const cloud = {
 
 /** The home page, section by section, in page order. index.astro only lays these out. */
 export const home = {
-  /** The `zsh` window beside the hero copy (hidden below 64rem): setup in a few lines. */
-  setup: [{ cmd: site.install }, { comment: 'the CLI and the MCP server' }] as (
-    | { cmd: string }
-    | { comment: string }
-  )[],
-
   /** The strip under the hero: who uses it, by name, linking to /showcase. */
   usedBy: {
     label: 'Used by teams at',

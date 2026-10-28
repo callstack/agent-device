@@ -19,7 +19,6 @@ import Window from '../components/site/Window.astro';
 import AdopterLogo from '../components/site/AdopterLogo.astro';
 import Hero from '../components/home/Hero.astro';
 import { adopters, cloud, docs, faq, home, site } from '../site/content';
-import { compact, monthlyDownloads } from '../site/npm';
 import { inlineCode } from '../site/markup';
 
 // Section numbers, [01] onwards, in page order.
@@ -85,7 +84,6 @@ const byName = (name: string) => adopters.find((a) => a.name === name)!;
 const stories = home.stories.map(byName);
 const featured = adopters.filter((a) => a.featured);
 const innerProof = byName(inner.proof);
-const downloads = await monthlyDownloads();
 ---
 
 <Site description={site.description} jsonLd={jsonLd}>
@@ -101,14 +99,6 @@ const downloads = await monthlyDownloads();
       </ul>
       <div class="used-by-foot">
         <a class="label more" href={usedBy.more.href}><NameCase text={usedBy.more.text} /> <span aria-hidden="true">→</span></a>
-        {
-          downloads && (
-            <a class="downloads" href={site.npm}>
-              <span class="downloads-n">{compact(downloads)}</span>
-              <span class="label">npm downloads in the last 30 days <span aria-hidden="true">↗</span></span>
-            </a>
-          )
-        }
       </div>
     </section>
 
@@ -629,21 +619,6 @@ const downloads = await monthlyDownloads();
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
-  }
-  .downloads {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    color: var(--muted);
-    text-decoration: none;
-  }
-  .downloads:hover {
-    color: var(--accent);
-  }
-  .downloads-n {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    color: var(--accent);
   }
   .videos {
     display: grid;

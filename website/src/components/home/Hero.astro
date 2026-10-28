@@ -1,13 +1,17 @@
 ---
-// The home page hero: the motto in two beats, a lede, GET STARTED and the install command, a
-// `zsh` window with the setup beside them on wide screens, then the session on the loop scene:
-// a tab per kind of job (build, verify, profile), each the prompt a developer gives as a
-// message, and every agent-device call the agent makes as its own card, output nested inside.
+// The home page hero, in one centred column: the motto in two beats, a lede, the install command
+// beside the GitHub stars and npm downloads, then the session on the loop scene: a tab per kind
+// of job (build, verify, profile), each the prompt a developer gives, every agent-device call the
+// agent makes as its own card with the output nested inside, and the agent's reply.
 import CopyCommand from '../site/CopyCommand.astro';
 import Dither from '../site/Dither.astro';
-import Window from '../site/Window.astro';
-import { docs, home, jobs, site } from '../../site/content';
+import GitHubStars from '../site/GitHubStars.astro';
+import PixelIcon from '../site/PixelIcon.astro';
+import { docs, jobs, site } from '../../site/content';
 import type { Line } from '../../site/content';
+import { compact, monthlyDownloads } from '../../site/npm';
+
+const downloads = await monthlyDownloads();
 
 // Each command starts a tool call; the lines after it, up to the next command, are its output.
 const calls = (lines: Line[]) =>
@@ -19,21 +23,27 @@ const calls = (lines: Line[]) =>
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <div class="hero-top hero-top--split">
-    <div class="hero-copy">
-      <h1 class="h1" id="hero-title">{site.headline[0]} <em>{site.headline[1]}</em></h1>
-      <p class="lede">{site.lede}</p>
-      <div class="actions">
-        <a class="btn" href={docs.start}>Get started <span aria-hidden="true">→</span></a>
-        <CopyCommand command={site.install} />
-      </div>
+  <div class="hero-top hero-center">
+    <h1 class="h1" id="hero-title">{site.headline[0]} <em>{site.headline[1]}</em></h1>
+    <p class="lede">{site.lede}</p>
+    <div class="actions">
+      <CopyCommand command={site.install} />
+      <GitHubStars class="label stat" named />
+      {
+        downloads !== undefined && (
+          <a
+            class="label stat"
+            href={site.npm}
+            aria-label={`${downloads.toLocaleString('en')} npm downloads in the last 30 days`}
+          >
+            <PixelIcon name="package" size={14} />
+            <span>npm</span>
+            <span>{compact(downloads)}/mo</span>
+          </a>
+        )
+      }
     </div>
-    <Window title="zsh" class="hero-side">
-      <div class="term">
-        {/* One line per element: .term is white-space: pre-wrap, so markup whitespace shows. */}
-        {home.setup.map((l) => ('cmd' in l ? <div class="ln"><span class="p">$</span> {l.cmd}</div> : <div class="ln dim"># {l.comment}</div>))}
-      </div>
-    </Window>
+    <a class="label more" href={docs.start}>Read the docs <span aria-hidden="true">→</span></a>
   </div>
 
   <div
@@ -79,6 +89,10 @@ const calls = (lines: Line[]) =>
                   </li>
                 ))}
               </ol>
+              <div class="reply" data-step>
+                <span class="label who">Agent</span>
+                <p>{j.reply}</p>
+              </div>
             </div>
           ))
         }
@@ -97,17 +111,40 @@ const calls = (lines: Line[]) =>
 </script>
 
 <style>
-  .hero-top--split {
-    grid-template-columns: minmax(0, 1fr) 28.5rem;
+  .hero-center {
+    justify-items: center;
+    gap: 1.25rem;
+    padding-block: clamp(2.5rem, 5vw, 4rem) clamp(2rem, 4vw, 3rem);
+    text-align: center;
+  }
+  .hero-center .lede {
+    max-width: 44rem;
+    text-wrap: balance;
+  }
+  .hero-center .actions {
+    justify-content: center;
+    margin-top: 0.5rem;
+  }
+  .hero-center :global(.stat) {
+    display: inline-flex;
     align-items: center;
-    padding-block: clamp(2rem, 4.5vw, 3.75rem);
+    gap: 0.5rem;
+    min-height: 2.625rem;
+    padding-inline: 0.875rem;
+    border: 1px solid var(--line-strong);
+    color: var(--muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      color 120ms,
+      border-color 120ms;
   }
-  .hero-top--split .h1 {
-    max-width: 16ch;
+  .hero-center :global(.stat:hover) {
+    border-color: var(--accent);
+    color: var(--text);
   }
-  :global(.hero-side) .term {
-    font-size: 0.6875rem;
-    overflow-wrap: normal;
+  .hero-center :global(.stat svg) {
+    color: var(--accent);
   }
   .rig {
     position: relative;
@@ -115,7 +152,7 @@ const calls = (lines: Line[]) =>
     gap: var(--pad);
     align-items: center;
     justify-content: center;
-    padding: clamp(2rem, 5vw, 3.5rem) var(--pad);
+    padding: clamp(1.5rem, 3vw, 2.5rem) var(--pad) clamp(2rem, 5vw, 3.5rem);
   }
   .session {
     flex: 0 1 42rem;
@@ -169,6 +206,22 @@ const calls = (lines: Line[]) =>
   .who {
     color: var(--accent);
   }
+  /* The agent's answer: what it brings back, the counterpart of the prompt. */
+  .reply {
+    display: grid;
+    gap: 0.375rem;
+    justify-self: start;
+    max-width: 85%;
+    padding: 0.875rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-left: 2px solid var(--accent);
+  }
+  .reply p {
+    margin: 0;
+    color: var(--text);
+    line-height: 1.5;
+  }
   .calls {
     display: grid;
     gap: 0.375rem;
@@ -221,12 +274,6 @@ const calls = (lines: Line[]) =>
     }
   }
   @media (max-width: 64rem) {
-    .hero-top--split {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    :global(.hero-side) {
-      display: none;
-    }
     /* Too narrow for two across: the pictures stack. */
     .rig {
       flex-direction: column;
@@ -238,7 +285,8 @@ const calls = (lines: Line[]) =>
     .job {
       min-height: 40rem;
     }
-    .prompt {
+    .prompt,
+    .reply {
       max-width: none;
     }
     .call {
