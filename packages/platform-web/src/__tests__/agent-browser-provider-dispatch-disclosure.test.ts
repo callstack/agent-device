@@ -124,7 +124,12 @@ async function fillFocusNotObservedAfterClick(): Promise<void> {
     async (provider) => {
       await provider.fill(20, 30, 'Ada');
     },
-  );
+  ).catch((error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'text_entry_focus_not_observed');
+    throw error;
+  });
 }
 
 /** `scroll --duration` long enough to pace into steps: two landed, the third was refused. */

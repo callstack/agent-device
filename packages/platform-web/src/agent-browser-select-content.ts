@@ -95,6 +95,21 @@ function isClickOnField(hit: PageElement, field: PageElement): boolean {
   return typeof hit.closest === 'function' && hit.closest('label')?.control === field;
 }
 
+/** The innermost start or end position of the host's content, where a browser may normalize to. */
+function readInnermostBoundary(
+  host: PageElement,
+  atEnd: boolean,
+): { node: PageElement; offset: number } {
+  let node = host;
+  let child: PageElement | null = atEnd ? node.lastChild : node.firstChild;
+  while (child) {
+    node = child;
+    child = atEnd ? node.lastChild : node.firstChild;
+  }
+  const length = node.nodeType === 3 ? node.data.length : node.childNodes.length;
+  return { node, offset: atEnd ? length : 0 };
+}
+
 function selectEditingHostContent(host: PageElement, hostDocument: PageDocument): string {
   const root = host.getRootNode();
   const selection =
@@ -105,16 +120,28 @@ function selectEditingHostContent(host: PageElement, hostDocument: PageDocument)
   range.selectNodeContents(host);
   selection.removeAllRanges();
   selection.addRange(range);
-  return selection.rangeCount === 1 && selection.toString() === range.toString()
-    ? 'selected'
-    : 'selection-failed';
+  // Compared by boundary points, not text: the rendered text of a selection and the text of a
+  // range differ for multiple paragraphs and hidden content, and a browser may normalize the kept
+  // range to the innermost nodes. 0 is START_TO_START, 2 is END_TO_END.
+  const kept = selection.rangeCount === 1 ? selection.getRangeAt(0) : null;
+  if (kept === null) return 'selection-failed';
+  const start = readInnermostBoundary(host, false);
+  const end = readInnermostBoundary(host, true);
+  const content = hostDocument.createRange();
+  content.setStart(start.node, start.offset);
+  content.setEnd(end.node, end.offset);
+  const coversHost =
+    kept.compareBoundaryPoints(0, content) <= 0 && kept.compareBoundaryPoints(2, content) >= 0;
+  return coversHost ? 'selected' : 'selection-failed';
 }
 
 function selectControlContent(control: PageElement): string {
   control.select();
-  // Inputs without a text selection (email, number) report a null selectionStart.
+  // Email and number inputs have no selection API (selectionStart is null), so select() is the
+  // only step there; test/integration/smoke-web-fill.test.ts proves it replaces their value.
+  const hasSelectionApi = !['email', 'number'].includes(String(control.type).toLowerCase());
   const covered =
-    typeof control.selectionStart !== 'number' ||
+    !hasSelectionApi ||
     (control.selectionStart === 0 && control.selectionEnd === control.value.length);
   return covered ? 'selected' : 'selection-failed';
 }
@@ -138,6 +165,7 @@ const PAGE_SCRIPT_FUNCTIONS = [
   resolveFocusedField,
   resolveClickedElement,
   isClickOnField,
+  readInnermostBoundary,
   selectEditingHostContent,
   selectControlContent,
   selectFocusedContent,

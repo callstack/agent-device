@@ -19,7 +19,7 @@ function fakeSelection(): FakeSelection {
     get rangeCount() {
       return state.ranges.length;
     },
-    toString: () => '',
+    getRangeAt: (index: number) => state.ranges[index],
   };
   return state;
 }
@@ -30,7 +30,11 @@ function fakeDocument(selection = fakeSelection()): Record<string, any> {
     hit: null,
     elementFromPoint: () => doc.hit,
     createRange: () => {
-      const range: Record<string, any> = { toString: () => '' };
+      const range: Record<string, any> = {
+        compareBoundaryPoints: () => 0,
+        setStart: () => {},
+        setEnd: () => {},
+      };
       range.selectNodeContents = (node: unknown) => (range.selectedNode = node);
       return range;
     },
@@ -42,6 +46,7 @@ function fakeDocument(selection = fakeSelection()): Record<string, any> {
 function fakeElement(doc: Record<string, any>, props: FakeElement): FakeElement {
   const element: FakeElement = {
     contains: (other: unknown) => other === element,
+    childNodes: [],
     getRootNode: () => doc,
     ...props,
   };
@@ -160,6 +165,44 @@ test('page script reports a selection the browser did not keep', () => {
   const { doc, selection } = pageWithFocusedAndHit({ tagName: 'DIV', isContentEditable: true });
   selection.selection.addRange = () => {};
   assert.equal(runInPage(doc), 'selection-failed');
+});
+
+test('page script judges a kept selection by boundary points, not by text', () => {
+  const start = 0;
+  const end = 2;
+  // A kept range that starts after, or ends before, the host content leaves some of it unselected.
+  for (const [boundary, comparison, expected] of [
+    [start, 1, 'selection-failed'],
+    [end, -1, 'selection-failed'],
+    [start, -1, 'selected'],
+    [end, 1, 'selected'],
+  ] as const) {
+    const { doc, selection } = pageWithFocusedAndHit({ tagName: 'DIV', isContentEditable: true });
+    const addRange = selection.selection.addRange;
+    selection.selection.addRange = (range: Record<string, any>) => {
+      const compare = range.compareBoundaryPoints;
+      range.compareBoundaryPoints = (how: number) => (how === boundary ? comparison : compare());
+      addRange(range);
+    };
+    assert.equal(runInPage(doc), expected, `${boundary} ${comparison}`);
+  }
+});
+
+test('page script trusts select() for inputs without a selection API and checks the rest', () => {
+  const control = (type: string, selectionStart: number | null) => ({
+    tagName: 'INPUT',
+    type,
+    value: 'old',
+    selectionStart,
+    selectionEnd: selectionStart === null ? null : 3,
+    select: () => {},
+  });
+  assert.equal(runInPage(pageWithFocusedAndHit(control('email', null)).doc), 'selected');
+  assert.equal(runInPage(pageWithFocusedAndHit(control('number', null)).doc), 'selected');
+  assert.equal(runInPage(pageWithFocusedAndHit(control('text', 0)).doc), 'selected');
+  // A text input whose selection did not cover the value must not pass as selected.
+  assert.equal(runInPage(pageWithFocusedAndHit(control('text', 1)).doc), 'selection-failed');
+  assert.equal(runInPage(pageWithFocusedAndHit(control('text', null)).doc), 'selection-failed');
 });
 
 test('selection outcome reads the backend result and treats anything else as no answer', () => {

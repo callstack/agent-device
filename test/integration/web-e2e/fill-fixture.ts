@@ -19,6 +19,9 @@ export const FILL_FIXTURE_POINTS = {
   checkbox: [310, 130],
   select: [370, 165],
   button: [360, 220],
+  emailInput: [370, 275],
+  numberInput: [370, 325],
+  multiParagraph: [420, 420],
   blank: [650, 450],
 } as const satisfies Record<string, readonly [number, number]>;
 
@@ -35,6 +38,9 @@ export type FillFixtureState = {
   dateInput: string;
   checkbox: boolean;
   select: string;
+  emailInput: string;
+  numberInput: string;
+  multiParagraph: string;
   clicks: number;
   enters: number;
 };
@@ -91,6 +97,9 @@ function pageHtml(): string {
 <input id="date" class="at" type="date" value="2020-01-01" style="left:300px;top:70px;width:150px;height:30px">
 <input id="checkbox" class="at" type="checkbox" style="left:300px;top:120px;width:20px;height:20px">
 <select id="select" class="at" style="left:300px;top:150px;width:150px;height:30px"><option>old</option><option>other</option></select>
+<input id="email" class="at" type="email" value="old@example.test" style="left:300px;top:260px;width:150px;height:30px">
+<input id="number" class="at" type="number" value="7" style="left:300px;top:310px;width:150px;height:30px">
+<div id="multi" class="at" contenteditable="true" style="left:300px;top:360px;width:250px;height:120px"><p>one</p><p>two <span style="display:none">hidden</span>three</p></div>
 <button id="button" class="at" style="left:300px;top:200px;width:120px;height:40px">Go</button>
 <p id="state" aria-label="state" class="at" style="left:20px;top:520px;border:0"></p>
 <script>
@@ -132,6 +141,9 @@ function pageHtml(): string {
       dateInput: document.getElementById('date').value,
       checkbox: document.getElementById('checkbox').checked,
       select: document.getElementById('select').value,
+      emailInput: document.getElementById('email').value,
+      numberInput: document.getElementById('number').value,
+      multiParagraph: document.getElementById('multi').textContent,
       clicks,
       enters,
     });

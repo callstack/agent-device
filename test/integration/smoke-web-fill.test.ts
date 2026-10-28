@@ -17,6 +17,8 @@ type Point = readonly [number, number];
 type Field = {
   name: Exclude<keyof typeof FILL_FIXTURE_POINTS, 'blank' | 'button'>;
   stateKey: keyof FillFixtureState;
+  /** What the replace step types; a number input accepts digits only. */
+  text?: string;
 };
 
 const EDITABLE_FIELDS: readonly Field[] = [
@@ -26,6 +28,11 @@ const EDITABLE_FIELDS: readonly Field[] = [
   { name: 'shadowInput', stateKey: 'shadowInput' },
   { name: 'shadowContenteditable', stateKey: 'shadowContenteditable' },
   { name: 'sameOriginFrame', stateKey: 'sameOriginFrame' },
+  { name: 'emailInput', stateKey: 'emailInput', text: 'new@example.test' },
+  { name: 'numberInput', stateKey: 'numberInput', text: '42' },
+  // Several paragraphs and a hidden span: the selection must cover all of it, though the text the
+  // browser renders for the selection differs from the text of the range.
+  { name: 'multiParagraph', stateKey: 'multiParagraph' },
 ];
 
 // A fill that cannot confirm an editable target must leave the page untouched, so each of these is
@@ -69,9 +76,10 @@ test(
 );
 
 async function assertFillReplacesAndClears(live: LiveFill, field: Field): Promise<void> {
-  const replaced = await live.fill(FILL_FIXTURE_POINTS[field.name], 'new');
+  const text = field.text ?? 'new';
+  const replaced = await live.fill(FILL_FIXTURE_POINTS[field.name], text);
   assert.equal(replaced.status, 0, debug(field.name, replaced));
-  assert.equal((await live.readState())[field.stateKey], 'new', `${field.name} replace`);
+  assert.equal((await live.readState())[field.stateKey], text, `${field.name} replace`);
 
   const cleared = await live.fill(FILL_FIXTURE_POINTS[field.name], '');
   assert.equal(cleared.status, 0, debug(field.name, cleared));
