@@ -4,7 +4,11 @@ import type {
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotPresentationKey,
+  type Rect,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -299,7 +303,8 @@ type MovingTargetMeasured = {
  * ADR 0014's reconciliation adopt the capture's coordinates for a same-identity node, which is the
  * sanctioned way a ref's position moves. `measureRefObservation` then asks whether that adoption is
  * what actually got dispatched — a resolution that kept its authorized frame node measured nothing
- * here, and the gate refuses rather than comparing one stale rect to itself.
+ * here, and the gate refuses rather than comparing one stale rect to itself. The observation is
+ * taken in the frame's own presentation, because reconciliation reads `@eN` by its ordinal.
  */
 async function reObserveTarget(
   runtime: AgentDeviceRuntime,
@@ -316,7 +321,11 @@ async function reObserveTarget(
       ? { measured: true, resolved, rect, surfaceBundleId }
       : { measured: false, resolved, rect: undefined };
   }
-  const { snapshot } = await captureInteractionSnapshot(runtime, options, true);
+  const { snapshot } = await captureInteractionSnapshot(
+    runtime,
+    options,
+    await refFrameIsInteractiveOnly(runtime, options),
+  );
   const resolved = await resolveInteractionTarget(runtime, options, params);
   return { resolved, ...measureRefObservation(surfaceScopedNodes(snapshot), resolved) };
 }
@@ -343,6 +352,23 @@ function measureRefObservation(
   return measured
     ? { measured: true, rect, surfaceBundleId: capture.surfaceBundleId }
     : { measured: false, rect: undefined };
+}
+
+const FULL_TREE_PRESENTATION_KEY = buildSnapshotPresentationKey({ interactiveOnly: false });
+
+/**
+ * Whether a ref re-observation captures interactive-only. Refs number a capture densely, so an
+ * interactive-only look at a full-tree frame names other nodes by the same refs, and a still target
+ * reads as unmeasured (#3981). A frame in a presentation the gate cannot reproduce (depth, scope,
+ * raw) keeps the interactive look and stays fail-closed.
+ */
+async function refFrameIsInteractiveOnly(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+): Promise<boolean> {
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  const frame = session?.refFrameSnapshot ?? session?.snapshot;
+  return frame?.presentationKey !== FULL_TREE_PRESENTATION_KEY;
 }
 
 function resolvedRect(resolved: ResolvedInteractionTarget): Rect | undefined {
