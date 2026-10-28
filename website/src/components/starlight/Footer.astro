@@ -4,13 +4,14 @@
 import Default from '@astrojs/starlight/components/Footer.astro';
 
 import { footer, site } from '../../site/content';
+import NameCase from '../site/NameCase.astro';
 
 const year = new Date().getFullYear();
 ---
 
 <Default />
 <div class="cs-footer">
-  <span>© {year} {site.name} by {site.owner}</span>
+  <span><NameCase text={`© ${year} ${site.name} by ${site.owner}`} /></span>
   <nav class="links" aria-label="Footer">
     {footer.map(({ text, href }) => <a href={href}>{text}</a>)}
   </nav>

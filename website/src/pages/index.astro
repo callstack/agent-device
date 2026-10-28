@@ -11,6 +11,7 @@ import Closing from '../components/site/Closing.astro';
 import Faq from '../components/site/Faq.astro';
 import Footer from '../components/site/Footer.astro';
 import Marquee from '../components/site/Marquee.astro';
+import NameCase from '../components/site/NameCase.astro';
 import Nav from '../components/site/Nav.astro';
 import CodeBlock from '../components/site/CodeBlock.astro';
 import Dither from '../components/site/Dither.astro';
@@ -99,7 +100,7 @@ const downloads = await monthlyDownloads();
         {featured.map((a) => <li><AdopterLogo adopter={a} /></li>)}
       </ul>
       <div class="used-by-foot">
-        <a class="label more" href={usedBy.more.href}>{usedBy.more.text} <span aria-hidden="true">→</span></a>
+        <a class="label more" href={usedBy.more.href}><NameCase text={usedBy.more.text} /> <span aria-hidden="true">→</span></a>
         {
           downloads && (
             <a class="downloads" href={site.npm}>
@@ -112,7 +113,7 @@ const downloads = await monthlyDownloads();
     </section>
 
     <section id="bottleneck" aria-labelledby="bottleneck-title">
-      <p class="section-head label"><b>[{num('bottleneck')}]</b> {bottleneck.label}</p>
+      <p class="section-head label"><b>[{num('bottleneck')}]</b> <NameCase text={bottleneck.label} /></p>
       <div class="editorial">
         <h2 class="h2" id="bottleneck-title">{bottleneck.headline[0]} <em>{bottleneck.headline[1]}</em></h2>
         <div class="editorial-body">
@@ -122,7 +123,7 @@ const downloads = await monthlyDownloads();
     </section>
 
     <section id="loop" aria-labelledby="loop-title">
-      <p class="section-head label"><b>[{num('loop')}]</b> {loop.label}</p>
+      <p class="section-head label"><b>[{num('loop')}]</b> <NameCase text={loop.label} /></p>
       <div class="intro">
         <h2 class="h2" id="loop-title">{loop.headline[0]} <em>{loop.headline[1]}</em></h2>
         <p class="lede">{loop.lede}</p>
@@ -145,7 +146,7 @@ const downloads = await monthlyDownloads();
     </section>
 
     <section id="inner" aria-labelledby="inner-title">
-      <p class="section-head label"><b>[{num('inner')}]</b> {inner.label}</p>
+      <p class="section-head label"><b>[{num('inner')}]</b> <NameCase text={inner.label} /></p>
       <div class="split">
         <div class="split-copy">
           <h2 class="h2" id="inner-title">{inner.headline[0]} <em>{inner.headline[1]}</em></h2>
@@ -155,7 +156,7 @@ const downloads = await monthlyDownloads();
             <p class="body" set:html={inlineCode(innerProof.how)} />
             <a class="label more" href={innerProof.sources.at(-1)!.href}>Read the case study <span aria-hidden="true">↗</span></a>
           </div>
-          <a class="label more" href={inner.link.href}>{inner.link.text} <span aria-hidden="true">→</span></a>
+          <a class="label more" href={inner.link.href}><NameCase text={inner.link.text} /> <span aria-hidden="true">→</span></a>
         </div>
         <div class="stage">
           <Dither scene="flow" focus={0.5} />
@@ -181,7 +182,7 @@ const downloads = await monthlyDownloads();
     </section>
 
     <section id="outer" aria-labelledby="outer-title">
-      <p class="section-head label"><b>[{num('outer')}]</b> {outer.label}</p>
+      <p class="section-head label"><b>[{num('outer')}]</b> <NameCase text={outer.label} /></p>
       <div class="split split--flip">
         <div class="split-copy">
           <h2 class="h2" id="outer-title">{outer.headline[0]} <em>{outer.headline[1]}</em></h2>
@@ -190,7 +191,7 @@ const downloads = await monthlyDownloads();
             <span class="label proof-label">Start from</span>
             <a class="proof-link" href={outer.proof.href}>{outer.proof.text} <span aria-hidden="true">↗</span></a>
           </div>
-          <a class="label more" href={outer.link.href}>{outer.link.text} <span aria-hidden="true">→</span></a>
+          <a class="label more" href={outer.link.href}><NameCase text={outer.link.text} /> <span aria-hidden="true">→</span></a>
         </div>
         <div class="stage">
           <Dither scene="flow" focus={0.5} />
@@ -208,12 +209,12 @@ const downloads = await monthlyDownloads();
     </section>
 
     <section id="feedback" aria-labelledby="feedback-title">
-      <p class="section-head label"><b>[{num('feedback')}]</b> {feedback.label}</p>
+      <p class="section-head label"><b>[{num('feedback')}]</b> <NameCase text={feedback.label} /></p>
       <div class="split">
         <div class="split-copy">
           <h2 class="h2" id="feedback-title">{feedback.headline[0]} <em>{feedback.headline[1]}</em></h2>
           <p class="lede" set:html={inlineCode(feedback.lede)} />
-          <a class="label more" href={feedback.link.href}>{feedback.link.text} <span aria-hidden="true">→</span></a>
+          <a class="label more" href={feedback.link.href}><NameCase text={feedback.link.text} /> <span aria-hidden="true">→</span></a>
         </div>
         <div class="stage">
           <Dither scene="flow" focus={0.5} />
@@ -243,7 +244,7 @@ const downloads = await monthlyDownloads();
               <p class="body" set:html={inlineCode(a.how)} />
               <ul class="story-sources">
                 {a.sources.map((src) => (
-                  <li><a class="label more" href={src.href}>{src.text} <span aria-hidden="true">↗</span></a></li>
+                  <li><a class="label more" href={src.href}><NameCase text={src.text} /> <span aria-hidden="true">↗</span></a></li>
                 ))}
               </ul>
             </li>
@@ -273,7 +274,7 @@ const downloads = await monthlyDownloads();
           ))
         }
       </ol>
-      <a class="label more pad" href="/cloud">Run agent-device anywhere <span aria-hidden="true">→</span></a>
+      <a class="label more pad" href="/cloud"><NameCase text="Run agent-device anywhere" /> <span aria-hidden="true">→</span></a>
     </section>
 
     <section id="watch" aria-labelledby="watch-title">
@@ -467,6 +468,9 @@ const downloads = await monthlyDownloads();
   .ring-step--product .ring-num,
   .ring-tag {
     color: var(--accent);
+  }
+  .ring-tag {
+    text-transform: none;
   }
   /* Arrows between neighbours: right along the top row, down at the end, left along the bottom
      row, and up from the last step back to the first. */

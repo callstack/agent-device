@@ -1,0 +1,21 @@
+---
+// Text for uppercase labels with the product's name kept as written, like the lockup: "Why
+// agent-device" renders WHY agent-device. A word that contains the name (a path such as
+// scripts/agent-device.ts) keeps its case whole.
+import { site } from '../../site/content';
+
+interface Props {
+  text: string;
+}
+const { text } = Astro.props;
+const name = site.name.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const parts = text.split(new RegExp(String.raw`(\S*${name}\S*)`));
+---
+
+{parts.map((part, i) => (i % 2 ? <span class="name" translate="no">{part}</span> : part))}
+
+<style>
+  .name {
+    text-transform: none;
+  }
+</style>

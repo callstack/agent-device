@@ -573,14 +573,13 @@ dl.cells dd {
 .giant {
   margin: 0;
   padding: 7cqi 0 5cqi;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 500;
   /* Overridden inline with giantSize() (giant.ts), which fits the product's wordmark. */
-  font-size: 21.6cqi;
+  font-size: 16cqi;
   line-height: 0.8;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.02em;
   text-align: center;
-  text-transform: uppercase;
   color: var(--accent);
   white-space: nowrap;
   user-select: none;

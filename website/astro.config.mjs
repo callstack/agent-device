@@ -85,7 +85,7 @@ export default defineConfig({
           ['agent-setup', 'AI agent setup'],
           ['quick-start', 'Quick start'],
         ]),
-        group('Using agent-device', [
+        group('Usage', [
           ['capabilities', 'Capabilities'],
           ['commands', 'Commands'],
           ['configuration', 'Configuration'],
