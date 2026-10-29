@@ -397,39 +397,30 @@ test.runIf(process.platform !== 'win32')(
 // that helper: it records the release the signal handler performs, and its `sleep` is the
 // hold the kill interrupts.
 
-function signalMarkerPaths(label: string): { ready: string; released: string } {
-  const dir = mkdtempForTestSync(`agent-device-exec-${label}-`);
-  return { ready: path.join(dir, 'ready'), released: path.join(dir, 'released') };
+function releasedMarkerPath(label: string): string {
+  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), 'released');
 }
 
-// `ready` is written only once the trap is installed and the hold has started, so a
-// signal sent after it appears always reaches the handler.
-function holdUntilSignalledShellScript(markers: { ready: string; released: string }): string {
-  return `trap 'printf released > ${shellQuote(markers.released)}; exit 143' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & printf ready > ${shellQuote(markers.ready)}; wait`;
-}
-
-async function waitForTrapReady(readyPath: string, settled: Promise<unknown>): Promise<void> {
-  let didSettle = false;
-  void settled.then(() => (didSettle = true));
-  const deadline = Date.now() + 2_000;
-  while (!fs.existsSync(readyPath)) {
-    if (didSettle) throw new Error('the command settled before its shell installed the trap');
-    if (Date.now() > deadline) throw new Error('the shell never reported its trap installed');
-    await sleep(10);
-  }
+// `ready` is printed only once the trap is installed and the hold has started, so a signal sent
+// after it arrives always reaches the handler.
+function holdUntilSignalledShellScript(releasedPath: string): string {
+  return `trap 'printf released > ${shellQuote(releasedPath)}; exit 143' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & printf ready; wait`;
 }
 
 test.runIf(process.platform !== 'win32')(
   'a cancelled command with a kill policy is signalled so it can release what it holds',
   async () => {
-    const markers = signalMarkerPaths('graceful-abort');
+    const releasedPath = releasedMarkerPath('graceful-abort');
     const controller = new AbortController();
-    const held = runCmd('/bin/sh', ['-c', holdUntilSignalledShellScript(markers)], {
+    const trap = stdoutAnnouncement();
+    const held = runCmdStreaming('/bin/sh', ['-c', holdUntilSignalledShellScript(releasedPath)], {
       signal: controller.signal,
       kill: { signal: 'SIGTERM', graceMs: 2_000 },
+      captureOutput: false,
+      onStdoutChunk: trap.onStdoutChunk,
     });
     const rejection = settledRejection(held);
-    await waitForTrapReady(markers.ready, rejection);
+    await trap.before(rejection);
 
     controller.abort();
     const outcome = await rejection;
@@ -438,7 +429,7 @@ test.runIf(process.platform !== 'win32')(
     const details = (outcome.error as { details?: Record<string, unknown> }).details;
     assert.equal(details?.reason, 'request_canceled');
     assert.equal(
-      fs.readFileSync(markers.released, 'utf8'),
+      fs.readFileSync(releasedPath, 'utf8'),
       'released',
       'the child never saw the signal its handler releases on: it was killed outright',
     );

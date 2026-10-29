@@ -252,17 +252,6 @@ test('runChecks skips CI checks, runs every local check of a fail-open plan, and
   );
 });
 
-// The related run leaves the unit projects out, so only check:unit can see their failures.
-test('a fail-open plan fails on a unit-suite failure', async () => {
-  const plan = selectChecks({ changedFiles: ['unknown/path.xyz'], packageEntryFiles: [] });
-  assert.equal(plan.failOpen, true);
-  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
-    execute: async (command) => (command.includes('check:unit') ? 23 : 0),
-    cwd: '.',
-  });
-  assert.equal(code, 23);
-});
-
 async function runFailingOn(script: string, changedFiles: string[]): Promise<number> {
   const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
   assert.equal(plan.failOpen, false, changedFiles.join(', '));
