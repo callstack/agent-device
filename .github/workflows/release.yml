@@ -244,17 +244,22 @@ jobs:
     timeout-minutes: 10
     permissions: {}
     steps:
-      - name: Wait for npm to serve the release as latest
+      # Any latest at or past this version will do: a newer stable release may already have
+      # moved latest on, and the site only needs the current one.
+      - name: Wait for npm to serve this release or a newer one as latest
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           for attempt in $(seq 1 30); do
-            if [ "$(npm view agent-device@latest version 2>/dev/null)" = "$VERSION" ]; then
+            latest="$(npm view agent-device@latest version 2>/dev/null || true)"
+            if [ -n "$latest" ] &&
+              [ "$(printf '%s\n' "$VERSION" "$latest" | sort -V | head -n 1)" = "$VERSION" ]; then
+              echo "npm serves $latest as latest."
               exit 0
             fi
             sleep 10
           done
-          echo "npm does not serve $VERSION as latest after 5 minutes."
+          echo "npm does not serve $VERSION or newer as latest after 5 minutes."
           exit 1
 
       - name: Trigger the site's production build
