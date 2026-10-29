@@ -207,6 +207,7 @@ test('a failed release of an unconfirmed spec lease still fails the command with
       error.code === 'UNSUPPORTED_OPERATION' &&
       error.details?.reason === 'device-spec-unsupported' &&
       error.details?.released === false &&
+      error.details?.releaseError === 'backend unreachable' &&
       error.details?.leaseId === 'lease-1',
   );
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
