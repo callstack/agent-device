@@ -121,6 +121,7 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
     ...cleanReport,
     providerReleases: { completed: [], pending: ['lease-a'], unknown: ['lease-b'] },
     requests: { drained: 1, abandoned: 2 },
+    platformOwners: 'failed',
     sessions: { closed: 0, failed: 1 },
     plugins: {
       disposed: [],
@@ -133,6 +134,7 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
 
   expect(lines).toEqual([
     expect.stringContaining('2 request(s) ignored cancellation'),
+    expect.stringContaining('platform owner shutdown failed'),
     expect.stringContaining('plugin stuck was still shutting down'),
     expect.stringContaining('plugin broken failed to dispose: refused'),
     expect.stringContaining('lease release still pending for lease-a'),
