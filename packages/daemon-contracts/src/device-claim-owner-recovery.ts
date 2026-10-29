@@ -5,6 +5,7 @@ import {
 } from './session-artifact-paths.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import {
   createDeviceClaimReconciler,
@@ -57,10 +58,26 @@ export function createOwnerScopedDeviceClaimReconciler(
     const inspection = await params.beforeGateway?.(claim);
     if (inspection?.status === 'retained') return inspection;
     const recovery = compose(claim.stateDir);
+    let outcome: Awaited<ReturnType<DeviceClaimReconciler>> | undefined;
     try {
-      return await recovery.reconcile(claim, inspection);
+      outcome = await recovery.reconcile(claim, inspection);
+      return outcome;
     } finally {
-      await recovery.dispose();
+      try {
+        await recovery.dispose();
+      } catch (error) {
+        if (outcome?.status === 'reconciled') throw error;
+        params.scope.diagnostics.emit({
+          level: 'error',
+          phase: 'device_claim_recovery_dispose_failed',
+          data: {
+            deviceKey: claim.deviceKey,
+            ownerSession: claim.session,
+            ...(outcome?.status === 'retained' ? { retainedReason: outcome.reason } : {}),
+            error: normalizeError(error),
+          },
+        });
+      }
     }
   };
 }

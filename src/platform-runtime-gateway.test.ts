@@ -13,6 +13,7 @@ import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/p
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import type { AgentDeviceHost } from './sdk/host-types.ts';
@@ -71,10 +72,62 @@ describe('composed platform runtime gateway', () => {
     await closing;
     expect(shutdown).toHaveBeenCalledOnce();
   });
+  test('an unfinished owner load does not delay shutdown of a loaded owner', async () => {
+    const readyRef = providerRuntimeOwner('limrun', 'ready');
+    const loadingRef = providerRuntimeOwner('limrun', 'loading');
+    const readyShutdown = vi.fn(async () => {});
+    const lateShutdown = vi.fn(async () => {});
+    let finishLoad!: () => void;
+    const loadReady = new Promise<void>((resolve) => {
+      finishLoad = resolve;
+    });
+    const runtimeGateway = gateway([
+      providerRuntime({
+        ref: readyRef,
+        load: async () => ({ ...runtimeOwner({ ref: readyRef }), shutdown: readyShutdown }),
+      }),
+      providerRuntime({
+        ref: loadingRef,
+        load: async () => {
+          await loadReady;
+          return { ...runtimeOwner({ ref: loadingRef }), shutdown: lateShutdown };
+        },
+      }),
+    ]);
+    await runtimeGateway.bind({
+      device,
+      intent: { kind: 'exact-owner', owner: readyRef, fence: { token: 'ready', generation: 1 } },
+      scope,
+    });
+    const loading = runtimeGateway.bind({
+      device,
+      intent: {
+        kind: 'exact-owner',
+        owner: loadingRef,
+        fence: { token: 'loading', generation: 1 },
+      },
+      scope,
+    });
+    const closing = runtimeGateway.shutdown();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(readyShutdown).toHaveBeenCalledOnce();
+      expect(lateShutdown).not.toHaveBeenCalled();
+    } finally {
+      finishLoad();
+      await loading;
+      await closing;
+    }
+    expect(readyShutdown).toHaveBeenCalledOnce();
+    expect(lateShutdown).toHaveBeenCalledOnce();
+  });
   test('daemon reports a composed owner failure and retains registration while completing cleanup', async () => {
     const ref = providerRuntimeOwner('limrun', 'failed');
     const shutdown = vi.fn(async () => {
-      throw new Error('owner refused');
+      throw new AppError('COMMAND_FAILED', 'owner refused', {
+        reason: 'owner-test-refusal',
+        hint: 'Inspect the original owner failure.',
+      });
     });
     const registration = providerRuntime({
       ref,
@@ -120,9 +173,11 @@ describe('composed platform runtime gateway', () => {
     expect(describeUnfinishedShutdownWork(report)).toEqual([
       expect.stringContaining('platform owner shutdown failed'),
     ]);
-    expect(fs.readFileSync(paths.logPath, 'utf8')).toContain(
-      'daemon_shutdown_platform_owner_failed',
-    );
+    const log = fs.readFileSync(paths.logPath, 'utf8');
+    expect(log).toContain('daemon_shutdown_platform_owner_failed');
+    expect(log).toContain('owner refused');
+    expect(log).toContain('owner-test-refusal');
+    expect(log).toContain('Inspect the original owner failure.');
     expect(fs.existsSync(paths.infoPath)).toBe(true);
     expect(fs.existsSync(paths.lockPath)).toBe(true);
     expect(clearLock).not.toHaveBeenCalled();
