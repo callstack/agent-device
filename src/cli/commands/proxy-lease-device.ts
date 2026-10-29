@@ -191,7 +191,7 @@ async function releaseUnhonouredSpecLease(
   lease: Lease,
   keys: readonly string[],
 ): Promise<AppError> {
-  let release: Record<string, unknown>;
+  let release: { released: boolean; releaseError?: string };
   try {
     release = { released: (await releaseLease(client, state, lease)).released };
   } catch (error) {
@@ -199,7 +199,9 @@ async function releaseUnhonouredSpecLease(
   }
   return deviceSpecUnsupportedError(
     keys,
-    'The proxy backend leased a device without confirming the requested device spec, so the lease was released.',
+    release.released
+      ? 'The proxy backend leased a device without confirming the requested device spec, so the lease was released.'
+      : 'The proxy backend leased a device without confirming the requested device spec, and releasing the lease failed, so it may stay held until it expires.',
     { session: state.session, leaseId: lease.leaseId, ...release },
   );
 }
