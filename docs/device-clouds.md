@@ -47,7 +47,9 @@ AWS Device Farm reads the AWS CLI credential chain instead, so this check does n
 
 ## Fill text on hosted WebDriver sessions
 
-On BrowserStack, AWS Device Farm, and TestMu AI, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot report focus at all, use `press <target>` followed by `type <text>`, which sends text without confirming where it lands.
+On BrowserStack, AWS Device Farm, and TestMu AI, `fill` replaces existing text after it confirms which element received focus. It clears and sends replacement text to that same element. An empty replacement clears the field without sending keys. If clearing fails, no replacement text is sent.
+
+Use `snapshot -i` to confirm the target. If the driver does not support the `/element/active` route, `fill` refuses before tapping. Keyboard visibility alone cannot identify the element to clear. `type` remains append-only. Use `press <target>` followed by `type <text>` only when you want to append text without confirming where it lands.
 
 ## Retrieve artifacts after close
 
