@@ -103,6 +103,7 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
         device,
         input.activeSessionApp.bundleId,
         signal,
+        input.requestId,
       )
     : undefined;
   // The recorder owns its own file and the export is produced from a copy of it (ADR 0024 2.3), so a

@@ -72,6 +72,7 @@ export async function captureAppleClockAnchor(
   device: DeviceInfo,
   appBundleId: string,
   signal?: AbortSignal,
+  requestId?: string,
 ) {
   try {
     const [simulatorTransport, runnerTransport] = await Promise.all([
@@ -93,7 +94,7 @@ export async function captureAppleClockAnchor(
     const result = await runAppleRunnerCommand(
       device,
       { command: 'snapshot', appBundleId, interactiveOnly: true, depth: 1 },
-      { signal },
+      { signal, requestId },
     );
     const wallClockAtMs = Date.now();
     return typeof result.currentUptimeMs === 'number' &&
