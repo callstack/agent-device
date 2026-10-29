@@ -2,15 +2,14 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import type { Lease } from '@agent-device/contracts/client';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import {
-  connectionWorkspace,
   createTestClient,
+  grantedLease,
+  proxyWorkspace,
   type LeaseAllocateRequest,
   type LeaseReleaseRequest,
-  seedConnectionState,
   unexpectedCommandCall,
 } from './remote-connection.fixtures.ts';
 
@@ -43,56 +42,6 @@ const LEASED_SIMULATOR = {
 } as const;
 
 type ListedDevices = Awaited<ReturnType<AgentDeviceClient['devices']['list']>>;
-
-function proxyWorkspace(prefix: string, seed: { leaseId?: string; deviceKey?: string } = {}) {
-  const workspace = connectionWorkspace(prefix);
-  fs.writeFileSync(
-    workspace.remoteConfigPath,
-    JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }),
-  );
-  seedConnectionState({
-    stateDir: workspace.stateDir,
-    state: {
-      session: 'adc-proxy',
-      remoteConfigPath: workspace.remoteConfigPath,
-      daemon: { baseUrl: 'https://daemon.example' },
-      tenant: 'proxy',
-      runId: 'proxy-client-1',
-      leaseProvider: 'proxy',
-      clientId: 'client-1',
-      ...(seed.leaseId
-        ? { leaseId: seed.leaseId, leaseBackend: 'ios-instance', platform: 'ios' }
-        : {}),
-      ...(seed.deviceKey ? { deviceKey: seed.deviceKey } : {}),
-    },
-  });
-  const flags = {
-    json: true,
-    help: false,
-    version: false,
-    stateDir: workspace.stateDir,
-    remoteConfig: workspace.remoteConfigPath,
-    daemonBaseUrl: 'https://daemon.example',
-    tenant: 'proxy',
-    runId: 'proxy-client-1',
-    session: 'adc-proxy',
-    platform: 'ios',
-  } as const;
-  return { ...workspace, flags };
-}
-
-function grantedLease(request: LeaseAllocateRequest, extra: Partial<Lease> = {}): Lease {
-  return {
-    leaseId: 'lease-1',
-    tenantId: request.tenant,
-    runId: request.runId,
-    backend: request.leaseBackend ?? 'ios-instance',
-    leaseProvider: request.leaseProvider,
-    clientId: request.clientId,
-    deviceKey: request.deviceKey,
-    ...extra,
-  };
-}
 
 test('proxy open without an exact device allocates by its selectors and keeps the device the lease names', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-');

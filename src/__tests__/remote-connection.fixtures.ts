@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
+import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import {
   hashRemoteConfigFile,
@@ -283,5 +284,65 @@ export function forceConnectFlags(
     session: 'adc-android',
     platform: 'android',
     ...options,
+  };
+}
+
+/** A proxy connection profile, its stored connection state, and the flags a proxy command runs with. */
+export function proxyWorkspace(
+  prefix: string,
+  seed: {
+    leaseId?: string;
+    deviceKey?: string;
+    leaseDeviceSpec?: { leaseId: string; spec: LeaseDeviceSpec; device?: LeaseDevice };
+  } = {},
+) {
+  const workspace = connectionWorkspace(prefix);
+  fs.writeFileSync(
+    workspace.remoteConfigPath,
+    JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }),
+  );
+  seedConnectionState({
+    stateDir: workspace.stateDir,
+    state: {
+      session: 'adc-proxy',
+      remoteConfigPath: workspace.remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'proxy',
+      runId: 'proxy-client-1',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      ...(seed.leaseId
+        ? { leaseId: seed.leaseId, leaseBackend: 'ios-instance', platform: 'ios' }
+        : {}),
+      ...(seed.deviceKey ? { deviceKey: seed.deviceKey } : {}),
+      ...(seed.leaseDeviceSpec ? { leaseDeviceSpec: seed.leaseDeviceSpec } : {}),
+    },
+  });
+  const flags = {
+    json: true,
+    help: false,
+    version: false,
+    stateDir: workspace.stateDir,
+    remoteConfig: workspace.remoteConfigPath,
+    daemonBaseUrl: 'https://daemon.example',
+    tenant: 'proxy',
+    runId: 'proxy-client-1',
+    session: 'adc-proxy',
+    platform: 'ios',
+  } as const;
+  return { ...workspace, flags };
+}
+
+/** The lease a proxy backend grants for `request`, on the device the request names unless `extra` overrides it. */
+export function grantedLease(request: LeaseAllocateRequest, extra: Partial<Lease> = {}): Lease {
+  return {
+    leaseId: 'lease-1',
+    tenantId: request.tenant,
+    runId: request.runId,
+    backend: request.leaseBackend ?? 'ios-instance',
+    leaseProvider: request.leaseProvider,
+    clientId: request.clientId,
+    deviceKey: request.deviceKey,
+    ...extra,
   };
 }

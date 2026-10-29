@@ -2,14 +2,15 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
+import type { LeaseDevice } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectionWorkspace,
   createTestClient,
+  grantedLease,
+  proxyWorkspace,
   type LeaseAllocateRequest,
   type LeaseReleaseRequest,
-  seedConnectionState,
   unexpectedCommandCall,
 } from '../../../__tests__/remote-connection.fixtures.ts';
 
@@ -28,69 +29,13 @@ import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-ca
 
 bindTestCommandHost();
 
+const REMOTE_DEVICE_KEY = 'ios:mobile:SIM-REMOTE';
+
 const GRANTED_DEVICE: LeaseDevice = {
   model: 'iPhone 17 Pro',
   osVersion: '26.1',
   physical: false,
 };
-
-function proxyWorkspace(
-  prefix: string,
-  seed: {
-    leaseId?: string;
-    deviceKey?: string;
-    leaseDeviceSpec?: { leaseId: string; spec: LeaseDeviceSpec; device?: LeaseDevice };
-  } = {},
-) {
-  const workspace = connectionWorkspace(prefix);
-  fs.writeFileSync(
-    workspace.remoteConfigPath,
-    JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }),
-  );
-  seedConnectionState({
-    stateDir: workspace.stateDir,
-    state: {
-      session: 'adc-proxy',
-      remoteConfigPath: workspace.remoteConfigPath,
-      daemon: { baseUrl: 'https://daemon.example' },
-      tenant: 'proxy',
-      runId: 'proxy-client-1',
-      leaseProvider: 'proxy',
-      clientId: 'client-1',
-      ...(seed.leaseId
-        ? { leaseId: seed.leaseId, leaseBackend: 'ios-instance', platform: 'ios' }
-        : {}),
-      ...(seed.deviceKey ? { deviceKey: seed.deviceKey } : {}),
-      ...(seed.leaseDeviceSpec ? { leaseDeviceSpec: seed.leaseDeviceSpec } : {}),
-    },
-  });
-  const flags = {
-    json: true,
-    help: false,
-    version: false,
-    stateDir: workspace.stateDir,
-    remoteConfig: workspace.remoteConfigPath,
-    daemonBaseUrl: 'https://daemon.example',
-    tenant: 'proxy',
-    runId: 'proxy-client-1',
-    session: 'adc-proxy',
-    platform: 'ios',
-  } as const;
-  return { ...workspace, flags };
-}
-
-function grantedLease(request: LeaseAllocateRequest, extra: Partial<Lease> = {}): Lease {
-  return {
-    leaseId: 'lease-1',
-    tenantId: request.tenant,
-    runId: request.runId,
-    backend: request.leaseBackend ?? 'ios-instance',
-    leaseProvider: request.leaseProvider,
-    clientId: request.clientId,
-    deviceKey: 'ios:mobile:SIM-REMOTE',
-    ...extra,
-  };
-}
 
 function renewingClient(heartbeats: string[]) {
   return createTestClient({
@@ -124,7 +69,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
       listDevices: unexpectedCommandCall,
       allocate: async (request) => {
         requests.push(request);
-        return grantedLease(request, { device: GRANTED_DEVICE });
+        return grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device: GRANTED_DEVICE });
       },
       release: unexpectedCommandCall,
     }),
@@ -163,7 +108,7 @@ test('a lease returned without lease.device for a spec request is released and t
       flags: { ...flags, osVersion: '34', imageTag: 'google_apis_playstore' },
       client: createTestClient({
         listDevices: unexpectedCommandCall,
-        allocate: async (request) => grantedLease(request),
+        allocate: async (request) => grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY }),
         release: async (request) => {
           releases.push(request);
           return { released: true };
@@ -197,7 +142,7 @@ test('a failed release of an unconfirmed spec lease still fails the command with
       flags: { ...flags, physical: true },
       client: createTestClient({
         listDevices: unexpectedCommandCall,
-        allocate: async (request) => grantedLease(request),
+        allocate: async (request) => grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY }),
         release: async () => {
           throw new AppError('COMMAND_FAILED', 'backend unreachable');
         },
@@ -317,7 +262,8 @@ test('a new spec lease for another device than the requested --udid is released 
       flags: { ...flags, osVersion: '>=26', udid: 'SIM-OTHER' },
       client: createTestClient({
         listDevices: unexpectedCommandCall,
-        allocate: async (request) => grantedLease(request, { device: GRANTED_DEVICE }),
+        allocate: async (request) =>
+          grantedLease(request, { deviceKey: REMOTE_DEVICE_KEY, device: GRANTED_DEVICE }),
         release: async (request) => {
           releases.push(request);
           return { released: true };
