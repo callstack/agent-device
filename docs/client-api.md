@@ -184,6 +184,14 @@ from an explicit selector, an existing session, one local booted/bootable candid
 simulator with the app installed, or one provider-owned candidate. Ambiguous requests fail with
 structured retry selectors instead of silently retargeting.
 
+`devices.boot` returns the same `selection` record. When a boot names no device and several
+equally preferred local devices match, all shut down, pass `pick: 'newest'` to boot one instead of
+failing: `selection.reason` is then `newest-bootable-local`, and the result names the device.
+
+```ts
+const booted = await client.devices.boot({ platform: 'ios', pick: 'newest' });
+```
+
 To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [TestMu AI](/docs/testmu), and [Limrun](/docs/limrun) guides for provider-specific setup.
 
 ## Web sessions

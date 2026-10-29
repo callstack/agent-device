@@ -37,6 +37,7 @@ agent-device boot
 agent-device boot --platform ios
 agent-device boot --platform android
 agent-device boot --platform android --device Pixel_9_Pro_XL --headless
+agent-device boot --platform ios --pick newest
 agent-device shutdown --platform ios
 agent-device shutdown --platform android --device Pixel_9_Pro_XL
 agent-device open [app|url] [url]
@@ -70,6 +71,7 @@ agent-device daemon status --json
 Boot and shut down:
 
 - `boot` gets the selected target ready without launching an app. It needs an active session or a device selector. You mainly need it when `open` fails because no simulator or emulator is booted.
+- `boot --pick newest` boots one device when the request names none and several equally preferred devices match, all shut down. Without it, `boot` fails with `AMBIGUOUS_MATCH` and its hint names the option. Device ranking still applies first, so a phone beats an iPad. Among the tied devices, it prefers a mobile target over a TV, then the newest OS version, then the first name in name order. Name order compares numbers by value, so iPhone 9 comes before iPhone 17, but it is not device age: with equal OS versions, iPhone 16e comes before iPhone 17. Stopped Android AVDs report no OS version, so the name decides between them. It never picks between booted devices or provider devices. The response names the device and reports `selection.reason: newest-bootable-local`.
 - Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one. On macOS the window opens behind the focused app, which keeps focus (also when `open` boots a stopped AVD). This is best-effort: the emulator can still take focus if the focused app cannot be read, or if its window appears after the startup budget runs out.
 - `shutdown` turns off the selected Apple simulator or Android emulator. It refuses the active session's device; use `close --shutdown` to end the session and turn the device off.
 - `--timeout <ms>` on `boot`, `open <app>`, and `prepare ios-runner` is the startup budget for booting an iOS Simulator or Android emulator (for `prepare ios-runner`, shared with runner preparation). A never-booted iOS Simulator can take several minutes. When the budget runs out, the command fails with `error.details.reason: boot_timeout` and the device keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
