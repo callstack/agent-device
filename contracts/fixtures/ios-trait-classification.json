@@ -284,13 +284,11 @@
       "bridge": {
         "basis": "captured",
         "input": {
-          "automationType": 52,
+          "automationType": 57,
           "traits": "140883519602688"
         },
         "expected": {
-          "type": "TextView",
-          "editable": true,
-          "password": false,
+          "type": "Map",
           "focused": true
         }
       },
@@ -317,13 +315,11 @@
       "bridge": {
         "basis": "captured",
         "input": {
-          "automationType": 52,
+          "automationType": 57,
           "traits": "140883517505536"
         },
         "expected": {
-          "type": "TextView",
-          "editable": true,
-          "password": false
+          "type": "Map"
         }
       },
       "limrun": {
