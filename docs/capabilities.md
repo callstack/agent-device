@@ -1,7 +1,6 @@
 # Capabilities
 
 The target tables below are generated from the runtime command-admission facts that back the `capabilities` command: a command that leaves the code leaves this page. Labels, limits, and integration rows are maintained beside the generator, and command availability does not establish support for every operation, subcommand, or device model.
-It covers agent-device 0.21.34-dev, generated 2026-10-27.
 
 **Yes** means the facts admit every command in that row on the target and every operation the row advertises. **No** means at least one is refused. A qualified cell names the operations that answer there. Targets that share the same available operations print as one column.
 
@@ -20,7 +19,7 @@ A provider column answers for that provider in its default configuration. Provid
 
 ## Inspect and verify the UI
 
-### Mobile targets
+### Inspect and verify the UI: mobile targets
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -29,7 +28,7 @@ A provider column answers for that provider in its default configuration. Provid
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | Yes | Yes |
 
-### TV targets
+### Inspect and verify the UI: TV targets
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
@@ -38,7 +37,7 @@ A provider column answers for that provider in its default configuration. Provid
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes | No |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes | No |
 
-### Desktop and web targets
+### Inspect and verify the UI: desktop and web targets
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
@@ -47,7 +46,7 @@ A provider column answers for that provider in its default configuration. Provid
 | [Screenshots](/docs/commands#media-and-logs) | Yes | Yes | Yes | Yes |
 | [Wait for text, selectors, and timeouts](/docs/commands#wait-and-alerts) | Yes | Yes | Yes | Yes |
 
-### Hosted provider sessions
+### Inspect and verify the UI: hosted provider sessions
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -62,7 +61,7 @@ What a **Yes** does not claim:
 
 ## Interact with the app
 
-### Mobile targets
+### Interact with the app: mobile targets
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -75,7 +74,7 @@ What a **Yes** does not claim:
 | [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Dismiss and enter; status unsupported | Dismiss and enter; status unsupported | Yes | Yes | Dismiss and enter; status unsupported | Dismiss and enter; status unsupported |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes | Yes | Yes |
 
-### TV targets
+### Interact with the app: TV targets
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
@@ -88,7 +87,7 @@ What a **Yes** does not claim:
 | [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | Yes | Yes | No | No | No |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes | No |
 
-### Desktop and web targets
+### Interact with the app: desktop and web targets
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
@@ -101,7 +100,7 @@ What a **Yes** does not claim:
 | [Keyboard dismiss, enter, and status](/docs/commands#keyboard) | No | No | No | No |
 | [React Native overlay dismissal](/docs/commands#react-native-overlays) | Yes | Yes | Yes | Yes |
 
-### Hosted provider sessions
+### Interact with the app: hosted provider sessions
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -122,7 +121,7 @@ What a **Yes** does not claim:
 
 ## Apps and devices
 
-### Mobile targets
+### Apps and devices: mobile targets
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -137,7 +136,7 @@ What a **Yes** does not claim:
 | [Shut down a simulator or emulator](/docs/commands#navigation) | Yes | No | Yes | No | No | No |
 | [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | Yes | Yes | No | No | No | No |
 
-### TV targets
+### Apps and devices: TV targets
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
@@ -152,7 +151,7 @@ What a **Yes** does not claim:
 | [Shut down a simulator or emulator](/docs/commands#navigation) | Yes | No | Yes | No | No |
 | [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | No | No | Yes | Yes | No |
 
-### Desktop and web targets
+### Apps and devices: desktop and web targets
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
@@ -167,7 +166,7 @@ What a **Yes** does not claim:
 | [Shut down a simulator or emulator](/docs/commands#navigation) | No | No | No | No |
 | [Prepare the Apple runner](/docs/commands#prepare-apple-runner) | Yes | Yes | No | No |
 
-### Hosted provider sessions
+### Apps and devices: hosted provider sessions
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -189,7 +188,7 @@ What a **Yes** does not claim:
 
 ## Evidence and diagnostics
 
-### Mobile targets
+### Evidence and diagnostics: mobile targets
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -199,7 +198,7 @@ What a **Yes** does not claim:
 | [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | Yes | Frames, memory, and CPU profiles; memory-snapshot artifact reports unavailable | Yes | Yes | Process RSS memory sample only; frames, memory-snapshot artifacts, CPU profiles, and native captures report unavailable | Process RSS memory sample only; frames, memory-snapshot artifacts, CPU profiles, and native captures report unavailable |
 | [Audio probe](/docs/debugging-profiling#audio-probes) | Yes | No | Yes | No | No | No |
 
-### TV targets
+### Evidence and diagnostics: TV targets
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
@@ -209,7 +208,7 @@ What a **Yes** does not claim:
 | [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | Yes | Yes | Yes | Yes | No |
 | [Audio probe](/docs/debugging-profiling#audio-probes) | Yes | No | Yes | No | No |
 
-### Desktop and web targets
+### Evidence and diagnostics: desktop and web targets
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
@@ -219,7 +218,7 @@ What a **Yes** does not claim:
 | [Performance samples (frames, memory, CPU profiles)](/docs/debugging-profiling#performance-snapshots) | Yes | Yes | No | No |
 | [Audio probe](/docs/debugging-profiling#audio-probes) | Yes | No | No | Page media probe only; host capture unsupported |
 
-### Hosted provider sessions
+### Evidence and diagnostics: hosted provider sessions
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -237,7 +236,7 @@ What a **Yes** does not claim:
 
 ## System and hardware
 
-### Mobile targets
+### System and hardware: mobile targets
 
 | Capability and reference | iOS Simulator | iOS device (CoreDevice) | Android emulator | Android device | HarmonyOS emulator | HarmonyOS device |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -254,7 +253,7 @@ What a **Yes** does not claim:
 | [App event triggers through the app hook](/docs/commands#app-event-triggers-app-hook) | Yes | Yes | Yes | Yes | No | No |
 | [Call and SMS simulation](/docs/commands#navigation) | No | No | Yes | No | No | No |
 
-### TV targets
+### System and hardware: TV targets
 
 | Capability and reference | Android TV emulator | Android TV / Fire OS device | tvOS Simulator | tvOS device | Vega OS (VVD) |
 | --- | --- | --- | --- | --- | --- |
@@ -271,7 +270,7 @@ What a **Yes** does not claim:
 | [App event triggers through the app hook](/docs/commands#app-event-triggers-app-hook) | Yes | Yes | Yes | Yes | No |
 | [Call and SMS simulation](/docs/commands#navigation) | Yes | No | No | No | No |
 
-### Desktop and web targets
+### System and hardware: desktop and web targets
 
 | Capability and reference | macOS desktop | macOS app | Linux desktop | Web browser |
 | --- | --- | --- | --- | --- |
@@ -288,7 +287,7 @@ What a **Yes** does not claim:
 | [App event triggers through the app hook](/docs/commands#app-event-triggers-app-hook) | Yes | Yes | No | No |
 | [Call and SMS simulation](/docs/commands#navigation) | No | No | No | No |
 
-### Hosted provider sessions
+### System and hardware: hosted provider sessions
 
 | Capability and reference | BrowserStack Android / TestMu AI Android | BrowserStack iOS / TestMu AI iOS | AWS Device Farm Android | AWS Device Farm iOS | Limrun iOS | Limrun Android |
 | --- | --- | --- | --- | --- | --- | --- |
