@@ -9,6 +9,7 @@ final class TextInputProbeIssues {
 enum TextInputProbeFailure: String, Error {
   case recordedIssue = "text_input_probe_recorded_issue"
   case exception = "text_input_probe_exception"
+  case emptyTree = "text_input_probe_empty_tree"
 }
 
 enum TextInputProbeOutcome {
@@ -57,27 +58,13 @@ extension RunnerTests {
     y: Double,
     contentTranslation: TextEntryContentTranslation
   ) -> CoordinateTextInputResolution {
-    let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
-      shouldStop -> CoordinateTextInputResolution in
-      let enumerated = enumerateTextInputQueries(app: app, shouldStop: shouldStop)
-      // A degraded XCTest channel is known to fail enumerating some simulator UI trees while direct
-      // gestures still work. An enumeration that read nothing cannot claim the point holds no
-      // input, so only a reading that saw some element makes absence a fact about the screen.
-      guard !enumerated.isEmpty else { return .unavailable }
-      guard let input = filterTextInputCandidates(
-        enumerated, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation, shouldStop: shouldStop
-      ).first else {
-        return .absent
-      }
-      guard let identity = input.identity else {
-        return .unavailable
-      }
+    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
+    case .matches(let inputs):
+      guard let input = inputs.first, let identity = input.identity else { return .unavailable }
       return .input(TextInputAtPoint(element: input.element, identity: identity))
-    }
-    switch probed {
-    case .success(let resolution):
-      return resolution
-    case .failure:
+    case .absent:
+      return .absent
+    case .unavailable:
       return .unavailable
     }
   }
@@ -106,11 +93,17 @@ extension RunnerTests {
   }
 
   func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> TextInputProbeOutcome {
-    switch containingTextInputProbeIssues(fallback: [], { shouldStop in
-      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
-    }) {
-    case .success(let inputs):
+    switch containingTextInputProbeIssues(fallback: TextInputProbeOutcome.unavailable(.emptyTree), { shouldStop in
+      var treeReadable = app.descendants(matching: .any).firstMatch.exists
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      if textInputProbeBlindForTesting { treeReadable = false }
+#endif
+      guard treeReadable else { return .unavailable(.emptyTree) }
+      let inputs = queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
       return inputs.isEmpty ? .absent : .matches(inputs)
+    }) {
+    case .success(let outcome):
+      return outcome
     case .failure(let failure):
       return .unavailable(failure)
     }
@@ -165,53 +158,28 @@ extension RunnerTests {
     contentTranslation: TextEntryContentTranslation,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
-    filterTextInputCandidates(
-      enumerateTextInputQueries(app: app, shouldStop: shouldStop),
-      point: point,
-      contentTranslation: contentTranslation,
-      shouldStop: shouldStop
-    )
-  }
-
-  /// Filters enumerated candidates to the inputs that contain `point`, smallest first.
-  private func filterTextInputCandidates(
-    _ candidates: [XCUIElement],
-    point: CGPoint,
-    contentTranslation: TextEntryContentTranslation,
-    shouldStop: () -> Bool
-  ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
-    for element in candidates {
-      if shouldStop() { break }
-      guard let candidate = ResolvedTextEntryInput(readingListed: element, contentTranslation: contentTranslation) else { continue }
-      // Matching dispatches nothing, so a read with no screen box compares its live frame.
-      let frame = candidate.frameOnScreen ?? candidate.element.frame
-      if isCoordinateTextInputCandidate(enabled: candidate.attributes.isEnabled, frame: frame, point: point) {
-        inputs.append(candidate)
-      }
-    }
-    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
-  }
-
-  /// Every element the four text-input queries enumerate, unfiltered by point. An empty result is
-  /// the channel reading nothing, which no point-filtered result can tell apart from a screen with
-  /// no inputs.
-  private func enumerateTextInputQueries(app: XCUIApplication, shouldStop: () -> Bool) -> [XCUIElement] {
-    var candidates: [XCUIElement] = []
     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
       if shouldStop() { break }
-      candidates.append(contentsOf: query.allElementsBoundByIndex)
+      let candidates = query.allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if let issue = textInputProbeIssueForTesting {
         textInputProbeIssueForTesting = nil
         record(issue)
       }
-      if textInputProbeBlindForTesting {
-        return []
-      }
 #endif
+      for element in candidates {
+        if shouldStop() { break }
+        guard let candidate = ResolvedTextEntryInput(readingListed: element, contentTranslation: contentTranslation) else { continue }
+        // Matching dispatches nothing, so a read with no screen box compares its live frame.
+        let frame = candidate.frameOnScreen ?? candidate.element.frame
+        if isCoordinateTextInputCandidate(enabled: candidate.attributes.isEnabled, frame: frame, point: point) {
+          inputs.append(candidate)
+        }
+      }
     }
-    return candidates
+    guard !shouldStop() else { return [] }
+    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
 
   /// The command's one content-vector read: the resolved window's screen origin when it is placed off
