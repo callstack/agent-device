@@ -73,7 +73,9 @@ type FakeDaemon = Readonly<{
   /**
    * Stops withholding the artifact and reports how the upload ended. The caller releases it after
    * `sendToDaemon` settles, so the answer is causal rather than timed: an upload the client did not
-   * cancel has nothing left that could stop it by then, and one it did cannot arrive.
+   * cancel runs to the end of its body by then, and one it did cannot arrive. Once the lease-loss
+   * beat has been answered, no release reports `drained` — only the client's destroy is an
+   * observation then — so an upload that outlived its lease reports `unresolved`.
    */
   releaseUpload(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
   /**
@@ -171,6 +173,14 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
       }
     });
     req.on('end', () => {
+      // Once the loss beat has been answered, a delivered `end` is the tail of a body the client
+      // wrote before it learned the lease was gone: the pause holds JavaScript back, not the kernel,
+      // so a resume that dispatches the client's destroy also replays whatever the socket buffers
+      // still hold, and that buffered tail can arrive first. Those bytes are not a completed upload
+      // — the response gate above already refuses to acknowledge them — so the destroy alone settles
+      // the artifact's fate. Without this refusal the fake reports the upload drained on a lease
+      // nobody held, on any runner whose socket buffers cover the artifact.
+      if (leaseDeclaredLost) return;
       bodyArrived = true;
       resolveOutcome('drained');
       answerUpload();
@@ -197,7 +207,13 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
     }
     const windowMs = mode === 'slow' ? SLOW_BEAT_LEASE_WINDOW_MS : LEASE_WINDOW_MS;
     writeBeatAnswer(res, payload.id, windowMs);
-    if (mode !== 'slow') releaseWithheldUpload?.();
+    // Only a beat that renewed the lease releases the artifact. In the lost-lease case no beat may
+    // open the valve: the loss is what ends this upload, and on a runner whose socket buffers cover
+    // the artifact, the first beat's release could land the whole body before the second beat ever
+    // declares the loss — the hold has to last until the lease-loss beat has been answered. The
+    // loss itself makes the client destroy its request; the test's releaseUpload only resumes this
+    // socket so that already-dispatched destroy is delivered here.
+    if (mode === 'renewed') releaseWithheldUpload?.();
   }
 
   function writeBeatAnswer(res: http.ServerResponse, id: unknown, windowMs: number): void {
