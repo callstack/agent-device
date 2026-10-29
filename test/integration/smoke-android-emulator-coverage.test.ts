@@ -169,7 +169,7 @@ test('Android emulator scenarios can be selected as an ordered subset', () => {
   assert.equal(scenarioIdsFromEnv(undefined), undefined);
 });
 
-test('Android emulator completeness check covers only recorded command evidence of the selected scenarios', () => {
+test('Android emulator completeness checks selected scenario completion and recorded command and behavior evidence', () => {
   const captureScenario = selectAndroidEmulatorScenarios(['smoke:capture-close'])[0];
   assert.ok(captureScenario);
   const selected = [ANDROID_EMULATOR_FIXTURE_BOOTSTRAP, captureScenario];
