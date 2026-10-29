@@ -34,8 +34,8 @@ export type NetworkOptions = DeviceCommandBaseOptions & {
   limit?: number;
   include?: NetworkIncludeMode;
   /**
-   * `start`: extra domain selectors for the live capture source, beyond its defaults. Exact
-   * hosts, subdomains, or wildcard domains; at most 64 selectors in total on a Limrun device.
+   * `start`: domain selectors that replace the live capture source's defaults. Exact
+   * hosts, subdomains, and wildcard domains are accepted.
    */
   hosts?: string[];
 };

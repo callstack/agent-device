@@ -375,7 +375,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     multiple: true,
     usageLabel: '--hosts <domain>',
     usageDescription:
-      'network start: repeatable domain selector the live capture source routes and inspects, beyond its defaults (exact host, subdomain, or wildcard domain).',
+      'network start: repeatable domain selector that replaces the default selectors of the live capture source (exact host, subdomain, or wildcard domain).',
     projectConfig: false,
     recorded: false,
   },
