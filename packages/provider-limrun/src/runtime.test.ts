@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
     | undefined,
   disconnect: vi.fn(),
   tunnelClose: vi.fn(),
+  deleteInstance: vi.fn(async () => undefined),
   startTunnel: vi.fn(async (): Promise<{ close: () => void }> => ({ close: () => {} })),
 }));
 
@@ -43,7 +44,7 @@ vi.mock('@limrun/api', () => ({
         },
       })),
       list: vi.fn(),
-      delete: vi.fn(async () => undefined),
+      delete: state.deleteInstance,
     };
     readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
   },
@@ -205,6 +206,34 @@ test('shutdown stops a live network capture and concurrent binds share one captu
   } finally {
     await runtime.shutdown();
   }
+});
+
+test('lease release deletes the instance even when capture close throws', async () => {
+  state.deleteInstance.mockClear();
+  state.startTunnel.mockImplementationOnce(async () => ({
+    close: () => {
+      throw new Error('capture close failed');
+    },
+  }));
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease: DeviceLease = {
+    leaseId: 'lease-close-error',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'android-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  const device = await allocateAndroidDevice(runtime, lease.leaseId);
+  const capture = await runtime.networkCaptureFor(device);
+  assert.ok(capture);
+  await capture.start(undefined);
+  await assert.rejects(() => runtime.leaseLifecycle.release!(lease), /capture close failed/);
+  assert.equal(capture.running, false);
+  assert.equal(state.deleteInstance.mock.calls.length, 1);
+  await runtime.shutdown();
 });
 
 function requestScope(signal: AbortSignal = new AbortController().signal): PlatformRequestScope {

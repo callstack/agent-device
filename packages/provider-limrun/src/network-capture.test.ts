@@ -253,6 +253,28 @@ describe('Limrun network capture entries', () => {
     );
   });
 
+  test('withholds JSON fragments inside text and nested strings', async () => {
+    let emit!: (event: DestinationTunnelInspectionEvent) => void;
+    const { client } = fakeTunnelClient((handler) => {
+      emit = handler;
+    });
+    const capture = createLimrunNetworkCapture(client);
+    await capture.start(undefined);
+    emit(
+      completeEvent('https://api.example.com/sse', {
+        responseBody: 'data: {"password":"secret123"}\n\n',
+      }),
+    );
+    emit(
+      completeEvent('https://api.example.com/nested', {
+        responseBody: JSON.stringify({ payload: JSON.stringify({ password: 'secret123' }) }),
+      }),
+    );
+    const entries = capture.readEntries({ maxEntries: 2, include: 'body' });
+    expect(entries[0]?.responseBody).not.toContain('secret123');
+    expect(entries[1]?.responseBody).not.toContain('secret123');
+  });
+
   test('the raw line carries the redacted url, never the query string', async () => {
     let emit!: (event: DestinationTunnelInspectionEvent) => void;
     const { client } = fakeTunnelClient((handler) => {

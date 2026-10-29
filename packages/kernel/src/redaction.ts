@@ -21,11 +21,17 @@ export function redactNetworkPayload(input: string | object): string {
     try {
       value = JSON.parse(input);
     } catch {
-      if (/^[\s\uFEFF]*[[{]/.test(input)) return '[REDACTED]';
+      if (/[[{]/.test(input)) return '[REDACTED]';
       value = input;
     }
   }
-  const redacted = redactValue(value, new WeakSet<object>(), undefined, NETWORK_PAYLOAD_MAX_LENGTH);
+  const redacted = redactValue(
+    value,
+    new WeakSet<object>(),
+    undefined,
+    NETWORK_PAYLOAD_MAX_LENGTH,
+    true,
+  );
   const output = typeof redacted === 'string' ? redacted : JSON.stringify(redacted);
   if (output.length <= NETWORK_PAYLOAD_MAX_LENGTH) return output;
   return `${output.slice(0, NETWORK_PAYLOAD_MAX_LENGTH - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
@@ -49,16 +55,20 @@ function redactValue(
   seen: WeakSet<object>,
   keyHint?: string,
   maxLength = REDACTED_STRING_MAX_LENGTH,
+  networkPayload = false,
 ): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === 'string') return redactString(value, keyHint, maxLength);
+  if (typeof value === 'string') {
+    if (networkPayload && /[[{]/.test(value)) return '[REDACTED]';
+    return redactString(value, keyHint, maxLength);
+  }
   if (typeof value !== 'object') return value;
 
   if (seen.has(value as object)) return '[Circular]';
   seen.add(value as object);
 
   if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(entry, seen, undefined, maxLength));
+    return value.map((entry) => redactValue(entry, seen, undefined, maxLength, networkPayload));
   }
 
   const output: Record<string, unknown> = {};
@@ -67,7 +77,7 @@ function redactValue(
       output[key] = '[REDACTED]';
       continue;
     }
-    output[key] = redactValue(entry, seen, key, maxLength);
+    output[key] = redactValue(entry, seen, key, maxLength, networkPayload);
   }
   return output;
 }

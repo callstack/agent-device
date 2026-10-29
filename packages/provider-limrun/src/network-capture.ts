@@ -187,10 +187,11 @@ export function createLimrunNetworkCapture(client: LimrunTunnelClient): LimrunNe
       ++generation;
       await starting?.catch(() => undefined);
       if (!tunnel) return { stopped: false };
-      tunnel.close();
+      const closing = tunnel;
       tunnel = undefined;
       entries.length = 0;
       failedHosts.clear();
+      closing.close();
       return { stopped: true };
     },
     readEntries: ({ maxEntries, include }) => {
