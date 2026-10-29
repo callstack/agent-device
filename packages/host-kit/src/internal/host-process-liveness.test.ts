@@ -30,6 +30,8 @@ function psAnswersEachField(fields: Record<string, string>): void {
   });
 }
 
+const PINNED_PS_COMMANDS: readonly string[] = ['/bin/ps', '/run/current-system/sw/bin/ps'];
+
 function psInstalledAt(installed: readonly string[]): void {
   vi.spyOn(fs, 'accessSync').mockImplementation((candidate) => {
     if (!installed.includes(String(candidate))) throw new Error(`ENOENT: ${String(candidate)}`);
@@ -39,7 +41,6 @@ function psInstalledAt(installed: readonly string[]): void {
 beforeEach(() => {
   mockRunCmdSync.mockReset();
   mockRunCmd.mockReset();
-  psInstalledAt(['/bin/ps']);
 });
 
 afterEach(() => {
@@ -83,7 +84,7 @@ test('reads many process identities from one ps snapshot', () => {
     startTime: 'Mon Aug 10 20:01:00 2026',
   });
   assert.equal(mockRunCmdSync.mock.calls.length, 1);
-  assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/bin/ps');
+  assert.ok(PINNED_PS_COMMANDS.includes(mockRunCmdSync.mock.calls[0]?.[0]));
   assert.deepEqual(mockRunCmdSync.mock.calls[0]?.[1], [
     '-p',
     '4242,4343',
@@ -183,7 +184,7 @@ test('the ownership read answers the zombie question from the state field', asyn
     command: 'y',
     zombie: true,
   });
-  assert.equal(mockRunCmd.mock.calls[0]?.[0], '/bin/ps');
+  assert.ok(PINNED_PS_COMMANDS.includes(mockRunCmd.mock.calls[0]?.[0]));
   assert.equal(mockRunCmd.mock.calls[0]?.[2]?.timeoutMs, 1_000);
 });
 
