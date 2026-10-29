@@ -223,10 +223,10 @@ function rowLimits(rows: readonly FactRow[]): string[] {
 }
 
 const GROUPS: ReadonlyArray<{ readonly group: TargetGroup; readonly caption: string }> = [
-  { group: 'local-mobile', caption: 'Mobile targets' },
+  { group: 'local-mobile', caption: 'mobile targets' },
   { group: 'local-tv', caption: 'TV targets' },
-  { group: 'local-desktop-web', caption: 'Desktop and web targets' },
-  { group: 'provider', caption: 'Hosted provider sessions' },
+  { group: 'local-desktop-web', caption: 'desktop and web targets' },
+  { group: 'provider', caption: 'hosted provider sessions' },
 ];
 
 export function renderPage(data: MatrixData): string {
@@ -288,8 +288,7 @@ export function renderPage(data: MatrixData): string {
     for (const { caption, group } of GROUPS) {
       const groupColumns = columns.get(group) as Column[];
       // Section and group in one heading, so search results and anchors stay distinct.
-      const groupLabel = caption.replace(/^[A-Z][a-z]/, (word) => word.toLowerCase());
-      lines.push(`### ${section.title}: ${groupLabel}`, '');
+      lines.push(`### ${section.title}: ${caption}`, '');
       lines.push(...tableFor(section.rows, groupColumns, data), '');
     }
     const limits = rowLimits(section.rows);
