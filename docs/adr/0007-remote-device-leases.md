@@ -308,7 +308,8 @@ This applies to a local daemon and to a daemon behind `agent-device proxy`.
 A blank `osVersion` or `imageTag` and `physical: false` name nothing, so a daemon accepts them.
 A named value is used as given, without trimming.
 A value of another type is refused with `INVALID_ARGS`, `details.reason: 'device-spec-invalid'`, and `details.keys`.
-`readLeaseDeviceSpec` is the one decision on these rules, for the CLI, the SDK, MCP, and the daemon.
+`readLeaseDeviceSpec` is the one decision on these rules, for CLI flags, the SDK, MCP, and the daemon.
+A remote config file first applies the value rules of every config key: a string must be non-empty, and a boolean also accepts a boolean string such as `"true"`.
 The backend that honours the spec strips the keys before it forwards the allocation, and echoes the granted device on the lease as `lease.device` (`model`, `osVersion`, `imageTag?`, `physical`).
 `deviceKey` stays the identity of the lease; `lease.device` is the proof that the spec was understood.
 A backend older than the spec returns a lease without `lease.device`.

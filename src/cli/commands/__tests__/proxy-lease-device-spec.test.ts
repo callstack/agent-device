@@ -119,7 +119,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   const materialized = await materializeRemoteConnectionForCommand({
     host: createTestHostEnvironment(),
     command: 'open',
-    flags: { ...flags, device: 'iPhone 17 Pro', osVersion: '>=26', physical: true },
+    flags: { ...flags, device: 'iPhone 17 Pro', osVersion: ' >=26 ', physical: true },
     client: createTestClient({
       listDevices: unexpectedCommandCall,
       allocate: async (request) => {
@@ -134,7 +134,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   assert.equal(requests[0]?.deviceKey, undefined);
   assert.equal(requests[0]?.platform, 'ios');
   assert.equal(requests[0]?.device, 'iPhone 17 Pro');
-  assert.equal(requests[0]?.osVersion, '>=26');
+  assert.equal(requests[0]?.osVersion, ' >=26 ');
   assert.equal(requests[0]?.physical, true);
   assert.equal(requests[0]?.imageTag, undefined);
   assert.deepEqual(materialized.leaseDevice, GRANTED_DEVICE);
@@ -146,7 +146,7 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   assert.equal(state?.leaseId, 'lease-1');
   assert.deepEqual(state?.leaseDeviceSpec, {
     leaseId: 'lease-1',
-    spec: { osVersion: '>=26', physical: true },
+    spec: { osVersion: ' >=26 ', physical: true },
     device: GRANTED_DEVICE,
   });
   fs.rmSync(tempRoot, { recursive: true, force: true });
