@@ -237,7 +237,7 @@ function networkCaptureStartResponse(result: NetworkCaptureStartResult): DaemonR
     return {
       ok: false,
       error: {
-        code: 'COMMAND_FAILED',
+        code: result.reason === 'invalid-hosts' ? 'INVALID_ARGS' : 'COMMAND_FAILED',
         message: result.message,
         details: { reason: result.reason },
       },

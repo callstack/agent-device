@@ -6,12 +6,29 @@ const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 /** Bound one redacted string field carries; callers that surface redacted output report this. */
-export const REDACTED_STRING_MAX_LENGTH = 400;
+const REDACTED_STRING_MAX_LENGTH = 400;
 const REDACTED_STDERR_MAX_LENGTH = 8192;
+export const NETWORK_PAYLOAD_MAX_LENGTH = 2048;
 const TRUNCATION_SUFFIX = '...<truncated>';
 
 export function redactDiagnosticData<T>(input: T): T {
   return redactValue(input, new WeakSet<object>()) as T;
+}
+
+export function redactNetworkPayload(input: string | object): string {
+  let value: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      value = JSON.parse(input);
+    } catch {
+      if (/^[\s\uFEFF]*[[{]/.test(input)) return '[REDACTED]';
+      value = input;
+    }
+  }
+  const redacted = redactValue(value, new WeakSet<object>(), undefined, NETWORK_PAYLOAD_MAX_LENGTH);
+  const output = typeof redacted === 'string' ? redacted : JSON.stringify(redacted);
+  if (output.length <= NETWORK_PAYLOAD_MAX_LENGTH) return output;
+  return `${output.slice(0, NETWORK_PAYLOAD_MAX_LENGTH - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
 }
 
 /** Sanitizes an untrusted structured cause before it crosses a process or client boundary. */
@@ -27,16 +44,21 @@ export function sanitizeErrorCause(cause: unknown): { message: string; code?: st
   });
 }
 
-function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): unknown {
+function redactValue(
+  value: unknown,
+  seen: WeakSet<object>,
+  keyHint?: string,
+  maxLength = REDACTED_STRING_MAX_LENGTH,
+): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === 'string') return redactString(value, keyHint);
+  if (typeof value === 'string') return redactString(value, keyHint, maxLength);
   if (typeof value !== 'object') return value;
 
   if (seen.has(value as object)) return '[Circular]';
   seen.add(value as object);
 
   if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(entry, seen));
+    return value.map((entry) => redactValue(entry, seen, undefined, maxLength));
   }
 
   const output: Record<string, unknown> = {};
@@ -45,14 +67,18 @@ function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): u
       output[key] = '[REDACTED]';
       continue;
     }
-    output[key] = redactValue(entry, seen, key);
+    output[key] = redactValue(entry, seen, key, maxLength);
   }
   return output;
 }
 
-function redactString(value: string, keyHint?: string): string {
+function redactString(
+  value: string,
+  keyHint?: string,
+  maxLength = REDACTED_STRING_MAX_LENGTH,
+): string {
   const trimmed = value.trim();
-  if (!trimmed) return boundRedactedString(value, keyHint);
+  if (!trimmed) return boundRedactedString(value, keyHint, maxLength);
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
   let output = redactUrls(trimmed);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
@@ -64,10 +90,14 @@ function redactString(value: string, keyHint?: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
-  return boundRedactedString(output, keyHint);
+  return boundRedactedString(output, keyHint, maxLength);
 }
 
-function boundRedactedString(value: string, keyHint?: string): string {
+function boundRedactedString(
+  value: string,
+  keyHint?: string,
+  maxLength = REDACTED_STRING_MAX_LENGTH,
+): string {
   if (keyHint === 'stderr') {
     if (value.length <= REDACTED_STDERR_MAX_LENGTH) return value;
     const marker = `\n${TRUNCATION_SUFFIX}\n`;
@@ -75,8 +105,8 @@ function boundRedactedString(value: string, keyHint?: string): string {
     const headLength = Math.ceil(retainedLength / 2);
     return `${value.slice(0, headLength)}${marker}${value.slice(-(retainedLength - headLength))}`;
   }
-  if (value.length <= REDACTED_STRING_MAX_LENGTH) return value;
-  return `${value.slice(0, REDACTED_STRING_MAX_LENGTH - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
 }
 
 function redactUrls(value: string): string {

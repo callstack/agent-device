@@ -6,7 +6,7 @@ import type {
   NetworkDumpResult,
   NetworkRuntimeOperations,
 } from '@agent-device/contracts/network-runtime';
-import { REDACTED_STRING_MAX_LENGTH } from '@agent-device/kernel/redaction';
+import { NETWORK_PAYLOAD_MAX_LENGTH } from '@agent-device/kernel/redaction';
 import type { LimrunNetworkCapture } from './network-capture.ts';
 
 /**
@@ -38,7 +38,7 @@ export function bindLimrunNetworkOperations(
         }),
         notes: input.capture.notes(),
         // The redactor bounds this source's fields; the response's limits report what it enforces.
-        limits: { maxPayloadChars: REDACTED_STRING_MAX_LENGTH },
+        limits: { maxPayloadChars: NETWORK_PAYLOAD_MAX_LENGTH },
       });
     },
     networkCaptureStart: async (

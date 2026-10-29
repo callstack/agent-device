@@ -60,7 +60,7 @@ export type NetworkCaptureStartInput = Readonly<{
   sessionId: string;
   /** App the session has open, when one is open; a source reports `requiresRelaunch` from it. */
   appBundleId?: string;
-  /** Extra domain selectors the source accepts, beyond its own default list. */
+  /** Domain selectors that replace the source's defaults. */
   hosts?: readonly string[];
 }>;
 
@@ -68,7 +68,9 @@ export type NetworkCaptureStartInput = Readonly<{
 export type NetworkCaptureStartFailureReason =
   | 'tunnel-in-use'
   | 'capture-stopped'
-  | 'unsupported-device';
+  | 'unsupported-device'
+  | 'invalid-hosts'
+  | 'tunnel-start-failed';
 
 export type NetworkCaptureStartResult =
   | Readonly<{

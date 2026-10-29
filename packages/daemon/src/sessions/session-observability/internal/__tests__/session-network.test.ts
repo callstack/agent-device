@@ -217,6 +217,27 @@ test('network start keeps a refused start out of the successful reply shape', as
   });
 });
 
+test('network start reports an invalid provider selector as invalid arguments', async () => {
+  const runtime = createNetworkRuntime(
+    { platform: 'apple', appleOs: 'ios', id: 'limrun:ios:l', name: 'n', kind: 'simulator' },
+    async (input) => emptyAppLogResult('android', input),
+    available,
+    undefined,
+    available,
+    async () => ({
+      started: false as const,
+      reason: 'invalid-hosts' as const,
+      message: 'Invalid selector',
+    }),
+  );
+  expect(
+    await runNetwork('start', runtime, { networkHosts: ['https://api.example.com'] }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', details: { reason: 'invalid-hosts' } },
+  });
+});
+
 test('a capture dump reports the source payload cap, not the app-log constant', async () => {
   const sessionStore = makeSessionStore();
   const session = makeSession('limrun-network-dump', {

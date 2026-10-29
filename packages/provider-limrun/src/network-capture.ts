@@ -6,7 +6,7 @@ import type { DestinationTcpTunnel } from '@limrun/api/destination-tunnel-dialer
 import { validateDestinationTunnelSelectors } from '@limrun/api/destination-tunnel';
 import type { NetworkEntry } from '@agent-device/contracts/observability';
 import type { NetworkCaptureStopResult } from '@agent-device/contracts/network-runtime';
-import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import { redactDiagnosticData, redactNetworkPayload } from '@agent-device/kernel/redaction';
 
 /**
  * The Limrun live capture source (ADR 0037, source 3a): Limrun's own tunnel inspection.
@@ -57,13 +57,13 @@ export type LimrunCaptureHosts =
   | Readonly<{ ok: true; hosts: readonly string[] }>
   | Readonly<{
       ok: false;
-      reason: 'unsupported-device';
+      reason: 'invalid-hosts';
       message: string;
     }>;
 
 /** A start refusal; the shared command maps these to its own response shape. */
 export type LimrunCaptureStartRefusal = Readonly<{
-  reason: 'tunnel-in-use' | 'capture-stopped' | 'unsupported-device';
+  reason: 'tunnel-in-use' | 'capture-stopped' | 'invalid-hosts' | 'tunnel-start-failed';
   message: string;
 }>;
 
@@ -229,12 +229,12 @@ function resolveHosts(requested: readonly string[] | undefined): LimrunCaptureHo
       ? requested.map((host) => host.trim()).filter((host) => host.length > 0)
       : [...DEFAULT_LIMRUN_CAPTURE_HOSTS];
   if (hosts.length === 0) {
-    return { ok: false, reason: 'unsupported-device', message: 'Capture hosts were all blank.' };
+    return { ok: false, reason: 'invalid-hosts', message: 'Capture hosts were all blank.' };
   }
   if (hosts.length > MAX_CAPTURED_HOSTS) {
     return {
       ok: false,
-      reason: 'unsupported-device',
+      reason: 'invalid-hosts',
       message: `Limrun tunnel inspection accepts at most ${MAX_CAPTURED_HOSTS} hosts; ${hosts.length} were requested.`,
     };
   }
@@ -243,7 +243,7 @@ function resolveHosts(requested: readonly string[] | undefined): LimrunCaptureHo
   } catch (error) {
     return {
       ok: false,
-      reason: 'unsupported-device',
+      reason: 'invalid-hosts',
       message: `Invalid capture host selector: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`,
     };
   }
@@ -251,10 +251,10 @@ function resolveHosts(requested: readonly string[] | undefined): LimrunCaptureHo
 }
 
 /** A second live tunnel on the instance is Limrun's typed `already_active` session error. */
-function classifyStartFailure(error: unknown): 'tunnel-in-use' | 'unsupported-device' {
+function classifyStartFailure(error: unknown): 'tunnel-in-use' | 'tunnel-start-failed' {
   return error instanceof DestinationTunnelSessionError && error.code === 'already_active'
     ? 'tunnel-in-use'
-    : 'unsupported-device';
+    : 'tunnel-start-failed';
 }
 
 function readEntryHost(entry: DestinationTunnelHAREntry): string | undefined {
@@ -276,9 +276,6 @@ function mapHarEntry(entry: DestinationTunnelHAREntry, line: number): NetworkEnt
   const headers = harHeaders(entry);
   const redacted = redactDiagnosticData({
     url: entry.request.url,
-    headers,
-    requestBody: harBody(entry.request.postData?.text),
-    responseBody: harBody(entry.response.content?.text),
   });
   return {
     method: entry.request.method,
@@ -286,9 +283,13 @@ function mapHarEntry(entry: DestinationTunnelHAREntry, line: number): NetworkEnt
     ...(Number.isFinite(entry.response.status) ? { status: entry.response.status } : {}),
     ...(entry.startedDateTime ? { timestamp: entry.startedDateTime } : {}),
     ...(durationMs === undefined ? {} : { durationMs }),
-    ...(redacted.headers === undefined ? {} : { headers: redacted.headers }),
-    ...(redacted.requestBody === undefined ? {} : { requestBody: redacted.requestBody }),
-    ...(redacted.responseBody === undefined ? {} : { responseBody: redacted.responseBody }),
+    ...(headers === undefined ? {} : { headers }),
+    ...(harBody(entry.request.postData?.text) === undefined
+      ? {}
+      : { requestBody: redactNetworkPayload(entry.request.postData!.text!) }),
+    ...(harBody(entry.response.content?.text) === undefined
+      ? {}
+      : { responseBody: redactNetworkPayload(entry.response.content!.text!) }),
     raw: `${entry.request.method} ${redacted.url} ${entry.response.status}`,
     line,
   };
@@ -304,7 +305,7 @@ function harHeaders(entry: DestinationTunnelHAREntry): string | undefined {
   if (Object.keys(requestHeaders).length + Object.keys(responseHeaders).length === 0) {
     return undefined;
   }
-  return JSON.stringify({ request: requestHeaders, response: responseHeaders });
+  return redactNetworkPayload({ request: requestHeaders, response: responseHeaders });
 }
 
 function harBody(text: string | undefined): string | undefined {

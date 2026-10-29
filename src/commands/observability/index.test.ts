@@ -32,6 +32,38 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 }
 
 describe('observability command interface', () => {
+  test('formats capture start and stop results', () => {
+    const start = observabilityCliOutputFormatters.network({
+      env: process.env,
+      input: {},
+      result: {
+        started: true,
+        source: 'limrun-tunnel',
+        hosts: ['api.example.com'],
+        requiresRelaunch: true,
+        capturingBodies: true,
+      },
+    });
+    expect(start.text).toContain('limrun-tunnel');
+    expect(start.stderr).toContain('api.example.com');
+    expect(start.stderr).toContain('relaunch');
+    expect(start.stderr).toContain('bodies');
+    expect(
+      observabilityCliOutputFormatters.network({
+        env: process.env,
+        input: {},
+        result: { stopped: true },
+      }).text,
+    ).toBe('Network capture stopped.');
+    expect(
+      observabilityCliOutputFormatters.network({
+        env: process.env,
+        input: {},
+        result: { stopped: false },
+      }).text,
+    ).toBe('No network capture was running.');
+  });
+
   test('owns logs and network public metadata', () => {
     expect(audioCommandMetadata.name).toBe('audio');
     expect(audioCommandFacet.definition.name).toBe('audio');

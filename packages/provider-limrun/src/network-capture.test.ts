@@ -35,6 +35,7 @@ function completeEvent(
     time?: number;
     error?: string;
     requestHeaders?: Array<{ name: string; value: string }>;
+    responseHeaders?: Array<{ name: string; value: string }>;
     responseBody?: string;
   } = {},
 ): DestinationTunnelInspectionEvent {
@@ -60,7 +61,7 @@ function completeEvent(
         statusText: 'OK',
         httpVersion: 'HTTP/1.1',
         cookies: [],
-        headers: [{ name: 'content-type', value: 'application/json' }],
+        headers: overrides.responseHeaders ?? [{ name: 'content-type', value: 'application/json' }],
         content: {
           size: overrides.responseBody?.length ?? 0,
           mimeType: 'application/json',
@@ -130,7 +131,7 @@ describe('Limrun network capture start', () => {
 
     const started = await capture.start(['   ']);
 
-    expect(started).toMatchObject({ ok: false, reason: 'unsupported-device' });
+    expect(started).toMatchObject({ ok: false, reason: 'invalid-hosts' });
     expect(starts).toHaveLength(0);
     expect(capture.running).toBe(false);
   });
@@ -147,7 +148,7 @@ describe('Limrun network capture start', () => {
     expect(capture.running).toBe(false);
   });
 
-  test('an unclassified start failure stays a generic unsupported-device refusal', async () => {
+  test('an unclassified start failure reports a tunnel failure', async () => {
     const { client } = fakeTunnelClient(undefined, () => {
       throw new Error('tunnel endpoint refused');
     });
@@ -155,7 +156,7 @@ describe('Limrun network capture start', () => {
 
     const started = await capture.start(undefined);
 
-    expect(started).toMatchObject({ ok: false, reason: 'unsupported-device' });
+    expect(started).toMatchObject({ ok: false, reason: 'tunnel-start-failed' });
   });
 });
 
@@ -211,7 +212,7 @@ describe('Limrun network capture entries', () => {
     expect(summary?.headers).toBeUndefined();
   });
 
-  test('redacts a credential carried in a captured header', async () => {
+  test('redacts sensitive headers and JSON payload fields before buffering', async () => {
     let emit!: (event: DestinationTunnelInspectionEvent) => void;
     const { client } = fakeTunnelClient((handler) => {
       emit = handler;
@@ -220,14 +221,36 @@ describe('Limrun network capture entries', () => {
     await capture.start(undefined);
     emit(
       completeEvent('https://api.example.com/v1/orders', {
-        requestHeaders: [{ name: 'authorization', value: 'Bearer super-secret-token' }],
+        requestHeaders: [
+          { name: 'cookie', value: 'sid=cookie-secret' },
+          { name: 'authorization', value: 'Basic basic-secret' },
+          { name: 'x-api-key', value: 'api-secret' },
+        ],
+        responseHeaders: [{ name: 'set-cookie', value: 'sid=response-secret' }],
+        responseBody: '{"password":"body-secret","ok":true}',
       }),
     );
 
     const [entry] = capture.readEntries({ maxEntries: 10, include: 'all' });
 
-    expect(entry?.headers).not.toContain('super-secret-token');
-    expect(entry?.headers).toContain('[REDACTED]');
+    expect(JSON.parse(entry!.headers!)).toMatchObject({
+      request: { cookie: '[REDACTED]', authorization: '[REDACTED]', 'x-api-key': '[REDACTED]' },
+      response: { 'set-cookie': '[REDACTED]' },
+    });
+    expect(JSON.parse(entry!.responseBody!)).toEqual({ password: '[REDACTED]', ok: true });
+  });
+
+  test('does not expose a truncated JSON body', async () => {
+    let emit!: (event: DestinationTunnelInspectionEvent) => void;
+    const { client } = fakeTunnelClient((handler) => {
+      emit = handler;
+    });
+    const capture = createLimrunNetworkCapture(client);
+    await capture.start(undefined);
+    emit(completeEvent('https://api.example.com/', { responseBody: '{"password":"body-secret' }));
+    expect(capture.readEntries({ maxEntries: 1, include: 'body' })[0]?.responseBody).toBe(
+      '[REDACTED]',
+    );
   });
 
   test('the raw line carries the redacted url, never the query string', async () => {
