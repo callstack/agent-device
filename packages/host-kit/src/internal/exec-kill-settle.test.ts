@@ -29,10 +29,17 @@ import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 const HOLDER_LIFETIME_SECONDS = 3;
 const DEADLINE_MS = 400;
 
+function holderFinishedPath(label: string): string {
+  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), 'finished');
+}
+
 // The holder announces its pid on the stdout it inherited, so the pid arriving is also the proof
-// that the pipe is held.
-const PIPE_HOLDER_SHELL_SCRIPT = `sleep ${HOLDER_LIFETIME_SECONDS} & printf %s $!; wait`;
-const EXITED_PIPE_HOLDER_SHELL_SCRIPT = `sleep ${HOLDER_LIFETIME_SECONDS} & printf %s $!; exit 0`;
+// that the pipe is held. It writes `finished` as its last act before it exits and releases that
+// pipe, so a command that waited for `close` always finds the marker; a liveness probe could
+// still see the holder as a zombie nobody has reaped yet.
+function pipeHolderShellScript(finishedPath: string, parent: 'wait' | 'exit 0'): string {
+  return `{ sleep ${HOLDER_LIFETIME_SECONDS}; printf finished > ${shellQuote(finishedPath)}; } & printf %s $!; ${parent}`;
+}
 
 function holdModuleClock(): void {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -102,23 +109,24 @@ function settledRejection<T>(promise: Promise<T>): Promise<{ error: unknown } | 
 test.runIf(process.platform !== 'win32')(
   'a command killed at its deadline settles on the child exit, not on an inherited pipe',
   async () => {
+    const finishedPath = holderFinishedPath('timeout-holder');
     holdModuleClock();
     const holder = stdoutAnnouncement();
-    const killed = runCmdStreaming('/bin/sh', ['-c', PIPE_HOLDER_SHELL_SCRIPT], {
+    const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
       timeoutMs: DEADLINE_MS,
       onStdoutChunk: holder.onStdoutChunk,
     });
     const rejection = settledRejection(killed);
 
-    const holderPid = Number(await holder.before(rejection));
+    await holder.before(rejection);
     vi.advanceTimersByTime(DEADLINE_MS);
     const outcome = await rejection;
 
     assert.ok(outcome, 'a command killed at its deadline must not resolve');
     assert.ok(isCommandTimeoutError(outcome.error));
     assert.equal(
-      isProcessRunning(holderPid),
-      true,
+      fs.existsSync(finishedPath),
+      false,
       'settled only once the pipe holder died, which is the wedge this settles before',
     );
   },
@@ -127,9 +135,10 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'a deadline on a detached command kills the descendant that inherited the pipes',
   async () => {
+    const finishedPath = holderFinishedPath('detached-holder');
     holdModuleClock();
     const holder = stdoutAnnouncement();
-    const killed = runCmdStreaming('/bin/sh', ['-c', PIPE_HOLDER_SHELL_SCRIPT], {
+    const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
       timeoutMs: DEADLINE_MS,
       detached: true,
       onStdoutChunk: holder.onStdoutChunk,
@@ -154,23 +163,25 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'runCmdBackground killed by request cancellation settles on the child exit',
   async () => {
+    const finishedPath = holderFinishedPath('abort-holder');
     const controller = new AbortController();
     const holder = stdoutAnnouncement();
-    const { child, wait } = runCmdBackground('/bin/sh', ['-c', PIPE_HOLDER_SHELL_SCRIPT], {
-      signal: controller.signal,
-      captureOutput: false,
-    });
+    const { child, wait } = runCmdBackground(
+      '/bin/sh',
+      ['-c', pipeHolderShellScript(finishedPath, 'wait')],
+      { signal: controller.signal, captureOutput: false },
+    );
     child.stdout?.on('data', (chunk) => holder.onStdoutChunk(String(chunk)));
     const rejection = settledRejection(wait);
 
-    const holderPid = Number(await holder.before(rejection));
+    await holder.before(rejection);
     controller.abort();
     const outcome = await rejection;
 
     assert.ok(outcome, 'a canceled background command must not resolve');
     assert.equal(
-      isProcessRunning(holderPid),
-      true,
+      fs.existsSync(finishedPath),
+      false,
       'settled only once the pipe holder died, which is the wedge this settles before',
     );
     const details = (outcome.error as { details?: Record<string, unknown> }).details;
@@ -184,10 +195,10 @@ test.runIf(process.platform !== 'win32')(
     // The direct child is gone, so no kill can reach the descendant that inherited its
     // pipes, and `close` only arrives when that descendant finishes. Settlement has to
     // come from the deadline noticing an already-exited child.
-    const { outcome, holderPid } = await deadlineAfterChildExit({});
+    const { outcome, holderFinished } = await deadlineAfterChildExit({});
 
     assert.ok(isCommandTimeoutError(outcome.error));
-    assert.equal(isProcessRunning(holderPid), true, 'settled only once the pipe holder finished');
+    assert.equal(holderFinished, false, 'settled only once the pipe holder finished');
   },
 );
 
@@ -197,14 +208,15 @@ test.runIf(process.platform !== 'win32')(
  */
 async function deadlineAfterChildExit(options: Pick<ExecStreamOptions, 'detached'>): Promise<{
   outcome: { error: unknown };
-  holderPid: number;
+  holderFinished: boolean;
   childPid: number;
 }> {
+  const finishedPath = holderFinishedPath('exited-holder');
   holdModuleClock();
   const holder = stdoutAnnouncement();
   const child = directChildExit();
   const rejection = settledRejection(
-    runCmdStreaming('/bin/sh', ['-c', EXITED_PIPE_HOLDER_SHELL_SCRIPT], {
+    runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'exit 0')], {
       ...options,
       timeoutMs: DEADLINE_MS,
       onStdoutChunk: holder.onStdoutChunk,
@@ -212,14 +224,11 @@ async function deadlineAfterChildExit(options: Pick<ExecStreamOptions, 'detached
     }),
   );
 
-  const [holderPid, exited] = await Promise.all([
-    holder.before(rejection).then(Number),
-    child.exited,
-  ]);
+  const [, exited] = await Promise.all([holder.before(rejection), child.exited]);
   vi.advanceTimersByTime(DEADLINE_MS);
   const outcome = await rejection;
   assert.ok(outcome, 'a command killed at its deadline must not resolve');
-  return { outcome, holderPid, childPid: exited.pid ?? 0 };
+  return { outcome, holderFinished: fs.existsSync(finishedPath), childPid: exited.pid ?? 0 };
 }
 
 // A command this module asked to be killed is finished once its child is gone, without
@@ -304,10 +313,12 @@ test.runIf(process.platform !== 'win32')(
   async () => {
     const groupWrites = guardGroupWrites();
     try {
-      const { outcome, holderPid, childPid } = await deadlineAfterChildExit({ detached: true });
+      const { outcome, holderFinished, childPid } = await deadlineAfterChildExit({
+        detached: true,
+      });
 
       assert.ok(isCommandTimeoutError(outcome.error));
-      assert.equal(isProcessRunning(holderPid), true, 'settled only once the pipe holder finished');
+      assert.equal(holderFinished, false, 'settled only once the pipe holder finished');
       assert.deepEqual(groupWrites.writes, [{ pid: -childPid, signal: 'SIGKILL' }]);
     } finally {
       groupWrites.restore();
@@ -323,10 +334,10 @@ test.runIf(process.platform !== 'win32')(
     // holder it just asked to be killed.
     const groupWrites = guardGroupWrites('no-such-process');
     try {
-      const { outcome, holderPid } = await deadlineAfterChildExit({ detached: true });
+      const { outcome, holderFinished } = await deadlineAfterChildExit({ detached: true });
 
       assert.ok(isCommandTimeoutError(outcome.error));
-      assert.equal(isProcessRunning(holderPid), true, 'settled only once the pipe holder finished');
+      assert.equal(holderFinished, false, 'settled only once the pipe holder finished');
       assert.equal(groupWrites.writes.length, 1);
     } finally {
       groupWrites.restore();
