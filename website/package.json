@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build --force && node scripts/build-depgraph.mjs",
+    "build": "node --test ../tools/depgraph-view/graph-model.test.mjs && astro build --force && node scripts/build-depgraph.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "og": "node scripts/og.mjs"
