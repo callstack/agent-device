@@ -17,12 +17,28 @@ pnpm depgraph affected packages/host-kit/src/command.ts # bounded text
 pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
 ```
 
-Reverse reachability over the value-edge graph, plus the three lookups that used to follow it:
+Reverse reachability over the value-edge graph, plus the lookups that used to follow it:
 the `scripts/check-affected/` gate plan for the dependent set, the public commands whose handler
 chain reaches the file (value + dynamic edges, because handlers load through `import()`) with
 their owning live iOS scenarios when that manifest is in the tree, and the ADR 0011
 guarantee-matrix cells the file implements. See docs/agents/testing.md § "Before editing a shared
 module".
+
+Two fields keep an empty or short list from reading as "nothing else is affected":
+
+- `executableDependents` is a second reverse reachability over value + dynamic edges.
+  `dependents` keeps its value-only meaning; `beyondValue` lists the files that only a dynamic
+  import connects. Type-only edges stay out of both.
+- `commandAttribution` qualifies `commands` and `liveOwners`. `static-reachability` means the
+  lists come from import edges alone. `partial` (`injected-runtime`) means the file is reachable
+  from the root platform-runtime composition family (`src/platform-runtime*.ts`, the R76
+  declaration). Daemon code cannot import that family (R65, R76) and reaches platform code through
+  the injected gateway, so no import edge records which command drives it. The lists are then a
+  lower bound.
+
+Both are reachability, not removability and not coverage. `static-reachability` is not a
+completeness claim, and `partial` does not name the missing commands. `gates` is unchanged and
+still selected from the value dependents.
 
 ## When to reach for this
 

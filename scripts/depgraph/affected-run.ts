@@ -30,12 +30,15 @@ import { selectChecks, type CheckPlan } from '../check-affected/model.ts';
 import {
   bound,
   collectDependents,
+  collectExecutableDependents,
+  commandAttribution,
   commandsReaching,
   formatBounded,
   guaranteeRowsForFile,
   rankByFanIn,
   weakDirectDependents,
   zoneBreakdown,
+  type CommandAttribution,
   type CommandChain,
   type GuaranteeRow,
 } from './affected.ts';
@@ -75,6 +78,10 @@ export type BlastRadius = {
     /** Direct importers over the excluded edge kinds — reported, never mixed into the counts. */
     weakDirect: { type: number; dynamic: number };
   };
+  /** Reverse reachability over value + dynamic edges; `beyondValue` is the part dynamic imports add. */
+  executableDependents: { direct: string[]; transitive: string[]; beyondValue: string[] };
+  /** How far `commands` and `liveOwners` can be trusted; applies to both. */
+  commandAttribution: CommandAttribution;
   gates: { checks: string[]; failOpen: boolean };
   commands: CommandChain[];
   liveOwners: { manifest: string; present: boolean; owners: LiveOwner[] };
@@ -219,6 +226,7 @@ export async function computeBlastRadius(repoRoot: string, target: string): Prom
   }
 
   const dependents = collectDependents(target, graph.edges);
+  const executable = collectExecutableDependents(target, graph.edges);
   const plan: CheckPlan = selectChecks({ changedFiles: [target, ...dependents.all] });
   const commands = commandsReaching(target, commandChains(repoRoot), graph.edges);
   const live = await loadLiveOwners(repoRoot, commands);
@@ -235,6 +243,12 @@ export async function computeBlastRadius(repoRoot: string, target: string): Prom
       topByFanIn: rankByFanIn(dependents.all, nodes),
       weakDirect: weakDirectDependents(target, graph.edges),
     },
+    executableDependents: {
+      direct: executable.direct,
+      transitive: executable.transitiveOnly,
+      beyondValue: executable.beyondValue,
+    },
+    commandAttribution: commandAttribution(target, executable.all),
     gates: { checks: plan.checks, failOpen: plan.failOpen },
     commands,
     liveOwners: { manifest: LIVE_COVERAGE_MANIFEST, present: live.present, owners: live.owners },
@@ -244,7 +258,8 @@ export async function computeBlastRadius(repoRoot: string, target: string): Prom
 
 /** Bounded text form — the shape an agent reads before spending its context on the edit. */
 export function formatBlastRadius(radius: BlastRadius, limit: number): string {
-  const { dependents } = radius;
+  const { dependents, executableDependents, commandAttribution: attribution } = radius;
+  const partial = attribution.kind === 'partial';
   const lines = [
     `blast radius: ${radius.file}  [zone ${radius.zone}, fan-in ${radius.fanIn}, fan-out ${radius.fanOut}]`,
     `dependents: ${dependents.direct.length} direct, ${dependents.transitive.length} transitive (value edges; ` +
@@ -252,10 +267,16 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
     `  by zone: ${formatBounded(bound(dependents.byZone, limit), (entry) => `${entry.zone} ${entry.count}`)}`,
     `  direct:  ${formatBounded(bound(dependents.direct, limit), (file) => file)}`,
     `  widest:  ${formatBounded(bound(dependents.topByFanIn, limit), (entry) => `${entry.file} (fan-in ${entry.fanIn})`)}`,
+    `executable dependents (value + dynamic edges): ${executableDependents.direct.length} direct, ${executableDependents.transitive.length} transitive; ` +
+      `${executableDependents.beyondValue.length} reached only across a dynamic import: ` +
+      formatBounded(bound(executableDependents.beyondValue, limit), (file) => file),
     `gates for this set${radius.gates.failOpen ? ' (fail-open: full set)' : ''}: ${radius.gates.checks.join(', ') || '(none)'}`,
     `  run: pnpm check:affected --run`,
     `public commands whose handler chain reaches it (${radius.commands.length}): ` +
       formatBounded(bound(radius.commands, limit), (chain) => `${chain.command} (${chain.route})`),
+    attribution.kind === 'partial'
+      ? `  attribution: PARTIAL (injected runtime) — reachable from ${formatBounded(bound(attribution.compositionRoots, limit), (file) => file)}; platform code runs behind the injected gateway, which no import edge records, so the command and live-owner lists are a lower bound`
+      : '  attribution: static import reachability only — an empty list means no handler chain imports this file, not that no command work depends on it',
   ];
 
   if (!radius.liveOwners.present) {
@@ -263,7 +284,9 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
       `live scenario owners: ${radius.liveOwners.manifest} is not in this tree (lands with the iOS simulator e2e manifest) — no live claim available`,
     );
   } else {
-    lines.push(`live scenario owners (${radius.liveOwners.owners.length}):`);
+    lines.push(
+      `live scenario owners (${radius.liveOwners.owners.length}${partial ? ', lower bound' : ''}):`,
+    );
     for (const owner of bound(radius.liveOwners.owners, limit).shown) {
       lines.push(`  ${owner.command} [${owner.level}] ${owner.owner} — ${owner.assertion}`);
     }

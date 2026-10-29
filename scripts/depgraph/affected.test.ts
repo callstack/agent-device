@@ -8,6 +8,8 @@ import { resolveImportEdges } from '../layering/model.ts';
 import {
   bound,
   collectDependents,
+  collectExecutableDependents,
+  commandAttribution,
   commandsReaching,
   formatBounded,
   guaranteeRowsForFile,
@@ -23,6 +25,7 @@ import {
   parseRouteEntries,
 } from './affected-run.ts';
 import { collapseEdges, type GraphNode } from './model.ts';
+import type { BlastRadius } from './affected-run.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -65,6 +68,50 @@ test('collectDependents ignores type-only and dynamic dependents, which are coun
 
   assert.deepEqual(collectDependents('src/core/target.ts', edges).all, []);
   assert.deepEqual(weakDirectDependents('src/core/target.ts', edges), { type: 1, dynamic: 1 });
+});
+
+test('collectExecutableDependents reports what a dynamic import adds beyond value dependents', () => {
+  const edges = edgesOf({
+    'src/core/target.ts': 'export const t = 1;',
+    'src/core/mid.ts': "import { t } from './target.ts';\nexport const m = t;",
+    'src/core/lazy.ts': "export const load = () => import('./mid.ts');",
+    'src/core/lazier.ts': "export const load = () => import('./lazy.ts');",
+    'src/core/typed.ts': "import type { t } from './target.ts';\nexport type U = typeof t;",
+  });
+
+  assert.deepEqual(collectDependents('src/core/target.ts', edges).all, ['src/core/mid.ts']);
+  assert.deepEqual(collectExecutableDependents('src/core/target.ts', edges), {
+    direct: ['src/core/mid.ts'],
+    all: ['src/core/lazier.ts', 'src/core/lazy.ts', 'src/core/mid.ts'],
+    transitiveOnly: ['src/core/lazier.ts', 'src/core/lazy.ts'],
+    beyondValue: ['src/core/lazier.ts', 'src/core/lazy.ts'],
+  });
+});
+
+test('commandAttribution is partial only when the file is reachable from the platform-runtime composition root', () => {
+  const edges = edgesOf({
+    'packages/platform-apple/src/leaf.ts': 'export const leaf = 1;',
+    'packages/platform-apple/src/runtime.ts':
+      "import { leaf } from './leaf.ts';\nexport const r = leaf;",
+    'src/platform-runtime-host.ts':
+      "import { r } from '../packages/platform-apple/src/runtime.ts';\nexport const h = r;",
+    'packages/daemon/src/handler.ts': 'export const handler = 1;',
+  });
+
+  const injected = collectExecutableDependents('packages/platform-apple/src/leaf.ts', edges);
+  assert.deepEqual(commandAttribution('packages/platform-apple/src/leaf.ts', injected.all), {
+    kind: 'partial',
+    reason: 'injected-runtime',
+    compositionRoots: ['src/platform-runtime-host.ts'],
+  });
+
+  const daemonOnly = collectExecutableDependents('packages/daemon/src/handler.ts', edges);
+  assert.deepEqual(commandAttribution('packages/daemon/src/handler.ts', daemonOnly.all), {
+    kind: 'static-reachability',
+  });
+
+  // The composition root itself is injected-runtime territory even with no dependents.
+  assert.equal(commandAttribution('src/platform-runtime.ts', []).kind, 'partial');
 });
 
 test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
@@ -197,35 +244,71 @@ test('parseInvocation rejects a missing path, a second path, and a non-positive 
   assert.throws(() => parseInvocation(['a.ts', '--limit', 'lots']), /positive integer/);
 });
 
-test('text output bounds every list and says what it hid', () => {
-  // This is an arbitrary report input used to exercise formatting, not a live source path.
-  const text = formatBlastRadius(
-    {
-      file: 'src/utils/exec.ts',
-      zone: 'utils',
-      fanIn: 81,
-      fanOut: 3,
-      dependents: {
-        direct: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
-        transitive: ['src/d.ts'],
-        byZone: [{ zone: 'utils', count: 4 }],
-        topByFanIn: [{ file: 'src/a.ts', fanIn: 7 }],
-        weakDirect: { type: 2, dynamic: 1 },
-      },
-      gates: { checks: ['lint', 'typecheck'], failOpen: false },
-      commands: [
-        { command: 'click', route: 'interaction', entry: 'packages/daemon/src/handlers/x.ts' },
-      ],
-      liveOwners: { manifest: 'test/…/coverage-manifest.ts', present: false, owners: [] },
-      guaranteeRows: [],
+function radiusFixture(overrides: Partial<BlastRadius> = {}): BlastRadius {
+  // An arbitrary report input used to exercise formatting, not a live source path.
+  return {
+    file: 'src/utils/exec.ts',
+    zone: 'utils',
+    fanIn: 81,
+    fanOut: 3,
+    dependents: {
+      direct: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+      transitive: ['src/d.ts'],
+      byZone: [{ zone: 'utils', count: 4 }],
+      topByFanIn: [{ file: 'src/a.ts', fanIn: 7 }],
+      weakDirect: { type: 2, dynamic: 1 },
     },
-    2,
-  );
+    executableDependents: {
+      direct: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/lazy.ts'],
+      transitive: ['src/d.ts', 'src/lazier.ts'],
+      beyondValue: ['src/lazy.ts', 'src/lazier.ts'],
+    },
+    commandAttribution: { kind: 'static-reachability' },
+    gates: { checks: ['lint', 'typecheck'], failOpen: false },
+    commands: [
+      { command: 'click', route: 'interaction', entry: 'packages/daemon/src/handlers/x.ts' },
+    ],
+    liveOwners: { manifest: 'test/…/coverage-manifest.ts', present: false, owners: [] },
+    guaranteeRows: [],
+    ...overrides,
+  };
+}
+
+test('text output bounds every list and says what it hid', () => {
+  const text = formatBlastRadius(radiusFixture(), 2);
 
   assert.match(text, /3 direct, 1 transitive .*2 type-only and 1 dynamic/);
   assert.match(text, /direct: {2}src\/a\.ts, src\/b\.ts \(\+1 more\)/);
+  assert.match(
+    text,
+    /executable dependents .*: 4 direct, 2 transitive; 2 reached only across a dynamic import: src\/lazy\.ts, src\/lazier\.ts/,
+  );
   assert.match(text, /gates for this set: lint, typecheck/);
   assert.match(text, /is not in this tree/);
+});
+
+test('text output tells a known-empty command list from an incomplete one', () => {
+  const noCommands = { commands: [] };
+  const staticText = formatBlastRadius(radiusFixture(noCommands), 5);
+  const partialText = formatBlastRadius(
+    radiusFixture({
+      ...noCommands,
+      commandAttribution: {
+        kind: 'partial',
+        reason: 'injected-runtime',
+        compositionRoots: ['src/platform-runtime.ts', 'src/platform-runtime-host.ts', 'src/x.ts'],
+      },
+    }),
+    2,
+  );
+
+  assert.match(staticText, /\(0\): \(none\)\n {2}attribution: static import reachability only/);
+  assert.doesNotMatch(staticText, /PARTIAL/);
+  assert.match(
+    partialText,
+    /\(0\): \(none\)\n {2}attribution: PARTIAL \(injected runtime\) — reachable from src\/platform-runtime\.ts, src\/platform-runtime-host\.ts \(\+1 more\)/,
+  );
+  assert.doesNotMatch(partialText, /static import reachability only/);
 });
 
 test('blast radius over the real tree agrees with check:affected and stays under 10s', async () => {
@@ -242,4 +325,24 @@ test('blast radius over the real tree agrees with check:affected and stays under
   // fewer gates the more files it touched.
   const single = selectChecks({ changedFiles: [file] });
   for (const check of single.checks) assert.ok(radius.gates.checks.includes(check), check);
+});
+
+test('the real platform snapshot route is flagged partial while a daemon handler is not', async () => {
+  const platform = await computeBlastRadius(
+    repoRoot,
+    'packages/platform-apple/src/snapshot-route.ts',
+  );
+  assert.deepEqual(platform.commands, []);
+  assert.equal(platform.commandAttribution.kind, 'partial');
+  assert.ok(
+    platform.executableDependents.beyondValue.length > 0,
+    'platform files are reached from the composition root only across dynamic imports',
+  );
+
+  const handler = await computeBlastRadius(
+    repoRoot,
+    'packages/daemon/src/sessions/handlers/session.ts',
+  );
+  assert.deepEqual(handler.commandAttribution, { kind: 'static-reachability' });
+  assert.ok(handler.commands.length > 0);
 });
