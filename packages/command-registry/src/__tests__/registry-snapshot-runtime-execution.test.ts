@@ -1,4 +1,5 @@
-import { commandDescriptors, selectSnapshotStepUses } from '../registry.ts';
+import { selectSnapshotStepUses } from '../descriptors/device-operations.ts';
+import { commandDescriptors } from '../registry.ts';
 import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
 

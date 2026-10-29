@@ -1,4 +1,5 @@
-import { commandDescriptors, selectFindStepUses } from '../registry.ts';
+import { selectFindStepUses } from '../descriptors/device-operations.ts';
+import { commandDescriptors } from '../registry.ts';
 import { expect, test } from 'vitest';
 import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 
