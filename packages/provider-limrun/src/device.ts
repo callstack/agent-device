@@ -7,7 +7,10 @@ export type LimrunPlatform = 'ios' | 'android';
 
 export const LIMRUN_PROVIDER = 'limrun';
 
-/** Limrun reads only the app to preinstall; it picks the instance itself. */
+/**
+ * Limrun reads the app to preinstall and the network capture settings; it picks the instance
+ * itself.
+ */
 export const LIMRUN_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   provider: LIMRUN_PROVIDER,
   label: 'Limrun',

@@ -155,8 +155,11 @@ function shouldProbeMetro(req: DaemonRequest, kind: DoctorKind): boolean {
 
 function remoteConnectionEvidence(req: DaemonRequest): Record<string, unknown> | undefined {
   const configured = Object.fromEntries(
+    // An opt-in boolean counts only when it is on.
     [...REMOTE_CONNECTION_FLAG_KEYS, ...REMOTE_PROVIDER_FLAG_KEYS].flatMap((key) =>
-      typeof req.flags?.[key] === 'string' ? [[key, '<configured>']] : [],
+      typeof req.flags?.[key] === 'string' || req.flags?.[key] === true
+        ? [[key, '<configured>']]
+        : [],
     ),
   );
   const evidence = {

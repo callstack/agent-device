@@ -274,7 +274,18 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     // ahead of attach as well as create, since an attached instance reads none of them either.
     rejectRefusedLimrunProfileFields(context);
     const existing = this.sessions.get(lease.leaseId);
-    if (existing) return { limrunInstanceId: existing.instanceId, device: existing.device };
+    if (existing) {
+      // A repeat allocation can opt into the capture the first one did not ask for.
+      const networkHar =
+        context?.flags?.providerNetworkLogs === true && !this.networkCaptures.has(lease.leaseId)
+          ? await this.startNetworkCapture(lease, existing, context)
+          : undefined;
+      return {
+        limrunInstanceId: existing.instanceId,
+        device: existing.device,
+        ...(networkHar ? { networkHar } : {}),
+      };
+    }
 
     const session =
       (await this.attachSession(platform, lease)) ??
@@ -413,7 +424,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
           reason: 'capture-dir-unset',
           message: 'The runtime has no directory for network capture files.',
         } as const);
-    this.forgetStoppedNetworkCaptures();
+    await this.forgetStoppedNetworkCaptures();
     if (!result.ok) {
       const { reason, message } = result;
       this.networkCaptures.set(lease.leaseId, {
@@ -437,7 +448,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (state?.phase !== 'capturing') return state;
     // Read the tunnel's last dial failure while the tunnel is still open.
     const failures = await state.capture.failures();
-    state.capture.close();
+    await state.capture.close();
     const stopped = {
       phase: 'stopped',
       instanceId: state.instanceId,
@@ -449,10 +460,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   /** Keeps released captures listable for a while without growing for the daemon's lifetime. */
-  private forgetStoppedNetworkCaptures(): void {
+  private async forgetStoppedNetworkCaptures(): Promise<void> {
     const settled = [...this.networkCaptures].filter(([, state]) => state.phase !== 'capturing');
-    for (const [leaseId] of settled.slice(0, -SETTLED_NETWORK_CAPTURE_LIMIT)) {
+    const { discardLimrunHar } = await import('./network-har.ts');
+    for (const [leaseId, state] of settled.slice(0, -SETTLED_NETWORK_CAPTURE_LIMIT)) {
       this.networkCaptures.delete(leaseId);
+      // The file holds raw traffic, so it lives exactly as long as the record that reports it.
+      if (state.phase === 'stopped') await discardLimrunHar(state.harPath).catch(() => undefined);
     }
   }
 
@@ -513,8 +527,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     // A capture rides the instance's one tunnel; close it before the client disconnects.
     const networkCapture = this.networkCaptures.get(leaseId);
     if (networkCapture?.phase === 'capturing') {
-      networkCapture.capture.close();
       this.networkCaptures.delete(leaseId);
+      // The client disconnect below ends the tunnel even when its own close fails.
+      await networkCapture.capture.close().catch(() => undefined);
     }
     session.client.disconnect();
     if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
@@ -726,7 +741,9 @@ function networkCaptureArtifacts(capture: SettledNetworkCapture): CloudArtifacts
     provider: LIMRUN_PROVIDER,
     status: 'ready',
     providerSessionId: instanceId,
-    ...(failures.total > 0 ? { message: summarizeTunnelFailures(failures) } : {}),
+    ...(failures.total > 0 || failures.lastDialFailure
+      ? { message: summarizeTunnelFailures(failures) }
+      : {}),
     cloudArtifacts: [
       {
         provider: LIMRUN_PROVIDER,

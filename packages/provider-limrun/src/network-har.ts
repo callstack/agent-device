@@ -2,16 +2,17 @@ import { DestinationTunnelHARAssembler } from '@limrun/api/destination-tunnel-ha
 import { validateDestinationTunnelSelectors } from '@limrun/api/destination-tunnel';
 import { DestinationTunnelSessionError } from '@limrun/api/destination-tunnel-dialer';
 import type { DestinationTunnelOpenFailureReason } from '@limrun/api/destination-tunnel';
-import type { DestinationTunnelHAREntry } from '@limrun/api/destination-tunnel-har';
 import type { DestinationTunnelInspectionEvent } from '@limrun/api/destination-tunnel-inspection';
 import type { DestinationTcpTunnel } from '@limrun/api/destination-tunnel-dialer';
 import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * The prototype Limrun network capture: one destination tunnel with inspection, streamed into a
- * live HAR 1.2 file. The file is rewritten on every completed request, so a reader (jq included)
- * always sees a valid document, during the session and after it.
+ * The Limrun network capture: one destination tunnel with inspection, streamed into a live HAR 1.2
+ * file. The file is replaced whole after completed requests, so a reader (jq included) always sees
+ * a valid document, during the session and after it. Memory and the cost of each write stay
+ * bounded however long the session runs: bodies are cut at `HAR_BODY_LIMIT_BYTES`, and the
+ * oldest entries leave the file once it would pass `HAR_MAX_BYTES`.
  *
  * One instance carries one destination tunnel, so the Metro/companion route rides this same
  * tunnel: the default selectors include the `localhost:8081` route, which makes the host's Metro
@@ -42,7 +43,7 @@ export const DEFAULT_LIMRUN_HAR_SELECTORS = Object.freeze([
 export type LimrunHarTunnelClient = Readonly<{
   startTunnel(options: {
     selectors: string[];
-    inspection?: { enabled?: boolean; captureBodies?: boolean };
+    inspection?: { enabled?: boolean; captureBodies?: boolean; maxBodyBytes?: number };
     onInspectionEvent?: (event: DestinationTunnelInspectionEvent) => void;
     onInspectionError?: (error: Error) => void;
   }): Promise<DestinationTcpTunnel>;
@@ -68,13 +69,16 @@ export type LimrunHarTunnelClient = Readonly<{
  * - `inspection-gap`: the inspection stream skipped events, so the HAR misses requests.
  * - `inspection-stream-error`: the inspection stream itself failed.
  * - `har-write-failed`: the HAR file could not be written, so it lags the captured traffic.
+ * - `har-truncated`: the oldest entries left the HAR to keep it under its size cap; the count is
+ *   the number of entries dropped.
  */
 export type LimrunTunnelFailureKind =
   | 'request-failed'
   | 'inspection-error'
   | 'inspection-gap'
   | 'inspection-stream-error'
-  | 'har-write-failed';
+  | 'har-write-failed'
+  | 'har-truncated';
 
 export type LimrunTunnelFailure = Readonly<{
   at: string;
@@ -110,11 +114,18 @@ const LATEST_FAILURES_PER_KIND = 5;
 const TUNNEL_STATUS_BUDGET_MS = 2_000;
 /** Completed requests within this window share one rewrite of the HAR file. */
 const HAR_WRITE_COALESCE_MS = 250;
+/** Each request and response body is cut to this size, by the tunnel and by the assembler. */
+const HAR_BODY_LIMIT_BYTES = 64 * 1024;
+/** The serialized entries a HAR file keeps; older entries are dropped first. */
+export const HAR_MAX_BYTES = 8 * 1024 * 1024;
 
 export type LimrunHarCapture = Readonly<{
   harPath: string;
-  /** Stops inspection and writes the final HAR document. Safe more than once. */
-  close(): void;
+  /**
+   * Stops inspection and writes the final HAR document. Safe more than once; when the tunnel
+   * refuses to close, the HAR is still written and a later call tries the tunnel again.
+   */
+  close(): Promise<void>;
   /** The failures recorded so far, plus the tunnel's last dial failure while it is open. */
   failures(): Promise<LimrunTunnelFailureReport>;
 }>;
@@ -142,47 +153,47 @@ export async function startLimrunHarCapture(
   } catch (error) {
     return { ok: false, reason: 'tunnel-start-failed', message: describe(error) };
   }
-  const entries: DestinationTunnelHAREntry[] = [];
   const failures = createFailureRecorder();
   try {
     // The HAR holds raw traffic, so only the daemon's user may read it.
-    fs.mkdirSync(path.dirname(input.harPath), { recursive: true, mode: 0o700 });
-    writeHar(input.harPath, entries);
-    let pendingWrite: NodeJS.Timeout | undefined;
-    const flush = (): void => {
-      clearTimeout(pendingWrite);
-      pendingWrite = undefined;
-      try {
-        writeHar(input.harPath, entries);
-      } catch (error) {
-        failures.record('har-write-failed', { message: describe(error) });
-      }
-    };
-    const assembler = new DestinationTunnelHARAssembler();
+    await fs.promises.mkdir(path.dirname(input.harPath), { recursive: true, mode: 0o700 });
+    const harFile = createHarFile(input.harPath, {
+      onDropped: (count) =>
+        failures.record(
+          'har-truncated',
+          { message: `dropped the ${count} oldest entries to stay under ${HAR_MAX_BYTES} bytes` },
+          count,
+        ),
+      onWriteError: (error) => failures.record('har-write-failed', { message: describe(error) }),
+    });
+    await harFile.flush();
+    const assembler = new DestinationTunnelHARAssembler(HAR_BODY_LIMIT_BYTES);
+    let closed = false;
     const tunnel = await client.startTunnel({
       selectors,
-      inspection: { enabled: true, captureBodies: true },
+      inspection: { enabled: true, captureBodies: true, maxBodyBytes: HAR_BODY_LIMIT_BYTES },
       onInspectionEvent: (event) => {
+        if (closed) return;
         failures.observe(event);
         const completed = assembler.add(event);
-        if (!completed || event.type !== 'complete') return;
-        entries.push(completed);
-        pendingWrite ??= setTimeout(flush, HAR_WRITE_COALESCE_MS);
+        if (completed && event.type === 'complete') harFile.add(completed);
       },
       onInspectionError: (error) => {
         failures.record('inspection-stream-error', { message: describe(error) });
       },
     });
-    let closed = false;
     return {
       ok: true,
       capture: Object.freeze({
         harPath: input.harPath,
-        close: () => {
+        close: async () => {
           if (closed) return;
-          closed = true;
-          tunnel.close();
-          flush();
+          try {
+            tunnel.close();
+            closed = true;
+          } finally {
+            await harFile.flush();
+          }
         },
         failures: async () =>
           failures.report(
@@ -212,10 +223,11 @@ function createFailureRecorder() {
   const record = (
     kind: LimrunTunnelFailureKind,
     failure: Omit<LimrunTunnelFailure, 'at'>,
+    count = 1,
   ): void => {
-    total += 1;
+    total += count;
     const entry = (byKind[kind] ??= { count: 0, latest: [] });
-    entry.count += 1;
+    entry.count += count;
     entry.latest.push({ ...failure, at: new Date().toISOString() });
     if (entry.latest.length > LATEST_FAILURES_PER_KIND) entry.latest.shift();
   };
@@ -298,18 +310,68 @@ function readUrlEndpoint(url: string): Readonly<{ host?: string; port?: number }
   }
 }
 
-function writeHar(harPath: string, entries: readonly DestinationTunnelHAREntry[]): void {
-  const document = {
-    log: {
-      version: '1.2',
-      creator: { name: 'agent-device limrun-tunnel', version: '1' },
-      entries,
+const HAR_HEADER =
+  '{"log":{"version":"1.2","creator":{"name":"agent-device limrun-tunnel","version":"1"},"entries":[';
+
+/**
+ * The HAR file of one capture. Each entry is serialized once into a ring capped at
+ * `HAR_MAX_BYTES`; a write joins the ring, so its cost is bounded too. Writes coalesce, and one
+ * runs at a time, off the event loop.
+ */
+function createHarFile(
+  harPath: string,
+  hooks: Readonly<{ onDropped: (count: number) => void; onWriteError: (error: unknown) => void }>,
+) {
+  const entries: string[] = [];
+  let bytes = 0;
+  let timer: NodeJS.Timeout | undefined;
+  let inFlight: Promise<void> | undefined;
+  let tempSequence = 0;
+  const write = async (): Promise<void> => {
+    // A fresh, exclusively created temp file, renamed into place: a reader never sees a partial
+    // document, and the published file always carries the owner-only mode.
+    tempSequence += 1;
+    const tempPath = `${harPath}.${process.pid}-${tempSequence}.tmp`;
+    try {
+      await fs.promises.writeFile(tempPath, `${HAR_HEADER}${entries.join(',')}]}}\n`, {
+        mode: 0o600,
+        flag: 'wx',
+      });
+      await fs.promises.rename(tempPath, harPath);
+    } catch (error) {
+      hooks.onWriteError(error);
+      await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
+    }
+  };
+  const flush = async (): Promise<void> => {
+    clearTimeout(timer);
+    timer = undefined;
+    while (inFlight) await inFlight;
+    inFlight = write().finally(() => {
+      inFlight = undefined;
+    });
+    await inFlight;
+  };
+  return {
+    flush,
+    add(entry: unknown): void {
+      const serialized = JSON.stringify(entry);
+      entries.push(serialized);
+      bytes += serialized.length;
+      let dropped = 0;
+      while (bytes > HAR_MAX_BYTES && entries.length > 1) {
+        bytes -= entries.shift()?.length ?? 0;
+        dropped += 1;
+      }
+      if (dropped > 0) hooks.onDropped(dropped);
+      timer ??= setTimeout(() => void flush(), HAR_WRITE_COALESCE_MS);
     },
   };
-  // Write-then-rename, so a reader never observes a half-written document.
-  const tempPath = `${harPath}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(document, null, 1)}\n`, { mode: 0o600 });
-  fs.renameSync(tempPath, harPath);
+}
+
+/** Deletes a capture's HAR file once nothing reports it any more. */
+export async function discardLimrunHar(harPath: string): Promise<void> {
+  await fs.promises.rm(harPath, { force: true });
 }
 
 function describe(error: unknown): string {

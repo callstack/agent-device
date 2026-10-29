@@ -31,6 +31,7 @@ const state = vi.hoisted(() => ({
   androidDelete: vi.fn(async () => undefined),
   inspectionEvents: [] as ((event: unknown) => void)[],
   destinationTunnelClose: vi.fn(),
+  tunnelStatus: {} as Record<string, unknown>,
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -69,7 +70,7 @@ vi.mock('@limrun/api/instance-client', () => ({
       state.inspectionEvents.push(options.onInspectionEvent);
       return { tunnelId: 't1', selectors: [], close: state.destinationTunnelClose };
     }),
-    getTunnelStatus: vi.fn(async () => ({})),
+    getTunnelStatus: vi.fn(async () => state.tunnelStatus),
   })),
 }));
 
@@ -217,6 +218,31 @@ test('a network capture reports its HAR and failures through artifacts and every
     assert.match(String(retried.cloudArtifacts?.message), /request-failed 1/);
     assert.equal(state.destinationTunnelClose.mock.calls.length, 1);
   } finally {
+    await runtime.shutdown?.();
+  }
+});
+
+test('a repeat allocation starts the capture it newly asks for, and a dial-only failure is reported', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-repeat');
+  state.tunnelStatus = {
+    lastDialFailure: { tunnelId: 't1', selectorId: 's1', reason: 'connection_refused' },
+  };
+  try {
+    const first = await runtime.leaseLifecycle.allocate?.(lease);
+    assert.equal(first?.networkHar, undefined);
+    const repeat = await runtime.leaseLifecycle.allocate?.(lease, {
+      flags: { providerNetworkLogs: true },
+    });
+    assert.equal((repeat?.networkHar as { status?: string } | undefined)?.status, 'capturing');
+
+    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
+    assert.match(String(listed?.message), /last dial failure connection_refused/);
+  } finally {
+    state.tunnelStatus = {};
     await runtime.shutdown?.();
   }
 });

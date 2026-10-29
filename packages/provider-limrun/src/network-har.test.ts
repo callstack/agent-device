@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
-import { afterEach, test, vi } from 'vitest';
+import { test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DestinationTunnelInspectionEvent } from '@limrun/api/destination-tunnel-inspection';
 import { DestinationTunnelSessionError } from '@limrun/api/destination-tunnel-dialer';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
-import { DEFAULT_LIMRUN_HAR_SELECTORS, startLimrunHarCapture } from './network-har.ts';
+import {
+  DEFAULT_LIMRUN_HAR_SELECTORS,
+  HAR_MAX_BYTES,
+  startLimrunHarCapture,
+} from './network-har.ts';
 
-function harEntry(url: string, error?: string): DestinationTunnelInspectionEvent {
+function harEntry(url: string, error?: string, comment?: string): DestinationTunnelInspectionEvent {
   return {
     type: 'complete',
     sequence: 1,
@@ -25,9 +29,11 @@ function harEntry(url: string, error?: string): DestinationTunnelInspectionEvent
         headersSize: -1,
         bodySize: 0,
       },
+      ...(comment ? { comment } : {}),
       response: {
-        status: 200,
-        statusText: 'OK',
+        // The tunnel reports a request it could not complete with status 0.
+        status: error ? 0 : 200,
+        statusText: error ? '' : 'OK',
         httpVersion: 'HTTP/1.1',
         cookies: [],
         headers: [],
@@ -43,12 +49,15 @@ function harEntry(url: string, error?: string): DestinationTunnelInspectionEvent
   } as unknown as DestinationTunnelInspectionEvent;
 }
 
-function fakeTunnelClient(lastDialFailure?: {
-  tunnelId: string;
-  selectorId: string;
-  reason: string;
-  osCode?: string;
-}) {
+function fakeTunnelClient(
+  lastDialFailure?: {
+    tunnelId: string;
+    selectorId: string;
+    reason: string;
+    osCode?: string;
+  },
+  tunnelClose: () => void = () => {},
+) {
   const started: {
     selectors: string[];
     onEvent?: (e: DestinationTunnelInspectionEvent) => void;
@@ -70,7 +79,7 @@ function fakeTunnelClient(lastDialFailure?: {
         return {
           tunnelId: 't1',
           selectors: [{ id: 's1', kind: 'domain', value: '*.com' }],
-          close: () => {},
+          close: tunnelClose,
         } as never;
       },
       getTunnelStatus: async () => (lastDialFailure ? { lastDialFailure } : {}),
@@ -88,17 +97,19 @@ test('the default capture selectors carry the public wildcards and the Metro rou
   assert.ok(DEFAULT_LIMRUN_HAR_SELECTORS.includes('localhost:8081'));
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+function readEntries(harPath: string): { response: { status: number } }[] {
+  return (
+    JSON.parse(fs.readFileSync(harPath, 'utf8')) as {
+      log: { entries: { response: { status: number } }[] };
+    }
+  ).log.entries;
+}
 
 function readEntryCount(harPath: string): number {
-  return (JSON.parse(fs.readFileSync(harPath, 'utf8')) as { log: { entries: unknown[] } }).log
-    .entries.length;
+  return readEntries(harPath).length;
 }
 
 test('completed requests reach the live HAR in one coalesced, owner-only write', async () => {
-  vi.useFakeTimers();
   const fake = fakeTunnelClient();
   const harPath = tempHarPath();
   const result = await startLimrunHarCapture(fake.client, { harPath });
@@ -110,7 +121,7 @@ test('completed requests reach the live HAR in one coalesced, owner-only write',
   emit(harEntry('https://example.com/b'));
   assert.equal(readEntryCount(harPath), 0);
 
-  vi.advanceTimersByTime(250);
+  await vi.waitFor(() => assert.equal(readEntryCount(harPath), 2));
   const document = JSON.parse(fs.readFileSync(harPath, 'utf8')) as {
     log: { version: string; entries: unknown[] };
   };
@@ -121,8 +132,59 @@ test('completed requests reach the live HAR in one coalesced, owner-only write',
 
   // Close flushes a request that is still inside the coalescing window.
   emit(harEntry('https://example.com/c'));
-  result.capture.close();
+  await result.capture.close();
   assert.equal(readEntryCount(harPath), 3);
+  assert.deepEqual(
+    fs.readdirSync(path.dirname(harPath)).filter((name) => name.endsWith('.tmp')),
+    [],
+  );
+});
+
+test('the HAR keeps the newest entries under its size cap and reports the dropped ones', async () => {
+  const fake = fakeTunnelClient();
+  const harPath = tempHarPath();
+  const result = await startLimrunHarCapture(fake.client, { harPath });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const emit = fake.started[0]?.onEvent;
+  assert.ok(emit);
+  const large = 'x'.repeat(Math.ceil(HAR_MAX_BYTES / 4));
+  for (let index = 0; index < 6; index += 1) {
+    emit(harEntry(`https://example.com/${index}`, undefined, large));
+  }
+  await result.capture.close();
+
+  const urls = (
+    JSON.parse(fs.readFileSync(harPath, 'utf8')) as {
+      log: { entries: { request: { url: string } }[] };
+    }
+  ).log.entries.map((entry) => entry.request.url);
+  assert.deepEqual(urls, [
+    'https://example.com/3',
+    'https://example.com/4',
+    'https://example.com/5',
+  ]);
+  const report = await result.capture.failures();
+  assert.equal(report.byKind['har-truncated']?.count, 3);
+});
+
+test('a tunnel that refuses to close still gets its HAR written, and a later close retries', async () => {
+  let closeAttempts = 0;
+  const fake = fakeTunnelClient(undefined, () => {
+    closeAttempts += 1;
+    if (closeAttempts === 1) throw new Error('socket busy');
+  });
+  const harPath = tempHarPath();
+  const result = await startLimrunHarCapture(fake.client, { harPath });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  fake.started[0]?.onEvent?.(harEntry('https://example.com/a'));
+
+  await assert.rejects(() => result.capture.close(), /socket busy/);
+  assert.equal(readEntryCount(harPath), 1);
+  await result.capture.close();
+  await result.capture.close();
+  assert.equal(closeAttempts, 2);
 });
 
 test('tunnel failures are counted, with the latest endpoints and the typed dial reason', async () => {
@@ -173,8 +235,11 @@ test('tunnel failures are counted, with the latest endpoints and the typed dial 
     selector: '*.com',
   });
   // The failed request stays in the HAR, as a status-0 entry.
-  result.capture.close();
-  assert.equal(readEntryCount(result.capture.harPath), 2);
+  await result.capture.close();
+  assert.deepEqual(
+    readEntries(result.capture.harPath).map((entry) => entry.response.status),
+    [200, 0],
+  );
 });
 
 test('inspection errors from pinned hosts do not evict failed requests', async () => {
@@ -197,7 +262,7 @@ test('inspection errors from pinned hosts do not evict failed requests', async (
   assert.equal(report.byKind['inspection-error']?.count, 20);
   assert.equal(report.byKind['inspection-error']?.latest.length, 5);
   assert.equal(report.byKind['request-failed']?.latest[0]?.host, 'api.example.com');
-  result.capture.close();
+  await result.capture.close();
 });
 
 test("another tunnel's dial failure is not reported as this capture's", async () => {
@@ -208,7 +273,7 @@ test("another tunnel's dial failure is not reported as this capture's", async ()
   const report = await result.capture.failures();
   assert.equal(report.total, 0);
   assert.equal(report.lastDialFailure, undefined);
-  result.capture.close();
+  await result.capture.close();
 });
 
 test('a tunnel conflict is reported as a typed refusal, not a crash', async () => {
