@@ -97,6 +97,25 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('proxy open by device spec without a platform or lease backend fails before allocating', async () => {
+  const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-no-platform-');
+  const { platform: _platform, ...flagsWithoutPlatform } = flags;
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
+      command: 'open',
+      flags: { ...flagsWithoutPlatform, osVersion: '26' },
+      client: createTestClient({
+        listDevices: unexpectedCommandCall,
+        allocate: unexpectedCommandCall,
+      }),
+    }),
+    { code: 'INVALID_ARGS' },
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a lease returned without lease.device for a spec request is released and the command fails with device-spec-unsupported', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-device-spec-noecho-');
   const releases: LeaseReleaseRequest[] = [];
