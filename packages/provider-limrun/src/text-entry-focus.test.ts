@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import {
   awaitLimrunTextEntryFocus,
@@ -238,3 +239,21 @@ test('focus that arrives late is waited for instead of typed past', async () => 
   expect(readiness).toBe('focused-element');
   expect(reads).toBe(3);
 });
+
+const traitClassification = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/ios-trait-classification.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  cases: Array<{
+    name: string;
+    limrun?: { seam: string; input: IosTreeNode; expected: { focusWitness: boolean } };
+  }>;
+};
+for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'focus')) {
+  test(`Limrun trait focus golden: ${row.name}`, () => {
+    const input = { ...row.limrun!.input, frame: FIELD_RECT };
+    expect(readLimrunTextEntryFocus(input) !== null).toBe(row.limrun!.expected.focusWitness);
+  });
+}

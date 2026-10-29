@@ -1,0 +1,283 @@
+{
+  "description": "Independent trait cases at producer seams. Bridge words and Limrun trait names are producer-specific inputs, not a raw encoding equivalence. Limrun keeps reported types, uses IsEditing for a focus witness, and recognizes TabButton during collapsed-bar recovery. XCTest takes XCUIElement types and is not applicable to trait classification; live conformance remains its authority. Absent expected keys mean absent facts.",
+  "cases": [
+    {
+      "name": "tab trait overrides cell type",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 75,
+          "traits": "146297323520"
+        },
+        "expected": {
+          "type": "Button"
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "RadioButton",
+          "traits": ["Button", "TabButton"]
+        },
+        "expected": {
+          "tabCandidate": true
+        },
+        "seam": "tab"
+      }
+    },
+    {
+      "name": "cell without tab trait",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 75,
+          "traits": "146028888064"
+        },
+        "expected": {
+          "type": "Cell"
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "RadioButton",
+          "traits": ["Button"]
+        },
+        "expected": {
+          "tabCandidate": false
+        },
+        "seam": "tab"
+      }
+    },
+    {
+      "name": "compose text area",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "140746078552064"
+        },
+        "expected": {
+          "type": "TextView",
+          "editable": true,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "text entry without area",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "8590196736"
+        },
+        "expected": {
+          "type": "TextField",
+          "editable": true,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "secure text entry takes precedence",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "140746095330304"
+        },
+        "expected": {
+          "type": "SecureTextField",
+          "editable": true,
+          "password": true
+        }
+      }
+    },
+    {
+      "name": "search text entry",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "140746078553088"
+        },
+        "expected": {
+          "type": "SearchField",
+          "editable": true,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "area without text entry",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "140746078289920"
+        },
+        "expected": {
+          "type": "Other"
+        }
+      }
+    },
+    {
+      "name": "declared input type takes precedence",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 45,
+          "traits": "140746078552064"
+        },
+        "expected": {
+          "type": "SearchField",
+          "editable": true,
+          "password": false
+        }
+      }
+    },
+    {
+      "name": "selected",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "8"
+        },
+        "expected": {
+          "type": "Other",
+          "selected": true
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "Other",
+          "traits": ["Selected"]
+        },
+        "expected": {
+          "selected": true
+        },
+        "seam": "selection"
+      }
+    },
+    {
+      "name": "unselected",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 0,
+          "traits": "0"
+        },
+        "expected": {
+          "type": "Other"
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "Other",
+          "traits": ["Button"]
+        },
+        "expected": {},
+        "seam": "selection"
+      }
+    },
+    {
+      "name": "editing",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 52,
+          "traits": "140883519602688"
+        },
+        "expected": {
+          "type": "TextView",
+          "editable": true,
+          "password": false,
+          "focused": true
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "TextView",
+          "traits": ["IsEditing"]
+        },
+        "expected": {
+          "focusWitness": true
+        },
+        "seam": "focus"
+      }
+    },
+    {
+      "name": "not editing",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "input": {
+          "automationType": 52,
+          "traits": "140883517505536"
+        },
+        "expected": {
+          "type": "TextView",
+          "editable": true,
+          "password": false
+        }
+      },
+      "limrun": {
+        "input": {
+          "type": "TextView",
+          "traits": ["TextEntry"]
+        },
+        "expected": {
+          "focusWitness": false
+        },
+        "seam": "focus"
+      }
+    }
+  ]
+}

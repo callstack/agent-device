@@ -306,3 +306,27 @@ for (const row of geometry.rows) {
     expect(tabs.length === items.length).toBe(row.expected);
   });
 }
+
+const traitClassification = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/ios-trait-classification.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  cases: Array<{
+    name: string;
+    limrun?: { seam: string; input: IosTreeNode; expected: { tabCandidate: boolean } };
+  }>;
+};
+for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'tab')) {
+  test(`Limrun trait tab golden: ${row.name}`, async () => {
+    const frame = { x: 25, y: 795, width: 74, height: 54 };
+    const { session } = dockedSession({ x: 0, y: 791, width: 402, height: 83 }, () => [
+      { ...row.limrun!.input, label: 'Left', frame },
+      { ...row.limrun!.input, label: 'Right', frame },
+    ]);
+    expect(tabsOf(await captureLimrunIosSnapshot(session)).length === 2).toBe(
+      row.limrun!.expected.tabCandidate,
+    );
+  });
+}

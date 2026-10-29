@@ -771,3 +771,47 @@ test('the element-type names the presented-surface rule reads are the ones this 
     assert.equal(decoded.nodes[1]?.type, name, `raw element type ${rawValue}`);
   }
 });
+
+test('trait classification golden rows name their producer applicability and bridge facts', () => {
+  const fixture = JSON.parse(
+    fs.readFileSync(
+      new URL('../../../../contracts/fixtures/ios-trait-classification.json', import.meta.url),
+      'utf8',
+    ),
+  ) as {
+    cases: Array<{
+      name: string;
+      applicability: { bridge: string; limrun: string; runner: string };
+      bridge: {
+        input: { automationType: number; traits: string };
+        expected: Record<string, string | boolean>;
+      };
+      limrun?: { seam: string };
+    }>;
+  };
+  assert.ok(fixture.cases.length > 0);
+  assert.deepEqual(
+    new Set(fixture.cases.flatMap((row) => (row.limrun ? [row.limrun.seam] : []))),
+    new Set(['tab', 'selection', 'focus']),
+  );
+  for (const row of fixture.cases) {
+    assert.equal(row.applicability.bridge, 'applicable', row.name);
+    assert.equal(row.applicability.runner, 'not-applicable', row.name);
+    assert.equal(row.applicability.limrun, row.limrun ? 'applicable' : 'not-applicable', row.name);
+    const node = decodeSnapshotBridgeTree(
+      {
+        [automationType]: row.bridge.input.automationType,
+        [traits]: row.bridge.input.traits,
+        [children]: [],
+      },
+      { truncated: false },
+      limits,
+    ).nodes[0]!;
+    const actual = Object.fromEntries(
+      (['type', 'editable', 'password', 'selected', 'focused'] as const).flatMap((key) =>
+        node[key] === undefined ? [] : [[key, node[key]]],
+      ),
+    );
+    assert.deepEqual(actual, row.bridge.expected, row.name);
+  }
+});

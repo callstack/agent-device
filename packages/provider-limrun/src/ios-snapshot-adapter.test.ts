@@ -212,3 +212,21 @@ test('limrun acquisition shares RN interpretation and preserves native values', 
   expect(field).not.toHaveProperty('iosValueSemantics');
   expect(field).not.toHaveProperty('checked');
 });
+
+const traitClassification = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/ios-trait-classification.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  cases: Array<{
+    name: string;
+    limrun?: { seam: string; input: IosTreeNode; expected: { selected?: boolean } };
+  }>;
+};
+for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'selection')) {
+  test(`Limrun trait selection golden: ${row.name}`, async () => {
+    const result = await captureLimrunIosSnapshot(createLimrunSnapshotSession(row.limrun!.input));
+    expect(result.acquisition.nodes[0]?.selected).toBe(row.limrun!.expected.selected);
+  });
+}
