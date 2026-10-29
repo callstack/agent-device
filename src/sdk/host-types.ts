@@ -18,6 +18,10 @@ export type AgentDeviceHost = Readonly<{
   client: AgentDeviceClient;
   /** Serializable attach config containing this instance's bearer token. Keep it inside the host. */
   clientConfig: AgentDeviceClientConfig;
-  /** Reports unfinished teardown. Repeated calls share one close; never exits the process. */
+  /**
+   * Reports teardown outcomes. `platformOwners` is `closed`, `pending` when the shutdown budget
+   * expires, or `failed` when an owner rejects. Pending or failed owners retain the daemon
+   * registration until this process exits. Repeated calls share one close; never exits the process.
+   */
   close: () => Promise<ShutdownReport>;
 }>;

@@ -62,6 +62,7 @@ export function createComposedPlatformRuntimeGateway(options: {
   const localLoads = new Map<Platform, Promise<PlatformRuntimeOwner>>();
   const providerLoads = new Map<PlatformRuntimeProviderModule, Promise<PlatformRuntimeOwner>>();
   const loadedOwners = new Map<string, PlatformRuntimeOwner>();
+  let closing: Promise<void> | undefined;
   let hostLoad: Promise<PlatformRuntimeHost> | undefined;
   const loadHost = async () => {
     hostLoad ??= options.loadHost();
@@ -105,6 +106,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     return owner;
   };
   const loadLocal = async (family: Platform) => {
+    if (closing) throw runtimeContractError('Platform runtime gateway is shut down');
     const existing = localLoads.get(family);
     if (existing) return await existing;
     const module = options.modules.get(family);
@@ -132,6 +134,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     }
   };
   const loadProvider = async (module: PlatformRuntimeProviderModule) => {
+    if (closing) throw runtimeContractError('Platform runtime gateway is shut down');
     const existing = providerLoads.get(module);
     if (existing) return await existing;
     const pending = loadHost().then(async (host) => {
@@ -184,14 +187,32 @@ export function createComposedPlatformRuntimeGateway(options: {
       }
       return await bindAndValidate(await loadLocal(request.device.platform), request);
     },
-    shutdown: async () => {
-      await Promise.allSettled(
-        [...loadedOwners.values()].map(async (owner) => await owner.shutdown()),
-      );
-      loadedOwners.clear();
-      localLoads.clear();
-      providerLoads.clear();
-    },
+    shutdown: () =>
+      (closing ??= Promise.resolve().then(async () => {
+        await Promise.allSettled([...localLoads.values(), ...providerLoads.values()]);
+        const owners = [...loadedOwners.entries()];
+        const outcomes = await Promise.allSettled(
+          owners.map(async ([, owner]) => owner.shutdown()),
+        );
+        loadedOwners.clear();
+        localLoads.clear();
+        providerLoads.clear();
+        const failures = outcomes.flatMap((outcome, index) =>
+          outcome.status === 'rejected'
+            ? [
+                new Error(`Platform runtime owner ${owners[index]![0]} failed to shut down`, {
+                  cause: outcome.reason,
+                }),
+              ]
+            : [],
+        );
+        if (failures.length > 0) {
+          throw new AggregateError(
+            failures,
+            `Platform runtime owner shutdown failed: ${failures.map((failure) => failure.message).join('; ')}`,
+          );
+        }
+      })),
   });
 }
 

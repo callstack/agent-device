@@ -64,7 +64,7 @@ export type ShutdownReport = {
    */
   requests: { drained: number; abandoned: number };
   sessions: { closed: number; failed: number };
-  platformOwners: 'closed' | 'pending';
+  platformOwners: 'closed' | 'pending' | 'failed';
   /** `pending` plugins were still shutting down when the budget ran out. */
   plugins: {
     disposed: string[];
@@ -92,6 +92,11 @@ export function describeUnfinishedShutdownWork(report: ShutdownReport): string[]
   if (report.platformOwners === 'pending') {
     lines.push(
       'Daemon shutdown: platform owners were still shutting down when the budget ran out; the daemon registration stays held until this process exits.',
+    );
+  }
+  if (report.platformOwners === 'failed') {
+    lines.push(
+      'Daemon shutdown: platform owner shutdown failed; the daemon registration stays held until this process exits.',
     );
   }
   for (const provider of report.plugins.pending) {
