@@ -4,13 +4,24 @@
 // imports it, at build time, so docs links can take each page's own title.
 import { readFileSync } from 'node:fs';
 
-/** A docs link labelled with the page's frontmatter title, so a title edit cannot leave it stale. */
-function docLink(slug: string, about: string): string {
+/** A docs page's frontmatter title, so a title edit cannot leave a label here stale. */
+function docTitle(slug: string): string {
   const page = readFileSync(new URL(`../../docs/docs/${slug}.md`, import.meta.url), 'utf8');
   const title = /^title: (.+)$/m.exec(page)?.[1];
   if (!title) throw new Error(`llms.ts: docs/docs/${slug}.md has no title.`);
-  return `- [${title}](https://agent-device.dev/docs/${slug}): ${about}`;
+  return title;
 }
+
+const docLink = (slug: string, about: string) =>
+  `- [${docTitle(slug)}](https://agent-device.dev/docs/${slug}): ${about}`;
+
+/**
+ * The pages llms-small.txt leaves out (astro.config.mjs passes them to starlight-llms-txt): the
+ * reference pages an agent reads from the installed CLI (`agent-device help`,
+ * `agent-device capabilities`) or only when it needs them. llms.txt names them from this list.
+ */
+export const llmsSmallExclude = ['commands', 'capabilities', 'client-api', 'migrating-gestures'];
+const excludedTitles = llmsSmallExclude.map(docTitle);
 
 export const llmsDescription =
   'Open-source device layer for AI agents: it lets coding agents control mobile, web, TV, and desktop apps on devices and simulators, locally or in the cloud. It gives agents structured UI state, semantic interaction, and runtime evidence through a CLI, MCP server, and typed Node.js API.';
@@ -48,7 +59,7 @@ ${docLink('device-clouds', 'hosted devices and the self-hosted remote daemon.')}
 
 ## Start here
 
-llms-small.txt leaves out the Commands, Capabilities, and Node.js API pages; read them in llms-full.txt or at the links below.
+llms-small.txt leaves out these pages: ${excludedTitles.join(', ')}. Read them in llms-full.txt or on the site.
 
 ${docLink('installation', '`npm install -g agent-device` (Node.js 22.12 or newer), then `agent-device doctor` to check the setup.')}
 ${docLink('introduction', 'Scope, supported workflows, and responsibility boundaries.')}

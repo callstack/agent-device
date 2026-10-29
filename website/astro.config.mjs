@@ -7,7 +7,12 @@ import starlightLlmsTxt from 'starlight-llms-txt';
 import { brandCss } from './src/site/brand.ts';
 import { site as meta, noindexPaths } from './src/site/content.ts';
 import { TITLE_DELIMITER } from './src/site/meta.ts';
-import { llmsDescription, llmsDetails, llmsOptionalLinks } from './src/site/llms.ts';
+import {
+  llmsDescription,
+  llmsDetails,
+  llmsOptionalLinks,
+  llmsSmallExclude,
+} from './src/site/llms.ts';
 
 const site = meta.url;
 const repo = meta.repo;
@@ -117,15 +122,9 @@ export default defineConfig({
           description: llmsDescription,
           details: llmsDetails,
           optionalLinks: llmsOptionalLinks,
-          // llms-small.txt leaves out the reference pages an agent reads from the installed CLI
-          // (`agent-device help`, `agent-device capabilities`) or only when it needs them; their
-          // tables also flatten badly there. llms-full.txt keeps every page.
-          exclude: [
-            'docs/commands',
-            'docs/capabilities',
-            'docs/client-api',
-            'docs/migrating-gestures',
-          ],
+          // llms-small.txt leaves out the reference pages in llmsSmallExclude (their tables also
+          // flatten badly there); llms-full.txt keeps every page.
+          exclude: llmsSmallExclude.map((slug) => `docs/${slug}`),
         }),
       ],
     }),
