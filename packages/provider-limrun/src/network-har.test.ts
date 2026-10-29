@@ -148,7 +148,8 @@ test('the HAR keeps the newest entries under its size cap and reports the droppe
   if (!result.ok) return;
   const emit = fake.started[0]?.onEvent;
   assert.ok(emit);
-  const large = 'x'.repeat(Math.ceil(HAR_MAX_BYTES / 4));
+  // Two UTF-8 bytes per character: a quarter of the cap in bytes, an eighth in string length.
+  const large = 'é'.repeat(Math.ceil(HAR_MAX_BYTES / 8));
   for (let index = 0; index < 6; index += 1) {
     emit(harEntry(`https://example.com/${index}`, undefined, large));
   }
@@ -164,8 +165,24 @@ test('the HAR keeps the newest entries under its size cap and reports the droppe
     'https://example.com/4',
     'https://example.com/5',
   ]);
+  assert.ok(fs.statSync(harPath).size <= HAR_MAX_BYTES);
   const report = await result.capture.failures();
   assert.equal(report.byKind['har-truncated']?.count, 3);
+});
+
+test('a capture whose HAR cannot be written refuses before the tunnel opens', async () => {
+  const fake = fakeTunnelClient();
+  const harPath = tempHarPath();
+  fs.mkdirSync(path.dirname(harPath), { recursive: true, mode: 0o500 });
+  try {
+    const result = await startLimrunHarCapture(fake.client, { harPath });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.reason, 'tunnel-start-failed');
+    assert.equal(fake.started.length, 0);
+  } finally {
+    fs.chmodSync(path.dirname(harPath), 0o700);
+  }
 });
 
 test('a tunnel that refuses to close still gets its HAR written, and a later close retries', async () => {

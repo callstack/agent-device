@@ -166,7 +166,8 @@ export async function startLimrunHarCapture(
         ),
       onWriteError: (error) => failures.record('har-write-failed', { message: describe(error) }),
     });
-    await harFile.flush();
+    // The first publication must succeed: a capture whose file cannot be written does not start.
+    await harFile.flush(true);
     const assembler = new DestinationTunnelHARAssembler(HAR_BODY_LIMIT_BYTES);
     let closed = false;
     const tunnel = await client.startTunnel({
@@ -312,6 +313,8 @@ function readUrlEndpoint(url: string): Readonly<{ host?: string; port?: number }
 
 const HAR_HEADER =
   '{"log":{"version":"1.2","creator":{"name":"agent-device limrun-tunnel","version":"1"},"entries":[';
+const HAR_FOOTER = ']}}\n';
+const HAR_WRAPPER_BYTES = Buffer.byteLength(HAR_HEADER) + Buffer.byteLength(HAR_FOOTER);
 
 /**
  * The HAR file of one capture. Each entry is serialized once into a ring capped at
@@ -322,32 +325,36 @@ function createHarFile(
   harPath: string,
   hooks: Readonly<{ onDropped: (count: number) => void; onWriteError: (error: unknown) => void }>,
 ) {
-  const entries: string[] = [];
-  let bytes = 0;
+  const entries: { json: string; bytes: number }[] = [];
+  // The file's size in UTF-8 bytes: the wrapper, every entry, and the commas between them.
+  let bytes = HAR_WRAPPER_BYTES;
   let timer: NodeJS.Timeout | undefined;
   let inFlight: Promise<void> | undefined;
   let tempSequence = 0;
-  const write = async (): Promise<void> => {
+  /** Publishes the file; `required` rethrows a failure instead of recording it. */
+  const write = async (required: boolean): Promise<void> => {
     // A fresh, exclusively created temp file, renamed into place: a reader never sees a partial
     // document, and the published file always carries the owner-only mode.
     tempSequence += 1;
     const tempPath = `${harPath}.${process.pid}-${tempSequence}.tmp`;
     try {
-      await fs.promises.writeFile(tempPath, `${HAR_HEADER}${entries.join(',')}]}}\n`, {
+      const document = `${HAR_HEADER}${entries.map((entry) => entry.json).join(',')}${HAR_FOOTER}`;
+      await fs.promises.writeFile(tempPath, document, {
         mode: 0o600,
         flag: 'wx',
       });
       await fs.promises.rename(tempPath, harPath);
     } catch (error) {
-      hooks.onWriteError(error);
       await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
+      if (required) throw error;
+      hooks.onWriteError(error);
     }
   };
-  const flush = async (): Promise<void> => {
+  const flush = async (required = false): Promise<void> => {
     clearTimeout(timer);
     timer = undefined;
     while (inFlight) await inFlight;
-    inFlight = write().finally(() => {
+    inFlight = write(required).finally(() => {
       inFlight = undefined;
     });
     await inFlight;
@@ -355,12 +362,15 @@ function createHarFile(
   return {
     flush,
     add(entry: unknown): void {
-      const serialized = JSON.stringify(entry);
-      entries.push(serialized);
-      bytes += serialized.length;
+      const json = JSON.stringify(entry);
+      const entryBytes = Buffer.byteLength(json);
+      entries.push({ json, bytes: entryBytes });
+      bytes += entryBytes + (entries.length > 1 ? 1 : 0);
       let dropped = 0;
-      while (bytes > HAR_MAX_BYTES && entries.length > 1) {
-        bytes -= entries.shift()?.length ?? 0;
+      // An entry that cannot fit even alone leaves too.
+      while (bytes > HAR_MAX_BYTES && entries.length > 0) {
+        const oldest = entries.shift();
+        bytes -= (oldest?.bytes ?? 0) + (entries.length > 0 ? 1 : 0);
         dropped += 1;
       }
       if (dropped > 0) hooks.onDropped(dropped);
