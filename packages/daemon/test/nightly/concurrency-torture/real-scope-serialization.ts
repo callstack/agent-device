@@ -28,6 +28,10 @@ import { SessionStore } from '../../../src/core/session-store.ts';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 
 import { DEVICE_POOL } from './bindings.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../../src/__tests__/support/unavailable-device-runtime-gateway.ts';
 
 function openRequest(sessionName: string, deviceId: string): DaemonWireRequest {
   return {
@@ -73,6 +77,8 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
               host: createTestHostEnvironment(),
               platformServices: daemonPlatformServicesFixture(),
               claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+              deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+              platformRequestScope: platformRequestScopeFixture(),
               req: openRequest(`real-${i}`, device.id),
               sessionStore,
               leaseRegistry,

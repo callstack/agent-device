@@ -15,6 +15,10 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { readOpenWaitAttempt } from '../../sessions/open-device-contention-wait.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 // Everything `open --wait <ms>` is for sits between two facts. A waiting open must not hold the
 // device execution lock, because `close` — the thing that could free the device — needs that same
@@ -122,6 +126,8 @@ test('an open that lost the race to a free device re-waits and opens rather than
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: openRequest('first-opener'),
     sessionStore,
     leaseRegistry,
@@ -130,6 +136,8 @@ test('an open that lost the race to a free device re-waits and opens rather than
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: openRequest('second-opener'),
     sessionStore,
     leaseRegistry,
@@ -165,6 +173,8 @@ test('a close that frees the device mid-wait gets through while the open is wait
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: openRequest('waiter'),
     sessionStore,
     leaseRegistry,
@@ -180,6 +190,8 @@ test('a close that frees the device mid-wait gets through while the open is wait
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: closeRequest('holder'),
     sessionStore,
     leaseRegistry,
@@ -214,6 +226,8 @@ test('an out-of-range wait budget is refused before resolving the target device'
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: openRequest('unbounded-opener', max + 1, 'request-unbounded'),
       sessionStore: makeSessionStore('agent-device-open-wait-bounds-'),
       leaseRegistry: new LeaseRegistry(),

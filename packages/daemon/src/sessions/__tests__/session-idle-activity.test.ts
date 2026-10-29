@@ -31,6 +31,10 @@ import {
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-session-idle-activity-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -62,6 +66,8 @@ test('a command that completes under the session lock stamps the session it ran 
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -92,6 +98,8 @@ test('ordinary failed lease admission retains the session activity stamp', async
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ command: 'home', meta: { leaseId: 'foreign-lease' } }),
       sessionStore,
       leaseRegistry,
@@ -111,6 +119,8 @@ test('a lock-exempt inventory command reports no activity, even against a claim-
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ command: 'devices' }),
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -134,6 +144,8 @@ test('a command whose client hung up mid-flight preserves no activity', async ()
         host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+        deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+        platformRequestScope: platformRequestScopeFixture(),
         req: makeRequest({ command: 'snapshot', meta: { requestId } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -164,6 +176,8 @@ test('a command still running when the expiry arrives blocks it until the stamp 
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry,
@@ -217,6 +231,8 @@ test('the reaper never observes a mid-command session through the shared map', a
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry,

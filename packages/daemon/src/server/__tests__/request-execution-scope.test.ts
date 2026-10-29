@@ -28,6 +28,10 @@ import {
 } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/internal/session-close.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 bindTestCommandHost();
 
@@ -898,7 +902,11 @@ test('router: an existing lease-less session under tenant isolation still refuse
 function createTestRequestScope(
   params: Omit<
     Parameters<typeof createRequestExecutionScope>[0],
-    'platformServices' | 'claimRecoveryGateway' | 'host'
+    | 'platformServices'
+    | 'claimRecoveryGateway'
+    | 'deviceRuntimeGateway'
+    | 'platformRequestScope'
+    | 'host'
   > &
     Partial<Pick<Parameters<typeof createRequestExecutionScope>[0], 'host'>>,
 ) {
@@ -907,6 +915,8 @@ function createTestRequestScope(
     ...params,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
   });
 }
 

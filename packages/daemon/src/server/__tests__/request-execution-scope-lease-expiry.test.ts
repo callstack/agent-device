@@ -13,6 +13,10 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 bindTestCommandHost();
 
@@ -58,6 +62,8 @@ test('expired leases remove owned sessions before the next command and free capa
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -114,6 +120,8 @@ test.each(['rebuild', 'retire'] as const)(
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: makeRequest({ session: address, flags: { session: address } }),
       sessionStore: store,
       leaseRegistry: leases,

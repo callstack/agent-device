@@ -14,6 +14,10 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 
 import { refreshRecordingHealth } from '../request-recording-health.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 // The observation spy hangs off the port, not the platform module behind it
 // (ADR 0019 section 11): the fixture's appleSessionObservation member is replaced wholesale.
@@ -208,6 +212,8 @@ test.each(['rebuild', 'retire'] as const)(
       // the fixture whose observation member is the test's spy.
       platformServices,
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
     });
     const prepared = scope.runLocked(() =>
       prepareLockedRequestScope({

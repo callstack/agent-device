@@ -10,6 +10,10 @@ import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
@@ -45,6 +49,8 @@ async function runScoped(params: {
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: { token: 't', session: 'default', positionals: [], ...params.req },
     sessionStore: params.sessionStore,
     leaseRegistry: params.leaseRegistry,
@@ -129,6 +135,8 @@ test('a request under a pid-pinned macos-app lease does not run once that proces
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: { token: 't', session: 'default', command: 'snapshot', positionals: [], flags: {} },
     sessionStore,
     leaseRegistry,

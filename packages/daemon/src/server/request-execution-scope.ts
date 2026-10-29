@@ -162,14 +162,6 @@ const requestScopeFinalizers = new WeakMap<
   (response: DaemonResponse) => DaemonResponse
 >();
 
-const gatewayMissing = async (): Promise<never> => {
-  throw new AppError(
-    'COMMAND_FAILED',
-    'Device runtime gateway is not configured for this request scope',
-    { reason: 'runtime-gateway-missing' },
-  );
-};
-
 export type RequestExecutionScope = AsyncDisposable & {
   /** The environment and working directory of the daemon serving this request. */
   host: HostEnvironment;
@@ -226,10 +218,10 @@ export async function createRequestExecutionScope(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
-  deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
-  platformRequestScope?: PlatformRequestScope;
+  platformRequestScope: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
   daemonPolicy?: DaemonPolicy;
@@ -333,9 +325,9 @@ export async function createRequestExecutionScope(params: {
     const disposeBindings = (): Promise<void> => {
       bindingCleanup ??= (async () => {
         try {
-          await runtimeBindings?.[Symbol.asyncDispose]();
+          await runtimeBindings[Symbol.asyncDispose]();
         } finally {
-          await claimAdmission?.[Symbol.asyncDispose]();
+          await claimAdmission[Symbol.asyncDispose]();
         }
       })();
       return bindingCleanup;
@@ -360,9 +352,9 @@ export async function createRequestExecutionScope(params: {
       startedAtMs,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
-      bindDevice: runtimeBindings?.bindDevice ?? gatewayMissing,
-      inspectFacts: runtimeBindings?.inspectFacts ?? gatewayMissing,
-      bindExactDevice: runtimeBindings?.bindExactDevice ?? gatewayMissing,
+      bindDevice: runtimeBindings.bindDevice,
+      inspectFacts: runtimeBindings.inspectFacts,
+      bindExactDevice: runtimeBindings.bindExactDevice,
       platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
@@ -554,18 +546,15 @@ function createRequestDeviceAccess(params: {
   workspace: string;
   callerCwd: string | undefined;
   stateDir: string;
-  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
-  platformRequestScope: PlatformRequestScope | undefined;
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  platformRequestScope: PlatformRequestScope;
   daemonPolicy: DaemonPolicy | undefined;
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
 }): {
-  claimAdmission: DeviceClaimAdmission | undefined;
-  runtimeBindings: RequestRuntimeBindings | undefined;
+  claimAdmission: DeviceClaimAdmission;
+  runtimeBindings: RequestRuntimeBindings;
 } {
   const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
-  if (!deviceRuntimeGateway || !platformRequestScope) {
-    return { claimAdmission: undefined, runtimeBindings: undefined };
-  }
   const claimAdmission = createDeviceClaimAdmission({
     policy: resolveCommandDeviceClaimPolicy(params.command),
     command: params.command,

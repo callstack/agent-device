@@ -7,6 +7,10 @@ import {
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 test('createRequestExecutionScope exposes the host of the daemon serving the request', async () => {
   const host = createTestHostEnvironment({
@@ -20,6 +24,8 @@ test('createRequestExecutionScope exposes the host of the daemon serving the req
     leaseRegistry: new LeaseRegistry(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
   });
 
   expect(scope.host).toBe(host);

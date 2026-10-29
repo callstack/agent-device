@@ -14,6 +14,10 @@ import {
   createControlLatch,
 } from '../../../__tests__/support/human-control-fixtures.ts';
 import { createHumanControlHarness } from '../../../__tests__/support/human-control-router-fixture.ts';
+import {
+  platformRequestScopeFixture,
+  unavailableDeviceRuntimeGateway,
+} from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 test('lease-owner takeover uses the production admission gate, preserves the session, and resumes after release', async () => {
   const { registry, lease, handleRequest, sessionStore, sessionName } = createHumanControlHarness();
@@ -39,6 +43,8 @@ test('lease-owner takeover uses the production admission gate, preserves the ses
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: humanControlRequest(lease, 'click', []),
     sessionStore,
     leaseRegistry: registry,
@@ -97,6 +103,8 @@ test('a fresh-session mutation without an advisory device lock still drains befo
     leaseRegistry: registry,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
   });
   const started = createControlLatch();
   const finish = createControlLatch();
@@ -117,6 +125,8 @@ test('a fresh-session mutation without an advisory device lock still drains befo
     host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
     req: { ...req, session: 'another-fresh-session' },
     sessionStore,
     leaseRegistry: registry,
@@ -141,6 +151,8 @@ test('a nested mutation is stopped when takeover begins during its parent reques
     leaseRegistry: registry,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: platformRequestScopeFixture(),
   });
   let activation: Promise<unknown> | undefined;
   await scope.runLocked(async () => {
@@ -151,6 +163,8 @@ test('a nested mutation is stopped when takeover begins during its parent reques
       host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+      deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+      platformRequestScope: platformRequestScopeFixture(),
       req: humanControlRequest(lease, 'click', []),
       sessionStore,
       leaseRegistry: registry,
