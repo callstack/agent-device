@@ -144,3 +144,15 @@ test('shared admission cannot hide an additional inspection behind an alias', ()
     'shared runtime admission must call requireFactsInspection directly without aliasing it',
   ]);
 });
+
+test('a capability bucket in a descriptor family module is rejected', () => {
+  assert.deepEqual(
+    messages([
+      [
+        'packages/command-registry/src/descriptors/local-cli.ts',
+        `const descriptor = { name: 'focus', capability: { apple: {} } };`,
+      ],
+    ]),
+    ['command descriptors may not restore capability-bucket admission'],
+  );
+});

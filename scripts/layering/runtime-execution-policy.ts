@@ -20,6 +20,7 @@ type AstNode = Record<string, unknown>;
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
 const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
+const COMMAND_DESCRIPTOR_FAMILY_DIR = 'packages/command-registry/src/descriptors/';
 const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/core/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
@@ -31,7 +32,7 @@ export function runtimeExecutionIntegrityViolations(
   for (const [file, source] of sources) {
     const program = parseSync(file, source).program as AstNode;
     visitAst(program, (node) => {
-      if (file === COMMAND_DESCRIPTOR_MODULE && isCapabilityDeclaration(node)) {
+      if (isCommandDescriptorSource(file) && isCapabilityDeclaration(node)) {
         violations.push(
           at(file, source, node, 'command descriptors may not restore capability-bucket admission'),
         );
@@ -66,6 +67,10 @@ export function runtimeExecutionIntegrityViolations(
   }
   violations.push(...sharedAdmissionViolations(sources));
   return violations;
+}
+
+function isCommandDescriptorSource(file: string): boolean {
+  return file === COMMAND_DESCRIPTOR_MODULE || file.startsWith(COMMAND_DESCRIPTOR_FAMILY_DIR);
 }
 
 function isCapabilityDeclaration(node: AstNode): boolean {
