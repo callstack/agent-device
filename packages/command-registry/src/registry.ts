@@ -1,11 +1,8 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { CommandFlags, DispatchedCommand } from '@agent-device/contracts/command';
-import type {
-  RuntimeUseStep,
-  RuntimeUseStepSelector,
-} from '@agent-device/contracts/command-platform-execution';
-import { checkFindArgs, isReadOnlyFindAction, type FindAction } from '@agent-device/selectors';
+import type { RuntimeUseStepSelector } from '@agent-device/contracts/command-platform-execution';
+import { checkFindArgs, isReadOnlyFindAction } from '@agent-device/selectors';
 import { resolveWaitBudgetMs } from './wait-positionals.ts';
 import {
   keyboardRefFrameEffect,
@@ -213,23 +210,20 @@ export const selectSnapshotStepUses: RuntimeUseStepSelector = (step) => {
  * (fail closed), including a step whose positionals are not there to parse.
  */
 export const selectFindStepUses: RuntimeUseStepSelector = (step) => {
-  const action = findStepAction(step);
-  if (action === undefined || !plansOwnLeg(action)) return findRuntimePlanUses;
+  const checked =
+    step.positionals === undefined ? undefined : checkFindArgs(step.positionals, step.flags);
+  const action = checked?.ok ? checked.parsed.action : undefined;
+  if (
+    action === undefined ||
+    !(isReadOnlyFindAction(action) || action === 'focus' || action === 'type')
+  ) {
+    return findRuntimePlanUses;
+  }
   const intent = findRuntimeIntent(action);
   return [true, false].map(
     (hasActiveApp) => resolveSelectorCaptureRuntimePlan({ hasActiveApp, intent }).use,
   );
 };
-
-function plansOwnLeg(action: FindAction['kind']): boolean {
-  return isReadOnlyFindAction(action) || action === 'focus' || action === 'type';
-}
-
-function findStepAction(step: RuntimeUseStep): FindAction['kind'] | undefined {
-  if (step.positionals === undefined) return undefined;
-  const checked = checkFindArgs(step.positionals, step.flags);
-  return checked.ok ? checked.parsed.action : undefined;
-}
 
 export const RAW_COMMAND_DESCRIPTORS = [
   {
