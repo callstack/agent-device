@@ -51,8 +51,8 @@ test('macOS coverage classification summary is the rollup of the manifest declar
 });
 
 // The scenario sources name which commands macOS scenarios invoke, independent of what the manifest
-// labels them. This is a source-text reading: a command in a skipped or commented-out step still
-// matches, so it checks declaration integrity, not execution. Provider scenarios name commands whose
+// labels them. Provider source scans match skipped or commented-out calls; replay scans exclude
+// `#` comments. This checks declaration integrity, not execution. Provider scenarios name commands whose
 // live claim is attributed to the replay scenario, so this closes the platform's live bucket rather
 // than each scenario's partition of it.
 test('macOS live declarations equal the commands named in live scenario sources', () => {
