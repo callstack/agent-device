@@ -24,7 +24,7 @@ export async function stopSessionAppLog(params: {
   await forceCleanupSessionAppLog({ ...params, ref });
 }
 
-export async function stopSessionPerfCapture(params: {
+async function stopSessionPerfCapture(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
@@ -32,7 +32,7 @@ export async function stopSessionPerfCapture(params: {
   if (binding.read()) await finishLivePerfCapture({ binding, intent: 'disposal' });
 }
 
-export async function stopSessionSnapshotHelper(
+async function stopSessionSnapshotHelper(
   session: SessionState,
   platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
@@ -192,7 +192,7 @@ export async function teardownSessionResources(
   if (aggregate) throw aggregate;
 }
 
-export async function finishSessionScreenRecording(params: {
+async function finishSessionScreenRecording(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
@@ -204,7 +204,7 @@ export async function finishSessionScreenRecording(params: {
   retainLeasedSessionRecording(params.ref, completion);
 }
 
-export async function finishSessionAudioProbe(params: {
+async function finishSessionAudioProbe(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
