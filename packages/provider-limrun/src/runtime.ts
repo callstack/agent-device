@@ -56,7 +56,7 @@ import type {
   CloudArtifactsQuery,
   CloudArtifactsResult,
 } from '@agent-device/contracts/observability';
-import type { LimrunHarCapture } from './network-har.ts';
+import type { LimrunHarCapture, LimrunTunnelFailureReport } from './network-har.ts';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -123,10 +123,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly keepAliveTimers = new Map<string, NodeJS.Timeout>();
   /** Live `--provider-network-logs` captures, and the HAR path each released session left behind. */
   private readonly networkCaptures = new Map<string, LimrunHarCapture>();
-  private readonly releasedNetworkHarPaths = new Map<
-    string,
-    Readonly<{ harPath: string; instanceId?: string }>
-  >();
+  private readonly releasedNetworkCaptures = new Map<string, ReleasedNetworkCapture>();
   private readonly appAliases = new Map<
     string,
     Readonly<{ assetName: string; installedAppId: string }>
@@ -378,16 +375,15 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
     const session = this.sessions.get(lease.leaseId);
     if (!session) return await this.releaseRecoveredSession(lease);
-    const networkHar = await this.stopNetworkCapture(lease.leaseId);
+    const networkHar = await this.stopNetworkCapture(lease.leaseId, session.instanceId);
     await this.terminateSession(session);
     this.sessions.delete(lease.leaseId);
     this.appAliases.delete(lease.leaseId);
     return {
       limrunInstanceId: session.instanceId,
       providerSessionId: session.instanceId,
-      ...(networkHar ? { networkHar } : {}),
       ...(networkHar
-        ? { cloudArtifacts: harArtifacts(session.instanceId, networkHar.harPath) }
+        ? { networkHar: { harPath: networkHar.harPath }, cloudArtifacts: harArtifacts(networkHar) }
         : {}),
     };
   }
@@ -420,16 +416,17 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   private async stopNetworkCapture(
     leaseId: string,
-  ): Promise<Readonly<{ harPath: string }> | undefined> {
+    instanceId: string,
+  ): Promise<ReleasedNetworkCapture | undefined> {
     const capture = this.networkCaptures.get(leaseId);
     if (!capture) return undefined;
     this.networkCaptures.delete(leaseId);
+    // Read the tunnel's last dial failure while the tunnel is still open.
+    const failures = await capture.failures();
     capture.close();
-    this.releasedNetworkHarPaths.set(leaseId, {
-      harPath: capture.harPath,
-      instanceId: this.sessions.get(leaseId)?.instanceId,
-    });
-    return { harPath: capture.harPath };
+    const released = { harPath: capture.harPath, instanceId, failures };
+    this.releasedNetworkCaptures.set(leaseId, released);
+    return released;
   }
 
   readonly cloudArtifacts: CloudArtifactProvider = {
@@ -439,11 +436,14 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       if (!query.leaseId) return undefined;
       const capture = this.networkCaptures.get(query.leaseId);
       if (capture) {
-        return harArtifacts(this.sessions.get(query.leaseId)?.instanceId, capture.harPath);
+        return harArtifacts({
+          harPath: capture.harPath,
+          instanceId: this.sessions.get(query.leaseId)?.instanceId,
+          failures: await capture.failures(),
+        });
       }
-      const released = this.releasedNetworkHarPaths.get(query.leaseId);
-      if (released) return harArtifacts(released.instanceId, released.harPath);
-      return undefined;
+      const released = this.releasedNetworkCaptures.get(query.leaseId);
+      return released ? harArtifacts(released) : undefined;
     },
   };
 
@@ -650,14 +650,23 @@ function readProviderNetworkHosts(value: unknown): readonly string[] | undefined
   return hosts.length > 0 ? hosts : undefined;
 }
 
-/** One finished HAR file, stated as a provider artifact whose `url` is its path on this host. */ function harArtifacts(
-  providerSessionId: string | undefined,
-  harPath: string,
-): CloudArtifactsResult {
+type ReleasedNetworkCapture = Readonly<{
+  harPath: string;
+  instanceId?: string;
+  failures: LimrunTunnelFailureReport;
+}>;
+
+/**
+ * One HAR file, stated as a provider artifact whose `url` is its path on this host. The tunnel
+ * failure report rides the artifact's metadata, and its summary is the result's message.
+ */
+function harArtifacts(capture: ReleasedNetworkCapture): CloudArtifactsResult {
+  const { harPath, instanceId, failures } = capture;
   return {
     provider: LIMRUN_PROVIDER,
     status: 'ready',
-    ...(providerSessionId ? { providerSessionId } : {}),
+    ...(instanceId ? { providerSessionId: instanceId } : {}),
+    ...(failures.total > 0 ? { message: summarizeTunnelFailures(failures) } : {}),
     cloudArtifacts: [
       {
         provider: LIMRUN_PROVIDER,
@@ -667,7 +676,22 @@ function readProviderNetworkHosts(value: unknown): readonly string[] | undefined
         extension: 'har',
         contentType: 'application/json',
         availability: 'ready',
+        metadata: { tunnelFailures: failures },
       },
     ],
   };
+}
+
+function summarizeTunnelFailures(failures: LimrunTunnelFailureReport): string {
+  const kinds = Object.entries(failures.byKind).map(([kind, entry]) => {
+    const failure = entry.latest.at(-1);
+    const endpoint = failure?.host
+      ? ` ${failure.host}${failure.port ? `:${failure.port}` : ''}`
+      : '';
+    return `${kind} ${entry.count}, latest${endpoint} (${failure?.message})`;
+  });
+  const dial = failures.lastDialFailure
+    ? [`last dial failure ${failures.lastDialFailure.reason}`]
+    : [];
+  return `Network capture failures: ${failures.total}; ${[...kinds, ...dial].join('; ')}`;
 }

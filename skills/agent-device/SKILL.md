@@ -21,4 +21,4 @@ Copy refs byte-for-byte: `@e12`, `@e12~s4` — keep the `@` and any `~sN`. Prefe
 
 Error output includes corrective hints; follow them instead of re-planning. Only when the task is specialized (for example gestures, scripting, TV, macOS, remote, or debugging) or a command shape is unclear, run `agent-device help <topic>`. `agent-device --help` lists topics, but is not a startup step.
 
-To debug network traffic on a remote Limrun session, connect with `--provider-network-logs`, open the app after connecting, then read the printed HAR artifact with `jq`. Certificate-pinned hosts fail and DNS-over-HTTPS bypasses the capture.
+To debug network traffic on a remote Limrun session, connect with `--provider-network-logs --provider-network-hosts <app API hosts>`, open the app after connecting, then read the HAR path that `artifacts` prints with `jq`. If requests fail or hang, read the failure summary that `artifacts` prints.

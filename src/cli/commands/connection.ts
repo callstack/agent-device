@@ -390,6 +390,7 @@ function renderDisconnectOutput(
     `Disconnected remote session "${session}".`,
     ...formatProviderReleaseWarnings(providerData),
     ...formatReadyArtifactLinks(providerData?.cloudArtifacts?.cloudArtifacts),
+    ...(providerData?.cloudArtifacts?.message ? [providerData.cloudArtifacts.message] : []),
   ].join('\n');
 }
 

@@ -179,6 +179,34 @@ describe('artifactsCliOutput', () => {
     });
   });
 
+  test('prints the provider message after ready artifacts', () => {
+    const output = managementCliOutputFormatters.artifacts({
+      env: process.env,
+      input: {},
+      result: {
+        provider: 'limrun',
+        status: 'ready',
+        message: 'Network capture failures: 1 (request-failed 1).',
+        cloudArtifacts: [
+          {
+            provider: 'limrun',
+            kind: 'network',
+            name: 'Network traffic',
+            url: '/tmp/state/network-har/i1.har',
+            availability: 'ready',
+          },
+        ],
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'network: Network traffic ready /tmp/state/network-har/i1.har',
+        'Network capture failures: 1 (request-failed 1).',
+      ].join('\n'),
+    );
+  });
+
   test('prints exact retry command for pending provider sessions', () => {
     const output = managementCliOutputFormatters.artifacts({
       env: process.env,

@@ -309,7 +309,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--provider-network-logs',
     usageDescription:
-      'Limrun: capture session network traffic through the provider tunnel and write it as a live HAR file under the session artifacts; print the path at disconnect. Certificate-pinned hosts fail and DNS-over-HTTPS bypasses the capture',
+      'Limrun: capture session network traffic into a live HAR file on this host; artifacts and close print its path and any tunnel failures. Captured traffic exits through this host, the HAR holds raw headers and bodies, certificate-pinned hosts fail, and DNS-over-HTTPS bypasses the capture',
     projectConfig: false,
     recorded: false,
   },
@@ -319,7 +319,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-network-hosts <list>',
     usageDescription:
-      'With --provider-network-logs: comma-separated tunnel selectors (exact hosts, wildcards like api.example.com or *.example.com, or localhost:<port> routes) that replace the default public-domain capture',
+      'With --provider-network-logs: comma-separated hosts to capture, such as your app API hosts (exact hosts, wildcards like *.example.com, or localhost:<port> routes). Replaces the noisy default of common public domains plus localhost:8081',
     projectConfig: false,
     recorded: false,
   },

@@ -144,7 +144,10 @@ function artifactsCliOutput(result: AgentArtifactsResult): CliOutput {
     data: result,
     text:
       result.cloudArtifacts.length > 0
-        ? result.cloudArtifacts.map(formatCloudArtifactLine).join('\n')
+        ? [
+            ...result.cloudArtifacts.map(formatCloudArtifactLine),
+            ...(result.message ? [result.message] : []),
+          ].join('\n')
         : emptyText.join('\n'),
   };
 }

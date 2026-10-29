@@ -170,12 +170,10 @@ function serializeOpenSessionPaths(result: AppOpenResult): Record<string, string
 export function serializeCloseResult(
   result: SessionCloseResult | AppCloseResult,
 ): Record<string, unknown> {
-  const artifacts =
-    'provider' in result
-      ? (result.provider?.cloudArtifacts?.cloudArtifacts ?? []).filter(
-          (artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url,
-        )
-      : [];
+  const cloudArtifacts = 'provider' in result ? result.provider?.cloudArtifacts : undefined;
+  const artifacts = (cloudArtifacts?.cloudArtifacts ?? []).filter(
+    (artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url,
+  );
   return {
     session: result.session,
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
@@ -184,6 +182,7 @@ export function serializeCloseResult(
       [
         result.session ? `Closed: ${result.session}` : 'Closed',
         ...artifacts.slice(0, 3).map((artifact) => `${artifact.name}: ${artifact.url}`),
+        ...(cloudArtifacts?.message ? [cloudArtifacts.message] : []),
       ].join('\n'),
     ),
   };
