@@ -149,6 +149,12 @@ test('a capability bucket in a descriptor family module is rejected', () => {
   assert.deepEqual(
     messages([
       [
+        ADMISSION,
+        admission(
+          'requireFactsInspection(request.inspectFacts); requireDeviceBinding(request.bindDevice);',
+        ),
+      ],
+      [
         'packages/command-registry/src/descriptors/local-cli.ts',
         `const descriptor = { name: 'focus', capability: { apple: {} } };`,
       ],
@@ -160,6 +166,12 @@ test('a capability bucket in a descriptor family module is rejected', () => {
 test('a conditional capability bucket in shared descriptor traits is rejected', () => {
   assert.deepEqual(
     messages([
+      [
+        ADMISSION,
+        admission(
+          'requireFactsInspection(request.inspectFacts); requireDeviceBinding(request.bindDevice);',
+        ),
+      ],
       [
         'packages/command-registry/src/descriptor-traits.ts',
         `export const traits = { ...(enabled ? { capability: { apple: {} } } : {}) };`,
