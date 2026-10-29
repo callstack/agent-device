@@ -31,6 +31,7 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
+import { assertBundledLicenseNotices } from './size-report-package.mjs';
 import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
@@ -102,7 +103,8 @@ function packTarball(): { tarball: string; packedPaths: string[] } {
       ['pack', '--ignore-scripts', '--json', '--pack-destination', packDestination],
       repoRoot,
     ),
-  ) as [{ filename: string; files: { path: string }[] }];
+  ) as [{ filename: string; files: { path: string; size: number }[] }];
+  assertBundledLicenseNotices(packed[0].files);
   return {
     tarball: path.join(packDestination, packed[0].filename),
     packedPaths: packed[0].files.map((file) => file.path),

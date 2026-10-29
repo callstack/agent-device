@@ -2,6 +2,10 @@
   "unpackedSize": 2319,
   "files": [
     {
+      "path": "dist/src/THIRD_PARTY_NOTICES.txt",
+      "size": 100
+    },
+    {
       "path": "dist/src/index.js",
       "size": 401
     },

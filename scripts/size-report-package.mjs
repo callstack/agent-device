@@ -65,7 +65,16 @@ export function collectNpmPack(root) {
   };
 }
 
+export function assertBundledLicenseNotices(entries) {
+  if (
+    !entries.some((entry) => entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt' && entry.size > 0)
+  ) {
+    throw new Error('npm pack is missing non-empty dist/src/THIRD_PARTY_NOTICES.txt');
+  }
+}
+
 export function assertPublishPackageContents(entries, options = {}) {
+  assertBundledLicenseNotices(entries);
   const paths = entries.map((entry) => entry.path);
   const requiredAssets = [
     { directory: 'android/snapshot-helper/dist/', suffix: '.apk' },
