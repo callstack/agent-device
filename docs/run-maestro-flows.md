@@ -4,7 +4,7 @@
 
 - Only the commands and fields in [Supported subset](#supported-subset) run. Anything else fails with source context instead of being skipped.
 - Flows run on iOS and Android only.
-- `runScript`, `evalScript`, and JavaScript conditions execute flow code on the machine running the agent-device daemon, without a security sandbox. Run only flows you trust to run there.
+- `runScript`, `evalScript`, and JavaScript conditions execute flow code on the machine running the agent-device daemon, without a security sandbox. Remote flows refuse these scripts. Run them only in trusted local flows.
 
 For recording and replaying native `.ad` scripts, see [Replay and E2E testing](/docs/replay-e2e).
 
@@ -33,7 +33,7 @@ Keep the target binding, such as `--platform ios`, on the `replay` or `test` com
 - Expressions: `evalScript` and condition `true:` fields (`runFlow.when` and `repeat.while` share one evaluator) are evaluated as JavaScript (flow `env` and prior `output` leaves are string-typed); a `true:` field that is a boolean, a `maestro.platform` comparison, or plain literal text after `${VAR}` lookups is decided without JavaScript, with the `assertTrue` falsy table for literal text. Other fields stay literal or `${VAR}` lookup-only — `assertTrue` supports literals and bare lookups, and other expression-shaped payloads fail loud.
 - Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
 - Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
-- Trust: `runScript`, `evalScript`, and JavaScript condition `true:` fields execute flow scripts in-process via `node:vm`, which is not a security sandbox; `runScript` may make `http.post` network requests and its output keys cannot contain a dot. `evalScript` and `true:` fields that need JavaScript are refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.
+- Trust: `runScript`, `evalScript`, and JavaScript condition `true:` fields execute flow scripts in-process via `node:vm`, which is not a security sandbox; `runScript` may make `http.post` network requests and its output keys cannot contain a dot. Remote flows refuse `runScript` before reading its file, including files supplied in the replay bundle, and refuse `evalScript` and `true:` fields that need JavaScript. Run these scripts only in trusted local flows. Local `runScript` paths refer to the daemon filesystem: relative paths resolve from the containing flow, and absolute paths and symlinks are allowed.
 - Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
 - Session takeover: `--keep-session` is a native `.ad` replay option and is rejected for Maestro YAML.
 
