@@ -17,7 +17,8 @@ This decision adds no default behavior or cross-family default denial set.
 Lifecycle retains separate authority.
 `platform-runtime-unavailable.ts` does not assign lifecycle semantics.
 No generator or vocabulary move is introduced.
-[ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) still governs any future eager-closure change.
+[ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) governs statement-neutral descriptor-root hub splits.
+[ADR 0019](0019-request-bound-platform-runtime.md) and the owning decisions retain the platform-loading constraints.
 
 ## Decision and reason
 
