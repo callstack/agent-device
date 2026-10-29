@@ -455,20 +455,27 @@ test('unit and coverage checks preserve their package-script owners', () => {
 
 test('vitest-related delegates changed paths to Vitest instead of modeling projects', () => {
   const related = CHECK_CATALOG.find((entry) => entry.id === 'vitest-related')!;
-  assert.deepEqual(resolveCommand(related, {}, 'origin/main', ['src/a.ts', 'test/fixture.ts']), [
-    'pnpm',
-    'exec',
-    'vitest',
-    'related',
-    '--run',
-    '--passWithNoTests',
-    'src/a.ts',
-    'test/fixture.ts',
-  ]);
+  assert.deepEqual(
+    resolveCommand(related, {}, 'origin/main', {
+      changedFiles: ['src/a.ts', 'test/fixture.ts'],
+      unitSuiteRuns: false,
+    }),
+    [
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
+      'src/a.ts',
+      'test/fixture.ts',
+    ],
+  );
   assert.equal(
-    resolveCommand(related, {}, 'origin/main', ['src/a.ts']).some((arg) =>
-      arg.startsWith('--maxWorkers='),
-    ),
+    resolveCommand(related, {}, 'origin/main', {
+      changedFiles: ['src/a.ts'],
+      unitSuiteRuns: true,
+    }).some((arg) => arg.startsWith('--maxWorkers=')),
     false,
     'worker sizing belongs to vitest.config.ts',
   );

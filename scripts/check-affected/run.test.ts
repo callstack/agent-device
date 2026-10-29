@@ -145,23 +145,42 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
   );
 });
 
-test('runChecks passes the selector change set to Vitest related', async () => {
+async function runPassing(changedFiles: string[]): Promise<string[][]> {
   const executed: string[][] = [];
-  const execute: CommandExecutor = async (command) => {
-    executed.push(command);
-    return 0;
-  };
-  const changedFiles = ['packages/selectors/src/index.ts', 'packages/selectors/src/index.test.ts'];
   const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
+  assert.equal(plan.failOpen, false, changedFiles.join(', '));
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
-    execute,
+    execute: async (command) => {
+      executed.push(command);
+      return 0;
+    },
     cwd: '.',
     changedFiles,
   });
   assert.equal(code, 0);
+  return executed;
+}
+
+const RELATED = ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests'];
+
+// check:unit runs every unit-core and fuzz-worker test, so the related run must not repeat them.
+test('a production source change leaves the unit projects to the unit suite it runs', async () => {
+  const changedFiles = ['packages/selectors/src/index.ts', 'packages/selectors/src/index.test.ts'];
+  const executed = await runPassing(changedFiles);
+  assert.ok(executed.some((command) => command.includes('check:unit')));
   assert.deepEqual(
     executed.find((command) => command.includes('related')),
-    ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles],
+    [...RELATED, '--project=!unit-core', '--project=!fuzz-worker', ...changedFiles],
+  );
+});
+
+test('a test-only change keeps the unit projects in the related run', async () => {
+  const changedFiles = ['packages/daemon/src/selectors.test.ts'];
+  const executed = await runPassing(changedFiles);
+  assert.ok(!executed.some((command) => command.includes('check:unit')));
+  assert.deepEqual(
+    executed.find((command) => command.includes('related')),
+    [...RELATED, ...changedFiles],
   );
 });
 
@@ -196,6 +215,10 @@ test('runChecks skips CI checks, runs every local check of a fail-open plan, and
   }
   const related = executed.filter((command) => command.includes('related'));
   assert.equal(related.length, 1);
+  assert.ok(
+    !related[0]?.some((arg) => arg.startsWith('--project')),
+    'a fail-open related run keeps every Vitest project',
+  );
   assert.ok(
     !related[0]?.includes('--coverage'),
     'coverage instrumentation stays GitHub-authoritative; the local run must not add it',

@@ -151,7 +151,7 @@
     "native-dupes:report": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --fail-on-empty",
     "native-dupes:baseline": "jscpd --config .jscpd-native.json --baseline native-dupes-baseline.json --update-baseline --fail-on-empty",
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
-    "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/*.test.ts",
+    "check:affected:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-affected/*.test.ts scripts/lib/vitest-projects.test.ts",
     "gate": "node --experimental-strip-types scripts/gate/run.ts",
     "check:gate-manifest": "node --experimental-strip-types scripts/gate/check.ts",
     "check:gate-manifest:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/gate/*.test.ts",

@@ -9,6 +9,7 @@
 // workflows by scripts/gate/model.ts, so the "GitHub-authoritative" claim an
 // agent reads before skipping a check locally cannot go stale.
 
+import { UNIT_TEST_PROJECTS } from '../lib/vitest-projects.ts';
 import { ALL_CHECKS, type CheckId } from './model.ts';
 
 export type CheckKind =
@@ -205,6 +206,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('replay-android', 'Android replay suite', 'test:replay:android', false),
 ];
 
+type RelatedRunScope = {
+  readonly changedFiles: readonly string[];
+  // The same run executes `unit`, which runs every test of UNIT_TEST_PROJECTS. The related run
+  // then leaves those projects out instead of running their tests twice.
+  readonly unitSuiteRuns: boolean;
+};
+
 export function getCheckSpec(id: CheckId): CheckSpec {
   const spec = CHECK_CATALOG.find((entry) => entry.id === id);
   if (!spec) throw new Error(`No catalog entry for check "${id}".`);
@@ -218,10 +226,17 @@ export function resolveCommand(
   spec: CheckSpec,
   scripts: Readonly<Record<string, string>>,
   base: string,
-  changedFiles: readonly string[] = [],
+  related: RelatedRunScope = { changedFiles: [], unitSuiteRuns: false },
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
-    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
+    const unitProjects = related.unitSuiteRuns
+      ? UNIT_TEST_PROJECTS.map((name) => `--project=!${name}`)
+      : [];
+    return [
+      ...['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests'],
+      ...unitProjects,
+      ...related.changedFiles,
+    ];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {

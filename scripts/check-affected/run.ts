@@ -213,6 +213,14 @@ export async function runChecks(
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   // A fail-open plan could not narrow the change, so no check may stand in for another.
   const relatedSelected = !plan.failOpen && plan.checks.includes('vitest-related');
+  const related = {
+    changedFiles: options.changedFiles ?? [],
+    unitSuiteRuns:
+      !plan.failOpen &&
+      runnable.some(
+        (spec) => spec.id === 'unit' && !isCoveredByRelatedTests(spec, relatedSelected),
+      ),
+  };
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
     const reason = describeOwner(spec.id, ciJobs);
@@ -224,7 +232,7 @@ export async function runChecks(
       options.skip?.(spec.id, 'covered by related tests', true);
       continue;
     }
-    const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles ?? []);
+    const command = resolveCommand(spec, pkg.scripts, args.base, related);
     const exitCode = await execute(command, cwd, spec.id);
     if (exitCode !== 0) {
       process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
