@@ -24,7 +24,7 @@ Amended by [ADR 0019](0019-request-bound-platform-runtime.md): device capability
 
 ### One declaration site
 
-Declare each command once as a `CommandDescriptor` in `packages/command-registry/src/registry.ts`. The root is synchronous: each derived view is a module-scope value, which keeps the literal-union and compile-time totality guarantees [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) relies on.
+Declare each command once as a `CommandDescriptor`, in `packages/command-registry/src/registry.ts` or in a family module under `packages/command-registry/src/descriptors/` that the root spreads in order. The root is synchronous: each derived view is a module-scope value, which keeps the literal-union and compile-time totality guarantees [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) relies on.
 
 The descriptor composes facets owned by their domains: catalog identity, command-family surface hooks, the `platformExecution` declaration, the `daemon` facet, `timeoutPolicy`, batch and MCP membership, `deviceClaimPolicy`, `postActionObservation`, response data transforms, and typed-result hooks. The public catalog, the batch allowlist, the MCP exposure list, the client timeout policy, and the daemon registry are pure projections of that set.
 

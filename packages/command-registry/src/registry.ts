@@ -26,11 +26,31 @@ import {
   COMPOSITE_TIMEOUT_POLICIES,
   DEFAULT_TIMEOUT_POLICY,
   FOLD_TIMEOUT_POLICY,
-  INSTALL_REQUEST_TIMEOUT_MS,
-  LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
-import { resolvePostActionObservationSupport } from './post-action-observation.ts';
+import {
+  ADMISSION_AND_LOCK_EXEMPT,
+  FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
+  GENERIC_MUTATING_COMMAND_TRAITS,
+  REQUEST_EXECUTION_EXEMPT,
+  TARGETED_TOUCH_INTERACTION_TRAITS,
+  TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
+  allowAnyDeviceSessionless,
+  isRecordingStartRequest,
+  isShardedTestRequest,
+  ownerFilesEnabled,
+  postActionObservation,
+  type RawCommandDescriptor,
+} from './descriptor-traits.ts';
+import {
+  INSTALL_TIMEOUT_POLICY,
+  LEASE_ALLOCATE_TIMEOUT_POLICY,
+  LEASE_TIMEOUT_POLICY,
+  PRESERVE_DAEMON_TIMEOUT_POLICY,
+  SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
+  postActionObservationTimeoutPolicy,
+} from './descriptor-timeout-policies.ts';
+import { LOCAL_CLI_COMMAND_DESCRIPTORS } from './descriptors/local-cli.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import {
   deployAppUse,
@@ -105,16 +125,6 @@ import type {
   TargetIdentityVerification,
 } from './types.ts';
 
-// `platformExecution` stays REQUIRED here (ADR 0019 §6): a raw descriptor that omits it
-// is a compile error, and {@link readDeclaredPlatformExecution} is the matching runtime gate.
-type RawCommandDescriptorShape<T> = T extends CommandDescriptor
-  ? Omit<T, 'mcpExposed'> & {
-      mcpExposed?: boolean;
-      ownerFiles?: readonly [string, ...string[]];
-    }
-  : never;
-type RawCommandDescriptor = RawCommandDescriptorShape<CommandDescriptor>;
-
 type RawCommandCatalogGroup<T> = T extends { catalog: { group: infer Group } } ? Group : never;
 
 type RawCommandCatalogKey<T> = T extends { catalog: { key: infer Key extends string } }
@@ -160,193 +170,6 @@ export type DescriptorSessionRouteCommandName =
       ? Name
       : never
     : never;
-
-// ---------------------------------------------------------------------------
-// Daemon request-policy trait bundles — shorthand composed into each
-// descriptor's `daemon` facet (ADR 0008, "Daemon ownership"). The daemon
-// registry derives its traits from those facets.
-// ---------------------------------------------------------------------------
-
-const ADMISSION_AND_LOCK_EXEMPT = {
-  leaseAdmissionExempt: true,
-  sessionExecutionLockExempt: true,
-} as const;
-
-const REQUEST_EXECUTION_EXEMPT = {
-  leaseAdmissionExempt: true,
-  sessionExecutionLockExempt: true,
-  selectorValidationExempt: true,
-} as const;
-
-const allowAnyDeviceSessionless = (): boolean => true;
-
-const isRecordingStartRequest = (req: DispatchedCommand): boolean =>
-  (req.positionals?.[0] ?? '').toLowerCase() === 'start';
-
-const isShardedTestRequest = (req: DispatchedCommand): boolean =>
-  req.command === 'test' &&
-  (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
-
-/**
- * The daemon/recording traits every generic-route mutating command shares. The legacy execution
- * pair it was split from (`dispatch`/`capability`) is gone: `scroll` was its last consumer, and
- * R53 migrated it, so every generic-route mutating command now spreads this alone.
- */
-const GENERIC_MUTATING_COMMAND_TRAITS = {
-  recordsSessionAction: true,
-  recordingEffect: 'mutates-app',
-  deviceClaimPolicy: 'require-owner',
-  daemon: {
-    route: 'generic',
-    refFrameEffect: 'may-invalidate',
-    androidBlockingDialogGuard: true,
-  },
-  timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-  batchable: true,
-  compositeResource: 'none',
-} as const satisfies Pick<
-  Extract<CommandDescriptor, { recordsSessionAction: true }>,
-  | 'recordsSessionAction'
-  | 'recordingEffect'
-  | 'deviceClaimPolicy'
-  | 'daemon'
-  | 'timeoutPolicy'
-  | 'batchable'
-  | 'compositeResource'
->;
-
-// click/fill/press/longpress differ only in their timeout budget and response
-// shaping: same owner file, same pre-dispatch target identity, same interaction
-// route and dialog guard, same device buckets, and the same session-bound claim
-// policy. Sharing that here is what keeps them from drifting apart one field at
-// a time.
-const TARGETED_TOUCH_INTERACTION_TRAITS = {
-  targetIdentityVerification: 'pre-dispatch',
-  catalog: { group: 'public' },
-  recordsSessionAction: true,
-  recordingEffect: 'mutates-app',
-  deviceClaimPolicy: 'require-owner',
-  daemon: {
-    route: 'interaction',
-    refFrameEffect: 'may-invalidate',
-    androidBlockingDialogGuard: true,
-  },
-} as const satisfies Pick<
-  Extract<CommandDescriptor, { recordsSessionAction: true }>,
-  | 'targetIdentityVerification'
-  | 'catalog'
-  | 'recordsSessionAction'
-  | 'recordingEffect'
-  | 'deviceClaimPolicy'
-  | 'daemon'
->;
-
-// ---------------------------------------------------------------------------
-// Timeout policies — descriptor-owned request-envelope budget source and
-// on-timeout daemon policy (ADR 0008). This replaces the two deleted client
-// hand lists (`isExplicitTimeoutCommand` in daemon-client.ts and
-// `DAEMON_PRESERVING_TIMEOUT_COMMANDS` in daemon-client-timeout.ts) plus the
-// per-command envelope branches of `resolveDaemonRequestTimeoutMs`.
-// ---------------------------------------------------------------------------
-
-// Read-only capture commands that can block in platform accessibility bridges
-// while the app is crashed or never idle share snapshot's failure mode. Keep the
-// daemon/session alive on their timeouts so callers can still collect
-// screenshot/perf/log evidence and close the session after the runner abort
-// path has been triggered — resetting the daemon here turned one timed-out wait
-// into a lost session for every session the daemon owned.
-const PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...DEFAULT_TIMEOUT_POLICY,
-  onTimeout: 'preserve-daemon',
-};
-
-// Installs run long device subprocesses; their envelope stays above the longest
-// platform install subprocess timeout (see INSTALL_REQUEST_TIMEOUT_MS).
-const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...DEFAULT_TIMEOUT_POLICY,
-  envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
-};
-
-// Lease-route commands act on billed cloud sessions the daemon owns; resetting
-// the daemon on a client timeout would SIGKILL it mid-create/mid-release and
-// orphan them all (#1774). Allocation also gets an envelope sized for remote
-// device allocation (see LEASE_ALLOCATION_BUDGET_MS).
-const LEASE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...DEFAULT_TIMEOUT_POLICY,
-  onTimeout: 'preserve-daemon',
-};
-const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...LEASE_TIMEOUT_POLICY,
-  envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
-};
-
-const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
-
-// Settle-capable interaction commands also resolve their target through the
-// same platform accessibility capture as snapshot/find (#1105): a hung capture
-// is their dominant timeout mode, so on top of the --settle flag-sourced
-// widening envelope above, keep the daemon (and sessions) alive on timeout too.
-const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...DEFAULT_TIMEOUT_POLICY,
-  // --settle (#1101) makes --timeout bound the SETTLE wait, not the whole
-  // request. Widen the envelope by the settle budget so selector/action
-  // overhead still has room before the post-action wait.
-  budget: {
-    source: 'flag',
-    envelope: 'widen',
-    defaultBudgetMs: DEFAULT_SETTLE_TIMEOUT_MS,
-  },
-  onTimeout: 'preserve-daemon',
-};
-
-const TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM = {
-  fields: {
-    count: { defaultValue: 1, omitDefault: true },
-    intervalMs: { defaultValue: 0, omitDefault: true },
-    holdMs: { defaultValue: 0, omitDefault: true },
-    jitterPx: { defaultValue: 0, omitDefault: true },
-    doubleTap: { defaultValue: false, omitDefault: true },
-  },
-} as const satisfies CommandResponseDataTransform;
-
-const FILL_INTERACTION_RESPONSE_DATA_TRANSFORM = {
-  fields: {
-    delayMs: { defaultValue: 0 },
-  },
-} as const satisfies CommandResponseDataTransform;
-
-/**
- * A settle-capable command spends its `--timeout` on the post-action wait, so
- * the envelope has to widen by that budget wherever the trait is declared —
- * interaction route or generic route (#1638). `withoutObservation` is the
- * policy the command would carry if the trait were dropped, so removing a
- * trait restores the command's own envelope instead of silently leaving it on
- * the settle one.
- */
-function postActionObservationTimeoutPolicy(
-  command: string,
-  withoutObservation: CommandTimeoutPolicy,
-): CommandTimeoutPolicy {
-  return resolvePostActionObservationSupport(command) !== undefined
-    ? SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY
-    : withoutObservation;
-}
-
-function postActionObservation(command: string): PostActionObservationSupport {
-  const support = resolvePostActionObservationSupport(command);
-  if (support === undefined) {
-    throw new Error(`Missing post-action observation descriptor support for ${command}`);
-  }
-  return support;
-}
-
-/**
- * Whether this build carries the descriptors' `ownerFiles` claims. Production defines
- * `__OWNER_FILES__` as `false`, so every `ownerFilesEnabled ? { ownerFiles: [...] } : {}` spread
- * in the root below folds to nothing and the navigation paths never reach a bundle — which
- * `pnpm check:bundle-owner-files` proves over `dist/`.
- */
-const ownerFilesEnabled = typeof __OWNER_FILES__ === 'undefined' || __OWNER_FILES__;
 
 // ---------------------------------------------------------------------------
 // The command declaration root (ADR 0008). Each entry carries the command identity
@@ -1621,188 +1444,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
     compositeResource: 'none',
   },
-
-  // -- local client-backed CLI/MCP commands (no daemon route/capability) --
-  {
-    name: 'debug',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/debugging/index.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    // Wave 6 residue: this route reads local diagnostics files and has no daemon route, no
-    // platform import, and no injected dispatch — it was `legacy` only because the discriminator
-    // pass had nothing better to say about it.
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'daemon',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/daemon.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    // `stop --clean` reconciles owner-scoped Apple runner resources through the neutral
-    // daemon-owner cleanup service. It is host execution, not a request-bound device operation.
-    platformExecution: HOST_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'device',
-    deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/device.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'metro',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'session',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/session.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'cdp',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/agent-cdp.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'auth',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/auth.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'plugins',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/plugins.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'connect',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'connection',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'disconnect',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'mcp',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/bin.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'proxy',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/proxy.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'takeover',
-    deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/takeover.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: { kind: 'inventory', use: inventoryUse },
-  },
-  {
-    name: 'react-devtools',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/react-devtools.ts'] as const } : {}),
-    catalog: { group: 'local-cli', key: 'reactDevtools' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    platformExecution: NO_PLATFORM_EXECUTION,
-  },
-  {
-    name: 'web',
-    deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/web.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
-    mcpExposed: false,
-    // setup/doctor mutate and inspect the managed browser installed on this host through the
-    // neutral managed-web-backend service. Live web sessions remain device-runtime owned.
-    platformExecution: HOST_PLATFORM_EXECUTION,
-  },
+  ...LOCAL_CLI_COMMAND_DESCRIPTORS,
 ] as const satisfies readonly RawCommandDescriptor[];
 
 /**
