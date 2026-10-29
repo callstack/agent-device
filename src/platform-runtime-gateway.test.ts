@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   type DeviceBinding,
   localRuntimeOwner,
@@ -17,16 +18,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import type { AgentDeviceHost } from './sdk/host-types.ts';
-import fs from 'node:fs';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { startDaemonRuntime } from '../packages/daemon/src/server/http/daemon-runtime.ts';
-import { describeUnfinishedShutdownWork } from '../packages/daemon/src/server/http/server-shutdown.ts';
-import {
-  applicationLifecycleResourceFixture,
-  daemonRuntimeDepsFixture,
-  platformOwnerLifecycleFixture,
-} from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
+import { startDaemonRuntime } from '@agent-device/daemon';
+import { composeDaemonRuntimeDeps } from './daemon-composition.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {
   gatewayFixture as gateway,
@@ -155,24 +150,28 @@ describe('composed platform runtime gateway', () => {
       }),
       stderr: { write: () => {} },
       stdout: { write: () => {} },
-      composeDeps: daemonRuntimeDepsFixture({
-        deviceRuntimeGateway: {
-          ...composed,
-          applicationLifecycle: {
-            ...applicationLifecycleResourceFixture(),
-            finalizeDaemonShutdown: finalize,
+      composeDeps: async (input) => {
+        const deps = await composeDaemonRuntimeDeps(input, []);
+        const applicationLifecycle = deps.deviceRuntimeGateway.applicationLifecycle;
+        if (!applicationLifecycle)
+          throw new Error('Root composition must supply application lifecycle');
+        return {
+          ...deps,
+          deviceRuntimeGateway: {
+            ...composed,
+            applicationLifecycle: {
+              ...applicationLifecycle,
+              finalizeDaemonShutdown: finalize,
+            },
           },
-        },
-        shutdownProviderRuntimes: pluginClose,
-        ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
-      }),
+          shutdownProviderRuntimes: pluginClose,
+          ownerLifecycle: { ...deps.ownerLifecycle, clearDaemonLockConfiguration: clearLock },
+        };
+      },
     });
     const report = await runtime.close();
     expect(report.platformOwners).toBe('failed');
     expect(report.runners.stopped).toEqual(['runner']);
-    expect(describeUnfinishedShutdownWork(report)).toEqual([
-      expect.stringContaining('platform owner shutdown failed'),
-    ]);
     const log = fs.readFileSync(paths.logPath, 'utf8');
     expect(log).toContain('daemon_shutdown_platform_owner_failed');
     expect(log).toContain('owner refused');

@@ -59,27 +59,33 @@ export function createOwnerScopedDeviceClaimReconciler(
     const inspection = await params.beforeGateway?.(claim);
     if (inspection?.status === 'retained') return inspection;
     const recovery = compose(claim.stateDir);
-    let outcome: Awaited<ReturnType<DeviceClaimReconciler>> | undefined;
+    let outcome:
+      | { status: 'fulfilled'; result: Awaited<ReturnType<DeviceClaimReconciler>> }
+      | { status: 'rejected'; error: unknown };
     try {
-      outcome = await recovery.reconcile(claim, inspection);
-      return outcome;
-    } finally {
-      try {
-        await recovery.dispose();
-      } catch (error) {
-        if (outcome?.status === 'reconciled') throw error;
-        emitDiagnostic({
-          level: 'error',
-          phase: 'device_claim_recovery_dispose_failed',
-          data: {
-            deviceKey: claim.deviceKey,
-            ownerSession: claim.session,
-            ...(outcome?.status === 'retained' ? { retainedReason: outcome.reason } : {}),
-            error: normalizeError(error),
-          },
-        });
-      }
+      outcome = { status: 'fulfilled', result: await recovery.reconcile(claim, inspection) };
+    } catch (error) {
+      outcome = { status: 'rejected', error };
     }
+    try {
+      await recovery.dispose();
+    } catch (error) {
+      if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
+      emitDiagnostic({
+        level: 'error',
+        phase: 'device_claim_recovery_dispose_failed',
+        data: {
+          deviceKey: claim.deviceKey,
+          ownerSession: claim.session,
+          ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
+            ? { retainedReason: outcome.result.reason }
+            : {}),
+          error: normalizeError(error),
+        },
+      });
+    }
+    if (outcome.status === 'rejected') throw outcome.error;
+    return outcome.result;
   };
 }
 
