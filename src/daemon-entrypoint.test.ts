@@ -6,6 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
@@ -292,10 +293,44 @@ test('daemon entrypoint reaps itself when idle: exits cleanly, releases its regi
     // Nothing ever talks to it, so the idle reap, not a signal, is what closes it.
     const result = await daemon.wait;
 
-    assert.equal(result.exitCode, 0);
-    assert.equal(result.stderr, '');
-    assert.equal(fs.existsSync(paths.infoPath), false);
-    assert.equal(fs.existsSync(paths.lockPath), false);
+    try {
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.stderr, '');
+      assert.equal(fs.existsSync(paths.infoPath), false);
+      assert.equal(fs.existsSync(paths.lockPath), false);
+    } catch (error) {
+      let diagnostics: { phase: string; reason?: string; code?: string }[] | 'unavailable';
+      try {
+        diagnostics = fs
+          .readFileSync(paths.logPath, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map(
+            (line) =>
+              JSON.parse(line) as {
+                phase: string;
+                data?: { reason?: string; error?: { code?: string } };
+              },
+          )
+          .filter(
+            ({ phase }) =>
+              phase === 'daemon_info_removal_declined' ||
+              phase === 'daemon_registration_finish_failed',
+          )
+          .map(({ phase, data }) => ({ phase, reason: data?.reason, code: data?.error?.code }));
+      } catch {
+        diagnostics = 'unavailable';
+      }
+      if (error instanceof Error) {
+        error.message += `\nRegistration cleanup evidence: ${JSON.stringify({
+          identity: readRegisteredDaemonIdentity(paths.infoPath),
+          infoExists: fs.existsSync(paths.infoPath),
+          lockExists: fs.existsSync(paths.lockPath),
+          diagnostics,
+        })}`;
+      }
+      throw error;
+    }
   } finally {
     if (isProcessAlive(pid)) {
       daemon.child.kill('SIGKILL');
