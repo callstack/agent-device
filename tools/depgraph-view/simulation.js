@@ -1,5 +1,7 @@
 export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZone }) {
   const sim = { alpha: 1, targetAlpha: 0.02, alphaDecay: 0.9825 };
+  const maxRadius = nodes.reduce((max, node) => Math.max(max, node.r), 0);
+  const cell = Math.sqrt(6) * (2 * maxRadius + 6);
 
   function repelNode(n, m, a) {
     if (m === n) return;
@@ -33,8 +35,6 @@ export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZon
   }
 
   function repelNodes(a) {
-    const maxRadius = nodes.reduce((max, node) => Math.max(max, node.r), 0);
-    const cell = Math.sqrt(6) * (2 * maxRadius + 6);
     const grid = new Map();
     for (const n of nodes) {
       const key = Math.floor(n.x / cell) + ':' + Math.floor(n.y / cell);

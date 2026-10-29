@@ -6,12 +6,6 @@ export function createDominatorAnalyzer(nodes, edges) {
     if (kind === 0) valueOut[a].push(b);
   }
 
-  /**
-   * Dominator tree of `entry` over value edges (Cooper–Harvey–Kennedy, walking reverse postorder):
-   * every file in `d`'s dominated set stops being reachable from `entry` when `d` disappears, so
-   * its size is the branch moving `d` behind `import()` would cut. Same query as
-   * computeDominatorSummary, run live so any file can be the entry.
-   */
   function reversePostorder(entry) {
     // iterative DFS -> postorder; reverse postorder is the fixpoint iteration order
     const post = [];
@@ -70,6 +64,12 @@ export function createDominatorAnalyzer(nodes, edges) {
     return idom;
   }
 
+  /**
+   * Dominator tree of `entry` over value edges (Cooper–Harvey–Kennedy, walking reverse postorder):
+   * every file in `d`'s dominated set stops being reachable from `entry` when `d` disappears, so
+   * its size is the branch moving `d` behind `import()` would cut. Same query as
+   * computeDominatorSummary, run live so any file can be the entry.
+   */
   function dominatorsOf(entry) {
     const order = reversePostorder(entry);
     const idom = immediateDominators(entry, order);
