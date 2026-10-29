@@ -74,6 +74,17 @@ A service that honours the spec returns the granted device on the lease as `leas
 
 The daemon itself cannot pick a device by these keys, so it refuses a named key instead of ignoring it. A local daemon, or one behind a plain `agent-device proxy`, fails such a request with `UNSUPPORTED_OPERATION`, `details.reason: "device-spec-unsupported"`, and `details.keys` naming the keys it got, and records no lease. When a service returns a lease without `lease.device`, the service did not understand the spec. The CLI releases that lease and fails with `UNSUPPORTED_OPERATION` and `details.reason: "device-spec-unsupported"`. `details.released` reports whether the release succeeded. While a lease is active, a later command that names a different value for any of the three keys fails with reason `CONNECTION_DEVICE_CONFLICT`; a key the command leaves out keeps the lease's value. Run `connect --force` to lease by another spec.
 
+## Download captures
+
+Remote screenshots, recordings, performance captures, and trace logs use generated output paths on
+the daemon. When you specify an output path through the CLI, SDK, or MCP, it selects the download
+destination on your machine. Direct RPC callers receive artifact IDs and download each result with
+`GET /artifacts/<id>` using the same authentication.
+
+Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
+publication with reason `REMOTE_HOST_INPUT_DENIED`. Omit these inputs, or use a local daemon for
+host tooling and script publication. Test suite artifacts also use a daemon-chosen output root.
+
 ## Human takeover
 
 With a remote device already leased by `open`, pause mutations through the same connection:
@@ -197,7 +208,7 @@ plus the lease's own heartbeat; `doctor`, `devices`, `session list` and the othe
 inventory commands are refused too.
 `open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
 capture only the app window, inputs that name a host path or a launch (`--save-script`,
-`--launch-url`, `--launch-console`, a screenshot path other than the client's own temp file) are
+`--launch-url`, `--launch-console`) are
 refused, device selectors (`--udid`, `--serial`, `--device`, `--target`) are refused, `open` and
 `batch` must carry `--platform macos`, every other command must run in the session `open` created for
 the leased app, and a pid-pinned lease stops working when that process exits. `open`
