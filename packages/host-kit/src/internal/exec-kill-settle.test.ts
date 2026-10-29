@@ -29,8 +29,8 @@ import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 const HOLDER_LIFETIME_SECONDS = 3;
 const DEADLINE_MS = 400;
 
-function holderFinishedPath(label: string): string {
-  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), 'finished');
+function markerPath(label: string, name: 'finished' | 'released'): string {
+  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), name);
 }
 
 // The holder announces its pid on the stdout it inherited, so the pid arriving is also the proof
@@ -109,7 +109,7 @@ function settledRejection<T>(promise: Promise<T>): Promise<{ error: unknown } | 
 test.runIf(process.platform !== 'win32')(
   'a command killed at its deadline settles on the child exit, not on an inherited pipe',
   async () => {
-    const finishedPath = holderFinishedPath('timeout-holder');
+    const finishedPath = markerPath('timeout-holder', 'finished');
     holdModuleClock();
     const holder = stdoutAnnouncement();
     const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
@@ -136,7 +136,7 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'a deadline on a detached command kills the descendant that inherited the pipes',
   async () => {
-    const finishedPath = holderFinishedPath('detached-holder');
+    const finishedPath = markerPath('detached-holder', 'finished');
     holdModuleClock();
     const holder = stdoutAnnouncement();
     const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
@@ -165,7 +165,7 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'runCmdBackground killed by request cancellation settles on the child exit',
   async () => {
-    const finishedPath = holderFinishedPath('abort-holder');
+    const finishedPath = markerPath('abort-holder', 'finished');
     const controller = new AbortController();
     const holder = stdoutAnnouncement();
     const { child, wait } = runCmdBackground(
@@ -213,7 +213,7 @@ async function deadlineAfterChildExit(options: Pick<ExecStreamOptions, 'detached
   holderFinished: boolean;
   childPid: number;
 }> {
-  const finishedPath = holderFinishedPath('exited-holder');
+  const finishedPath = markerPath('exited-holder', 'finished');
   holdModuleClock();
   const holder = stdoutAnnouncement();
   const child = directChildExit();
@@ -397,10 +397,6 @@ test.runIf(process.platform !== 'win32')(
 // that helper: it records the release the signal handler performs, and its `sleep` is the
 // hold the kill interrupts.
 
-function releasedMarkerPath(label: string): string {
-  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), 'released');
-}
-
 // `ready` is printed only once the trap is installed and the hold has started, so a signal sent
 // after it arrives always reaches the handler.
 function holdUntilSignalledShellScript(releasedPath: string): string {
@@ -410,7 +406,7 @@ function holdUntilSignalledShellScript(releasedPath: string): string {
 test.runIf(process.platform !== 'win32')(
   'a cancelled command with a kill policy is signalled so it can release what it holds',
   async () => {
-    const releasedPath = releasedMarkerPath('graceful-abort');
+    const releasedPath = markerPath('graceful-abort', 'released');
     const controller = new AbortController();
     const trap = stdoutAnnouncement();
     const held = runCmdStreaming('/bin/sh', ['-c', holdUntilSignalledShellScript(releasedPath)], {
