@@ -213,13 +213,13 @@ export async function runChecks(
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   // A fail-open plan could not narrow the change, so no check may stand in for another.
   const relatedSelected = !plan.failOpen && plan.checks.includes('vitest-related');
+  // Leaving the unit projects to `unit` stands in for nothing, so fail-open plans do it too.
+  // The run stops at the first failure, so no pass skips the `unit` run.
   const related = {
     changedFiles: options.changedFiles ?? [],
-    unitSuiteRuns:
-      !plan.failOpen &&
-      runnable.some(
-        (spec) => spec.id === 'unit' && !isCoveredByRelatedTests(spec, relatedSelected),
-      ),
+    unitSuiteRuns: runnable.some(
+      (spec) => spec.id === 'unit' && !isCoveredByRelatedTests(spec, relatedSelected),
+    ),
   };
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {

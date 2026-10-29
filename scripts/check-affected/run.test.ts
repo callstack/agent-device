@@ -215,9 +215,10 @@ test('runChecks skips CI checks, runs every local check of a fail-open plan, and
   }
   const related = executed.filter((command) => command.includes('related'));
   assert.equal(related.length, 1);
-  assert.ok(
-    !related[0]?.some((arg) => arg.startsWith('--project')),
-    'a fail-open related run keeps every Vitest project',
+  // check:unit runs in this plan too, so the related run leaves the unit projects to it.
+  assert.deepEqual(
+    related[0]?.filter((arg) => arg.startsWith('--project')),
+    ['--project=!unit-core', '--project=!fuzz-worker'],
   );
   assert.ok(
     !related[0]?.includes('--coverage'),
@@ -249,6 +250,17 @@ test('runChecks skips CI checks, runs every local check of a fail-open plan, and
     false,
     'the coverage gate is GitHub-authoritative and must not run locally',
   );
+});
+
+// The related run leaves the unit projects out, so only check:unit can see their failures.
+test('a fail-open plan fails on a unit-suite failure', async () => {
+  const plan = selectChecks({ changedFiles: ['unknown/path.xyz'], packageEntryFiles: [] });
+  assert.equal(plan.failOpen, true);
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute: async (command) => (command.includes('check:unit') ? 23 : 0),
+    cwd: '.',
+  });
+  assert.equal(code, 23);
 });
 
 async function runFailingOn(script: string, changedFiles: string[]): Promise<number> {
