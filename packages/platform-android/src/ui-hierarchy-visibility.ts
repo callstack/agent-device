@@ -68,7 +68,9 @@ function collectInactiveApplicationWindows(
     presentationBudget?.check('work');
     if (!isAndroidApplicationWindow(window)) continue;
     const keep =
-      isAndroidWindowAboveLayer(window, foregroundLayer) ||
+      (foregroundLayer !== undefined &&
+        window.windowLayer !== undefined &&
+        window.windowLayer > foregroundLayer) ||
       (isAndroidForegroundWindow(window) &&
         (foregroundLayer === undefined || window.windowLayer === foregroundLayer));
     if (!keep) hidden.add(window);
@@ -80,10 +82,6 @@ function highestAndroidWindowLayer(windows: AndroidNode[]): number | undefined {
     .map((window) => window.windowLayer)
     .filter((layer): layer is number => layer !== undefined);
   return layers.length > 0 ? Math.max(...layers) : undefined;
-}
-
-function isAndroidWindowAboveLayer(window: AndroidNode, layer: number | undefined): boolean {
-  return layer !== undefined && window.windowLayer !== undefined && window.windowLayer > layer;
 }
 
 function isAndroidWindowRoot(node: AndroidNode): boolean {
