@@ -6,14 +6,6 @@ import {
 } from './timeout-policy.ts';
 import type { CommandTimeoutPolicy } from './types.ts';
 
-// ---------------------------------------------------------------------------
-// Timeout policies — descriptor-owned request-envelope budget source and
-// on-timeout daemon policy (ADR 0008). This replaces the two deleted client
-// hand lists (`isExplicitTimeoutCommand` in daemon-client.ts and
-// `DAEMON_PRESERVING_TIMEOUT_COMMANDS` in daemon-client-timeout.ts) plus the
-// per-command envelope branches of `resolveDaemonRequestTimeoutMs`.
-// ---------------------------------------------------------------------------
-
 // Read-only capture commands that can block in platform accessibility bridges
 // while the app is crashed or never idle share snapshot's failure mode. Keep the
 // daemon/session alive on their timeouts so callers can still collect
@@ -45,10 +37,8 @@ export const LEASE_ALLOCATE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   envelopeMs: LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
 };
 
-// Settle-capable interaction commands also resolve their target through the
-// same platform accessibility capture as snapshot/find (#1105): a hung capture
-// is their dominant timeout mode, so on top of the --settle flag-sourced
-// widening envelope above, keep the daemon (and sessions) alive on timeout too.
+// Settling also captures platform accessibility state, so a hung capture must not
+// reset the daemon/session when the client timeout expires.
 export const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   // --settle (#1101) makes --timeout bound the SETTLE wait, not the whole

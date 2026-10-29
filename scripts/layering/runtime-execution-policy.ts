@@ -11,7 +11,7 @@
 //   token is a type, so an `as` cast or narrowing to it type-checks from any module.
 
 import { parseSync } from 'oxc-parser';
-import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
@@ -19,9 +19,7 @@ type AstNode = Record<string, unknown>;
 
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
-const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
-const COMMAND_DESCRIPTOR_TRAITS_MODULE = 'packages/command-registry/src/descriptor-traits.ts';
-const COMMAND_DESCRIPTOR_FAMILY_DIR = 'packages/command-registry/src/descriptors/';
+const COMMAND_REGISTRY_SOURCE_ROOT = 'packages/command-registry/src/';
 const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/core/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
@@ -71,11 +69,7 @@ export function runtimeExecutionIntegrityViolations(
 }
 
 function isCommandDescriptorSource(file: string): boolean {
-  return (
-    file === COMMAND_DESCRIPTOR_MODULE ||
-    file === COMMAND_DESCRIPTOR_TRAITS_MODULE ||
-    file.startsWith(COMMAND_DESCRIPTOR_FAMILY_DIR)
-  );
+  return file.startsWith(COMMAND_REGISTRY_SOURCE_ROOT) && isProductionSourceFile(file);
 }
 
 function isCapabilityDeclaration(node: AstNode): boolean {

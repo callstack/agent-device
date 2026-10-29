@@ -163,7 +163,27 @@ test('a capability bucket in a descriptor family module is rejected', () => {
   );
 });
 
-test('a conditional capability bucket in shared descriptor traits is rejected', () => {
+for (const module of ['descriptor-traits.ts', 'descriptor-extra-traits.ts']) {
+  test(`a conditional capability bucket in ${module} is rejected`, () => {
+    assert.deepEqual(
+      messages([
+        [
+          ADMISSION,
+          admission(
+            'requireFactsInspection(request.inspectFacts); requireDeviceBinding(request.bindDevice);',
+          ),
+        ],
+        [
+          `packages/command-registry/src/${module}`,
+          `export const traits = { ...(enabled ? { capability: { apple: {} } } : {}) };`,
+        ],
+      ]),
+      ['command descriptors may not restore capability-bucket admission'],
+    );
+  });
+}
+
+test('test-support capability objects are outside the declaration policy', () => {
   assert.deepEqual(
     messages([
       [
@@ -173,10 +193,10 @@ test('a conditional capability bucket in shared descriptor traits is rejected', 
         ),
       ],
       [
-        'packages/command-registry/src/descriptor-traits.ts',
-        `export const traits = { ...(enabled ? { capability: { apple: {} } } : {}) };`,
+        'packages/command-registry/src/__tests__/capability-fixture.ts',
+        'const fixture = { capability: { apple: {} } };',
       ],
     ]),
-    ['command descriptors may not restore capability-bucket admission'],
+    [],
   );
 });
