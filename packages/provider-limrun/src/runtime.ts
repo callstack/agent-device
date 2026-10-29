@@ -145,9 +145,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       });
     }
     const result = await this.release(lease);
-    if (Array.isArray(result?.warnings) && result.warnings.length > 0) {
-      throw new AppError('COMMAND_FAILED', 'Limrun network capture could not close cleanly.');
-    }
+    const warnings = Array.isArray(result?.warnings)
+      ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : [];
+    return warnings.length > 0 ? { warnings } : undefined;
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {

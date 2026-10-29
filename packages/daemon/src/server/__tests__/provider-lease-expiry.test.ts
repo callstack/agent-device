@@ -29,6 +29,31 @@ test('records provider cleanup warnings for a background lease release', async (
   }
 });
 
+test('records recovery warnings without retrying a completed release', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-recovery-warning-');
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'team-a',
+    runId: 'run-a',
+    leaseProvider: 'limrun',
+  });
+  const reportWarning = vi.fn(async () => {});
+  const recoverExpiredLease = vi.fn(async () => ({ warnings: ['capture close failed'] }));
+  const releaser = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    recoverableProviderIds: ['limrun'],
+    stateDir,
+    reportWarning,
+  });
+  try {
+    await releaser.release(lease);
+    await releaser.retryPending();
+    expect(reportWarning).toHaveBeenCalledWith(lease, ['capture close failed']);
+    expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
+  } finally {
+    releaser.shutdown();
+  }
+});
+
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();
   let now = 1_000;

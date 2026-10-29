@@ -29,7 +29,9 @@ export type ProviderPortReverseOptions = {
   name: string;
 };
 
-export type ProviderExpiredLeaseRecovery = (lease: DeviceLease) => Promise<void>;
+export type ProviderExpiredLeaseRecovery = (
+  lease: DeviceLease,
+) => Promise<void | Readonly<{ warnings?: readonly string[] }>>;
 
 /** Provider adapter contract; root owns active-runtime and request composition. */
 export type ProviderDeviceRuntime = {

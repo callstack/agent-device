@@ -25,7 +25,9 @@ test('provider device runtime registry delegates lifecycle, inventory, and inter
   assert.deepEqual(await requestProviders.leaseLifecycleProvider?.allocate?.(world.lease), {
     provider: 'hit',
   });
-  await requestProviders.recoverExpiredLease?.(world.lease);
+  assert.deepEqual(await requestProviders.recoverExpiredLease?.(world.lease), {
+    warnings: ['capture close failed'],
+  });
   assert.deepEqual(requestProviders.recoverableProviderIds, ['hit']);
   assert.equal(requestProviders.providerAppCatalog?.supports('hit'), true);
   assert.equal(requestProviders.providerAppCatalog?.supports('miss'), false);
@@ -154,6 +156,7 @@ function makeProviderRuntimeWorld() {
   hitRuntime.appCatalog = async () => [];
   hitRuntime.recoverExpiredLease = async (expiredLease) => {
     recoveredLeases.push(expiredLease);
+    return { warnings: ['capture close failed'] };
   };
   return { lease, device, interactor, missRuntime, hitRuntime, recoveredLeases };
 }

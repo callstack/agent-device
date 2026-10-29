@@ -165,7 +165,19 @@ export function createExpiredProviderLeaseReleaser(options: {
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
     const attempt = (async (): Promise<void> => {
-      if (await releaseExpiredProviderLease(options.recoverExpiredLease, lease)) {
+      const recover = options.recoverExpiredLease;
+      if (
+        await releaseExpiredProviderLease(
+          recover
+            ? async (expiredLease) => {
+                const result = await recover(expiredLease);
+                if (result?.warnings?.length)
+                  await options.reportWarning?.(expiredLease, result.warnings);
+              }
+            : undefined,
+          lease,
+        )
+      ) {
         pendingRecoveryLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
         persistPendingLeases();

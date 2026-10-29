@@ -176,7 +176,7 @@ function composeExpiredLeaseRecovery(
         { provider: lease.leaseProvider, leaseId: lease.leaseId },
       );
     }
-    await runtime.recoverExpiredLease(lease);
+    return await runtime.recoverExpiredLease(lease);
   };
 }
 
