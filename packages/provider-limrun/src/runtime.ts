@@ -275,9 +275,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     rejectRefusedLimrunProfileFields(context);
     const existing = this.sessions.get(lease.leaseId);
     if (existing) {
-      // A repeat allocation can opt into the capture the first one did not ask for.
+      // A repeat allocation can opt into the capture the first one did not ask for, or retry one
+      // that could not start.
       const networkHar =
-        context?.flags?.providerNetworkLogs === true && !this.networkCaptures.has(lease.leaseId)
+        context?.flags?.providerNetworkLogs === true &&
+        (this.networkCaptures.get(lease.leaseId)?.phase ?? 'unavailable') === 'unavailable'
           ? await this.startNetworkCapture(lease, existing, context)
           : undefined;
       return {

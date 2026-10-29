@@ -156,7 +156,10 @@ export async function startLimrunHarCapture(
   const failures = createFailureRecorder();
   try {
     // The HAR holds raw traffic, so only the daemon's user may read it.
-    await fs.promises.mkdir(path.dirname(input.harPath), { recursive: true, mode: 0o700 });
+    const harDir = path.dirname(input.harPath);
+    await fs.promises.mkdir(harDir, { recursive: true, mode: 0o700 });
+    // mkdir leaves an existing directory as it was, so tighten it explicitly.
+    await fs.promises.chmod(harDir, 0o700);
     const harFile = createHarFile(input.harPath, {
       onDropped: (count) =>
         failures.record(

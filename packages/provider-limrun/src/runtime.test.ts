@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
@@ -243,6 +244,55 @@ test('a repeat allocation starts the capture it newly asks for, and a dial-only 
     assert.match(String(listed?.message), /last dial failure connection_refused/);
   } finally {
     state.tunnelStatus = {};
+    await runtime.shutdown?.();
+  }
+});
+
+test('a repeat allocation retries a capture that could not start', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-retry');
+  try {
+    const first = await runtime.leaseLifecycle.allocate?.(lease, {
+      flags: { providerNetworkLogs: true, providerNetworkHosts: 'not a host!!' },
+    });
+    assert.equal((first?.networkHar as { status?: string } | undefined)?.status, 'unavailable');
+    const retried = await runtime.leaseLifecycle.allocate?.(lease, {
+      flags: { providerNetworkLogs: true, providerNetworkHosts: 'api.example.com' },
+    });
+    assert.equal((retried?.networkHar as { status?: string } | undefined)?.status, 'capturing');
+  } finally {
+    await runtime.shutdown?.();
+  }
+});
+
+test('a stopped capture past the retention limit loses its record and its HAR file', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
+    testDependencies(),
+  );
+  const release = runtime.leaseLifecycle.release;
+  assert.ok(release);
+  const harPaths: string[] = [];
+  try {
+    // 33 stopped captures; the 34th start evicts the oldest.
+    for (let index = 0; index < 34; index += 1) {
+      const lease = androidLease(`lease-retention-${index}`);
+      const allocation = await runtime.leaseLifecycle.allocate?.(lease, {
+        flags: { providerNetworkLogs: true },
+      });
+      harPaths.push(String((allocation?.networkHar as { harPath?: string } | undefined)?.harPath));
+      if (index < 33) await release(lease);
+    }
+    assert.equal(fs.existsSync(harPaths[0] ?? ''), false);
+    assert.equal(fs.existsSync(harPaths[1] ?? ''), true);
+    assert.equal(
+      await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: 'lease-retention-0' }),
+      undefined,
+    );
+  } finally {
     await runtime.shutdown?.();
   }
 });

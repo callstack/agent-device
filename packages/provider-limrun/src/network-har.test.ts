@@ -112,6 +112,8 @@ function readEntryCount(harPath: string): number {
 test('completed requests reach the live HAR in one coalesced, owner-only write', async () => {
   const fake = fakeTunnelClient();
   const harPath = tempHarPath();
+  // An existing, wider directory is tightened too.
+  fs.mkdirSync(path.dirname(harPath), { recursive: true, mode: 0o755 });
   const result = await startLimrunHarCapture(fake.client, { harPath });
   assert.equal(result.ok, true);
   if (!result.ok) return;
@@ -173,16 +175,15 @@ test('the HAR keeps the newest entries under its size cap and reports the droppe
 test('a capture whose HAR cannot be written refuses before the tunnel opens', async () => {
   const fake = fakeTunnelClient();
   const harPath = tempHarPath();
-  fs.mkdirSync(path.dirname(harPath), { recursive: true, mode: 0o500 });
-  try {
-    const result = await startLimrunHarCapture(fake.client, { harPath });
-    assert.equal(result.ok, false);
-    if (result.ok) return;
-    assert.equal(result.reason, 'tunnel-start-failed');
-    assert.equal(fake.started.length, 0);
-  } finally {
-    fs.chmodSync(path.dirname(harPath), 0o700);
-  }
+  // A non-empty directory where the HAR belongs: the rename into place fails.
+  fs.mkdirSync(harPath, { recursive: true });
+  fs.writeFileSync(path.join(harPath, 'occupied'), '');
+  const result = await startLimrunHarCapture(fake.client, { harPath });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.reason, 'tunnel-start-failed');
+  assert.equal(fake.started.length, 0);
+  assert.deepEqual(fs.readdirSync(path.dirname(harPath)), [path.basename(harPath)]);
 });
 
 test('a tunnel that refuses to close still gets its HAR written, and a later close retries', async () => {
