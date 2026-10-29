@@ -114,6 +114,7 @@ test.runIf(process.platform !== 'win32')(
     const holder = stdoutAnnouncement();
     const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
       timeoutMs: DEADLINE_MS,
+      captureOutput: false,
       onStdoutChunk: holder.onStdoutChunk,
     });
     const rejection = settledRejection(killed);
@@ -141,6 +142,7 @@ test.runIf(process.platform !== 'win32')(
     const killed = runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'wait')], {
       timeoutMs: DEADLINE_MS,
       detached: true,
+      captureOutput: false,
       onStdoutChunk: holder.onStdoutChunk,
     });
     const rejection = settledRejection(killed);
@@ -219,6 +221,7 @@ async function deadlineAfterChildExit(options: Pick<ExecStreamOptions, 'detached
     runCmdStreaming('/bin/sh', ['-c', pipeHolderShellScript(finishedPath, 'exit 0')], {
       ...options,
       timeoutMs: DEADLINE_MS,
+      captureOutput: false,
       onStdoutChunk: holder.onStdoutChunk,
       onSpawn: child.onSpawn,
     }),
@@ -459,6 +462,7 @@ test.runIf(process.platform !== 'win32')(
         {
           timeoutMs: DEADLINE_MS,
           kill: { signal: 'SIGTERM', graceMs },
+          captureOutput: false,
           onStdoutChunk: trap.onStdoutChunk,
           onSpawn: (spawned) => {
             child = spawned;
