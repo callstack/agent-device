@@ -16,20 +16,7 @@ export function createGraphModel(raw) {
     slot: null,
   }));
 
-  // Group import kinds only when they have the same source and target.
-  const pairMap = new Map();
-  for (const [a, b, kind, flags] of raw.edges) {
-    const key = a * nodes.length + b;
-    let pair = pairMap.get(key);
-    if (!pair) {
-      pair = { a, b, counts: [0, 0, 0], redundantValue: 0, display: -1 };
-      pairMap.set(key, pair);
-    }
-    pair.counts[kind]++;
-    // Bit 2 marks reachability in the value-edge graph; value cycles leave it unset.
-    if (kind === 0 && flags & 2) pair.redundantValue++;
-  }
-  const pairs = [...pairMap.values()];
+  const pairs = raw.edges.map(([a, b, kind, flags]) => ({ a, b, kind, flags, display: -1 }));
   const nodePairs = nodes.map(() => []);
   pairs.forEach((p, i) => {
     nodePairs[p.a].push(i);
@@ -39,29 +26,14 @@ export function createGraphModel(raw) {
   return { zones, nodes, pairs, nodePairs };
 }
 
-export function refreshPairKinds(pairs, enabledKinds, hideRedundant) {
-  for (const p of pairs) {
-    p.display = -1;
-    for (const k of [0, 1, 2]) {
-      if (p.counts[k] <= 0 || !enabledKinds.has(k)) continue;
-      // a value edge the transitive reduction already dropped
-      if (hideRedundant && k === 0 && p.redundantValue === p.counts[0]) continue;
-      p.display = k;
-      break;
-    }
+export function refreshPairKinds(pairs, enabledKinds, hideReachable) {
+  for (const pair of pairs) {
+    const hidden = hideReachable && pair.kind === 0 && (pair.flags & 2) !== 0;
+    pair.display = enabledKinds.has(pair.kind) && !hidden ? pair.kind : -1;
   }
 }
 
-export function visibleKinds(pair, enabledKinds, hideRedundant) {
-  return [0, 1, 2].filter(
-    (kind) =>
-      pair.counts[kind] > 0 &&
-      enabledKinds.has(kind) &&
-      !(hideRedundant && kind === 0 && pair.redundantValue === pair.counts[0]),
-  );
-}
-
-export function visibleCycleFocus(cycles, pairs, nodes, zoneVisible, enabledKinds, hideRedundant) {
+export function visibleCycleFocus(cycles, pairs, nodes, zoneVisible) {
   const pairByDirection = new Map(pairs.map((pair, index) => [`${pair.a}:${pair.b}`, index]));
   const focusNodes = new Set();
   const focusPairs = new Set();
@@ -72,7 +44,7 @@ export function visibleCycleFocus(cycles, pairs, nodes, zoneVisible, enabledKind
       const to = cycle.path[i];
       const index = pairByDirection.get(`${from}:${to}`);
       if (index === undefined || !zoneVisible[nodes[from].z] || !zoneVisible[nodes[to].z]) break;
-      if (!visibleKinds(pairs[index], enabledKinds, hideRedundant).length) break;
+      if (pairs[index].display < 0) break;
       pathPairs.push(index);
     }
     if (pathPairs.length !== cycle.path.length - 1 || !pathPairs.length) continue;

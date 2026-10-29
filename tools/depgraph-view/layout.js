@@ -1,3 +1,14 @@
+export function fitScale(width, height, padding, graphWidth, graphHeight) {
+  const inset = Math.min(padding, width / 4, height / 4);
+  return Math.min(
+    2,
+    Math.min(
+      Math.max(1, width - inset * 2) / (graphWidth || 1),
+      Math.max(1, height - inset * 2) / (graphHeight || 1),
+    ),
+  );
+}
+
 export function createLayout({ zones, nodes, raw, entryManifest, PALETTE }) {
   // ---------- workspace packages: one rectangle each, subdivided by its zones ----------
 
@@ -25,15 +36,20 @@ export function createLayout({ zones, nodes, raw, entryManifest, PALETTE }) {
   // declared package.json exports are the boundary every cross-package edge already lands on,
   // so those files become the package's entry points and ride its perimeter
   const entryNodes = new Map();
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   function assignEntryNodes() {
     for (const [pkgName, list] of Object.entries(entryManifest)) {
       if (!packages.has(pkgName)) continue;
       for (const { id, subpath } of list) {
-        const idx = nodes.findIndex((n) => n.id === id);
-        if (idx < 0 || nodes[idx].entry) continue;
-        nodes[idx].entry = subpath;
+        const node = nodeById.get(id);
+        if (!node) continue;
+        if (node.entry !== null) {
+          node.entry += `, ${subpath}`;
+          continue;
+        }
+        node.entry = subpath;
         if (!entryNodes.has(pkgName)) entryNodes.set(pkgName, []);
-        entryNodes.get(pkgName).push(idx);
+        entryNodes.get(pkgName).push(node.index);
       }
     }
   }

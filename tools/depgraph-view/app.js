@@ -1,13 +1,8 @@
 import { escapeHtml } from './html.js';
-import { createLayout } from './layout.js';
+import { createLayout, fitScale } from './layout.js';
 import { createSimulation } from './simulation.js';
 import { buildAnalysis } from './analysis.js';
-import {
-  createGraphModel,
-  refreshPairKinds,
-  visibleKinds,
-  visibleCycleFocus,
-} from './graph-model.js';
+import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-model.js';
 
 /* agent-device dependency-graph explorer
  * Canvas force view over the JSON emitted by scripts/depgraph/build.ts.
@@ -120,10 +115,7 @@ import {
       maxY = Math.max(maxY, r.y + r.h);
     }
     if (!Number.isFinite(minX)) return;
-    const k = Math.min(
-      2,
-      Math.min((W - pad * 2) / (maxX - minX || 1), (H - pad * 2) / (maxY - minY || 1)),
-    );
+    const k = fitScale(W, H, pad, maxX - minX, maxY - minY);
     const target = { k, x: W / 2 - ((minX + maxX) / 2) * k, y: H / 2 - ((minY + maxY) / 2) * k };
     if (immediate) {
       Object.assign(view, target, { anim: null });
@@ -156,21 +148,14 @@ import {
   let cycleMode = false;
   let edgeAlpha = 0.1;
   let labelMinIn = 45;
-  let hideRedundant = false;
+  let hideReachable = false;
   let focusNodes = new Set();
   let focusPairs = new Set();
   let visiblePairCount = 0;
   let dirty = true;
 
   function focusCycles() {
-    ({ focusNodes, focusPairs } = visibleCycleFocus(
-      raw.cycles || [],
-      pairs,
-      nodes,
-      zoneVisible,
-      enabledKinds,
-      hideRedundant,
-    ));
+    ({ focusNodes, focusPairs } = visibleCycleFocus(raw.cycles || [], pairs, nodes, zoneVisible));
   }
 
   function focusSelection() {
@@ -208,7 +193,7 @@ import {
   }
 
   function applyFilters() {
-    refreshPairKinds(pairs, enabledKinds, hideRedundant);
+    refreshPairKinds(pairs, enabledKinds, hideReachable);
     visiblePairCount = pairs.filter(pairVisible).length;
     if (selected != null && !zoneVisible[nodes[selected].z]) {
       selected = null;
@@ -794,17 +779,11 @@ import {
       if (p.a === selected) out.push([p.b, p]);
       else inc.push([p.a, p]);
     }
-    out.sort(
-      (a, b) => b[1].counts.reduce((s, c) => s + c, 0) - a[1].counts.reduce((s, c) => s + c, 0),
-    );
-    inc.sort(
-      (a, b) => b[1].counts.reduce((s, c) => s + c, 0) - a[1].counts.reduce((s, c) => s + c, 0),
-    );
     const list = (items, dir) =>
       items
         .slice(0, 40)
         .map(([i, p]) => {
-          const kinds = visibleKinds(p, enabledKinds, hideRedundant).map(kindBadge).join('');
+          const kinds = kindBadge(p.kind);
           return `<div class="dep" data-node="${i}">${dir === 'out' ? '→ ' : '← '}${escapeHtml(nodes[i].id)}${kinds}</div>`;
         })
         .join('') +
@@ -870,8 +849,8 @@ import {
     recomputeFocus();
     updateStatus();
   });
-  document.getElementById('redundant').addEventListener('change', (e) => {
-    hideRedundant = e.target.checked;
+  document.getElementById('reachable').addEventListener('change', (e) => {
+    hideReachable = e.target.checked;
     applyFilters();
     reheat(0.3);
   });

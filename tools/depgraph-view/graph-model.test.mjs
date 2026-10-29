@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  createGraphModel,
-  refreshPairKinds,
-  visibleKinds,
-  visibleCycleFocus,
-} from './graph-model.js';
+import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-model.js';
 
 test('keeps opposite imports separate and hides disabled kinds', () => {
   const graph = createGraphModel({
@@ -17,7 +12,6 @@ test('keeps opposite imports separate and hides disabled kinds', () => {
     edges: [
       [0, 1, 0, 0],
       [1, 0, 1, 0],
-      [1, 0, 2, 0],
     ],
   });
   assert.equal(graph.pairs.length, 2);
@@ -30,10 +24,18 @@ test('keeps opposite imports separate and hides disabled kinds', () => {
   );
   const kinds = new Set([0, 1]);
   refreshPairKinds(graph.pairs, kinds, false);
-  assert.deepEqual(visibleKinds(graph.pairs[1], kinds, false), [1]);
+  assert.deepEqual(
+    graph.pairs.map((pair) => pair.display),
+    [0, 1],
+  );
+  refreshPairKinds(graph.pairs, new Set([0]), false);
+  assert.deepEqual(
+    graph.pairs.map((pair) => pair.display),
+    [0, -1],
+  );
 });
 
-test('hides transitively reachable value edges while preserving type imports', () => {
+test('hides transitively reachable value edges and keeps other imports', () => {
   const graph = createGraphModel({
     zones: [],
     nodes: [
@@ -42,15 +44,17 @@ test('hides transitively reachable value edges while preserving type imports', (
     ],
     edges: [
       [0, 1, 0, 2],
-      [0, 1, 1, 0],
+      [1, 0, 1, 0],
     ],
   });
   const enabled = new Set([0, 1]);
   refreshPairKinds(graph.pairs, enabled, false);
   assert.equal(graph.pairs[0].display, 0);
   refreshPairKinds(graph.pairs, enabled, true);
-  assert.equal(graph.pairs[0].display, 1);
-  assert.deepEqual(visibleKinds(graph.pairs[0], enabled, true), [1]);
+  assert.deepEqual(
+    graph.pairs.map((pair) => pair.display),
+    [-1, 1],
+  );
   refreshPairKinds(graph.pairs, new Set([0]), true);
   assert.equal(graph.pairs[0].display, -1);
 });
@@ -72,8 +76,10 @@ test('highlights only complete visible directed cycle paths', () => {
     { kind: 'type', path: [2, 3, 2] },
   ];
   const visible = [true, true, true, true];
-  const focus = (kinds) =>
-    visibleCycleFocus(cycles, graph.pairs, graph.nodes, visible, new Set(kinds), false);
+  const focus = (kinds) => {
+    refreshPairKinds(graph.pairs, new Set(kinds), false);
+    return visibleCycleFocus(cycles, graph.pairs, graph.nodes, visible);
+  };
   assert.deepEqual([...focus([0, 1]).focusPairs], [0, 1, 2, 3]);
   assert.equal(focus([0]).focusPairs.size, 0);
   visible[2] = false;

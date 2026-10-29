@@ -1,5 +1,5 @@
 export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZone }) {
-  const sim = { alpha: 1, targetAlpha: 0.02, alphaDecay: 0.9825, running: true };
+  const sim = { alpha: 1, targetAlpha: 0.02, alphaDecay: 0.9825 };
 
   function repelNode(n, m, a) {
     if (m === n) return;
@@ -116,7 +116,6 @@ export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZon
 
   function reheat(value) {
     sim.alpha = Math.max(sim.alpha, value);
-    sim.running = true;
   }
 
   return { sim, tick, reheat };

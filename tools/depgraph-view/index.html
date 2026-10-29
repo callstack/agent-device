@@ -295,6 +295,26 @@
       .hot:hover {
         background: var(--panel-2);
       }
+      @media (max-width: 700px) {
+        body {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: 46px minmax(0, 1fr) minmax(160px, 35vh);
+          grid-template-areas: 'head' 'canvas' 'side';
+        }
+        header #stats {
+          display: none;
+        }
+        #search {
+          width: min(260px, 45vw);
+        }
+        aside {
+          border-right: 0;
+          border-top: 1px solid var(--border);
+        }
+        main {
+          min-height: 0;
+        }
+      }
     </style>
   </head>
   <body>
@@ -322,10 +342,11 @@
           <input id="cycles" type="checkbox" /><label for="cycles">highlight cycles</label>
         </div>
         <div class="row">
-          <input id="redundant" type="checkbox" /><label for="redundant"
-            >hide redundant value edges</label
+          <input id="reachable" type="checkbox" /><label for="reachable"
+            >hide value edges with another import path</label
           >
         </div>
+        <div class="hint">Another path does not mean a direct import can be removed.</div>
       </section>
       <section class="block">
         <h2>Layout</h2>
