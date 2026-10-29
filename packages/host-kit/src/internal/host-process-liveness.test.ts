@@ -211,3 +211,11 @@ test('a host with no pinned ps still runs /bin/ps and never resolves ps from PAT
   assert.equal(isProcessZombie(4242), false);
   assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/bin/ps');
 });
+
+test('a host with both pinned ps binaries keeps running /bin/ps', () => {
+  psInstalledAt(['/bin/ps', '/run/current-system/sw/bin/ps']);
+  psReturns('Ss  \n');
+
+  assert.equal(isProcessZombie(4242), false);
+  assert.equal(mockRunCmdSync.mock.calls[0]?.[0], '/bin/ps');
+});
