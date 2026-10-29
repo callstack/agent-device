@@ -358,6 +358,23 @@ test('parseUiHierarchy keeps only the top active Android application window', ()
   );
 });
 
+test('parseUiHierarchy keeps an inactive Android popup window above the active window', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" package="com.example.app" bounds="[0,0][390,844]" window-index="0" window-type="1" window-layer="0" window-active="true" window-focused="true" window-bounds="[0,0][390,844]">
+    <node class="android.widget.AutoCompleteTextView" text="a" bounds="[10,20][380,80]" enabled="true" focused="true"/>
+  </node>
+  <node class="android.widget.FrameLayout" package="com.example.app" bounds="[10,80][380,200]" window-index="1" window-type="1" window-layer="1" window-active="false" window-focused="false" window-bounds="[10,80][380,200]">
+    <node class="android.widget.TextView" text="alpha" bounds="[10,80][380,140]" clickable="true" enabled="true"/>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, {});
+  assert.equal(
+    result.nodes.some((node) => node.label === 'alpha'),
+    true,
+  );
+});
+
 test('parseUiHierarchy excludes Android nodes that are not visible to the user', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">

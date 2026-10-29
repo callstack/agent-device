@@ -55,7 +55,9 @@ function collectInactiveApplicationWindows(
 
   // Android can keep stale application windows in the accessibility tree after drawer and
   // navigation transitions. Keep dialogs/system windows, but expose only the foreground
-  // application layer so agents do not act on content that is hidden from users.
+  // application layer and the windows above it, so agents do not act on content that is hidden
+  // from users. A popup that does not take focus sits above that layer but is never active or
+  // focused.
   const foregroundApplicationWindows = windows.filter(
     (window) => isAndroidApplicationWindow(window) && isAndroidForegroundWindow(window),
   );
@@ -66,8 +68,9 @@ function collectInactiveApplicationWindows(
     presentationBudget?.check('work');
     if (!isAndroidApplicationWindow(window)) continue;
     const keep =
-      isAndroidForegroundWindow(window) &&
-      (foregroundLayer === undefined || window.windowLayer === foregroundLayer);
+      isAndroidWindowAboveLayer(window, foregroundLayer) ||
+      (isAndroidForegroundWindow(window) &&
+        (foregroundLayer === undefined || window.windowLayer === foregroundLayer));
     if (!keep) hidden.add(window);
   }
 }
@@ -77,6 +80,10 @@ function highestAndroidWindowLayer(windows: AndroidNode[]): number | undefined {
     .map((window) => window.windowLayer)
     .filter((layer): layer is number => layer !== undefined);
   return layers.length > 0 ? Math.max(...layers) : undefined;
+}
+
+function isAndroidWindowAboveLayer(window: AndroidNode, layer: number | undefined): boolean {
+  return layer !== undefined && window.windowLayer !== undefined && window.windowLayer > layer;
 }
 
 function isAndroidWindowRoot(node: AndroidNode): boolean {
