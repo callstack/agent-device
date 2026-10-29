@@ -4,6 +4,11 @@ import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import {
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecovery,
 } from './device-claim-owner-recovery.ts';
@@ -33,14 +38,14 @@ function fixture(reconcile: OwnerScopedClaimRecovery['reconcile']) {
   const cleanupError = new AppError('COMMAND_FAILED', 'owner disposal failed', {
     reason: 'owner-cleanup-refused',
   });
-  const emit = vi.fn();
+  const logPath = path.join(stateDir, 'recovery.ndjson');
   const dispose = vi.fn(async () => {
     throw cleanupError;
   });
   const recovery = createOwnerScopedDeviceClaimReconciler({
     scope: {
       signal: new AbortController().signal,
-      diagnostics: { emit },
+      diagnostics: { emit: emitDiagnostic },
       progress: { report: () => {} },
     },
     composeGateway: () => {
@@ -48,7 +53,7 @@ function fixture(reconcile: OwnerScopedClaimRecovery['reconcile']) {
     },
     composeRecovery: () => ({ reconcile, dispose }),
   });
-  return { claim, env, cleanupError, emit, dispose, recovery };
+  return { claim, env, cleanupError, logPath, dispose, recovery };
 }
 
 test('cleanup-only failure prevents a reconciled claim from being released', async () => {
@@ -69,8 +74,11 @@ test('disposal failure preserves the primary reconciliation error and records se
     throw primary;
   });
 
-  await expect(f.recovery(f.claim)).rejects.toBe(primary);
-  expect(f.emit).toHaveBeenCalledWith(
+  await withDiagnosticsScope({ logPath: f.logPath }, async () => {
+    await expect(f.recovery(f.claim)).rejects.toBe(primary);
+    flushDiagnosticsToSessionFile({ force: true });
+  });
+  expect(JSON.parse(fs.readFileSync(f.logPath, 'utf8'))).toEqual(
     expect.objectContaining({
       phase: 'device_claim_recovery_dispose_failed',
       data: expect.objectContaining({
@@ -85,9 +93,12 @@ test('disposal failure preserves an existing retained-claim reason', async () =>
   const retained = { status: 'retained', reason: 'screen-recording-owner-mismatch' } as const;
   const f = fixture(async () => retained);
 
-  await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).resolves.toBe(retained);
+  await withDiagnosticsScope({ logPath: f.logPath }, async () => {
+    await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).resolves.toBe(retained);
+    flushDiagnosticsToSessionFile({ force: true });
+  });
   expect(fs.existsSync(resolveDeviceClaimPath(f.claim.deviceKey, f.env))).toBe(true);
-  expect(f.emit).toHaveBeenCalledWith(
+  expect(JSON.parse(fs.readFileSync(f.logPath, 'utf8'))).toEqual(
     expect.objectContaining({
       phase: 'device_claim_recovery_dispose_failed',
       data: expect.objectContaining({ retainedReason: retained.reason }),
