@@ -2,7 +2,7 @@
 
 The [decision in #4056](https://github.com/callstack/agent-device/issues/4056#issuecomment-6499398178) retains the compile-checked duplicate declarations.
 The experiment did not reduce file or package coordination.
-This record supports the rejection of proposed [ADR 0028](../adr/0028-capability-family-cell-vocabulary.md).
+This record supports the accepted retention decision and rejection of the single-source table in [ADR 0028](../adr/0028-capability-family-cell-vocabulary.md).
 It does not establish that a whole capability addition was replayed.
 
 ## Source identity and comparison
