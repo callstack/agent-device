@@ -418,7 +418,9 @@ test('a rejected platform close retains registration and lock', async () => {
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
-  await expect(runtime.close()).rejects.toThrow('gateway teardown rejected');
+  const report = await runtime.close();
+  expect(report.platformOwners).toBe('failed');
+  expect(fs.readFileSync(paths.logPath, 'utf8')).toContain('gateway teardown rejected');
   expect(fs.existsSync(paths.infoPath)).toBe(true);
   expect(fs.existsSync(paths.lockPath)).toBe(true);
 });
