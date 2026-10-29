@@ -338,6 +338,16 @@ test('text and JSON CLI output agree on partial attribution and bounded dynamic 
   assert.ok(
     text.includes(`public commands whose handler chain reaches it (${json.commands.length}):`),
   );
+  assert.ok(
+    text.includes(
+      `dependents: ${json.dependents.direct.length} direct, ${json.dependents.transitive.length} transitive`,
+    ),
+  );
+  assert.ok(
+    text.includes(
+      `executable dependents (value + dynamic edges): ${json.executableDependents.direct.length} direct, ${json.executableDependents.transitive.length} transitive;`,
+    ),
+  );
   const dynamic = json.executableDependents.beyondValue;
   assert.ok(dynamic.length > 2, 'the platform route must exercise CLI truncation');
   assert.ok(

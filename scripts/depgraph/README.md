@@ -30,13 +30,12 @@ Two fields keep an empty or short list from reading as "nothing else is affected
   `dependents` keeps its value-only meaning; `beyondValue` lists the files that only a dynamic
   import connects. Type-only edges stay out of both.
 - `commandAttribution` marks every `commands` and `liveOwners` list as `partial`, with reason
-  `injected-calls-not-modeled`. These lists follow static import paths. Calls through injected
+  `injected-calls-not-modeled`. These lists follow value and dynamic import edges. Calls through injected
   functions can reach code without an import path from a command handler. An empty list means no
   handler import path was found; other commands may still depend on the file.
 
 Use these lists as lower bounds when you plan a change. They do not identify removable imports,
-prove test coverage, or name the missing commands. `gates` is unchanged and still selected from
-the value dependents.
+prove test coverage, or name the missing commands. `gates` comes from the value dependents only.
 
 ## When to reach for this
 

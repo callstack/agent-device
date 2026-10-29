@@ -272,7 +272,7 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
     `  run: pnpm check:affected --run`,
     `public commands whose handler chain reaches it (${radius.commands.length}): ` +
       formatBounded(bound(radius.commands, limit), (chain) => `${chain.command} (${chain.route})`),
-    '  attribution: PARTIAL — static import reachability only; injected calls are not modeled, so command and live-owner lists are lower bounds',
+    '  attribution: PARTIAL — import reachability (value + dynamic) only; injected calls are not modeled, so command and live-owner lists are lower bounds',
   ];
 
   if (!radius.liveOwners.present) {
