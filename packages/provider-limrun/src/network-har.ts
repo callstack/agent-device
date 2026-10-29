@@ -155,6 +155,14 @@ export async function startLimrunHarCapture(
   }
   const failures = createFailureRecorder();
   try {
+    // A relative path would make the capture directory, and its chmod, the daemon's cwd.
+    if (!path.isAbsolute(input.harPath)) {
+      return {
+        ok: false,
+        reason: 'tunnel-start-failed',
+        message: 'The HAR path must be absolute.',
+      };
+    }
     // The HAR holds raw traffic, so only the daemon's user may read it.
     const harDir = path.dirname(input.harPath);
     await fs.promises.mkdir(harDir, { recursive: true, mode: 0o700 });

@@ -172,6 +172,15 @@ test('the HAR keeps the newest entries under its size cap and reports the droppe
   assert.equal(report.byKind['har-truncated']?.count, 3);
 });
 
+test('a relative HAR path is refused before any directory is touched', async () => {
+  const fake = fakeTunnelClient();
+  const result = await startLimrunHarCapture(fake.client, { harPath: 'capture.har' });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.reason, 'tunnel-start-failed');
+  assert.equal(fake.started.length, 0);
+});
+
 test('a capture whose HAR cannot be written refuses before the tunnel opens', async () => {
   const fake = fakeTunnelClient();
   const harPath = tempHarPath();
