@@ -43,11 +43,13 @@ function packageEntries(exports, probe) {
   );
 }
 
+const normalizeExports = (exports) =>
+  typeof exports === 'string' ? { '.': exports } : (exports ?? {});
+
 const packages = {};
 
 const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-const rootExports =
-  typeof rootPkg.exports === 'string' ? { '.': rootPkg.exports } : rootPkg.exports;
+const rootExports = normalizeExports(rootPkg.exports);
 const buildConfig = await import(pathToFileURL(path.join(repoRoot, 'tsdown.config.ts')).href);
 const root = packageEntries(rootExports, (target) => {
   const name = target.replace('./dist/src/', '').replace(/\.js$/, '');
@@ -63,8 +65,7 @@ for (const node of graph.nodes) {
 }
 for (const pkgDir of [...packageDirs].sort()) {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, pkgDir, 'package.json'), 'utf8'));
-  const exports =
-    typeof manifest.exports === 'string' ? { '.': manifest.exports } : (manifest.exports ?? {});
+  const exports = normalizeExports(manifest.exports);
   const entries = packageEntries(exports, (target) => [
     `${pkgDir}/${target.slice(2)}`,
     `${pkgDir}/${target.slice(2).replace(/\.js$/, '.ts')}`,
@@ -79,7 +80,9 @@ const expected =
     (sum, dir) =>
       sum +
       Object.keys(
-        JSON.parse(fs.readFileSync(path.join(repoRoot, dir, 'package.json'), 'utf8')).exports ?? {},
+        normalizeExports(
+          JSON.parse(fs.readFileSync(path.join(repoRoot, dir, 'package.json'), 'utf8')).exports,
+        ),
       ).length,
     0,
   );

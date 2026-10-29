@@ -1,17 +1,15 @@
 export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZone }) {
   const sim = { alpha: 1, targetAlpha: 0.02, alphaDecay: 0.9825, running: true };
 
-  function repelNode(n, m, cell, a) {
+  function repelNode(n, m, a) {
     if (m === n) return;
     let ddx = n.x - m.x,
       ddy = n.y - m.y;
     let d2 = ddx * ddx + ddy * ddy;
-    if (d2 > cell * cell * 2 || d2 === 0) {
-      if (d2 === 0) {
-        ddx = (Math.random() - 0.5) * 2;
-        ddy = (Math.random() - 0.5) * 2;
-        d2 = 4;
-      } else return;
+    if (d2 === 0) {
+      ddx = (Math.random() - 0.5) * 2;
+      ddy = (Math.random() - 0.5) * 2;
+      d2 = 4;
     }
     const ideal = n.r + m.r + 6;
     if (d2 < ideal * ideal * 6) {
@@ -29,13 +27,14 @@ export function createSimulation({ nodes, pairs, zones, hubs, zoneRect, pkgOfZon
       for (let dy = -1; dy <= 1; dy++) {
         const bucket = grid.get(gx + dx + ':' + (gy + dy));
         if (!bucket) continue;
-        for (const m of bucket) repelNode(n, m, cell, a);
+        for (const m of bucket) repelNode(n, m, a);
       }
     }
   }
 
   function repelNodes(a) {
-    const cell = 30;
+    const maxRadius = nodes.reduce((max, node) => Math.max(max, node.r), 0);
+    const cell = Math.sqrt(6) * (2 * maxRadius + 6);
     const grid = new Map();
     for (const n of nodes) {
       const key = Math.floor(n.x / cell) + ':' + Math.floor(n.y / cell);

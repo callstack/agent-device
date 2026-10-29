@@ -1,3 +1,4 @@
+import { escapeHtml } from './html.js';
 import { createLayout } from './layout.js';
 import { createSimulation } from './simulation.js';
 import { buildAnalysis } from './analysis.js';
@@ -158,18 +159,23 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
   let dirty = true;
 
   function focusCycles() {
-    for (const n of nodes) if (n.cyc >= 0) focusNodes.add(n.index);
+    for (const n of nodes) if (n.cyc >= 0 && zoneVisible[n.z]) focusNodes.add(n.index);
+    const visibleCycleNodes = new Set();
     for (let i = 0; i < pairs.length; i++) {
       const p = pairs[i];
-      if (focusNodes.has(p.a) && focusNodes.has(p.b)) focusPairs.add(i);
+      if (!pairVisible(p) || !focusNodes.has(p.a) || !focusNodes.has(p.b)) continue;
+      focusPairs.add(i);
+      visibleCycleNodes.add(p.a);
+      visibleCycleNodes.add(p.b);
     }
+    focusNodes = visibleCycleNodes;
   }
 
   function focusSelection() {
     focusNodes.add(selected);
     for (const pi of nodePairs[selected]) {
       const p = pairs[pi];
-      if (p.display < 0) continue;
+      if (!pairVisible(p)) continue;
       focusPairs.add(pi);
       focusNodes.add(p.a);
       focusNodes.add(p.b);
@@ -180,7 +186,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     for (const n of nodes) if (n.z === selectedZone) focusNodes.add(n.index);
     for (let i = 0; i < pairs.length; i++) {
       const p = pairs[i];
-      if (p.display >= 0 && (nodes[p.a].z === selectedZone || nodes[p.b].z === selectedZone))
+      if (pairVisible(p) && (nodes[p.a].z === selectedZone || nodes[p.b].z === selectedZone))
         focusPairs.add(i);
     }
   }
@@ -340,6 +346,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       bctx.fillStyle = 'rgba(255,235,170,0.95)';
       for (const i of cycleNodes) {
         const n = nodes[i];
+        if (!focusNodes.has(i) || !zoneVisible[n.z]) continue;
         bctx.beginPath();
         bctx.arc(n.x, n.y, n.r * 1.4, 0, 7);
         bctx.fill();
@@ -608,12 +615,18 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       tooltip.style.left = Math.min(W - 430, e.offsetX + 14) + 'px';
       tooltip.style.top = e.offsetY + 14 + 'px';
       tooltip.innerHTML =
-        `${n.id}<br><span class="t-zone">${z.id}${z.rank != null ? ' · rank ' + z.rank : ''}` +
+        `${escapeHtml(n.id)}<br><span class="t-zone">${escapeHtml(z.id)}${z.rank != null ? ' · rank ' + z.rank : ''}` +
         ` · ${n.loc} loc · in ${n.in} · out ${n.out} · level ${n.lvl}` +
         `${n.cyc >= 0 ? ' · cycle ' + n.cyc : ''}</span>`;
     } else {
       tooltip.style.display = 'none';
     }
+    dirty = true;
+  });
+
+  canvas.addEventListener('pointercancel', () => {
+    drag = null;
+    canvas.classList.remove('panning');
     dirty = true;
   });
 
@@ -705,7 +718,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       <div class="row" data-zone="${z.index}">
         <input type="checkbox" id="z${z.index}" checked />
         <span class="swatch" style="background:${zoneColor(z)}"></span>
-        <label for="z${z.index}">${z.id}${z.rank != null ? ` <span class="count">r${z.rank}</span>` : ''}</label>
+        <label for="z${z.index}">${escapeHtml(z.id)}${z.rank != null ? ` <span class="count">r${z.rank}</span>` : ''}</label>
         <span class="count">${z.files}</span>
       </div>`,
       )
@@ -771,7 +784,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     if (selected == null) {
       const z = zones[selectedZone];
       el.innerHTML =
-        `<h2>Zone · ${z.id}</h2><div class="meta">${z.classification}` +
+        `<h2>Zone · ${escapeHtml(z.id)}</h2><div class="meta">${escapeHtml(z.classification)}` +
         `${z.rank != null ? ` · rank ${z.rank}` : ''} · ${z.files} files · ${z.loc} loc</div>`;
       return;
     }
@@ -795,13 +808,13 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
         .slice(0, 40)
         .map(([i, p]) => {
           const kinds = visibleKinds(p, enabledKinds, hideRedundant).map(kindBadge).join('');
-          return `<div class="dep" data-node="${i}">${dir === 'out' ? '→ ' : '← '}${nodes[i].id}${kinds}</div>`;
+          return `<div class="dep" data-node="${i}">${dir === 'out' ? '→ ' : '← '}${escapeHtml(nodes[i].id)}${kinds}</div>`;
         })
         .join('') +
       (items.length > 40 ? `<div class="hint">… ${items.length - 40} more</div>` : '');
     el.innerHTML = `<h2>Selection</h2>
-      <div class="file">${n.id}</div>
-      <div class="meta">${zones[n.z].id} · ${n.loc} loc · fan-in ${n.in} · fan-out ${n.out} · level ${n.lvl}${n.cyc >= 0 ? ` · in cycle ${n.cyc}` : ''}</div>
+      <div class="file">${escapeHtml(n.id)}</div>
+      <div class="meta">${escapeHtml(zones[n.z].id)} · ${n.loc} loc · fan-in ${n.in} · fan-out ${n.out} · level ${n.lvl}${n.cyc >= 0 ? ` · in cycle ${n.cyc}` : ''}</div>
       <h3>Imports (${out.length})</h3>${out.length ? list(out, 'out') : '<div class="hint">none</div>'}
       <h3>Imported by (${inc.length})</h3>${inc.length ? list(inc, 'in') : '<div class="hint">none</div>'}`;
   }
@@ -824,12 +837,13 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       const hits = needle
         ? nodes.filter((n) => n.id.includes(needle)).slice(0, 60)
         : nodes.slice(0, 0);
-      dl.innerHTML = hits.map((n) => `<option value="${n.id}">`).join('');
+      dl.innerHTML = hits.map((n) => `<option value="${escapeHtml(n.id)}">`).join('');
     };
     searchInput.addEventListener('input', () => fill(searchInput.value));
     searchInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       const q = searchInput.value.trim().toLowerCase();
+      if (!q) return;
       const hit =
         nodes.find((n) => n.id === searchInput.value) ||
         nodes.find((n) => n.id.toLowerCase().includes(q));

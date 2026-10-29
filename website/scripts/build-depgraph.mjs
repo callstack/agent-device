@@ -11,15 +11,16 @@ const viewer = path.join(root, 'tools/depgraph-view');
 // repository so the graph still uses the layering scan's tracked-file selection.
 let temporaryGit;
 const env = { ...process.env };
-if (process.env.VERCEL && !existsSync(path.join(root, '.git'))) {
-  temporaryGit = mkdtempSync(path.join(os.tmpdir(), 'depgraph-git-'));
-  execFileSync('git', ['init', '--bare', '--quiet', temporaryGit]);
-  env.GIT_DIR = temporaryGit;
-  env.GIT_WORK_TREE = root;
-  execFileSync('git', ['add', '--', 'src', 'packages'], { cwd: root, env });
-}
 
 try {
+  if (process.env.VERCEL && !existsSync(path.join(root, '.git'))) {
+    temporaryGit = mkdtempSync(path.join(os.tmpdir(), 'depgraph-git-'));
+    execFileSync('git', ['init', '--bare', '--quiet', temporaryGit]);
+    env.GIT_DIR = temporaryGit;
+    env.GIT_WORK_TREE = root;
+    execFileSync('git', ['add', '--', 'src', 'packages'], { cwd: root, env });
+  }
+
   mkdirSync(output, { recursive: true });
   for (const file of [
     'index.html',
@@ -28,6 +29,8 @@ try {
     'analysis.js',
     'graph-model.js',
     'simulation.js',
+    'html.js',
+    'dominator.js',
   ])
     copyFileSync(path.join(viewer, file), path.join(output, file));
   execFileSync(

@@ -26,8 +26,7 @@ export function createGraphModel(raw) {
       pairMap.set(key, pair);
     }
     pair.counts[kind]++;
-    // bit 2: the target is also reachable at distance >= 2, which the graph sets on value edges
-    // only because the transitive reduction that defines it is undefined on a value cycle
+    // Bit 2 marks reachability in the value-edge graph; value cycles leave it unset.
     if (kind === 0 && flags & 2) pair.redundantValue++;
   }
   const pairs = [...pairMap.values()];
