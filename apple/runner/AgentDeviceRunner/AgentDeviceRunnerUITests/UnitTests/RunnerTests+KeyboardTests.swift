@@ -260,7 +260,9 @@ extension RunnerTests {
       "--agent-device-text-entry-submit-clears",
       "--agent-device-text-entry-long-prefill",
     ]
-    let (response, recordedFailures) = try keyboardReturnOnLaunchedFixture()
+    let (response, recordedFailures) = try keyboardReturnOnLaunchedFixture(
+      waitingForTextInput: "agent-device-hardware-keyboard-input"
+    )
     let field = app.textFields["agent-device-hardware-keyboard-input"]
 
     XCTAssertEqual(textEntryInputCount(), 1)
@@ -280,13 +282,18 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func keyboardReturnOnLaunchedFixture() throws -> (response: Response, recordedFailures: Int) {
+  private func keyboardReturnOnLaunchedFixture(
+    waitingForTextInput identifier: String? = nil
+  ) throws -> (response: Response, recordedFailures: Int) {
     app.launch()
     addTeardownBlock { @MainActor in
       self.invalidateCachedTarget(reason: "unit_test_cleanup")
       self.app.terminate()
     }
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: appExistenceTimeout))
+    if let identifier {
+      XCTAssertTrue(app.textFields[identifier].waitForFixtureExistence(timeout: appExistenceTimeout))
+    }
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
