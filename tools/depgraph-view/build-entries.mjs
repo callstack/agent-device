@@ -33,20 +33,14 @@ const targetsOf = (value) =>
     })
     .filter((d) => typeof d === 'string');
 
-function packageEntries(pkgDir, exports, probe) {
-  const out = [];
-  for (const [subpath, value] of Object.entries(exports)) {
-    for (const target of targetsOf(value)) {
-      if (!target.startsWith('./')) continue;
-      for (const id of probe(target)) {
-        if (ids.has(id)) {
-          out.push({ id, subpath: subpath === '.' ? '.' : subpath });
-          break;
-        }
-      }
-    }
-  }
-  return out;
+function packageEntries(exports, probe) {
+  return Object.entries(exports).flatMap(([subpath, value]) =>
+    targetsOf(value).flatMap((target) => {
+      if (!target.startsWith('./')) return [];
+      const id = probe(target).find((candidate) => ids.has(candidate));
+      return id ? [{ id, subpath }] : [];
+    }),
+  );
 }
 
 const packages = {};
@@ -55,7 +49,7 @@ const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 
 const rootExports =
   typeof rootPkg.exports === 'string' ? { '.': rootPkg.exports } : rootPkg.exports;
 const buildConfig = await import(pathToFileURL(path.join(repoRoot, 'tsdown.config.ts')).href);
-const root = packageEntries('.', rootExports, (target) => {
+const root = packageEntries(rootExports, (target) => {
   const name = target.replace('./dist/src/', '').replace(/\.js$/, '');
   const source = buildConfig.default.entry[name];
   return source ? [source.replace(/^src\//, '')] : [];
@@ -71,7 +65,7 @@ for (const pkgDir of [...packageDirs].sort()) {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, pkgDir, 'package.json'), 'utf8'));
   const exports =
     typeof manifest.exports === 'string' ? { '.': manifest.exports } : (manifest.exports ?? {});
-  const entries = packageEntries(pkgDir, exports, (target) => [
+  const entries = packageEntries(exports, (target) => [
     `${pkgDir}/${target.slice(2)}`,
     `${pkgDir}/${target.slice(2).replace(/\.js$/, '.ts')}`,
   ]);

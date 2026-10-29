@@ -27,7 +27,7 @@ export function buildAnalysis({
    * its size is the branch moving `d` behind `import()` would cut. Same query as
    * computeDominatorSummary, run live so any file can be the entry.
    */
-  function dominatorsOf(entry) {
+  function reversePostorder(entry) {
     // iterative DFS -> postorder; reverse postorder is the fixpoint iteration order
     const post = [];
     const state = new Set([entry]);
@@ -45,7 +45,10 @@ export function buildAnalysis({
       state.add(next);
       stack.push({ node: next, edge: 0 });
     }
-    const order = post.slice().reverse();
+    return post.reverse();
+  }
+
+  function immediateDominators(entry, order) {
     const postRank = new Map(order.map((n, i) => [n, i]));
 
     const preds = new Map(order.map((n) => [n, []]));
@@ -57,15 +60,19 @@ export function buildAnalysis({
       changed = false;
       for (let i = 1; i < order.length; i++) {
         const n = order[i];
-        let candidate = -1;
-        for (const p of preds.get(n)) {
-          if (!idom.has(p)) continue;
-          candidate = candidate < 0 ? p : intersect(candidate, p);
-        }
+        const candidate = findDominator(preds.get(n));
         if (candidate < 0 || idom.get(n) === candidate) continue;
         idom.set(n, candidate);
         changed = true;
       }
+    }
+    function findDominator(predecessors) {
+      let candidate = -1;
+      for (const predecessor of predecessors) {
+        if (!idom.has(predecessor)) continue;
+        candidate = candidate < 0 ? predecessor : intersect(candidate, predecessor);
+      }
+      return candidate;
     }
     function intersect(finger1, finger2) {
       while (finger1 !== finger2) {
@@ -74,6 +81,13 @@ export function buildAnalysis({
       }
       return finger1;
     }
+
+    return idom;
+  }
+
+  function dominatorsOf(entry) {
+    const order = reversePostorder(entry);
+    const idom = immediateDominators(entry, order);
 
     // dominated sets bottom-up: the dominator parent always precedes its subtree in reverse
     // postorder, so walking `order` backwards fills a node's set before it rolls into its parent

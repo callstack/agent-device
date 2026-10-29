@@ -25,16 +25,19 @@ export function createLayout({ zones, nodes, raw, entryManifest, PALETTE }) {
   // declared package.json exports are the boundary every cross-package edge already lands on,
   // so those files become the package's entry points and ride its perimeter
   const entryNodes = new Map();
-  for (const [pkgName, list] of Object.entries(entryManifest)) {
-    if (!packages.has(pkgName)) continue;
-    for (const { id, subpath } of list) {
-      const idx = nodes.findIndex((n) => n.id === id);
-      if (idx < 0 || nodes[idx].entry) continue;
-      nodes[idx].entry = subpath;
-      if (!entryNodes.has(pkgName)) entryNodes.set(pkgName, []);
-      entryNodes.get(pkgName).push(idx);
+  function assignEntryNodes() {
+    for (const [pkgName, list] of Object.entries(entryManifest)) {
+      if (!packages.has(pkgName)) continue;
+      for (const { id, subpath } of list) {
+        const idx = nodes.findIndex((n) => n.id === id);
+        if (idx < 0 || nodes[idx].entry) continue;
+        nodes[idx].entry = subpath;
+        if (!entryNodes.has(pkgName)) entryNodes.set(pkgName, []);
+        entryNodes.get(pkgName).push(idx);
+      }
     }
   }
+  assignEntryNodes();
   for (const list of entryNodes.values())
     list.sort((a, b) => nodes[a].entry.localeCompare(nodes[b].entry) || a - b);
 

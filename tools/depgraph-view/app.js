@@ -1,4 +1,5 @@
 import { createLayout } from './layout.js';
+import { createSimulation } from './simulation.js';
 import { buildAnalysis } from './analysis.js';
 import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.js';
 
@@ -61,111 +62,15 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
 
   // ---------- force simulation ----------
 
-  const sim = { alpha: 1, targetAlpha: 0.02, alphaDecay: 0.9825, running: true };
+  const { sim, tick, reheat } = createSimulation({
+    nodes,
+    pairs,
+    zones,
+    hubs,
+    zoneRect,
+    pkgOfZone,
+  });
   let spread = 14;
-
-  function tick() {
-    const a = sim.alpha;
-    const cell = 30;
-    const grid = new Map();
-    for (const n of nodes) {
-      const key = Math.floor(n.x / cell) + ':' + Math.floor(n.y / cell);
-      let bucket = grid.get(key);
-      if (!bucket) grid.set(key, (bucket = []));
-      bucket.push(n);
-    }
-    for (const n of nodes) {
-      const gx = Math.floor(n.x / cell);
-      const gy = Math.floor(n.y / cell);
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const bucket = grid.get(gx + dx + ':' + (gy + dy));
-          if (!bucket) continue;
-          for (const m of bucket) {
-            if (m === n) continue;
-            let ddx = n.x - m.x,
-              ddy = n.y - m.y;
-            let d2 = ddx * ddx + ddy * ddy;
-            if (d2 > cell * cell * 2 || d2 === 0) {
-              if (d2 === 0) {
-                ddx = (Math.random() - 0.5) * 2;
-                ddy = (Math.random() - 0.5) * 2;
-                d2 = 4;
-              } else continue;
-            }
-            const ideal = n.r + m.r + 6;
-            if (d2 < ideal * ideal * 6) {
-              const d = Math.sqrt(d2);
-              const push = ((ideal * 3 - d) / d) * 0.08 * a;
-              n.vx += ddx * push;
-              n.vy += ddy * push;
-            }
-          }
-        }
-      }
-    }
-    for (const p of pairs) {
-      if (p.display < 0) continue;
-      const s = nodes[p.a],
-        t = nodes[p.b];
-      // boxes are fixed, so only edges that can be honoured inside one package steer the layout
-      if (pkgOfZone[s.z] !== pkgOfZone[t.z]) continue;
-      const dx = t.x - s.x,
-        dy = t.y - s.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ideal = s.r + t.r + 30;
-      const k = (((d - ideal) / d) * 0.045 * a) / Math.min(s.out + s.in, t.out + t.in);
-      s.vx += dx * k;
-      s.vy += dy * k;
-      t.vx -= dx * k;
-      t.vy -= dy * k;
-    }
-    for (const z of zones) {
-      const hub = hubs[z.index];
-      const r = zoneRect[z.index];
-      hub.x = r.x + r.w / 2;
-      hub.y = r.y + r.h / 2;
-    }
-    for (const n of nodes) {
-      // entry points ride the package perimeter, not the interior zone tile
-      if (n.entry != null) {
-        if (n.slot) {
-          n.x = n.slot.x;
-          n.y = n.slot.y;
-        }
-        n.vx = 0;
-        n.vy = 0;
-        continue;
-      }
-      const r = zoneRect[n.z];
-      const pad = Math.min(n.r + 3, r.w / 2 - 0.5, r.h / 2 - 0.5);
-      const clampX = (v) => Math.max(r.x + pad, Math.min(r.x + r.w - pad, v));
-      const clampY = (v) => Math.max(r.y + pad, Math.min(r.y + r.h - pad, v));
-      if (n.fx != null) {
-        n.fx = clampX(n.fx);
-        n.fy = clampY(n.fy);
-        n.x = n.fx;
-        n.y = n.fy;
-        n.vx = 0;
-        n.vy = 0;
-        continue;
-      }
-      // walls contain the cluster, so gravity stays negligible and packing fills the box
-      const hub = hubs[n.z];
-      n.vx += (hub.x - n.x) * 0.0015 * a;
-      n.vy += (hub.y - n.y) * 0.0015 * a;
-      n.vx = Math.max(-30, Math.min(30, n.vx * 0.82));
-      n.vy = Math.max(-30, Math.min(30, n.vy * 0.82));
-      n.x = clampX(n.x + n.vx);
-      n.y = clampY(n.y + n.vy);
-    }
-    if (sim.alpha > sim.targetAlpha) sim.alpha *= sim.alphaDecay;
-  }
-
-  function reheat(value) {
-    sim.alpha = Math.max(sim.alpha, value);
-    sim.running = true;
-  }
 
   // ---------- view / canvas ----------
 
@@ -252,32 +157,40 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
   let visiblePairCount = 0;
   let dirty = true;
 
+  function focusCycles() {
+    for (const n of nodes) if (n.cyc >= 0) focusNodes.add(n.index);
+    for (let i = 0; i < pairs.length; i++) {
+      const p = pairs[i];
+      if (focusNodes.has(p.a) && focusNodes.has(p.b)) focusPairs.add(i);
+    }
+  }
+
+  function focusSelection() {
+    focusNodes.add(selected);
+    for (const pi of nodePairs[selected]) {
+      const p = pairs[pi];
+      if (p.display < 0) continue;
+      focusPairs.add(pi);
+      focusNodes.add(p.a);
+      focusNodes.add(p.b);
+    }
+  }
+
+  function focusZone() {
+    for (const n of nodes) if (n.z === selectedZone) focusNodes.add(n.index);
+    for (let i = 0; i < pairs.length; i++) {
+      const p = pairs[i];
+      if (p.display >= 0 && (nodes[p.a].z === selectedZone || nodes[p.b].z === selectedZone))
+        focusPairs.add(i);
+    }
+  }
+
   function recomputeFocus() {
     focusNodes = new Set();
     focusPairs = new Set();
-    if (cycleMode) {
-      for (const n of nodes) if (n.cyc >= 0) focusNodes.add(n.index);
-      for (let i = 0; i < pairs.length; i++) {
-        const p = pairs[i];
-        if (focusNodes.has(p.a) && focusNodes.has(p.b)) focusPairs.add(i);
-      }
-    } else if (selected != null) {
-      focusNodes.add(selected);
-      for (const pi of nodePairs[selected]) {
-        const p = pairs[pi];
-        if (p.display < 0) continue;
-        focusPairs.add(pi);
-        focusNodes.add(p.a);
-        focusNodes.add(p.b);
-      }
-    } else if (selectedZone != null) {
-      for (const n of nodes) if (n.z === selectedZone) focusNodes.add(n.index);
-      for (let i = 0; i < pairs.length; i++) {
-        const p = pairs[i];
-        if (p.display >= 0 && (nodes[p.a].z === selectedZone || nodes[p.b].z === selectedZone))
-          focusPairs.add(i);
-      }
-    }
+    if (cycleMode) focusCycles();
+    else if (selected != null) focusSelection();
+    else if (selectedZone != null) focusZone();
     dirty = true;
     updateStatus();
   }
@@ -318,6 +231,13 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     c.closePath();
   }
 
+  function drawPackageZones(c) {
+    for (const pkg of pkgList) {
+      if (!pkgVisible(pkg.name) || pkg.zones.length < 2) continue;
+      for (const zi of pkg.zones) drawZoneBox(c, zi, selectedZone === zi);
+    }
+  }
+
   function drawPackageLayer(c) {
     c.save();
     c.translate(view.x, view.y);
@@ -334,10 +254,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       c.lineWidth = (active ? 1.6 : 1) / view.k;
       c.stroke();
     }
-    for (const pkg of pkgList) {
-      if (!pkgVisible(pkg.name) || pkg.zones.length < 2) continue;
-      for (const zi of pkg.zones) drawZoneBox(c, zi, selectedZone === zi);
-    }
+    drawPackageZones(c);
     c.restore();
   }
 
@@ -366,8 +283,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
   }
 
-  function drawEdges(c) {
-    // any selection — node, zone, or cycle mode — lights up its own edges and dims the rest
+  function edgeGroups() {
     const focusing = focusPairs.size > 0;
     const groups = new Map();
     for (let i = 0; i < pairs.length; i++) {
@@ -381,6 +297,12 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       if (!arr) groups.set(g, (arr = []));
       arr.push(p);
     }
+    return groups;
+  }
+
+  function drawEdges(c) {
+    // any selection — node, zone, or cycle mode — lights up its own edges and dims the rest
+    const groups = edgeGroups();
     for (const [g, arr] of groups) {
       const [kind, alpha] = g.split('|');
       c.strokeStyle = KIND_COLORS[kind];
@@ -434,6 +356,23 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     return true;
   }
 
+  function drawEntryNodes(c, focusing) {
+    // entry points sit on the package border, so they draw last and read as ports
+    for (const n of nodes) {
+      if (n.entry == null || !zoneVisible[n.z]) continue;
+      const dim = focusing && !focusNodes.has(n.index);
+      const r = Math.max(ENTRY_R, n.r) / Math.max(0.55, Math.sqrt(view.k));
+      c.globalAlpha = dim ? 0.12 : 1;
+      c.beginPath();
+      c.arc(n.x, n.y, r, 0, 7);
+      c.fillStyle = hexAlpha(zoneColor(zones[n.z]), 0.95);
+      c.fill();
+      c.lineWidth = 1.3 / view.k;
+      c.strokeStyle = dim ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.8)';
+      c.stroke();
+    }
+  }
+
   function drawNodes(c) {
     // node dimming stays opt-in; edge highlighting follows any selection
     const focusing = (focusMode || cycleMode) && focusNodes.size > 0;
@@ -451,20 +390,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
         c.stroke();
       }
     }
-    // entry points sit on the package border, so they draw last and read as ports
-    for (const n of nodes) {
-      if (n.entry == null || !zoneVisible[n.z]) continue;
-      const dim = focusing && !focusNodes.has(n.index);
-      const r = Math.max(ENTRY_R, n.r) / Math.max(0.55, Math.sqrt(view.k));
-      c.globalAlpha = dim ? 0.12 : 1;
-      c.beginPath();
-      c.arc(n.x, n.y, r, 0, 7);
-      c.fillStyle = hexAlpha(zoneColor(zones[n.z]), 0.95);
-      c.fill();
-      c.lineWidth = 1.3 / view.k;
-      c.strokeStyle = dim ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.8)';
-      c.stroke();
-    }
+    drawEntryNodes(c, focusing);
     c.globalAlpha = 1;
     if (selected != null && zoneVisible[nodes[selected].z]) {
       const n = nodes[selected];
@@ -484,76 +410,101 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     }
   }
 
-  function drawLabels(c) {
-    c.save();
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    c.textAlign = 'left';
-    for (const pkg of pkgList) {
-      if (!pkgVisible(pkg.name)) continue;
-      const r = pkgRect.get(pkg.name);
-      if (!r) continue;
-      const sx = r.x * view.k + view.x;
-      const sy = r.y * view.k + view.y;
-      const wpx = r.w * view.k;
-      const hpx = r.h * view.k;
-      if (sx > W || sy > H || sx + wpx < 0 || sy + hpx < 0) continue;
-      const active = selectedZone != null && pkg.zones.includes(selectedZone);
-      const count = `${pkg.zones.reduce((s, zi) => s + zones[zi].files, 0)} files`;
-      if (wpx > 90) {
-        const withCount = wpx > 260;
+  function drawZoneLabels(c, pkg) {
+    if (pkg.zones.length < 2) return;
+    c.font = '600 10px ui-monospace, Menlo, monospace';
+    for (const zi of pkg.zones) {
+      const zr = zoneRect[zi];
+      const zx = zr.x * view.k + view.x + 5;
+      const zy = zr.y * view.k + view.y + 12;
+      if (zr.w * view.k < 52 || zr.h * view.k < 18) continue;
+      if (zx > W || zy > H || zx < -150 || zy < -12) continue;
+      c.fillStyle =
+        selectedZone === zi ? 'rgba(255,255,255,0.95)' : hexAlpha(zoneColor(zones[zi]), 0.9);
+      c.fillText(clipText(c, zones[zi].id, zr.w * view.k - 10), zx, zy);
+    }
+  }
+
+  function drawPackageHeading(c, pkg, sx, sy, wpx, active, count) {
+    if (wpx > 90) {
+      const withCount = wpx > 260;
+      c.font = '10px ui-monospace, Menlo, monospace';
+      const countW = c.measureText(count).width;
+      c.font = '700 11.5px ui-monospace, Menlo, monospace';
+      const name = clipText(c, pkg.name, wpx - 12 - (withCount ? countW + 8 : 0));
+      const nameW = c.measureText(name).width;
+      c.fillStyle = active ? 'rgba(255,255,255,0.95)' : 'rgba(215,220,230,0.85)';
+      c.fillText(name, sx + 2, sy - 7);
+      if (withCount) {
         c.font = '10px ui-monospace, Menlo, monospace';
-        const countW = c.measureText(count).width;
-        c.font = '700 11.5px ui-monospace, Menlo, monospace';
-        const name = clipText(c, pkg.name, wpx - 12 - (withCount ? countW + 8 : 0));
-        const nameW = c.measureText(name).width;
-        c.fillStyle = active ? 'rgba(255,255,255,0.95)' : 'rgba(215,220,230,0.85)';
-        c.fillText(name, sx + 2, sy - 7);
-        if (withCount) {
-          c.font = '10px ui-monospace, Menlo, monospace';
-          c.fillStyle = 'rgba(139,147,167,0.75)';
-          c.fillText(count, sx + 2 + nameW + 8, sy - 7);
-        }
-      }
-      if (pkg.zones.length < 2) continue;
-      c.font = '600 10px ui-monospace, Menlo, monospace';
-      for (const zi of pkg.zones) {
-        const zr = zoneRect[zi];
-        const zx = zr.x * view.k + view.x + 5;
-        const zy = zr.y * view.k + view.y + 12;
-        if (zr.w * view.k < 52 || zr.h * view.k < 18) continue;
-        if (zx > W || zy > H || zx < -150 || zy < -12) continue;
-        c.fillStyle =
-          selectedZone === zi ? 'rgba(255,255,255,0.95)' : hexAlpha(zoneColor(zones[zi]), 0.9);
-        c.fillText(clipText(c, zones[zi].id, zr.w * view.k - 10), zx, zy);
+        c.fillStyle = 'rgba(139,147,167,0.75)';
+        c.fillText(count, sx + 2 + nameW + 8, sy - 7);
       }
     }
+  }
+
+  function drawPackageLabel(c, pkg) {
+    if (!pkgVisible(pkg.name)) return;
+    const r = pkgRect.get(pkg.name);
+    if (!r) return;
+    const sx = r.x * view.k + view.x;
+    const sy = r.y * view.k + view.y;
+    const wpx = r.w * view.k;
+    const hpx = r.h * view.k;
+    if (sx > W || sy > H || sx + wpx < 0 || sy + hpx < 0) return;
+    const active = selectedZone != null && pkg.zones.includes(selectedZone);
+    const count = `${pkg.zones.reduce((s, zi) => s + zones[zi].files, 0)} files`;
+    drawPackageHeading(c, pkg, sx, sy, wpx, active, count);
+    drawZoneLabels(c, pkg);
+  }
+
+  function drawPackageLabels(c) {
+    for (const pkg of pkgList) drawPackageLabel(c, pkg);
+  }
+
+  function drawFileLabel(c, n) {
+    if (!zoneVisible[n.z] || n.in < labelMinIn || n.entry != null) return;
+    if (focusNodes.size && !focusNodes.has(n.index)) return;
+    const sx = n.x * view.k + view.x;
+    const sy = n.y * view.k + view.y;
+    if (sx < 0 || sy < 0 || sx > W || sy > H) return;
+    c.fillText(n.id.split('/').pop(), sx, sy - n.r * view.k - 4);
+  }
+
+  function drawFileLabels(c) {
     if (view.k > 0.5 || labelMinIn <= 8) {
       c.font = '10px ui-monospace, Menlo, monospace';
       c.fillStyle = 'rgba(215,220,230,0.75)';
       c.textAlign = 'center';
-      for (const n of nodes) {
-        if (!zoneVisible[n.z] || n.in < labelMinIn || n.entry != null) continue;
-        if (focusNodes.size && !focusNodes.has(n.index)) continue;
-        const sx = n.x * view.k + view.x;
-        const sy = n.y * view.k + view.y;
-        if (sx < 0 || sy < 0 || sx > W || sy > H) continue;
-        c.fillText(n.id.split('/').pop(), sx, sy - n.r * view.k - 4);
-      }
+      for (const n of nodes) drawFileLabel(c, n);
     }
+  }
+
+  function drawEntryLabel(c, n) {
+    if (n.entry == null || !zoneVisible[n.z]) return;
+    if ((focusMode || cycleMode) && focusNodes.size > 0 && !focusNodes.has(n.index)) return;
+    const sx = n.x * view.k + view.x;
+    const sy = n.y * view.k + view.y;
+    if (sx < -80 || sy < -12 || sx > W + 80 || sy > H + 12) return;
+    c.fillStyle = hexAlpha(zoneColor(zones[n.z]), 0.95);
+    c.fillText(n.entry, sx, sy - Math.max(ENTRY_R, n.r) - 5);
+  }
+
+  function drawEntryLabels(c) {
     if (view.k > 1.15) {
-      const focusing = (focusMode || cycleMode) && focusNodes.size > 0;
       c.font = '9.5px ui-monospace, Menlo, monospace';
       c.textAlign = 'center';
-      for (const n of nodes) {
-        if (n.entry == null || !zoneVisible[n.z]) continue;
-        if (focusing && !focusNodes.has(n.index)) continue;
-        const sx = n.x * view.k + view.x;
-        const sy = n.y * view.k + view.y;
-        if (sx < -80 || sy < -12 || sx > W + 80 || sy > H + 12) continue;
-        c.fillStyle = hexAlpha(zoneColor(zones[n.z]), 0.95);
-        c.fillText(n.entry, sx, sy - Math.max(ENTRY_R, n.r) - 5);
-      }
+      for (const n of nodes) drawEntryLabel(c, n);
     }
+  }
+
+  function drawLabels(c) {
+    c.save();
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.textAlign = 'left';
+    drawPackageLabels(c);
+    drawFileLabels(c);
+    drawEntryLabels(c);
     c.restore();
   }
 

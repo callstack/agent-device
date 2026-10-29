@@ -21,7 +21,14 @@ if (process.env.VERCEL && !existsSync(path.join(root, '.git'))) {
 
 try {
   mkdirSync(output, { recursive: true });
-  for (const file of ['index.html', 'app.js', 'layout.js', 'analysis.js', 'graph-model.js'])
+  for (const file of [
+    'index.html',
+    'app.js',
+    'layout.js',
+    'analysis.js',
+    'graph-model.js',
+    'simulation.js',
+  ])
     copyFileSync(path.join(viewer, file), path.join(output, file));
   execFileSync(
     process.execPath,
