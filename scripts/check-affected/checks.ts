@@ -233,7 +233,12 @@ export function resolveCommand(
       ? UNIT_TEST_PROJECTS.map((name) => `--project=!${name}`)
       : [];
     return [
-      ...['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests'],
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
       ...unitProjects,
       ...related.changedFiles,
     ];
