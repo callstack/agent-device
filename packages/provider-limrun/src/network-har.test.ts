@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DestinationTunnelInspectionEvent } from '@limrun/api/destination-tunnel-inspection';
@@ -88,7 +88,17 @@ test('the default capture selectors carry the public wildcards and the Metro rou
   assert.ok(DEFAULT_LIMRUN_HAR_SELECTORS.includes('localhost:8081'));
 });
 
-test('a completed inspection event lands in a valid HAR document', async () => {
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+function readEntryCount(harPath: string): number {
+  return (JSON.parse(fs.readFileSync(harPath, 'utf8')) as { log: { entries: unknown[] } }).log
+    .entries.length;
+}
+
+test('completed requests reach the live HAR in one coalesced, owner-only write', async () => {
+  vi.useFakeTimers();
   const fake = fakeTunnelClient();
   const harPath = tempHarPath();
   const result = await startLimrunHarCapture(fake.client, { harPath });
@@ -98,18 +108,21 @@ test('a completed inspection event lands in a valid HAR document', async () => {
   assert.ok(emit);
   emit(harEntry('https://example.com/a'));
   emit(harEntry('https://example.com/b'));
+  assert.equal(readEntryCount(harPath), 0);
 
+  vi.advanceTimersByTime(250);
   const document = JSON.parse(fs.readFileSync(harPath, 'utf8')) as {
     log: { version: string; entries: unknown[] };
   };
   assert.equal(document.log.version, '1.2');
   assert.equal(document.log.entries.length, 2);
+  assert.equal(fs.statSync(harPath).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.dirname(harPath)).mode & 0o777, 0o700);
 
+  // Close flushes a request that is still inside the coalescing window.
+  emit(harEntry('https://example.com/c'));
   result.capture.close();
-  const final = JSON.parse(fs.readFileSync(result.capture.harPath, 'utf8')) as {
-    log: { entries: unknown[] };
-  };
-  assert.equal(final.log.entries.length, 2);
+  assert.equal(readEntryCount(harPath), 3);
 });
 
 test('tunnel failures are counted, with the latest endpoints and the typed dial reason', async () => {
@@ -160,11 +173,8 @@ test('tunnel failures are counted, with the latest endpoints and the typed dial 
     selector: '*.com',
   });
   // The failed request stays in the HAR, as a status-0 entry.
-  const document = JSON.parse(fs.readFileSync(result.capture.harPath, 'utf8')) as {
-    log: { entries: unknown[] };
-  };
-  assert.equal(document.log.entries.length, 2);
   result.capture.close();
+  assert.equal(readEntryCount(result.capture.harPath), 2);
 });
 
 test('inspection errors from pinned hosts do not evict failed requests', async () => {

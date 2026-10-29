@@ -9,6 +9,7 @@ import type {
   CaptureSnapshotResult,
   SessionCloseResult,
 } from '@agent-device/contracts/client';
+import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import { publicSnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isSerialAddressablePlatform } from '@agent-device/kernel/device';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
@@ -170,10 +171,6 @@ function serializeOpenSessionPaths(result: AppOpenResult): Record<string, string
 export function serializeCloseResult(
   result: SessionCloseResult | AppCloseResult,
 ): Record<string, unknown> {
-  const cloudArtifacts = 'provider' in result ? result.provider?.cloudArtifacts : undefined;
-  const artifacts = (cloudArtifacts?.cloudArtifacts ?? []).filter(
-    (artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url,
-  );
   return {
     session: result.session,
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
@@ -181,9 +178,23 @@ export function serializeCloseResult(
     ...successText(
       [
         result.session ? `Closed: ${result.session}` : 'Closed',
-        ...artifacts.slice(0, 3).map((artifact) => `${artifact.name}: ${artifact.url}`),
-        ...(cloudArtifacts?.message ? [cloudArtifacts.message] : []),
+        ...formatDeliveredArtifactLines(
+          'provider' in result ? result.provider?.cloudArtifacts : undefined,
+        ),
       ].join('\n'),
     ),
   };
+}
+
+/** The ready provider artifacts a released session left behind, and the provider's note on them. */
+export function formatDeliveredArtifactLines(
+  cloudArtifacts: CloudArtifactsResult | undefined,
+): string[] {
+  return [
+    ...(cloudArtifacts?.cloudArtifacts ?? [])
+      .filter((artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url)
+      .slice(0, 3)
+      .map((artifact) => `${artifact.name}: ${artifact.url}`),
+    ...(cloudArtifacts?.message ? [cloudArtifacts.message] : []),
+  ];
 }

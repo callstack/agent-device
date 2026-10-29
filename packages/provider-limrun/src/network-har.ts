@@ -67,12 +67,14 @@ export type LimrunHarTunnelClient = Readonly<{
  *   host that rejected the interception.
  * - `inspection-gap`: the inspection stream skipped events, so the HAR misses requests.
  * - `inspection-stream-error`: the inspection stream itself failed.
+ * - `har-write-failed`: the HAR file could not be written, so it lags the captured traffic.
  */
 export type LimrunTunnelFailureKind =
   | 'request-failed'
   | 'inspection-error'
   | 'inspection-gap'
-  | 'inspection-stream-error';
+  | 'inspection-stream-error'
+  | 'har-write-failed';
 
 export type LimrunTunnelFailure = Readonly<{
   at: string;
@@ -106,6 +108,8 @@ export type LimrunTunnelFailureReport = Readonly<{
 
 const LATEST_FAILURES_PER_KIND = 5;
 const TUNNEL_STATUS_BUDGET_MS = 2_000;
+/** Completed requests within this window share one rewrite of the HAR file. */
+const HAR_WRITE_COALESCE_MS = 250;
 
 export type LimrunHarCapture = Readonly<{
   harPath: string;
@@ -116,7 +120,7 @@ export type LimrunHarCapture = Readonly<{
 }>;
 
 export type LimrunHarCaptureFailure = Readonly<{
-  reason: 'tunnel-in-use' | 'tunnel-start-failed';
+  reason: 'tunnel-in-use' | 'tunnel-start-failed' | 'capture-dir-unset';
   message: string;
 }>;
 
@@ -141,8 +145,19 @@ export async function startLimrunHarCapture(
   const entries: DestinationTunnelHAREntry[] = [];
   const failures = createFailureRecorder();
   try {
-    fs.mkdirSync(path.dirname(input.harPath), { recursive: true });
+    // The HAR holds raw traffic, so only the daemon's user may read it.
+    fs.mkdirSync(path.dirname(input.harPath), { recursive: true, mode: 0o700 });
     writeHar(input.harPath, entries);
+    let pendingWrite: NodeJS.Timeout | undefined;
+    const flush = (): void => {
+      clearTimeout(pendingWrite);
+      pendingWrite = undefined;
+      try {
+        writeHar(input.harPath, entries);
+      } catch (error) {
+        failures.record('har-write-failed', { message: describe(error) });
+      }
+    };
     const assembler = new DestinationTunnelHARAssembler();
     const tunnel = await client.startTunnel({
       selectors,
@@ -152,7 +167,7 @@ export async function startLimrunHarCapture(
         const completed = assembler.add(event);
         if (!completed || event.type !== 'complete') return;
         entries.push(completed);
-        writeHar(input.harPath, entries);
+        pendingWrite ??= setTimeout(flush, HAR_WRITE_COALESCE_MS);
       },
       onInspectionError: (error) => {
         failures.record('inspection-stream-error', { message: describe(error) });
@@ -167,7 +182,7 @@ export async function startLimrunHarCapture(
           if (closed) return;
           closed = true;
           tunnel.close();
-          writeHar(input.harPath, entries);
+          flush();
         },
         failures: async () =>
           failures.report(
@@ -293,7 +308,7 @@ function writeHar(harPath: string, entries: readonly DestinationTunnelHAREntry[]
   };
   // Write-then-rename, so a reader never observes a half-written document.
   const tempPath = `${harPath}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(document, null, 1)}\n`);
+  fs.writeFileSync(tempPath, `${JSON.stringify(document, null, 1)}\n`, { mode: 0o600 });
   fs.renameSync(tempPath, harPath);
 }
 

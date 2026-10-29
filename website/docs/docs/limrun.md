@@ -104,7 +104,7 @@ agent-device disconnect
 
 `--provider-network-hosts` takes exact hosts, wildcards such as `*.example.com`, and `localhost:<port>` routes. Keep `localhost:8081`, or your Metro port, in the list when the app loads its bundle from a local Metro server. Without `--provider-network-hosts`, the capture covers every `.com`, `.org`, `.app`, `.net`, `.io`, and `.dev` host plus `localhost:8081`. Operating system traffic then fills most of the file, and hosts under other domains, such as `.co`, `.ai`, or country domains, are not captured.
 
-The file is `<state-dir>/network-har/<instance-id>.har`. `agent-device artifacts` lists it during the session and after `close`, while the daemon still runs.
+The file is `<state-dir>/network-har/<instance-id>-<lease-id>.har`, readable only by your user. `agent-device artifacts` lists it during the session and after `close`, while the daemon still runs. If the capture can't start, for example because a `--provider-network-hosts` entry is not a valid host, `artifacts` reports the network artifact as `unavailable` with the reason.
 
 ### When a request fails or hangs
 

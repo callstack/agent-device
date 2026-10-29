@@ -1,8 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import type {
-  CloudArtifact,
-  CloudProviderSessionResult,
-} from '@agent-device/contracts/observability';
+import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
@@ -40,6 +37,7 @@ import {
   stopMetroCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
+import { formatDeliveredArtifactLines } from '../../commands/output/result-serialization.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -389,8 +387,7 @@ function renderDisconnectOutput(
   return [
     `Disconnected remote session "${session}".`,
     ...formatProviderReleaseWarnings(providerData),
-    ...formatReadyArtifactLinks(providerData?.cloudArtifacts?.cloudArtifacts),
-    ...(providerData?.cloudArtifacts?.message ? [providerData.cloudArtifacts.message] : []),
+    ...formatDeliveredArtifactLines(providerData?.cloudArtifacts),
   ].join('\n');
 }
 
@@ -410,13 +407,6 @@ function formatProviderReleaseWarning(warning: unknown): string | undefined {
   if (typeof entry.message !== 'string' || entry.message.length === 0) return undefined;
   const code = typeof entry.code === 'string' && entry.code.length > 0 ? ` (${entry.code})` : '';
   return `Provider release warning${code}: ${entry.message}`;
-}
-
-function formatReadyArtifactLinks(artifacts: CloudArtifact[] | undefined): string[] {
-  return (artifacts ?? [])
-    .filter((artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url)
-    .slice(0, 3)
-    .map((artifact) => `${artifact.name}: ${artifact.url}`);
 }
 
 function readConnectProvider(
