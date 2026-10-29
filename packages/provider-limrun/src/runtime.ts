@@ -425,6 +425,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const live = this.networkCaptures.get(lease.leaseId);
     const capture = await this.writeNetworkCapture(lease.leaseId);
     if (capture) this.networkCaptures.set(lease.leaseId, capture);
+    for (const [leaseId, state] of this.networkCaptures) {
+      if (this.networkCaptures.size <= SETTLED_NETWORK_CAPTURE_LIMIT) break;
+      if (state.phase !== 'capturing') this.networkCaptures.delete(leaseId);
+    }
     if (live?.phase === 'capturing') live.capture.close();
     await this.terminateSession(session);
     this.sessions.delete(lease.leaseId);
@@ -629,6 +633,9 @@ function portReverseResult(options: ProviderPortReverseOptions): Record<string, 
 function unsupported(command: string, message: string): never {
   throw new AppError('UNSUPPORTED_OPERATION', message, { command });
 }
+
+/** Released captures stay listable; the oldest records are forgotten past this count. */
+const SETTLED_NETWORK_CAPTURE_LIMIT = 32;
 
 type SettledNetworkCapture =
   | Readonly<{ phase: 'written'; harPath: string; failures: LimrunNetworkFailures }>

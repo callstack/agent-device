@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
     | undefined,
   disconnect: vi.fn(),
   tunnelClose: vi.fn(),
+  captureTunnelClose: vi.fn(),
   onInspectionEvent: undefined as ((event: unknown) => void) | undefined,
 }));
 
@@ -66,7 +67,7 @@ vi.mock('@limrun/api/instance-client', () => ({
     })),
     startTunnel: vi.fn(async (options: { onInspectionEvent: (event: unknown) => void }) => {
       state.onInspectionEvent = options.onInspectionEvent;
-      return { tunnelId: 't1', selectors: [], close: vi.fn() };
+      return { tunnelId: 't1', selectors: [], close: state.captureTunnelClose };
     }),
     getTunnelStatus: vi.fn(async () => ({
       lastDialFailure: { tunnelId: 't1', reason: 'dns_not_found' },
@@ -219,6 +220,7 @@ test('a network capture writes a private HAR with its failures on artifacts and 
       cloudArtifacts?: { cloudArtifacts: { url?: string }[]; message?: string };
     };
     assert.equal(released.cloudArtifacts?.cloudArtifacts[0]?.url, harPath);
+    assert.equal(state.captureTunnelClose.mock.calls.length, 1);
     assert.match(
       String(released.cloudArtifacts?.message),
       /last request-failed missing\.example\.com:443/,

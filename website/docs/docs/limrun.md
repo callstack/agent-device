@@ -98,7 +98,7 @@ agent-device connect limrun --platform ios --provider-network-logs \
 agent-device open com.example.app
 agent-device artifacts      # writes the HAR and prints its path
 jq -r '.log.entries[] | "\(.response.status) \(.request.method) \(.request.url)"' <har-path>
-agent-device close          # writes the final HAR and prints its path
+agent-device close          # writes the HAR again and prints its path
 agent-device disconnect
 ```
 

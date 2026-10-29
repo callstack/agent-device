@@ -309,7 +309,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--provider-network-logs',
     usageDescription:
-      'Limrun: capture session network traffic; artifacts and close write it as a HAR file on the daemon host and print its path and any capture failures. Pass --provider-network-hosts with your app API hosts. Captured traffic exits through the daemon host, the HAR holds raw headers and bodies, and certificate-pinned, DNS-over-HTTPS, and HTTP/1.1-only TLS hosts are not captured',
+      'Limrun: capture session network traffic; artifacts and close write it as a HAR file on the daemon host and print its path and any capture failures. Pass --provider-network-hosts with your app API hosts. Captured traffic exits through the daemon host, the HAR holds raw headers and bodies, certificate-pinned hosts and HTTPS hosts without HTTP/2 fail to connect, and DNS-over-HTTPS bypasses the capture',
     projectConfig: false,
     recorded: false,
   },

@@ -156,6 +156,8 @@ export async function writeLimrunHar(
     log: { version: '1.2', creator: { name: 'agent-device', version: '1' }, entries },
   };
   await fs.promises.writeFile(harPath, `${JSON.stringify(har)}\n`, { mode: 0o600 });
+  // `mode` applies only when the file is created.
+  await fs.promises.chmod(harPath, 0o600);
 }
 
 /** The status read takes no signal, so a slow read is abandoned after the budget. */
