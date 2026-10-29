@@ -1,5 +1,5 @@
 {
-  "description": "Independent trait cases at producer seams. Bridge words and Limrun trait names are producer-specific inputs, not a raw encoding equivalence. Limrun keeps reported types, uses IsEditing for a focus witness, and recognizes TabButton during collapsed-bar recovery. XCTest takes XCUIElement types and is not applicable to trait classification; live conformance remains its authority. Absent expected keys mean absent facts.",
+  "description": "Independent trait cases at producer seams. Bridge words and Limrun trait names are producer-specific inputs, not a raw encoding equivalence. Limrun keeps reported types, uses IsEditing for a focus witness, and recognizes TabButton during collapsed-bar recovery. XCTest takes XCUIElement types and is not applicable to trait classification; live conformance remains its authority. Absent expected keys mean absent facts. Basis describes each producer input: captured bridge words are recorded in the existing tree tests; rule inputs are synthetic. Expected fields pin producer rules, including unobserved precedence branches. Limrun inputs are synthetic seam cases. Captured words do not establish live XCTest parity.",
   "cases": [
     {
       "name": "tab trait overrides cell type",
@@ -9,6 +9,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "captured",
         "input": {
           "automationType": 75,
           "traits": "146297323520"
@@ -18,6 +19,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "TabButton makes a collapsed-bar tab candidate",
         "input": {
           "type": "RadioButton",
           "traits": ["Button", "TabButton"]
@@ -36,6 +39,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 75,
           "traits": "146028888064"
@@ -45,6 +49,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "Button without TabButton is not a collapsed-bar tab candidate",
         "input": {
           "type": "RadioButton",
           "traits": ["Button"]
@@ -63,6 +69,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "captured",
         "input": {
           "automationType": 0,
           "traits": "140746078552064"
@@ -82,6 +89,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "8590196736"
@@ -101,6 +109,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "140746095330304"
@@ -120,6 +129,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "140746078553088"
@@ -139,9 +149,46 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "140746078289920"
+        },
+        "expected": {
+          "type": "Other"
+        }
+      }
+    },
+    {
+      "name": "search bit without text entry",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "basis": "rule",
+        "input": {
+          "automationType": 0,
+          "traits": "1024"
+        },
+        "expected": {
+          "type": "Other"
+        }
+      }
+    },
+    {
+      "name": "secure bit without text entry",
+      "applicability": {
+        "bridge": "applicable",
+        "limrun": "not-applicable",
+        "runner": "not-applicable"
+      },
+      "bridge": {
+        "basis": "rule",
+        "input": {
+          "automationType": 0,
+          "traits": "16777216"
         },
         "expected": {
           "type": "Other"
@@ -156,6 +203,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 45,
           "traits": "140746078552064"
@@ -175,6 +223,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "8"
@@ -185,6 +234,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "Selected reports selection",
         "input": {
           "type": "Other",
           "traits": ["Selected"]
@@ -203,6 +254,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "rule",
         "input": {
           "automationType": 0,
           "traits": "0"
@@ -212,6 +264,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "without Selected the selection fact is absent",
         "input": {
           "type": "Other",
           "traits": ["Button"]
@@ -228,6 +282,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "captured",
         "input": {
           "automationType": 52,
           "traits": "140883519602688"
@@ -240,6 +295,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "IsEditing provides a focus witness",
         "input": {
           "type": "TextView",
           "traits": ["IsEditing"]
@@ -258,6 +315,7 @@
         "runner": "not-applicable"
       },
       "bridge": {
+        "basis": "captured",
         "input": {
           "automationType": 52,
           "traits": "140883517505536"
@@ -269,6 +327,8 @@
         }
       },
       "limrun": {
+        "basis": "rule",
+        "fact": "without IsEditing no focus witness is reported",
         "input": {
           "type": "TextView",
           "traits": ["TextEntry"]

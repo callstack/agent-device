@@ -248,11 +248,16 @@ const traitClassification = JSON.parse(
 ) as {
   cases: Array<{
     name: string;
-    limrun?: { seam: string; input: IosTreeNode; expected: { focusWitness: boolean } };
+    limrun?: {
+      fact: string;
+      seam: string;
+      input: IosTreeNode;
+      expected: { focusWitness: boolean };
+    };
   }>;
 };
 for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'focus')) {
-  test(`Limrun trait focus golden: ${row.name}`, () => {
+  test(`Limrun trait focus golden: ${row.limrun!.fact}`, () => {
     const input = { ...row.limrun!.input, frame: FIELD_RECT };
     expect(readLimrunTextEntryFocus(input) !== null).toBe(row.limrun!.expected.focusWitness);
   });

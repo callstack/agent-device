@@ -221,11 +221,11 @@ const traitClassification = JSON.parse(
 ) as {
   cases: Array<{
     name: string;
-    limrun?: { seam: string; input: IosTreeNode; expected: { selected?: boolean } };
+    limrun?: { fact: string; seam: string; input: IosTreeNode; expected: { selected?: boolean } };
   }>;
 };
 for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'selection')) {
-  test(`Limrun trait selection golden: ${row.name}`, async () => {
+  test(`Limrun trait selection golden: ${row.limrun!.fact}`, async () => {
     const result = await captureLimrunIosSnapshot(createLimrunSnapshotSession(row.limrun!.input));
     expect(result.acquisition.nodes[0]?.selected).toBe(row.limrun!.expected.selected);
   });
