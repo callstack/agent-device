@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import type { ChildProcess } from 'node:child_process';
+import { test, vi } from 'vitest';
 import {
   isCommandTimeoutError,
   runCmd,
@@ -388,24 +389,61 @@ test.runIf(process.platform !== 'win32')(
   },
 );
 
+// The deadline is armed when the shell is spawned, not once its trap is in place, so on the
+// real clock a loaded host can deliver the first signal to a shell that does not ignore it yet.
+// The module's timers run on a held clock instead: the deadline fires only after the shell
+// announced its trap, and each escalation step is read from the signals the child was sent.
 test.runIf(process.platform !== 'win32')(
   'a deadline with a kill policy still ends a child that ignores the first signal',
   async () => {
-    const startedAt = Date.now();
-    await assert.rejects(
-      () =>
-        runCmd('/bin/sh', ['-c', `trap '' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & wait`], {
+    const graceMs = 200;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let child: ChildProcess | undefined;
+    let sentSignals: () => unknown[] = () => [];
+    try {
+      let announceTrap!: () => void;
+      const trapInstalled = new Promise<void>((resolve) => (announceTrap = resolve));
+      const ignoring = runCmdStreaming(
+        '/bin/sh',
+        ['-c', `trap '' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & printf ready; wait`],
+        {
           timeoutMs: DEADLINE_MS,
-          kill: { signal: 'SIGTERM', graceMs: 200 },
+          kill: { signal: 'SIGTERM', graceMs },
+          onStdoutChunk: () => announceTrap(),
+          onSpawn: (spawned) => {
+            child = spawned;
+            const kill = vi.spyOn(spawned, 'kill');
+            sentSignals = () => kill.mock.calls.map(([signal]) => signal);
+          },
+        },
+      );
+      const rejection = settledRejection(ignoring);
+      await Promise.race([
+        trapInstalled,
+        rejection.then(() => {
+          throw new Error('the command settled before its shell installed the trap');
         }),
-      (error: unknown) => {
-        assert.equal(isCommandTimeoutError(error), true);
-        return true;
-      },
-    );
-    const elapsedMs = Date.now() - startedAt;
-    assert.ok(elapsedMs >= DEADLINE_MS + 200, `escalated before the grace passed: ${elapsedMs}ms`);
-    assert.ok(elapsedMs < 2_000, `the grace became a way to outlive the deadline: ${elapsedMs}ms`);
+      ]);
+
+      vi.advanceTimersByTime(DEADLINE_MS);
+      assert.deepEqual(sentSignals(), ['SIGTERM'], 'the deadline did not send the policy signal');
+      vi.advanceTimersByTime(graceMs - 1);
+      assert.deepEqual(sentSignals(), ['SIGTERM'], 'escalated before the grace passed');
+      vi.advanceTimersByTime(1);
+      assert.deepEqual(
+        sentSignals(),
+        ['SIGTERM', 'SIGKILL'],
+        'the grace became a way to outlive the deadline',
+      );
+
+      const outcome = await rejection;
+      assert.ok(outcome, 'a command killed at its deadline must not resolve');
+      assert.ok(isCommandTimeoutError(outcome.error));
+      assert.equal(child?.signalCode, 'SIGKILL', 'the first signal ended the child, not SIGKILL');
+    } finally {
+      vi.useRealTimers();
+      if (child?.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
   },
   10_000,
 );
