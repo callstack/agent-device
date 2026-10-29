@@ -42,12 +42,7 @@ import type {
   CommandTimeoutPolicy,
   TargetIdentityVerification,
 } from './types.ts';
-// The family tuples this root composes, so a source-attribution consumer reads membership from them.
-export {
-  DEVICE_OPERATION_COMMAND_DESCRIPTORS,
-  LOCAL_CLI_COMMAND_DESCRIPTORS,
-  SESSION_OPERATION_COMMAND_DESCRIPTORS,
-};
+export { selectFindStepUses, selectSnapshotStepUses } from './descriptors/device-operations.ts';
 
 type RawCommandCatalogGroup<T> = T extends { catalog: { group: infer Group } } ? Group : never;
 

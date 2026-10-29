@@ -5,13 +5,7 @@ import {
 } from '@agent-device/command-registry/cli-command-aliases';
 import { buildCommandUsage } from '../commands/schema/usage.ts';
 import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
-import {
-  commandDescriptors,
-  DEVICE_OPERATION_COMMAND_DESCRIPTORS,
-  LOCAL_CLI_COMMAND_DESCRIPTORS,
-  SESSION_OPERATION_COMMAND_DESCRIPTORS,
-  type Command,
-} from '@agent-device/command-registry/registry';
+import { commandDescriptors, type Command } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import type { CommandTimeoutPolicy } from '@agent-device/command-registry/types';
 import {
@@ -306,25 +300,6 @@ function groupFlagDefinitions(): Map<FlagKey, FlagDefinition[]> {
   return result;
 }
 
-/** The family modules the registry root spreads in, keyed by the tuple they declare. */
-const DESCRIPTOR_FAMILY_MODULES: readonly {
-  readonly descriptors: readonly { readonly name: string }[];
-  readonly file: string;
-}[] = [
-  {
-    descriptors: SESSION_OPERATION_COMMAND_DESCRIPTORS,
-    file: 'packages/command-registry/src/descriptors/session-operations.ts',
-  },
-  {
-    descriptors: DEVICE_OPERATION_COMMAND_DESCRIPTORS,
-    file: 'packages/command-registry/src/descriptors/device-operations.ts',
-  },
-  {
-    descriptors: LOCAL_CLI_COMMAND_DESCRIPTORS,
-    file: 'packages/command-registry/src/descriptors/local-cli.ts',
-  },
-];
-
 function commandFiles(
   command: string,
   ownerFiles: readonly string[],
@@ -334,10 +309,6 @@ function commandFiles(
   daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): string[] {
   const derived = ['packages/command-registry/src/registry.ts'];
-  const familyModule = DESCRIPTOR_FAMILY_MODULES.find(({ descriptors }) =>
-    descriptors.some((descriptor) => descriptor.name === command),
-  );
-  if (familyModule) derived.push(familyModule.file);
   const opportunistic: string[] = [];
   if (family) {
     derived.push(`src/commands/${family}/index.ts`);

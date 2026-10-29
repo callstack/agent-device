@@ -1,3 +1,6 @@
+import { DEVICE_OPERATION_COMMAND_DESCRIPTORS } from './descriptors/device-operations.ts';
+import { SESSION_OPERATION_COMMAND_DESCRIPTORS } from './descriptors/session-operations.ts';
+import { LOCAL_CLI_COMMAND_DESCRIPTORS } from './descriptors/local-cli.ts';
 import type { DaemonCommandRoute } from './daemon-command-descriptor.ts';
 import { RAW_COMMAND_DESCRIPTORS, type Command } from './registry.ts';
 
@@ -46,7 +49,29 @@ export const COMMAND_OWNER_FILES = buildOwnerFiles(RAW_COMMAND_DESCRIPTORS) sati
 
 /** The owner-file claims for one command (development-only navigation metadata). */
 export function ownerFilesForCommand(command: Command): readonly [string, ...string[]] {
-  return COMMAND_OWNER_FILES[command];
+  const families: readonly {
+    descriptors: readonly { name: string }[];
+    file: string;
+  }[] = [
+    {
+      descriptors: SESSION_OPERATION_COMMAND_DESCRIPTORS,
+      file: 'packages/command-registry/src/descriptors/session-operations.ts',
+    },
+    {
+      descriptors: DEVICE_OPERATION_COMMAND_DESCRIPTORS,
+      file: 'packages/command-registry/src/descriptors/device-operations.ts',
+    },
+    {
+      descriptors: LOCAL_CLI_COMMAND_DESCRIPTORS,
+      file: 'packages/command-registry/src/descriptors/local-cli.ts',
+    },
+  ];
+  const declaration = families.find(({ descriptors }) =>
+    descriptors.some(({ name }) => name === command),
+  );
+  return declaration
+    ? [declaration.file, ...COMMAND_OWNER_FILES[command]]
+    : COMMAND_OWNER_FILES[command];
 }
 
 /**
