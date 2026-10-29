@@ -144,7 +144,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         leaseBackend: lease.backend,
       });
     }
-    await this.release(lease);
+    const result = await this.release(lease);
+    if (Array.isArray(result?.warnings) && result.warnings.length > 0) {
+      throw new AppError('COMMAND_FAILED', 'Limrun network capture could not close cleanly.');
+    }
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
@@ -275,11 +278,16 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     this.pendingNetworkCaptures.clear();
     const captures = [...this.networkCaptures.values()];
     this.networkCaptures.clear();
-    await Promise.allSettled(captures.map(async (capture) => await capture.stop()));
+    const captureResults = await Promise.allSettled(
+      captures.map(async (capture) => await capture.stop()),
+    );
     const sessions = [...this.sessions.values()];
     await Promise.allSettled(sessions.map(async (session) => await this.terminateSession(session)));
     this.sessions.clear();
     this.appAliases.clear();
+    if (captureResults.some((result) => result.status === 'rejected')) {
+      throw new AppError('COMMAND_FAILED', 'Limrun network capture could not close cleanly.');
+    }
   }
 
   private async allocate(

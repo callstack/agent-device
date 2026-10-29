@@ -239,6 +239,22 @@ test('lease release deletes the instance even when capture close throws', async 
   await runtime.shutdown();
 });
 
+test('shutdown reports a capture close failure after disconnecting the session', async () => {
+  state.disconnect.mockClear();
+  state.startTunnel.mockImplementationOnce(async () => ({
+    close: () => {
+      throw new Error('capture close failed');
+    },
+  }));
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const device = await allocateAndroidDevice(runtime, 'lease-shutdown-close-error');
+  const capture = await runtime.networkCaptureFor(device);
+  assert.ok(capture);
+  await capture.start(undefined);
+  await assert.rejects(() => runtime.shutdown(), /network capture could not close/);
+  assert.equal(state.disconnect.mock.calls.length, 1);
+});
+
 function requestScope(signal: AbortSignal = new AbortController().signal): PlatformRequestScope {
   return {
     signal,

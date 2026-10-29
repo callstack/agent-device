@@ -52,6 +52,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   stateDir?: string;
   recoverableProviderIds?: readonly string[];
   retryDelayMs?: number;
+  reportWarning?: (lease: DeviceLease, warnings: readonly string[]) => Promise<void>;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
   const pendingRecoveryLeases = loadPendingLeases(options.stateDir);
@@ -147,7 +148,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     const activeAttempt = activeReleaseAttempts.get(key);
     if (activeAttempt) return activeAttempt;
     const attempt = (async (): Promise<void> => {
-      if (await releaseLiveProviderLease(options.leaseLifecycleProvider, lease)) {
+      if (
+        await releaseLiveProviderLease(options.leaseLifecycleProvider, lease, options.reportWarning)
+      ) {
         pendingLiveLeases.delete(lease.leaseId);
         recordReleasedLease(lease);
       }
@@ -238,11 +241,16 @@ export function createExpiredProviderLeaseReleaser(options: {
 async function releaseLiveProviderLease(
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
   lease: DeviceLease,
+  reportWarning: ((lease: DeviceLease, warnings: readonly string[]) => Promise<void>) | undefined,
 ): Promise<boolean> {
   return await releaseExpiredProviderLease(
     leaseLifecycleProvider?.release
       ? async (expiredLease) => {
-          await leaseLifecycleProvider.release?.(expiredLease);
+          const result = await leaseLifecycleProvider.release?.(expiredLease);
+          const warnings = Array.isArray(result?.warnings)
+            ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
+            : [];
+          if (warnings.length > 0) await reportWarning?.(expiredLease, warnings);
         }
       : undefined,
     lease,

@@ -5,6 +5,30 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
+test('records provider cleanup warnings for a background lease release', async () => {
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'team-a',
+    runId: 'run-a',
+    leaseProvider: 'limrun',
+  });
+  const reportWarning = vi.fn(async () => {});
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: {
+      release: async () => ({ warnings: ['Limrun network capture could not close cleanly.'] }),
+    },
+    providerRuntimeIds: ['limrun'],
+    reportWarning,
+  });
+  try {
+    await releaser.release(lease);
+    expect(reportWarning).toHaveBeenCalledWith(lease, [
+      'Limrun network capture could not close cleanly.',
+    ]);
+  } finally {
+    releaser.shutdown();
+  }
+});
+
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();
   let now = 1_000;

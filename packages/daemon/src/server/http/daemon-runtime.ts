@@ -371,6 +371,13 @@ async function startDaemonRuntimeOnHost(
     recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
+    reportWarning: async (lease, warnings) => {
+      await emitDaemonDiagnostic(logPath, 'provider_lease_release_warning', {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+        warnings,
+      });
+    },
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
   void expiredProviderLeaseReleaser.retryPending();
