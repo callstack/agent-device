@@ -29,7 +29,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -189,22 +189,32 @@ export function createComposedPlatformRuntimeGateway(options: {
     },
     shutdown: () =>
       (closing ??= Promise.resolve().then(async () => {
-        await Promise.allSettled([...localLoads.values(), ...providerLoads.values()]);
-        const owners = [...loadedOwners.entries()];
         const outcomes = await Promise.allSettled(
-          owners.map(async ([, owner]) => owner.shutdown()),
+          [...localLoads.values(), ...providerLoads.values()].map((load) =>
+            load.then(
+              async (owner) => {
+                try {
+                  await owner.shutdown();
+                } catch (error) {
+                  const key = runtimeOwnerKey(owner.owner);
+                  const failure = normalizeError(error);
+                  throw new AppError(
+                    'COMMAND_FAILED',
+                    `Platform runtime owner ${key} failed to shut down: ${failure.message}`,
+                    { reason: 'platform-owner-shutdown-failed', owner: key, failure },
+                    error,
+                  );
+                }
+              },
+              () => undefined,
+            ),
+          ),
         );
         loadedOwners.clear();
         localLoads.clear();
         providerLoads.clear();
-        const failures = outcomes.flatMap((outcome, index) =>
-          outcome.status === 'rejected'
-            ? [
-                new Error(`Platform runtime owner ${owners[index]![0]} failed to shut down`, {
-                  cause: outcome.reason,
-                }),
-              ]
-            : [],
+        const failures = outcomes.flatMap((outcome) =>
+          outcome.status === 'rejected' ? [outcome.reason] : [],
         );
         if (failures.length > 0) {
           throw new AggregateError(
