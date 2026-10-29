@@ -91,6 +91,24 @@ describe('explainCommand', () => {
     );
   });
 
+  test('attributes each command to the family module that declares it', () => {
+    const familyModules = [
+      'packages/command-registry/src/descriptors/device-operations.ts',
+      'packages/command-registry/src/descriptors/local-cli.ts',
+      'packages/command-registry/src/descriptors/session-operations.ts',
+    ];
+    const declaringModules = (command: string) => {
+      const result = explainCommand(command, { fileExists });
+      if (!result.found) throw new Error(`${command} not found`);
+      return result.explanation.files.filter((file) => familyModules.includes(file));
+    };
+
+    expect(declaringModules('click')).toEqual([familyModules[0]]);
+    expect(declaringModules('open')).toEqual([familyModules[2]]);
+    expect(declaringModules('web')).toEqual([familyModules[1]]);
+    expect(declaringModules('devices')).toEqual([]);
+  });
+
   test('degrades gracefully for schema-only local commands', () => {
     expect(explainCommand('web', { fileExists })).toMatchObject({
       found: true,
