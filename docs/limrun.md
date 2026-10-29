@@ -66,7 +66,7 @@ agent-device disconnect
 
 On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use the Android snapshot helper, installs upload the app through Limrun asset storage, and port reverse runs over ADB, including the usual reverse setup for a local Metro server.
 
-On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, app installation, and system alerts. `alert get/wait/accept/dismiss` read the alert from the same element tree as snapshots and dispatch the selected button; a choice is pressed only when its English label states the asked-for action (`Allow`, `Don't Allow`, `Ask App Not to Track`, and similar), so a localized alert is reported but never pressed. For an alert it recognizes, Limrun uses the same English button preferences as local Apple XCTest: `Allow While Using App` outranks `Allow Once`; `Open`, `Done`, and `Confirm…` accept; `Keep Browsing`, `Deny`, and `Skip` dismiss. Equal-ranked choices and unknown labels refuse. Limrun needs at least two actionable buttons to recognize an alert. App-owned dialogs are not system alerts there, so use `snapshot -i` and then `press @ref` or a label selector for the visible control. `open --launch-args` relaunches the app with those arguments through simctl. iOS cannot reverse a remote device port to a local host port, so for Metro use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, app installation, and system alerts. `alert get/wait/accept/dismiss` read the alert from the same element tree as snapshots and dispatch the selected button; a choice is pressed only when its English label states the asked-for action (`Allow`, `Don't Allow`, `Ask App Not to Track`, and similar), so a localized alert is reported but never pressed. For an alert it recognizes, Limrun uses the same English button preferences as local Apple XCTest: `Allow While Using App` outranks `Allow Once`; `Open`, `Done`, and `Confirm…` accept; `Keep Browsing`, `Deny`, and `Skip` dismiss. Equal-ranked choices and unknown labels refuse. Limrun needs at least two actionable buttons to recognize an alert. App-owned dialogs are not system alerts there, so use `snapshot -i` and then `press @ref` or a label selector for the visible control. `open --launch-args` relaunches the app with those arguments through simctl. iOS has no `port reverse`: that command is Android-only, because it runs over ADB. iOS still reaches a local Metro. The instance client's destination tunnel routes device `localhost` connections back to this machine, so while that tunnel is open the app reaches a Metro listening on the host. With `agent-device connect limrun --provider-network-logs`, the session opens that tunnel when the device is allocated, usually by the first `open`, and keeps it; see [Capture session network traffic](#capture-session-network-traffic). Otherwise give the app a publicly reachable HTTPS Metro endpoint.
 
 On an iPhone, Limrun reports a native tab bar as one empty group. `snapshot` then hit-tests points across the bar and lists the tabs it finds under it, with their labels, frames, and selected state, so you can press a tab by label. If a hit-test fails, takes longer than 1.5 seconds, or the 24 hit-tests a snapshot allows run out before the bar is found, `snapshot` lists the bar without tabs and returns a warning.
 
@@ -74,7 +74,54 @@ On iOS, `settings` supports `appearance`, `permission`, `location`, and `clear-a
 
 On iOS, `fill` taps the target, waits for that field to take text-entry focus, and only then types. Apps that never report a globally focused element, such as Flutter forms, still fill and report `textEntryReadiness: "focused-element"`. If the tap does not focus a field, `fill` fails with `text_entry_focus_not_observed` instead of typing into an unknown field. Use `type` to send text to whichever field already has focus.
 
-To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). Limrun returns no provider artifacts, so `artifacts` has nothing to fetch.
+To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp). For Limrun, `artifacts` lists the network capture file only when you connect with `--provider-network-logs`; otherwise there are no provider artifacts to fetch.
+
+## Capture session network traffic
+
+`--provider-network-logs` records the device's HTTP traffic into a HAR 1.2 file on the machine that runs agent-device. The file stays valid while the session runs, so you can read it with `jq` at any point.
+
+Before you turn it on, know what the capture changes:
+
+- Captured traffic leaves through the machine that runs agent-device, not the device's own network. Servers see that machine's public IP, each new connection takes longer, and the device loses the captured hosts if agent-device stops. On CI, the traffic leaves from the CI runner.
+- The HAR holds raw requests and responses, including headers, cookies, tokens, and bodies. Treat it as a secret: keep it out of logs, bug reports, and build artifacts that others can read.
+- Certificate-pinned hosts refuse the connection, and an app that resolves names over DNS-over-HTTPS bypasses the capture.
+- HTTPS hosts that don't support HTTP/2 fail to connect while the capture runs.
+- Each request and response body is cut to 64 KiB. Once the file would pass 8 MiB, the oldest entries are dropped, and the failure summary reports them as `har-truncated`.
+
+Pass your app's API hosts with `--provider-network-hosts`, then open the app after you connect:
+
+```bash
+agent-device connect limrun --platform ios --provider-network-logs \
+  --provider-network-hosts "api.example.com,*.cdn.example.com,localhost:8081"
+agent-device open com.example.app
+agent-device artifacts      # prints the HAR path
+jq -r '.log.entries[] | "\(.response.status) \(.request.method) \(.request.url)"' <har-path>
+agent-device close          # prints the HAR path again
+agent-device disconnect
+```
+
+`--provider-network-hosts` takes exact hosts, wildcards such as `*.example.com`, and `localhost:<port>` routes. Keep `localhost:8081`, or your Metro port, in the list when the app loads its bundle from a local Metro server. Without `--provider-network-hosts`, the capture covers every `.com`, `.org`, `.app`, `.net`, `.io`, and `.dev` host plus `localhost:8081`. Operating system traffic then fills most of the file, and hosts under other domains, such as `.co`, `.ai`, or country domains, are not captured.
+
+The file is `<state-dir>/network-har/<instance-id>-<lease-id>.har`, readable only by your user. `agent-device artifacts` lists it during the session and after `close`. agent-device keeps the files of the 32 most recent captures that have stopped and deletes older ones; files from a daemon that has stopped stay until you delete them. If the capture can't start, for example because a `--provider-network-hosts` entry is not a valid host, `artifacts` reports the network artifact as `unavailable` with the reason.
+
+### When a request fails or hangs
+
+A request that can't reach its host still appears in the HAR with status `0`. `artifacts` and `close` also print a failure summary after the HAR path:
+
+```text
+Network capture failures: 9; inspection-error 8, latest bag.itunes.apple.com:443 (terminate app TLS: EOF); request-failed 1, latest api.example.com:443 (tunnel client could not open the destination: client_dial_failed); last dial failure tls_handshake_failed
+```
+
+- `request-failed`: the request reached the capture, but its host didn't resolve, refused, timed out, or failed the TLS handshake. Check that the machine running agent-device can reach the host.
+- `inspection-error`: the capture couldn't read a connection. This is usually a certificate-pinned host. System hosts, such as Apple's, report these in every session.
+- `inspection-gap` and `inspection-stream-error`: the HAR misses requests. Reconnect if you need a complete file.
+- `har-truncated`: the oldest entries were dropped to keep the file under 8 MiB. Narrow `--provider-network-hosts` to keep more of your app's traffic.
+- `har-write-failed`: the file could not be written, so it lags the traffic. Check the free disk space on the machine that runs agent-device.
+- `last dial failure`: the reason Limrun reports for the most recent failed connection, such as `dns_not_found`, `connection_refused`, `client_timeout`, or `tls_handshake_failed`.
+
+Occasionally, requests skip the capture: they are missing from the HAR and from the failure summary. This affects the first request after the device is allocated, or now and then a whole session. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
+
+`artifacts --json` returns the same report, with counts and the latest failures of each kind, in `data.cloudArtifacts[0].metadata.tunnelFailures`.
 
 ## Embed the Node.js runtime
 
@@ -128,4 +175,4 @@ After allocating a lease, call `runtime.getDeviceSession(device)` to get the all
 
 ## Get artifacts and troubleshoot
 
-`agent-device artifacts` does not return provider artifacts for Limrun. If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.
+For Limrun, `agent-device artifacts` lists only the `--provider-network-logs` HAR file. If a page hangs while the capture runs, read the failure summary that `artifacts` prints; see [When a request fails or hangs](#when-a-request-fails-or-hangs). If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.
