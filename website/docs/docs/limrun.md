@@ -119,7 +119,7 @@ Network capture failures: 9; inspection-error 8, latest bag.itunes.apple.com:443
 - `inspection-gap` and `inspection-stream-error`: the HAR misses requests. Reconnect if you need a complete file.
 - `last dial failure`: the reason Limrun reports for the most recent failed connection, such as `dns_not_found`, `connection_refused`, `client_timeout`, or `tls_handshake_failed`.
 
-The first request after the device is allocated can occasionally skip the capture: it is missing from the HAR and from the failure summary. If the first page or API call you expect is missing, open it again.
+Occasionally, requests skip the capture: they are missing from the HAR and from the failure summary. This affects the first request after the device is allocated, or now and then a whole session. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
 
 `artifacts --json` returns the same report, with counts and the latest failures of each kind, in `cloudArtifacts[0].metadata.tunnelFailures`.
 
