@@ -4,7 +4,7 @@ import { createLayout, fitScale } from './layout.js';
 
 test('fits a large graph into a canvas narrower than the usual padding', () => {
   const scale = fitScale(108, 500, 70, 3000, 2000);
-  assert.ok(scale > 0);
+  assert.equal(scale, 54 / 3000);
   assert.ok(3000 * scale <= 108);
   assert.ok(2000 * scale <= 500);
 });

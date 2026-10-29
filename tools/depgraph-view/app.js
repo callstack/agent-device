@@ -781,13 +781,11 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
     }
     const list = (items, dir) =>
       items
-        .slice(0, 40)
         .map(([i, p]) => {
           const kinds = kindBadge(p.kind);
           return `<div class="dep" data-node="${i}">${dir === 'out' ? '→ ' : '← '}${escapeHtml(nodes[i].id)}${kinds}</div>`;
         })
-        .join('') +
-      (items.length > 40 ? `<div class="hint">… ${items.length - 40} more</div>` : '');
+        .join('');
     el.innerHTML = `<h2>Selection</h2>
       <div class="file">${escapeHtml(n.id)}</div>
       <div class="meta">${escapeHtml(zones[n.z].id)} · ${n.loc} loc · fan-in ${n.in} · fan-out ${n.out} · level ${n.lvl}${n.cyc >= 0 ? ` · in cycle ${n.cyc}` : ''}</div>
