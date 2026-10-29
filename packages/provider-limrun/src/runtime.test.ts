@@ -29,10 +29,7 @@ const state = vi.hoisted(() => ({
     | undefined,
   disconnect: vi.fn(),
   tunnelClose: vi.fn(),
-  androidDelete: vi.fn(async () => undefined),
-  inspectionEvents: [] as ((event: unknown) => void)[],
-  destinationTunnelClose: vi.fn(),
-  tunnelStatus: {} as Record<string, unknown>,
+  onInspectionEvent: undefined as ((event: unknown) => void) | undefined,
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -48,7 +45,7 @@ vi.mock('@limrun/api', () => ({
         },
       })),
       list: vi.fn(),
-      delete: state.androidDelete,
+      delete: vi.fn(async () => undefined),
     };
     readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
   },
@@ -68,10 +65,12 @@ vi.mock('@limrun/api/instance-client', () => ({
       close: state.tunnelClose,
     })),
     startTunnel: vi.fn(async (options: { onInspectionEvent: (event: unknown) => void }) => {
-      state.inspectionEvents.push(options.onInspectionEvent);
-      return { tunnelId: 't1', selectors: [], close: state.destinationTunnelClose };
+      state.onInspectionEvent = options.onInspectionEvent;
+      return { tunnelId: 't1', selectors: [], close: vi.fn() };
     }),
-    getTunnelStatus: vi.fn(async () => state.tunnelStatus),
+    getTunnelStatus: vi.fn(async () => ({
+      lastDialFailure: { tunnelId: 't1', reason: 'dns_not_found' },
+    })),
   })),
 }));
 
@@ -185,6 +184,90 @@ test('the platform module surfaces an aborted request inside the app-state reade
   }
 });
 
+test('a network capture writes a private HAR with its failures on artifacts and at release', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-har-') },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-capture');
+  try {
+    // A repeat allocation of the live lease starts the capture it newly asks for.
+    await runtime.leaseLifecycle.allocate?.(lease);
+    await runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } });
+    for (let index = 0; index < 500; index += 1) {
+      state.onInspectionEvent?.(completedRequest(`https://api.example.com/${index}`));
+    }
+    state.onInspectionEvent?.(
+      completedRequest('https://missing.example.com/', 'client_dial_failed'),
+    );
+
+    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
+    const harPath = String(listed?.cloudArtifacts[0]?.url);
+    const har = JSON.parse(fs.readFileSync(harPath, 'utf8'));
+    assert.equal(har.log.entries.length, 500);
+    assert.equal(har.log.entries.at(-1).response.status, 0);
+    assert.equal(fs.statSync(harPath).mode & 0o777, 0o600);
+    assert.deepEqual(listed?.cloudArtifacts[0]?.metadata, {
+      failures: {
+        count: 2,
+        last: { kind: 'request-failed', host: 'missing.example.com', port: 443 },
+        lastDialFailure: 'dns_not_found',
+      },
+    });
+
+    const released = (await runtime.leaseLifecycle.release?.(lease)) as {
+      cloudArtifacts?: { cloudArtifacts: { url?: string }[]; message?: string };
+    };
+    assert.equal(released.cloudArtifacts?.cloudArtifacts[0]?.url, harPath);
+    assert.match(
+      String(released.cloudArtifacts?.message),
+      /last request-failed missing\.example\.com:443/,
+    );
+    const afterClose = await runtime.cloudArtifacts?.listCloudArtifacts?.({
+      leaseId: lease.leaseId,
+    });
+    assert.equal(afterClose?.cloudArtifacts[0]?.url, harPath);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('a network capture that cannot start is an unavailable artifact with its typed reason', async () => {
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-no-dir');
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } });
+    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
+    assert.equal(listed?.status, 'unavailable');
+    assert.deepEqual(listed?.cloudArtifacts[0]?.metadata, { reason: 'capture-dir-unset' });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+function completedRequest(url: string, error?: string): unknown {
+  return {
+    type: 'complete',
+    sequence: 1,
+    requestId: url,
+    data: {
+      startedDateTime: new Date(0).toISOString(),
+      time: 0,
+      request: { method: 'GET', url, httpVersion: 'HTTP/1.1', headers: [], cookies: [] },
+      response: {
+        status: error ? 0 : 200,
+        statusText: '',
+        httpVersion: '',
+        headers: [],
+        cookies: [],
+      },
+      cache: {},
+      timings: { send: 0, wait: 0, receive: 0 },
+      _limrun: { tunnelId: 't1', selectorId: 's1', ...(error ? { error } : {}) },
+    },
+  };
+}
+
 function requestScope(signal: AbortSignal = new AbortController().signal): PlatformRequestScope {
   return {
     signal,
@@ -193,146 +276,14 @@ function requestScope(signal: AbortSignal = new AbortController().signal): Platf
   };
 }
 
-test('a network capture reports its HAR and failures through artifacts and every release attempt', async () => {
-  const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
-    testDependencies(),
-  );
-  const lease = androidLease('lease-capture');
-  try {
-    await runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } });
-    state.inspectionEvents.at(-1)?.(failedRequest('https://api.example.com/login'));
-
-    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
-    const harPath = listed?.cloudArtifacts[0]?.url;
-    assert.match(String(harPath), /android-instance-1-lease-capture\.har$/);
-    assert.match(String(listed?.message), /request-failed 1, latest api\.example\.com:443/);
-
-    const release = runtime.leaseLifecycle.release;
-    assert.ok(release);
-    state.androidDelete.mockRejectedValueOnce(new Error('temporary delete failure'));
-    await assert.rejects(() => release(lease), /temporary delete failure/);
-    const retried = (await release(lease)) as {
-      cloudArtifacts?: { cloudArtifacts: { url?: string }[]; message?: string };
-    };
-    assert.equal(retried.cloudArtifacts?.cloudArtifacts[0]?.url, harPath);
-    assert.match(String(retried.cloudArtifacts?.message), /request-failed 1/);
-    assert.equal(state.destinationTunnelClose.mock.calls.length, 1);
-  } finally {
-    await runtime.shutdown?.();
-  }
-});
-
-test('a repeat allocation starts the capture it newly asks for, and a dial-only failure is reported', async () => {
-  const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
-    testDependencies(),
-  );
-  const lease = androidLease('lease-repeat');
-  state.tunnelStatus = {
-    lastDialFailure: { tunnelId: 't1', selectorId: 's1', reason: 'connection_refused' },
-  };
-  try {
-    const first = await runtime.leaseLifecycle.allocate?.(lease);
-    assert.equal(first?.networkHar, undefined);
-    const repeat = await runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true },
-    });
-    assert.equal((repeat?.networkHar as { status?: string } | undefined)?.status, 'capturing');
-
-    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
-    assert.match(String(listed?.message), /last dial failure connection_refused/);
-  } finally {
-    state.tunnelStatus = {};
-    await runtime.shutdown?.();
-  }
-});
-
-test('a repeat allocation retries a capture that could not start', async () => {
-  const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
-    testDependencies(),
-  );
-  const lease = androidLease('lease-retry');
-  try {
-    const first = await runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true, providerNetworkHosts: 'not a host!!' },
-    });
-    assert.equal((first?.networkHar as { status?: string } | undefined)?.status, 'unavailable');
-    const retried = await runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true, providerNetworkHosts: 'api.example.com' },
-    });
-    assert.equal((retried?.networkHar as { status?: string } | undefined)?.status, 'capturing');
-  } finally {
-    await runtime.shutdown?.();
-  }
-});
-
-test('a stopped capture past the retention limit loses its record and its HAR file', async () => {
-  const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-runtime-har-') },
-    testDependencies(),
-  );
-  const release = runtime.leaseLifecycle.release;
-  assert.ok(release);
-  const harPaths: string[] = [];
-  try {
-    // 33 stopped captures; the 34th start evicts the oldest.
-    for (let index = 0; index < 34; index += 1) {
-      const lease = androidLease(`lease-retention-${index}`);
-      const allocation = await runtime.leaseLifecycle.allocate?.(lease, {
-        flags: { providerNetworkLogs: true },
-      });
-      harPaths.push(String((allocation?.networkHar as { harPath?: string } | undefined)?.harPath));
-      if (index < 33) await release(lease);
-    }
-    assert.equal(fs.existsSync(harPaths[0] ?? ''), false);
-    assert.equal(fs.existsSync(harPaths[1] ?? ''), true);
-    assert.equal(
-      await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: 'lease-retention-0' }),
-      undefined,
-    );
-  } finally {
-    await runtime.shutdown?.();
-  }
-});
-
-test('a network capture that cannot start is an unavailable artifact with its typed reason', async () => {
-  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
-  const lease = androidLease('lease-no-dir');
-  try {
-    const allocation = await runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true },
-    });
-    assert.deepEqual(allocation?.networkHar, {
-      status: 'unavailable',
-      reason: 'capture-dir-unset',
-      message: 'The runtime has no directory for network capture files.',
-    });
-    const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
-    assert.equal(listed?.status, 'unavailable');
-    assert.deepEqual(listed?.cloudArtifacts[0]?.metadata, { reason: 'capture-dir-unset' });
-    assert.match(String(listed?.message), /did not start \(capture-dir-unset\)/);
-  } finally {
-    await runtime.shutdown?.();
-  }
-});
-
-function failedRequest(url: string): unknown {
-  return {
-    type: 'complete',
-    sequence: 1,
-    requestId: 'req-1',
-    data: {
-      startedDateTime: new Date(0).toISOString(),
-      time: 0,
-      request: { method: 'GET', url, httpVersion: 'HTTP/1.1', headers: [], cookies: [] },
-      response: { status: 0, statusText: '', httpVersion: '', headers: [], cookies: [] },
-      cache: {},
-      timings: { send: 0, wait: 0, receive: 0 },
-      _limrun: { tunnelId: 't1', selectorId: 's1', error: 'client_dial_failed' },
-    },
-  };
+async function allocateAndroidDevice(
+  runtime: ReturnType<typeof createLimrunRuntime>,
+  leaseId = 'lease-appstate',
+): Promise<DeviceInfo> {
+  const allocation = await runtime.leaseLifecycle.allocate?.(androidLease(leaseId));
+  const device = allocation?.device;
+  if (!device || typeof device !== 'object') throw new Error('Expected allocated device');
+  return device as DeviceInfo;
 }
 
 function androidLease(leaseId: string): DeviceLease {
@@ -346,16 +297,6 @@ function androidLease(leaseId: string): DeviceLease {
     heartbeatAt: 1,
     expiresAt: 60_001,
   };
-}
-
-async function allocateAndroidDevice(
-  runtime: ReturnType<typeof createLimrunRuntime>,
-  leaseId = 'lease-appstate',
-): Promise<DeviceInfo> {
-  const allocation = await runtime.leaseLifecycle.allocate?.(androidLease(leaseId));
-  const device = allocation?.device;
-  if (!device || typeof device !== 'object') throw new Error('Expected allocated device');
-  return device as DeviceInfo;
 }
 
 function testDependencies(): LimrunRuntimeDependencies {

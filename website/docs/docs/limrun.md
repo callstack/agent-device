@@ -81,15 +81,14 @@ To drive Limrun only through MCP, see [Use a provider only through MCP](/docs/de
 
 ## Capture session network traffic
 
-`--provider-network-logs` records the device's HTTP traffic into a HAR 1.2 file on the machine that runs agent-device. The file stays valid while the session runs, so you can read it with `jq` at any point.
+Use `--provider-network-logs` when you debug an app's network requests on a remote Limrun device. The device's traffic is captured while the session runs. `agent-device artifacts` and `close` write it as a HAR 1.2 file and print its path.
 
 Before you turn it on, know what the capture changes:
 
-- Captured traffic leaves through the machine that runs agent-device, not the device's own network. Servers see that machine's public IP, each new connection takes longer, and the device loses the captured hosts if agent-device stops. On CI, the traffic leaves from the CI runner.
-- The HAR holds raw requests and responses, including headers, cookies, tokens, and bodies. Treat it as a secret: keep it out of logs, bug reports, and build artifacts that others can read.
-- Certificate-pinned hosts refuse the connection, and an app that resolves names over DNS-over-HTTPS bypasses the capture.
-- HTTPS hosts that don't support HTTP/2 fail to connect while the capture runs.
-- Each request and response body is cut to 64 KiB. Once the file would pass 8 MiB, the oldest entries are dropped, and the failure summary reports them as `har-truncated`.
+- Captured traffic leaves through the machine that runs agent-device, not the device's own network. Servers see that machine's public IP. On CI, the traffic leaves from the CI runner.
+- The HAR holds raw requests and responses, including headers, cookies, tokens, and bodies. Treat it as a secret. Keep it out of logs, bug reports, and build artifacts that others can read.
+- Some hosts can't be captured: certificate-pinned hosts refuse the connection, apps that resolve names over DNS-over-HTTPS bypass the capture, and HTTPS hosts that don't support HTTP/2 fail to connect.
+- Each body is cut to 64 KiB, and the HAR keeps the latest 500 requests.
 
 Pass your app's API hosts with `--provider-network-hosts`, then open the app after you connect:
 
@@ -97,34 +96,25 @@ Pass your app's API hosts with `--provider-network-hosts`, then open the app aft
 agent-device connect limrun --platform ios --provider-network-logs \
   --provider-network-hosts "api.example.com,*.cdn.example.com,localhost:8081"
 agent-device open com.example.app
-agent-device artifacts      # prints the HAR path
+agent-device artifacts      # writes the HAR and prints its path
 jq -r '.log.entries[] | "\(.response.status) \(.request.method) \(.request.url)"' <har-path>
-agent-device close          # prints the HAR path again
+agent-device close          # writes the final HAR and prints its path
 agent-device disconnect
 ```
 
-`--provider-network-hosts` takes exact hosts, wildcards such as `*.example.com`, and `localhost:<port>` routes. Keep `localhost:8081`, or your Metro port, in the list when the app loads its bundle from a local Metro server. Without `--provider-network-hosts`, the capture covers every `.com`, `.org`, `.app`, `.net`, `.io`, and `.dev` host plus `localhost:8081`. Operating system traffic then fills most of the file, and hosts under other domains, such as `.co`, `.ai`, or country domains, are not captured.
+`--provider-network-hosts` takes exact hosts, wildcards such as `*.example.com`, and `localhost:<port>` routes. Keep `localhost:8081`, or your Metro port, in the list when the app loads its bundle from a local Metro server. Without `--provider-network-hosts`, the capture covers every `.com`, `.org`, `.app`, `.net`, `.io`, and `.dev` host plus `localhost:8081`. System traffic then fills most of the file.
 
-The file is `<state-dir>/network-har/<instance-id>-<lease-id>.har`, readable only by your user. `agent-device artifacts` lists it during the session and after `close`. agent-device keeps the files of the 32 most recent captures that have stopped and deletes older ones; files from a daemon that has stopped stay until you delete them. If the capture can't start, for example because a `--provider-network-hosts` entry is not a valid host, `artifacts` reports the network artifact as `unavailable` with the reason.
+The file is `<state-dir>/network-har/<lease-id>.har`, and only your user can read it. It stays until you delete it. If the capture can't start, for example because a `--provider-network-hosts` entry is not a valid host, `artifacts` reports the network artifact as `unavailable` with the reason.
 
-### When a request fails or hangs
-
-A request that can't reach its host still appears in the HAR with status `0`. `artifacts` and `close` also print a failure summary after the HAR path:
+A request that can't reach its host appears in the HAR with status `0`. When the capture has failures, `artifacts` and `close` print a summary after the HAR path:
 
 ```text
-Network capture failures: 9; inspection-error 8, latest bag.itunes.apple.com:443 (terminate app TLS: EOF); request-failed 1, latest api.example.com:443 (tunnel client could not open the destination: client_dial_failed); last dial failure tls_handshake_failed
+Network capture failures: 2; last request-failed api.example.com:443; last dial failure dns_not_found
 ```
 
-- `request-failed`: the request reached the capture, but its host didn't resolve, refused, timed out, or failed the TLS handshake. Check that the machine running agent-device can reach the host.
-- `inspection-error`: the capture couldn't read a connection. This is usually a certificate-pinned host. System hosts, such as Apple's, report these in every session.
-- `inspection-gap` and `inspection-stream-error`: the HAR misses requests. Reconnect if you need a complete file.
-- `har-truncated`: the oldest entries were dropped to keep the file under 8 MiB. Narrow `--provider-network-hosts` to keep more of your app's traffic.
-- `har-write-failed`: the file could not be written, so it lags the traffic. Check the free disk space on the machine that runs agent-device.
-- `last dial failure`: the reason Limrun reports for the most recent failed connection, such as `dns_not_found`, `connection_refused`, `client_timeout`, or `tls_handshake_failed`.
+The count includes these kinds: `request-failed` (the host didn't resolve, refused, timed out, or failed TLS), `inspection-error` (usually a certificate-pinned host), `inspection-gap` and `inspection-stream-error` (the HAR misses requests), and `har-truncated` (an old request left the HAR). `last dial failure` is Limrun's reason for the most recent failed connection. `artifacts --json` returns the same values in `data.cloudArtifacts[0].metadata.failures`.
 
-Occasionally, requests skip the capture: they are missing from the HAR and from the failure summary. This affects the first request after the device is allocated, or now and then a whole session. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
-
-`artifacts --json` returns the same report, with counts and the latest failures of each kind, in `data.cloudArtifacts[0].metadata.tunnelFailures`.
+Now and then, a request skips the capture: it is missing from the HAR and from the failure count. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
 
 ## Embed the Node.js runtime
 
@@ -178,4 +168,4 @@ After allocating a lease, call `runtime.getDeviceSession(device)` to get the all
 
 ## Get artifacts and troubleshoot
 
-For Limrun, `agent-device artifacts` lists only the `--provider-network-logs` HAR file. If a page hangs while the capture runs, read the failure summary that `artifacts` prints; see [When a request fails or hangs](#when-a-request-fails-or-hangs). If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.
+For Limrun, `agent-device artifacts` lists only the `--provider-network-logs` HAR file. If a page hangs while the capture runs, read the failure summary that `artifacts` prints; see [Capture session network traffic](#capture-session-network-traffic). If `connect` fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.

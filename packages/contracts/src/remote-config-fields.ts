@@ -43,7 +43,7 @@ export type CloudProviderProfileFields = {
   providerNoResignApp?: boolean;
   /**
    * Asks a provider that supports it to capture session network traffic and deliver it as a HAR
-   * artifact. On Limrun the HAR is a live file the session writes while it runs.
+   * artifact.
    */
   providerNetworkLogs?: boolean;
   /** With `providerNetworkLogs`: comma-separated tunnel selectors replacing the default capture list. */
