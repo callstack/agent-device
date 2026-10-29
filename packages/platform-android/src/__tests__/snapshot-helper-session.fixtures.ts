@@ -187,6 +187,8 @@ export type SessionProviderOptions = {
   /** How many `forward --remove` calls hang until their cleanup budget aborts them. */
   stalledForwardRemovals?: number;
   stalledSnapshots?: number;
+  /** How many snapshot requests each helper process answers before `stalledSnapshots` applies. */
+  answeredSnapshotsBeforeStall?: number;
   /** Whether `adb features` advertises the shell protocol that forwards device exit status. */
   shellProtocolV2?: boolean;
   /** Make the `adb features` probe fail the way an adb too old to know the command does. */
@@ -259,7 +261,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
             return;
           }
           snapshotCount += 1;
-          if (stalledSnapshots > 0) {
+          if (snapshotCount > (options.answeredSnapshotsBeforeStall ?? 0) && stalledSnapshots > 0) {
             stalledSnapshots -= 1;
             return;
           }

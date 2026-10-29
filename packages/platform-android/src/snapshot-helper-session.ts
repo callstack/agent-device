@@ -15,6 +15,7 @@ import {
   type AndroidSnapshotHelperResolvedCaptureOptions,
 } from './snapshot-helper-capture.ts';
 import {
+  isAndroidSnapshotHelperSessionRequestTimeout,
   parseAndroidSnapshotHelperSessionTouchResponse,
   requestAndroidSnapshotHelperSessionSnapshot,
   sendAndroidSnapshotHelperSessionCommand,
@@ -49,8 +50,8 @@ async function captureFromAndroidSnapshotHelperSession(params: {
 }): Promise<AndroidSnapshotHelperOutput | undefined> {
   const { session, deviceKey, options, resolved } = params;
   const requestedAtMs = Date.now();
+  const reused = session.capturedCount > 0;
   try {
-    const reused = session.capturedCount > 0;
     const output = await requestAndroidSnapshotHelperSessionSnapshot({
       port: session.port,
       commandTimeoutMs: resolved.commandTimeoutMs,
@@ -73,6 +74,7 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       identity: session.identity,
       failedAfterMs: Date.now() - requestedAtMs,
       fallbackBudgetMs: resolveAndroidSnapshotHelperCaptureOptions(options).commandTimeoutMs,
+      reusedSessionTimedOut: reused && isAndroidSnapshotHelperSessionRequestTimeout(error),
       signal: options.signal,
       cause: error,
     });

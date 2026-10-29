@@ -35,6 +35,13 @@ export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
   });
 }
 
+const SESSION_REQUEST_TIMEOUT_REASON = 'android_snapshot_helper_session_request_timeout';
+
+/** The helper accepted the session request but sent no answer before the command deadline. */
+export function isAndroidSnapshotHelperSessionRequestTimeout(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === SESSION_REQUEST_TIMEOUT_REASON;
+}
+
 export function sendAndroidSnapshotHelperSessionCommand(
   port: number,
   command: string,
@@ -52,6 +59,7 @@ export function sendAndroidSnapshotHelperSessionCommand(
           command: command.split(' ', 1)[0],
           timeoutMs,
           port,
+          reason: SESSION_REQUEST_TIMEOUT_REASON,
         }),
       );
     }, timeoutMs);

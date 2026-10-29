@@ -33,7 +33,6 @@ import {
 } from './snapshot-helper-session-protocol.ts';
 import {
   type AndroidSnapshotHelperProcessExit,
-  type AndroidSnapshotHelperRuntimeRelease,
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
@@ -253,27 +252,26 @@ export async function retireFailedAndroidSnapshotHelperSession(params: {
   failedAfterMs: number;
   /** Budget of the one-shot capture that answers in place of the failed session. */
   fallbackBudgetMs: number;
+  /** The session had already answered a capture, and this one got no answer before its deadline. */
+  reusedSessionTimedOut: boolean;
   signal?: AbortSignal;
   cause: unknown;
 }): Promise<void> {
-  const retirement = await stopAndroidSnapshotHelperSession(params.deviceKey, {
+  await stopAndroidSnapshotHelperSession(params.deviceKey, {
     force: true,
     signal: params.signal,
     cause: params.cause,
   });
   if (params.signal?.aborted) return;
-  // CONSERVATIVE: a frozen helper can stall adb on its next start (#3929), so a retirement that did
-  // not prove release keeps this build one-shot until reset. `unknown` may be one slow `pidof` read.
-  if (retirement && (retirement.release !== 'released' || retirement.cleanupTimedOut)) {
+  // A helper that answered and then went silent was frozen while idle (#3929: ColorOS freezes the
+  // idle helper, force-stop kills it cleanly, and every restarted helper is frozen again), so this
+  // build stays one-shot until reset.
+  if (params.reusedSessionTimedOut) {
     failedSessions().set(params.identity, Number.POSITIVE_INFINITY);
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_persistent_session_disabled',
-      data: {
-        deviceKey: params.deviceKey,
-        release: retirement.release,
-        externalCleanupTimedOut: retirement.cleanupTimedOut,
-      },
+      data: { deviceKey: params.deviceKey, failedAfterMs: params.failedAfterMs },
     });
     return;
   }
@@ -475,15 +473,9 @@ export async function stopAndroidSnapshotHelperSession(
     signal?: AbortSignal;
     cause?: unknown;
   } = {},
-): Promise<
-  | {
-      release: AndroidSnapshotHelperRuntimeRelease;
-      cleanupTimedOut: boolean;
-    }
-  | undefined
-> {
+): Promise<boolean> {
   const session = sessions().get(deviceKey);
-  if (!session) return undefined;
+  if (!session) return false;
   sessions().delete(deviceKey);
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
@@ -552,7 +544,7 @@ export async function stopAndroidSnapshotHelperSession(
       externalCleanupTimedOut: cleanup.timedOut,
     },
   });
-  return { release, cleanupTimedOut: cleanup.timedOut };
+  return true;
 }
 
 async function requestGracefulSessionExit(
