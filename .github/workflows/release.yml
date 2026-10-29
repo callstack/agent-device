@@ -233,15 +233,30 @@ jobs:
       release_tag: v${{ needs.plan.outputs.version }}
 
   # agent-device.dev serves /.well-known/mcp.json with the npm `latest` version read when the
-  # site builds. A tag push builds nothing on Vercel, so ask for a production build of main.
+  # site builds. A tag push builds nothing on Vercel, so ask for a production build of main once
+  # npm serves the new version. The VERCEL_SITE_DEPLOY_HOOK secret holds the Vercel deploy hook
+  # of the agent-device-website project for main; it is the only secret this workflow reads.
   redeploy-site:
     name: Redeploy agent-device.dev
     needs: [plan, publish]
     if: needs.plan.outputs.mode == 'stable'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions: {}
     steps:
+      - name: Wait for npm to serve the release as latest
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if [ "$(npm view agent-device@latest version 2>/dev/null)" = "$VERSION" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "npm does not serve $VERSION as latest after 5 minutes."
+          exit 1
+
       - name: Trigger the site's production build
         env:
           DEPLOY_HOOK: ${{ secrets.VERCEL_SITE_DEPLOY_HOOK }}

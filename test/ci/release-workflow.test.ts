@@ -26,8 +26,20 @@ test('only the npm publisher and the MCP Registry call can mint an id-token', ()
   expect(workflow.jobs.publish?.environment).toBe('npm-publish');
 });
 
+/** The secret names a job references, wherever in the job they appear. */
+const secretsOf = (job: Job) =>
+  [...JSON.stringify(job).matchAll(/secrets\.([A-Za-z0-9_]+)/g)].map(([, name]) => name);
+
 test('the publisher authenticates through OIDC alone', () => {
-  expect(source).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN|secrets\./);
+  expect(source).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);
+  // No secret reaches the jobs that build or publish the packages. The one secret in the file
+  // is the site's deploy hook, which only the redeploy job after a stable release reads.
+  expect(secretsOf(workflow.jobs.publish ?? {})).toEqual([]);
+  expect(secretsOf(workflow.jobs.build ?? {})).toEqual([]);
+  const withSecrets = Object.entries(workflow.jobs)
+    .map(([name, job]) => [name, secretsOf(job)] as const)
+    .filter(([, names]) => names.length > 0);
+  expect(withSecrets).toEqual([['redeploy-site', ['VERCEL_SITE_DEPLOY_HOOK']]]);
   const setupNode = workflow.jobs.publish?.steps?.find((step) =>
     step.uses?.startsWith('actions/setup-node@'),
   );
