@@ -9,7 +9,11 @@ import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 // resolveRemoteConfigProfile.
 import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
-import { isInactiveLeaseError, requireLeaseDeviceSpec } from '@agent-device/contracts/lease-scope';
+import {
+  isInactiveLeaseError,
+  readLeaseAllocateProviderFlags,
+  requireLeaseDeviceSpec,
+} from '@agent-device/contracts/lease-scope';
 import {
   narrowConnectionPlatform,
   buildRemoteConnectionDaemonState,
@@ -39,7 +43,6 @@ import {
   connectionProviderCapabilities,
   primeProviderConnection,
 } from '../connection/provider-policy.ts';
-import { readHostedDeviceProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 import {
   bindLeaseNamedDevice,
@@ -913,6 +916,13 @@ async function allocateOrReuseLease(
       hint: 'Ask the host for a new macos-app lease and update the remote config.',
     });
   }
+  // The spec rides only a by-spec allocate, so it is added below rather than taken from the flags.
+  const {
+    osVersion: _osVersion,
+    imageTag: _imageTag,
+    physical: _physical,
+    ...providerFlags
+  } = readLeaseAllocateProviderFlags(flags);
   const lease = await client.leases.allocate({
     tenant: state.tenant,
     runId: state.runId,
@@ -921,21 +931,11 @@ async function allocateOrReuseLease(
     ...connection,
     ...(allocateBySpec ? { deviceKey: undefined } : {}),
     ttlMs: policy.ttlMs(state),
+    ...providerFlags,
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
     ...(allocateBySpec ? requireLeaseDeviceSpec(flags).spec : {}),
     providerApp: initialApp ?? flags.providerApp,
-    providerOsVersion: flags.providerOsVersion,
-    providerDeviceType: flags.providerDeviceType,
-    providerProject: flags.providerProject,
-    providerBuild: flags.providerBuild,
-    providerSessionName: flags.providerSessionName,
-    ...readHostedDeviceProfileFields(flags),
   });
   return { lease, acquired: true };
 }
