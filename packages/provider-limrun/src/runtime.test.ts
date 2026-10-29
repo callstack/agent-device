@@ -230,7 +230,10 @@ test('lease release deletes the instance even when capture close throws', async 
   const capture = await runtime.networkCaptureFor(device);
   assert.ok(capture);
   await capture.start(undefined);
-  await assert.rejects(() => runtime.leaseLifecycle.release!(lease), /capture close failed/);
+  assert.deepEqual(await runtime.leaseLifecycle.release!(lease), {
+    limrunInstanceId: 'android-instance-1',
+    warnings: ['Limrun network capture could not close cleanly.'],
+  });
   assert.equal(capture.running, false);
   assert.equal(state.deleteInstance.mock.calls.length, 1);
   await runtime.shutdown();

@@ -391,15 +391,22 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     // Drain a create that is still in flight first: it would set the capture after the delete below
     // and orphan its tunnel on an attached instance.
     await this.pendingNetworkCaptures.get(lease.leaseId)?.catch(() => undefined);
+    let captureCloseFailed = false;
     try {
       await this.networkCaptures.get(lease.leaseId)?.stop();
-    } finally {
-      this.networkCaptures.delete(lease.leaseId);
-      await this.terminateSession(session);
-      this.sessions.delete(lease.leaseId);
-      this.appAliases.delete(lease.leaseId);
+    } catch {
+      captureCloseFailed = true;
     }
-    return { limrunInstanceId: session.instanceId };
+    this.networkCaptures.delete(lease.leaseId);
+    await this.terminateSession(session);
+    this.sessions.delete(lease.leaseId);
+    this.appAliases.delete(lease.leaseId);
+    return {
+      limrunInstanceId: session.instanceId,
+      ...(captureCloseFailed
+        ? { warnings: ['Limrun network capture could not close cleanly.'] }
+        : {}),
+    };
   }
 
   private async releaseRecoveredSession(
