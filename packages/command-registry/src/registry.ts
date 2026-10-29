@@ -1,7 +1,10 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
 import type { CommandFlags, DispatchedCommand } from '@agent-device/contracts/command';
+import type { RuntimeUseStepSelector } from '@agent-device/contracts/command-platform-execution';
+import { checkFindArgs, isReadOnlyFindAction } from '@agent-device/selectors';
 import {
+  findRecordingEffect,
   HOST_PLATFORM_EXECUTION,
   NO_PLATFORM_EXECUTION,
   readDeclaredPlatformExecution,
@@ -18,6 +21,7 @@ import {
 import {
   LEASE_ALLOCATE_TIMEOUT_POLICY,
   LEASE_TIMEOUT_POLICY,
+  PRESERVE_DAEMON_TIMEOUT_POLICY,
 } from './descriptor-timeout-policies.ts';
 import { SESSION_OPERATION_COMMAND_DESCRIPTORS } from './descriptors/session-operations.ts';
 import { DEVICE_OPERATION_COMMAND_DESCRIPTORS } from './descriptors/device-operations.ts';
@@ -27,6 +31,11 @@ import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
   appStateRuntimeUses,
   appsRuntimeUse,
+  findRuntimeIntent,
+  findRuntimePlanUses,
+  resolveSelectorCaptureRuntimePlan,
+  resolveSnapshotRuntimePlan,
+  snapshotRuntimePlanUses,
   deviceBootRuntimeUses,
   shutdownTargetUse,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -42,7 +51,6 @@ import type {
   CommandTimeoutPolicy,
   TargetIdentityVerification,
 } from './types.ts';
-export { selectFindStepUses, selectSnapshotStepUses } from './descriptors/device-operations.ts';
 
 type RawCommandCatalogGroup<T> = T extends { catalog: { group: infer Group } } ? Group : never;
 
@@ -97,6 +105,41 @@ export type DescriptorSessionRouteCommandName =
 // non-public dispatch aliases live here too; every view derives from this
 // array rather than recreating command-name sets.
 // ---------------------------------------------------------------------------
+
+/**
+ * Plan-time selectors for the commands whose declared alternatives differ in what they execute.
+ * Each reads the daemon step exactly as its handler will (`flags` and `positionals`; a structured
+ * `input` only when a caller kept one) and resolves the same plan the handler resolves, for both
+ * sides of the active-app split the plan cannot know yet.
+ */
+export const selectSnapshotStepUses: RuntimeUseStepSelector = (step) => {
+  const customActions =
+    step.flags?.['snapshotCustomActions'] === true || step.input?.['customActions'] === true;
+  return [true, false].map(
+    (hasActiveApp) => resolveSnapshotRuntimePlan({ customActions, hasActiveApp }).use,
+  );
+};
+
+/**
+ * `find` parses its action from positionals and defaults a missing one to click, so a step the
+ * handler would not parse as a read-only, focus, or type action keeps every declared alternative
+ * (fail closed), including a step whose positionals are not there to parse.
+ */
+export const selectFindStepUses: RuntimeUseStepSelector = (step) => {
+  const checked =
+    step.positionals === undefined ? undefined : checkFindArgs(step.positionals, step.flags);
+  const action = checked?.ok ? checked.parsed.action : undefined;
+  if (
+    action === undefined ||
+    !(isReadOnlyFindAction(action) || action === 'focus' || action === 'type')
+  ) {
+    return findRuntimePlanUses;
+  }
+  const intent = findRuntimeIntent(action);
+  return [true, false].map(
+    (hasActiveApp) => resolveSelectorCaptureRuntimePlan({ hasActiveApp, intent }).use,
+  );
+};
 
 export const RAW_COMMAND_DESCRIPTORS = [
   {
@@ -371,7 +414,70 @@ export const RAW_COMMAND_DESCRIPTORS = [
     compositeResource: 'none',
   },
   ...SESSION_OPERATION_COMMAND_DESCRIPTORS,
-  ...DEVICE_OPERATION_COMMAND_DESCRIPTORS,
+  // -- snapshot (route: snapshot) --
+  {
+    name: 'snapshot',
+    deviceClaimPolicy: 'require-owner',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/snapshot.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'core',
+    recordsSessionAction: true,
+    recordingEffect: 'observes-app',
+    daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
+    // First Apple snapshot on a device can sit behind runner startup; --timeout
+    // widens the envelope, and a timeout must not tear down the daemon.
+    timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
+    batchable: true,
+    compositeResource: 'none',
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: snapshotRuntimePlanUses,
+      selectUses: selectSnapshotStepUses,
+    },
+  },
+  {
+    name: 'diff',
+    deviceClaimPolicy: 'require-owner',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/diff.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    recordsSessionAction: true,
+    recordingEffect: 'observes-app',
+    daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+    compositeResource: 'none',
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: snapshotRuntimePlanUses,
+      selectUses: selectSnapshotStepUses,
+    },
+  },
+  ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.captureAndSystem,
+  {
+    name: 'find',
+    deviceClaimPolicy: 'require-owner',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'core',
+    recordsSessionAction: true,
+    recordingEffect: findRecordingEffect,
+    daemon: {
+      route: 'find',
+      refFrameEffect: 'may-invalidate',
+      appLease: 'allowed',
+    },
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    batchable: true,
+    compositeResource: 'none',
+    platformExecution: {
+      kind: 'device-runtime',
+      uses: findRuntimePlanUses,
+      selectUses: selectFindStepUses,
+    },
+  },
+
+  ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.interactionAndHardware,
   ...LOCAL_CLI_COMMAND_DESCRIPTORS,
 ] as const satisfies readonly RawCommandDescriptor[];
 

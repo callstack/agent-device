@@ -58,7 +58,10 @@ export function ownerFilesForCommand(command: Command): readonly [string, ...str
       file: 'packages/command-registry/src/descriptors/session-operations.ts',
     },
     {
-      descriptors: DEVICE_OPERATION_COMMAND_DESCRIPTORS,
+      descriptors: [
+        ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.captureAndSystem,
+        ...DEVICE_OPERATION_COMMAND_DESCRIPTORS.interactionAndHardware,
+      ],
       file: 'packages/command-registry/src/descriptors/device-operations.ts',
     },
     {
