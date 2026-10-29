@@ -14,7 +14,8 @@ import {
 } from '../command-explain.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
-const fileExists = (file: string) => fs.existsSync(path.join(repoRoot, file));
+const fileExists = (file: string) =>
+  fs.statSync(path.join(repoRoot, file), { throwIfNoEntry: false })?.isFile() ?? false;
 const daemonRouteOwnerFiles = getDaemonRouteOwnerFiles();
 const explainCommand = (
   query: string,
