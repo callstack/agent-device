@@ -282,7 +282,8 @@
         "runner": "not-applicable"
       },
       "bridge": {
-        "basis": "captured",
+        "basis": "rule",
+        "provenance": "The trait word was captured from a SwiftUI TextEditor in #3163; automationType 57 is synthetic, retained from the existing focus test.",
         "input": {
           "automationType": 57,
           "traits": "140883519602688"
@@ -313,7 +314,8 @@
         "runner": "not-applicable"
       },
       "bridge": {
-        "basis": "captured",
+        "basis": "rule",
+        "provenance": "The trait word was captured from a SwiftUI TextEditor in #3163; automationType 57 is synthetic, retained from the existing focus test.",
         "input": {
           "automationType": 57,
           "traits": "140883517505536"
