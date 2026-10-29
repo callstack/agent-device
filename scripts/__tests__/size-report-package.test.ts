@@ -23,6 +23,27 @@ const helperManifestSource = [
   '  name: "AgentDeviceMacOSInputTests",',
 ].join('\n');
 
+test('publish package requires bundled dependency license notices', () => {
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.filter((entry) => entry.path !== 'dist/src/THIRD_PARTY_NOTICES.txt'),
+        { macosHelperManifestSource: helperManifestSource },
+      ),
+    /THIRD_PARTY_NOTICES\.txt/,
+  );
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.map((entry) =>
+          entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt' ? { ...entry, size: 0 } : entry,
+        ),
+        { macosHelperManifestSource: helperManifestSource },
+      ),
+    /non-empty.*THIRD_PARTY_NOTICES\.txt/,
+  );
+});
+
 test('publish package requires both Android helpers and excludes benchmark scripts', () => {
   assert.doesNotThrow(() =>
     assertPublishPackageContents(fixturePack.files, {
