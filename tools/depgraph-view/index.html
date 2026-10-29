@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>agent-device · dependency graph</title>
+    <style>
+      :root {
+        --bg: #0d1017;
+        --panel: #151a24;
+        --panel-2: #1b2130;
+        --border: #262e3f;
+        --text: #d7dce6;
+        --muted: #8b93a7;
+        --accent: #7aa2f7;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font:
+          13px/1.45 ui-monospace,
+          'SF Mono',
+          Menlo,
+          monospace;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 292px 1fr;
+        grid-template-rows: 46px 1fr;
+        grid-template-areas: 'side head' 'side canvas';
+      }
+      header {
+        grid-area: head;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+      }
+      header h1 {
+        font-size: 13px;
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      header .stats {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      header .grow {
+        flex: 1;
+      }
+      #search {
+        width: 260px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font: inherit;
+        outline: none;
+      }
+      #search:focus {
+        border-color: var(--accent);
+      }
+      aside {
+        grid-area: side;
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      section.block {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      section.block h2 {
+        margin: 0 0 8px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      main {
+        grid-area: canvas;
+        position: relative;
+      }
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        cursor: grab;
+      }
+      canvas.panning {
+        cursor: grabbing;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 2.5px 0;
+      }
+      .row label {
+        flex: 1;
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row .count {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .row.dim label,
+      .row.dim .swatch {
+        opacity: 0.35;
+      }
+      .swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex: none;
+      }
+      input[type='checkbox'] {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      input[type='range'] {
+        width: 120px;
+        accent-color: var(--accent);
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 3px 0;
+      }
+      .slider-row span {
+        color: var(--muted);
+        flex: 1;
+      }
+      button {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      .btn-row {
+        display: flex;
+        gap: 8px;
+      }
+      #details {
+        white-space: normal;
+      }
+      #details .file {
+        font-size: 12px;
+        word-break: break-all;
+        color: var(--accent);
+      }
+      #details .meta {
+        color: var(--muted);
+        font-size: 11px;
+        margin: 4px 0 8px;
+      }
+      #details .dep {
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        word-break: break-all;
+      }
+      #details .dep:hover {
+        background: var(--panel-2);
+      }
+      #details .dep .kind {
+        font-size: 10px;
+        padding: 0 4px;
+        border-radius: 3px;
+        margin-left: 5px;
+      }
+      #details h3 {
+        margin: 10px 0 4px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+      }
+      #tooltip {
+        position: absolute;
+        pointer-events: none;
+        background: rgba(13, 16, 23, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 9px;
+        font-size: 11px;
+        max-width: 420px;
+        display: none;
+        z-index: 5;
+      }
+      #tooltip .t-zone {
+        color: var(--muted);
+      }
+      #status {
+        position: absolute;
+        left: 12px;
+        bottom: 10px;
+        color: var(--muted);
+        font-size: 11px;
+        pointer-events: none;
+      }
+      #help {
+        position: absolute;
+        right: 12px;
+        bottom: 10px;
+        color: var(--muted);
+        font-size: 11px;
+        pointer-events: none;
+        text-align: right;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      select {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 3px 6px;
+        font: inherit;
+        outline: none;
+      }
+      select:focus {
+        border-color: var(--accent);
+      }
+      .bar-row {
+        padding: 3px 0;
+        cursor: pointer;
+      }
+      .bar-row .top {
+        display: flex;
+        gap: 7px;
+        align-items: baseline;
+      }
+      .bar-row .top span:first-child {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bar-row .count {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .bar {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--panel-2);
+        margin-top: 2px;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        border-radius: 2px;
+      }
+      .hot {
+        padding: 2.5px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .hot:hover {
+        background: var(--panel-2);
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <section class="block">
+        <h2>Edge kinds</h2>
+        <div id="kinds"></div>
+      </section>
+      <section class="block">
+        <h2>Display</h2>
+        <div class="slider-row">
+          <span>edge opacity</span><input id="edgeAlpha" type="range" min="2" max="40" value="10" />
+        </div>
+        <div class="slider-row">
+          <span>label fan-in ≥</span
+          ><input id="labelMin" type="range" min="8" max="200" value="45" />
+        </div>
+        <div class="row">
+          <input id="focus" type="checkbox" /><label for="focus"
+            >focus mode (isolate selection)</label
+          >
+        </div>
+        <div class="row">
+          <input id="cycles" type="checkbox" /><label for="cycles">highlight cycles</label>
+        </div>
+        <div class="row">
+          <input id="redundant" type="checkbox" /><label for="redundant"
+            >hide redundant value edges</label
+          >
+        </div>
+      </section>
+      <section class="block">
+        <h2>Layout</h2>
+        <div class="slider-row">
+          <span>cluster spread</span><input id="spread" type="range" min="6" max="26" value="14" />
+        </div>
+        <div class="btn-row">
+          <button id="reheat">re-run layout</button>
+          <button id="fit">fit (F)</button>
+        </div>
+      </section>
+      <section class="block">
+        <h2>Zones</h2>
+        <div id="zones"></div>
+      </section>
+      <section class="block" id="analysis"></section>
+      <section class="block" id="details">
+        <h2>Selection</h2>
+        <div class="hint">Click a node to inspect its dependencies.</div>
+      </section>
+    </aside>
+    <header>
+      <h1>agent-device · dep graph</h1>
+      <span class="stats" id="stats"></span>
+      <span class="grow"></span>
+      <input
+        id="search"
+        list="files"
+        placeholder="search file… (Enter to jump)"
+        autocomplete="off"
+      />
+      <datalist id="files"></datalist>
+    </header>
+    <main>
+      <canvas id="canvas"></canvas>
+      <div id="tooltip"></div>
+      <div id="status"></div>
+      <div id="help">
+        drag = pan · scroll = zoom · drag node = pin · dbl-click = zoom to · Esc = clear
+      </div>
+    </main>
+    <script src="/dependency-graph/app.js"></script>
+  </body>
+</html>

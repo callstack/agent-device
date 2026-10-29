@@ -73,6 +73,7 @@ type Payload = {
 };
 
 function headCommit(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 10);
   try {
     return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
       cwd: repoRoot,

@@ -200,6 +200,22 @@ export default defineConfig({
       },
     },
     {
+      // The dependency-graph viewer is a browser page, not a Node entry point.
+      files: ['tools/depgraph-view/app.js'],
+      env: { browser: true },
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        requestAnimationFrame: 'readonly',
+        performance: 'readonly',
+        PointerEvent: 'readonly',
+        KeyboardEvent: 'readonly',
+        Event: 'readonly',
+        Blob: 'readonly',
+      },
+    },
+    {
       // Product tests get scratch from the package tmp-dir helpers, which honor the run's
       // redirected TMPDIR; reading node:os reuses a fixed path across the suite. A file with a
       // justified read (mocking production, a real socket path, or the TMPDIR mechanism itself)
