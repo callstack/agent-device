@@ -8,7 +8,6 @@
 // gate's own model — the dependents reported here are exactly the edges CI enforces.
 
 import { genBFS, getPredecessors, type Graph, type TraversalDirection } from '@statelyai/graph';
-import { isRootPlatformRuntimeTarget } from '../layering/daemon-platform-runtime-inventory.ts';
 import { EXECUTABLE_EDGES, importGraph, VALUE_EDGES } from './import-graph.ts';
 import type { GraphEdge, GraphNode } from './model.ts';
 
@@ -163,27 +162,8 @@ export function commandsReaching(
     .sort((left, right) => left.command.localeCompare(right.command));
 }
 
-/**
- * How far the `commands` and live-owner lists can be trusted as a statement about impact.
- * - `static-reachability`: the lists come from import edges alone; an empty list means no handler
- *   chain imports the file, not that no command work depends on it.
- * - `partial`: the file is reachable from the root platform-runtime composition family, which
- *   daemon code may not import (R65, R76); platform code runs behind the injected gateway and no
- *   import edge records which command drives it, so the lists are a lower bound.
- */
-export type CommandAttribution =
-  | { kind: 'static-reachability' }
-  | { kind: 'partial'; reason: 'injected-runtime'; compositionRoots: string[] };
-
-export function commandAttribution(
-  file: string,
-  executableDependents: readonly string[],
-): CommandAttribution {
-  const compositionRoots = [file, ...executableDependents].filter(isRootPlatformRuntimeTarget);
-  return compositionRoots.length === 0
-    ? { kind: 'static-reachability' }
-    : { kind: 'partial', reason: 'injected-runtime', compositionRoots };
-}
+/** Import reachability cannot prove complete attribution across injected calls. */
+export type CommandAttribution = { kind: 'partial'; reason: 'injected-calls-not-modeled' };
 
 export type GuaranteeRow = {
   path: string;

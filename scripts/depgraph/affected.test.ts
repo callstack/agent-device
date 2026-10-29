@@ -9,7 +9,6 @@ import {
   bound,
   collectDependents,
   collectExecutableDependents,
-  commandAttribution,
   commandsReaching,
   formatBounded,
   guaranteeRowsForFile,
@@ -86,32 +85,6 @@ test('collectExecutableDependents reports what a dynamic import adds beyond valu
     transitiveOnly: ['src/core/lazier.ts', 'src/core/lazy.ts'],
     beyondValue: ['src/core/lazier.ts', 'src/core/lazy.ts'],
   });
-});
-
-test('commandAttribution is partial only when the file is reachable from the platform-runtime composition root', () => {
-  const edges = edgesOf({
-    'packages/platform-apple/src/leaf.ts': 'export const leaf = 1;',
-    'packages/platform-apple/src/runtime.ts':
-      "import { leaf } from './leaf.ts';\nexport const r = leaf;",
-    'src/platform-runtime-host.ts':
-      "import { r } from '../packages/platform-apple/src/runtime.ts';\nexport const h = r;",
-    'packages/daemon/src/handler.ts': 'export const handler = 1;',
-  });
-
-  const injected = collectExecutableDependents('packages/platform-apple/src/leaf.ts', edges);
-  assert.deepEqual(commandAttribution('packages/platform-apple/src/leaf.ts', injected.all), {
-    kind: 'partial',
-    reason: 'injected-runtime',
-    compositionRoots: ['src/platform-runtime-host.ts'],
-  });
-
-  const daemonOnly = collectExecutableDependents('packages/daemon/src/handler.ts', edges);
-  assert.deepEqual(commandAttribution('packages/daemon/src/handler.ts', daemonOnly.all), {
-    kind: 'static-reachability',
-  });
-
-  // The composition root itself is injected-runtime territory even with no dependents.
-  assert.equal(commandAttribution('src/platform-runtime.ts', []).kind, 'partial');
 });
 
 test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
@@ -260,10 +233,10 @@ function radiusFixture(overrides: Partial<BlastRadius> = {}): BlastRadius {
     },
     executableDependents: {
       direct: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/lazy.ts'],
-      transitive: ['src/d.ts', 'src/lazier.ts'],
-      beyondValue: ['src/lazy.ts', 'src/lazier.ts'],
+      transitive: ['src/d.ts', 'src/lazier.ts', 'src/third-lazy.ts'],
+      beyondValue: ['src/lazy.ts', 'src/lazier.ts', 'src/third-lazy.ts'],
     },
-    commandAttribution: { kind: 'static-reachability' },
+    commandAttribution: { kind: 'partial', reason: 'injected-calls-not-modeled' },
     gates: { checks: ['lint', 'typecheck'], failOpen: false },
     commands: [
       { command: 'click', route: 'interaction', entry: 'packages/daemon/src/handlers/x.ts' },
@@ -281,34 +254,25 @@ test('text output bounds every list and says what it hid', () => {
   assert.match(text, /direct: {2}src\/a\.ts, src\/b\.ts \(\+1 more\)/);
   assert.match(
     text,
-    /executable dependents .*: 4 direct, 2 transitive; 2 reached only across a dynamic import: src\/lazy\.ts, src\/lazier\.ts/,
+    /executable dependents .*: 4 direct, 3 transitive; 3 reached only across a dynamic import: src\/lazy\.ts, src\/lazier\.ts \(\+1 more\)/,
   );
   assert.match(text, /gates for this set: lint, typecheck/);
   assert.match(text, /is not in this tree/);
 });
 
-test('text output tells a known-empty command list from an incomplete one', () => {
-  const noCommands = { commands: [] };
-  const staticText = formatBlastRadius(radiusFixture(noCommands), 5);
-  const partialText = formatBlastRadius(
-    radiusFixture({
-      ...noCommands,
-      commandAttribution: {
-        kind: 'partial',
-        reason: 'injected-runtime',
-        compositionRoots: ['src/platform-runtime.ts', 'src/platform-runtime-host.ts', 'src/x.ts'],
-      },
-    }),
-    2,
-  );
-
-  assert.match(staticText, /\(0\): \(none\)\n {2}attribution: static import reachability only/);
-  assert.doesNotMatch(staticText, /PARTIAL/);
-  assert.match(
-    partialText,
-    /\(0\): \(none\)\n {2}attribution: PARTIAL \(injected runtime\) — reachable from src\/platform-runtime\.ts, src\/platform-runtime-host\.ts \(\+1 more\)/,
-  );
-  assert.doesNotMatch(partialText, /static import reachability only/);
+test('text output treats empty and nonempty command lists as lower bounds', () => {
+  for (const commands of [[], radiusFixture().commands]) {
+    const text = formatBlastRadius(
+      radiusFixture({
+        commands,
+        liveOwners: { manifest: 'coverage.ts', present: true, owners: [] },
+      }),
+      2,
+    );
+    assert.match(text, /attribution: PARTIAL/);
+    assert.match(text, /injected calls are not modeled/);
+    assert.match(text, /live scenario owners \(0, lower bound\):/);
+  }
 });
 
 test('blast radius over the real tree agrees with check:affected and stays under 10s', async () => {
@@ -327,7 +291,7 @@ test('blast radius over the real tree agrees with check:affected and stays under
   for (const check of single.checks) assert.ok(radius.gates.checks.includes(check), check);
 });
 
-test('the real platform snapshot route is flagged partial while a daemon handler is not', async () => {
+test('platform and command-surface injection both have partial command attribution', async () => {
   const platform = await computeBlastRadius(
     repoRoot,
     'packages/platform-apple/src/snapshot-route.ts',
@@ -343,6 +307,42 @@ test('the real platform snapshot route is flagged partial while a daemon handler
     repoRoot,
     'packages/daemon/src/sessions/handlers/session.ts',
   );
-  assert.deepEqual(handler.commandAttribution, { kind: 'static-reachability' });
+  assert.equal(handler.commandAttribution.kind, 'partial');
   assert.ok(handler.commands.length > 0);
+  const commandSurface = await computeBlastRadius(
+    repoRoot,
+    'src/command-runtime/runtime-command-surface.ts',
+  );
+  assert.deepEqual(commandSurface.commandAttribution, {
+    kind: 'partial',
+    reason: 'injected-calls-not-modeled',
+  });
+});
+
+test('text and JSON CLI output agree on partial attribution and bounded dynamic dependents', () => {
+  const cli = path.join(repoRoot, 'scripts/depgraph/build.ts');
+  const target = 'packages/platform-apple/src/snapshot-route.ts';
+  const run = (args: string[]) =>
+    execFileSync(
+      process.execPath,
+      ['--experimental-strip-types', cli, 'affected', target, ...args],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+  const json = JSON.parse(run(['--json'])) as BlastRadius;
+  const text = run(['--limit', '2']);
+  assert.deepEqual(json.commandAttribution, {
+    kind: 'partial',
+    reason: 'injected-calls-not-modeled',
+  });
+  assert.match(text, /attribution: PARTIAL/);
+  assert.ok(
+    text.includes(`public commands whose handler chain reaches it (${json.commands.length}):`),
+  );
+  const dynamic = json.executableDependents.beyondValue;
+  assert.ok(dynamic.length > 2, 'the platform route must exercise CLI truncation');
+  assert.ok(
+    text.includes(
+      `${dynamic.length} reached only across a dynamic import: ${dynamic.slice(0, 2).join(', ')} (+${dynamic.length - 2} more)`,
+    ),
+  );
 });

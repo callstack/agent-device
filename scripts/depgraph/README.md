@@ -29,16 +29,14 @@ Two fields keep an empty or short list from reading as "nothing else is affected
 - `executableDependents` is a second reverse reachability over value + dynamic edges.
   `dependents` keeps its value-only meaning; `beyondValue` lists the files that only a dynamic
   import connects. Type-only edges stay out of both.
-- `commandAttribution` qualifies `commands` and `liveOwners`. `static-reachability` means the
-  lists come from import edges alone. `partial` (`injected-runtime`) means the file is reachable
-  from the root platform-runtime composition family (`src/platform-runtime*.ts`, the R76
-  declaration). Daemon code cannot import that family (R65, R76) and reaches platform code through
-  the injected gateway, so no import edge records which command drives it. The lists are then a
-  lower bound.
+- `commandAttribution` marks every `commands` and `liveOwners` list as `partial`, with reason
+  `injected-calls-not-modeled`. These lists follow static import paths. Calls through injected
+  functions can reach code without an import path from a command handler. An empty list means no
+  handler import path was found; other commands may still depend on the file.
 
-Both are reachability, not removability and not coverage. `static-reachability` is not a
-completeness claim, and `partial` does not name the missing commands. `gates` is unchanged and
-still selected from the value dependents.
+Use these lists as lower bounds when you plan a change. They do not identify removable imports,
+prove test coverage, or name the missing commands. `gates` is unchanged and still selected from
+the value dependents.
 
 ## When to reach for this
 

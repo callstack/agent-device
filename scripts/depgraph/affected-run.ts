@@ -31,7 +31,6 @@ import {
   bound,
   collectDependents,
   collectExecutableDependents,
-  commandAttribution,
   commandsReaching,
   formatBounded,
   guaranteeRowsForFile,
@@ -248,7 +247,7 @@ export async function computeBlastRadius(repoRoot: string, target: string): Prom
       transitive: executable.transitiveOnly,
       beyondValue: executable.beyondValue,
     },
-    commandAttribution: commandAttribution(target, executable.all),
+    commandAttribution: { kind: 'partial', reason: 'injected-calls-not-modeled' },
     gates: { checks: plan.checks, failOpen: plan.failOpen },
     commands,
     liveOwners: { manifest: LIVE_COVERAGE_MANIFEST, present: live.present, owners: live.owners },
@@ -258,8 +257,7 @@ export async function computeBlastRadius(repoRoot: string, target: string): Prom
 
 /** Bounded text form — the shape an agent reads before spending its context on the edit. */
 export function formatBlastRadius(radius: BlastRadius, limit: number): string {
-  const { dependents, executableDependents, commandAttribution: attribution } = radius;
-  const partial = attribution.kind === 'partial';
+  const { dependents, executableDependents } = radius;
   const lines = [
     `blast radius: ${radius.file}  [zone ${radius.zone}, fan-in ${radius.fanIn}, fan-out ${radius.fanOut}]`,
     `dependents: ${dependents.direct.length} direct, ${dependents.transitive.length} transitive (value edges; ` +
@@ -274,9 +272,7 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
     `  run: pnpm check:affected --run`,
     `public commands whose handler chain reaches it (${radius.commands.length}): ` +
       formatBounded(bound(radius.commands, limit), (chain) => `${chain.command} (${chain.route})`),
-    attribution.kind === 'partial'
-      ? `  attribution: PARTIAL (injected runtime) — reachable from ${formatBounded(bound(attribution.compositionRoots, limit), (file) => file)}; platform code runs behind the injected gateway, which no import edge records, so the command and live-owner lists are a lower bound`
-      : '  attribution: static import reachability only — an empty list means no handler chain imports this file, not that no command work depends on it',
+    '  attribution: PARTIAL — static import reachability only; injected calls are not modeled, so command and live-owner lists are lower bounds',
   ];
 
   if (!radius.liveOwners.present) {
@@ -284,9 +280,7 @@ export function formatBlastRadius(radius: BlastRadius, limit: number): string {
       `live scenario owners: ${radius.liveOwners.manifest} is not in this tree (lands with the iOS simulator e2e manifest) — no live claim available`,
     );
   } else {
-    lines.push(
-      `live scenario owners (${radius.liveOwners.owners.length}${partial ? ', lower bound' : ''}):`,
-    );
+    lines.push(`live scenario owners (${radius.liveOwners.owners.length}, lower bound):`);
     for (const owner of bound(radius.liveOwners.owners, limit).shown) {
       lines.push(`  ${owner.command} [${owner.level}] ${owner.owner} — ${owner.assertion}`);
     }
