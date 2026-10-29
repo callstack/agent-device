@@ -1,5 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { deviceIdentity } from '@agent-device/kernel/device';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
@@ -62,11 +65,50 @@ function sessionWithEveryResource(
   sessionStore: ReturnType<typeof makeSessionStore>,
   name: string,
 ): SessionState {
+  const session = makeIosSimulatorRecordingSession(sessionStore, name);
+  const device = deviceIdentity(session.device);
+  const unexpectedHandleUse = (): never => {
+    throw new Error('Resource handles must be stopped through the mocked finisher seams');
+  };
+  const coordinates = {
+    sessionId: name,
+    device,
+    owner: localRuntimeOwner(device.family),
+    fence: { token: 'teardown-order', generation: 1 },
+    lifecycle: 'open',
+    descriptor: { version: 1, body: {} },
+  } as const;
   return {
-    ...makeIosSimulatorRecordingSession(sessionStore, name),
-    appLog: {} as SessionState['appLog'],
-    audioProbe: {} as SessionState['audioProbe'],
-    perfCapture: {} as SessionState['perfCapture'],
+    ...session,
+    appLog: {
+      handle: {
+        inspect: unexpectedHandleUse,
+        finish: unexpectedHandleUse,
+        forceCleanup: unexpectedHandleUse,
+        [Symbol.asyncDispose]: unexpectedHandleUse,
+      },
+      envelope: createDurableResourceEnvelope({ ...coordinates, resourceKind: 'app-log' }),
+    },
+    audioProbe: {
+      handle: {
+        inspect: unexpectedHandleUse,
+        status: unexpectedHandleUse,
+        finish: unexpectedHandleUse,
+        forceCleanup: unexpectedHandleUse,
+        [Symbol.asyncDispose]: unexpectedHandleUse,
+      },
+      envelope: createDurableResourceEnvelope({ ...coordinates, resourceKind: 'audio-probe' }),
+    },
+    perfCapture: {
+      handle: {
+        inspect: unexpectedHandleUse,
+        setOutputPath: unexpectedHandleUse,
+        finish: unexpectedHandleUse,
+        forceCleanup: unexpectedHandleUse,
+        [Symbol.asyncDispose]: unexpectedHandleUse,
+      },
+      envelope: createDurableResourceEnvelope({ ...coordinates, resourceKind: 'perf-capture' }),
+    },
   };
 }
 

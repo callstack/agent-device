@@ -39,13 +39,8 @@ async function stopSessionSnapshotHelper(
   await platformCleanup.stopSnapshotHelper(session.device);
 }
 
-// Best-effort mirror of the platform close `session close` dispatches for a web session
-// (`shouldDispatchPlatformClose` in
-// `daemon/session-lifecycle/internal/session-close.ts`) so a daemon shutdown or expired-session
-// reap tells agent-browser to close its fleet immediately instead of leaving it
-// for agent-browser's own idle timer (`DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS`). Unlike its
-// siblings above, this has no second caller in the ordinary-close path (that path already
-// reaches the browser through `dispatchTargetedPlatformClose`), so it stays module-private.
+// Shutdown and expiry close the browser here instead of waiting for its idle timer.
+// Ordinary close reaches it through dispatchTargetedPlatformClose.
 async function stopSessionWebBrowser(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
@@ -166,9 +161,6 @@ export async function teardownSessionResources(
   const platformCleanup = request.platformCleanup;
   const steps: SessionCleanupStep[] = [
     ...sessionResourceStopSteps({ ...request, platformCleanup }),
-    // Runs after the resource steps above (recording, app-log, audio, perf) so nothing is still
-    // reading through the browser when it closes, mirroring the ordering `runSessionCloseTeardown`
-    // uses for an ordinary `session close`: best-effort resources first, platform close after.
     {
       step: 'web_browser',
       run: () =>

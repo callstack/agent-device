@@ -144,6 +144,7 @@ function makeIosSimulatorRecordingSession(
     name,
     options.device ?? {
       platform: 'apple',
+      appleOs: 'ios',
       id: 'sim-udid-recording',
       name: 'iPhone 15',
       kind: 'simulator',
