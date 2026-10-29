@@ -22,7 +22,7 @@ import {
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
-test('tvOS coverage exhaustively classifies the public catalog', () => {
+test('tvOS coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   assert.deepEqual(Object.keys(TVOS_PLATFORM_COVERAGE).sort(), publicCommands);
   assertCoverageGapRowsAreOwned('tvOS', TVOS_PLATFORM_COVERAGE);
 
@@ -36,7 +36,7 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
   }
 });
 
-test('tvOS coverage report has the expected classification counts', () => {
+test('tvOS coverage classification summary is the rollup of the manifest declarations', () => {
   assertCoverageClassificationSummaryWiredToManifest(
     'tvOS',
     TVOS_PLATFORM_COVERAGE,
@@ -45,7 +45,7 @@ test('tvOS coverage report has the expected classification counts', () => {
   );
 });
 
-test('tvOS contract claims name existing executable evidence', () => {
+test('tvOS contract declarations name an existing file containing the evidence test text', () => {
   for (const [command, entry] of Object.entries(TVOS_PLATFORM_COVERAGE)) {
     if (entry.level !== 'command-contract') continue;
     const evidencePath = path.resolve(entry.owner.path);
@@ -53,12 +53,12 @@ test('tvOS contract claims name existing executable evidence', () => {
     assert.equal(
       fs.readFileSync(evidencePath, 'utf8').includes(entry.owner.test),
       true,
-      `${command} owner does not contain named evidence`,
+      `${command} owner file lacks the evidence test text`,
     );
   }
 });
 
-test('tvOS provider contract claims only commands executed by the existing scenario', () => {
+test('tvOS provider-contract declarations match callCommand names in the scenario source', () => {
   const scenarioSource = fs.readFileSync(path.resolve(TVOS_REMOTE_EVIDENCE.path), 'utf8');
   assert.equal(scenarioSource.includes(TVOS_REMOTE_TEST_NAME), true);
 
@@ -66,7 +66,7 @@ test('tvOS provider contract claims only commands executed by the existing scena
     assert.equal(
       scenarioSource.includes(`callCommand('${command}'`),
       true,
-      `${command} is not invoked by ${TVOS_REMOTE_EVIDENCE.path}`,
+      `${command} is not named by a callCommand in ${TVOS_REMOTE_EVIDENCE.path}`,
     );
     assert.equal(TVOS_PLATFORM_COVERAGE[command].level, 'command-contract');
   }

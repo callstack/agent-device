@@ -21,7 +21,7 @@ import { runCleanupWithCoverageReport, writeCoverageReport } from './web-e2e/cov
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
-test('web coverage exhaustively classifies the public catalog', () => {
+test('web coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   assert.deepEqual(Object.keys(WEB_PLATFORM_COVERAGE).sort(), publicCommands);
   assertCoverageGapRowsAreOwned('web', WEB_PLATFORM_COVERAGE);
 
@@ -35,7 +35,7 @@ test('web coverage exhaustively classifies the public catalog', () => {
   }
 });
 
-test('web coverage report counts every manifest classification', () => {
+test('web coverage classification summary is the rollup of the manifest declarations', () => {
   assertCoverageClassificationSummaryWiredToManifest(
     'web',
     WEB_PLATFORM_COVERAGE,
@@ -44,21 +44,22 @@ test('web coverage report counts every manifest classification', () => {
   );
 });
 
-// The manifest says which commands are live; the scenario says which ones it runs. Read together
-// they close the live bucket from both sides, which a count of either cannot: a command the scenario
-// runs but the manifest does not claim, or a claim the scenario stopped honouring, fails here and
-// names itself.
-test('web live claims are exactly the commands the smoke scenario invokes', () => {
+// The manifest says which commands are live; the scenario source names which ones it passes as argv
+// heads. Read together they close the live bucket from both sides, which a count of either cannot:
+// a command the source names but the manifest does not claim, or a claim the source stopped naming,
+// fails here and names itself. A name in a skipped or commented-out step still matches, so this
+// checks declaration integrity, not execution.
+test('web live declarations equal the commands named as argv heads in the smoke scenario source', () => {
   const smokeSource = fs.readFileSync(path.resolve(WEB_SMOKE_EVIDENCE.path), 'utf8');
   assert.ok(smokeSource.includes(WEB_SMOKE_TEST_NAME));
   assertLiveCoverageMatchesEvidence(
     'web',
     WEB_PLATFORM_COVERAGE,
-    invokedWebSmokeCommands(smokeSource),
+    namedWebSmokeCommands(smokeSource),
   );
 });
 
-test('web contract claims name existing executable evidence', () => {
+test('web contract declarations name an existing file containing the evidence test text', () => {
   for (const [command, entry] of Object.entries(WEB_PLATFORM_COVERAGE)) {
     if (entry.level !== 'command-contract') continue;
     const evidencePath = path.resolve(entry.owner.path);
@@ -66,7 +67,7 @@ test('web contract claims name existing executable evidence', () => {
     assert.equal(
       fs.readFileSync(evidencePath, 'utf8').includes(entry.owner.test),
       true,
-      `${command} owner does not contain named evidence`,
+      `${command} owner file lacks the evidence test text`,
     );
   }
 });
@@ -138,16 +139,16 @@ test('web cleanup error is preserved when report writing also fails', async () =
   );
 });
 
-/** Every catalog command the smoke scenario passes as an argv head, read off the scenario source. */
-function invokedWebSmokeCommands(smokeSource: string): string[] {
+/** Every catalog command the smoke scenario source names as an argv head. */
+function namedWebSmokeCommands(smokeSource: string): string[] {
   const catalogCommands: ReadonlySet<string> = new Set(publicCommands);
-  const invoked = new Set<string>();
+  const named = new Set<string>();
   for (const [, candidate] of smokeSource.matchAll(/\[\s*'([a-z][a-z-]*)'/g)) {
     if (candidate !== undefined && catalogCommands.has(candidate)) {
-      invoked.add(candidate);
+      named.add(candidate);
     }
   }
-  return [...invoked].sort();
+  return [...named].sort();
 }
 
 function readCoverageReport(

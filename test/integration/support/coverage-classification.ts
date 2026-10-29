@@ -107,10 +107,12 @@ export function assertCoverageClassificationSummaryWiredToManifest(
 }
 
 /**
- * Ties a platform's live bucket to an enumeration of the commands its own evidence executes, read
- * from the scenario sources rather than from the manifest's `level` fields. Both directions matter:
- * an executed command that is not claimed live means the platform is understating what it proves,
- * and a live claim no scenario executes any more means the platform is overstating it. A platform
+ * Ties a platform's live bucket to an enumeration of the commands its own evidence sources name,
+ * read from the scenario sources rather than from the manifest's `level` fields. This is a
+ * source-text check: a command in a skipped or commented-out step still matches, and executed
+ * evidence comes only from a runner's recorded command evidence. Both directions matter:
+ * a named command that is not claimed live means the platform is understating its declarations,
+ * and a live claim no scenario source names any more means the platform is overstating them. A platform
  * with no independent enumeration behind a bucket can only assert the rollup above.
  */
 export function assertLiveCoverageMatchesEvidence(
@@ -125,7 +127,7 @@ export function assertLiveCoverageMatchesEvidence(
   assert.deepEqual(
     [...new Set(evidenceCommands)].sort(),
     live,
-    `${platform} live claims are not the commands its own evidence executes`,
+    `${platform} live claims are not the commands its own evidence sources name`,
   );
 }
 

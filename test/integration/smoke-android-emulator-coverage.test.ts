@@ -22,7 +22,7 @@ import {
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
-test('Android emulator coverage exhaustively classifies the public catalog', () => {
+test('Android emulator coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   assert.deepEqual(Object.keys(ANDROID_EMULATOR_E2E_COVERAGE).sort(), publicCommands);
   for (const command of publicCommands) {
     const entry = ANDROID_EMULATOR_E2E_COVERAGE[command];
@@ -39,7 +39,7 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
   }
 });
 
-test('Android coverage report summary accounts for every manifest classification', () => {
+test('Android coverage classification summary is the rollup of the manifest declarations', () => {
   assertCoverageClassificationSummaryWiredToManifest(
     'Android emulator',
     ANDROID_EMULATOR_E2E_COVERAGE,
@@ -48,7 +48,7 @@ test('Android coverage report summary accounts for every manifest classification
   );
 });
 
-test('Android live command ownership is structural and exhaustive', () => {
+test('Android scenario command declarations equal the live manifest rows with one owner per command', () => {
   assert.deepEqual(
     [...ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.commands].sort(),
     liveCommandsForScenario(ANDROID_EMULATOR_FIXTURE_BOOTSTRAP.id).sort(),
@@ -169,7 +169,7 @@ test('Android emulator scenarios can be selected as an ordered subset', () => {
   assert.equal(scenarioIdsFromEnv(undefined), undefined);
 });
 
-test('Android emulator coverage completeness is scoped to the executed subset', () => {
+test('Android emulator completeness check covers only recorded command evidence of the selected scenarios', () => {
   const captureScenario = selectAndroidEmulatorScenarios(['smoke:capture-close'])[0];
   assert.ok(captureScenario);
   const selected = [ANDROID_EMULATOR_FIXTURE_BOOTSTRAP, captureScenario];
@@ -209,7 +209,7 @@ test('Android emulator coverage completeness is scoped to the executed subset', 
   );
 });
 
-test('Android command-contract declarations are unique and exhaustive', () => {
+test('Android command-contract declarations name an existing file containing the evidence test text', () => {
   const contractEntries = Object.entries(ANDROID_EMULATOR_E2E_COVERAGE).filter(
     (
       entry,
@@ -224,14 +224,14 @@ test('Android command-contract declarations are unique and exhaustive', () => {
   const declarations = new Map<string, (typeof contractEntries)[number][1]['evidence']>();
   for (const [command, entry] of contractEntries) {
     const { evidence } = entry;
-    assert.ok(evidence.testName.trim().length > 0, `${evidence.owner} needs an executable test`);
+    assert.ok(evidence.testName.trim().length > 0, `${evidence.owner} needs a named test`);
     if (evidence.owner.endsWith('.ts')) {
       const evidencePath = path.resolve(evidence.owner);
       assert.equal(fs.existsSync(evidencePath), true, `${command} owner does not exist`);
       assert.equal(
         fs.readFileSync(evidencePath, 'utf8').includes(evidence.testName),
         true,
-        `${command} evidence is not named in ${evidence.owner}`,
+        `${command} owner file lacks the evidence test text in ${evidence.owner}`,
       );
     }
     const declarationKey = `${evidence.owner}:${evidence.testName}`;
@@ -242,10 +242,10 @@ test('Android command-contract declarations are unique and exhaustive', () => {
       declarations.set(declarationKey, evidence);
     }
   }
-  assert.ok(declarations.size > 0, 'Android command contracts need executable evidence');
+  assert.ok(declarations.size > 0, 'Android command contracts need declared evidence');
 });
 
-test('Android behavior patterns are owned by live fixture journeys', () => {
+test('Android behavior declarations equal the scenario behavior declarations with one owner each', () => {
   const claimedBehaviors = ANDROID_EMULATOR_LIVE_SCENARIOS.flatMap(
     (scenario) => scenario.behaviors,
   );
@@ -271,7 +271,7 @@ test('Android behavior patterns are owned by live fixture journeys', () => {
   );
 });
 
-test('Android fact-owned denials carry runtime contract evidence', () => {
+test('Android fact-owned denials are declared command-contract', () => {
   assert.equal(
     ANDROID_EMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level,
     'command-contract',

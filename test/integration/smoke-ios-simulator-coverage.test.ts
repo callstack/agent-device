@@ -22,7 +22,7 @@ import { collectPagedEventTimeline } from './live-device-e2e/event-timeline.ts';
 import { findMissingFixtureIdentifiers } from './ios-simulator-e2e/fixture-identifier-coverage.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';
 
-test('iOS simulator coverage exhaustively classifies the public catalog', () => {
+test('iOS simulator coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
   assert.deepEqual(Object.keys(IOS_SIMULATOR_E2E_COVERAGE).sort(), publicCommands);
 
@@ -38,7 +38,7 @@ test('iOS simulator coverage exhaustively classifies the public catalog', () => 
   }
 });
 
-test('live command claims are owned by executable scenarios', () => {
+test('iOS live command declarations name existing scenario ids with one owner per command', () => {
   const scenariosById = new Map(
     IOS_SIMULATOR_LIVE_SCENARIOS.map((scenario) => [scenario.id, scenario]),
   );
@@ -49,7 +49,7 @@ test('live command claims are owned by executable scenarios', () => {
     assert.ok(scenario, `${command} references missing scenario ${entry.owner}`);
     assert.ok(
       liveCommandsForScenario(scenario.id).some((candidate) => candidate === command),
-      `${entry.owner} does not execute ${command}`,
+      `${entry.owner} does not declare ${command}`,
     );
   }
 
@@ -61,11 +61,11 @@ test('live command claims are owned by executable scenarios', () => {
   assert.equal(
     new Set(claimedCommands).size,
     claimedCommands.length,
-    'runtime command claims must have one primary scenario',
+    'live command declarations must have one primary scenario',
   );
 });
 
-test('mobile behavior patterns are owned by live scenarios or executable workflows', () => {
+test('iOS behavior declarations name an existing scenario id or a file containing the owner test text', () => {
   const scenarioIds = new Set(IOS_SIMULATOR_LIVE_SCENARIOS.map((scenario) => scenario.id));
   for (const [behavior, entry] of Object.entries(IOS_SIMULATOR_BEHAVIOR_COVERAGE)) {
     assert.ok(entry.assertion.trim().length > 0, `${behavior} needs an observable assertion`);
@@ -76,20 +76,20 @@ test('mobile behavior patterns are owned by live scenarios or executable workflo
       assert.ok(fs.existsSync(ownerPath), `${behavior} owner does not exist`);
       assert.ok(
         fs.readFileSync(ownerPath, 'utf8').includes(entry.owner.test),
-        `${behavior} owner does not contain ${entry.owner.test}`,
+        `${behavior} owner file lacks the test text ${entry.owner.test}`,
       );
     }
   }
 });
 
-test('non-live owners name concrete executable repository evidence', () => {
+test('iOS non-live owner declarations name an existing file containing the evidence test text', () => {
   for (const [command, entry] of Object.entries(IOS_SIMULATOR_E2E_COVERAGE)) {
     if (entry.level === 'live') continue;
     const ownerPath = path.resolve(entry.owner.path);
     assert.ok(fs.existsSync(ownerPath), `${command} owner does not exist: ${entry.owner.path}`);
     assert.ok(
       fs.readFileSync(ownerPath, 'utf8').includes(entry.owner.test),
-      `${command} owner does not contain named evidence: ${entry.owner.test}`,
+      `${command} owner file lacks the evidence test text: ${entry.owner.test}`,
     );
   }
 });
@@ -107,7 +107,7 @@ nodes.find((node) => node.identifier === 'field-snapshot-typo');`,
   );
 });
 
-test('live iOS scenarios reference fixture identifiers that exist', () => {
+test('live iOS scenario sources reference test IDs present in the fixture app sources', () => {
   const readSources = (directory: string, includes: (fileName: string) => boolean) =>
     fs
       .readdirSync(directory)
@@ -124,11 +124,11 @@ test('live iOS scenarios reference fixture identifiers that exist', () => {
   assert.deepEqual(
     findMissingFixtureIdentifiers(fixtureSources, liveScenarioSources),
     [],
-    'live iOS scenarios must use test IDs defined by the fixture app',
+    'live iOS scenario sources must use test IDs present in the fixture app sources',
   );
 });
 
-test('fact-owned simulator denials carry runtime contract evidence', () => {
+test('iOS fact-owned simulator denials are declared command-contract', () => {
   assert.equal(
     IOS_SIMULATOR_E2E_COVERAGE[PUBLIC_COMMANDS.tvRemote].level,
     'command-contract',

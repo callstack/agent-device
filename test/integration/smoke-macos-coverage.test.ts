@@ -23,7 +23,7 @@ import { writeCoverageReport } from './macos-e2e/coverage-report.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
-test('macOS coverage exhaustively classifies the public catalog', () => {
+test('macOS coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   assert.deepEqual(Object.keys(MACOS_PLATFORM_COVERAGE).sort(), publicCommands);
   assertCoverageGapRowsAreOwned('macOS', MACOS_PLATFORM_COVERAGE);
 
@@ -41,7 +41,7 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
   }
 });
 
-test('macOS coverage report counts every manifest classification', () => {
+test('macOS coverage classification summary is the rollup of the manifest declarations', () => {
   assertCoverageClassificationSummaryWiredToManifest(
     'macOS',
     MACOS_PLATFORM_COVERAGE,
@@ -50,18 +50,20 @@ test('macOS coverage report counts every manifest classification', () => {
   );
 });
 
-// The scenario sources say which commands macOS actually runs, independent of what the manifest
-// labels them. Provider scenarios run commands whose live claim is attributed to the replay
-// scenario, so this closes the platform's live bucket rather than each scenario's partition of it.
-test('macOS live claims are exactly the commands its live scenarios execute', () => {
+// The scenario sources name which commands macOS scenarios invoke, independent of what the manifest
+// labels them. This is a source-text reading: a command in a skipped or commented-out step still
+// matches, so it checks declaration integrity, not execution. Provider scenarios name commands whose
+// live claim is attributed to the replay scenario, so this closes the platform's live bucket rather
+// than each scenario's partition of it.
+test('macOS live declarations equal the commands named in live scenario sources', () => {
   assertLiveCoverageMatchesEvidence(
     'macOS',
     MACOS_PLATFORM_COVERAGE,
-    commandsExecutedByMacOsLiveScenarios(),
+    commandsNamedByMacOsLiveScenarios(),
   );
 });
 
-test('macOS live claims reference commands in existing executable scenarios', () => {
+test('macOS live declarations name commands present in their scenario source files', () => {
   const scenariosById = new Map(MACOS_LIVE_SCENARIOS.map((scenario) => [scenario.id, scenario]));
   const claimedCommands: string[] = [];
 
@@ -74,7 +76,7 @@ test('macOS live claims reference commands in existing executable scenarios', ()
       assert.equal(
         sourceContainsCommand(source, scenario.syntax, command),
         true,
-        `${command} is not executed by ${scenario.owner.path}`,
+        `${command} is not named in ${scenario.owner.path}`,
       );
       claimedCommands.push(command);
     }
@@ -88,7 +90,7 @@ test('macOS live claims reference commands in existing executable scenarios', ()
   );
 });
 
-test('macOS non-live evidence owners name existing executable repository evidence', () => {
+test('macOS non-live evidence declarations name an existing file containing the evidence test text', () => {
   for (const [command, entry] of Object.entries(MACOS_PLATFORM_COVERAGE)) {
     if (entry.level === 'live' || entry.level === 'known-gap' || entry.level === 'accepted-gap') {
       continue;
@@ -98,7 +100,7 @@ test('macOS non-live evidence owners name existing executable repository evidenc
     assert.equal(
       fs.readFileSync(evidencePath, 'utf8').includes(entry.owner.test),
       true,
-      `${command} owner does not contain named evidence: ${entry.owner.test}`,
+      `${command} owner file lacks the evidence test text: ${entry.owner.test}`,
     );
   }
 });
@@ -134,11 +136,11 @@ test('macOS coverage report persists the manifest rollup and live command list',
   );
 });
 
-function commandsExecutedByMacOsLiveScenarios(): string[] {
+function commandsNamedByMacOsLiveScenarios(): string[] {
   const catalogCommands: ReadonlySet<string> = new Set(publicCommands);
   const executed = new Set<string>();
   for (const scenario of MACOS_LIVE_SCENARIOS) {
-    for (const command of commandsExecutedInScenarioSource(
+    for (const command of commandsNamedInScenarioSource(
       readEvidence(scenario.owner),
       scenario.syntax,
     )) {
@@ -150,7 +152,7 @@ function commandsExecutedByMacOsLiveScenarios(): string[] {
   return [...executed];
 }
 
-function commandsExecutedInScenarioSource(
+function commandsNamedInScenarioSource(
   source: string,
   syntax: MacOsLiveScenario['syntax'],
 ): string[] {

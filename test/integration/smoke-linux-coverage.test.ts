@@ -24,7 +24,7 @@ import {
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
-test('Linux coverage exhaustively classifies the public catalog', () => {
+test('Linux coverage declarations cover exactly the public catalog with an assertion and owner', () => {
   assert.deepEqual(Object.keys(LINUX_PLATFORM_COVERAGE).sort(), publicCommands);
   assertCoverageGapRowsAreOwned('Linux', LINUX_PLATFORM_COVERAGE);
 
@@ -38,7 +38,7 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
   }
 });
 
-test('Linux coverage report has the expected classification counts', () => {
+test('Linux coverage classification summary is the rollup of the manifest declarations', () => {
   // Focus (#1925), click, and type are live through the replay; the separate command-evidence
   // lane adds generic-command rows without changing it. Artifact inventory stays a gap because
   // local Linux screenshot paths are not daemon-downloadable.
@@ -50,7 +50,7 @@ test('Linux coverage report has the expected classification counts', () => {
   );
 });
 
-test('Linux live claims reference commands in the existing smoke replay', () => {
+test('Linux live declarations equal the commands parsed from the smoke replay script', () => {
   const replaySource = fs.readFileSync(path.resolve(LINUX_REPLAY_EVIDENCE.path), 'utf8');
   assert.ok(replaySource.includes(LINUX_REPLAY_EVIDENCE.test));
 
@@ -62,18 +62,18 @@ test('Linux live claims reference commands in the existing smoke replay', () => 
   assert.deepEqual(
     [...replayCommands].sort(),
     [...liveCommands].sort(),
-    'the existing replay smoke command set must remain unchanged',
+    'the parsed smoke replay command set must remain unchanged',
   );
   for (const command of liveCommands) {
     assert.equal(
       replayCommands.has(command),
       true,
-      `${command} is not invoked by ${LINUX_REPLAY_EVIDENCE.path}`,
+      `${command} is not a parsed action of ${LINUX_REPLAY_EVIDENCE.path}`,
     );
   }
 });
 
-test('Linux command-evidence claims name every executable lane command', () => {
+test('Linux command-evidence declarations match command assertions named in the lane runner source', () => {
   const runnerPath = path.resolve(LINUX_COMMAND_EVIDENCE.path);
   const runnerSource = fs.readFileSync(runnerPath, 'utf8');
   assert.ok(runnerSource.includes(LINUX_COMMAND_EVIDENCE.test));
@@ -95,12 +95,12 @@ test('Linux command-evidence claims name every executable lane command', () => {
     assert.match(
       runnerSource,
       new RegExp(`verifyCommand\\([\\s\\S]{0,220}C\\.${command}\\b`),
-      `${command} must have a named command-evidence assertion`,
+      `${command} must have a named command-evidence assertion in the runner source`,
     );
   }
 });
 
-test('Linux contract claims name existing executable evidence', () => {
+test('Linux contract declarations name an existing file containing the evidence test text', () => {
   for (const [command, entry] of Object.entries(LINUX_PLATFORM_COVERAGE)) {
     if (entry.level !== 'command-contract') continue;
     const evidencePath = path.resolve(entry.owner.path);
@@ -108,12 +108,12 @@ test('Linux contract claims name existing executable evidence', () => {
     assert.equal(
       fs.readFileSync(evidencePath, 'utf8').includes(entry.owner.test),
       true,
-      `${command} owner does not contain named evidence`,
+      `${command} owner file lacks the evidence test text`,
     );
   }
 });
 
-test('Linux accepted gaps name the permanent Linux limitation behind each row', () => {
+test('Linux accepted-gap rows are exactly the pinned command list', () => {
   const acceptedCommands = Object.entries(LINUX_PLATFORM_COVERAGE)
     .filter(([, entry]) => entry.level === 'accepted-gap')
     .map(([command]) => command)
