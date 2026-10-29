@@ -14,7 +14,18 @@ import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screens
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, expectTypeOf, test, vi } from 'vitest';
+import type { AgentDeviceHost } from './sdk/host-types.ts';
+import fs from 'node:fs';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { startDaemonRuntime } from '../packages/daemon/src/server/http/daemon-runtime.ts';
+import { describeUnfinishedShutdownWork } from '../packages/daemon/src/server/http/server-shutdown.ts';
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+  platformOwnerLifecycleFixture,
+} from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {
   gatewayFixture as gateway,
@@ -28,6 +39,151 @@ import {
 } from './platform-runtime-gateway.fixtures.ts';
 
 describe('composed platform runtime gateway', () => {
+  test('the SDK close report exposes each platform owner outcome', () => {
+    expectTypeOf<Awaited<ReturnType<AgentDeviceHost['close']>>['platformOwners']>().toEqualTypeOf<
+      'closed' | 'pending' | 'failed'
+    >();
+  });
+
+  test('shutdown waits for an owner load already in progress', async () => {
+    const ref = providerRuntimeOwner('limrun', 'loading');
+    const shutdown = vi.fn(async () => {});
+    let finishLoad!: () => void;
+    const loadReady = new Promise<void>((resolve) => {
+      finishLoad = resolve;
+    });
+    const registration = providerRuntime({
+      ref,
+      load: async () => {
+        await loadReady;
+        return { ...runtimeOwner({ ref }), shutdown };
+      },
+    });
+    const runtimeGateway = gateway([registration]);
+    const binding = runtimeGateway.bind({
+      device,
+      intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
+      scope,
+    });
+    const closing = runtimeGateway.shutdown();
+    finishLoad();
+    await binding;
+    await closing;
+    expect(shutdown).toHaveBeenCalledOnce();
+  });
+  test('daemon reports a composed owner failure and retains registration while completing cleanup', async () => {
+    const ref = providerRuntimeOwner('limrun', 'failed');
+    const shutdown = vi.fn(async () => {
+      throw new Error('owner refused');
+    });
+    const registration = providerRuntime({
+      ref,
+      load: async () => ({ ...runtimeOwner({ ref }), shutdown }),
+    });
+    const composed = gateway([registration]);
+    await composed.bind({
+      device,
+      intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
+      scope,
+    });
+    const stateDir = mkdtempForTestSync('agent-device-owner-failure-');
+    const paths = resolveDaemonPaths(stateDir);
+    const finalize = vi.fn(async () => ['runner']);
+    const pluginClose = vi.fn(async () => []);
+    const clearLock = vi.fn(async () => {});
+    const runtime = await startDaemonRuntime({
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+      composeDeps: daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: {
+          ...composed,
+          applicationLifecycle: {
+            ...applicationLifecycleResourceFixture(),
+            finalizeDaemonShutdown: finalize,
+          },
+        },
+        shutdownProviderRuntimes: pluginClose,
+        ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
+      }),
+    });
+    const report = await runtime.close();
+    expect(report.platformOwners).toBe('failed');
+    expect(report.runners.stopped).toEqual(['runner']);
+    expect(describeUnfinishedShutdownWork(report)).toEqual([
+      expect.stringContaining('platform owner shutdown failed'),
+    ]);
+    expect(fs.readFileSync(paths.logPath, 'utf8')).toContain(
+      'daemon_shutdown_platform_owner_failed',
+    );
+    expect(fs.existsSync(paths.infoPath)).toBe(true);
+    expect(fs.existsSync(paths.lockPath)).toBe(true);
+    expect(clearLock).not.toHaveBeenCalled();
+    expect(pluginClose).toHaveBeenCalledOnce();
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(await runtime.close()).toBe(report);
+    expect(shutdown).toHaveBeenCalledOnce();
+  });
+  test('settles all owners and preserves the failure across concurrent and repeated shutdown', async () => {
+    const failedRef = providerRuntimeOwner('limrun', 'failed');
+    const healthyRef = providerRuntimeOwner('limrun', 'healthy');
+    const failure = new Error('owner refused');
+    const failedShutdown = vi.fn(async () => {
+      throw failure;
+    });
+    const healthyShutdown = vi.fn(async () => {});
+    const failed = providerRuntime({
+      ref: failedRef,
+      load: async () => ({ ...runtimeOwner({ ref: failedRef }), shutdown: failedShutdown }),
+    });
+    const healthy = providerRuntime({
+      ref: healthyRef,
+      load: async () => ({ ...runtimeOwner({ ref: healthyRef }), shutdown: healthyShutdown }),
+    });
+    const runtimeGateway = gateway([failed, healthy]);
+    for (const ref of [failedRef, healthyRef]) {
+      await runtimeGateway.bind({
+        device,
+        intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
+        scope,
+      });
+    }
+
+    const first = runtimeGateway.shutdown();
+    const second = runtimeGateway.shutdown();
+    const results = await Promise.allSettled([first, second]);
+    for (const result of results) {
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toBeInstanceOf(AggregateError);
+        expect(result.reason.message).toContain('failed');
+        expect(result.reason.errors[0].cause).toBe(failure);
+      }
+    }
+    await expect(runtimeGateway.shutdown()).rejects.toBe(
+      (results[0] as PromiseRejectedResult).reason,
+    );
+    expect(failedShutdown).toHaveBeenCalledOnce();
+    expect(healthyShutdown).toHaveBeenCalledOnce();
+    await expect(
+      runtimeGateway.bind({
+        device,
+        intent: {
+          kind: 'exact-owner',
+          owner: healthyRef,
+          fence: { token: 'fence', generation: 1 },
+        },
+        scope,
+      }),
+    ).rejects.toThrow('shut down');
+  });
   test('loads only the selected Apple owner for screenshot facts and binding', async () => {
     const appleDevice: DeviceInfo = {
       platform: 'apple',
