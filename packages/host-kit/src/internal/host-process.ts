@@ -5,10 +5,9 @@ import { sleep } from './retry.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 const PS_TIMEOUT_MS = 1_000;
-// The binaries behind every POSIX probe, in order: pinning them keeps a hostile PATH from
-// substituting another `ps`. NixOS has no `/bin/ps`; its root-owned system profile holds the
-// same procps. Windows hosts branch to the CIM query at every call site before these are
-// consulted, so they name no Windows tool.
+// Every POSIX probe runs the first of these that exists, never a PATH lookup, so a hostile PATH
+// cannot substitute another `ps`. NixOS keeps procps only in its root-owned system profile. With
+// neither present, `/bin/ps` runs and fails closed. Windows hosts take the CIM query instead.
 const HOST_PS_COMMANDS = ['/bin/ps', '/run/current-system/sw/bin/ps'] as const;
 // PowerShell pays a fixed startup cost before the CIM query even runs, so every
 // Windows process-table read gets at least this budget instead of the `ps` one.
@@ -79,8 +78,6 @@ export function hostProcessId(): number {
   return process.pid;
 }
 
-// With no pinned binary present, `/bin/ps` still runs and fails, so the probe stays
-// unknown evidence rather than falling back to PATH.
 function hostPsCommand(): string {
   for (const candidate of HOST_PS_COMMANDS) {
     try {
