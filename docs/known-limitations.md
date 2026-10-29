@@ -1,4 +1,4 @@
-# Known Limitations
+# Known limitations
 
 Platform constraints that change what you see during automation, and what to do instead.
 

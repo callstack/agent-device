@@ -1,4 +1,4 @@
-# Replay & E2E Testing
+# Replay and E2E testing
 
 Record a session as an `.ad` script, then run it again with `replay` or run a folder of scripts as an E2E suite with `test`.
 

@@ -1,4 +1,4 @@
-# AI Agent Setup
+# AI agent setup
 
 Set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent to drive mobile, TV, desktop, and web apps with `agent-device`, through skills, project rules, or MCP.
 
@@ -238,7 +238,7 @@ If the client supports project rules or custom instructions, paste the [recommen
 
 For supported targets, evidence features, and how `agent-device` differs from scripted test frameworks, see [Introduction](/docs/introduction). For command groups and platform behavior, see [Commands](/docs/commands).
 
-For the local execution model, permissions, artifacts, and sensitive data guidance, see [Security & Trust](/docs/security-trust).
+For the local execution model, permissions, artifacts, and sensitive data guidance, see [Security and trust](/docs/security-trust).
 
 ## Agent-readable docs
 

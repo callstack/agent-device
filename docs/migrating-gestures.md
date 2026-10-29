@@ -1,4 +1,4 @@
-# Rewrite Old Gesture Commands
+# Rewrite old gesture commands
 
 `swipe`, `gesture fling`, and `gesture swipe` don't take a duration, and `gesture rotate` doesn't
 take a velocity. A command, script, or client call that passes one fails with an `INVALID_ARGS`

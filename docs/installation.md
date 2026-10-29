@@ -36,7 +36,7 @@ A global install gives agents a stable `agent-device` command. Start with the co
 agent-device help workflow
 ```
 
-For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/docs/agent-setup); to expose commands as MCP tools with `agent-device mcp`, see [MCP server](/docs/agent-setup#mcp-server). If an agent can't find `agent-device` after a global install, see [Fix a missing agent-device command](/docs/agent-setup#fix-a-missing-agent-device-command). For the first app automation commands, see [Quick Start](/docs/quick-start).
+For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI agent setup](/docs/agent-setup); to expose commands as MCP tools with `agent-device mcp`, see [MCP server](/docs/agent-setup#mcp-server). If an agent can't find `agent-device` after a global install, see [Fix a missing agent-device command](/docs/agent-setup#fix-a-missing-agent-device-command). For the first app automation commands, see [Quick start](/docs/quick-start).
 
 ## Update the CLI
 

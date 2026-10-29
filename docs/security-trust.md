@@ -1,4 +1,4 @@
-# Security & Trust
+# Security and trust
 
 `agent-device` runs locally by default and can control every device, simulator, emulator, and desktop app your user account can reach. Treat it like any developer tool that interacts with apps, captures screens, and reads diagnostic output.
 
