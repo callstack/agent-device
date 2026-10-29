@@ -28,7 +28,7 @@ async function bundle(root: string): Promise<void> {
     outDir: 'dist',
     dts: false,
     minify: true,
-    deps: { onlyBundle: ['included', 'unused', 'jpeg-js'] },
+    deps: { onlyBundle: ['included', 'shared', 'distinct', 'unused', 'jpeg-js'] },
     plugins: [bundledLicenseNotices(root, path.join(root, 'dist'))],
     logLevel: 'silent',
   });
@@ -87,6 +87,43 @@ test('bundling fails when a dependency has a license identifier but no license t
     'node_modules/included/index.js': 'export const value = 42;',
   });
   await assert.rejects(bundle(root), /included@1\.0\.0 is missing its license or license text/);
+});
+
+test('identical notices are shared without losing packages or distinct copyrights', async () => {
+  const sharedLicense = 'Copyright shared author\nFull shared license terms.';
+  const sharedNotice = 'Shared upstream attribution.';
+  const distinctLicense = 'Copyright different author\nFull shared license terms.';
+  const files: Record<string, string> = {
+    'input.ts': [
+      "export { value as first } from 'included';",
+      "export { value as second } from 'shared';",
+      "export { value as third } from 'distinct';",
+    ].join('\n'),
+  };
+  for (const name of ['included', 'shared', 'distinct']) {
+    files[`node_modules/${name}/package.json`] = JSON.stringify({
+      name,
+      version: '1.0.0',
+      license: 'MIT',
+      main: 'index.js',
+    });
+    files[`node_modules/${name}/index.js`] = `export const value = process.env.${name};`;
+    files[`node_modules/${name}/LICENSE`] = name === 'distinct' ? distinctLicense : sharedLicense;
+    files[`node_modules/${name}/NOTICE`] = sharedNotice;
+  }
+  const root = await fixture(files);
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.equal(notices.split(sharedLicense).length - 1, 1);
+  assert.equal(notices.split(sharedNotice).length - 1, 1);
+  assert.equal(notices.split(distinctLicense).length - 1, 1);
+  const references = ['included', 'shared', 'distinct'].map((name) => {
+    const line = new RegExp(`^${name}@1\\.0\\.0 \\(MIT\\): (.+)$`, 'm');
+    assert.match(notices, line);
+    return notices.match(line)?.[1];
+  });
+  assert.equal(references[0], references[1]);
+  assert.notEqual(references[0], references[2]);
 });
 
 test('bundled jpeg-js retains source-file notices and the Apache license', async () => {
