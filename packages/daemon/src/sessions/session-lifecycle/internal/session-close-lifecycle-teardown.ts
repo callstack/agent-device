@@ -6,11 +6,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {
   reportSessionCleanupFailures,
-  finishSessionAudioProbe,
-  finishSessionScreenRecording,
-  stopSessionSnapshotHelper,
-  stopSessionAppLog,
-  stopSessionPerfCapture,
+  sessionResourceStopSteps,
   type SessionCleanupFailure,
 } from '../../session-teardown.ts';
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
@@ -85,12 +81,13 @@ export async function runSessionCloseTeardown(params: {
     hasLease: Boolean(session.lease),
   });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
-  await stopBestEffortSessionResources(
+  const resourceStops = sessionResourceStopSteps({
     ref,
     sessionStore,
-    attemptCleanup,
-    params.platformResourceCleanup,
-  );
+    platformCleanup: params.platformResourceCleanup,
+    appLog: 'run',
+  });
+  for (const { step, run } of resourceStops) await attemptCleanup(step, run);
   session = sessionStore.requireCurrent(ref);
   const platformCloseError = repairArmed
     ? undefined
@@ -125,24 +122,6 @@ export async function runSessionCloseTeardown(params: {
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
   return { platformCloseError, saveScriptError, shutdownResult: finalization?.shutdown };
-}
-
-type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
-
-async function stopBestEffortSessionResources(
-  ref: SessionRef,
-  sessionStore: SessionStore,
-  attemptCleanup: CleanupRunner,
-  platformCleanup: PlatformResourceCleanup,
-): Promise<void> {
-  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-  await attemptCleanup('recording', () => finishSessionScreenRecording({ ref, sessionStore }));
-  await attemptCleanup('app_log', () => stopSessionAppLog({ ref, sessionStore }));
-  await attemptCleanup('audio_probe', () => finishSessionAudioProbe({ ref, sessionStore }));
-  await attemptCleanup('perf_capture', () => stopSessionPerfCapture({ ref, sessionStore }));
-  await attemptCleanup('platform_snapshot_helper', () =>
-    stopSessionSnapshotHelper(session, platformCleanup),
-  );
 }
 
 export function closeCleanupError(

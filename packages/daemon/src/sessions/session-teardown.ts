@@ -62,7 +62,7 @@ async function stopSessionWebBrowser(params: {
   });
 }
 
-type SessionCleanupStep = { step: string; run: () => Promise<void> };
+export type SessionCleanupStep = { step: string; run: () => Promise<void> };
 export type SessionCleanupFailure = { step: string; error: unknown };
 
 // Run every cleanup step, isolating failures so one rejected resource never
@@ -116,6 +116,35 @@ export function reportSessionCleanupFailures(params: {
   );
 }
 
+// Ordered stops for the session resources every teardown path releases. Ordinary close and daemon
+// shutdown/expiry both consume this list; each caller owns how the steps run and what follows.
+// `appLog: 'already-settled'` omits the app-log step for a caller that stopped it under its own fence.
+export function sessionResourceStopSteps(params: {
+  ref: SessionRef;
+  sessionStore: SessionStore;
+  platformCleanup: PlatformResourceCleanup;
+  appLog: 'run' | 'already-settled';
+}): SessionCleanupStep[] {
+  const { ref, sessionStore, platformCleanup } = params;
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  return [
+    // Finalize any still-active recording BEFORE the Apple runner is stopped: the runner supplies
+    // gesture-telemetry for overlay finalization, and signalling the recorder first prevents a
+    // leaked `simctl recordVideo` child (and its 0-byte, slot-holding mp4) when a session is torn
+    // down — including on daemon shutdown — without an explicit `record stop`.
+    { step: 'recording', run: () => finishSessionScreenRecording({ ref, sessionStore }) },
+    ...(params.appLog === 'run'
+      ? [{ step: 'app_log', run: () => stopSessionAppLog({ ref, sessionStore }) }]
+      : []),
+    { step: 'audio_probe', run: () => finishSessionAudioProbe({ ref, sessionStore }) },
+    { step: 'perf_capture', run: () => stopSessionPerfCapture({ ref, sessionStore }) },
+    {
+      step: 'platform_snapshot_helper',
+      run: () => stopSessionSnapshotHelper(session, platformCleanup),
+    },
+  ];
+}
+
 type SessionResourceTeardownRequest = {
   ref: SessionRef;
   sessionStore: SessionStore;
@@ -127,7 +156,6 @@ export async function teardownSessionResources(
   request: SessionResourceTeardownRequest,
 ): Promise<void> {
   const { ref, sessionStore } = request;
-  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   const sessionName = ref.address;
   if (!request.platformCleanup) {
     throw new AppError(
@@ -136,42 +164,8 @@ export async function teardownSessionResources(
     );
   }
   const platformCleanup = request.platformCleanup;
-  const appLogSteps: SessionCleanupStep[] =
-    request.appLog === 'run'
-      ? [
-          {
-            step: 'app_log',
-            run: () => stopSessionAppLog({ ref, sessionStore }),
-          },
-        ]
-      : [];
   const steps: SessionCleanupStep[] = [
-    // Finalize any still-active recording BEFORE the Apple runner is stopped
-    // below: the runner supplies gesture-telemetry for overlay finalization, and
-    // signalling the recorder first prevents a leaked `simctl recordVideo` child
-    // (and its 0-byte, slot-holding mp4) when a session is torn down — including
-    // on daemon shutdown — without an explicit `record stop`.
-    {
-      step: 'recording',
-      run: () =>
-        finishSessionScreenRecording({
-          ref,
-          sessionStore,
-        }),
-    },
-    ...appLogSteps,
-    {
-      step: 'audio_probe',
-      run: () => finishSessionAudioProbe({ ref, sessionStore }),
-    },
-    {
-      step: 'perf_capture',
-      run: () => stopSessionPerfCapture({ ref, sessionStore }),
-    },
-    {
-      step: 'platform_snapshot_helper',
-      run: () => stopSessionSnapshotHelper(session, platformCleanup),
-    },
+    ...sessionResourceStopSteps({ ...request, platformCleanup }),
     // Runs after the resource steps above (recording, app-log, audio, perf) so nothing is still
     // reading through the browser when it closes, mirroring the ordering `runSessionCloseTeardown`
     // uses for an ordinary `session close`: best-effort resources first, platform close after.
