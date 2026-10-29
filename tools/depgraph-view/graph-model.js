@@ -60,3 +60,27 @@ export function visibleKinds(pair, enabledKinds, hideRedundant) {
       !(hideRedundant && kind === 0 && pair.redundantValue === pair.counts[0]),
   );
 }
+
+export function visibleCycleFocus(cycles, pairs, nodes, zoneVisible, enabledKinds, hideRedundant) {
+  const pairByDirection = new Map(pairs.map((pair, index) => [`${pair.a}:${pair.b}`, index]));
+  const focusNodes = new Set();
+  const focusPairs = new Set();
+  for (const cycle of cycles) {
+    const pathPairs = [];
+    for (let i = 1; i < cycle.path.length; i++) {
+      const from = cycle.path[i - 1];
+      const to = cycle.path[i];
+      const index = pairByDirection.get(`${from}:${to}`);
+      if (index === undefined || !zoneVisible[nodes[from].z] || !zoneVisible[nodes[to].z]) break;
+      if (!visibleKinds(pairs[index], enabledKinds, hideRedundant).length) break;
+      pathPairs.push(index);
+    }
+    if (pathPairs.length !== cycle.path.length - 1 || !pathPairs.length) continue;
+    for (const index of pathPairs) {
+      focusPairs.add(index);
+      focusNodes.add(pairs[index].a);
+      focusNodes.add(pairs[index].b);
+    }
+  }
+  return { focusNodes, focusPairs };
+}

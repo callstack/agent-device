@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.js';
+import {
+  createGraphModel,
+  refreshPairKinds,
+  visibleKinds,
+  visibleCycleFocus,
+} from './graph-model.js';
 
 test('keeps opposite imports separate and hides disabled kinds', () => {
   const graph = createGraphModel({
@@ -48,4 +53,29 @@ test('hides transitively reachable value edges while preserving type imports', (
   assert.deepEqual(visibleKinds(graph.pairs[0], enabled, true), [1]);
   refreshPairKinds(graph.pairs, new Set([0]), true);
   assert.equal(graph.pairs[0].display, -1);
+});
+
+test('highlights only complete visible directed cycle paths', () => {
+  const graph = createGraphModel({
+    zones: [],
+    nodes: Array.from({ length: 4 }, (_, z) => ({ z, in: 1, out: 1 })),
+    edges: [
+      [0, 1, 1, 0],
+      [1, 0, 0, 0],
+      [2, 3, 1, 0],
+      [3, 2, 0, 0],
+      [1, 2, 0, 0],
+    ],
+  });
+  const cycles = [
+    { kind: 'type', path: [0, 1, 0] },
+    { kind: 'type', path: [2, 3, 2] },
+  ];
+  const visible = [true, true, true, true];
+  const focus = (kinds) =>
+    visibleCycleFocus(cycles, graph.pairs, graph.nodes, visible, new Set(kinds), false);
+  assert.deepEqual([...focus([0, 1]).focusPairs], [0, 1, 2, 3]);
+  assert.equal(focus([0]).focusPairs.size, 0);
+  visible[2] = false;
+  assert.deepEqual([...focus([0, 1]).focusPairs], [0, 1]);
 });

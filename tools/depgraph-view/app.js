@@ -2,7 +2,12 @@ import { escapeHtml } from './html.js';
 import { createLayout } from './layout.js';
 import { createSimulation } from './simulation.js';
 import { buildAnalysis } from './analysis.js';
-import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.js';
+import {
+  createGraphModel,
+  refreshPairKinds,
+  visibleKinds,
+  visibleCycleFocus,
+} from './graph-model.js';
 
 /* agent-device dependency-graph explorer
  * Canvas force view over the JSON emitted by scripts/depgraph/build.ts.
@@ -152,23 +157,20 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
   let edgeAlpha = 0.1;
   let labelMinIn = 45;
   let hideRedundant = false;
-  let cycleNodes = new Set();
   let focusNodes = new Set();
   let focusPairs = new Set();
   let visiblePairCount = 0;
   let dirty = true;
 
   function focusCycles() {
-    for (const n of nodes) if (n.cyc >= 0 && zoneVisible[n.z]) focusNodes.add(n.index);
-    const visibleCycleNodes = new Set();
-    for (let i = 0; i < pairs.length; i++) {
-      const p = pairs[i];
-      if (!pairVisible(p) || !focusNodes.has(p.a) || !focusNodes.has(p.b)) continue;
-      focusPairs.add(i);
-      visibleCycleNodes.add(p.a);
-      visibleCycleNodes.add(p.b);
-    }
-    focusNodes = visibleCycleNodes;
+    ({ focusNodes, focusPairs } = visibleCycleFocus(
+      raw.cycles || [],
+      pairs,
+      nodes,
+      zoneVisible,
+      enabledKinds,
+      hideRedundant,
+    ));
   }
 
   function focusSelection() {
@@ -199,11 +201,6 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     else if (selectedZone != null) focusZone();
     dirty = true;
     updateStatus();
-  }
-
-  function recomputeCycles() {
-    cycleNodes = new Set();
-    for (const c of raw.cycles || []) for (const i of c.path) cycleNodes.add(i);
   }
 
   function pairVisible(p) {
@@ -344,7 +341,7 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
     // cycle mode marks membership; a selection keeps its own colours and only glows the edges
     if (cycleMode) {
       bctx.fillStyle = 'rgba(255,235,170,0.95)';
-      for (const i of cycleNodes) {
+      for (const i of focusNodes) {
         const n = nodes[i];
         if (!focusNodes.has(i) || !zoneVisible[n.z]) continue;
         bctx.beginPath();
@@ -911,7 +908,6 @@ import { createGraphModel, refreshPairKinds, visibleKinds } from './graph-model.
       renderDetails();
     },
   });
-  recomputeCycles();
   placeLayout(spread, true);
   seedPositions();
   applyFilters();
