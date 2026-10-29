@@ -86,6 +86,9 @@ describe('explainCommand', () => {
       'packages/daemon/src/execution/interaction/index.ts',
     );
     expect(result.explanation.files.every(fileExists)).toBe(true);
+    expect(result.explanation.files).not.toContain(
+      'packages/command-registry/src/descriptors/local-cli.ts',
+    );
   });
 
   test('degrades gracefully for schema-only local commands', () => {
@@ -97,6 +100,7 @@ describe('explainCommand', () => {
         cli: { usage: 'web setup | web doctor' },
         files: expect.arrayContaining([
           'packages/command-registry/src/registry.ts',
+          'packages/command-registry/src/descriptors/local-cli.ts',
           'src/commands/schema/command-overrides.ts',
           'src/cli/commands/web.ts',
         ]),

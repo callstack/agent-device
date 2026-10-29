@@ -156,3 +156,15 @@ test('a capability bucket in a descriptor family module is rejected', () => {
     ['command descriptors may not restore capability-bucket admission'],
   );
 });
+
+test('a conditional capability bucket in shared descriptor traits is rejected', () => {
+  assert.deepEqual(
+    messages([
+      [
+        'packages/command-registry/src/descriptor-traits.ts',
+        `export const traits = { ...(enabled ? { capability: { apple: {} } } : {}) };`,
+      ],
+    ]),
+    ['command descriptors may not restore capability-bucket admission'],
+  );
+});
