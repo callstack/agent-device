@@ -94,7 +94,7 @@ Refs are valid only in the latest output: after a `--settle` command, use the re
 }
 ```
 
-See [AI Agent Setup](https://agent-device.dev/docs/agent-setup) for per-client setup and when to prefer plain CLI over MCP.
+See [AI agent setup](https://agent-device.dev/docs/agent-setup) for per-client setup and when to prefer plain CLI over MCP.
 
 ### Script it from Node.js
 
@@ -139,9 +139,9 @@ With the CLI installed, prompts like these work end to end:
 
 ## Next steps
 
-- [AI Agent Setup](https://agent-device.dev/docs/agent-setup): skills, project rules, and per-client setup for Cursor, Codex, Claude Code, Windsurf, and others.
-- [Quick Start](https://agent-device.dev/docs/quick-start): open an app, read its UI, and interact with it from the command line.
-- [Replay & E2E](https://agent-device.dev/docs/replay-e2e) and [Debugging & Profiling](https://agent-device.dev/docs/debugging-profiling): repeatable tests and bug hunting.
+- [AI agent setup](https://agent-device.dev/docs/agent-setup): skills, project rules, and per-client setup for Cursor, Codex, Claude Code, Windsurf, and others.
+- [Quick start](https://agent-device.dev/docs/quick-start): open an app, read its UI, and interact with it from the command line.
+- [Replay and E2E testing](https://agent-device.dev/docs/replay-e2e) and [Debugging and profiling](https://agent-device.dev/docs/debugging-profiling): repeatable tests and bug hunting.
 
 ## Where to run agent-device
 
@@ -171,7 +171,7 @@ Sessions are scoped to the caller's git worktree, and host-local device claims s
 
 ### Is there an MCP server for mobile app automation?
 
-Yes. `agent-device mcp` starts the official stdio MCP server. The Quick start above has the client config, and [AI Agent Setup](https://agent-device.dev/docs/agent-setup) covers per-client details.
+Yes. `agent-device mcp` starts the official stdio MCP server. The Quick start above has the client config, and [AI agent setup](https://agent-device.dev/docs/agent-setup) covers per-client details.
 
 ### Does it work with React Native, Expo, Flutter, and native apps?
 

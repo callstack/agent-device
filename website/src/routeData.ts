@@ -5,6 +5,7 @@ import { defineRouteMiddleware, type StarlightRouteData } from '@astrojs/starlig
 
 import { docs, site as meta } from './site/content';
 import { fullTitle } from './site/meta';
+import { cleanHref } from './site/urls';
 
 const MAX = 160;
 
@@ -51,10 +52,10 @@ function dropHtmlSuffix(head: Head) {
   for (const tag of head) {
     const attrs = tag.attrs;
     if (tag.tag === 'link' && attrs?.rel === 'canonical' && typeof attrs.href === 'string') {
-      attrs.href = attrs.href.replace(/\.html$/, '');
+      attrs.href = cleanHref(attrs.href);
     }
     if (tag.tag === 'meta' && attrs?.property === 'og:url' && typeof attrs.content === 'string') {
-      attrs.content = attrs.content.replace(/\.html$/, '');
+      attrs.content = cleanHref(attrs.content);
     }
   }
 }
@@ -67,7 +68,7 @@ type SidebarEntry = StarlightRouteData['sidebar'][number];
  */
 function dropHtmlLinks(entries: SidebarEntry[]) {
   for (const entry of entries) {
-    if (entry.type === 'link') entry.href = entry.href.replace(/\.html(#|$)/, '$1');
+    if (entry.type === 'link') entry.href = cleanHref(entry.href);
     else dropHtmlLinks(entry.entries);
   }
 }
@@ -76,7 +77,7 @@ export const onRequest = defineRouteMiddleware((context) => {
   const route = context.locals.starlightRoute;
   dropHtmlLinks(route.sidebar);
   for (const link of [route.pagination.prev, route.pagination.next]) {
-    if (link) link.href = link.href.replace(/\.html(#|$)/, '$1');
+    if (link) link.href = cleanHref(link.href);
   }
   const { entry, head } = route;
   const site = context.site?.href ?? `${meta.url}/`;
@@ -112,7 +113,7 @@ export const onRequest = defineRouteMiddleware((context) => {
     { name: 'Docs', item: new URL(docs.intro, site).href },
     {
       name: entry.data.title,
-      item: new URL(context.url.pathname.replace(/\.html$/, ''), site).href,
+      item: new URL(cleanHref(context.url.pathname), site).href,
     },
   ];
   head.push({

@@ -195,4 +195,4 @@ To free a device:
   [`targetActivation` disclosure](/docs/commands#foreground-repairs-on-ios).
 - For remote `connect --remote-config` sessions, see [Commands](/docs/commands#remote-metro-workflow).
 
-For replay scripts and deterministic E2E guidance, see [Replay & E2E](/docs/replay-e2e).
+For replay scripts and deterministic E2E guidance, see [Replay and E2E testing](/docs/replay-e2e).

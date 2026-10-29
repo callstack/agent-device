@@ -20,12 +20,14 @@ import PixelIcon from './PixelIcon.astro';
 </docs-search>
 
 <script>
+  import { cleanHref } from '../../site/urls';
+
   // Mirrors Starlight's search (components/Search.astro): the same options, loaded from the
   // Pagefind bundle the docs build writes.
   type PagefindResult = { url: string; sub_results: { url: string }[] };
   const PAGEFIND = '/pagefind/';
   // Pages are served without .html or a trailing slash (vercel.json).
-  const cleanUrl = (url: string) => url.replace(/\.html(#|$)/, '$1').replace(/(.)\/(#.*)?$/, '$1$2');
+  const cleanUrl = (url: string) => cleanHref(url).replace(/(.)\/(#.*)?$/, '$1$2');
 
   const loadScript = () =>
     new Promise<void>((resolve, reject) => {

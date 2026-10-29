@@ -47,7 +47,7 @@ Start with the core workflow guide in the installed CLI help. [Commands](/docs/c
 agent-device help workflow
 ```
 
-Use [AI Agent Setup](/docs/agent-setup) for Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and MCP setup. Use [Commands](/docs/commands) for detailed command groups and platform behavior.
+Use [AI agent setup](/docs/agent-setup) for Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and MCP setup. Use [Commands](/docs/commands) for detailed command groups and platform behavior.
 
 ## Where it fits
 
@@ -60,8 +60,8 @@ MCP clients can drive devices directly through the `agent-device mcp` server, wh
 ## Next steps
 
 - Install the CLI: [Installation](/docs/installation)
-- Set up an agent client: [AI Agent Setup](/docs/agent-setup)
-- Run the first commands: [Quick Start](/docs/quick-start)
+- Set up an agent client: [AI agent setup](/docs/agent-setup)
+- Run the first commands: [Quick start](/docs/quick-start)
 - Inspect all command groups: [Commands](/docs/commands)
-- Collect runtime evidence: [Debugging & Profiling](/docs/debugging-profiling)
-- Record deterministic flows: [Replay & E2E](/docs/replay-e2e)
+- Collect runtime evidence: [Debugging and profiling](/docs/debugging-profiling)
+- Record deterministic flows: [Replay and E2E testing](/docs/replay-e2e)
