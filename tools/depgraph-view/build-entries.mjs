@@ -4,13 +4,12 @@
 //
 //   node tools/depgraph-view/build-entries.mjs [--graph <graph.json>] [--out <entries.json>]
 //
-// The root package publishes ./dist/src/<name>.js, whose source lives under src/ but is
-// re-exported through src/sdk/<name>.ts; tsdown owns that mapping, so both spellings are
-// probed against the graph and whichever node exists wins.
+// Root entry sources come from tsdown's entry map.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const argv = process.argv.slice(2);
@@ -55,9 +54,11 @@ const packages = {};
 const rootPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const rootExports =
   typeof rootPkg.exports === 'string' ? { '.': rootPkg.exports } : rootPkg.exports;
+const buildConfig = await import(pathToFileURL(path.join(repoRoot, 'tsdown.config.ts')).href);
 const root = packageEntries('.', rootExports, (target) => {
-  const base = target.replace('./dist/src/', '').replace(/\.js$/, '');
-  return [`${base}.ts`, `sdk/${base}.ts`, `${base}/index.ts`, `sdk/${base}/index.ts`];
+  const name = target.replace('./dist/src/', '').replace(/\.js$/, '');
+  const source = buildConfig.default.entry[name];
+  return source ? [source.replace(/^src\//, '')] : [];
 });
 if (root.length) packages['src (agent-device)'] = root;
 

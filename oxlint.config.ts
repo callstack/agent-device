@@ -201,7 +201,7 @@ export default defineConfig({
     },
     {
       // The dependency-graph viewer is a browser page, not a Node entry point.
-      files: ['tools/depgraph-view/app.js'],
+      files: ['tools/depgraph-view/*.js'],
       env: { browser: true },
       globals: {
         window: 'readonly',

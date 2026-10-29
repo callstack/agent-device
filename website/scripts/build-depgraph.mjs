@@ -21,7 +21,7 @@ if (process.env.VERCEL && !existsSync(path.join(root, '.git'))) {
 
 try {
   mkdirSync(output, { recursive: true });
-  for (const file of ['index.html', 'app.js'])
+  for (const file of ['index.html', 'app.js', 'layout.js', 'analysis.js', 'graph-model.js'])
     copyFileSync(path.join(viewer, file), path.join(output, file));
   execFileSync(
     process.execPath,
@@ -36,6 +36,7 @@ try {
   execFileSync(
     process.execPath,
     [
+      '--experimental-strip-types',
       'tools/depgraph-view/build-entries.mjs',
       '--graph',
       path.join(output, 'graph.json'),
