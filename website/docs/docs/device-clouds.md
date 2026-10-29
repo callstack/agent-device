@@ -9,6 +9,7 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 - [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS.
 - [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
 - [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
+- [Revyl](/docs/revyl): iOS simulators and Android emulators rented from Revyl's execution API.
 
 ## Compare providers
 

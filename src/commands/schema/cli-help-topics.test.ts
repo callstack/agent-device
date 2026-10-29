@@ -467,6 +467,18 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(testMuFlow, /major OS version \(18, not 18\.0\)/);
   assert.match(testMuFlow, /agent-device disconnect/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
+  assert.match(help, /Revyl uses REVYL_API_KEY/);
+  assert.match(help, /plugins add @agent-device\/revyl/);
+  const revylFlow = help.slice(
+    help.indexOf('Revyl cloud-device flow'),
+    help.indexOf('Local profile flow'),
+  );
+  assert.match(
+    revylFlow,
+    /connect revyl --platform ios --device "iPhone 16" --provider-os-version 18\.0 --provider-app https:\/\//,
+  );
+  assert.match(revylFlow, /must be a public https URL/);
+  assert.match(revylFlow, /agent-device disconnect/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
   assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);
   assert.match(help, /Limrun Android supports direct ADB port reverse/);

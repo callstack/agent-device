@@ -1,0 +1,67 @@
+{
+  "name": "@agent-device/revyl",
+  "version": "0.21.36-dev",
+  "type": "module",
+  "description": "Revyl cloud iOS simulator and Android emulator plugin for agent-device.",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provider-webdriver": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "revyl",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": false,
+      "supportsDeferredAppSelection": false,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": false
+    },
+    "credentialVariables": [
+      "REVYL_API_KEY",
+      "REVYL_API_URL"
+    ]
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/agent-device.mjs"
+      },
+      "./agent-device": {
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-revyl"
+  },
+  "homepage": "https://agent-device.dev/docs/revyl"
+}

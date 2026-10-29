@@ -108,6 +108,9 @@ importers:
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:packages/replay-test
+      '@agent-device/revyl':
+        specifier: workspace:*
+        version: link:packages/provider-revyl
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:packages/selectors
@@ -752,6 +755,24 @@ importers:
       '@limrun/api':
         specifier: ^0.64.1
         version: 0.64.1(supports-color@7.2.0)
+
+  packages/provider-revyl:
+    devDependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provider-webdriver':
+        specifier: workspace:*
+        version: link:../provider-webdriver
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/provider-testmu:
     devDependencies:
