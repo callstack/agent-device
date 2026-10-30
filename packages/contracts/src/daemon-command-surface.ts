@@ -90,7 +90,8 @@ export type DaemonScreenshotCommandOptions = CommandContext &
     out?: FileOutputRef;
     fullscreen?: boolean;
     overlayRefs?: boolean;
-    pixelDensity?: number | 'native';
+    pixelDensity?: number;
+    nativeDensity?: boolean;
     scale?: number;
     stabilize?: boolean;
     normalizeStatusBar?: boolean;

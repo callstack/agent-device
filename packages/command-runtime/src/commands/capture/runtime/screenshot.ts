@@ -45,7 +45,7 @@ export const screenshotCommand: RuntimeCommand<
       {
         fullscreen: options.fullscreen,
         overlayRefs: options.overlayRefs,
-        pixelDensity: options.pixelDensity,
+        pixelDensity: options.nativeDensity ? 'native' : options.pixelDensity,
         screenMask: readScreenshotScreenMask(options.screenMask),
         stabilize: options.stabilize,
         normalizeStatusBar: options.normalizeStatusBar,

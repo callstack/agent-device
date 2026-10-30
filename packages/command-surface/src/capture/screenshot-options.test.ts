@@ -202,3 +202,14 @@ test('explicit screenshot stabilization survives SDK projection and script recor
   });
   assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
 });
+
+test('native density survives the trip through flags and options', () => {
+  assert.equal(
+    screenshotOptionsFromFlags({ screenshotNativeDensity: true }).nativeDensity,
+    true,
+  );
+  assert.equal(
+    screenshotFlagsFromOptions({ nativeDensity: true }).screenshotNativeDensity,
+    true,
+  );
+});

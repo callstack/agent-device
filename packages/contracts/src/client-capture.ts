@@ -112,7 +112,8 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   overlayRefs?: boolean;
   /** Crop the capture to the frame of the selector resolved on the same screen. */
   cropOn?: string;
-  pixelDensity?: number | 'native';
+  pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
