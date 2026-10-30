@@ -1,4 +1,4 @@
-import type { DaemonResponse } from './index.ts';
+import type { DaemonResponse } from './daemon-client-request.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 /** Adds copyable addressing for a kept-alive replay session, without URL credentials. */

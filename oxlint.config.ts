@@ -53,7 +53,7 @@ const LEGACY_FILE_LINE_CAPS = {
   'src/__tests__/remote-connection.test.ts': 2324,
   'packages/command-runtime/src/commands/interaction/runtime/settle.test.ts': 2094,
   'packages/daemon-client/src/__tests__/daemon-client-lifecycle.test.ts': 1169,
-  'packages/daemon-client/src/__tests__/daemon-client.test.ts': 1340,
+  'packages/daemon-client/src/__tests__/index.test.ts': 1340,
   'src/mcp/__tests__/command-tools.test.ts': 1029,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
   'packages/host-kit/src/internal/exec.ts': 1032,

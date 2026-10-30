@@ -2,10 +2,8 @@ import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contract
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import type { sendToDaemon } from './index.ts';
+import type { DaemonTransport } from './daemon-client-request.ts';
 import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
-
-type DaemonTransport = typeof sendToDaemon;
 
 export type EnsuringTransportOptions = {
   /** The host the ensured daemon is resolved and started from; the process's own when omitted. */

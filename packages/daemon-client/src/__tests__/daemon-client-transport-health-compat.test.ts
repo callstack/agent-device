@@ -11,7 +11,7 @@ import {
 
 /**
  * ADR 0006 health compatibility across every link a command RPC crosses. `sendToDaemon`
- * runs this check before the RPC (daemon-client.test.ts pins that order); these cases pin
+ * runs this check before the RPC (index.test.ts pins that order); these cases pin
  * what the check itself accepts and refuses when a proxy sits in front of the daemon.
  */
 

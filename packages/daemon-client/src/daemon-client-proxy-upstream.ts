@@ -1,16 +1,10 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { ensureManagedDaemon, resolveClientSettings } from './daemon-client-lifecycle.ts';
 
-export type ProxyUpstreamDaemon = Readonly<{
-  httpPort: number | undefined;
-  token: string;
-  stateDir: string;
-}>;
-
 export async function ensureProxyUpstreamDaemon(options: {
   stateDir?: string;
   host: HostEnvironment;
-}): Promise<ProxyUpstreamDaemon> {
+}): Promise<{ httpPort: number | undefined; token: string; stateDir: string }> {
   const settings = resolveClientSettings(
     {
       session: 'default',

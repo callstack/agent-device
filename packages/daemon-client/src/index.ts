@@ -1,11 +1,4 @@
-import type { DaemonResponse as SharedDaemonResponse } from '@agent-device/kernel/contracts';
-import type { RequestProgressSink } from '@agent-device/contracts/progress';
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type {
-  AgentDeviceDaemonTransportContext,
-  DaemonConnection,
-  EnsureDaemonOptions,
-} from '@agent-device/contracts/client';
+import type { DaemonConnection, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
@@ -29,14 +22,14 @@ import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
-import type { ProxyUpstreamDaemon } from './daemon-client-proxy-upstream.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  DaemonTransportOptions,
+} from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type DaemonRequest = DaemonWireRequest;
-export type DaemonResponse = SharedDaemonResponse;
-type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
-  onProgress?: RequestProgressSink;
-};
+export type { DaemonRequest, DaemonResponse };
 
 /** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(
@@ -433,7 +426,7 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
 export async function ensureProxyUpstreamDaemon(options: {
   stateDir?: string;
   host: HostEnvironment;
-}): Promise<ProxyUpstreamDaemon> {
+}): Promise<{ httpPort: number | undefined; token: string; stateDir: string }> {
   const { ensureProxyUpstreamDaemon: ensure } = await import('./daemon-client-proxy-upstream.ts');
   return await ensure(options);
 }
