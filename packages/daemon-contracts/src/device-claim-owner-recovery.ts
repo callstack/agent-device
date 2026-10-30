@@ -79,7 +79,11 @@ export function createOwnerScopedDeviceClaimReconciler(
           ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
             ? { retainedReason: outcome.result.reason }
             : {}),
-          error: JSON.parse(JSON.stringify(normalizeError(error))),
+          error: JSON.parse(
+            JSON.stringify(normalizeError(error), (_key, value) =>
+              typeof value === 'bigint' ? value.toString() : value,
+            ),
+          ),
         },
       });
     }

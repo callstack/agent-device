@@ -14,7 +14,11 @@ import { resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
 import { settleVerifiedOrphanedClaim } from './device-claim-settlement.ts';
 
-function fixture(reconcile: OwnerScopedClaimRecovery['reconcile'], failureCount: 1 | 2) {
+function fixture(
+  reconcile: OwnerScopedClaimRecovery['reconcile'],
+  failureCount: 1 | 2,
+  failureDetails: Record<string, unknown> = {},
+) {
   const stateDir = mkdtempForTestSync('claim-recovery-dispose-');
   const claim: DeviceClaim = {
     schemaVersion: 3,
@@ -39,6 +43,7 @@ function fixture(reconcile: OwnerScopedClaimRecovery['reconcile'], failureCount:
       hint: 'Inspect Android owner diagnostics.',
       diagnosticId: 'android-owner-diagnostic',
       logPath: '/tmp/android-owner.log',
+      ...failureDetails,
     }),
   };
   const second = {
@@ -194,6 +199,47 @@ test.each([1, 2] as const)(
         }),
       }),
     );
+    expect(f.reconcileOnce).toHaveBeenCalledOnce();
+    expect(f.dispose).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(['primary-error', 'retained'] as const)(
+  'bigint disposal details preserve the %s outcome and claim',
+  async (outcome) => {
+    const primary = new AppError('DEVICE_IN_USE', 'reconciliation refused', {
+      reason: 'primary-refusal',
+    });
+    const retained = { status: 'retained', reason: 'screen-recording-owner-mismatch' } as const;
+    const f = fixture(
+      async () => {
+        if (outcome === 'primary-error') throw primary;
+        return retained;
+      },
+      1,
+      { observedAtNs: 9_007_199_254_740_993n, samples: { elapsedNs: [1n, 42n] } },
+    );
+
+    const recovery = settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env);
+    if (outcome === 'primary-error') await expect(recovery).rejects.toBe(primary);
+    else await expect(recovery).resolves.toBe(retained);
+
+    expect(f.emit).toHaveBeenCalledOnce();
+    const event = f.emit.mock.calls[0]?.[0];
+    expect(event.phase).toBe('device_claim_recovery_dispose_failed');
+    expect(event.data.error.details.failures[0].error).toMatchObject({
+      code: 'COMMAND_FAILED',
+      hint: 'Inspect Android owner diagnostics.',
+      diagnosticId: 'android-owner-diagnostic',
+      logPath: '/tmp/android-owner.log',
+      details: {
+        reason: 'android-cleanup-refused',
+        observedAtNs: '9007199254740993',
+        samples: { elapsedNs: ['1', '42'] },
+      },
+    });
+    if (outcome === 'retained') expect(event.data.retainedReason).toBe(retained.reason);
+    expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
     expect(f.reconcileOnce).toHaveBeenCalledOnce();
     expect(f.dispose).toHaveBeenCalledOnce();
   },
