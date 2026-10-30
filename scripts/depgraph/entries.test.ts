@@ -39,4 +39,12 @@ test('maps declared root and workspace exports to graph source files', () => {
     { id: 'packages/example/src/index.ts', subpath: '.' },
     { id: 'packages/example/src/index.ts', subpath: './alias' },
   ]);
+  fs.writeFileSync(
+    path.join(repo, 'package.json'),
+    JSON.stringify({ exports: { './missing': { import: './dist/src/missing.js' } } }),
+  );
+  assert.throws(
+    () => graphEntries(repo, new Set()),
+    /Root export \.\/missing points to unknown build entry/,
+  );
 });

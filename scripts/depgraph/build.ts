@@ -22,7 +22,7 @@ import { graphEntries, type EntryManifest } from './entries.ts';
 import { computeLevels, markTransitivelyReachableEdges, type GraphData } from './model.ts';
 import {
   computeCohesionSummary,
-  computeDominatorSummary,
+  createDominatorAnalyzer,
   computeZoneSccSummary,
   type CohesionSummary,
   type DominatorSummary,
@@ -78,10 +78,12 @@ type Payload = {
 function headCommit(): string {
   if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 10);
   try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: repoRoot,
       encoding: 'utf8',
-    }).trim();
+    })
+      .trim()
+      .slice(0, 10);
   } catch {
     return 'unknown';
   }
@@ -111,7 +113,8 @@ function hasValueCycle(graph: Pick<GraphData, 'cycles'>): boolean {
 
 function buildPayload(dominatorEntry: string): Payload {
   const graph = loadGraph(repoRoot);
-  const dominatorSummary = computeDominatorSummary(dominatorEntry, graph);
+  const dominatorsOf = createDominatorAnalyzer(graph);
+  const dominatorSummary = dominatorsOf(dominatorEntry);
   if (!hasValueCycle(graph)) markTransitivelyReachableEdges(graph.edges);
   const levels = computeLevels(graph.nodes, graph.edges);
 
@@ -132,7 +135,10 @@ function buildPayload(dominatorEntry: string): Payload {
   const originalIds = new Map(graph.nodes.map((n) => [n.id.replace(/^src\//, ''), n.id]));
   const entrySummaries = Object.fromEntries(
     [...selected].map((id) => {
-      const summary = computeDominatorSummary(originalIds.get(id)!, graph);
+      const original = originalIds.get(id);
+      if (!original)
+        throw new Error(`Graph entry ${id} does not identify a production source file.`);
+      const summary = original === dominatorEntry ? dominatorSummary : dominatorsOf(original);
       return [id, { ...summary, bottlenecks: summary.bottlenecks.slice(0, 8) }];
     }),
   );

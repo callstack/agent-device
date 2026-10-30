@@ -61,6 +61,11 @@ try {
     ],
     { cwd: root, env, stdio: 'inherit' },
   );
+} catch (error) {
+  process.stderr.write(
+    `depgraph build failed: ${error instanceof Error ? error.message : error}\n`,
+  );
+  process.exitCode = 1;
 } finally {
   if (temporaryGit) rmSync(temporaryGit, { recursive: true, force: true });
 }

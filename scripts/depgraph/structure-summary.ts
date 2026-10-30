@@ -42,13 +42,22 @@ export type DominatorSummary = {
  * reachable from `entry` are absent from `getDominatorTree`'s result by construction (it walks
  * from `from` and only records visited nodes), so `reachableFiles` is exactly that closure size.
  */
-export function computeDominatorSummary(entry: string, graph: GraphData): DominatorSummary {
+export function createDominatorAnalyzer(graph: GraphData): (entry: string) => DominatorSummary {
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const valueGraph = importGraph(graph.edges, VALUE_EDGES, nodesById.keys());
+  return (entry) => summarizeDominator(entry, graph, nodesById, valueGraph);
+}
+
+function summarizeDominator(
+  entry: string,
+  graph: GraphData,
+  nodesById: Map<string, GraphData['nodes'][number]>,
+  valueGraph: Graph,
+): DominatorSummary {
   if (!nodesById.has(entry)) {
     throw new Error(`${entry} is not a production source file in the layering graph.`);
   }
 
-  const valueGraph = importGraph(graph.edges, VALUE_EDGES, [entry]);
   const idom = getDominatorTree(valueGraph, { from: entry });
   const reachable = Object.keys(idom);
 
@@ -89,6 +98,10 @@ export function computeDominatorSummary(entry: string, graph: GraphData): Domina
     totalFiles: graph.nodes.length,
     bottlenecks,
   };
+}
+
+export function computeDominatorSummary(entry: string, graph: GraphData): DominatorSummary {
+  return createDominatorAnalyzer(graph)(entry);
 }
 
 export type ZoneComponent = { zones: string[]; size: number };

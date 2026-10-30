@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildEntries } from '../build-entries.ts';
-import { readWorkspacePackages } from '../layering/package-boundaries.ts';
+import { readWorkspacePackages, runtimeExportTarget } from '../layering/package-boundaries.ts';
 
 export type EntryManifest = Record<string, { id: string; subpath: string }[]>;
 
@@ -18,12 +18,12 @@ export function graphEntries(repoRoot: string, ids: ReadonlySet<string>): EntryM
   };
   const rootExports = typeof root.exports === 'string' ? { '.': root.exports } : root.exports;
   for (const [subpath, value] of Object.entries(rootExports)) {
-    const target =
-      typeof value === 'string' ? value : (value.default ?? value.import ?? value.require);
+    const target = runtimeExportTarget(value);
     if (!target) continue;
     const name = target.replace(/^\.\/dist\/src\//, '').replace(/\.js$/, '');
     const source = (buildEntries as Record<string, string>)[name];
-    if (source) add('src (agent-device)', source, subpath);
+    if (!source) throw new Error(`Root export ${subpath} points to unknown build entry ${target}.`);
+    add('src (agent-device)', source, subpath);
   }
   for (const pkg of readWorkspacePackages(repoRoot)) {
     for (const [specifier, target] of pkg.exportTargets) {

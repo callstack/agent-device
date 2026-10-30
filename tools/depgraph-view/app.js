@@ -23,7 +23,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
     '#2ac9de',
     '#7aa2f7',
     '#bb9af7',
-    '#f7768e',
+    '#89ddff',
     '#c0caf5',
     '#b4f9f8',
     '#9d7cd8',
@@ -657,10 +657,16 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   );
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest('a, input, select, textarea, button, [contenteditable="true"]')) return;
+    if (
+      e.target.closest(
+        'input:not([type=checkbox]):not([type=range]), select, textarea, [contenteditable]:not([contenteditable=false])',
+      )
+    )
+      return;
     if (e.key === 'f' || e.key === 'F') fitView();
     if (e.key === 'l' || e.key === 'L') {
-      labelMinIn = labelMinIn > 1 ? 1 : 45;
+      labelMinIn =
+        labelMinIn > Number(labelMin.min) ? Number(labelMin.min) : Number(labelMin.defaultValue);
       labelMin.value = labelMinIn;
       dirty = true;
     }

@@ -5,6 +5,7 @@ import { buildGraph } from './model.ts';
 import {
   computeCohesionSummary,
   computeDominatorSummary,
+  createDominatorAnalyzer,
   computeZoneSccSummary,
 } from './structure-summary.ts';
 
@@ -59,6 +60,19 @@ test('computeDominatorSummary rejects an entry outside the layering graph', () =
     () => computeDominatorSummary('src/core/missing.ts', graph),
     /src\/core\/missing\.ts is not a production source file/,
   );
+});
+
+test('one analyzer computes independent summaries for connected and isolated entries', () => {
+  const files = sources({
+    'src/core/a.ts': "import { b } from './b.ts';",
+    'src/core/b.ts': 'export const b = 1;',
+    'src/core/isolated.ts': 'export const isolated = 1;',
+  });
+  const analyze = createDominatorAnalyzer(buildGraph(files, resolveImportEdges(files)));
+  assert.equal(analyze('src/core/a.ts').reachableFiles, 2);
+  assert.equal(analyze('src/core/b.ts').reachableFiles, 1);
+  assert.equal(analyze('src/core/isolated.ts').reachableFiles, 1);
+  assert.equal(analyze('src/core/a.ts').bottlenecks[0]?.file, 'src/core/b.ts');
 });
 
 test('computeZoneSccSummary finds a zone-level cycle built from value edges across distinct files', () => {

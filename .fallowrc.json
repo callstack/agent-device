@@ -3,7 +3,6 @@
   "entry": [
     "tsdown.config.ts",
     "tools/depgraph-view/app.js",
-    "tools/depgraph-view/build-entries.mjs",
     "scripts/check-provider-plugin.mjs",
     "scripts/check-affected/command.ts",
     "packages/provider-testmu/test/package-smoke.mjs",

@@ -116,12 +116,7 @@ export default defineConfig({
         ]),
         {
           label: 'Reference',
-          items: [
-            'docs/security-trust',
-            'docs/known-limitations',
-            'docs/migrating-gestures',
-            { label: 'Dependency graph', link: '/depgraph/' },
-          ],
+          items: ['docs/security-trust', 'docs/known-limitations', 'docs/migrating-gestures'],
         },
       ],
       plugins: [

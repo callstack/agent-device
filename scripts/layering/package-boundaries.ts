@@ -130,6 +130,13 @@ export function readTrackedPackageManifests(repoRoot: string): Map<string, strin
   );
 }
 
+/** Runtime target selected for a declared package export. */
+export function runtimeExportTarget(
+  target: string | { default?: string; import?: string; require?: string },
+): string | undefined {
+  return typeof target === 'string' ? target : (target.default ?? target.import ?? target.require);
+}
+
 /** The same package model over manifest sources already in hand, e.g. read from a git ref. */
 export function workspacePackagesFromManifests(
   manifests: ReadonlyMap<string, string>,
@@ -151,8 +158,7 @@ export function workspacePackagesFromManifests(
     const exports =
       typeof manifest.exports === 'string' ? { '.': manifest.exports } : (manifest.exports ?? {});
     for (const [subpath, target] of Object.entries(exports)) {
-      const targetFile =
-        typeof target === 'string' ? target : (target.default ?? target.import ?? target.require);
+      const targetFile = runtimeExportTarget(target);
       if (!targetFile) continue;
       exportTargets.set(
         path.posix.join(manifest.name, subpath),
