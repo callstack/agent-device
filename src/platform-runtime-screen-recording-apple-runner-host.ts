@@ -104,6 +104,8 @@ export async function captureAppleClockAnchor(
       : undefined;
   } catch {
     signal?.throwIfAborted();
+    const { throwIfRequestCanceled } = await import('@agent-device/host-kit/request');
+    throwIfRequestCanceled(requestId);
     return undefined;
   }
 }
