@@ -31,9 +31,12 @@ const DEFAULT_LONG_PRESS_DURATION_MS = 1_500;
  */
 class RevylInteractor implements Interactor {
   private readonly session: RevylSession;
+  /** The cancellation the command came in with, when the runner carried one. */
+  private readonly signal: AbortSignal | undefined;
 
-  constructor(session: RevylSession) {
+  constructor(session: RevylSession, signal?: AbortSignal) {
     this.session = session;
+    this.signal = signal;
   }
 
   async open(
@@ -120,7 +123,9 @@ class RevylInteractor implements Interactor {
    *
    * A per-character delay is honored the way the local providers honor one: the text goes one
    * character at a time with the pause between them. Revyl's `/input` has no pacing field, so a
-   * paced fill that fails partway names how much of the text already landed.
+   * paced fill that fails partway names how much of the text already landed. The pause is canceled
+   * with the command that asked for it, so a canceled fill stops at the character it reached instead
+   * of waiting out the delay and typing another.
    */
   async fill(
     x: number,
@@ -140,10 +145,11 @@ class RevylInteractor implements Interactor {
     let dispatched = 0;
     try {
       for (const char of Array.from(text)) {
+        this.signal?.throwIfAborted();
         // Only the first character clears: the rest append to what the field already holds.
         await this.workerAction('input', { x, y, text: char, clear_first: dispatched === 0 });
         dispatched += 1;
-        await sleep(delayMs);
+        await sleep(delayMs, undefined, this.signal === undefined ? {} : { signal: this.signal });
       }
     } catch (error) {
       throw discloseDispatchAfterSteps(error, dispatched);
@@ -209,7 +215,7 @@ class RevylInteractor implements Interactor {
     return await captureRevylSnapshot(
       this.session,
       createRevylSnapshotReader(this.session),
-      options?.signal,
+      options?.signal ?? this.signal,
     );
   }
 
@@ -235,12 +241,12 @@ class RevylInteractor implements Interactor {
     action: string,
     body?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.session.client.workerAction(this.session.runId, action, body);
+    return this.session.client.workerAction(this.session.runId, action, body, this.signal);
   }
 }
 
-export function createRevylInteractor(session: RevylSession): Interactor {
-  return new RevylInteractor(session);
+export function createRevylInteractor(session: RevylSession, signal?: AbortSignal): Interactor {
+  return new RevylInteractor(session, signal);
 }
 
 /** The plan works in a zero-origin box; a snapshot container's rect is in the same space here. */

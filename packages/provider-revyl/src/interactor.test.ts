@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
+import { captureRevylSnapshot, type RevylSnapshotReader } from './snapshot.ts';
 import {
   revylLease,
   startRevylFixtureBackend,
@@ -230,6 +231,30 @@ test('a capture the caller gave up on does not report a snapshot finished afterw
     fixture.paths().filter((request) => request.endsWith('/hierarchy')).length,
     1,
     'the aborted read is not retried',
+  );
+});
+
+test('a capture whose tree arrives after the caller gave up reports no snapshot', async () => {
+  // The read itself cannot fail here: the reader answers once the caller has already gone, so only
+  // the check that follows the read can keep a canceled capture from reporting a finished snapshot.
+  const controller = new AbortController();
+  let deliverTree: () => void = () => {};
+  const reader: RevylSnapshotReader = {
+    readHierarchyXml: () =>
+      new Promise<string>((resolve) => {
+        deliverTree = () => resolve(IOS_HIERARCHY);
+      }),
+    viewport: () => undefined,
+  };
+  const capture = captureRevylSnapshot({ platform: 'ios' }, reader, controller.signal);
+  controller.abort();
+  // The tree lands after the abort, which is the race the check after the read has to lose on purpose.
+  deliverTree();
+
+  await assert.rejects(
+    async () => await capture,
+    (error: unknown) => error instanceof Error && error.name === 'AbortError',
+    'the canceled capture must not report the tree that arrived late',
   );
 });
 

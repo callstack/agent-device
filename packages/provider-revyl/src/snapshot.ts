@@ -2,7 +2,7 @@ import type { SnapshotViewportSize } from '@agent-device/kernel/snapshot';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { SnapshotRuntimeResult } from '@agent-device/contracts/interactor-types';
 import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
-import { REVYL_SNAPSHOT_CHANNEL } from './device.ts';
+import { REVYL_SNAPSHOT_CHANNEL, type RevylPlatform } from './device.ts';
 import type { RevylSession } from './revyl-session.ts';
 
 /** Reads one Revyl worker's accessibility tree and the box its actions measure. */
@@ -32,7 +32,7 @@ export function createRevylSnapshotReader(session: RevylSession): RevylSnapshotR
  * written against a local simulator or an adb-connected phone resolves here from the same node facts.
  */
 export async function captureRevylSnapshot(
-  session: RevylSession,
+  session: Readonly<{ platform: RevylPlatform }>,
   reader: RevylSnapshotReader,
   signal?: AbortSignal,
 ): Promise<SnapshotRuntimeResult> {
