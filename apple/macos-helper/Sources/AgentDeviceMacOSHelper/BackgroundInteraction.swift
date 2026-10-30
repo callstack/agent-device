@@ -540,7 +540,53 @@ func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) thr
       ]
     )
   }
-  return onScreenWindows(pid: pid, windowInfo: windowInfo).first
+  return frontWindow(
+    among: onScreenWindows(pid: pid, windowInfo: windowInfo),
+    isSharingIndicator: { isWindowSharingIndicator(pid: pid, frame: $0.bounds) }
+  )
+}
+
+/// The frontmost candidate that is not a window-sharing indicator. A lone window is never one: an
+/// indicator only appears in front of the window it belongs to.
+func frontWindow(
+  among candidates: [OnScreenWindow],
+  isSharingIndicator: (OnScreenWindow) -> Bool
+) -> OnScreenWindow? {
+  guard candidates.count > 1 else { return candidates.first }
+  return candidates.first { !isSharingIndicator($0) }
+}
+
+/// While a ScreenCaptureKit stream shares one of an app's windows, macOS 27 adds a 66 x 20
+/// normal-layer window titled "Window" in front of it. Its only child is a button titled
+/// `WindowSharingSessionButton`. That window is a system indicator, not the app's front window.
+private let windowSharingIndicatorButtonTitle = "WindowSharingSessionButton"
+
+/// A hung app reads as no indicator rather than stalling a capture. `AXUIElementSetMessagingTimeout`
+/// applies only to the element it is set on, so every element the probe reads gets it, and the
+/// probe stops at its own deadline.
+private let sharingIndicatorReplyTimeoutSeconds: Float = 0.1
+private let sharingIndicatorProbeSeconds = 0.5
+
+private func isWindowSharingIndicator(pid: pid_t, frame: CGRect) -> Bool {
+  let deadline = Date().addingTimeInterval(sharingIndicatorProbeSeconds)
+  func bounded(_ element: AXUIElement) -> AXUIElement? {
+    guard Date() < deadline else { return nil }
+    AXUIElementSetMessagingTimeout(element, sharingIndicatorReplyTimeoutSeconds)
+    return element
+  }
+  guard let appElement = bounded(AXUIElementCreateApplication(pid)) else { return false }
+  let window = windows(of: appElement).first { window in
+    guard let window = bounded(window), let rect = rectAttribute(window) else { return false }
+    return abs(rect.x - frame.minX) < 1 && abs(rect.y - frame.minY) < 1
+      && abs(rect.width - frame.width) < 1 && abs(rect.height - frame.height) < 1
+  }
+  guard let window else { return false }
+  return children(of: window).contains { child in
+    guard let child = bounded(child) else { return false }
+    return role(of: child) == "AXButton"
+      && stringAttribute(child, attribute: kAXTitleAttribute as String)
+        == windowSharingIndicatorButtonTitle
+  }
 }
 
 func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
