@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
@@ -8,7 +9,6 @@ import {
 } from '@agent-device/command-registry/owner-files';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const distPath = path.join(repoRoot, 'dist/src');
 
 function collectJsFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { recursive: true, encoding: 'utf8' });
@@ -17,7 +17,9 @@ function collectJsFiles(dir: string): string[] {
 
 describe('owner-file metadata', () => {
   test('does not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
-    fs.rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true });
+    const sharedDistPath = path.join(repoRoot, 'dist');
+    const sharedDistModified = fs.statSync(sharedDistPath, { throwIfNoEntry: false })?.mtimeMs;
+    const distPath = path.join(mkdtempForTestSync('owner-files-no-leak-'), 'dist');
 
     const build = runCmdSync(
       'node',
@@ -26,10 +28,16 @@ describe('owner-file metadata', () => {
         'node_modules/tsdown/dist/run.mjs',
         '--config-loader',
         'native',
+        '--out-dir',
+        distPath,
       ],
       { cwd: repoRoot },
     );
     expect(build.exitCode, build.stderr).toBe(0);
+    expect(
+      fs.statSync(sharedDistPath, { throwIfNoEntry: false })?.mtimeMs,
+      'the metadata build must preserve the shared dist used by other tests',
+    ).toBe(sharedDistModified);
 
     expect(
       fs.existsSync(path.join(distPath, 'sdk-selectors.js')),

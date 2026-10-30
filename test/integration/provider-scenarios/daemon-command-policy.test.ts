@@ -8,6 +8,7 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 test('Provider-backed integration daemon command policies gate admission and provider scoping', async () => {
   const adbCalls: string[][] = [];
   let activeRecordingPath: string | undefined;
+  let recordingRunning = false;
   const inactiveLeaseMeta = {
     tenantId: 'tenant-a',
     runId: 'run-a',
@@ -19,8 +20,14 @@ test('Provider-backed integration daemon command policies gate admission and pro
       adbCalls.push([...args]);
       const command = args.join(' ');
       const startedPath = screenRecordingPath(command);
-      if (startedPath) activeRecordingPath = startedPath;
-      return androidAdbResult(args, activeRecordingPath);
+      if (startedPath) {
+        activeRecordingPath = startedPath;
+        recordingRunning = true;
+      }
+      if (command === 'shell kill -2 4321' || command === 'shell kill -9 4321') {
+        recordingRunning = false;
+      }
+      return androidAdbResult(args, activeRecordingPath, recordingRunning);
     },
   };
 
@@ -74,17 +81,20 @@ test('Provider-backed integration daemon command policies gate admission and pro
       );
     },
   );
+  assert.ok(adbCalls.some((args) => args.join(' ') === 'shell kill -2 4321'));
+  assert.ok(!adbCalls.some((args) => args.join(' ') === 'shell kill -9 4321'));
 }, 15_000);
 
 function androidAdbResult(
   args: readonly string[],
   activeRecordingPath: string | undefined,
+  recordingRunning: boolean,
 ): AdbResult {
   const command = args.join(' ');
   return (
     deviceStatusResponse(command) ??
     recordingManifestResponse(command) ??
-    screenRecordingProcessResponse(command, activeRecordingPath) ??
+    screenRecordingProcessResponse(command, activeRecordingPath, recordingRunning) ??
     recordingArtifactResponse(command, activeRecordingPath) ??
     adbResult()
   );
@@ -126,18 +136,22 @@ function recordingManifestResponse(command: string): AdbResult | undefined {
 function screenRecordingProcessResponse(
   command: string,
   activeRecordingPath: string | undefined,
+  recordingRunning: boolean,
 ): AdbResult | undefined {
+  if (command === 'shell test -d /proc/4321') {
+    return adbResult('', recordingRunning ? 0 : 1);
+  }
   if (isAndroidScreenrecordStartCommand(command)) {
     return adbResult('4321\n');
   }
   if (command === 'shell cat /proc/4321/stat') {
-    return adbResult(processStat(4321, '424242'));
+    return recordingRunning ? adbResult(processStat(4321, '424242')) : adbResult('', 1);
   }
-  if (command === 'shell cat /proc/4321/cmdline' && activeRecordingPath) {
+  if (command === 'shell cat /proc/4321/cmdline' && activeRecordingPath && recordingRunning) {
     return adbResult(`screenrecord\u0000--bit-rate\u00008000000\u0000${activeRecordingPath}\u0000`);
   }
   if (command === 'shell ps -o pid= -p 4321') {
-    return adbResult('4321\n');
+    return adbResult(recordingRunning ? '4321\n' : '');
   }
   return undefined;
 }
