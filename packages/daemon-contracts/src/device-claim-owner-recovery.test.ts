@@ -122,6 +122,22 @@ test.each([1, 2] as const)(
     await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).rejects.toBe(
       f.cleanupError,
     );
+    expect(f.emit).toHaveBeenCalledOnce();
+    expect(f.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'device_claim_recovery_dispose_failed',
+        data: expect.objectContaining({
+          deviceKey: f.claim.deviceKey,
+          ownerSession: f.claim.session,
+          error: expect.objectContaining({
+            details: {
+              reason: 'platform-owner-shutdown-failed',
+              failures: expectedFailures.slice(0, failureCount),
+            },
+          }),
+        }),
+      }),
+    );
     const normalized = normalizeError(f.cleanupError);
     expect(JSON.parse(JSON.stringify(normalized))).toMatchObject({
       code: 'COMMAND_FAILED',
@@ -252,6 +268,9 @@ test.each([
   ['retained', 'circular'],
   ['retained', 'toJSON'],
   ['retained', 'sink'],
+  ['reconciled', 'circular'],
+  ['reconciled', 'toJSON'],
+  ['reconciled', 'sink'],
 ] as const)(
   'preserves %s outcome and claim when secondary diagnostics encounter %s',
   async (outcome, fault) => {
@@ -264,7 +283,7 @@ test.each([
     const f = fixture(
       async () => {
         if (outcome === 'primary-error') throw primary;
-        return retained;
+        return outcome === 'retained' ? retained : { status: 'reconciled' };
       },
       1,
       fault === 'circular'
@@ -283,6 +302,7 @@ test.each([
       });
     const recovery = settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env);
     if (outcome === 'primary-error') await expect(recovery).rejects.toBe(primary);
+    else if (outcome === 'reconciled') await expect(recovery).rejects.toBe(f.cleanupError);
     else await expect(recovery).resolves.toBe(retained);
     if (fault === 'circular') {
       expect(f.emit).toHaveBeenCalledOnce();
