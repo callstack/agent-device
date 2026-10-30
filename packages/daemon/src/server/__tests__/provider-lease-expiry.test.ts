@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { leaseReleaseRequestFor } from '../../resources/lease-registry-scope.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
@@ -162,5 +163,58 @@ test('shutdown drain reports releases completed before and during its final retr
     expect(drained.pending).toEqual([]);
   } finally {
     releaser.shutdown();
+  }
+});
+
+test('a daemon killed while holding a provider lease recovers it on restart', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const options = { recoverExpiredLease, stateDir, recoverableProviderIds: ['revyl'] };
+  const killedDaemon = createExpiredProviderLeaseReleaser(options);
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => killedDaemon.recordLiveLeases(leases),
+  });
+  try {
+    const held = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    // A provider with no recovery has nothing a restart could do, so it is not journaled.
+    registry.allocateLease({ tenantId: 't', runId: 'run-2', leaseProvider: 'browserstack' });
+    // The process dies here: no release, no expiry, nothing drained.
+    killedDaemon.shutdown();
+
+    const restartedDaemon = createExpiredProviderLeaseReleaser(options);
+    await restartedDaemon.retryPending();
+    expect(recoverExpiredLease.mock.calls.map(([lease]) => lease.leaseId)).toEqual([held.leaseId]);
+    expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(false);
+    restartedDaemon.shutdown();
+
+    // Recovered once means recovered: the next daemon inherits nothing.
+    const thirdDaemon = createExpiredProviderLeaseReleaser(options);
+    await thirdDaemon.retryPending();
+    expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
+    thirdDaemon.shutdown();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a provider lease released before the daemon stops is not recovered again', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const options = { recoverExpiredLease, stateDir, recoverableProviderIds: ['revyl'] };
+  const daemon = createExpiredProviderLeaseReleaser(options);
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
+  });
+  try {
+    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    registry.releaseLease(leaseReleaseRequestFor(lease));
+    daemon.shutdown();
+
+    const restartedDaemon = createExpiredProviderLeaseReleaser(options);
+    await restartedDaemon.retryPending();
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+    restartedDaemon.shutdown();
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

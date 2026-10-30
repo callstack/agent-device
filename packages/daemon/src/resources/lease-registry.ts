@@ -63,6 +63,7 @@ export class LeaseRegistry {
   private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
   private readonly onLeaseExpired?: (lease: DeviceLease) => void;
+  private readonly onProviderLeasesChanged?: (leases: readonly DeviceLease[]) => void;
   private readonly providerSessionOwnership: ProviderSessionOwnershipRegistry;
 
   constructor(options: LeaseRegistryOptions = {}) {
@@ -72,6 +73,7 @@ export class LeaseRegistry {
     this.resolveLeaseTtlMs = createLeaseTtlResolver(options);
     this.now = options.now ?? (() => Date.now());
     this.onLeaseExpired = options.onLeaseExpired;
+    this.onProviderLeasesChanged = options.onProviderLeasesChanged;
     this.providerSessionOwnership = new ProviderSessionOwnershipRegistry({
       now: this.now,
       retentionMs: options.providerSessionRetentionMs,
@@ -175,6 +177,16 @@ export class LeaseRegistry {
     this.issuedLeaseIds.add(lease.leaseId);
     this.leases.set(lease.leaseId, lease);
     this.bindLease(lease);
+    this.reportProviderLeases(lease);
+  }
+
+  private reportProviderLeases(changed: DeviceLease): void {
+    if (!changed.leaseProvider || !this.onProviderLeasesChanged) return;
+    this.onProviderLeasesChanged(
+      [...this.leases.values()]
+        .filter((lease) => lease.leaseProvider)
+        .map((lease) => ({ ...lease })),
+    );
   }
 
   private refreshExistingRunBinding(
@@ -249,6 +261,7 @@ export class LeaseRegistry {
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease);
     this.inFlightWork.forget(lease.leaseId);
+    this.reportProviderLeases(lease);
     return { released: true, lease };
   }
 
@@ -585,6 +598,7 @@ export class LeaseRegistry {
       const expiredLease = { ...lease };
       expired.push(expiredLease);
       this.onLeaseExpired?.(expiredLease);
+      this.reportProviderLeases(expiredLease);
     }
     return expired;
   }
@@ -604,6 +618,7 @@ export class LeaseRegistry {
     this.unbindLease(currentLease, currentLease.expiresAt);
     const expiredLease = { ...currentLease };
     this.onLeaseExpired?.(expiredLease);
+    this.reportProviderLeases(expiredLease);
     return expiredLease;
   }
 

@@ -383,6 +383,7 @@ async function startDaemonRuntimeOnHost(
       void expiredProviderLeaseReleaser.release(lease);
       void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
+    onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
   // The registry only notices an expired lease when something calls it; this sweep ends an
   // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.

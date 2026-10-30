@@ -12,6 +12,11 @@ import { sleep } from '@agent-device/host-kit/retry';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
+/**
+ * The recoverable provider leases this daemon holds right now. A daemon that starts and finds this
+ * file inherited it from one that died without releasing them, so every lease in it is recovered.
+ */
+const LIVE_LEASES_FILE = 'live-provider-leases.json';
 const PENDING_RELEASES_VERSION = 1;
 const PERSISTED_LEASE_STRING_FIELDS = [
   'leaseId',
@@ -32,6 +37,8 @@ type PersistedExpiredProviderLeases = {
 export type ExpiredProviderLeaseReleaser = {
   beginShutdown: () => void;
   release: (lease: DeviceLease) => Promise<void>;
+  /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
+  recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   retryPending: () => Promise<void>;
   /**
    * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
@@ -54,7 +61,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   retryDelayMs?: number;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
-  const pendingRecoveryLeases = loadPendingLeases(options.stateDir);
+  const pendingRecoveryLeases = loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE);
   const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
@@ -74,23 +81,10 @@ export function createExpiredProviderLeaseReleaser(options: {
       );
       return false;
     }
-    const filePath = pendingReleasesPath(options.stateDir);
     try {
-      if (pendingRecoveryLeases.size === 0) {
-        fs.rmSync(filePath, { force: true });
-      } else {
-        fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
-        const record: PersistedExpiredProviderLeases = {
-          version: PENDING_RELEASES_VERSION,
-          leases: [...pendingRecoveryLeases.values()],
-        };
-        publishFileSync({
-          destination: filePath,
-          contents: `${JSON.stringify(record)}\n`,
-          mode: 0o600,
-        });
-        fs.chmodSync(filePath, 0o600);
-      }
+      writeLeaseRecord(options.stateDir, PENDING_RELEASES_FILE, [
+        ...pendingRecoveryLeases.values(),
+      ]);
       persistedRecoveryLeaseIds.clear();
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
@@ -99,6 +93,43 @@ export function createExpiredProviderLeaseReleaser(options: {
     } catch (error) {
       emitPersistenceFailure(pendingRecoveryLeases.size, error);
       return false;
+    }
+  };
+
+  const adoptOrphanedLeases = (): void => {
+    const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE);
+    if (orphaned.size === 0 || !options.stateDir) return;
+    for (const [leaseId, lease] of orphaned) {
+      if (!pendingRecoveryLeases.has(leaseId)) pendingRecoveryLeases.set(leaseId, lease);
+    }
+    // The journal is dropped only once its leases are in the pending record, so a crash in between
+    // leaves them in one file or the other.
+    if (!persistPendingLeases()) return;
+    fs.rmSync(leaseRecordPath(options.stateDir, LIVE_LEASES_FILE), { force: true });
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'provider_lease_orphans_adopted',
+      data: { leaseIds: [...orphaned.keys()] },
+    });
+  };
+  adoptOrphanedLeases();
+
+  const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
+    if (!options.stateDir) return;
+    const recoverable = leases.filter((lease) =>
+      isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
+    );
+    try {
+      writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, recoverable);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'error',
+        phase: 'provider_lease_journal_write_failed',
+        data: {
+          leaseCount: recoverable.length,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   };
 
@@ -207,6 +238,7 @@ export function createExpiredProviderLeaseReleaser(options: {
         scheduleRetry();
       }
     },
+    recordLiveLeases,
     retryPending,
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
@@ -297,9 +329,24 @@ function emitPersistenceFailure(pendingLeaseCount: number, error: unknown): void
   });
 }
 
-function loadPendingLeases(stateDir: string | undefined): Map<string, DeviceLease> {
+function writeLeaseRecord(stateDir: string, file: string, leases: readonly DeviceLease[]): void {
+  const filePath = leaseRecordPath(stateDir, file);
+  if (leases.length === 0) {
+    fs.rmSync(filePath, { force: true });
+    return;
+  }
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  const record: PersistedExpiredProviderLeases = {
+    version: PENDING_RELEASES_VERSION,
+    leases: [...leases],
+  };
+  publishFileSync({ destination: filePath, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
+  fs.chmodSync(filePath, 0o600);
+}
+
+function loadLeaseRecord(stateDir: string | undefined, file: string): Map<string, DeviceLease> {
   if (!stateDir) return new Map();
-  const filePath = pendingReleasesPath(stateDir);
+  const filePath = leaseRecordPath(stateDir, file);
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedExpiredProviderLeases;
     if (parsed.version !== PENDING_RELEASES_VERSION || !Array.isArray(parsed.leases)) {
@@ -328,6 +375,6 @@ function isPersistedDeviceLease(value: unknown): value is DeviceLease {
   );
 }
 
-function pendingReleasesPath(stateDir: string): string {
-  return path.join(stateDir, PENDING_RELEASES_FILE);
+function leaseRecordPath(stateDir: string, file: string): string {
+  return path.join(stateDir, file);
 }
