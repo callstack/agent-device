@@ -154,8 +154,9 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
 // Exported for direct hint-matrix testing: handleRequestTimeout also runs the real liveness probe
 // and process-kill side effects, so its wording is verified through this pure sub-function
 // (see also the production-seam route tests in
-// packages/daemon-client/src/__tests__/daemon-client-timeout-route.test.ts, which prove the liveness-gated
-// recovery this route performs — the side of the contract a pure formatter test cannot reach).
+// packages/daemon-client/src/__tests__/daemon-client-timeout-route.test.ts, which prove the
+// liveness-gated recovery this route performs — the side of the contract a pure formatter test
+// cannot reach).
 export function resolveRequestTimeoutHint(params: {
   remote: boolean;
   resetDaemon: boolean;

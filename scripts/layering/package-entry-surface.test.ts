@@ -1,4 +1,4 @@
-// The shape of the pinned package entries (R83): test-kit, daemon and daemon-client each publish a
+// The shape of the pinned package entries (R83): test-kit, daemon, daemon-client and apple-runner publish a
 // single entry that names its exports, and test-kit also runs the shared isolation walk
 // (package-isolation.test.ts) under its policy.
 

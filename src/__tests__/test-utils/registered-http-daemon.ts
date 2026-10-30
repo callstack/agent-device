@@ -58,11 +58,11 @@ export async function startRegisteredHttpDaemon(): Promise<RegisteredHttpDaemon>
     const child = spawnRegisteredDaemonFixture(paths, await registrationFor(stub.port), undefined);
     await waitForRegisteredDaemonFixture(paths, child);
   } catch (error) {
-    try {
-      await finishRegisteredDaemonFixture(stateDir);
-    } finally {
-      await closeLoopbackServer(stub.server);
-    }
+    // Both teardown steps run, and neither failure replaces the startup error.
+    await Promise.allSettled([
+      finishRegisteredDaemonFixture(stateDir),
+      closeLoopbackServer(stub.server),
+    ]);
     throw error;
   }
   return {
@@ -90,7 +90,7 @@ export async function launchesFreshHttpDaemon(
   try {
     fields = await registrationFor(stub.port);
   } catch (error) {
-    await closeLoopbackServer(stub.server);
+    await Promise.allSettled([closeLoopbackServer(stub.server)]);
     throw error;
   }
   spawn.mockImplementation((_command, _args, options) =>
