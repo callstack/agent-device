@@ -165,7 +165,7 @@ int main(int argc, const char *argv[])
         requests++;
         if ([scenario hasPrefix:@"api-depth-"]) {
           NSUInteger start = [element isKindOfClass:NSNumber.class] ? [element unsignedIntegerValue] : 0;
-          require(levels == MIN(depth + 1 - start, kMaximumRequestLevels), @"native levels must include the root exactly once, at most kMaximumRequestLevels per request");
+          require(levels == MIN(depth + 1 - start, kMaximumRequestLevels), [NSString stringWithFormat:@"native levels must include the root exactly once, at most %lu per request", (unsigned long)kMaximumRequestLevels]);
           NSUInteger end = MIN(start + levels, depth + 1);
           NSDictionary *tree = nil;
           for (NSUInteger level = end; level-- > start;) tree = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyElement": @(level), @"UIAccessibilitySnapshotKeyChildrenCount": [scenario isEqual:@"api-depth-unknown"] ? [NSNull null] : @(level < depth ? 1 : 0), @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]};
