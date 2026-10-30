@@ -133,6 +133,9 @@ importers:
       '@agent-device/testmu':
         specifier: workspace:*
         version: link:packages/provider-testmu
+      '@agent-device/tizen':
+        specifier: workspace:*
+        version: link:packages/provider-tizen
       '@agent-device/tv-cdp':
         specifier: workspace:*
         version: link:packages/tv-cdp
@@ -903,6 +906,24 @@ importers:
       '@agent-device/provider-webdriver':
         specifier: workspace:*
         version: link:../provider-webdriver
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
+  packages/provider-tizen:
+    devDependencies:
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      '@agent-device/tv-cdp':
+        specifier: workspace:*
+        version: link:../tv-cdp
       agent-device:
         specifier: workspace:*
         version: link:../..

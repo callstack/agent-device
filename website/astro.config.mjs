@@ -115,6 +115,7 @@ export default defineConfig({
           'limrun',
           'revyl',
           'webos',
+          'tizen',
         ]),
         {
           label: 'Reference',

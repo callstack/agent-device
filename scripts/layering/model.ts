@@ -125,6 +125,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'provider-revyl',
   'provider-testmu',
   'provider-webos',
+  'provider-tizen',
   'tv-cdp',
   'proxy',
   'react-native',

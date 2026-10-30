@@ -2,7 +2,7 @@
 title: Provider plugins
 ---
 
-Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/docs/testmu) and [LG webOS](/docs/webos). Installing one requires npm on your host:
+Provider plugins add device providers that agent-device does not bundle, such as [TestMu AI](/docs/testmu), [LG webOS](/docs/webos), and [Samsung Tizen](/docs/tizen). Installing one requires npm on your host:
 
 ```bash
 agent-device plugins add @example/agent-device-provider
