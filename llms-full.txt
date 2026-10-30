@@ -2393,6 +2393,7 @@ agent-device install com.example.app ./build/MyApp.app --platform ios
 * `install <app> <path>` installs from a binary path without uninstalling first, keeping existing app data where the platform allows. Use it for upgrade flows.
 * Supports Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices. On xctrace-only devices, install the app with Xcode before opening it by bundle ID.
 * Formats: Android `.apk`/`.aab`, iOS `.app`/`.ipa`, HarmonyOS `.hap`. For an `.ipa` with several app bundles, `<app>` picks one by bundle id or name.
+* On local Android and iOS targets, each install step times out after 120 seconds. `install`, `reinstall`, and `uninstall` allow 480 seconds overall, including device startup. For `.aab`, building and installing the APK set each have a 120-second limit.
 * `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`; it installs a universal APK.
 * Remote daemons upload local app files automatically; prefix the path with `remote:` to use a path on the daemon host as is. A daemon that serves the public remote surface (proxy marker or auth hook) refuses daemon host paths with reason `REMOTE_HOST_INPUT_DENIED`.
 
@@ -2423,6 +2424,7 @@ agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635
 ```
 
 * `install-from-source <url>` installs an artifact the daemon can reach at a URL; use `install` or `reinstall` for local files. Device coverage matches `install`.
+* `install-from-source` allows 600 seconds overall, including up to 120 seconds for the download. The local Android and iOS install limits match `install`.
 * A URL may point to an Android `.apk` or `.aab`, or, from any public host, to an archive containing one `.apk`, `.aab`, `.ipa`, or iOS `.app`.
 * `--github-actions-artifact <owner/repo:artifact>` lets a compatible remote daemon fetch a GitHub Actions artifact with its own credentials. A numeric artifact is treated as an id, anything else as a name.
 * Repeat `--header <name:value>` for authenticated or signed downloads. Sensitive headers are not forwarded to other origins.
