@@ -36,6 +36,18 @@ test('a rented device carries the identity and shape its platform implies', () =
   });
 });
 
+test('the display name keeps the run id whole', () => {
+  // The name is the only handle an operator sees in `devices`, and it is what they paste into Revyl's
+  // console to find the device. Two run ids that agree on their first eight characters would otherwise
+  // name two different devices with one string.
+  const name = buildRevylDevice(
+    'ios',
+    revylLease('ios'),
+    'f3a9c1d2-8b40-4e7f-9c11-2a5d7e9b0c14',
+  ).name;
+  assert.equal(name, 'Revyl ios f3a9c1d2-8b40-4e7f-9c11-2a5d7e9b0c14');
+});
+
 test('a device id is read back only in the exact shape this module writes', () => {
   assert.deepEqual(parseRevylDeviceId('revyl:ios:lease-1'), {
     platform: 'ios',

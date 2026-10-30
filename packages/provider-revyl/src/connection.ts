@@ -6,13 +6,11 @@ import {
 } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
-import { REVYL_PROVIDER, type RevylPlatform } from './device.ts';
+import { REVYL_PROVIDER, REVYL_SERVICE, type RevylPlatform } from './device.ts';
 import { requireRevylCredentials, type RevylCredentials } from './credentials.ts';
 import { createRevylClient } from './revyl-client.ts';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
 import { revylTextFlag } from './session-allocation.ts';
-
-const SERVICE = 'Revyl';
 
 /** The connect half of the plugin, bound to one host's environment. */
 export type RevylConnection = ReturnType<typeof createRevylConnection>;
@@ -53,7 +51,7 @@ export function createRevylConnection(host: ProviderPluginHost) {
       return await verifyRevylProfile(
         requireRevylCredentials(host.env, `connect ${REVYL_PROVIDER}`),
         host.clientVersion,
-        requireResolvedProfilePlatform(flags.platform, SERVICE),
+        requireResolvedProfilePlatform(flags.platform, REVYL_SERVICE),
         {
           appUrl: requireAppReference(flags.providerApp),
           ...(deviceModel === undefined ? {} : { deviceModel }),
@@ -85,29 +83,28 @@ export async function verifyRevylProfile(
   if (!isRevylAppUrl(profile.appUrl)) {
     throw new AppError(
       'INVALID_ARGS',
-      'Revyl installs the app from a URL, so --provider-app must be an https URL.',
+      `${REVYL_SERVICE} installs the app from a URL, so --provider-app must be an https URL.`,
       {
         reason: 'invalid_provider_app',
-        hint: 'Pass the URL Revyl can read the build from; a local path cannot be.',
+        hint: `Pass the URL ${REVYL_SERVICE} can read the build from; a local path cannot.`,
       },
     );
   }
   return {
     provider: REVYL_PROVIDER,
-    service: SERVICE,
-    verificationMessage: 'Credentials verified; Revyl picks the device when the session starts.',
+    service: REVYL_SERVICE,
+    verificationMessage: `Credentials verified; ${REVYL_SERVICE} picks the device when the session starts.`,
     device: {
       status: 'configured',
       ...(profile.deviceModel === undefined ? {} : { name: profile.deviceModel }),
       platform,
       ...(profile.osVersion === undefined ? {} : { osVersion: profile.osVersion }),
-      message:
-        'Revyl assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.',
+      message: `${REVYL_SERVICE} assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.`,
     },
     app: {
       status: 'configured',
       reference: profile.appUrl,
-      message: 'App URL configured; Revyl fetches and installs it when the session starts.',
+      message: `App URL configured; ${REVYL_SERVICE} fetches and installs it when the session starts.`,
     },
   };
 }
@@ -157,7 +154,7 @@ function requireAppUrl(app: string | undefined, host: ProviderPluginHost): strin
 function requireAppReference(app: string | undefined): string {
   const value = app?.trim();
   if (!value) {
-    throw new AppError('COMMAND_FAILED', `${SERVICE} profile missed its app URL.`, {
+    throw new AppError('COMMAND_FAILED', `${REVYL_SERVICE} profile missed its app URL.`, {
       hint: 'Reconnect with --provider-app <https-url>.',
     });
   }

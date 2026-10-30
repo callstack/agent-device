@@ -127,7 +127,12 @@ export function revylInteractionOperationFacts(liveSession?: RuntimeOperationUna
       type: liveSession ?? typeTextUnavailable,
     }),
     ...touchRuntimeOperationFacts({
-      unsupported: liveSession ?? unavailableFact('unsupported-provider-mode'),
+      unsupported:
+        liveSession ??
+        unavailableFact(
+          'unsupported-provider-mode',
+          'Revyl taps and fills at a point; it has no action for a hover or for a selector target.',
+        ),
       tap: cell,
       longPress: cell,
       fill: cell,

@@ -6,6 +6,9 @@ export type RevylPlatform = 'ios' | 'android';
 
 export const REVYL_PROVIDER = 'revyl';
 
+/** How the service names itself to a user, in every message and display name this package writes. */
+export const REVYL_SERVICE = 'Revyl';
+
 /**
  * The snapshot channel each platform's `hierarchy` XML is presented on. Revyl answers the iOS
  * hierarchy with XCUITest-style XML and the Android hierarchy with a uiautomator dump, so each
@@ -32,7 +35,9 @@ export function buildRevylDevice(
     platform: platform === 'ios' ? 'apple' : 'android',
     ...(platform === 'ios' ? { appleOs: 'ios' as const } : {}),
     id: revylDeviceId(platform, lease.leaseId),
-    name: `Revyl ${platform} ${runId.slice(0, 8)}`,
+    // The run id whole: it is the handle an operator pastes into Revyl's console to find this device,
+    // and a prefix that two sessions share would name the wrong one.
+    name: `${REVYL_SERVICE} ${platform} ${runId}`,
     kind: platform === 'ios' ? 'simulator' : 'emulator',
     target: 'mobile',
     booted: true,
