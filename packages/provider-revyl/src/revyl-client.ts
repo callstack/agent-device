@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
@@ -8,6 +8,8 @@ import type {
   RevylWorkerActionResponse,
   RevylWorkerConnection,
   RevylWorkerHealth,
+  RevylWorkflowCancelResponse,
+  RevylWorkflowLifecycleResponse,
 } from './revyl-types.ts';
 
 export const REVYL_DEFAULT_BACKEND_URL = 'https://backend.revyl.ai';
@@ -32,6 +34,13 @@ export type RevylClientOptions = Readonly<{
   fetch?: typeof fetch;
 }>;
 
+/**
+ * Which half of the API one request belongs to, which is what a 404 or 410 means. A route that
+ * addresses one session or run reports a session Revyl no longer has; a route that starts or
+ * authenticates reports a request the backend refused or never routed.
+ */
+type RevylRoute = 'session' | 'general';
+
 type RevylRequest = Readonly<{
   method: 'GET' | 'POST';
   path: string;
@@ -41,6 +50,8 @@ type RevylRequest = Readonly<{
   retry?: boolean;
   /** A device-proxy action carries the agent header; an execution-API call does not. */
   workerAction?: boolean;
+  /** Defaults to `general`, which never reads a 404 or 410 as a gone session. */
+  route?: RevylRoute;
   signal?: AbortSignal;
 }>;
 
@@ -126,6 +137,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       method: DEVICE_PROXY_GET_ACTIONS.has(action) ? 'GET' : 'POST',
       path: `/api/v1/execution/device-proxy/${encodeURIComponent(workflowRunId)}/${action}`,
       workerAction: true,
+      route: 'session',
       ...(signal === undefined ? {} : { signal }),
     };
   }
@@ -168,19 +180,24 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       assertWorkerActionSuccess(request, response);
       return response;
     },
-    stopDeviceSession(sessionId) {
-      return json<RevylDeviceSessionStopResponse>({
+    async stopDeviceSession(sessionId) {
+      const response = await json<RevylDeviceSessionStopResponse>({
         method: 'POST',
         path: `/api/v1/execution/device/sessions/${encodeURIComponent(sessionId)}/stop`,
         retry: true,
+        route: 'session',
       });
+      assertLifecycleAccepted('stop', response);
+      return response;
     },
     async cancelDeviceRun(workflowRunId) {
-      await json<unknown>({
+      const response = await json<RevylWorkflowCancelResponse>({
         method: 'POST',
         path: `/api/v1/execution/device/status/cancel/${encodeURIComponent(workflowRunId)}`,
         retry: true,
+        route: 'session',
       });
+      assertLifecycleAccepted('cancel', response);
     },
     async verifyCredentials(signal) {
       await json<unknown>({
@@ -260,8 +277,9 @@ function requestTimedOut(request: RevylRequest, cause: unknown): AppError {
 function assertSuccess(request: RevylRequest, response: RevylResponse): void {
   if (response.status >= 200 && response.status < 300) return;
   const detail = responseDetail(response);
+  const failure = revylFailure(request.route ?? 'general', response.status);
   const details: Record<string, unknown> = {
-    reason: revylFailureReason(response.status),
+    reason: failure.reason,
     path: request.path,
     providerStatus: response.status,
   };
@@ -270,7 +288,7 @@ function assertSuccess(request: RevylRequest, response: RevylResponse): void {
     details.hint = `Revyl did not confirm ${request.method} ${request.path}; the action may have landed.`;
   }
   throw new AppError(
-    appErrorCode(response.status),
+    failure.code,
     `Revyl request ${request.method} ${request.path} failed with HTTP ${response.status}${
       detail === undefined ? '' : `: ${detail}`
     }`,
@@ -279,16 +297,47 @@ function assertSuccess(request: RevylRequest, response: RevylResponse): void {
 }
 
 /**
+ * Revyl's `/stop` and `/status/cancel` answers name the verdict they reached, and a 200 that says
+ * `success: false` or `request_accepted: false` is a refusal the caller still has to act on: the
+ * session is rented either way.
+ */
+function assertLifecycleAccepted(
+  operation: 'stop' | 'cancel',
+  response: RevylWorkflowLifecycleResponse,
+): void {
+  if (response.success === true && (response.request_accepted ?? true) === true) return;
+  const message = typeof response.message === 'string' ? response.message : undefined;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Revyl did not ${operation === 'stop' ? 'stop the session' : 'cancel the run'}${
+      message === undefined ? '' : `: ${message}`
+    }`,
+    {
+      reason: 'provider-refused',
+      operation,
+      ...(message === undefined ? {} : { providerDetail: message }),
+      hint: 'The Revyl session may still be rented. End it from Revyl if it stays listed.',
+    },
+  );
+}
+
+/**
  * A device-proxy action reports a refusal inside a 200 body, and `install` is the one action that
  * spells its success field with a capital, so both spellings are read.
+ *
+ * A body that names no verdict at all is read as success, which is what Revyl's own driver does: its
+ * `buildActionResult` starts from `Success: true` and only overwrites it when the worker answered
+ * `success: false`. A body that carries an error without a verdict is not read that way, since a
+ * worker that names a failure did not perform the action.
  */
 function assertWorkerActionSuccess(
   request: RevylRequest,
   response: RevylWorkerActionResponse,
 ): void {
+  const error =
+    typeof response.error === 'string' && response.error !== '' ? response.error : undefined;
   const succeeded = response.success ?? response.Success;
-  if (succeeded !== false) return;
-  const error = typeof response.error === 'string' ? response.error : undefined;
+  if (succeeded !== false && error === undefined) return;
   throw new AppError(
     'COMMAND_FAILED',
     `Revyl rejected the ${lastPathSegment(request.path)} action${
@@ -341,18 +390,25 @@ function parseJson<T>(request: RevylRequest, response: RevylResponse): T {
   }
 }
 
-function appErrorCode(status: number): 'UNAUTHORIZED' | 'SESSION_NOT_FOUND' | 'COMMAND_FAILED' {
-  if (status === 401 || status === 403) return 'UNAUTHORIZED';
-  if (status === 404 || status === 410) return 'SESSION_NOT_FOUND';
-  return 'COMMAND_FAILED';
-}
-
-function revylFailureReason(status: number): string {
-  if (status === 401 || status === 403) return 'provider-auth-rejected';
-  if (status === 404 || status === 410) return 'provider-session-gone';
-  if (status === 409) return 'provider-conflict';
-  if (status === 408 || status >= 500) return 'provider-unconfirmed';
-  return 'provider-request-failed';
+/**
+ * The typed failure one status names, read together with the route that answered. `session-gone` is
+ * only ever a session route's answer: a 404 from `start_device` or the credential check is a request
+ * the backend did not route, not a session that ended, and reading it as one sends the user to run
+ * `open` on a session they already have.
+ */
+function revylFailure(
+  route: RevylRoute,
+  status: number,
+): Readonly<{ code: AppErrorCode; reason: string }> {
+  if (status === 401 || status === 403) {
+    return { code: 'UNAUTHORIZED', reason: 'provider-auth-rejected' };
+  }
+  if ((status === 404 || status === 410) && route === 'session') {
+    return { code: 'SESSION_NOT_FOUND', reason: 'provider-session-gone' };
+  }
+  if (status === 409) return { code: 'COMMAND_FAILED', reason: 'provider-conflict' };
+  if (uncertainStatus(status)) return { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed' };
+  return { code: 'COMMAND_FAILED', reason: 'provider-request-failed' };
 }
 
 /** A status that leaves it unknown whether Revyl carried out what the request asked for. */

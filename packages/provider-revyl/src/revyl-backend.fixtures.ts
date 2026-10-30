@@ -14,15 +14,20 @@ export type RevylFixtureRequest = Readonly<{
 }>;
 
 export type RevylFixtureOptions = Readonly<{
-  /** Overrides one response: keyed by `METHOD /path`, the value is what to answer with. */
-  respond?: Record<
-    string,
-    { status?: number; body?: unknown; contentType?: string } | (() => unknown)
-  >;
-  /** Answers every `worker-connection` poll with this before the ready one. */
+  /**
+   * Overrides one response: keyed by `METHOD /path`, the value is the answer to write. A function is
+   * called per request, which is how an action that behaves differently on its second call is
+   * scripted.
+   */
+  respond?: Record<string, RevylFixtureResponse | (() => RevylFixtureResponse)>;
+  /** Answers the first `worker-connection` polls with these, in order, before the ready one. */
   connectionStatuses?: string[];
-  /** Answers `health` with this on the first poll before the connected one. */
+  /** Answers `health` with a not-ready answer this many times before the connected one. */
   healthNotReadyPolls?: number;
+  /** Answers `health` with Revyl's 503 "worker not attached" this many times before the ready one. */
+  healthNotReady503Polls?: number;
+  /** Delays every `health` answer this long, which is how a slow worker is modeled. */
+  healthDelayMs?: number;
   /** The health screen to report. */
   screen?: Readonly<{ width: number; height: number }>;
   /** Reports no screen size at all, which is what a health answer without the fields reads as. */
@@ -47,17 +52,24 @@ export type RevylFixtureBackend = Readonly<{
 }>;
 
 const DEFAULT_IOS_SCREEN = { width: 390, height: 844 };
-const SESSION_ID = 'session-1';
 const RUN_ID = 'run-1';
+/** What the fake answers `start_device` with when the request carries no session id of its own. */
+const FALLBACK_SESSION_ID = 'session-1';
 
-/** One answer the fixture writes: what `respondWith` accepts. */
-type FixtureResponse = { status?: number; body?: unknown; contentType?: string };
+/** One answer the fixture writes: what `respond` and `respondWith` accept. */
+export type RevylFixtureResponse = {
+  status?: number;
+  body?: unknown;
+  contentType?: string;
+  /** Holds the answer back this long before writing it, so a caller's deadline can expire first. */
+  delayMs?: number;
+};
 
 /**
  * A stand-in for the Revyl execution API: the start/ready/stop handshake the runtime drives, the
  * device-proxy actions it sends, and the request log the assertions read. Every route answers with
- * Revyl's own status and body shapes, so a request the runtime should never send is a missing log
- * entry rather than a mock that accepted it.
+ * Revyl's own status and body shapes, and anything that is not one of them is a 404, so a request
+ * the runtime should never send shows up as a failed request rather than an action that succeeded.
  */
 export async function startRevylFixtureBackend(
   options: RevylFixtureOptions = {},
@@ -65,6 +77,9 @@ export async function startRevylFixtureBackend(
   const requests: RevylFixtureRequest[] = [];
   let connectionPolls = 0;
   let healthPolls = 0;
+  let health503Polls = 0;
+  /** The platform and session id of the last `start_device`, which is what later answers report. */
+  let started: { platform: string; sessionId: string } | undefined;
   const screen = options.screen ?? DEFAULT_IOS_SCREEN;
 
   const overrides = new Map(Object.entries(options.respond ?? {}));
@@ -85,61 +100,88 @@ export async function startRevylFixtureBackend(
         agentHeader: header(request, 'x-revyl-agent'),
       });
       const override = overrides.get(`${method} ${url}`);
-      if (typeof override === 'function') {
-        const value = override();
-        respondWith(response, { body: value });
-        return;
-      }
       if (override !== undefined) {
-        respondWith(response, override);
+        respondWith(response, typeof override === 'function' ? override() : override);
         return;
       }
-      answer(url);
+      answer(url, recorded);
     });
 
-    function answer(url: string): void {
-      const routes: Record<string, () => FixtureResponse> = {
+    function answer(url: string, body: Record<string, unknown> | undefined): void {
+      const routes: Record<string, () => RevylFixtureResponse> = {
         verify: () => ({ body: { uuid: 'user-1' } }),
-        start: () => ({
-          body: {
-            status: 'started',
-            workflow_run_id: RUN_ID,
-            session_id: SESSION_ID,
-            ...options.startResponse,
-          },
-        }),
+        start: () => {
+          const sessionId =
+            typeof body?.session_id === 'string' ? body.session_id : FALLBACK_SESSION_ID;
+          const platform = typeof body?.platform === 'string' ? body.platform : 'ios';
+          started = { platform, sessionId };
+          return {
+            body: {
+              status: 'started',
+              workflow_run_id: RUN_ID,
+              session_id: sessionId,
+              ...options.startResponse,
+            },
+          };
+        },
         'worker-connection': () => ({ body: nextWorkerConnection() }),
-        health: () => ({ body: nextHealth(url) }),
+        health: () => nextHealth(),
         hierarchy: () => ({ contentType: 'application/xml', body: options.hierarchy ?? '' }),
         screenshot: () => ({ contentType: 'image/png', body: pngBytes() }),
-        stop: () => ({ body: { success: true, session_id: SESSION_ID } }),
+        stop: () => ({
+          body: {
+            success: true,
+            request_accepted: true,
+            session_id: sessionIdIn(url) ?? started?.sessionId ?? FALLBACK_SESSION_ID,
+          },
+        }),
         // Every device-proxy action: Revyl answers a working action with success in a 200 body.
         action: () => ({ body: { success: true, action: lastPathSegment(url) } }),
       };
-      respondWith(response, (routes[fixtureRoute(url)] ?? routes.action!)());
+      const route = fixtureRoute(url);
+      respondWith(response, (routes[route] ?? unknownRoute(url))());
     }
 
-    /** The worker-connection poll sequence: the scripted statuses, then `ready`. */
+    /**
+     * The worker-connection poll sequence: each scripted status once, then `ready`. A sequence
+     * longer than the runtime's patience fails the test on its own rather than repeating forever.
+     */
     function nextWorkerConnection(): Record<string, unknown> {
-      const statuses = options.connectionStatuses ?? [];
-      const status = statuses[Math.min(connectionPolls, statuses.length - 1)] ?? 'ready';
+      const status = (options.connectionStatuses ?? [])[connectionPolls] ?? 'ready';
       connectionPolls += 1;
       if (status !== 'ready') return { status, message: 'worker not assigned' };
       return { status: 'ready', workflow_run_id: RUN_ID, worker_ws_url: 'wss://worker.test/ws' };
     }
 
-    /** The health poll sequence: `healthNotReadyPolls` starting answers, then a connected one. */
-    function nextHealth(url: string): Record<string, unknown> {
+    /**
+     * The health poll sequence: `healthNotReady503Polls` answers of Revyl's "worker not attached"
+     * 503, then `healthNotReadyPolls` starting answers, then a connected one. `healthDelayMs` holds
+     * each answer back, which is how a worker that answers later than the caller's budget is modeled.
+     */
+    function nextHealth(): RevylFixtureResponse {
       const notReady = (options.healthNotReadyPolls ?? 0) > healthPolls;
+      const workerNotAttached = (options.healthNotReady503Polls ?? 0) > health503Polls;
       healthPolls += 1;
-      if (notReady) return { status: 'starting', device_connected: false };
+      const delay = { delayMs: options.healthDelayMs };
+      if (workerNotAttached) {
+        health503Polls += 1;
+        return {
+          ...delay,
+          status: 503,
+          body: { detail: 'Worker not attached', error: 'Service Unavailable' },
+        };
+      }
+      if (notReady) return { ...delay, body: { status: 'starting', device_connected: false } };
       return {
-        status: 'ok',
-        device_connected: true,
-        platform: url.includes('android') ? 'android' : 'ios',
-        ...(options.withoutScreen
-          ? {}
-          : { screen_width: screen.width, screen_height: screen.height }),
+        ...delay,
+        body: {
+          status: 'ok',
+          device_connected: true,
+          platform: started?.platform ?? 'ios',
+          ...(options.withoutScreen
+            ? {}
+            : { screen_width: screen.width, screen_height: screen.height }),
+        },
       };
     }
   });
@@ -190,16 +232,47 @@ export function revylLease(platform: 'ios' | 'android', leaseId = 'lease-1'): De
   };
 }
 
-/** The route one request path belongs to; anything unlisted is a device-proxy action. */
+/**
+ * The route one request path belongs to. Only Revyl's own routes are recognized: an execution-API
+ * path spelled wrong has no route, so the test that asked for it learns about the misspelling.
+ */
 function fixtureRoute(url: string): string {
   if (url === '/api/v1/entity/users/get_user_uuid') return 'verify';
   if (url === '/api/v1/execution/start_device') return 'start';
   if (url.startsWith('/api/v1/execution/streaming/worker-connection/')) return 'worker-connection';
-  if (url.endsWith('/health')) return 'health';
-  if (url.endsWith('/hierarchy')) return 'hierarchy';
-  if (url.endsWith('/screenshot')) return 'screenshot';
-  if (url.endsWith('/stop') || url.includes('/status/cancel/')) return 'stop';
-  return 'action';
+  if (isDeviceProxyRoute(url)) {
+    if (url.endsWith('/health')) return 'health';
+    if (url.endsWith('/hierarchy')) return 'hierarchy';
+    if (url.endsWith('/screenshot')) return 'screenshot';
+    return 'action';
+  }
+  if (isDeviceSessionRoute(url) && url.endsWith('/stop')) return 'stop';
+  if (url.startsWith('/api/v1/execution/device/status/cancel/')) return 'stop';
+  return 'unknown';
+}
+
+/** Revyl routes every device action below the run's device-proxy prefix. */
+function isDeviceProxyRoute(url: string): boolean {
+  return url.startsWith('/api/v1/execution/device-proxy/');
+}
+
+/** Revyl ends one session below its sessions prefix. */
+function isDeviceSessionRoute(url: string): boolean {
+  return url.startsWith('/api/v1/execution/device/sessions/');
+}
+
+/** The session id one `/device/sessions/<id>/stop` path carries. */
+function sessionIdIn(url: string): string | undefined {
+  const match = /^\/api\/v1\/execution\/device\/sessions\/([^/]+)\/stop$/.exec(url);
+  return match?.[1];
+}
+
+/** Revyl's own answer for a path it does not serve, which is what makes a wrong URL a failure. */
+function unknownRoute(url: string): () => RevylFixtureResponse {
+  return () => ({
+    status: 404,
+    body: { detail: `Not Found: no route for ${url}`, error: 'Not Found' },
+  });
 }
 
 /** The device-proxy action one `/.../device-proxy/<run>/<action>` path names. */
@@ -226,24 +299,31 @@ function header(request: http.IncomingMessage, name: string): string | undefined
 
 function respondWith(
   response: http.ServerResponse,
-  result: { status?: number; body?: unknown; contentType?: string },
+  result: { status?: number; body?: unknown; contentType?: string; delayMs?: number },
 ): void {
-  const contentType = result.contentType ?? 'application/json';
-  const payload =
-    typeof result.body === 'string' || result.body === undefined
-      ? (result.body ?? '')
-      : contentType === 'image/png'
-        ? Buffer.from(result.body as number[])
-        : JSON.stringify(result.body);
-  response.writeHead(result.status ?? 200, { 'content-type': contentType });
-  response.end(payload);
+  const write = () => {
+    const contentType = result.contentType ?? 'application/json';
+    const payload =
+      typeof result.body === 'string' || result.body === undefined
+        ? (result.body ?? '')
+        : contentType === 'image/png'
+          ? Buffer.from(result.body as number[])
+          : JSON.stringify(result.body);
+    response.writeHead(result.status ?? 200, { 'content-type': contentType });
+    response.end(payload);
+  };
+  if (result.delayMs === undefined) {
+    write();
+    return;
+  }
+  setTimeout(write, result.delayMs).unref?.();
 }
 
-/** The smallest valid PNG: the runtime treats a screenshot body as opaque bytes. */
+/** A real 1x1 RGBA PNG, decoded from its base64 form so the fixture body stays short. */
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/** The smallest valid PNG: a decoder reading a screenshot body gets a real image. */
 function pngBytes(): number[] {
-  return [
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-    0x89,
-  ];
+  return [...Buffer.from(PNG_1X1_BASE64, 'base64')];
 }

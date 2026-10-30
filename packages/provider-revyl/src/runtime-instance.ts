@@ -1,5 +1,5 @@
 import { scryptSync } from 'node:crypto';
-import { REVYL_DEFAULT_BACKEND_URL } from './revyl-client.ts';
+import { REVYL_DEFAULT_BACKEND_URL, resolveRevylBackendUrl } from './revyl-client.ts';
 
 const RUNTIME_INSTANCE_KEY_LENGTH = 16;
 const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
@@ -19,7 +19,9 @@ export function resolveRevylRuntimeInstance(
 ): string {
   const principal = JSON.stringify({
     provider: 'revyl',
-    backendUrl: options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL,
+    // The origin the client actually calls: `https://backend.revyl.ai/` and
+    // `https://backend.revyl.ai` are one account, and must not become two owner identities.
+    backendUrl: resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL),
     apiKey: options.apiKey,
   });
   const fingerprint = scryptSync(principal, RUNTIME_INSTANCE_SALT, RUNTIME_INSTANCE_KEY_LENGTH, {

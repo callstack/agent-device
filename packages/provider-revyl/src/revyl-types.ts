@@ -5,6 +5,11 @@ export type RevylPlatform = 'ios' | 'android';
 export type RevylStartDeviceRequest = Readonly<{
   platform: RevylPlatform;
   is_simulation: true;
+  /**
+   * The caller's own canonical session id. Revyl accepts it as the session's identity, which is what
+   * lets the runtime name the session it rented for one lease after a restart.
+   */
+  session_id?: string;
   idle_timeout_seconds?: number;
   app_url?: string;
   device_model?: string;
@@ -47,6 +52,17 @@ export type RevylDeviceSessionStopResponse = Readonly<{
   status?: string;
   message?: string;
 }>;
+
+/** Revyl's answer to cancelling a run: the same verdict spelling, without the acceptance field. */
+export type RevylWorkflowCancelResponse = Readonly<{
+  success?: boolean;
+  message?: string;
+  task_id?: string;
+}>;
+
+/** What either lifecycle answer has to say for the runtime to treat the end as done. */
+export type RevylWorkflowLifecycleResponse = RevylDeviceSessionStopResponse &
+  RevylWorkflowCancelResponse;
 
 /**
  * A device-proxy action result. `install` reports its verdict as `Success`, capitalized, where

@@ -42,7 +42,11 @@ export function buildRevylDevice(
 export function parseRevylDeviceId(
   value: string,
 ): { platform: RevylPlatform; leaseId: string } | undefined {
-  const [prefix, platform, leaseId] = value.split(':');
+  // Exactly the three segments `revylDeviceId` writes: an id with a fourth one is not ours, and
+  // reading a lease id that contains a separator as one would address the wrong session.
+  const parts = value.split(':');
+  if (parts.length !== 3) return undefined;
+  const [prefix, platform, leaseId] = parts;
   if (prefix !== REVYL_PROVIDER) return undefined;
   if (platform !== 'ios' && platform !== 'android') return undefined;
   if (!leaseId) return undefined;
