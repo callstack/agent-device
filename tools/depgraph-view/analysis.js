@@ -1,23 +1,7 @@
 import { escapeHtml } from './html.js';
-import { createDominatorAnalyzer } from './dominator.js';
 
-export function buildAnalysis({
-  nodes,
-  raw,
-  entryManifest,
-  zones,
-  zoneColor,
-  hexAlpha,
-  selectNode,
-  selectZone,
-}) {
+export function buildAnalysis({ nodes, raw, zones, zoneColor, hexAlpha, selectNode, selectZone }) {
   // ---------- structural analysis (report-only summaries from scripts/depgraph) ----------
-
-  // node ids drop the root's `src/` prefix (scripts/depgraph/build.ts), so summaries that name
-  // files must be mapped the same way before they can be looked up here.
-  const nodeIdOf = (file) => nodes.find((n) => n.id === file.replace(/^src\//, ''));
-
-  const dominatorsOf = createDominatorAnalyzer(nodes, raw.edges);
 
   function renderAnalysis() {
     const el = document.getElementById('analysis');
@@ -29,21 +13,8 @@ export function buildAnalysis({
       return;
     }
 
-    const entryChoices = () => {
-      const hot = nodes
-        .filter((n) => n.in > 0)
-        .sort((a, b) => b.in + b.out - (a.in + a.out))
-        .slice(0, 300)
-        .map((n) => n.id);
-      const declared = new Set(
-        Object.values(entryManifest)
-          .flat()
-          .map((e) => e.id),
-      );
-      return [...new Set([...declared, ...hot])].filter((id) => nodes.some((n) => n.id === id));
-    };
     const initial = dom ? dom.entry.replace(/^src\//, '') : 'daemon.ts';
-    const options = entryChoices();
+    const options = Object.keys(raw.entrySummaries);
     if (!options.includes(initial)) options.unshift(initial);
 
     el.innerHTML =
@@ -86,36 +57,29 @@ export function buildAnalysis({
         : '');
 
     function renderDominator(id) {
-      const entry = nodeIdOf(id);
       const summary = el.querySelector('#domSummary');
       const top = el.querySelector('#domTop');
-      if (!entry) {
+      const data = raw.entrySummaries[id];
+      if (!data) {
         summary.textContent = `${id} is not a production source file in this graph`;
         top.innerHTML = '';
         return;
       }
-      const t0 = performance.now();
-      const { reachable, reachableLoc, bottlenecks } = dominatorsOf(entry.index);
-      const ms = performance.now() - t0;
-      summary.textContent = `${reachable} of ${nodes.length} files loaded eagerly (${Math.round(
-        (reachable / nodes.length) * 100,
-      )}%) · ${reachableLoc} loc · ${ms.toFixed(0)}ms`;
+      const { reachableFiles, reachableLoc, bottlenecks } = data;
+      summary.textContent = `${reachableFiles} of ${nodes.length} files loaded eagerly (${Math.round(
+        (reachableFiles / nodes.length) * 100,
+      )}%) · ${reachableLoc} loc`;
       top.innerHTML = bottlenecks
-        .slice(0, 8)
-        .map(
-          (r) => `<div class="bar-row" data-node="${r.index}">
-          <div class="top"><span>${escapeHtml(nodes[r.index].id)}</span>
+        .map((r) => {
+          const node = nodes.find((n) => n.id === r.file.replace(/^src\//, ''));
+          return `<div class="bar-row" data-node="${node.index}">
+          <div class="top"><span>${escapeHtml(node.id)}</span>
           <span class="count">${r.files} files</span></div>
           <div class="bar"><i style="width:${Math.round(
             (r.files / (bottlenecks[0]?.files || 1)) * 100,
-          )}%;background:${hexAlpha(zoneColor(zones[nodes[r.index].z]), 0.85)}"></i></div></div>`,
-        )
+          )}%;background:${hexAlpha(zoneColor(zones[node.z]), 0.85)}"></i></div></div>`;
+        })
         .join('');
-      // both numbers come from the same payload, so a divergence means this traversal disagrees
-      // with scripts/depgraph/structure-summary.ts rather than that the data is stale
-      if (dom && id === dom.entry.replace(/^src\//, '') && dom.reachableFiles !== reachable) {
-        summary.textContent += ` · ⚠ report says ${dom.reachableFiles} of ${dom.totalFiles} / ${dom.reachableLoc} loc`;
-      }
     }
 
     el.querySelector('#domEntry').addEventListener('change', (e) =>

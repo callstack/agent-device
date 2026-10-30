@@ -1,3 +1,4 @@
+import { buildEntries } from './scripts/build-entries.ts';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
@@ -92,29 +93,7 @@ const dropAmbientDeclarationImports: TsdownPluginOption = {
 };
 
 export default defineConfig({
-  entry: {
-    index: 'src/sdk/index.ts',
-    io: 'src/sdk/io.ts',
-    artifacts: 'src/sdk/artifacts.ts',
-    batch: 'src/sdk/batch.ts',
-    metro: 'src/sdk/metro.ts',
-    'remote-config': 'src/sdk/remote-config.ts',
-    'install-source': 'src/sdk/install-source.ts',
-    'android-adb': 'src/sdk/android-adb.ts',
-    limrun: 'src/sdk/limrun.ts',
-    plugins: 'src/sdk/plugins.ts',
-    'plugins/webdriver': 'src/sdk/plugin-webdriver.ts',
-    contracts: 'src/sdk/contracts.ts',
-    selectors: 'src/sdk/selectors.ts',
-    finders: 'src/sdk/finders.ts',
-    'ai-sdk': 'src/ai-sdk/index.ts',
-    'internal/bin': 'src/bin.ts',
-    'internal/companion-tunnel': 'packages/react-native/src/companion/companion-tunnel.ts',
-    'internal/daemon': 'src/daemon.ts',
-    'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
-    'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
-    'internal/update-check-entry': 'src/cli/update-check-entry.ts',
-  },
+  entry: buildEntries,
   deps: {
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [

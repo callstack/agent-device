@@ -30,7 +30,6 @@ try {
     'graph-model.js',
     'simulation.js',
     'html.js',
-    'dominator.js',
   ])
     copyFileSync(path.join(viewer, file), path.join(output, file));
   execFileSync(
@@ -40,18 +39,6 @@ try {
       'scripts/depgraph/build.ts',
       '--out',
       path.join(output, 'graph.json'),
-    ],
-    { cwd: root, env, stdio: 'inherit' },
-  );
-  execFileSync(
-    process.execPath,
-    [
-      '--experimental-strip-types',
-      'tools/depgraph-view/build-entries.mjs',
-      '--graph',
-      path.join(output, 'graph.json'),
-      '--out',
-      path.join(output, 'entries.json'),
     ],
     { cwd: root, env, stdio: 'inherit' },
   );

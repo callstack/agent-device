@@ -34,12 +34,10 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   let raw;
   let entryManifest;
   try {
-    const [graphResponse, entriesResponse] = await Promise.all([
-      fetch('/dependency-graph/graph.json'),
-      fetch('/dependency-graph/entries.json'),
-    ]);
-    if (!graphResponse.ok || !entriesResponse.ok) throw new Error('Graph data unavailable');
-    [raw, entryManifest] = await Promise.all([graphResponse.json(), entriesResponse.json()]);
+    const response = await fetch('/dependency-graph/graph.json');
+    if (!response.ok) throw new Error('Graph data unavailable');
+    raw = await response.json();
+    entryManifest = raw.entries;
   } catch {
     document.getElementById('stats').textContent = 'Could not load the graph. Reload to try again.';
     return;
@@ -658,7 +656,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   );
 
   window.addEventListener('keydown', (e) => {
-    if (document.activeElement === searchInput) return;
+    if (e.target.closest('input, select, textarea, button, [contenteditable="true"]')) return;
     if (e.key === 'f' || e.key === 'F') fitView();
     if (e.key === 'l' || e.key === 'L') {
       labelMinIn = labelMinIn > 1 ? 1 : 45;
@@ -869,7 +867,6 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   buildAnalysis({
     nodes,
     raw,
-    entryManifest,
     zones,
     zoneColor,
     hexAlpha,

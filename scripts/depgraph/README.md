@@ -7,8 +7,9 @@ pnpm depgraph:test
 ```
 
 Emits the dependency graph of every production file under `src/` (tests excluded) as JSON,
-plus a short summary of what the layering gate does not enforce. There is no renderer: the
-productive artifact is the JSON, queried directly.
+plus a short summary of what the layering gate does not enforce. The interactive viewer is at
+`/dependency-graph/` on the website. Run `pnpm --dir website build` and `pnpm --dir website preview`
+to view the generated graph locally.
 
 ## Blast radius of one file
 

@@ -140,14 +140,19 @@ export function workspacePackagesFromManifests(
     const manifest = JSON.parse(manifests.get(manifestFile)!) as {
       name?: string;
       private?: boolean;
-      exports?: Record<string, { default?: string; import?: string } | string>;
+      exports?:
+        | string
+        | Record<string, { default?: string; import?: string; require?: string } | string>;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
     if (!manifest.name) continue;
     const exportTargets = new Map<string, string>();
-    for (const [subpath, target] of Object.entries(manifest.exports ?? {})) {
-      const targetFile = typeof target === 'string' ? target : (target.default ?? target.import);
+    const exports =
+      typeof manifest.exports === 'string' ? { '.': manifest.exports } : (manifest.exports ?? {});
+    for (const [subpath, target] of Object.entries(exports)) {
+      const targetFile =
+        typeof target === 'string' ? target : (target.default ?? target.import ?? target.require);
       if (!targetFile) continue;
       exportTargets.set(
         path.posix.join(manifest.name, subpath),

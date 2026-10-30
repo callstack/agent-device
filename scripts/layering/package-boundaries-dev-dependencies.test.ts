@@ -41,6 +41,20 @@ function violations(owner: Record<string, unknown>, file: string) {
 
 const DEV_ONLY = { private: true, devDependencies: { '@agent-device/helper': 'workspace:*' } };
 
+test('a string export resolves the package root', () => {
+  const packages = workspacePackagesFromManifests(manifests({ exports: './src/index.ts' }));
+  const owner = packages.find(({ name }) => name === '@agent-device/owner')!;
+  assert.equal(owner.exportTargets.get('@agent-device/owner'), 'packages/owner/src/index.ts');
+});
+
+test('a require-only export resolves the package root', () => {
+  const packages = workspacePackagesFromManifests(
+    manifests({ exports: { '.': { require: './src/index.ts' } } }),
+  );
+  const owner = packages.find(({ name }) => name === '@agent-device/owner')!;
+  assert.equal(owner.exportTargets.get('@agent-device/owner'), 'packages/owner/src/index.ts');
+});
+
 test('a private package reads its devDependencies as test-only siblings', () => {
   const [, owner] = workspacePackagesFromManifests(manifests(DEV_ONLY));
   assert.deepEqual([...owner!.workspaceDependencies], []);

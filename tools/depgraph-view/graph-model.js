@@ -20,7 +20,7 @@ export function createGraphModel(raw) {
   const nodePairs = nodes.map(() => []);
   pairs.forEach((p, i) => {
     nodePairs[p.a].push(i);
-    if (p.b !== p.a) nodePairs[p.b].push(i);
+    nodePairs[p.b].push(i);
   });
 
   return { zones, nodes, pairs, nodePairs };

@@ -531,6 +531,8 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     edgeAuthorities: string[][];
     authorityCounts: Record<string, number>;
     typeInversions: Record<string, number>;
+    entries: Record<string, { id: string; subpath: string }[]>;
+    entrySummaries: Record<string, { reachableFiles: number; reachableLoc: number }>;
     dominatorSummary: { entry: string; reachableFiles: number; totalFiles: number };
     zoneSccSummary: { zones: number; components: { zones: string[]; size: number }[] };
     cohesionSummary: {
@@ -549,6 +551,8 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     'edges',
     'cycles',
     'typeInversions',
+    'entries',
+    'entrySummaries',
     'dominatorSummary',
     'zoneSccSummary',
     'cohesionSummary',
@@ -568,6 +572,15 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
 
   // Report-only fields (#3283): no gate reads these, so this pins only the wire shape.
   assert.equal(payload.dominatorSummary.entry, 'src/daemon.ts');
+  assert.ok(
+    payload.entries['src (agent-device)'].some(
+      (entry) => entry.subpath === '.' && entry.id === 'sdk/index.ts',
+    ),
+  );
+  assert.equal(
+    payload.entrySummaries['daemon.ts'].reachableFiles,
+    payload.dominatorSummary.reachableFiles,
+  );
   assert.ok(payload.dominatorSummary.reachableFiles > 0);
   assert.ok(payload.dominatorSummary.reachableFiles <= payload.dominatorSummary.totalFiles);
   assert.ok(payload.zoneSccSummary.zones > 0);
