@@ -451,7 +451,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /uploaded artifacts remain supported/);
   assert.match(
     help,
-    /Limrun, BrowserStack, AWS Device Farm, and TestMu AI through local provider profiles/,
+    /Limrun, BrowserStack, AWS Device Farm, TestMu AI, and Revyl through local provider profiles/,
   );
   assert.match(help, /plugins add @agent-device\/testmu/);
   assert.match(help, /TestMu AI uses LT_USERNAME and LT_ACCESS_KEY/);

@@ -31,5 +31,19 @@ import revyl from '@agent-device/revyl';
 const plugin = revyl({ apiKey: 'your-api-key' });
 ```
 
+Pass that object to a host you start yourself, and drive the device with its client:
+
+```js
+import { startAgentDevice } from 'agent-device';
+import revyl from '@agent-device/revyl';
+
+const host = await startAgentDevice({
+  stateDir: './.my-app/agent-device-state',
+  plugins: [revyl({ apiKey: 'your-api-key' })],
+});
+// host.client drives the device; await host.close() when you are done.
+```
+
 Credentials passed as options are used instead of the environment variables, and the daemon does not
-compare them with your shell.
+compare them with your shell. Each option replaces only its own variable: passing `apiUrl` alone still
+reads `REVYL_API_KEY` from the environment.

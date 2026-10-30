@@ -64,7 +64,9 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   local device.
 - `click`, `press`, `double tap`, `longpress`, and `fill` by point or by snapshot reference, and
   `scroll` by direction. `scroll` sends one drag of the planned finger path, so `--pixels` and
-  `--amount` mean the same distance they mean on a local device.
+  `--amount` mean the same distance they mean on a local device. Revyl's drag takes endpoints only, so
+  `scroll --duration-ms` sets no speed there and the report names no duration; `fill --delay-ms` is
+  paced by typing one character per pause.
 - `open` (the session's app), `open` with a deep link or URL, and `close`.
 - `back`, and `home`.
 
@@ -109,11 +111,18 @@ which is what a local fake of the API is for.
 
 ## Use it from JavaScript
 
-Install the plugin package as a dependency of your host and pass it to the client, or leave the
-daemon to load it and allocate a Revyl lease:
+Install the plugin package as a dependency of your host and pass it to a host you start yourself.
+`startAgentDevice()` runs the daemon in your process and registers the plugin objects you hand it, so
+no `plugins add` step and no `REVYL_API_KEY` in the environment are needed:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
+import { createAgentDeviceClient, startAgentDevice } from 'agent-device';
+import revyl from '@agent-device/revyl';
+
+const host = await startAgentDevice({
+  stateDir: './.my-app/agent-device-state',
+  plugins: [revyl({ apiKey: 'your-api-key', apiUrl: 'https://backend.example.com' })],
+});
 
 const scope = {
   tenant: 'revyl',
@@ -122,14 +131,14 @@ const scope = {
   leaseProvider: 'revyl',
 } as const;
 
-const lease = await createAgentDeviceClient().leases.allocate({
+const lease = await host.client.leases.allocate({
   ...scope,
   platform: 'ios',
   device: 'iPhone 16',
   providerOsVersion: '18.0',
   providerApp: 'https://apps.example.com/MyApp-simulator.zip',
 });
-const client = createAgentDeviceClient({ ...scope, leaseId: lease.leaseId });
+const client = createAgentDeviceClient({ ...host.clientConfig, ...scope, leaseId: lease.leaseId });
 
 try {
   await client.apps.open({ app: 'com.example.app' });
@@ -137,18 +146,14 @@ try {
   await client.interactions.click({ selector: 'label="Continue"' });
 } finally {
   // Releasing the lease ends the Revyl session, so a failure cannot leave a device rented.
-  await client.leases.release({ ...scope, leaseId: lease.leaseId });
+  await host.client.leases.release({ ...scope, leaseId: lease.leaseId });
+  await host.close();
 }
 ```
 
-The package default-exports the plugin factory for a host that mounts it directly. Pass
-`apiKey` (and optionally `apiUrl`) to use credentials other than the environment's:
-
-```js
-import revyl from '@agent-device/revyl';
-
-const plugin = revyl({ apiKey: 'your-api-key' });
-```
+`apiUrl` is optional and only needed for a staging or private Revyl backend. Leaving both out makes
+the plugin read `REVYL_API_KEY` from the environment, which is also the only path a CLI or MCP session
+takes when the daemon loads the plugin from the plugin store.
 
 ## Troubleshoot
 
