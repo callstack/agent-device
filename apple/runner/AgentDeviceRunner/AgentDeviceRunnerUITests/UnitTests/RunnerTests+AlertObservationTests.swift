@@ -299,7 +299,8 @@ extension RunnerTests {
   func testSafariDialogObservationMatchesOnlyTheDialogView() {
     let dialog = ElementAttributesFixture(.other, CGRect(x: 20, y: 300, width: 360, height: 120), identifier: Self.safariDialogIdentifier)
     let alert = ElementAttributesFixture(.alert, CGRect(x: 20, y: 500, width: 360, height: 120))
-    let window = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 402, height: 874), children: [alert, dialog])
+    let page = ElementAttributesFixture(.other, CGRect(x: 0, y: 100, width: 402, height: 600), identifier: "WebView")
+    let window = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 402, height: 874), children: [page, alert, dialog])
     XCTAssertEqual(
       alertSnapshots(in: window, source: .safariDialog, viewport: window.frame).map(\.identifier),
       [Self.safariDialogIdentifier]
