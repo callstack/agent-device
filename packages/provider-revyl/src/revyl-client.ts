@@ -46,7 +46,10 @@ type RevylRequest = Readonly<{
   path: string;
   body?: unknown;
   timeoutMs?: number;
-  /** Defaults to true for GET and false for POST: a side-effecting action is never replayed. */
+  /**
+   * Defaults to true for GET and false for POST. A POST opts in only when Revyl documents it as
+   * idempotent, which `/stop` and `/status/cancel` are; a device action is never replayed.
+   */
   retry?: boolean;
   /** A device-proxy action carries the agent header; an execution-API call does not. */
   workerAction?: boolean;
@@ -100,7 +103,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
     const attempts = retry ? RETRY_DELAYS_MS.length + 1 : 1;
     for (let attempt = 1; ; attempt += 1) {
       const outcome = await sendOnce(backendUrl, fetchImpl, baseHeaders, request);
-      if (!isRetryable(outcome) || attempt >= attempts || request.signal?.aborted) {
+      if (!isRetryable(request, outcome) || attempt >= attempts || request.signal?.aborted) {
         if (outcome instanceof Error) throw outcome;
         return outcome;
       }
@@ -122,9 +125,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
   /** A successful call whose body is raw text or bytes; a binary action still reports errors as JSON. */
   async function body(request: RevylRequest): Promise<Uint8Array> {
     const response = await send(request);
-    if (response.status < 200 || response.status >= 300) {
-      assertSuccess(request, response);
-    }
+    assertSuccess(request, response);
     return response.body;
   }
 
@@ -256,8 +257,16 @@ async function sendOnce(
   }
 }
 
-function isRetryable(outcome: RevylResponse | Error): boolean {
-  return outcome instanceof Error || revylFailure('general', outcome.status).retryable;
+/**
+ * Only a request that never reached Revyl, or a status Revyl marks transient, is replayed. A
+ * cancellation is the caller's own answer, and a timeout has already spent the request's budget, so
+ * neither is sent again.
+ */
+function isRetryable(request: RevylRequest, outcome: RevylResponse | Error): boolean {
+  if (outcome instanceof Error) {
+    return outcome instanceof AppError && outcome.details?.reason === 'provider-unreachable';
+  }
+  return revylFailure(request.route ?? 'general', outcome.status).retryable;
 }
 
 function requestCanceled(request: RevylRequest, cause: unknown): AppError {

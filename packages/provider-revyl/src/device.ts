@@ -6,7 +6,7 @@ export type RevylPlatform = 'ios' | 'android';
 
 export const REVYL_PROVIDER = 'revyl';
 
-/** How the service names itself to a user, in every message and display name this package writes. */
+/** The service name the connect report and a device's display name carry. */
 export const REVYL_SERVICE = 'Revyl';
 
 /** Revyl picks the device from the platform, an optional model and OS version, and an app URL. */

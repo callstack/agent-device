@@ -37,7 +37,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const available = Object.freeze({ available: true } as const);
+export const available = Object.freeze({ available: true } as const);
 
 /**
  * Revyl's text entry takes the field's coordinates, and no action injects text into whatever the

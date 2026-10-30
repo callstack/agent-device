@@ -59,16 +59,16 @@ the device is returned. Revyl also releases an idle session on its own after its
 
 A Revyl session runs the commands that reach a device through Revyl's device actions:
 
-- `snapshot` and `screenshot`. iOS reads Revyl's XCUITest-style tree and Android reads its uiautomator
-  dump, so `snapshot -i`, `--json`, and label and selector targeting work the same way they do on a
-  local device.
+- `snapshot` and `screenshot`. iOS reads the simulator's accessibility tree and Android reads its
+  uiautomator dump, so `snapshot -i`, `--json`, and label and selector targeting work the same way they
+  do on a local device.
 - `click`, `press`, `double tap`, `longpress`, and `fill` by point or by snapshot reference, and
   `scroll` by direction. `scroll` sends one drag of the planned finger path, so `--pixels` and
   `--amount` mean the same distance they mean on a local device. Revyl's drag takes endpoints only, so
   `scroll --duration-ms` refuses with that reason rather than running the drag at a speed nobody chose;
   `fill --delay-ms` is paced by typing one character per pause.
-- `open` (the session's app), `open` with a deep link or URL, and `close`.
-- `back`, and `home`.
+- `open` (the session's app), `open` with a deep link or URL, and `close` for the app the session opened.
+- `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
 
 The plugin refuses every other command with a reason that names the substitute. It does not
 report a refused command as a success:

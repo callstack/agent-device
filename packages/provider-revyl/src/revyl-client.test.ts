@@ -357,6 +357,35 @@ test('a refusal is told from a verdict that never came back', async () => {
   );
 });
 
+test('a read that never reached Revyl is replayed, and a canceled one is not', async () => {
+  const unreachableCalls: Request[] = [];
+  const flaky = clientResponding((call) => {
+    if (call === 0) throw new TypeError('fetch failed');
+    return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+  }, unreachableCalls);
+  assert.equal(await flaky.getWorkerHierarchy('run-1'), '[]');
+  assert.equal(unreachableCalls.length, 2);
+
+  const canceledCalls: Request[] = [];
+  const controller = new AbortController();
+  const hanging = clientResponding(
+    (call) =>
+      new Promise<Response>((_, reject) => {
+        const request = canceledCalls[call]!;
+        request.signal.addEventListener('abort', () => reject(request.signal.reason), {
+          once: true,
+        });
+        controller.abort();
+      }),
+    canceledCalls,
+  );
+  await assert.rejects(
+    async () => await hanging.getWorkerHierarchy('run-1', controller.signal),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(canceledCalls.length, 1, 'the canceled read is sent once');
+});
+
 /** A client whose every answer comes from `reply`, recording each request it makes. */
 function clientResponding(
   reply: (call: number) => Response | Promise<Response>,

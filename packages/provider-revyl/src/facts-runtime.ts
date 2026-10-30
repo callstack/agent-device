@@ -11,6 +11,7 @@ import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-p
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { isSupportedRevylRuntimeDevice } from './device.ts';
 import {
+  available,
   liveSessionUnavailable,
   revylInteractionOperationFacts,
   revylNavigationOperationFacts,
@@ -18,8 +19,6 @@ import {
   REVYL_FOLD_UNAVAILABLE,
   REVYL_TELEPHONY_UNAVAILABLE,
 } from './interaction-operations.ts';
-
-const available = Object.freeze({ available: true } as const);
 
 /** Revyl installs the app it is given when the session starts; the worker's install action takes a URL. */
 const installUnavailable = unavailableFact(
