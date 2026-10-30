@@ -69,7 +69,7 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
     const retention = resolveRetention(req);
     let device = await resolveInstallDevice(
       session,
-      req.flags,
+      req,
       sessionStore.host.env,
       params.platformServices,
     );
@@ -141,10 +141,11 @@ export async function handleReleaseMaterializedPathsCommand(params: {
 
 async function resolveInstallDevice(
   session: SessionState | undefined,
-  flags: DaemonRequest['flags'] | undefined,
+  req: DaemonRequest,
   env: EnvMap,
   platformServices: DaemonPlatformServices,
 ): Promise<SessionState['device']> {
+  const flags = req.flags;
   const requestedPlatform = normalizePlatform(flags?.platform);
   if (session && requestedPlatform && !matchesPlatformSelector(session.device, requestedPlatform)) {
     throw new AppError(
@@ -168,7 +169,7 @@ async function resolveInstallDevice(
     session,
     flags,
     env,
-    androidAvdSelection: resolveCommandAndroidAvdSelection('install_source'),
+    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
     platformServices,
   });
 }

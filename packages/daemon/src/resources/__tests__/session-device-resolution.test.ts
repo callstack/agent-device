@@ -8,7 +8,6 @@ import {
   resolveCommandDevice,
   refreshSessionDeviceIfNeeded,
   pinSessionDeviceSelection,
-  resolvePowerCommandDevice,
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
@@ -117,7 +116,7 @@ test('resolveCommandDevice does not prepare a sessionless device', async () => {
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
 });
 
-test('power command selection includes a stopped Android AVD', async () => {
+test('command selection forwards stopped Android AVD scope', async () => {
   const stopped: DeviceInfo = {
     platform: 'android',
     id: 'emulator-5554',
@@ -126,7 +125,8 @@ test('power command selection includes a stopped Android AVD', async () => {
     booted: false,
   };
   mockResolveTargetDevice.mockResolvedValue(stopped);
-  const selected = await resolvePowerCommandDevice({
+  const selected = await resolveCommandDevice({
+    androidAvdSelection: 'include-stopped',
     session: undefined,
     flags: { platform: 'android', device: 'Pixel_9' },
     env: process.env,

@@ -303,6 +303,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
+      androidAvdSelection: 'include-stopped',
       route: 'session',
       refFrameEffect: 'preserve',
       sessionKind: 'inventory',
@@ -348,6 +349,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
+      androidAvdSelection: 'include-stopped',
       route: 'session',
       refFrameEffect: 'preserve',
       sessionKind: 'inventory',
@@ -368,6 +370,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
+      androidAvdSelection: 'include-stopped',
       route: 'session',
       refFrameEffect: 'may-invalidate',
       sessionKind: 'state',
@@ -387,6 +390,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: {
+      androidAvdSelection: 'include-stopped',
       route: 'session',
       refFrameEffect: 'may-invalidate',
       sessionKind: 'state',

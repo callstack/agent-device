@@ -76,31 +76,19 @@ export async function resolveCommandDevice(params: {
   return hostApp && device.id === hostApp.hostDeviceId ? params.session!.device : device;
 }
 
-type PowerCommandDeviceParams = Omit<
-  Parameters<typeof resolveCommandDevice>[0],
-  'androidAvdSelection'
->;
-
-/** Boot and shutdown both allow a stopped Android AVD to be selected by name. */
-export async function resolvePowerCommandDevice(
-  params: PowerCommandDeviceParams,
-): Promise<DeviceInfo> {
-  return await resolveCommandDevice({ ...params, androidAvdSelection: 'include-stopped' });
-}
-
 /**
- * Boot's device with its selection evidence. Boot alone reads the `--pick` opt-in; shutdown shares
- * the stopped-AVD scope above and keeps refusing a tie.
+ * Boot's device with its selection evidence. Boot alone reads the `--pick` opt-in; other
+ * commands keep refusing a tie.
  */
 export async function resolveBootCommandSelection(
-  params: PowerCommandDeviceParams,
+  params: Parameters<typeof resolveCommandDevice>[0],
 ): Promise<DeviceSelectionResult> {
   if (params.session && !hasExplicitDeviceSelector(params.flags)) {
-    return resolveExistingSessionDeviceSelection(await resolvePowerCommandDevice(params));
+    return resolveExistingSessionDeviceSelection(await resolveCommandDevice(params));
   }
   return await resolveTargetDeviceSelection(params.flags ?? {}, {
     env: params.env,
-    androidAvdSelection: 'include-stopped',
+    androidAvdSelection: params.androidAvdSelection,
     boot: { pick: params.flags?.pick },
   });
 }

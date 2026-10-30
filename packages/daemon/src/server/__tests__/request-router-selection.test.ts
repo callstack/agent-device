@@ -46,7 +46,9 @@ function selectionHandler(
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async (request) => {
         inventoryRequests.push(request);
-        return devices;
+        return request.androidAvdSelection === 'running-only'
+          ? devices.filter((device) => device.platform !== 'android' || device.booted === true)
+          : devices;
       },
     }),
     deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, inspectFacts },
@@ -80,33 +82,37 @@ test('fresh no-app foreground open selects iOS from mixed Android and iOS invent
   expect(sessionStore.get('foreground')?.device.id).toBe(ios.id);
 });
 
-test('shutdown selects a stopped Android AVD and rejects an invalid selector before facts', async () => {
-  const inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }> = [];
-  const stopped = { ...android, booted: false };
-  const { handler, inspectFacts } = selectionHandler([stopped], inventoryRequests);
-  const selected = await handler({
-    token: 'test-token',
-    session: 'no-session',
-    command: 'shutdown',
-    positionals: [],
-    flags: { platform: 'android', device: stopped.name },
-    meta: { requestId: 'shutdown-stopped' },
-  });
-  expect(
-    inventoryRequests.some((request) => request.androidAvdSelection === 'include-stopped'),
-  ).toBe(true);
-  if (!selected.ok) expect(selected.error.code).not.toBe('DEVICE_NOT_FOUND');
-  expect(inspectFacts).toHaveBeenCalledWith(stopped);
-  const factsBeforeInvalid = inspectFacts.mock.calls.length;
+test.each(['boot', 'shutdown', 'capabilities', 'apps'] as const)(
+  '%s keeps stopped-AVD selection consistent through request admission',
+  async (command) => {
+    const inventoryRequests: Array<{ platform?: string; androidAvdSelection?: string }> = [];
+    const stopped = { ...android, id: android.name, booted: false };
+    const { handler, inspectFacts } = selectionHandler([stopped], inventoryRequests);
+    const selected = await handler({
+      token: 'test-token',
+      session: 'no-session',
+      command,
+      positionals: [],
+      flags: { platform: 'android', device: stopped.name },
+      meta: { requestId: `${command}-stopped` },
+    });
+    expect(
+      inventoryRequests.length > 0 &&
+        inventoryRequests.every((request) => request.androidAvdSelection === 'include-stopped'),
+    ).toBe(true);
+    if (!selected.ok) expect(selected.error.code).not.toBe('DEVICE_NOT_FOUND');
+    expect(inspectFacts).toHaveBeenCalledWith(stopped);
+    const factsBeforeInvalid = inspectFacts.mock.calls.length;
 
-  const invalid = await handler({
-    token: 'test-token',
-    session: 'no-session',
-    command: 'shutdown',
-    positionals: [],
-    flags: { platform: 'android', device: 'missing-avd' },
-    meta: { requestId: 'shutdown-missing' },
-  });
-  expect(invalid).toMatchObject({ ok: false, error: { code: 'DEVICE_NOT_FOUND' } });
-  expect(inspectFacts).toHaveBeenCalledTimes(factsBeforeInvalid);
-});
+    const invalid = await handler({
+      token: 'test-token',
+      session: 'no-session',
+      command,
+      positionals: [],
+      flags: { platform: 'android', device: 'missing-avd' },
+      meta: { requestId: `${command}-missing` },
+    });
+    expect(invalid).toMatchObject({ ok: false, error: { code: 'DEVICE_NOT_FOUND' } });
+    expect(inspectFacts).toHaveBeenCalledTimes(factsBeforeInvalid);
+  },
+);

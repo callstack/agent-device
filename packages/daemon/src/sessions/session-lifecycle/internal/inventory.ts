@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../../../core/daemon-command-registry.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveSessionRunnerLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -273,10 +274,7 @@ async function capabilitiesInventoryResponse(params: {
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
-  const resolution = await resolveInventoryCommandDevice({
-    ...params,
-    androidAvdSelection: 'include-stopped',
-  });
+  const resolution = await resolveInventoryCommandDevice(params);
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
   const sessionOwnedAppStateAvailable = isSessionOwnedAppStateAvailable(
@@ -349,7 +347,6 @@ async function handleAppsInventory(params: {
     req,
     sessionName,
     sessionStore,
-    androidAvdSelection: 'include-stopped',
     platformServices,
   });
   if ('response' in resolution) return resolution.response;
@@ -448,10 +445,9 @@ async function resolveInventoryCommandDevice(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  androidAvdSelection?: 'running-only' | 'include-stopped';
   platformServices: DaemonPlatformServices;
 }): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
-  const { req, sessionName, sessionStore, androidAvdSelection, platformServices } = params;
+  const { req, sessionName, sessionStore, platformServices } = params;
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
   const response = requireSessionOrExplicitSelector(req.command, session, flags);
@@ -463,7 +459,7 @@ async function resolveInventoryCommandDevice(params: {
       flags,
       env: sessionStore.host.env,
       platformServices,
-      androidAvdSelection,
+      androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
     }),
   };
 }

@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
@@ -6,7 +7,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import {
   requireSessionOrExplicitSelector,
-  resolvePowerCommandDevice,
+  resolveCommandDevice,
 } from '../../resources/session-device-resolution.ts';
 import {
   requireRuntimeBinding,
@@ -43,10 +44,11 @@ export async function handleShutdownCommand(
   const guard = requireSessionOrExplicitSelector(params.req.command, activeSession, flags);
   if (guard) return guard;
 
-  const device = await resolvePowerCommandDevice({
+  const device = await resolveCommandDevice({
     flags,
     session: activeSession,
     env: params.sessionStore.host.env,
+    androidAvdSelection: resolveCommandAndroidAvdSelection(params.req.command),
     platformServices: params.platformServices,
   });
   const inspectFacts = requireRuntimeFacts(params.inspectFacts);

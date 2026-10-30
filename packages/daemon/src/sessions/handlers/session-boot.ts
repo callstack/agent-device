@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -60,6 +61,7 @@ async function resolveBootTargetSelection(
       session,
       flags,
       env: sessionStore.host.env,
+      androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
       platformServices,
     });
     const { device } = selection;
