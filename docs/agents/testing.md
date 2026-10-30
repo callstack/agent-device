@@ -11,7 +11,7 @@ Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
 Both broad commands and heavy `pnpm gate` ids acquire the same host lock.
 Wait for the owner to finish.
-Do not add lock wrappers.
+Do not add lock wrappers. Do not delete lock files.
 A wait ends after two hours.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
@@ -50,6 +50,7 @@ Do not add tests that assert prose.
 ## A gate failed
 
 Keep failure attribution separate from validation status.
+Never call a failing gate passed.
 
 | Evidence | Next action | Outcome |
 | --- | --- | --- |
