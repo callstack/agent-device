@@ -289,14 +289,17 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     rejectRefusedRevylProfileFields(context);
     const pending = this.pendingAllocations.get(lease.leaseId);
     if (pending) return await this.joinAllocation(pending, platform, context);
-    const starting = this.allocate(lease, platform, context);
-    this.pendingAllocations.set(lease.leaseId, starting);
-    try {
-      const allocated = await starting;
+    // Registration happens inside the published start, so a caller that waits for it — a release that
+    // comes in while the device is still being rented — always finds the session it has to end.
+    const starting = this.allocate(lease, platform, context).then((allocated) => {
       // Recorded while the start is still registered, so no allocation can arrive in the gap after it
       // and rent a device of its own.
       if (!this.shuttingDown) this.sessions.set(lease.leaseId, allocated.session);
       return allocated;
+    });
+    this.pendingAllocations.set(lease.leaseId, starting);
+    try {
+      return await starting;
     } finally {
       this.pendingAllocations.delete(lease.leaseId);
     }
@@ -393,6 +396,13 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     if (lease.leaseProvider !== this.provider || !platformForRevylLeaseBackend(lease.backend)) {
       return undefined;
     }
+    // A release can arrive while the device is still being rented: the daemon releases the lease when a
+    // joining caller is canceled, and the start that caller joined belongs to somebody still waiting for
+    // it. Until that start settles, its session is not in the table and there would be nothing to stop,
+    // so the release would report a device Revyl is holding. The start's own outcome is not the release's
+    // — one that failed has already stopped what it rented — and waiting is what makes the stop below see
+    // the session it rented.
+    await this.awaitPendingAllocation(lease.leaseId);
     const session = this.sessions.get(lease.leaseId);
     if (!session) {
       const confirmed = this.confirmedReleases.get(lease.leaseId);
@@ -409,6 +419,15 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     this.sessions.delete(lease.leaseId);
     this.rememberRelease(lease.leaseId, session.sessionId);
     return allocationResult(session);
+  }
+
+  /**
+   * Waits for the start this lease has running, if it has one. Its outcome is not the waiter's to
+   * report: a start that never became ready has already stopped what it rented, and what matters here is
+   * only that a start that did rent a device has put its session where the stop can find it.
+   */
+  private async awaitPendingAllocation(leaseId: string): Promise<void> {
+    await this.pendingAllocations.get(leaseId)?.catch(() => undefined);
   }
 
   /**

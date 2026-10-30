@@ -166,6 +166,37 @@ test('a canceled joiner reports its own cancellation while the shared start runs
   ]);
 });
 
+test('a release that lands while the shared start is still running stops the device it rents', async () => {
+  // The daemon drops the lease the moment its caller is gone, and a canceled joiner is gone: this release
+  // arrives while the caller that started the device is still waiting for it. The session is not in the
+  // table yet, so a release that only read the table would report a device Revyl is about to rent.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const first = runtime.leaseLifecycle?.allocate?.(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+  const controller = new AbortController();
+  const joining = runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(
+    async () => await joining,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+
+  const released = await runtime.leaseLifecycle!.release!(lease);
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+
+  // The caller that rented the device is not made to carry the joiner's release: it still gets its
+  // answer, and the runtime holds no session a later shutdown would stop twice.
+  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await runtime.shutdown();
+  assert.equal(stops(fixture).length, 1);
+});
+
 test("a joiner whose deadline expires names its own budget, not the other caller's", async () => {
   // The deadline is the other half of the same rule: a joiner that gave Revyl 60 ms cannot be made to
   // wait for the patience of the caller that started first, and the failure names the wait it was given.
