@@ -112,6 +112,12 @@ export async function startRevylFixtureBackend(
 
   const overrides = new Map(Object.entries(options.respond ?? {}));
   const server = http.createServer((request, response) => {
+    /** What this request was answered with, which decides whether a stop actually ended a session. */
+    let sent: RevylFixtureResponse | undefined;
+    const reply = (result: RevylFixtureResponse): void => {
+      sent = result;
+      respondWith(response, result);
+    };
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
@@ -132,14 +138,14 @@ export async function startRevylFixtureBackend(
       // recorded on receipt — cannot say.
       response.on('finish', () => {
         answered.push(`${method} ${url}`);
-        if (response.statusCode !== 200) return;
+        if (response.statusCode !== 200 || !lifecycleAccepted(sent?.body)) return;
         if (url.endsWith('/start_device') && started) openSessions.add(started.sessionId);
         const stoppedId = stoppedSessionIn(url);
         if (stoppedId !== undefined) openSessions.delete(stoppedId);
       });
       const override = overrides.get(`${method} ${url}`);
       if (override !== undefined) {
-        respondWith(response, typeof override === 'function' ? override() : override);
+        reply(typeof override === 'function' ? override() : override);
         return;
       }
       answer(url, recorded);
@@ -191,7 +197,7 @@ export async function startRevylFixtureBackend(
         action: () => ({ body: { success: true, action: lastPathSegment(url) } }),
       };
       const route = fixtureRoute(url);
-      respondWith(response, (routes[route] ?? unknownRoute(url))());
+      reply((routes[route] ?? unknownRoute(url))());
     }
 
     /**
@@ -302,6 +308,13 @@ function fixtureRoute(url: string): string {
   if (isDeviceSessionRoute(url) && url.endsWith('/stop')) return 'stop';
   if (url.startsWith('/api/v1/execution/device/status/cancel/')) return 'stop';
   return 'unknown';
+}
+
+/** A lifecycle answer ends its session only when Revyl did not say it refused, as the client reads it. */
+function lifecycleAccepted(body: unknown): boolean {
+  if (body === null || typeof body !== 'object') return true;
+  const verdict = body as { success?: unknown; request_accepted?: unknown };
+  return verdict.success !== false && verdict.request_accepted !== false;
 }
 
 /** Revyl routes every device action below the run's device-proxy prefix. */
