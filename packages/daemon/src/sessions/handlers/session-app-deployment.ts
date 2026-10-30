@@ -5,6 +5,7 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
 import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment-runtime';
 import {
+  deployAppUse,
   readyDeployAppUse,
   readySendPushNotificationUse,
   uninstallAppUse,
@@ -89,17 +90,22 @@ export async function handleAppDeploymentCommand(params: {
       platformServices: params.platformServices,
     });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
-    const unsupported =
-      unavailableRuntimeOperationResponse(command, facts.operations.ensureReady) ??
-      unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
+    const unsupported = unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
     if (unsupported) return unsupported;
 
-    let runtime = await requireRuntimeBinding(params.bindDevice)(device, readyDeployAppUse);
-    const ready = await runtime.operations.ensureReady({});
-    if (ready.id !== device.id) {
-      runtime = await requireRuntimeBinding(params.bindDevice)(ready, readyDeployAppUse);
+    let runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
+    if (
+      runtime.owner.kind === 'local-family' &&
+      device.platform === 'android' &&
+      device.booted !== true
+    ) {
+      const readyRuntime = await requireRuntimeBinding(params.bindDevice)(
+        device,
+        readyDeployAppUse,
+      );
+      device = await readyRuntime.operations.ensureReady({});
+      runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
     }
-    device = ready;
     // ADR 0014: deployment can replace the visible surface. Do this immediately before the
     // bound operation so an admission failure never discards a still-valid reference frame.
     if (ref) expireRefFrame(sessionStore.requireCurrent(ref));

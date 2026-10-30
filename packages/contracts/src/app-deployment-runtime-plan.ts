@@ -1,5 +1,7 @@
 import { defineUse } from './platform-runtime-operations.ts';
 
+export const deployAppUse = defineUse({ required: ['deployApp'], conditional: ['ensureReady'] });
+
 export const readyDeployAppUse = defineUse({ required: ['ensureReady', 'deployApp'] });
 
 export const uninstallAppUse = defineUse({ required: ['uninstallApp'] });

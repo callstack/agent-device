@@ -167,7 +167,8 @@ test('install binds the deployment use exactly once after one facts admission', 
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime.mock.calls[0]?.[1]).toMatchObject({
-    required: ['ensureReady', 'deployApp'],
+    required: ['deployApp'],
+    conditional: ['ensureReady'],
   });
 });
 
