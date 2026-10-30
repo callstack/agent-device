@@ -14,7 +14,7 @@ import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/p
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import type { AgentDeviceHost } from './sdk/host-types.ts';
@@ -173,6 +173,19 @@ describe('composed platform runtime gateway', () => {
     expect(report.platformOwners).toBe('failed');
     expect(report.runners.stopped).toEqual(['runner']);
     const log = fs.readFileSync(paths.logPath, 'utf8');
+    const diagnostic = log
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .find(({ phase }) => phase === 'daemon_shutdown_platform_owner_failed');
+    expect(diagnostic.data.error).toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: {
+        reason: 'platform-owner-shutdown-failed',
+        failures: [{ owner: ref, error: { code: 'COMMAND_FAILED', message: 'owner refused' } }],
+      },
+    });
+    expect(diagnostic.data).not.toHaveProperty('failures');
     expect(log).toContain('daemon_shutdown_platform_owner_failed');
     expect(log).toContain('owner refused');
     expect(log).toContain('owner-test-refusal');
@@ -185,59 +198,106 @@ describe('composed platform runtime gateway', () => {
     expect(await runtime.close()).toBe(report);
     expect(shutdown).toHaveBeenCalledOnce();
   });
-  test('settles all owners and preserves the failure across concurrent and repeated shutdown', async () => {
-    const failedRef = providerRuntimeOwner('limrun', 'failed');
-    const healthyRef = providerRuntimeOwner('limrun', 'healthy');
-    const failure = new Error('owner refused');
-    const failedShutdown = vi.fn(async () => {
-      throw failure;
-    });
-    const healthyShutdown = vi.fn(async () => {});
-    const failed = providerRuntime({
-      ref: failedRef,
-      load: async () => ({ ...runtimeOwner({ ref: failedRef }), shutdown: failedShutdown }),
-    });
-    const healthy = providerRuntime({
-      ref: healthyRef,
-      load: async () => ({ ...runtimeOwner({ ref: healthyRef }), shutdown: healthyShutdown }),
-    });
-    const runtimeGateway = gateway([failed, healthy]);
-    for (const ref of [failedRef, healthyRef]) {
-      await runtimeGateway.bind({
-        device,
-        intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
-        scope,
+  test.each([1, 2] as const)(
+    'settles all owners and preserves %i failure(s) across concurrent and repeated shutdown',
+    async (failureCount) => {
+      const failedRef = providerRuntimeOwner('limrun', 'failed');
+      const secondFailedRef = providerRuntimeOwner('limrun', 'second-failed');
+      const healthyRef = providerRuntimeOwner('limrun', 'healthy');
+      const failure = new Error('owner refused');
+      const failedShutdown = vi.fn(async () => {
+        throw failure;
       });
-    }
-
-    const first = runtimeGateway.shutdown();
-    const second = runtimeGateway.shutdown();
-    const results = await Promise.allSettled([first, second]);
-    for (const result of results) {
-      expect(result.status).toBe('rejected');
-      if (result.status === 'rejected') {
-        expect(result.reason).toBeInstanceOf(AggregateError);
-        expect(result.reason.message).toContain('failed');
-        expect(result.reason.errors[0].cause).toBe(failure);
+      const secondFailure = new AppError('TOOL_MISSING', 'owner tool missing', {
+        reason: 'owner-tool-missing',
+        hint: 'Inspect owner tooling.',
+        diagnosticId: 'owner-tool-diagnostic',
+      });
+      const secondShutdown = vi.fn(async () => {
+        throw secondFailure;
+      });
+      const healthyShutdown = vi.fn(async () => {});
+      const failed = providerRuntime({
+        ref: failedRef,
+        load: async () => ({ ...runtimeOwner({ ref: failedRef }), shutdown: failedShutdown }),
+      });
+      const healthy = providerRuntime({
+        ref: healthyRef,
+        load: async () => ({ ...runtimeOwner({ ref: healthyRef }), shutdown: healthyShutdown }),
+      });
+      const secondFailed = providerRuntime({
+        ref: secondFailedRef,
+        load: async () => ({ ...runtimeOwner({ ref: secondFailedRef }), shutdown: secondShutdown }),
+      });
+      const runtimeGateway = gateway(
+        failureCount === 1 ? [failed, healthy] : [failed, secondFailed, healthy],
+      );
+      for (const ref of failureCount === 1
+        ? [failedRef, healthyRef]
+        : [failedRef, secondFailedRef, healthyRef]) {
+        await runtimeGateway.bind({
+          device,
+          intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
+          scope,
+        });
       }
-    }
-    await expect(runtimeGateway.shutdown()).rejects.toBe(
-      (results[0] as PromiseRejectedResult).reason,
-    );
-    expect(failedShutdown).toHaveBeenCalledOnce();
-    expect(healthyShutdown).toHaveBeenCalledOnce();
-    await expect(
-      runtimeGateway.bind({
-        device,
-        intent: {
-          kind: 'exact-owner',
-          owner: healthyRef,
-          fence: { token: 'fence', generation: 1 },
-        },
-        scope,
-      }),
-    ).rejects.toThrow('shut down');
-  });
+
+      const first = runtimeGateway.shutdown();
+      const second = runtimeGateway.shutdown();
+      const results = await Promise.allSettled([first, second]);
+      for (const result of results) {
+        expect(result.status).toBe('rejected');
+        if (result.status === 'rejected') {
+          expect(result.reason).toBeInstanceOf(AppError);
+          expect(result.reason.message).toContain('failed');
+          expect(normalizeError(result.reason)).toMatchObject({
+            code: 'COMMAND_FAILED',
+            retriable: false,
+            details: {
+              reason: 'platform-owner-shutdown-failed',
+              failures: [
+                {
+                  owner: failedRef,
+                  error: expect.objectContaining({ code: 'UNKNOWN', message: 'owner refused' }),
+                },
+                ...(failureCount === 2
+                  ? [
+                      {
+                        owner: secondFailedRef,
+                        error: expect.objectContaining({
+                          code: 'TOOL_MISSING',
+                          hint: 'Inspect owner tooling.',
+                          diagnosticId: 'owner-tool-diagnostic',
+                        }),
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          });
+          if (failureCount === 1) expect(result.reason.cause).toBe(failure);
+          else expect(result.reason.cause.errors).toEqual([failure, secondFailure]);
+        }
+      }
+      await expect(runtimeGateway.shutdown()).rejects.toBe(
+        (results[0] as PromiseRejectedResult).reason,
+      );
+      expect(failedShutdown).toHaveBeenCalledOnce();
+      expect(healthyShutdown).toHaveBeenCalledOnce();
+      expect(secondShutdown).toHaveBeenCalledTimes(failureCount === 2 ? 1 : 0);
+      await expect(
+        runtimeGateway.bind({
+          device,
+          intent: {
+            kind: 'exact-owner',
+            owner: healthyRef,
+            fence: { token: 'fence', generation: 1 },
+          },
+          scope,
+        }),
+      ).rejects.toThrow('shut down');
+    },
+  );
   test('loads only the selected Apple owner for screenshot facts and binding', async () => {
     const appleDevice: DeviceInfo = {
       platform: 'apple',

@@ -873,9 +873,6 @@ async function startDaemonRuntimeOnHost(
     if (ownerClose.kind === 'rejected') {
       await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
         error: normalizeError(ownerClose.error),
-        ...(ownerClose.error instanceof AggregateError
-          ? { failures: ownerClose.error.errors.map((error) => normalizeError(error)) }
-          : {}),
       });
     }
     const plugins = await pluginClose.close();
