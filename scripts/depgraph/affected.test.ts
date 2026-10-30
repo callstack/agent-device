@@ -191,7 +191,9 @@ test('the real guarantee matrix contributes module-qualified rows', () => {
   const rows = guaranteeRows();
   assert.ok(rows.length > 0);
   assert.ok(
-    rows.some((row) => row.via.startsWith('src/') && row.via.includes('#')),
+    rows.some(
+      (row) => row.via.startsWith('packages/command-runtime/src/') && row.via.includes('#'),
+    ),
     'expected at least one runtime cell naming a module',
   );
 });

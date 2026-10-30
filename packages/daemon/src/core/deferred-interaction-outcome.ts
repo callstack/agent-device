@@ -41,7 +41,7 @@ import type { DeferredSurface, SessionState } from './session-state.ts';
  * the member-to-member paths it now concentrates.
  *
  * Distinct from the opt-in same-response settled observation
- * (`--settle`/`--verify`, `src/commands/interaction/runtime/settle.ts`), and
+ * (`--settle`/`--verify`, `packages/command-runtime/src/commands/interaction/runtime/settle.ts`), and
  * deliberately scoped to these post-action markers only: ADR 0014's ref-frame
  * expiry and ADR 0012/0016's staged repair protocol are different consistency
  * disciplines and never route through here.

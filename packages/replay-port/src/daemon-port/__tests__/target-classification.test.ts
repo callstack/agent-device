@@ -706,7 +706,7 @@ test('#2498 e2e: matches in distinct subtrees stay a refusal, not a collapse to 
 // Split resolver: dispatch resolution runs occlusion/visibility filters verification does not
 // replicate, so dispatch can resolve a different member than the one verified. These fixtures pin
 // the verification side; the post-resolution guard that refuses the split pre-action is pinned
-// beside `src/commands/interaction/runtime/replay-target-guard.ts`.
+// beside `packages/command-runtime/src/commands/interaction/runtime/replay-target-guard.ts`.
 
 /** Two "Save" buttons; A (deeper) is covered, B is the visible sibling. */
 function coveredDeeperSaveButtons(identifiers: { a: string; b: string }): SnapshotNode[] {

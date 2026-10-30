@@ -17,7 +17,7 @@ import { createTouchCommandSurface } from '../../../__tests__/support/touch-comm
 // The settle loop pins `private-ax` on its captures once the observation reports that producer; the
 // daemon must carry that preference through its capture path to the interactor, which is what the
 // runner request is built from. Where the loop decides to pin is pinned beside it, in
-// src/commands/interaction/runtime/settle.test.ts, and how the Apple interactor turns the preference
+// packages/command-runtime/src/commands/interaction/runtime/settle.test.ts, and how the Apple interactor turns the preference
 // into a runner request in packages/platform-apple.
 
 const snapshotCalls: SnapshotOptions[] = [];

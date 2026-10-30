@@ -4,7 +4,7 @@
  * bounded diagnostic diffs built on top of it. Both the writer (over
  * `SnapshotNode`-derived values, `@agent-device/selectors/target-evidence`) and
  * replay-time verification (`packages/replay-port/src/daemon-port/target-classification.ts` and
- * `src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
+ * `packages/command-runtime/src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
  * sides compute the SAME identity/ancestry match by construction (#1478 P5
  * review, "genuinely shared recording vocabulary" relocated to its owner).
  *
@@ -52,7 +52,7 @@ type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
  * (`@agent-device/selectors/target-evidence`), replay-time verification
  * (`packages/replay-port/src/daemon-port/session-replay-target-verification.ts`), and the
  * dispatch-side post-resolution guard
- * (`src/commands/interaction/runtime/replay-target-guard.ts`), so all three compute
+ * (`packages/command-runtime/src/commands/interaction/runtime/replay-target-guard.ts`), so all three compute
  * a node's identity with byte-identical semantics.
  */
 export function readNodeLocalIdentity(

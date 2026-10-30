@@ -109,7 +109,7 @@ const diffKey = (node: SnapshotNode) => `${node.type}|${node.label ?? ''}`;
  * A stand-in for the command family's settled diff, keyed by role and label: enough for the daemon
  * to have added lines that carry refs minted from the settled tree, removed lines that carry none,
  * and, when nothing was added, the unchanged interactive tail. How the real diff is computed is
- * pinned beside it, in src/commands/interaction/runtime/settle.test.ts.
+ * pinned beside it, in packages/command-runtime/src/commands/interaction/runtime/settle.test.ts.
  */
 function settledDiff(baseline: SnapshotNode[] | undefined, settled: SnapshotNode[]) {
   const before = baseline ?? [];

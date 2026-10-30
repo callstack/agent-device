@@ -1,10 +1,13 @@
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
-import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
+import type {
+  CommandClock,
+  CommandSessionRecord,
+  CommandSessionStore,
+} from '@agent-device/contracts/runtime-contract';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
 import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 
 type ContractBackendOverrides = Partial<
   Pick<

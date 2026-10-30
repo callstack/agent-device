@@ -35,7 +35,7 @@ export const INTERACTION_ERROR_REASONS = {
    * `details.movedToRect` where the last re-observation found it — present only when that look
    * measured one. Branch on this reason, not the message: the recovery is to wait for the surface
    * and retry, never to retry the same point immediately. The owner is
-   * `src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
+   * `packages/command-runtime/src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
    * hint that names that recovery.
    */
   targetStillMoving: 'target_still_moving',
