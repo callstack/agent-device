@@ -227,22 +227,18 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   forceStopRuntime: boolean;
 }): Promise<{ timedOut: boolean }> {
   const signal = AbortSignal.timeout(params.timeoutMs);
-  const forwardRemoved = (
-    await Promise.all([
-      ...(params.forceStopRuntime
-        ? [
-            stopAndroidSnapshotHelperRuntime({
-              adb: params.adb,
-              packageName: params.packageName,
-              timeoutMs: params.timeoutMs,
-              signal,
-            }),
-          ]
-        : []),
-      removeAndroidSnapshotHelperSessionForward({ ...params, signal }),
-    ])
-  ).at(-1);
-  return { timedOut: signal.aborted || forwardRemoved !== true };
+  const [, forwardRemoved] = await Promise.all([
+    params.forceStopRuntime
+      ? stopAndroidSnapshotHelperRuntime({
+          adb: params.adb,
+          packageName: params.packageName,
+          timeoutMs: params.timeoutMs,
+          signal,
+        })
+      : undefined,
+    removeAndroidSnapshotHelperSessionForward({ ...params, signal }),
+  ]);
+  return { timedOut: signal.aborted || !forwardRemoved };
 }
 
 /**
