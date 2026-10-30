@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { tryAdoptRunnerSessionFromLease } from '../runner-adoption.ts';
@@ -10,11 +9,7 @@ import { disposeRunnerSession } from '../runner-disposal.ts';
 import { buildRunnerLease, writeRunnerLease } from '../runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
-import {
-  assertProducedRunnerRequests,
-  readRunnerRequestFixture,
-  REPO_ROOT,
-} from '@agent-device/test-kit';
+import { assertProducedRunnerRequests, readRunnerRequestFixture } from '@agent-device/test-kit';
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
@@ -145,37 +140,4 @@ test('runner-requests.json has a production request for every runner command', (
     [],
     'runner commands with no production request',
   );
-  for (const producer of new Set(entries.map((entry) => entry.producer))) {
-    const source = fs.readFileSync(path.join(REPO_ROOT, producer), 'utf8');
-    assert.ok(
-      producer.endsWith('runner-requests.test.ts') &&
-        source.includes('assertProducedRunnerRequests(import.meta.filename'),
-      `${producer} must be a dedicated *runner-requests.test.ts drive that checks its own entries`,
-    );
-  }
-});
-
-const REQUEST_LITERAL = /\bcommand\s*:(?!\s*RunnerCommand\b)/;
-const DIRECT_SEND = new RegExp(
-  `\\b(?:${['runAppleRunnerCommand', 'executeRunnerCommandWithSession', 'waitForRunner', 'sendRunnerCommandOnce'].join('|')})\\s*\\(`,
-);
-
-test('runner request drives send only requests production builds', () => {
-  const producers = readRunnerRequestFixture().map((entry) => path.join(REPO_ROOT, entry.producer));
-  const sources = [
-    ...new Set(producers),
-    path.join(REPO_ROOT, 'packages/test-kit/src/runner-requests.fixtures.ts'),
-    path.join(REPO_ROOT, 'packages/platform-apple/src/__tests__/recording-runner-provider.ts'),
-  ];
-  const offending = sources.flatMap((file) =>
-    fs
-      .readFileSync(file, 'utf8')
-      .split('\n')
-      .flatMap((line, index) =>
-        REQUEST_LITERAL.test(line) || DIRECT_SEND.test(line)
-          ? [`${path.relative(REPO_ROOT, file)}:${index + 1}: ${line.trim()}`]
-          : [],
-      ),
-  );
-  assert.deepEqual(offending, []);
 });

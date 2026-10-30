@@ -14,7 +14,7 @@ import { createMacOsDesktopWorld } from './macos-world.ts';
 import { createAppleRunnerProviderFromTranscript } from './providers.ts';
 import { runProviderScenario } from './scenario.ts';
 import { createProviderTranscript } from './transcript.ts';
-import type { AppleRunnerPrepareResult, AppleRunnerProvider } from '@agent-device/apple-runner';
+import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 
 test('Provider-backed integration prepare uses the Apple runner lifecycle provider', async () => {
   const lifecycleCalls: string[] = [];
@@ -23,7 +23,7 @@ test('Provider-backed integration prepare uses the Apple runner lifecycle provid
     runCommand: async () => {
       throw new Error('prepare should not be reduced to a raw runner command');
     },
-    prepare: async (device): Promise<AppleRunnerPrepareResult> => {
+    prepare: async (device) => {
       lifecycleCalls.push(`prepare:${device.platform}:${device.target ?? 'unknown'}`);
       return {
         runner: { uptimeMs: 123 },

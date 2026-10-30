@@ -33,7 +33,6 @@ export {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
   type AppleRunnerCommandOptions,
-  type AppleRunnerPrepareResult,
   type AppleRunnerProvider,
 } from './runner-provider.ts';
 export {
@@ -44,14 +43,11 @@ export {
   resolveRunnerContainerBundleIds,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
-  resolveRunnerScriptDefaultDerivedPath,
   resolveRunnerSigningBuildSettings,
 } from './runner-cache-metadata.ts';
 export {
   SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
-  isRunnerXcuitestScriptPlatform,
   resolveRunnerDerivedOverride,
-  resolveRunnerScriptDevice,
 } from './apple-runner-platform.ts';
 export {
   requireCertifiedRunnerCacheArtifacts,

@@ -261,8 +261,10 @@ The `./runner/operations` and `./runner-owner` subpaths remain the seams through
 The host-bound runner client is bound once, in `core/runner-client.ts`.
 The runner test host remains package-internal and the package exports no test support.
 The `apple-runner` vitest project runs the package suites.
-platform-apple provides the real host capabilities from its own setup file, and the package's `__tests__/host-setup.ts` installs them behind the test host.
-Suites that need both the runner and Apple lifecycle, alert, or tool-provider code live in platform-apple and use the entry.
+The package's `__tests__/host-setup.ts` installs a package-local host behind the test host.
+That host uses real host-kit and kernel capabilities, and explicit Apple test adapters that a suite overrides.
+The project reads no platform-apple or root code.
+Suites that need both the runner and Apple lifecycle, alert, tool-provider, or physical-device code live in platform-apple and use the entry.
 The package owns its cache files and usbmux sockets.
 R13 does not apply the ambient-host rule to the package. Raw process primitives remain prohibited.
 The package imports no platform-apple, sibling platform, root, or daemon code.

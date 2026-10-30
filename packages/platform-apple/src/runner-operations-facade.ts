@@ -18,10 +18,7 @@ export {
   resolveRunnerBundleBuildSettings,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
-  isRunnerXcuitestScriptPlatform,
   resolveRunnerDerivedOverride,
-  resolveRunnerScriptDefaultDerivedPath,
-  resolveRunnerScriptDevice,
   resolveRunnerSigningBuildSettings,
   requireCertifiedRunnerCacheArtifacts,
   requireRunnerBuildSettingsMatchBuildLog,
@@ -31,6 +28,11 @@ export {
   verifyLeaseRunnerPidIdentity,
   writeRunnerCacheMetadataForArtifacts,
 } from './core/runner-client.ts';
+export {
+  isRunnerXcuitestScriptPlatform,
+  resolveRunnerScriptDefaultDerivedPath,
+  resolveRunnerScriptDevice,
+} from './core/runner-script.ts';
 
 export async function cleanupRunnerLeasesForOwner(
   owner: Parameters<(typeof import('./core/runner-client.ts'))['cleanupRunnerLeasesForOwner']>[0],

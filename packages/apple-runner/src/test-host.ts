@@ -2,11 +2,10 @@ import { bindAppleRunnerHost, type AppleRunnerHost } from './host.ts';
 
 /**
  * Test seam for the package's own suites. The `apple-runner` vitest project's setup
- * (`packages/apple-runner/src/__tests__/host-setup.ts`) installs the real `platform-apple` host
- * capabilities, which platform-apple provides, here, so package tests exercise genuine retry, lock, and exec semantics by default
- * and override individual capabilities per test via {@link appleRunnerTestHost}. Production code
- * never imports this module; `platform-apple` binds the production host in
- * `core/runner-client.ts`.
+ * (`__tests__/host-setup.ts`) installs a package-local host here, so package tests exercise genuine
+ * retry, lock, and exec semantics by default and override individual capabilities per test via
+ * {@link appleRunnerTestHost}. Production code never imports this module; `platform-apple` binds
+ * the production host in `core/runner-client.ts`.
  */
 
 let defaults: AppleRunnerHost | undefined;

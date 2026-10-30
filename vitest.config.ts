@@ -249,15 +249,14 @@ export default defineConfig({
       {
         test: {
           // The apple-runner package's own suites: same lane semantics as
-          // unit-core, plus a setup that installs the real root host
-          // capabilities behind the package's test-host seam (the package
-          // cannot import platform-apple, so platform-apple's setup provides the host).
+          // unit-core, plus a setup that installs a package-local host (real
+          // host-kit capabilities and explicit Apple test adapters) behind the
+          // package's test-host seam.
           name: 'apple-runner',
           include: [...APPLE_RUNNER_TESTS],
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',
-            'packages/platform-apple/src/__tests__/apple-runner-host-setup.ts',
             'packages/apple-runner/src/__tests__/host-setup.ts',
           ],
         },

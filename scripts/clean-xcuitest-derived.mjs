@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   resolveRunnerDerivedOverride,
@@ -26,7 +27,7 @@ const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
 const DERIVED_PATHS = new Map(
   [...supported].map((platform) => [
     platform,
-    DERIVED_OVERRIDE ?? resolveRunnerScriptDefaultDerivedPath(platform),
+    DERIVED_OVERRIDE ?? resolveRunnerScriptDefaultDerivedPath(platform, os.homedir()),
   ]),
 );
 const PLATFORM_LABELS = new Map([
