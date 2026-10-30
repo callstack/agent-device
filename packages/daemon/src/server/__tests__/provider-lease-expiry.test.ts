@@ -266,13 +266,21 @@ test('a journal write that fails is retried with the latest leases', async () =>
     onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
   });
   try {
-    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    const first = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    // A second lease arrives while writes still fail, so the retry must write the latest set.
+    const second = registry.allocateLease({
+      tenantId: 't',
+      runId: 'run-2',
+      leaseProvider: 'revyl',
+    });
     expect(fs.statSync(journalPath).isDirectory()).toBe(true);
 
     fs.rmdirSync(journalPath);
     await vi.advanceTimersByTimeAsync(10);
     const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
-    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([lease.leaseId]);
+    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId).sort()).toEqual(
+      [first.leaseId, second.leaseId].sort(),
+    );
   } finally {
     daemon.shutdown();
     vi.useRealTimers();
