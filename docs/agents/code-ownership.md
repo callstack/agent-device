@@ -1,6 +1,6 @@
 # Code ownership
 
-Before you edit a module with many callers, run `pnpm depgraph affected <path>` to identify callers and guarantees.
+Before you edit a module with many callers, run `pnpm depgraph affected <path>`.
 
 ## Declarations
 
@@ -11,11 +11,11 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>` 
 | Daemon request-policy predicates | `packages/daemon/src/core/daemon-command-registry.ts` |
 | Interaction guarantees | `packages/contracts/src/interaction-guarantees.ts` |
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
-| Command facets and metadata, input schemas, CLI grammar, request projection, and the client port | `packages/command-surface/src/`, through its one entry |
+| Command facets, metadata, schemas, CLI grammar, request projection, and client port | `packages/command-surface/src/` |
 | CLI output formatters, help, and progress | `src/commands/` |
 | Input fields and audiences | `packages/command-surface/src/common-input-fields.ts`, `packages/command-surface/src/input-audience.ts` |
 | Released SDK default hosts | `src/sdk/host.ts` |
-| Apple runner host port and its one binding | `packages/apple-runner/src/host.ts`, `packages/platform-apple/src/core/runner-client.ts` |
+| Apple runner host port and binding | `packages/apple-runner/src/host.ts`, `packages/platform-apple/src/core/runner-client.ts` |
 
 For SDK entries `android-adb`, `artifacts`, `limrun`, `metro`, and `remote-config`, use `captureSdkHost` for defaults.
 For command-host readers, use `withSdkHost`.
