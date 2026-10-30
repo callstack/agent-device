@@ -562,7 +562,8 @@ test('shutdown reports a session it could not stop instead of forgetting it', as
       error instanceof AppError &&
       error.details?.reason === 'provider-cleanup-pending' &&
       JSON.stringify(error.details?.providerSessionIds) ===
-        JSON.stringify([revylSessionIdForLease('lease-1')]),
+        JSON.stringify([revylSessionIdForLease('lease-1')]) &&
+      error.message.includes(revylSessionIdForLease('lease-1')),
   );
   assert.equal(stops(fixture).length, 1);
 
@@ -656,9 +657,15 @@ test('a start canceled while it is in flight stops the session it rented', async
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
   controller.abort();
 
+  // The daemon releases a canceled first allocation without asking the provider, so the error is the only
+  // place left to name the session a failed late stop would leave rented.
   await assert.rejects(
     async () => await allocating,
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'request_canceled' &&
+      error.details?.providerSessionId === revylSessionIdForLease('lease-1') &&
+      String(error.details?.hint).includes(revylSessionIdForLease('lease-1')),
   );
   // The stop follows the answer, not the cancellation: the answer is what names the device.
   await waitFor(() =>
@@ -740,7 +747,10 @@ test('a start slower than the allocation budget is given up on and its session s
   await assert.rejects(
     async () =>
       await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'provider-not-ready',
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-not-ready' &&
+      error.details?.providerSessionId === revylSessionIdForLease('lease-1'),
   );
   // The readiness polls belong to a start the caller no longer has, so none may have been sent yet.
   assert.equal(
