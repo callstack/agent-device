@@ -34,6 +34,13 @@ test.for([
   expect(providerCredentialFingerprint(provider, after)).not.toBe(fingerprint);
 });
 
+test('provider whitespace does not bypass credential fingerprinting', () => {
+  const first = providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: 'first' });
+  expect(first).toBeDefined();
+  expect(providerCredentialFingerprint('  limrun  ', { LIMRUN_API_KEY: 'first' })).toBe(first);
+  expect(providerCredentialFingerprint('  limrun  ', { LIMRUN_API_KEY: 'second' })).not.toBe(first);
+});
+
 test('a fingerprint ignores variables the provider does not read and blank values', () => {
   const fingerprint = providerCredentialFingerprint('browserstack', BROWSERSTACK_ENV);
   expect(

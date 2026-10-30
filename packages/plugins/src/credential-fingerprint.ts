@@ -19,7 +19,7 @@ export function providerCredentialFingerprint(
   leaseBackend?: string,
   inventory?: readonly PluginInventoryEntry[],
 ): string | undefined {
-  const variables = declaredCredentialVariables(provider, env, leaseBackend, inventory);
+  const variables = declaredCredentialVariables(provider.trim(), env, leaseBackend, inventory);
   // Whitespace-only counts as unset and other values are kept as is, as the provider's requireEnv does.
   return variables
     ? digest(

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  createTestHostEnvironment,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { finishRegisteredDaemonFixtures } from './registered-daemon-fixture.ts';
@@ -277,7 +281,10 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
   const { stateDir, paths } = stateDirAndPaths();
   const fresh = await startScriptedDaemon(okResult({ via: 'fresh' }));
   launchesFreshDaemonAt(spawn, paths, fresh.port);
-  const ensuring = createEnsuredDaemonTransport();
+  const firstHost = createTestHostEnvironment();
+  const secondHost = createTestHostEnvironment();
+  const ensuring = createEnsuredDaemonTransport({ host: firstHost });
+  const secondEnsuring = createEnsuredDaemonTransport({ host: secondHost });
   const flags = { stateDir, daemonTransport: 'http' };
   const ensure = vi.spyOn(ensureModule, 'ensureDaemon');
 
@@ -292,7 +299,14 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
       { ok: true, data: { via: 'fresh' } },
     ]);
     assert.equal(ensure.mock.calls.length, 1, 'one ensure for both requests');
-    assert.equal(spawn.mock.calls.length, 1, 'one daemon start for both requests');
+    assert.equal(ensure.mock.calls[0]?.[1], firstHost);
+    assert.deepEqual(await secondEnsuring(request('devices', flags)), {
+      ok: true,
+      data: { via: 'fresh' },
+    });
+    assert.equal(ensure.mock.calls.length, 2, 'a separate transport ensures again');
+    assert.equal(ensure.mock.calls[1]?.[1], secondHost);
+    assert.equal(spawn.mock.calls.length, 1, 'both transports reuse one daemon');
   } finally {
     await closeLoopbackServer(fresh.server);
   }

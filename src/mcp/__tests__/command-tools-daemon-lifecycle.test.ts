@@ -11,6 +11,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   runCmdDetachedMonitored: vi.fn(),
 }));
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
+import * as daemonClient from '@agent-device/daemon-client';
 import * as hostProcess from '@agent-device/host-kit/process';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
@@ -35,7 +36,13 @@ test('each MCP tool call ensures the daemon, then attaches to it', async (t) => 
   const daemon = await launchesFreshHttpDaemon(spawn, paths);
   close = daemon.close;
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
-  const capture = vi.spyOn(hostProcess, 'captureHostEnvironment');
+  vi.stubEnv('AGENT_DEVICE_HOST_CANARY', 'process-host');
+  const captureHost = hostProcess.captureHostEnvironment;
+  const capture = vi.spyOn(hostProcess, 'captureHostEnvironment').mockImplementation((source) => {
+    const host = captureHost(source);
+    return { ...host, env: { ...host.env, AGENT_DEVICE_HOST_CANARY: 'captured-host' } };
+  });
+  const factory = vi.spyOn(daemonClient, 'createEnsuredDaemonTransport');
   const executor = createCommandToolExecutor();
 
   const first = await executor.execute('devices', {});
@@ -44,6 +51,11 @@ test('each MCP tool call ensures the daemon, then attaches to it', async (t) => 
   assert.equal(first.isError, false, JSON.stringify(first.structuredContent));
   assert.equal(second.isError, false, JSON.stringify(second.structuredContent));
   assert.equal(spawn.mock.calls.length, 1, 'the second call reuses the daemon the first started');
+  assert.equal(spawn.mock.calls[0]?.[2]?.env?.AGENT_DEVICE_HOST_CANARY, 'captured-host');
   assert.deepEqual(daemon.commands(), ['devices', 'devices']);
   assert.equal(capture.mock.calls.length, 2, 'one host capture per tool call');
+  assert.equal(factory.mock.calls.length, 2);
+  for (let i = 0; i < 2; i++) {
+    assert.equal(factory.mock.calls[i]?.[0]?.host, capture.mock.results[i]?.value);
+  }
 });

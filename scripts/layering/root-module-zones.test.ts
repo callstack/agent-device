@@ -48,13 +48,21 @@ test('R5 ranks a root module by its declared zone, so no lower zone reaches the 
       ],
       [
         'src/agent-device-client.ts',
-        "import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';",
+        "import { createRequestGuard } from '../packages/daemon-client/src/daemon-client-transport.ts';",
       ],
       [
         'packages/daemon-client/src/daemon-client-transport.ts',
         'export const createRequestGuard = 1;',
       ],
     ]),
+  );
+
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.file === 'src/agent-device-client.ts' &&
+        edge.target === 'packages/daemon-client/src/daemon-client-transport.ts',
+    ),
   );
 
   // The published SDK entries rank above the typed client they publish; the client zone does not.

@@ -54,8 +54,17 @@ export function stateDirAndPaths(): { stateDir: string; paths: DaemonPaths } {
 export async function startRegisteredHttpDaemon(): Promise<RegisteredHttpDaemon> {
   const { stateDir, paths } = stateDirAndPaths();
   const stub = await startHttpDaemonFixture({ devices: [] });
-  const child = spawnRegisteredDaemonFixture(paths, await registrationFor(stub.port), undefined);
-  await waitForRegisteredDaemonFixture(paths, child);
+  try {
+    const child = spawnRegisteredDaemonFixture(paths, await registrationFor(stub.port), undefined);
+    await waitForRegisteredDaemonFixture(paths, child);
+  } catch (error) {
+    try {
+      await finishRegisteredDaemonFixture(stateDir);
+    } finally {
+      await closeLoopbackServer(stub.server);
+    }
+    throw error;
+  }
   return {
     stateDir,
     paths,
@@ -77,7 +86,13 @@ export async function launchesFreshHttpDaemon(
   paths: DaemonPaths,
 ): Promise<{ stub: HttpDaemonFixture; commands: () => string[]; close: () => Promise<void> }> {
   const stub = await startHttpDaemonFixture({ devices: [] });
-  const fields = await registrationFor(stub.port);
+  let fields: DaemonRegistrationFields;
+  try {
+    fields = await registrationFor(stub.port);
+  } catch (error) {
+    await closeLoopbackServer(stub.server);
+    throw error;
+  }
   spawn.mockImplementation((_command, _args, options) =>
     spawnRegisteredDaemonFixture(paths, fields, options),
   );

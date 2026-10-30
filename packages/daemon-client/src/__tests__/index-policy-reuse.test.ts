@@ -21,7 +21,7 @@ import {
 } from '@agent-device/test-kit';
 import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { sendToDaemon } from '../index.ts';
+import { createDaemonTransport, sendToDaemon } from '../index.ts';
 
 // ADR 0029: a caller that names a daemon policy must not use a daemon that enforces another one.
 
@@ -29,6 +29,28 @@ const mockSpawnDaemon = vi.mocked(runCmdDetachedMonitored);
 
 afterEach(() => {
   mockSpawnDaemon.mockReset();
+});
+
+test('a host-bound transport resolves policy from its host environment and working directory', async (t) => {
+  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  const fixture = await startReusableDaemon({ policyDigest: undefined });
+  try {
+    vi.stubEnv('AGENT_DEVICE_DAEMON_POLICY', '');
+    const host = { env: { AGENT_DEVICE_DAEMON_POLICY: 'policy.json' }, cwd: fixture.stateDir };
+    await assert.rejects(
+      createDaemonTransport(host)({
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { stateDir: fixture.stateDir },
+      }),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'DAEMON_POLICY_MISMATCH',
+    );
+    assert.deepEqual(fixture.seenPaths, ['GET /health']);
+  } finally {
+    await fixture.close();
+  }
 });
 
 test('a caller naming a policy refuses a running daemon without that policy', async (t) => {
