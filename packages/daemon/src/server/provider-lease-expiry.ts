@@ -109,8 +109,9 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 
   const adoptOrphanedLeases = (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void): void => {
+    if (!options.stateDir) return;
     const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE);
-    if (orphaned.size === 0 || !options.stateDir) return;
+    if (orphaned.size === 0) return;
     for (const [leaseId, lease] of orphaned) {
       if (!pendingRecoveryLeases.has(leaseId)) pendingRecoveryLeases.set(leaseId, lease);
     }
@@ -167,10 +168,11 @@ export function createExpiredProviderLeaseReleaser(options: {
   ): Promise<void> => {
     if (inherited) return;
     inherited = true;
+    // Everything in the expired record is durable by definition, which is what the persisted ids track.
     for (const [leaseId, lease] of loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE)) {
       pendingRecoveryLeases.set(leaseId, lease);
-      persistedRecoveryLeaseIds.add(leaseId);
     }
+    for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
     adoptOrphanedLeases(onDiagnostic);
     await retryPending();
   };
