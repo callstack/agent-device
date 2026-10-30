@@ -278,8 +278,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
       if (!pairVisible(p)) continue;
       const hot = focusing && focusPairs.has(i);
       const dim = focusing && !hot;
-      const alpha = dim ? DIM_ALPHA : hot ? 0.9 : edgeAlpha;
-      const g = `${p.display}|${alpha.toFixed(2)}`;
+      const g = `${p.display}|${hot ? 'hot' : dim ? 'dim' : 'base'}`;
       let arr = groups.get(g);
       if (!arr) groups.set(g, (arr = []));
       arr.push(p);
@@ -291,10 +290,10 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
     // any selection — node, zone, or cycle mode — lights up its own edges and dims the rest
     const groups = edgeGroups();
     for (const [g, arr] of groups) {
-      const [kind, alpha] = g.split('|');
+      const [kind, emphasis] = g.split('|');
       c.strokeStyle = KIND_COLORS[kind];
-      c.globalAlpha = Number(alpha);
-      c.lineWidth = (alpha === '0.90' ? 1.7 : 1) / view.k;
+      c.globalAlpha = emphasis === 'hot' ? 0.9 : emphasis === 'dim' ? DIM_ALPHA : edgeAlpha;
+      c.lineWidth = (emphasis === 'hot' ? 1.7 : 1) / view.k;
       c.beginPath();
       for (const p of arr) {
         const s = nodes[p.a],

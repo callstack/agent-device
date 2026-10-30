@@ -49,9 +49,7 @@ export function buildAnalysis({ nodes, raw, zones, zoneColor, hexAlpha, selectNo
         ? `<h2 style="margin-top:12px">Zone cycles</h2>
       <div class="hint">${
         scc.components.length
-          ? scc.components
-              .map((c) => `<div class="hot">${escapeHtml(c.zones.join(' → '))} → …</div>`)
-              .join('')
+          ? scc.components.map((c) => `<div>${escapeHtml(c.zones.join(', '))}</div>`).join('')
           : `none across ${scc.zones} zones (R4 is file-level; this checks zone level)`
       }</div>`
         : '');
@@ -95,7 +93,6 @@ export function buildAnalysis({ nodes, raw, zones, zoneColor, hexAlpha, selectNo
       const zoneRow = e.target.closest('[data-zone]');
       if (zoneRow) {
         const zi = Number(zoneRow.dataset.zone);
-        if (zi < 0) return;
         selectZone(zi);
       }
     });
