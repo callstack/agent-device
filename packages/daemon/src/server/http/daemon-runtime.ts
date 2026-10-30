@@ -861,7 +861,7 @@ async function startDaemonRuntimeOnHost(
     });
     expiredProviderLeaseReleaser.shutdown();
     const ownerClose = await settleWithinBudget(
-      () => deviceRuntimeGateway.shutdown(),
+      () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
       options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
     );
     platformOwners =

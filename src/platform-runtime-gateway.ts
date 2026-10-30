@@ -29,7 +29,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -210,6 +210,16 @@ export function createComposedPlatformRuntimeGateway(options: {
                 try {
                   await owner.shutdown();
                 } catch (error) {
+                  try {
+                    const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+                    emitDiagnostic({
+                      level: 'error',
+                      phase: 'platform_runtime_owner_shutdown_failed',
+                      data: { owner: owner.owner, error: normalizeError(error) },
+                    });
+                  } catch {
+                    // ADR 0010: diagnostics must not replace the owner shutdown failure.
+                  }
                   return { owner: owner.owner, error };
                 }
               },
