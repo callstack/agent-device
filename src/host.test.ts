@@ -4,6 +4,7 @@
 // for `process.exit`, would take the test runner down with it.
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
@@ -359,6 +360,42 @@ test('a host never takes a state directory somebody else holds', async () => {
     });
     // Refusing left the first host untouched: same runtime, same record, still attachable.
     expect(readDaemonStopIdentity(held.paths.infoPath).ownership).toBe('embedded');
+  } finally {
+    await held.host.close();
+    removeStateDir(held.stateDir);
+  }
+});
+
+test('a host refused a held state directory leaves its provider lease records untouched', async () => {
+  const held = await bootHost();
+  // The running host's crash journal, as it would hold a rented device's lease.
+  const journalPath = path.join(held.paths.baseDir, 'live-provider-leases.json');
+  const journal = `${JSON.stringify({
+    version: 1,
+    leases: [
+      {
+        leaseId: 'lease-held',
+        tenantId: 'tenant',
+        runId: 'run',
+        backend: 'ios-instance',
+        leaseProvider: 'limrun',
+        createdAt: 1,
+        heartbeatAt: 1,
+        expiresAt: 2,
+      },
+    ],
+  })}\n`;
+  fs.writeFileSync(journalPath, journal);
+  try {
+    await expect(
+      startAgentDevice({ stateDir: held.stateDir, host: createTestHostEnvironment() }),
+    ).rejects.toMatchObject({ details: { reason: 'daemon_registration_refused' } });
+
+    // Only the registered daemon may read, move or act on the lease records of its state directory.
+    expect(fs.readFileSync(journalPath, 'utf8')).toBe(journal);
+    expect(fs.existsSync(path.join(held.paths.baseDir, 'expired-provider-leases.json'))).toBe(
+      false,
+    );
   } finally {
     await held.host.close();
     removeStateDir(held.stateDir);
