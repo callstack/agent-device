@@ -25,7 +25,7 @@ export type IosTreeNode = {
   role?: string;
   subrole?: string | null;
   selected?: boolean;
-  role_description?: string;
+  role_description?: IosTextAttribute;
   hittable?: boolean;
   traits?: string[];
   pid?: number;
@@ -65,7 +65,7 @@ function mapIosNode(
     selected: readIosNodeSelected(node),
     password: node.subrole === 'AXSecureTextField' ? true : undefined,
     heading: node.traits?.includes('Header') === true ? true : undefined,
-    roleDescription: node.role_description,
+    roleDescription: scalarText(node.role_description),
     hittable: node.hittable,
     depth: options.depth,
     parentIndex: options.parentIndex,
@@ -155,7 +155,7 @@ export function resolveIosAxTreeViewport(
     (Array.isArray(tree) ? tree : [tree]).map(viewportRoot),
   );
   if (evidence?.kind === 'reported') return { kind: 'derived', rect: evidence.rect };
-  if (screen?.width !== undefined && screen.height !== undefined) {
+  if (screen !== undefined && (screen.width !== undefined || screen.height !== undefined)) {
     return isFiniteNumber(screen.width) &&
       isFiniteNumber(screen.height) &&
       screen.width > 0 &&

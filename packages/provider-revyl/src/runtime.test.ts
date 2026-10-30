@@ -22,7 +22,7 @@ afterEach(async () => {
 
 /** Stops the fixture recorded, which is what every lifecycle assertion reads. */
 function stops(fixture: RevylFixtureBackend): string[] {
-  return fixture.paths().filter((path) => path.includes('/stop') || path.includes('/cancel/'));
+  return fixture.paths().filter((path) => path.includes('/stop'));
 }
 
 test('a lease start waits for the worker and the device, and reports the rented device', async () => {

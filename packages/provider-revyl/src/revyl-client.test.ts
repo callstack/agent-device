@@ -107,12 +107,6 @@ test('reads the typed failure one status names, on the route that answered', asy
       call: async (client) => await client.stopDeviceSession('session-1'),
     },
     {
-      status: 410,
-      reason: 'provider-session-gone',
-      code: 'SESSION_NOT_FOUND',
-      call: async (client) => await client.cancelDeviceRun('run-1'),
-    },
-    {
       // The same status on a route that names no session is a request the backend did not route.
       status: 404,
       reason: 'provider-request-failed',
@@ -235,15 +229,6 @@ test('a lifecycle stop that Revyl answers with a refusal is still a refusal', as
   await assert.rejects(
     async () => await unaccepted.stopDeviceSession('session-1'),
     (error: unknown) => error instanceof AppError && error.details?.reason === 'provider-refused',
-  );
-
-  const canceled = clientResponding(() => jsonResponse({ success: false }));
-  await assert.rejects(
-    async () => await canceled.cancelDeviceRun('run-1'),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.details?.reason === 'provider-refused' &&
-      error.details?.operation === 'cancel',
   );
 });
 

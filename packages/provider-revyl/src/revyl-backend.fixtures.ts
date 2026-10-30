@@ -97,11 +97,6 @@ export async function startRevylFixtureBackend(
   let health503Polls = 0;
   /** The platform and session id of the last `start_device`, which is what later answers report. */
   let started: { platform: string; sessionId: string } | undefined;
-  /** The session a stop or a run cancel ends: the id in a session stop, the started run's for a cancel. */
-  const stoppedSessionIn = (url: string): string | undefined =>
-    url.startsWith('/api/v1/execution/device/status/cancel/')
-      ? started?.sessionId
-      : sessionIdIn(url);
   /**
    * The sessions Revyl would hold right now, by id. A session is made when its `start_device` is
    * *answered* — with a start delay, later than the request — and a confirmed `/stop` for that id ends
@@ -140,7 +135,7 @@ export async function startRevylFixtureBackend(
         answered.push(`${method} ${url}`);
         if (response.statusCode !== 200 || !lifecycleAccepted(sent?.body)) return;
         if (url.endsWith('/start_device') && started) openSessions.add(started.sessionId);
-        const stoppedId = stoppedSessionIn(url);
+        const stoppedId = sessionIdIn(url);
         if (stoppedId !== undefined) openSessions.delete(stoppedId);
       });
       const override = overrides.get(`${method} ${url}`);
@@ -181,7 +176,7 @@ export async function startRevylFixtureBackend(
         stop: () => {
           // With `sessionExistsOnceStarted`, a stop that arrives before the start has answered names a
           // session Revyl never made. The caller must not read that 404 as a release it never got.
-          const stopping = stoppedSessionIn(url);
+          const stopping = sessionIdIn(url);
           if (options.sessionExistsOnceStarted && (!stopping || !openSessions.has(stopping))) {
             return { status: 404, body: { detail: 'no such session', error: 'Not Found' } };
           }
@@ -306,11 +301,10 @@ function fixtureRoute(url: string): string {
     return 'action';
   }
   if (isDeviceSessionRoute(url) && url.endsWith('/stop')) return 'stop';
-  if (url.startsWith('/api/v1/execution/device/status/cancel/')) return 'stop';
   return 'unknown';
 }
 
-/** A `/stop` or run cancel ends its session exactly when the client accepts the answer. */
+/** A `/stop` ends its session exactly when the client accepts the answer. */
 function lifecycleAccepted(body: unknown): boolean {
   if (body === null || typeof body !== 'object') return false;
   const verdict = body as { success?: unknown; request_accepted?: unknown };

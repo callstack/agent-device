@@ -9,8 +9,6 @@ import type {
   RevylWorkerActionResponse,
   RevylWorkerConnection,
   RevylWorkerHealth,
-  RevylWorkflowCancelResponse,
-  RevylWorkflowLifecycleResponse,
 } from './revyl-types.ts';
 
 export const REVYL_DEFAULT_BACKEND_URL = 'https://backend.revyl.ai';
@@ -50,7 +48,7 @@ type RevylRequest = Readonly<{
   timeoutMs?: number;
   /**
    * Defaults to true for GET and false for POST. A POST opts in only when Revyl documents it as
-   * idempotent, which `/stop` and `/status/cancel` are; a device action is never replayed.
+   * idempotent, which `/stop` is; a device action is never replayed.
    */
   retry?: boolean;
   /** A device-proxy action carries the agent header; an execution-API call does not. */
@@ -84,8 +82,6 @@ export type RevylClient = Readonly<{
     signal?: AbortSignal,
   ): Promise<RevylWorkerActionResponse>;
   stopDeviceSession(sessionId: string): Promise<RevylDeviceSessionStopResponse>;
-  /** The fallback for a session whose start never returned an id: cancel the run itself. */
-  cancelDeviceRun(workflowRunId: string): Promise<void>;
   /** Cheap enough to run on every `connect`: it authenticates without starting a device. */
   verifyCredentials(signal?: AbortSignal): Promise<void>;
 }>;
@@ -204,15 +200,6 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       assertLifecycleAccepted('stop', response);
       return response;
     },
-    async cancelDeviceRun(workflowRunId) {
-      const response = await json<RevylWorkflowCancelResponse>({
-        method: 'POST',
-        path: `/api/v1/execution/device/status/cancel/${encodeURIComponent(workflowRunId)}`,
-        retry: true,
-        route: 'session',
-      });
-      assertLifecycleAccepted('cancel', response);
-    },
     async verifyCredentials(signal) {
       await json<unknown>({
         method: 'GET',
@@ -319,21 +306,19 @@ function assertSuccess(request: RevylRequest, response: RevylResponse): void {
 }
 
 /**
- * Revyl's `/stop` and `/status/cancel` answers name the verdict they reached, and a 200 that says
- * `success: false` or `request_accepted: false` is a refusal the caller still has to act on: the
- * session is rented either way.
+ * Revyl's `/stop` answer names the verdict it reached, and a 200 that says `success: false` or
+ * `request_accepted: false` is a refusal the caller still has to act on: the session is rented
+ * either way.
  */
 function assertLifecycleAccepted(
-  operation: 'stop' | 'cancel',
-  response: RevylWorkflowLifecycleResponse,
+  operation: 'stop',
+  response: RevylDeviceSessionStopResponse,
 ): void {
   if (response.success === true && (response.request_accepted ?? true) === true) return;
   const message = typeof response.message === 'string' ? response.message : undefined;
   throw new AppError(
     'COMMAND_FAILED',
-    `Revyl did not ${operation === 'stop' ? 'stop the session' : 'cancel the run'}${
-      message === undefined ? '' : `: ${message}`
-    }`,
+    `Revyl did not stop the session${message === undefined ? '' : `: ${message}`}`,
     {
       reason: 'provider-refused',
       operation,

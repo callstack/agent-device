@@ -98,3 +98,12 @@ test('without a usable root the device screen is the viewport, and a bad screen 
     ),
   ).toEqual({ kind: 'derived', rect: { x: 0, y: 0, width: 320, height: 240 } });
 });
+
+test('a screen box with one dimension is invalid, and a null role description is omitted', () => {
+  expect(resolveIosAxTreeViewport([{ type: 'Application' }], { width: 440 })).toEqual({
+    kind: 'missing',
+    reason: 'invalid',
+  });
+  const [node] = flattenIosTree({ type: 'Button', role_description: null });
+  expect(node?.roleDescription).toBeUndefined();
+});

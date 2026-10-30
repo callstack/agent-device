@@ -471,7 +471,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    */
   private async stopRented(target: RevylRentedSession): Promise<string | undefined> {
     try {
-      await stopRevylSession(this.client, target.runId, target.sessionId);
+      await stopRevylSession(this.client, target.sessionId);
       return undefined;
     } catch (error) {
       return isRevylSessionGone(error) ? undefined : errorMessage(error);

@@ -520,6 +520,24 @@ test('an iOS screenshot is rescaled from its native scale to the requested densi
   assert.deepEqual(await readPngSize(path.join(directory, 'native.png')), { width: 6, height: 6 });
 });
 
+test('an iOS screenshot of an interface rotated since health keeps its aspect at the right scale', async () => {
+  // health read a 2x4-point portrait screen; the app has since rotated, so the 3x capture is 12x6.
+  const { interactor } = await liveInteractor('ios', {
+    screen: { width: 2, height: 4 },
+    respond: {
+      'GET /api/v1/execution/device-proxy/run-1/screenshot': () => ({
+        contentType: 'image/png',
+        body: [...PNG.sync.write(new PNG({ width: 12, height: 6 }))],
+      }),
+    },
+  });
+  const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-rotated-'), 'shot.png');
+
+  await interactor.screenshot(outPath);
+
+  assert.deepEqual(await readPngSize(outPath), { width: 4, height: 2 });
+});
+
 test('two captures of one path each keep their own temporary file', async () => {
   // Both writes land in the same directory with the same base name. If they shared a temporary sibling, the
   // first rename would move it away and the second would fail with ENOENT on a file that is no longer there.

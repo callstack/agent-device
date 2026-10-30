@@ -53,17 +53,6 @@ export type RevylDeviceSessionStopResponse = Readonly<{
   message?: string;
 }>;
 
-/** Revyl's answer to cancelling a run: the same verdict spelling, without the acceptance field. */
-export type RevylWorkflowCancelResponse = Readonly<{
-  success?: boolean;
-  message?: string;
-  task_id?: string;
-}>;
-
-/** What either lifecycle answer has to say for the runtime to treat the end as done. */
-export type RevylWorkflowLifecycleResponse = RevylDeviceSessionStopResponse &
-  RevylWorkflowCancelResponse;
-
 /**
  * A device-proxy action result. `install` reports its verdict as `Success`, capitalized, where
  * every other action uses `success`; a refusal arrives in a 200 body rather than a status code.

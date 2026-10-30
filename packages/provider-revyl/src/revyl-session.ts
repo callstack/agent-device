@@ -479,19 +479,11 @@ async function sleepBefore(deadline: RevylDeadline, signal?: AbortSignal): Promi
 }
 
 /**
- * Ends one Revyl session. `/stop` is idempotent, so a repeat release is safe, and a session with no
- * run to route to is ended by its session id — the same pair of ends Revyl's own clients take.
+ * Ends one Revyl session by the id this runtime issued for it. `/stop` is idempotent, so a repeat
+ * release is safe; every rented session carries that id, so no run-level cancel is needed.
  */
-export async function stopRevylSession(
-  client: RevylClient,
-  runId: string | undefined,
-  sessionId: string | undefined,
-): Promise<void> {
-  if (sessionId) {
-    await client.stopDeviceSession(sessionId);
-    return;
-  }
-  if (runId) await client.cancelDeviceRun(runId);
+export async function stopRevylSession(client: RevylClient, sessionId: string): Promise<void> {
+  await client.stopDeviceSession(sessionId);
 }
 
 function readRevylScreenSize(health: RevylWorkerHealth): RevylScreenSize | undefined {

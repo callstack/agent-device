@@ -369,7 +369,7 @@ export function createRevylInteractor(session: RevylSession, signal?: AbortSigna
 /** Rescales an iOS capture from the density its point size implies to the one the caller asked for. */
 async function normalizeRevylIosDensity(
   file: string,
-  screen: { width: number } | undefined,
+  screen: { width: number; height: number } | undefined,
   pixelDensity: number | undefined,
 ): Promise<void> {
   // The host reports the requested density for every iOS simulator capture, so an image whose source
@@ -388,7 +388,9 @@ async function normalizeRevylIosDensity(
       import('@agent-device/capture-kit/screenshot-density'),
     ]);
   const size = await readPngSize(file);
-  const target = computeDensityScaledScreenshotSize(size, size.width / screen.width, pixelDensity);
+  // The longer sides match whichever way the app has rotated its interface since `health` was read.
+  const sourceDensity = Math.max(size.width, size.height) / Math.max(screen.width, screen.height);
+  const target = computeDensityScaledScreenshotSize(size, sourceDensity, pixelDensity);
   if (target) await resizePngFile(file, target.width, target.height);
 }
 
