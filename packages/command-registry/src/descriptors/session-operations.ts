@@ -255,10 +255,18 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'install',
     ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+    daemon: {
+      ...DEPLOY_APP_COMMAND_DESCRIPTOR.daemon,
+      androidAvdSelection: 'include-stopped',
+    },
   },
   {
     name: 'reinstall',
     ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+    daemon: {
+      ...DEPLOY_APP_COMMAND_DESCRIPTOR.daemon,
+      androidAvdSelection: 'include-stopped',
+    },
   },
   {
     name: 'uninstall',
@@ -283,7 +291,11 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
     },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
-    daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
+    daemon: {
+      route: 'session',
+      refFrameEffect: 'may-invalidate',
+      androidAvdSelection: 'include-stopped',
+    },
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
     timeoutPolicy: { ...INSTALL_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
     batchable: false,

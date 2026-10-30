@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
@@ -145,7 +146,10 @@ async function resolveReplayDeviceLock(req: DaemonRequest, env: EnvMap) {
 
 function resolveExplicitDeviceLock(req: DaemonRequest, env: EnvMap) {
   return hasDeviceSelectionInput(req.flags)
-    ? { flags: req.flags ?? {}, options: { env } }
+    ? {
+        flags: req.flags ?? {},
+        options: { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) },
+      }
     : undefined;
 }
 

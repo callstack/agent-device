@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../core/daemon-command-registry.ts';
 import { restrictRemoteHostInputs } from './remote-host-input-policy.ts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -152,7 +153,13 @@ async function resolveBoundedClaimDevice(
   }
   if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
   if (req.command === 'install_source' && session) return session.device;
-  const params = { session, flags: req.flags, env, platformServices };
+  const params = {
+    session,
+    flags: req.flags,
+    env,
+    platformServices,
+    androidAvdSelection: resolveCommandAndroidAvdSelection(req.command),
+  };
   if (req.command === 'boot') return (await resolveBootCommandSelection(params)).device;
   const resolve = req.command === 'shutdown' ? resolvePowerCommandDevice : resolveCommandDevice;
   return await resolve(params);

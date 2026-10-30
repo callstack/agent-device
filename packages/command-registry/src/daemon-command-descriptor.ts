@@ -1,3 +1,4 @@
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { DispatchedCommand } from '@agent-device/contracts/command';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 
@@ -45,6 +46,7 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   appLease?: 'allowed';
   sessionExecutionLockExempt?: boolean;
   selectorValidationExempt?: boolean;
+  androidAvdSelection?: DeviceInventoryRequest['androidAvdSelection'];
   replayScopedAction?: boolean;
   allowInvalidRecording?: boolean;
   /**

@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -167,7 +168,7 @@ async function resolveInstallDevice(
     session,
     flags,
     env,
-    androidAvdSelection: 'include-stopped',
+    androidAvdSelection: resolveCommandAndroidAvdSelection('install_source'),
     platformServices,
   });
 }

@@ -1,3 +1,4 @@
+import { resolveCommandAndroidAvdSelection } from '../../core/daemon-command-registry.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
@@ -87,7 +88,7 @@ export async function handleAppDeploymentCommand(params: {
       session,
       flags,
       env: sessionStore.host.env,
-      androidAvdSelection: 'include-stopped',
+      androidAvdSelection: resolveCommandAndroidAvdSelection(command),
       platformServices: params.platformServices,
     });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);

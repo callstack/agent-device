@@ -70,6 +70,12 @@ export function isAppLeaseAllowed(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.appLease === 'allowed';
 }
 
+export function resolveCommandAndroidAvdSelection(
+  command: string,
+): DaemonCommandDescriptor['androidAvdSelection'] {
+  return getDaemonCommandDescriptor(command)?.androidAvdSelection;
+}
+
 export function shouldValidateSessionSelector(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.selectorValidationExempt !== true;
 }

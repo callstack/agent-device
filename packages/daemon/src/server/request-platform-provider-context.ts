@@ -6,7 +6,10 @@ import {
   hasExplicitDeviceSelector,
 } from '../core/device/device-selector-intent.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
-import { resolveProviderDeviceResolutionIntent } from '../core/daemon-command-registry.ts';
+import {
+  resolveCommandAndroidAvdSelection,
+  resolveProviderDeviceResolutionIntent,
+} from '../core/daemon-command-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 
@@ -82,6 +85,6 @@ async function resolveProviderTargetDevice(
   const options =
     req.command === 'open'
       ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env, req.flags?.surface)
-      : undefined;
+      : { env, androidAvdSelection: resolveCommandAndroidAvdSelection(req.command) };
   return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
 }
