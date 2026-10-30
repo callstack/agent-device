@@ -42,20 +42,18 @@ async function createRuntime(host: ProviderPluginHost): Promise<RevylSetupResult
  * fingerprints.
  */
 function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
+  // Each option replaces its own variable and nothing else: an `apiUrl` with no `apiKey` still has
+  // the key read from the environment, and a `apiKey` with no `apiUrl` still reads the URL there.
+  const overridden: Record<string, string> = {};
+  if (options.apiKey !== undefined) overridden[REVYL_API_KEY_VARIABLE] = options.apiKey;
+  if (options.apiUrl !== undefined) overridden[REVYL_API_URL_VARIABLE] = options.apiUrl;
   const withCredentials = (host: ProviderPluginHost): ProviderPluginHost =>
-    options.apiKey
-      ? {
-          ...host,
-          env: {
-            ...host.env,
-            [REVYL_API_KEY_VARIABLE]: options.apiKey,
-            ...(options.apiUrl ? { [REVYL_API_URL_VARIABLE]: options.apiUrl } : {}),
-          },
-        }
-      : host;
+    Object.keys(overridden).length === 0 ? host : { ...host, env: { ...host.env, ...overridden } };
+  // Only a variable this plugin still reads from the environment is declared: one the options carry
+  // is not part of what the daemon fingerprints.
   const environmentVariables = [
-    ...(options.apiKey ? [] : [REVYL_API_KEY_VARIABLE]),
-    ...(options.apiKey || options.apiUrl ? [] : [REVYL_API_URL_VARIABLE]),
+    ...(options.apiKey === undefined ? [REVYL_API_KEY_VARIABLE] : []),
+    ...(options.apiUrl === undefined ? [REVYL_API_URL_VARIABLE] : []),
   ];
   return {
     apiVersion: 2,

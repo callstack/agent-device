@@ -26,6 +26,9 @@ export function resolveRevylAppUrl(context?: LeaseLifecycleContext): string | un
  * `--provider-os-version` the OS version. A profile that names neither lets Revyl choose
  * from its own pool. `fallback` carries what the runtime itself was built with, which an embedder
  * sets for every session it rents.
+ *
+ * Both values go through {@link revylTextFlag}, which is the same canonicalizer connect stores them
+ * with, so the persisted profile and the `start_device` body cannot differ by whitespace.
  */
 export function resolveRevylDeviceSelection(
   context: LeaseLifecycleContext | undefined,
@@ -38,10 +41,16 @@ export function resolveRevylDeviceSelection(
   };
 }
 
+/** One text selection a profile or flag carries: trimmed, and absent when it is blank. */
+export function revylTextFlag(value: unknown): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || undefined;
+}
+
 function optionalFlag(
   value: unknown,
   key: 'deviceModel' | 'osVersion',
 ): Readonly<{ [Name in 'deviceModel' | 'osVersion']?: string }> {
-  const text = typeof value === 'string' ? value.trim() : '';
-  return text ? { [key]: text } : {};
+  const text = revylTextFlag(value);
+  return text === undefined ? {} : { [key]: text };
 }

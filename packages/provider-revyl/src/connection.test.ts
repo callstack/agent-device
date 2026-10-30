@@ -40,15 +40,41 @@ test('verify authenticates with the cheap call and reports the profile without r
   assert.deepEqual(fixture.paths(), ['GET /api/v1/entity/users/get_user_uuid']);
   assert.equal(fixture.requests[0]?.authorization, 'Bearer test-key');
   assert.equal(result.provider, 'revyl');
+  assert.equal(
+    result.verificationMessage,
+    'Credentials verified; Revyl picks the device when the session starts.',
+  );
+  // The literals are asserted so a reworded report fails the test instead of being compared with
+  // itself.
   assert.deepEqual(result.device, {
     status: 'configured',
     name: 'iPhone 16',
     platform: 'ios',
     osVersion: '18.0',
-    message: result.device.message,
+    message:
+      'Revyl assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.',
   });
-  assert.equal(result.app?.status, 'configured');
-  assert.equal(result.app?.reference, 'https://apps.test/app.zip');
+  assert.deepEqual(result.app, {
+    status: 'configured',
+    reference: 'https://apps.test/app.zip',
+    message: 'Public app URL configured; Revyl fetches and installs it when the session starts.',
+  });
+});
+
+test('verify reports a profile that names no device or OS version', async () => {
+  const fixture = await backend();
+  const result = await verifyRevylProfile(
+    { apiKey: 'test-key', apiUrl: fixture.backendUrl },
+    '0.0.0-test',
+    'android',
+    { appUrl: 'https://apps.test/app.apk' },
+  );
+  assert.deepEqual(result.device, {
+    status: 'configured',
+    platform: 'android',
+    message:
+      'Revyl assigns a device of this platform when the session starts; a model or OS version it has no device for is reported then.',
+  });
 });
 
 test('verify reports a rejected key as an unauthorized error before checking the app', async () => {
@@ -61,6 +87,8 @@ test('verify reports a rejected key as an unauthorized error before checking the
     }),
     (error: unknown) => error instanceof AppError && error.code === 'UNAUTHORIZED',
   );
+  // The app is only looked at once the key is good, so a bad key never reaches that check.
+  assert.deepEqual(fixture.paths(), ['GET /api/v1/entity/users/get_user_uuid']);
 });
 
 test('verify refuses an app source Revyl cannot fetch', async () => {
@@ -75,6 +103,81 @@ test('verify refuses an app source Revyl cannot fetch', async () => {
       appUrl,
     );
   }
+});
+
+test('verify refuses an app URL only the caller own network can serve', async () => {
+  const fixture = await backend();
+  // Revyl fetches the build from its own network, so these can never be read there.
+  for (const appUrl of [
+    'https://localhost:8443/app.zip',
+    'https://127.0.0.1/app.zip',
+    'https://10.1.2.3/app.zip',
+    'https://192.168.0.7/app.zip',
+    'https://172.16.0.7/app.zip',
+    'https://169.254.1.1/app.zip',
+    'https://[::1]/app.zip',
+    'https://builder.local/app.zip',
+    'https://vpn.internal/app.zip',
+    'https://user:pass@apps.test/app.zip',
+  ]) {
+    await assert.rejects(
+      verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
+        appUrl,
+      }),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'invalid_provider_app',
+      appUrl,
+    );
+  }
+  // A publicly reachable host is accepted, including one in a range that only looks private.
+  for (const appUrl of ['https://100.128.0.1/app.zip', 'https://172.32.0.1/app.zip']) {
+    await verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
+      appUrl,
+    });
+  }
+});
+
+test('verify refuses a profile flag Revyl has no field for before it rents anything', async () => {
+  const fixture = await backend();
+  const host = {
+    env: { REVYL_API_KEY: 'test-key', REVYL_API_URL: fixture.backendUrl },
+    clientVersion: '0.0.0-test',
+    createError: (code: string, message: string) => new AppError(code as 'INVALID_ARGS', message),
+  } as never;
+  const connection = createRevylConnection(host);
+
+  await assert.rejects(
+    async () =>
+      await connection.verify({
+        flags: {
+          platform: 'ios',
+          providerApp: 'https://apps.test/app.zip',
+          providerTimezone: 'UTC',
+        } as CliFlags,
+      }),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+  // The refusal is cheap: no request reaches the backend for a profile that cannot be honored.
+  assert.deepEqual(fixture.paths(), []);
+});
+
+test('verify canonicalizes the device and OS version it reports', async () => {
+  const fixture = await backend();
+  const host = {
+    env: { REVYL_API_KEY: 'test-key', REVYL_API_URL: fixture.backendUrl },
+    clientVersion: '0.0.0-test',
+    createError: (code: string, message: string) => new AppError(code as 'INVALID_ARGS', message),
+  } as never;
+  const result = await createRevylConnection(host).verify({
+    flags: {
+      platform: 'ios',
+      providerApp: 'https://apps.test/app.zip',
+      device: '  iPhone 16  ',
+      providerOsVersion: '  ',
+    } as CliFlags,
+  });
+  assert.equal(result.device.name, 'iPhone 16');
+  assert.equal('osVersion' in result.device, false, 'a blank OS version is no OS version');
 });
 
 test('resolve keeps the device, OS version and app URL and refuses a non-mobile platform', () => {
@@ -111,7 +214,14 @@ test('resolve keeps the device, OS version and app URL and refuses a non-mobile 
 
 test('resolve refuses an app that is not a public https URL', () => {
   const connection = createRevylConnection(HOST);
-  for (const providerApp of [undefined, './build/app.ipa', 'https://user@apps.test/app.zip']) {
+  for (const providerApp of [
+    undefined,
+    './build/app.ipa',
+    'https://user@apps.test/app.zip',
+    'https://localhost:8443/app.zip',
+    'https://192.168.0.7/app.zip',
+    'http://apps.test/app.zip',
+  ]) {
     assert.throws(
       () =>
         connection.resolve({
