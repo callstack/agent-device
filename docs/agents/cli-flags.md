@@ -6,21 +6,21 @@ Pass a flag only through layers that consume it:
    Add its definition to the owner in `packages/command-registry/src/flag-definitions-*.ts`.
    Add it to the applicable group in `packages/command-registry/src/flag-groups.ts`, for example `SNAPSHOT_FLAGS`.
    Update the command family metadata/schema that exposes the flag.
-   To find the owner, run `rg -n "<command>|helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.
-   For schema-only CLI commands, use `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `src/commands/schema/command-overrides.ts`.
+   To find the owner, run `rg -n "<command>|helpDescription|summary|supportedFlags|allowedFlags" packages/command-surface/src src/commands src/cli/parser`.
+   For schema-only CLI commands, use `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `packages/command-surface/src/schema/command-overrides.ts`.
    Each flag declaration requires `projectConfig` and `recorded`.
    `projectConfig` permits a project `agent-device.json` to set the flag.
    `recorded` makes the session recorder copy it into `SessionAction.flags`.
    Compilation enforces completeness, without an allowlist. A declaration without either field does not compile.
    Only when repository control is safe, set `projectConfig: true`. Otherwise, a new flag is operator-only.
    Only when a `.ad` recording must carry the flag, set `recorded: true`.
-2. In `src/commands/cli-grammar/*`, read the CLI flag into command input.
+2. In `packages/command-surface/src/cli-grammar/*`, read the CLI flag into command input.
 3. If the flag affects daemon execution, write the input into the daemon request.
-   Use `src/commands/command-projection.ts` and the command-family projection helpers.
+   Use `packages/command-surface/src/index.ts` (`prepareDaemonCommandRequest`) and the command-family projection helpers.
 4. If Node.js or MCP should expose structured input, add a field to the command's field map. `defineFieldCommandMetadata` generates `inputSchema` and the audience.
-   For a credential, its destination endpoint, or operator infrastructure, declare the input key with `operatorField(...)` (`src/commands/command-input.ts`).
+   For a credential, its destination endpoint, or operator infrastructure, declare the input key with `operatorField(...)` (`packages/command-surface/src/command-input.ts`).
    MCP and AI SDK tool schemas thus exclude parameters for the model to write that input.
-   For a shared common key, declare the same audience in its `src/commands/common-input-fields.ts` row instead.
+   For a shared common key, declare the same audience in its `packages/command-surface/src/common-input-fields.ts` row instead.
 5. If Node.js exposes the option, update the public typed client option in `src/client/client-types.ts`.
 6. If the request still needs public-to-internal translation, update daemon flag normalization in `src/client/client-normalizers.ts`.
 7. If the field enters platform dispatch, add it to `packages/daemon/src/core/context.ts` and `packages/daemon/src/core/dispatch-context.ts`.
@@ -36,7 +36,7 @@ An example is `find --first`.
 ## Where CLI help and schema live
 
 - Long help prose is in `src/commands/schema/cli-help.ts`.
-  CLI input readers are in `src/commands/cli-grammar/`.
+  CLI input readers are in `packages/command-surface/src/cli-grammar/`.
 - `src/commands/schema/usage.ts` generates the synopsis `[label]` flag tail from `allowedFlags`.
   A new option reaches `--help` without a synopsis edit.
   Only when the command synopsis names fewer options, declare `usageFlags`.
@@ -52,4 +52,4 @@ An example is `find --first`.
   The parser rejects only options in rows. If it rejected `--json`, it would reject the command.
 - Keep command-specific usage/flag metadata with the command family metadata that owns the command.
 - Keep argument parsing in `src/cli/parser/`. Keep help rendering in `src/commands/schema/`.
-  Command schema metadata derives from command metadata, family declarations, and the schema-only merge in `src/commands/schema/command-overrides.ts`.
+  Command schema metadata derives from command metadata, family declarations, and the schema-only merge in `packages/command-surface/src/schema/command-overrides.ts`.

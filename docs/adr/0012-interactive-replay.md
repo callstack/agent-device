@@ -1284,7 +1284,7 @@ After bounded expiry, the tombstone disappears and the key is free.
 > The flags retain their different scopes:
 >
 > - Common `--no-record` belongs to `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`.
->   Every recordable reader forwards it with `noRecordInputFromFlags` (`src/commands/cli-grammar/common.ts`, #1304).
+>   Every recordable reader forwards it with `noRecordInputFromFlags` (`packages/command-surface/src/cli-grammar/common.ts`, #1304).
 > - Scoped `--record` is not common.
 >   Only `snapshot`/`get`/`is` and dynamically validated `find` permit it.
 >   Only their readers use `observationRecordInputFromFlags`.
@@ -1295,10 +1295,10 @@ After bounded expiry, the tombstone disappears and the key is free.
 > That fail-open is what the split prevents.
 > Both flags then use the ordinary typed path:
 >
-> - Node forwards them through `buildRequestFlags`/`buildFlags` in `src/commands/command-flags.ts`.
+> - Node forwards them through `buildRequestFlags`/`buildFlags` in `packages/command-surface/src/command-flags.ts`.
 >   Sources are `InternalRequestOptions`, `GetOptions`, `IsOptions`, `FindOptions`, and `CaptureSnapshotOptions`.
 > - MCP exposes `record`/`noRecord` on `get`/`is`/`find`/`snapshot` tools.
->   `src/commands/interaction/metadata.ts` and `src/commands/capture/snapshot.ts` use `CommandMetadata.inputSchema` plus `readMetadataCommandFlags`, as for other typed fields.
+>   `packages/command-surface/src/interaction/metadata.ts` and `packages/command-surface/src/capture/snapshot.ts` use `CommandMetadata.inputSchema` plus `readMetadataCommandFlags`, as for other typed fields.
 >
 > There is no separate per-surface recording contract.
 >

@@ -11,7 +11,7 @@ Amended by [ADR 0019](0019-request-bound-platform-runtime.md): device capability
 - Declare each command once in the descriptor registry. Compose the declaration from facets owned by their domains. No second table declares the same traits.
 - Derive every shared consumer table as a pure projection. Do not copy a derived classification back into a consumer as a hand-authored set.
 - Keep a narrow fact on the descriptor when several projections consume it: `timeoutPolicy`, `recordingEffect`, `postActionObservation`.
-- Keep grammar, decoding, executable surface metadata, and client invocation in `src/commands/**`. Keep shared option and result data in domain contracts. Keep the client facade in the client layer.
+- Keep grammar, decoding, executable surface metadata, request projection, and client invocation in `@agent-device/command-surface`. Keep CLI output formatters, help, and progress in `src/commands/`. A command facet declares no formatter. Keep shared option and result data in domain contracts. The package declares the client port once. The client layer re-exports it.
 - Declare daemon route and request policy in the separately typed `daemon` facet. Derive the daemon registry from it. Expose request-policy predicates only through the daemon registry.
 - Request modules consume named predicates. Handler modules own execution logic only. Neither recreates command sets or coverage tables.
 - Public grammar, client options, MCP schemas, help, and capability contracts must not derive from daemon-only traits. A diagnostic display, such as `command explain`, may show them.
@@ -32,7 +32,11 @@ Keep a narrow fact on the descriptor when more than one projection consumes it. 
 
 ### Domain-owned surfaces
 
-Keep CLI grammar, input decoding, executable surface metadata, and client-backed invocation in `src/commands/**`. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: both surfaces need that vocabulary, so a shared shape sits below both. A type-only dependency on the `AgentDeviceClient` facade from a command module is an accepted ratchet-bounded position, not shared data that must move to contracts. The facade declares its signatures in that vocabulary. Add a type projection only when it removes real duplication across consumers.
+Keep CLI grammar, input decoding, executable surface metadata, request projection, and client-backed invocation in `@agent-device/command-surface`. The package exposes one entry, `.`, that names its exports. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: both surfaces need that vocabulary, so a shared shape sits below both.
+
+The package declares the client port, `AgentDeviceClient` and `AgentDeviceCommandClient`, once, in contracts and command-registry vocabulary. The command definitions invoke that port. `src/client/client-types.ts` re-exports exactly those two names, so the published SDK types do not change and the package has no edge into the client layer. Add a type projection only when it removes real duplication across consumers.
+
+Keep CLI presentation in `src/commands/`: output formatters, the warning dispatcher, help, and progress. A formatter is keyed by `CommandName` in `src/commands/cli-output.ts`, and a duplicate key throws when the table builds. The package reaches no root module, so request projection and the SDK load no presentation.
 
 The client `invoke` seam is cross-process; the daemon `execute` seam runs the platform handler inside the daemon process. The process boundary is never collapsed.
 
@@ -74,4 +78,5 @@ About ten hand-maintained tables once repeated command identity, route membershi
 
 ## Decision history
 
+- 2026-10-30 — the command declaration surface moved to `@agent-device/command-surface`. Formatters left the facets for a `CommandName`-keyed table in `src/commands/cli-output.ts`, so the SDK no longer evaluates CLI presentation. The client port is declared in the package and re-exported by the client layer.
 - 2026-09-05 — [#2294](https://github.com/callstack/agent-device/pull/2294) removed the navigation-only phantom-type projection: direct signatures were simpler and preserved the published contract.
