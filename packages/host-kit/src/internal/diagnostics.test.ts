@@ -267,3 +267,34 @@ test.each(['toJSON', 'getter'] as const)(
     });
   },
 );
+
+test.each([false, true])(
+  'invalid data preserves following diagnostic events with debug=%s',
+  async (debug) => {
+    const logPath = path.join(mkdtempForTestSync('agent-device-diag-following-'), 'events.ndjson');
+    await withDiagnosticsScope({ debug, logPath }, async () => {
+      emitDiagnostic({
+        phase: 'bad_metadata',
+        data: {
+          toJSON: () => {
+            throw new Error('serialization hook failed');
+          },
+        },
+      });
+      emitDiagnostic({ phase: 'request_failed', data: { reason: 'original-refusal' } });
+      assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+    });
+    const rows = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      rows.map(({ phase, data }) => ({ phase, data })),
+      [
+        { phase: 'bad_metadata', data: { reason: 'diagnostic-data-unserializable' } },
+        { phase: 'request_failed', data: { reason: 'original-refusal' } },
+      ],
+    );
+  },
+);
