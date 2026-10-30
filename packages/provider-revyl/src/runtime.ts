@@ -170,9 +170,11 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     return this.sessionForDevice(device) !== undefined;
   }
 
-  getInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor | undefined {
+  getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined {
     const session = this.sessionForDevice(device);
-    return session ? createRevylInteractor(session) : undefined;
+    // The runner's signal is the command's cancellation: paced work (a delayed fill) stops on it
+    // instead of typing on after the caller hung up.
+    return session ? createRevylInteractor(session, runner?.signal) : undefined;
   }
 
   /**
