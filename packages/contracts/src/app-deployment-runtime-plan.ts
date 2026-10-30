@@ -1,12 +1,13 @@
 import { defineUse } from './platform-runtime-operations.ts';
 
-export const deployAppUse = defineUse({ required: ['deployApp'] });
+export const readyDeployAppUse = defineUse({ required: ['ensureReady', 'deployApp'] });
 
 export const uninstallAppUse = defineUse({ required: ['uninstallApp'] });
 
 /**
  * Source installs retain their readiness precondition in the same request binding as
- * materialization and deployment, so the handler has one admission and one bind.
+ * materialization and deployment. If readiness changes the device identity, the handler must
+ * admit and bind that device before deployment.
  */
 export const readyMaterializeAndDeployAppUse = defineUse({
   required: ['ensureReady', 'materializeAppSource', 'deployMaterializedApp'],

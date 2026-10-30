@@ -20,7 +20,7 @@ import {
 } from '../descriptor-traits.ts';
 import { INSTALL_TIMEOUT_POLICY } from '../descriptor-timeout-policies.ts';
 import {
-  deployAppUse,
+  readyDeployAppUse,
   readyMaterializeAndDeployAppUse,
   readySendPushNotificationUse,
   uninstallAppUse,
@@ -50,7 +50,7 @@ const DEPLOY_APP_COMMAND_DESCRIPTOR = {
   recordsSessionAction: true,
   recordingEffect: 'mutates-app',
   daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
-  platformExecution: { kind: 'device-runtime', use: deployAppUse },
+  platformExecution: { kind: 'device-runtime', use: readyDeployAppUse },
   timeoutPolicy: INSTALL_TIMEOUT_POLICY,
   batchable: true,
   compositeResource: 'none',

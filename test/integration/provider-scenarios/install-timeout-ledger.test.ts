@@ -1,3 +1,4 @@
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import * as inventoryContext from '@agent-device/device-selection/device-inventory-context';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
@@ -70,6 +71,7 @@ class InstallLedger {
 type InstallLedgerScenario = ClosableProviderScenarioResource &
   Readonly<{
     appPath: string;
+    claimsDir?: string;
     daemon: ProviderScenarioHarness;
     ledger: InstallLedger;
     selection: Readonly<
@@ -100,6 +102,32 @@ for (const route of [
       });
     });
   }
+}
+
+for (const command of ['install', 'reinstall', 'install_source'] as const) {
+  test(`${command} admits the discovered emulator before deployment`, async () => {
+    await withInstallLedgerScenario('Android APK', async (scenario) => {
+      assert.ok(scenario.claimsDir);
+      await acquireDeviceClaim({
+        env: { AGENT_DEVICE_CLAIMS_DIR: scenario.claimsDir },
+        device: PROVIDER_SCENARIO_ANDROID,
+        session: 'foreign-session',
+        workspace: '/foreign-worktree',
+        stateDir: path.join(path.dirname(scenario.daemon.stateDir), 'foreign-state'),
+        reconcileOrphanedDeviceClaim: async () => ({
+          status: 'retained',
+          reason: 'live-test-owner',
+        }),
+      });
+      await assert.rejects(runInstallCommand(scenario, command), { code: 'DEVICE_IN_USE' });
+      assert.ok(scenario.ledger.calls.some((call) => call.args.includes('sys.boot_completed')));
+      assert.ok(
+        !scenario.ledger.calls.some(
+          (call) => call.args.includes('install') || call.args.includes('uninstall'),
+        ),
+      );
+    });
+  });
 }
 
 async function withInstallLedgerScenario<T>(
@@ -387,13 +415,19 @@ async function createAndroidScenario(
   vi.spyOn(inventoryContext, 'listLocalDeviceInventory').mockImplementation(inventory);
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: inventory,
-    env: { PATH: tempRoot, ANDROID_HOME: tempRoot, ANDROID_SDK_ROOT: tempRoot },
+    env: {
+      PATH: tempRoot,
+      ANDROID_HOME: tempRoot,
+      ANDROID_SDK_ROOT: tempRoot,
+      AGENT_DEVICE_CLAIMS_DIR: path.join(tempRoot, 'claims'),
+    },
   });
   return {
     appPath,
     daemon,
     ledger,
     selection: { platform: 'android', device: device.name },
+    claimsDir: path.join(tempRoot, 'claims'),
     close: async () => {
       await daemon.close();
     },

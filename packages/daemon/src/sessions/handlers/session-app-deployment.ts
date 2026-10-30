@@ -5,7 +5,7 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
 import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment-runtime';
 import {
-  deployAppUse,
+  readyDeployAppUse,
   readySendPushNotificationUse,
   uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
@@ -82,17 +82,24 @@ export async function handleAppDeploymentCommand(params: {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
 
-    const device = await resolveCommandDevice({
+    let device = await resolveCommandDevice({
       session,
       flags,
       env: sessionStore.host.env,
       platformServices: params.platformServices,
     });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
-    const unsupported = unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
+    const unsupported =
+      unavailableRuntimeOperationResponse(command, facts.operations.ensureReady) ??
+      unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
     if (unsupported) return unsupported;
 
-    const runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
+    let runtime = await requireRuntimeBinding(params.bindDevice)(device, readyDeployAppUse);
+    const ready = await runtime.operations.ensureReady({});
+    if (ready.id !== device.id) {
+      runtime = await requireRuntimeBinding(params.bindDevice)(ready, readyDeployAppUse);
+    }
+    device = ready;
     // ADR 0014: deployment can replace the visible surface. Do this immediately before the
     // bound operation so an admission failure never discards a still-valid reference frame.
     if (ref) expireRefFrame(sessionStore.requireCurrent(ref));

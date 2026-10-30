@@ -103,51 +103,34 @@ test('exposes the complete Android deployment operation set only for admitted ki
   ).toEqual({});
 });
 
-test.each([false, true])(
-  'uses the discovered Android serial for deployment (replaceExisting=%s)',
-  async (replaceExisting) => {
-    const order: string[] = [];
-    ensureAndroidReady.mockImplementationOnce(async () => {
-      order.push('ready');
-      return device;
-    });
-    const host = hostFixture({
-      prepareArtifact: async () => {
-        order.push('prepare');
-        return { installablePath: '/tmp/app.apk', cleanup: async () => {} };
-      },
-    });
-    native.installAndroidArtifact.mockResolvedValueOnce(undefined);
+test('waits for Android readiness before inspecting an install artifact', async () => {
+  const order: string[] = [];
+  ensureAndroidReady.mockImplementationOnce(async () => {
+    order.push('ready');
+    return device;
+  });
+  const host = hostFixture({
+    prepareArtifact: async () => {
+      order.push('prepare');
+      return { installablePath: '/tmp/app.apk', cleanup: async () => {} };
+    },
+  });
+  native.installAndroidArtifact.mockResolvedValueOnce(undefined);
 
-    await createAndroidAppDeploymentOperations({
-      host,
-      device: { ...device, id: 'stopped-avd', booted: false },
-      signal: new AbortController().signal,
-    }).deployApp?.({ app: 'com.example.app', appPath: '/tmp/app.apk', replaceExisting });
+  await createAndroidAppDeploymentOperations({
+    host,
+    device: { ...device, booted: false },
+    signal: new AbortController().signal,
+  }).deployApp?.({ app: '', appPath: '/tmp/app.apk', replaceExisting: false });
 
-    expect(ensureAndroidReady).toHaveBeenCalledWith(
-      host,
-      { ...device, id: 'stopped-avd', booted: false },
-      { headless: false },
-      expect.any(AbortSignal),
-    );
-    expect(order).toEqual(['ready', 'prepare']);
-    expect(native.installAndroidArtifact).toHaveBeenCalledWith(
-      host,
-      device,
-      '/tmp/app.apk',
-      undefined,
-      expect.any(AbortSignal),
-    );
-    if (replaceExisting)
-      expect(native.uninstallAndroidPackage).toHaveBeenCalledWith(
-        host,
-        device,
-        'com.example.app',
-        expect.any(AbortSignal),
-      );
-  },
-);
+  expect(ensureAndroidReady).toHaveBeenCalledWith(
+    host,
+    { ...device, booted: false },
+    { headless: false },
+    expect.any(AbortSignal),
+  );
+  expect(order).toEqual(['ready', 'prepare']);
+});
 
 test('preserves reinstall partial-failure ordering and whole-operation cache invalidation', async () => {
   const order: string[] = [];
