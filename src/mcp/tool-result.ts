@@ -1,6 +1,5 @@
 import { serializeDevice } from '../commands/output/result-serialization.ts';
-import type { CommandName } from '../commands/command-metadata.ts';
-import type { CommandExecutionResult } from '../commands/command-surface.ts';
+import type { CommandExecutionResult, CommandName } from '@agent-device/command-surface';
 
 type CollectionCommandName = {
   [Name in CommandName]: CommandExecutionResult<Name> extends readonly unknown[] ? Name : never;

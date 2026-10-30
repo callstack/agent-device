@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCommandWithOutput } from '../../../src/commands/cli-runner.ts';
-import type { CommandName } from '../../../src/commands/command-metadata.ts';
+import type { CommandName } from '@agent-device/command-surface';
 import { parseArgs } from '../../../src/cli/parser/args.ts';
 import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';

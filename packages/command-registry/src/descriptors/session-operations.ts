@@ -44,7 +44,9 @@ import {
 
 const DEPLOY_APP_COMMAND_DESCRIPTOR = {
   deviceClaimPolicy: 'transient-exclusive',
-  ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
+  ...(ownerFilesEnabled
+    ? { ownerFiles: ['packages/command-surface/src/management/install.ts'] as const }
+    : {}),
   catalog: { group: 'public' },
   frameworkTier: 'extended',
   recordsSessionAction: true,
@@ -60,7 +62,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'perf',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/perf/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/perf/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: true,
@@ -78,7 +82,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'logs',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/observability/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -95,7 +101,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'events',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/observability/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -115,7 +123,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'network',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/observability/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -132,7 +142,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'audio',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/observability/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/observability/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -149,7 +161,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'replay',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/replay/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -170,7 +184,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'test',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/replay/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/replay/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -214,7 +230,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'clipboard',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R55 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -234,7 +252,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'keyboard',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R46 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -325,7 +345,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'push',
     deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/push.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: true,
@@ -339,7 +361,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'trigger-app-event',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/push.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/push.ts'] as const }
+      : {}),
     catalog: { group: 'public', key: 'triggerAppEvent' },
     frameworkTier: 'extended',
     // R57 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -357,7 +381,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'open',
     deviceClaimPolicy: 'acquire-session',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/app.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     recordsSessionAction: true,
@@ -378,7 +404,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'prepare',
     deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/prepare.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/prepare.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -397,7 +425,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'batch',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/batch/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/batch/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -411,7 +441,9 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
   {
     name: 'close',
     deviceClaimPolicy: 'release-session',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/app.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     recordsSessionAction: true,

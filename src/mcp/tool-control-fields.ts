@@ -1,9 +1,9 @@
-import type { JsonSchema } from '../commands/command-contract.ts';
 import {
   operatorAudience,
   type InputAudience,
   type InputAudienceMap,
-} from '../commands/input-audience.ts';
+  type JsonSchema,
+} from '@agent-device/command-surface';
 
 /**
  * The MCP surface's own tool arguments: transport and response-shaping controls

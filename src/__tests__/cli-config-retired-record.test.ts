@@ -6,7 +6,7 @@ import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';
 
 /**
- * The retired `record` config surface (`src/commands/schema/cli-config.ts`):
+ * The retired `record` config surface (`packages/command-surface/src/schema/cli-config.ts`):
  * the config key `record` and AGENT_DEVICE_RECORD were released as command
  * defaults, but the repair-segment recording opt-in they feed needs
  * per-invocation provenance a config default cannot carry. They fail closed

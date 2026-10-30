@@ -34,7 +34,7 @@ import {
 } from './agent-device-client.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { readCliBatchStepsJson } from './commands/batch/batch-steps.ts';
+import { readCliBatchStepsJson } from '@agent-device/command-surface';
 import {
   createRequestId,
   emitDiagnostic,

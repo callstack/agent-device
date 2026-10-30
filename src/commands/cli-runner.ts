@@ -1,11 +1,10 @@
+import type { CliOutput } from './output-common.ts';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClient, CommandRequestResult } from '../agent-device-client.ts';
 import { readFillTextFromStdin } from './interaction/fill-text-stdin.ts';
 import { formatCliOutput } from './cli-output.ts';
-import { readInputFromCli } from './cli-grammar.ts';
-import { runCommand, type CommandName } from './command-surface.ts';
-import type { CliOutput } from './command-contract.ts';
+import { readInputFromCli, runCommand, type CommandName } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { CommandProgressState } from './command-progress.ts';
 

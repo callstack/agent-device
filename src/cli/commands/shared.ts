@@ -1,4 +1,4 @@
-import type { CliOutput } from '../../commands/command-contract.ts';
+import type { CliOutput } from '../../commands/output-common.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 export async function writeCommandOutput(

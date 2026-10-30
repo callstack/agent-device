@@ -1,0 +1,175 @@
+import { describe, expect, test } from 'vitest';
+import type { CliFlags } from '@agent-device/contracts/command';
+import { alertCliReader, alertDaemonWriter } from './alert.ts';
+import { diffCliReader } from './diff.ts';
+import { screenshotCliReader, screenshotDaemonWriter } from './screenshot.ts';
+import { snapshotCliReader } from './snapshot.ts';
+import { waitCliReader, waitDaemonWriter } from './wait.ts';
+
+function flags(overrides: Partial<CliFlags> = {}): CliFlags {
+  return overrides as CliFlags;
+}
+
+function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
+  expect(fn).toThrow(
+    expect.objectContaining({
+      code: 'INVALID_ARGS',
+      message: expect.stringContaining(messageFragment),
+    }),
+  );
+}
+
+describe('capture command interface', () => {
+  test('reads snapshot flags', () => {
+    expect(
+      snapshotCliReader(
+        [],
+        flags({
+          snapshotInteractiveOnly: true,
+          snapshotDepth: 3,
+          snapshotScope: 'Login',
+          snapshotRaw: true,
+          snapshotCustomActions: true,
+          snapshotForceFull: true,
+          timeoutMs: 10_000,
+        }),
+      ),
+    ).toMatchObject({
+      interactiveOnly: true,
+      depth: 3,
+      scope: 'Login',
+      raw: true,
+      customActions: true,
+      forceFull: true,
+      timeoutMs: 10_000,
+    });
+  });
+
+  test('reads screenshot path and writes screenshot flags', () => {
+    const input = screenshotCliReader(
+      ['page.png'],
+      flags({ screenshotPixelDensity: 2, screenshotFullscreen: true, screenshotScale: 0.3 }),
+    );
+    expect(input).toMatchObject({
+      path: 'page.png',
+      pixelDensity: 2,
+      fullscreen: true,
+      scale: 0.3,
+    });
+    expect(screenshotDaemonWriter(input)).toMatchObject({
+      command: 'screenshot',
+      positionals: ['page.png'],
+      options: {
+        screenshotPixelDensity: 2,
+        screenshotFullscreen: true,
+        screenshotScale: 0.3,
+      },
+    });
+  });
+
+  test('reads and writes screenshot status-bar normalization flag', () => {
+    const input = screenshotCliReader(['page.png'], flags({ screenshotNormalizeStatusBar: true }));
+    expect(input).toMatchObject({
+      path: 'page.png',
+      normalizeStatusBar: true,
+    });
+    expect(screenshotDaemonWriter(input)).toMatchObject({
+      command: 'screenshot',
+      options: {
+        screenshotNormalizeStatusBar: true,
+      },
+    });
+  });
+
+  test('reads diff snapshot input only', () => {
+    expect(
+      diffCliReader(['snapshot'], flags({ snapshotDepth: 4, out: './diff.json' })),
+    ).toMatchObject({
+      kind: 'snapshot',
+      depth: 4,
+      out: './diff.json',
+    });
+    expectInvalidArgs(() => diffCliReader(['screenshot'], flags()), 'Only diff snapshot');
+  });
+
+  test('reads and writes wait targets', () => {
+    expect(waitCliReader(['text', 'Ready', '5000'], flags())).toMatchObject({
+      text: 'Ready',
+      timeoutMs: 5000,
+    });
+    expect(waitDaemonWriter({ text: 'Ready', timeoutMs: 5000 })).toMatchObject({
+      command: 'wait',
+      positionals: ['text', 'Ready', '5000'],
+    });
+    expectInvalidArgs(() => waitDaemonWriter({ text: 'Ready', ref: '@e1' }), 'exactly one');
+  });
+
+  test('reads and writes strict wait absent targets', () => {
+    expect(waitCliReader(['absent', 'label="Removed"', '5000'], flags())).toMatchObject({
+      absent: 'label="Removed"',
+      timeoutMs: 5000,
+    });
+    expect(waitDaemonWriter({ absent: 'label="Removed"', timeoutMs: 5000 })).toMatchObject({
+      command: 'wait',
+      positionals: ['absent', 'label="Removed"', '5000'],
+    });
+  });
+
+  test('refuses wait absent scope and depth with typed invalid arguments', () => {
+    expectInvalidArgs(
+      () => waitCliReader(['absent', 'label="Removed"'], flags({ snapshotScope: 'Root' })),
+      '--scope',
+    );
+    expectInvalidArgs(
+      () => waitCliReader(['absent', 'label="Removed"'], flags({ snapshotDepth: 2 })),
+      '--depth',
+    );
+    expectInvalidArgs(
+      () => waitDaemonWriter({ absent: 'label="Removed"', scope: 'Root' }),
+      '--scope',
+    );
+    expectInvalidArgs(() => waitDaemonWriter({ absent: 'label="Removed"', depth: 2 }), '--depth');
+  });
+
+  test('reads and writes wait stable with defaults', () => {
+    expect(waitCliReader(['stable'], flags())).toMatchObject({ stable: true });
+    expect(waitDaemonWriter({ stable: true })).toMatchObject({
+      command: 'wait',
+      positionals: ['stable'],
+    });
+  });
+
+  test('reads and writes wait stable with quietMs and timeoutMs', () => {
+    expect(waitCliReader(['stable', '500', '10000'], flags())).toMatchObject({
+      stable: true,
+      quietMs: 500,
+      timeoutMs: 10_000,
+    });
+    expect(waitDaemonWriter({ stable: true, quietMs: 500, timeoutMs: 10_000 })).toMatchObject({
+      command: 'wait',
+      positionals: ['stable', '500', '10000'],
+    });
+  });
+
+  test('rejects wait stable combined with another target', () => {
+    expectInvalidArgs(() => waitDaemonWriter({ stable: true, text: 'Ready' }), 'exactly one');
+  });
+
+  test('rejects wait stable timeoutMs without quietMs', () => {
+    expectInvalidArgs(
+      () => waitDaemonWriter({ stable: true, timeoutMs: 10_000 }),
+      'quietMs before timeoutMs',
+    );
+  });
+
+  test('reads and writes alert action and timeout', () => {
+    expect(alertCliReader(['wait', '3000'], flags())).toMatchObject({
+      action: 'wait',
+      timeoutMs: 3000,
+    });
+    expect(alertDaemonWriter({ action: 'dismiss', timeoutMs: 1000 })).toMatchObject({
+      command: 'alert',
+      positionals: ['dismiss', '1000'],
+    });
+  });
+});

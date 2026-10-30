@@ -1,6 +1,6 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { CliOutput } from '../command-contract.ts';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import {
@@ -9,6 +9,7 @@ import {
   pinnedRefText,
   resultOutput,
   type CliOutputFormatter,
+  type CliOutput,
 } from '../output-common.ts';
 import { withSettleCapableNotes } from '../settle-output.ts';
 
@@ -103,4 +104,4 @@ export const interactionCliOutputFormatters = withSettleCapableNotes({
     }),
   is: resultOutput(isCliOutput),
   find: resultOutput(findCliOutput),
-} satisfies Record<string, CliOutputFormatter>);
+} satisfies Partial<Record<CommandName, CliOutputFormatter>>);

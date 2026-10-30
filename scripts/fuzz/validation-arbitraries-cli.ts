@@ -9,12 +9,9 @@
 
 import fc from 'fast-check';
 import { isKnownCliCommandName, listCliCommandNames } from '@agent-device/command-registry/catalog';
-import {
-  getCliCommandSchema,
-  getFlagDefinitions,
-  type FlagDefinition,
-} from '../../src/commands/schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../src/commands/schema/option-schema.ts';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
+import { getCliCommandSchema, isFlagSupportedForCommand } from '@agent-device/command-surface';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
 import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
 

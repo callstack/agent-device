@@ -65,6 +65,7 @@ const TARGET_DAG_RANK = new Map([
   ['replay-test', 1],
   ['selectors', 1],
   ['session-journal', 1],
+  ['command-surface', 2],
   ['core', 2],
   ['daemon-contracts', 2],
   ['command-runtime', 3],

@@ -289,7 +289,7 @@
       "exports": ["IS_PREDICATE_USAGE_HINT"]
     },
     {
-      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload from packages/selectors/src/target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema).
+      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload from packages/selectors/src/target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from packages/command-surface/src/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema).
       "file": "packages/{ad-script,maestro,capture-kit}/src/index.ts",
       "exports": [
         "parseTargetAnnotationV1Payload",

@@ -1,4 +1,4 @@
-import { isCommandName, type CommandName } from '../../commands/command-metadata.ts';
+import { isCommandName, type CommandName } from '@agent-device/command-surface';
 
 export type ClientBackedCliCommandName = CommandName;
 

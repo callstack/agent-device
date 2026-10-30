@@ -9,12 +9,14 @@ import {
   type AppErrorDetails,
   type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
-import type {
-  SnapshotNode,
-  SnapshotPreferredBackend,
-  SnapshotState,
+import {
+  findNodeByRef,
+  normalizeRef,
+  type SnapshotCommandOptionFields,
+  type SnapshotNode,
+  type SnapshotPreferredBackend,
+  type SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import {
   formatSelectorFailure,
   selectorFailureHint,
@@ -28,7 +30,6 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
 import { toBackendContext } from '../../runtime-common.ts';
 import { findNodeByLabel } from './selector-read-utils.ts';
-import type { SelectorSnapshotInput } from '../../command-input.ts';
 
 export type CapturedSnapshot = {
   sessionName: string;
@@ -36,7 +37,7 @@ export type CapturedSnapshot = {
   snapshot: SnapshotState;
 };
 
-export type SelectorSnapshotOptions = SelectorSnapshotInput;
+export type SelectorSnapshotOptions = Pick<SnapshotCommandOptionFields, 'depth' | 'scope' | 'raw'>;
 
 /**
  * Resolve the snapshot a `@ref` READ binds against. ADR 0014: a ref resolves

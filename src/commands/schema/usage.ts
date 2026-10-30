@@ -1,9 +1,6 @@
-import {
-  getFlagDefinitions,
-  type CommandSchema,
-  type FlagDefinition,
-  type FlagKey,
-} from './command-schema.ts';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 
 function formatPositionalArg(arg: string): string {
   const optional = arg.endsWith('?');

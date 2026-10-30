@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { listExecutableCommandNames } from '../../../commands/command-surface.ts';
+import { listCommandMetadata } from '@agent-device/command-surface';
 import { isClientBackedCliCommandName } from '../client-backed.ts';
 
 test('client-backed CLI command routing follows executable command metadata', () => {
-  const executableCommands = new Set<string>(listExecutableCommandNames());
+  const executableCommands = new Set<string>(
+    listCommandMetadata().map((metadata) => metadata.name),
+  );
 
   for (const command of executableCommands) {
     assert.equal(

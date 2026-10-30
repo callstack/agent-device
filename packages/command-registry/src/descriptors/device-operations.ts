@@ -63,7 +63,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'wait',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/wait.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/capture/wait.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'core',
       recordsSessionAction: true,
@@ -98,7 +100,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'alert',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/alert.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/capture/alert.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'core',
       // R59 retires this command's capability bucket and its Apple `supportsAlertSurface` closure
@@ -119,7 +123,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'settings',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/settings.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/capture/settings.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // R58 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
@@ -141,7 +147,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'react-native',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/react-native/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/react-native/index.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'reactNative' },
       frameworkTier: 'extended',
       // R61 retires this command's capability bucket: admission is the owner's own `tapPoint` fact,
@@ -161,8 +169,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       ...(ownerFilesEnabled
         ? {
             ownerFiles: [
-              'src/commands/recording/index.ts',
-              'src/commands/recording/output-schemas.ts',
+              'packages/command-surface/src/recording/index.ts',
+              'packages/command-surface/src/recording/output-schemas.ts',
             ] as const,
           }
         : {}),
@@ -190,8 +198,8 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       ...(ownerFilesEnabled
         ? {
             ownerFiles: [
-              'src/commands/recording/index.ts',
-              'src/commands/recording/output-schemas.ts',
+              'packages/command-surface/src/recording/index.ts',
+              'packages/command-surface/src/recording/output-schemas.ts',
             ] as const,
           }
         : {}),
@@ -217,7 +225,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'click',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       targetIdentityVerification: 'pre-dispatch',
       catalog: { group: 'public' },
       frameworkTier: 'core',
@@ -238,7 +248,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'fill',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       ...TARGETED_TOUCH_INTERACTION_TRAITS,
       daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
       frameworkTier: 'core',
@@ -251,7 +263,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'longpress',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       ...TARGETED_TOUCH_INTERACTION_TRAITS,
       catalog: { group: 'public', key: 'longPress' },
       frameworkTier: 'extended',
@@ -270,7 +284,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'hover',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       targetIdentityVerification: 'pre-dispatch',
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -288,7 +304,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'press',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       ...TARGETED_TOUCH_INTERACTION_TRAITS,
       daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
       frameworkTier: 'core',
@@ -302,7 +320,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'type',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'core',
       recordsSessionAction: true,
@@ -321,7 +341,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'get',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       targetIdentityVerification: 'pre-dispatch',
       catalog: { group: 'public' },
       frameworkTier: 'core',
@@ -336,7 +358,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'is',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       targetIdentityVerification: 'pre-dispatch',
       catalog: { group: 'public' },
       frameworkTier: 'core',
@@ -352,7 +376,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     // -- generic (route: generic) --
     {
       name: 'back',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'core',
       // R42 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -366,7 +392,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'gesture',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       recordsSessionAction: true,
@@ -387,7 +415,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'home',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // R43 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -397,7 +427,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'tv-remote',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'tvRemote' },
       frameworkTier: 'extended',
       // R45 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -407,7 +439,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'orientation',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // R44 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -417,7 +451,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'fold',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // Admission is the owner's `setFoldPose` fact, the same ADR 0019 §9 shape as `orientation`.
@@ -429,7 +465,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'telephony',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // Admission is the owner's `sendTelephonyEvent` fact. The event goes to the emulator console
@@ -458,7 +496,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'swipe',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'core',
       recordsSessionAction: true,
@@ -477,7 +517,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'focus',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+        : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
       // R40 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -492,7 +534,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       ...(ownerFilesEnabled
         ? {
             ownerFiles: [
-              'src/commands/capture/screenshot.ts',
+              'packages/command-surface/src/capture/screenshot.ts',
               'packages/daemon/src/execution/screenshot-runtime.ts',
             ] as const,
           }
@@ -512,7 +554,7 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
       compositeResource: 'none',
       deviceClaimPolicy: 'require-owner',
       ...(ownerFilesEnabled
-        ? { ownerFiles: ['src/commands/management/viewport.ts'] as const }
+        ? { ownerFiles: ['packages/command-surface/src/management/viewport.ts'] as const }
         : {}),
       catalog: { group: 'public' },
       frameworkTier: 'extended',
@@ -527,7 +569,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'app-switcher',
       deviceClaimPolicy: 'require-owner',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'appSwitcher' },
       frameworkTier: 'extended',
       // R56 removed the legacy `dispatch` leaf, capability bucket, and HarmonyOS overlay membership.
@@ -546,7 +590,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'action-button',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'actionButton' },
       frameworkTier: 'extended',
       // Admission is the owner's `actionButton` fact, the same ADR 0019 §9 shape as `home`. The
@@ -559,7 +605,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     },
     {
       name: 'hardware-button',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'hardwareButton' },
       frameworkTier: 'extended',
       // The first positional selects one of the eleven named keys, the way `orientation` selects
@@ -572,7 +620,9 @@ export const DEVICE_OPERATION_COMMAND_DESCRIPTORS = {
     {
       name: 'install-from-source',
       deviceClaimPolicy: 'none',
-      ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/install.ts'] as const } : {}),
+      ...(ownerFilesEnabled
+        ? { ownerFiles: ['packages/command-surface/src/management/install.ts'] as const }
+        : {}),
       catalog: { group: 'public', key: 'installFromSource' },
       frameworkTier: 'extended',
       recordsSessionAction: true,

@@ -1,6 +1,6 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { DebugSymbolsResult } from '@agent-device/contracts/observability';
-import type { CliOutput } from '../command-contract.ts';
-import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 function debugSymbolsCliOutput(result: DebugSymbolsResult): CliOutput {
   const lines = [result.outPath, result.message];
@@ -16,7 +16,7 @@ function debugSymbolsCliOutput(result: DebugSymbolsResult): CliOutput {
 
 export const debuggingCliOutputFormatters = {
   debug: resultOutput(debugSymbolsCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatDebugCrashSummary(result: DebugSymbolsResult): string[] {
   const crash = result.crash;

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { readInputFromCli } from '../commands/cli-grammar.ts';
+import { readInputFromCli } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 const BASE_FLAGS: CliFlags = {

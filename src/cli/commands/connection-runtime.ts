@@ -38,7 +38,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
+import { readMetroPrepareKind } from '@agent-device/command-surface';
 import {
   connectionProviderCapabilities,
   primeProviderConnection,

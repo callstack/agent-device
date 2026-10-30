@@ -51,7 +51,7 @@
     "packages/kernel/src/errors.ts#NormalizedError": "sha256:99d880cce96cf364c4937045c704f2e34a870fef37af35c2115df33f8e8355af",
     "packages/kernel/src/errors.ts#normalizeError": "sha256:5d9f906fd326676b4c3095cd6bd675c784cb26f36f4b8344a108cf5f7628f9dc",
     "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
-    "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
+    "packages/command-surface/src/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
     "packages/contracts/src/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
     "src/daemon-client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
     "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:807eb96ca26de118a8e678f2ec776d17c207db4eec86ff23cfaec9cd2476b60f",

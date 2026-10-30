@@ -479,7 +479,10 @@ test('R13 leaves the Android test-only fixture subpaths to R83 for every consume
 
   // Production importers of a fixture are R83's to refuse (package-export-surface.test.ts);
   // R13 holds no second list of them.
-  for (const file of ['src/commands/replay/index.ts', 'src/core/interactors/android.ts']) {
+  for (const file of [
+    'packages/command-surface/src/replay/index.ts',
+    'src/core/interactors/android.ts',
+  ]) {
     const production = validSources();
     production.set(file, fixtureImport);
     assert.deepEqual(messages(production), [], file);

@@ -3,11 +3,10 @@
 //   one home of test helpers shared across packages, so a second entry there publishes a fixture's
 //   surface into every test's import graph. The daemon's entry is its package boundary and the one
 //   place a barrel is allowed, so a subpath or a star re-export there publishes the daemon graph
-//   under an unowned name (ADR 0033). The Apple runner package's entry names its explicit
-//   production API, so a subpath or a star re-export there would publish the runner engine
-//   (fixtures, test host, internals) under an unowned name too.
-// Evidence: the packages held the shape by hand until now; test-kit's single entry, the
-//   daemon's `.` and the Apple runner's `.` are each asserted by the same declaration.
+//   under an unowned name (ADR 0033). The Apple runner and command surface entries name their
+//   explicit production APIs. Subpaths or star re-exports would publish internals under unowned
+//   names (ADR 0008).
+// Evidence: test-kit, daemon, Apple runner and command surface each assert the same entry shape.
 // Cost: one pass over the pinned manifests and their entry sources.
 // Kill criterion: a maintainer decision that a pinned package may expose subpath entries or a star
 //   re-export from its entry.
@@ -31,11 +30,14 @@ const DAEMON_DIR = 'packages/daemon';
 const DAEMON_PACKAGE = '@agent-device/daemon';
 const APPLE_RUNNER_DIR = 'packages/apple-runner';
 const APPLE_RUNNER_PACKAGE = '@agent-device/apple-runner';
+const COMMAND_SURFACE_DIR = 'packages/command-surface';
+const COMMAND_SURFACE_PACKAGE = '@agent-device/command-surface';
 
 const ENTRY_SURFACES = [
   { packageName: TEST_KIT_PACKAGE, dir: TEST_KIT_DIR, entry: ENTRY_FILE },
   { packageName: DAEMON_PACKAGE, dir: DAEMON_DIR, entry: ENTRY_FILE },
   { packageName: APPLE_RUNNER_PACKAGE, dir: APPLE_RUNNER_DIR, entry: ENTRY_FILE },
+  { packageName: COMMAND_SURFACE_PACKAGE, dir: COMMAND_SURFACE_DIR, entry: ENTRY_FILE },
 ] as const;
 
 function stringLeaves(value: unknown): string[] {
@@ -48,7 +50,7 @@ function violation(file: string, message: string, line = 1): LayeringViolation {
   return { rule: PACKAGE_EXPORT_SURFACE_RULE, file, line, message };
 }
 
-/** Keeps test-kit, daemon and the Apple runner on one named public entry; test-kit also runs the isolation walk. */
+/** Keeps pinned packages on one named public entry; test-kit also runs the isolation walk. */
 export function checkPackageEntrySurfaces(
   manifests: ParsedManifests,
   sources: ReadonlyMap<string, string>,

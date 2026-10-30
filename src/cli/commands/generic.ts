@@ -1,8 +1,8 @@
 import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
 import { isParseableOutputCommand } from '../../commands/cli-output.ts';
-import { routeResponseWarnings } from '../../commands/output-common.ts';
-import type { CommandName } from '../../commands/command-metadata.ts';
+import { routeResponseWarnings, type CliOutput } from '../../commands/output-common.ts';
+import type { CommandName } from '@agent-device/command-surface';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
@@ -10,7 +10,6 @@ import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput, writeCliOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
-import type { CliOutput } from '../../commands/command-contract.ts';
 import type { LeaseDevice } from '@agent-device/contracts/client';
 import { isRecord } from '@agent-device/kernel/record';
 

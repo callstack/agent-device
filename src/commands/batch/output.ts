@@ -1,7 +1,7 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { BatchRunResult, BatchStepResult } from '@agent-device/command-registry/batch';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
-import type { CliOutput } from '../command-contract.ts';
-import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 function batchCliOutput(result: BatchRunResult): CliOutput {
   const lines = [
@@ -15,7 +15,7 @@ function batchCliOutput(result: BatchRunResult): CliOutput {
 
 export const batchCliOutputFormatters = {
   batch: resultOutput<BatchRunResult>(batchCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function renderBatchStepLine(result: BatchStepResult): string {
   const description = readCommandMessage(result.data) ?? result.command;

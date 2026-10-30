@@ -1,17 +1,23 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../client/client-types.ts';
-import type { CliOutput, CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
-import type { CommandExecutionResult } from '../commands/command-surface.ts';
-import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import {
+  COMMON_INPUT_AUDIENCE,
   findCommandMetadata,
   isCommandName,
   listCommandMetadata,
   listMcpCommandMetadata,
+  operatorAudience,
+  operatorInputRefusal,
+  type CommandExecutionResult,
+  type CommandMetadata,
   type CommandName,
-} from '../commands/command-metadata.ts';
+  type InputAudienceMap,
+  type JsonSchema,
+} from '@agent-device/command-surface';
+import type { CliOutput } from '../commands/output-common.ts';
+import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import { mcpBody } from '@agent-device/command-registry/command-text';
 import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
@@ -19,12 +25,6 @@ import {
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
-import { COMMON_INPUT_AUDIENCE } from '../commands/common-input-fields.ts';
-import {
-  operatorAudience,
-  operatorInputRefusal,
-  type InputAudienceMap,
-} from '../commands/input-audience.ts';
 import {
   MCP_TOOL_CONFIG_AUDIENCE,
   MCP_TOOL_CONFIG_KEYS,
@@ -272,7 +272,7 @@ async function runCommand(
   name: CommandName,
   input: Record<string, unknown>,
 ): Promise<CommandExecutionResult> {
-  const commandSurface = await import('../commands/command-surface.ts');
+  const commandSurface = await import('@agent-device/command-surface');
   return await commandSurface.runCommand(client, name, input);
 }
 

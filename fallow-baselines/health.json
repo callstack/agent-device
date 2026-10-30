@@ -5,7 +5,7 @@
         "count": 1
       }
     },
-    "src/commands/schema/option-schema.ts": {
+    "packages/command-surface/src/schema/option-schema.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -87,7 +87,7 @@
     "packages/selectors/src/internal/predicates.ts:high impact",
     "packages/provision-kit/src/boot-diagnostics.ts:complexity",
     "packages/daemon/src/sessions/session-routing.ts:high impact",
-    "src/commands/cli-grammar/common.ts:high impact",
+    "packages/command-surface/src/cli-grammar/common.ts:high impact",
     "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
     "src/commands/interaction/output.ts:high impact",
@@ -108,7 +108,7 @@
     "packages/selectors/src/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "packages/kernel/src/source-value.ts:high impact",
-    "src/commands/interaction/selectors.ts:untested risk",
+    "packages/command-surface/src/interaction/selectors.ts:untested risk",
     "packages/selectors/src/internal/build.ts:high impact",
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
     "packages/kernel/src/keyed-lock.ts:high impact",

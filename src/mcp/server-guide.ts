@@ -1,4 +1,4 @@
-import type { JsonSchema } from '../commands/command-contract.ts';
+import type { JsonSchema } from '@agent-device/command-surface';
 import {
   buildUsageText,
   helpTopicIds,

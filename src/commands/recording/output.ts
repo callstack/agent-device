@@ -1,6 +1,6 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
-import type { CliOutput } from '../command-contract.ts';
-import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 export function recordCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -28,7 +28,7 @@ export function recordCliOutput(result: CommandRequestResult): CliOutput {
 
 export const recordingCliOutputFormatters = {
   record: resultOutput(recordCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatRecordSingleOutput(data: Record<string, unknown>, outPath: string): string {
   const lines: string[] = [];

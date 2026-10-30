@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { runExplainCommandCli } from '../../../scripts/explain-command.ts';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
+import { listCommandMetadata } from '@agent-device/command-surface';
 import {
   ownerFilesForCommand,
   getDaemonRouteOwnerFiles,
@@ -49,6 +50,16 @@ function runExplainCliProcess(args: string[]): { status: number; stdout: string;
 }
 
 describe('explainCommand', () => {
+  test('reports the canonical command description of every command with metadata', () => {
+    for (const metadata of listCommandMetadata()) {
+      const result = explainCommand(metadata.name);
+      expect(result, metadata.name).toMatchObject({
+        found: true,
+        explanation: { description: metadata.description },
+      });
+    }
+  });
+
   test('resolves every descriptor name and catalog key', () => {
     for (const descriptor of commandDescriptors) {
       expect(explainCommand(descriptor.name, { fileExists })).toMatchObject({
@@ -82,7 +93,7 @@ describe('explainCommand', () => {
     });
     if (!result.found) return;
     expect(result.explanation.cli?.commandFlags.map((flag) => flag.key)).toContain('settle');
-    expect(result.explanation.files).toContain('src/commands/interaction/index.ts');
+    expect(result.explanation.files).toContain('packages/command-surface/src/interaction/index.ts');
     expect(result.explanation.files).toContain(
       'packages/daemon/src/execution/interaction/index.ts',
     );
@@ -120,7 +131,7 @@ describe('explainCommand', () => {
         files: expect.arrayContaining([
           'packages/command-registry/src/registry.ts',
           'packages/command-registry/src/descriptors/local-cli.ts',
-          'src/commands/schema/command-overrides.ts',
+          'packages/command-surface/src/schema/command-overrides.ts',
           'src/cli/commands/web.ts',
         ]),
       },
@@ -175,13 +186,19 @@ describe('explainCommand table-driven coverage', () => {
   test.each([
     [
       'press',
-      ['src/commands/interaction/index.ts', 'packages/daemon/src/execution/interaction/index.ts'],
+      [
+        'packages/command-surface/src/interaction/index.ts',
+        'packages/daemon/src/execution/interaction/index.ts',
+      ],
     ],
-    ['apps', ['src/commands/management/app.ts']],
+    ['apps', ['packages/command-surface/src/management/app.ts']],
     // R39: screenshot has no dispatch projection left, so its platform work is named directly.
     [
       'screenshot',
-      ['src/commands/capture/screenshot.ts', 'packages/daemon/src/execution/screenshot-runtime.ts'],
+      [
+        'packages/command-surface/src/capture/screenshot.ts',
+        'packages/daemon/src/execution/screenshot-runtime.ts',
+      ],
     ],
     ['react-native', ['packages/daemon/src/execution/handlers/react-native.ts']],
     ['record', ['packages/daemon/src/sessions/handlers/record-trace.ts']],

@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isKnownCliCommandName, listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseArgs } from '../args.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { getFlagDefinitions } from '../../../commands/schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../../commands/schema/option-schema.ts';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import { isFlagSupportedForCommand, readInputFromCli } from '@agent-device/command-surface';
 import {
   listCommandAliasSuggestionEntries,
   listFlagNameSuggestionEntries,
@@ -47,7 +46,7 @@ test('every curated alias suggestion example parses as a valid invocation', () =
 
 test('the keyboard dismiss example uses a real keyboard action', () => {
   const baseFlags: CliFlags = { json: false, help: false, version: false };
-  assert.doesNotThrow(() => keyboardCliReader(['dismiss'], baseFlags));
+  assert.doesNotThrow(() => readInputFromCli('keyboard', ['dismiss'], baseFlags));
 });
 
 // `launch`/`relaunch` and `tap` are true aliases normalized before the

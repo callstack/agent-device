@@ -1,6 +1,5 @@
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
-import type { CliOutput } from './command-contract.ts';
-import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
+import { pinnedRefText, type CliOutputFormatter, type CliOutput } from './output-common.ts';
 
 /**
  * Compact `--settle` (#1101) rendering appended to a command's own success

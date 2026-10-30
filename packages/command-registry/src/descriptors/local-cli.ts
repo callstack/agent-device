@@ -8,7 +8,9 @@ export const LOCAL_CLI_COMMAND_DESCRIPTORS = [
   {
     name: 'debug',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/debugging/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/debugging/index.ts'] as const }
+      : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -45,7 +47,9 @@ export const LOCAL_CLI_COMMAND_DESCRIPTORS = [
   {
     name: 'metro',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/metro/index.ts'] as const }
+      : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -55,7 +59,9 @@ export const LOCAL_CLI_COMMAND_DESCRIPTORS = [
   {
     name: 'session',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/session.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/session.ts'] as const }
+      : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,

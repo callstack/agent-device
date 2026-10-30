@@ -4,16 +4,17 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionAction } from '@agent-device/contracts/session';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
-import { findCommandMetadata, type CommandName } from '../commands/command-metadata.ts';
-import { readInputFromCli } from '../commands/cli-grammar/registry.ts';
 import {
-  listCommandFamilyCliOutputFormatters,
-  listCommandFamilyDefinitions,
-} from '../commands/family/registry.ts';
+  COMMAND_OUTPUT_SCHEMAS,
+  findCommandMetadata,
+  getCliCommandSchema,
+  readInputFromCli,
+  runCommand,
+  type CommandName,
+} from '@agent-device/command-surface';
+import { listCliOutputFormatters } from '../commands/cli-output.ts';
 import type { SettleCapableClientOptionCommands } from '../commands/post-action-observation-client-options.ts';
-import { getCliCommandSchema } from '../commands/schema/command-schema.ts';
 import { buildActionDetails } from '@agent-device/session-journal/session-event-action';
-import { COMMAND_OUTPUT_SCHEMAS } from '../mcp/command-output-schemas.ts';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,
@@ -169,13 +170,11 @@ function recordingClient(calls: Array<Record<string, unknown>>): AgentDeviceClie
 }
 
 test('post-action observation client options follow descriptor traits', async () => {
-  const definitions = listCommandFamilyDefinitions();
   for (const [command, positionals] of Object.entries(SETTLE_READER_POSITIONALS)) {
-    const definition = definitions.find((entry) => entry.name === command);
-    assert.ok(definition, `${command}: missing executable definition`);
     const calls: Array<Record<string, unknown>> = [];
-    await definition.invoke(
+    await runCommand(
       recordingClient(calls),
+      command as CommandName,
       readInputFromCli(command as CommandName, positionals, SETTLE_FLAGS_SNAPSHOT),
     );
     assert.equal(calls.length, 1, `${command}: expected exactly one client call`);
@@ -258,7 +257,7 @@ test('post-action observation MCP output schemas follow descriptor traits', () =
 });
 
 test('post-action observation CLI output formatters follow descriptor traits', async () => {
-  const formatters = listCommandFamilyCliOutputFormatters();
+  const formatters = listCliOutputFormatters();
   for (const command of SETTLE_OBSERVATION_COMMANDS) {
     assert.ok(formatters[command], `${command}: missing CLI output formatter`);
   }

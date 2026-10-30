@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { listCommandMetadata } from '../src/commands/command-metadata.ts';
+import { listCommandMetadata } from '@agent-device/command-surface';
 import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import { walkFiles } from './lib/walk-files.ts';
 
@@ -15,7 +15,7 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
     path.join(root, 'packages/daemon/src/execution/handlers/__tests__'),
   ];
   const providerScenarioDir = path.join(root, 'test/integration/provider-scenarios');
-  const commandContractFiles = walkFiles(path.join(root, 'src/commands'), (file) =>
+  const commandContractFiles = walkFiles(path.join(root, 'packages/command-surface/src'), (file) =>
     isCommandContractSource(file),
   );
   const clientCommandMethods = readClientCommandMethods(commandContractFiles);

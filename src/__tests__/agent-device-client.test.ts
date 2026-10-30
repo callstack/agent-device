@@ -21,7 +21,7 @@ import {
   type TriggerAppEventCommandResult,
   type WaitCommandResult,
 } from '../agent-device-client.ts';
-import { runCommand } from '../commands/command-surface.ts';
+import { runCommand } from '@agent-device/command-surface';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';

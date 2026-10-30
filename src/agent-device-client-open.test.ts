@@ -1,0 +1,247 @@
+import { describe, expect, test } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync } from 'node:fs';
+
+import path from 'node:path';
+import type { CliFlags } from '@agent-device/contracts/command';
+import { findCommandMetadata, readInputFromCli, runCommand } from '@agent-device/command-surface';
+import { parseArgs } from './cli/parser/args.ts';
+import { createAgentDeviceClient } from './agent-device-client.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
+import {
+  mkdtempForTestSync,
+  readMetroSessionFixture,
+  writeMetroSessionFixture,
+} from '@agent-device/test-kit';
+
+function flags(overrides: Partial<CliFlags> = {}): CliFlags {
+  return overrides as CliFlags;
+}
+
+function tempStateDir(): string {
+  const dir = path.join(
+    mkdtempForTestSync('agent-device-app-test'),
+    `agent-device-app-test-${randomUUID()}`,
+  );
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function createOpenClient(params: { stateDir: string; session: string; sessionReused?: boolean }) {
+  const calls: Array<Omit<DaemonRequest, 'token'>> = [];
+  const client = createAgentDeviceClient(
+    { session: params.session, stateDir: params.stateDir },
+    {
+      transport: async (req) => {
+        calls.push(req);
+        return {
+          ok: true,
+          data: { sessionReused: params.sessionReused ?? false },
+        } satisfies DaemonResponse;
+      },
+    },
+  );
+  return { client, calls };
+}
+
+describe('open startup budget', () => {
+  test('open --timeout projects the startup budget onto the daemon request', async () => {
+    const parsed = parseArgs(['open', 'Settings', '--timeout', '600000'], { strictFlags: true });
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'cold-start' });
+      await runCommand(client, 'open', readInputFromCli('open', parsed.positionals, parsed.flags));
+      expect(calls[0]?.flags?.timeoutMs).toBe(600_000);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test.each([0, -1, 1.5])('structured open input rejects the startup budget %s', (timeoutMs) => {
+    expect(() => findCommandMetadata('open').readInput({ app: 'Settings', timeoutMs })).toThrow(
+      /timeoutMs/,
+    );
+  });
+});
+
+describe('open device spec input', () => {
+  test('structured open input reads the spec as readLeaseDeviceSpec decides it', () => {
+    expect(
+      findCommandMetadata('open').readInput({
+        app: 'Settings',
+        osVersion: '18',
+        imageTag: '',
+        physical: false,
+      }),
+    ).toEqual({ app: 'Settings', osVersion: '18' });
+    expect(() =>
+      findCommandMetadata('open').readInput({ app: 'Settings', physical: 'yes' }),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: { reason: 'device-spec-invalid', keys: ['physical'] },
+      }),
+    );
+  });
+});
+
+describe('open command metro session hints', () => {
+  test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {
+    const parsed = parseArgs(
+      [
+        'open',
+        'MyApp',
+        '--metro-host',
+        '127.0.0.1',
+        '--metro-port',
+        '8082',
+        '--bundle-url',
+        'http://127.0.0.1:8082/index.bundle',
+        '--launch-url',
+        'myapp://home',
+      ],
+      { strictFlags: true },
+    );
+    expect(parsed.flags.metroHost).toBe('127.0.0.1');
+    expect(parsed.flags.metroPort).toBe(8082);
+    expect(parsed.flags.bundleUrl).toBe('http://127.0.0.1:8082/index.bundle');
+    expect(parsed.flags.launchUrl).toBe('myapp://home');
+  });
+
+  test('openCliReader threads the flat hint flags into command input', () => {
+    const input = readInputFromCli(
+      'open',
+      ['MyApp'],
+      flags({
+        metroHost: '127.0.0.1',
+        metroPort: 8082,
+        bundleUrl: 'http://127.0.0.1:8082/index.bundle',
+        launchUrl: 'myapp://home',
+      }),
+    );
+    expect(input).toMatchObject({
+      app: 'MyApp',
+      metroHost: '127.0.0.1',
+      metroPort: 8082,
+      bundleUrl: 'http://127.0.0.1:8082/index.bundle',
+      launchUrl: 'myapp://home',
+    });
+  });
+
+  test('open folds the flat hint fields into a single session-scoped runtime object on the daemon request', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'proj-a' });
+      const cliInput = readInputFromCli(
+        'open',
+        ['MyApp'],
+        flags({
+          metroHost: '127.0.0.1',
+          metroPort: 8082,
+          bundleUrl: 'http://127.0.0.1:8082/index.bundle',
+        }),
+      );
+      await runCommand(client, 'open', cliInput);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.command).toBe('open');
+      expect(calls[0]?.runtime).toEqual({
+        metroHost: '127.0.0.1',
+        metroPort: 8082,
+        bundleUrl: 'http://127.0.0.1:8082/index.bundle',
+        launchUrl: undefined,
+      });
+      expect(calls[0]?.flags).not.toHaveProperty('metroHost');
+      expect(calls[0]?.flags).not.toHaveProperty('metroPort');
+      expect(calls[0]?.flags).not.toHaveProperty('bundleUrl');
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('open omits runtime entirely when no hint flags are given', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'proj-a' });
+      const cliInput = readInputFromCli('open', ['MyApp'], flags({}));
+      await runCommand(client, 'open', cliInput);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.runtime).toBeUndefined();
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('open with hint flags records the session dev-server binding for metro reload', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client } = createOpenClient({ stateDir, session: 'proj-a' });
+      const cliInput = readInputFromCli(
+        'open',
+        ['MyApp'],
+        flags({
+          metroHost: '127.0.0.1',
+          metroPort: 8082,
+          bundleUrl: 'http://127.0.0.1:8082/index.bundle',
+        }),
+      );
+      await runCommand(client, 'open', cliInput);
+
+      expect(readMetroSessionFixture({ stateDir, session: 'proj-a' })).toEqual({
+        controlBaseUrl: 'http://127.0.0.1:8082/',
+      });
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('open with only a Metro port binds reload to the local server on that port', async () => {
+    const stateDir = tempStateDir();
+    const { client } = createOpenClient({ stateDir, session: 'proj-a' });
+    await runCommand(
+      client,
+      'open',
+      readInputFromCli('open', ['MyApp'], flags({ metroPort: 8082 })),
+    );
+    expect(readMetroSessionFixture({ stateDir, session: 'proj-a' })).toEqual({
+      controlBaseUrl: 'http://localhost:8082/',
+    });
+  });
+
+  test('a hintless open that creates the session clears a leftover same-name binding', async () => {
+    const stateDir = tempStateDir();
+    try {
+      writeMetroSessionFixture({
+        stateDir,
+        session: 'proj-a',
+        hints: { controlBaseUrl: 'http://127.0.0.1:8083/' },
+      });
+      const { client } = createOpenClient({ stateDir, session: 'proj-a', sessionReused: false });
+      await runCommand(client, 'open', readInputFromCli('open', ['MyApp'], flags({})));
+
+      expect(readMetroSessionFixture({ stateDir, session: 'proj-a' })).toBeUndefined();
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('a hintless open on an existing session keeps the current binding', async () => {
+    const stateDir = tempStateDir();
+    try {
+      writeMetroSessionFixture({
+        stateDir,
+        session: 'proj-a',
+        hints: { controlBaseUrl: 'http://127.0.0.1:8083/' },
+      });
+      const { client } = createOpenClient({ stateDir, session: 'proj-a', sessionReused: true });
+      await runCommand(client, 'open', readInputFromCli('open', ['OtherApp'], flags({})));
+
+      expect(readMetroSessionFixture({ stateDir, session: 'proj-a' })).toEqual({
+        controlBaseUrl: 'http://127.0.0.1:8083/',
+      });
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});

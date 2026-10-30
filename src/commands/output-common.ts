@@ -1,7 +1,13 @@
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { CommandProgressState } from './command-progress.ts';
-import type { CliOutput } from './command-contract.ts';
+
+export type CliOutput = {
+  data: unknown;
+  jsonData?: unknown;
+  text?: string | null;
+  stderr?: string | null;
+};
 
 export type CliOutputFormatterParams = {
   input: Record<string, unknown>;

@@ -68,8 +68,8 @@ export const resolveDeferredProviderAppCatalogLeaseAdmissionExemption: NonNullab
 };
 
 // ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
-// positional (see keyboard/alert daemon writers in src/commands/system/index.ts
-// and src/commands/capture/alert.ts). Only the read-only status probes preserve
+// positional (see keyboard/alert daemon writers in packages/command-surface/src/system/index.ts
+// and packages/command-surface/src/capture/alert.ts). Only the read-only status probes preserve
 // the frame; every mutating subaction crosses a device side effect.
 //
 // keyboard actions are status/get/dismiss/enter/return (src/commands/system/

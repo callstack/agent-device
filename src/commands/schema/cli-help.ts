@@ -3,16 +3,14 @@ import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';
+import { getCliCommandSchema, getCommandSchema } from '@agent-device/command-surface';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import {
   DEVICE_SELECTION_FLAG_KEYS,
-  getCliCommandSchema,
-  getCommandSchema,
-  getFlagDefinitions,
   GLOBAL_FLAG_KEYS,
-  type CommandSchema,
-  type FlagDefinition,
-  type FlagKey,
-} from './command-schema.ts';
+} from '@agent-device/command-registry/flag-groups';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { buildCommandUsage } from './usage.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import {
@@ -22,7 +20,7 @@ import {
   WAIT_FAILURE_CONTRACT,
 } from './cli-help-workflows.ts';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
-import { foldableHelpTopic } from '../system/index.ts';
+import { foldableHelpTopic } from './cli-help-foldable.ts';
 import { providerPluginHelp } from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [

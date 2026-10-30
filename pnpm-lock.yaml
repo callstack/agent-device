@@ -36,6 +36,9 @@ importers:
       '@agent-device/command-registry':
         specifier: workspace:*
         version: link:packages/command-registry
+      '@agent-device/command-surface':
+        specifier: workspace:*
+        version: link:packages/command-surface
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
@@ -318,6 +321,46 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+
+  packages/command-surface:
+    dependencies:
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
+      '@agent-device/replay-port':
+        specifier: workspace:*
+        version: link:../replay-port
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
+    devDependencies:
+      '@agent-device/remote':
+        specifier: workspace:*
+        version: link:../remote
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      vitest:
+        specifier: 5.0.4
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.0))
 
   packages/contracts:
     dependencies:

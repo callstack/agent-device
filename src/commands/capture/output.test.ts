@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { snapshotCliOutput } from './output.ts';
+import { formatCliOutput } from '../cli-output.ts';
+import { captureCliOutputFormatters, snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {
   return {
@@ -148,4 +149,60 @@ test('JSON output keeps snapshot quality and warnings and drops capture analysis
   const jsonData = output.jsonData as Record<string, unknown>;
   assert.equal('analysis' in jsonData, false);
   assert.equal('freshness' in jsonData, false);
+});
+
+test('routes snapshot diagnostics warning to stderr output', async () => {
+  const output = await snapshotCliOutput({
+    result: {
+      nodes: [],
+      truncated: false,
+      identifiers: {},
+      snapshotDiagnostics: {
+        stats: {
+          count: 2,
+          p50Ms: 400,
+          p95Ms: 1_900,
+          maxMs: 1_900,
+          slowThresholdMs: 1_500,
+          platform: 'ios',
+        },
+        warning: 'Warning: ios snapshots are slow in this run: p95 1900ms over 2 captures.',
+      },
+    },
+  });
+
+  assert.equal(
+    output.stderr,
+    'Warning: ios snapshots are slow in this run: p95 1900ms over 2 captures.\n',
+  );
+  assert.ok(!output.text?.includes('snapshots are slow'));
+});
+
+// #1796: the Android revoke warning rides `warnings`; the human CLI line must show it. The line is
+// appended by `formatCliOutput` (#2682), so that is where the guarantee is asserted; the formatter
+// itself only renders the response's own message.
+test('settings renders response warnings after the message', async () => {
+  const warning = 'android.permission.CAMERA was granted before this revoke, and Android …';
+  const response = {
+    setting: 'permission',
+    state: 'reset',
+    message: 'Updated setting: permission',
+    warnings: [warning],
+  };
+
+  const output = await formatCliOutput({
+    env: process.env,
+    name: 'settings',
+    input: {},
+    result: response,
+  });
+  assert.equal(output?.text, `Updated setting: permission\nWarning: ${warning}`);
+  assert.deepEqual((output!.data as { warnings?: string[] }).warnings, [warning]);
+
+  const rendered = await captureCliOutputFormatters.settings!({
+    env: process.env,
+    input: {},
+    result: response,
+  });
+  assert.equal(rendered.text, 'Updated setting: permission');
 });

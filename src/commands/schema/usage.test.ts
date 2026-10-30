@@ -2,13 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import type { CommandText } from '@agent-device/command-registry/command-text';
-import {
-  getCliCommandSchema,
-  getFlagDefinitions,
-  type CommandSchema,
-  type FlagDefinition,
-  type FlagKey,
-} from './command-schema.ts';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
+import { getCliCommandSchema } from '@agent-device/command-surface';
 import { buildCommandUsage } from './usage.ts';
 
 const TEXT: CommandText = {

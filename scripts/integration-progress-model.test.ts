@@ -36,7 +36,7 @@ test('integration progress counts explicit generic Apple host-tool usage only', 
 test('integration progress maps a parameterless facet to its client method', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-progress-'));
   try {
-    const commandsDir = path.join(root, 'src/commands/system');
+    const commandsDir = path.join(root, 'packages/command-surface/src/system');
     const scenarioDir = path.join(root, 'test/integration/provider-scenarios');
     await mkdir(commandsDir, { recursive: true });
     await mkdir(scenarioDir, { recursive: true });

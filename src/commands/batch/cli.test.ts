@@ -11,7 +11,7 @@ import {
 } from '../../__tests__/cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { createBatchCommandMetadata } from './metadata.ts';
+import { findCommandMetadata } from '@agent-device/command-surface';
 
 const batchDefaultResponse: DaemonResponse = {
   ok: true,
@@ -159,7 +159,7 @@ test('a non-batchable command states the boundary and, on the CLI, the help reco
 // help pointer (#2062). The hint also has to survive the 400-character redaction cap intact —
 // enumerating the roster inline truncated it, help pointer and all.
 test('the MCP/Node availability refusal is surface-neutral and survives redaction whole', () => {
-  const metadata = createBatchCommandMetadata();
+  const metadata = findCommandMetadata('batch');
   try {
     metadata.readInput({ steps: [{ command: 'session', input: {} }] });
     assert.fail('expected the nested session command to be refused');

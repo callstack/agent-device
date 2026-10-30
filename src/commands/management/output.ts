@@ -1,3 +1,4 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type {
   AgentDeviceCapabilitiesResult,
@@ -20,12 +21,12 @@ import type {
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
 import type { CommandProgressState } from '../command-progress.ts';
-import type { CliOutput } from '../command-contract.ts';
 import {
   type CliOutputFormatter,
   messageCliOutput,
   messageOutput,
   resultOutput,
+  type CliOutput,
 } from '../output-common.ts';
 
 async function devicesCliOutput(result: AgentDeviceDevice[]): Promise<CliOutput> {
@@ -248,7 +249,7 @@ export const managementCliOutputFormatters = {
   'install-from-source': resultOutput(installFromSourceCliOutput),
   prepare: messageOutput,
   viewport: messageOutput,
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatDeviceLine(device: AgentDeviceDevice): string {
   const kind = device.kind ? ` ${device.kind}` : '';

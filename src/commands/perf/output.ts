@@ -1,7 +1,7 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import { isRecord } from '@agent-device/kernel/record';
-import type { CliOutput } from '../command-contract.ts';
-import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 function perfCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -10,7 +10,7 @@ function perfCliOutput(result: CommandRequestResult): CliOutput {
 
 export const perfCliOutputFormatters = {
   perf: resultOutput(perfCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatPerfCliOutput(data: Record<string, unknown>): string {
   return formatNativePerfOutput(data) ?? formatObservationPerfOutput(data);

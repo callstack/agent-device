@@ -33,6 +33,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
       name: '@agent-device/apple-runner',
       exports: { '.': entry('./src/index.ts') },
     },
+    'command-surface': {
+      name: '@agent-device/command-surface',
+      exports: { '.': entry('./src/index.ts') },
+    },
     proxy: { name: '@agent-device/proxy' },
     contracts: { name: '@agent-device/contracts' },
   };
@@ -56,6 +60,7 @@ const SOURCE = new Map([
     "export { startDaemonRuntime } from './server/http/daemon-runtime.ts';",
   ],
   ['packages/apple-runner/src/index.ts', "export { bindAppleRunnerHost } from './host.ts';"],
+  ['packages/command-surface/src/index.ts', "export { runCommand } from './command-surface.ts';"],
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
@@ -138,6 +143,36 @@ test('every daemon condition of "." points at src/index.ts', () => {
   assert.deepEqual(check({ daemon: { exports: { '.': './src/index.ts' } } }), []);
 });
 
+test('command-surface exports exactly "." and nothing else', () => {
+  for (const exports of [
+    { '.': entry('./src/index.ts'), './family/registry': entry('./src/family/registry.ts') },
+    { '.': entry('./src/index.ts'), './schema/*': entry('./src/schema/*.ts') },
+    { './command-input': entry('./src/command-input.ts') },
+  ]) {
+    const found = check({ 'command-surface': { exports } });
+    assert.equal(found.length, 1, JSON.stringify(exports));
+    assert.match(found[0]!.file, /packages\/command-surface\/package\.json/);
+    assert.match(found[0]!.message, /exports exactly "\."/);
+  }
+  const retargeted = check({ 'command-surface': { exports: { '.': entry('./src/other.ts') } } });
+  assert.equal(retargeted.length, 1);
+  assert.match(retargeted[0]!.message, /every condition of it is \.\/src\/index\.ts/);
+  assert.deepEqual(check(), []);
+});
+
+test('the command-surface entry names its exports: export * and namespace dumps are refused', () => {
+  for (const body of [
+    "export * from './command-surface.ts';",
+    "export { runCommand } from './command-surface.ts';\nexport * as families from './family/registry.ts';",
+    "export type * from './client-port.ts';",
+  ]) {
+    const found = check({}, new Map([...SOURCE, ['packages/command-surface/src/index.ts', body]]));
+    assert.equal(found.length, 1, body);
+    assert.equal(found[0]!.file, 'packages/command-surface/src/index.ts');
+    assert.match(found[0]!.message, /names every export explicitly/);
+  }
+});
+
 test('the entry names its exports: export * is refused', () => {
   for (const body of [
     "export * from './a.ts';",
@@ -197,7 +232,7 @@ test('the shared isolation walk runs under the test-kit policy', () => {
   assert.match(found[0]!.message, /test-kit -> @agent-device\/daemon/);
 });
 
-for (const dir of ['daemon', 'test-kit']) {
+for (const dir of ['daemon', 'test-kit', 'command-surface']) {
   test(`${dir} refuses a missing or renamed entry source`, () => {
     for (const renamed of [false, true]) {
       const sources = new Map(SOURCE);

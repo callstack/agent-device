@@ -175,7 +175,7 @@ export const FIND_VALUE_REQUIRED_MESSAGE = 'find requires a value';
 
 /**
  * Shared by both `Unsupported find action` throw sites (this file's raw-token
- * parser and `src/commands/interaction/selectors.ts`'s typed CLI reader) so
+ * parser and `packages/command-surface/src/interaction/selectors.ts`'s typed CLI reader) so
  * the recovery guidance cannot drift between them. `find` has no longpress/
  * swipe action of its own — the fix is to inspect matches with the read-only
  * `list` action, then dispatch the gesture on the chosen @ref as its own

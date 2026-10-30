@@ -1,15 +1,16 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { mergeDefinedFlags } from '../../commands/schema/merge-flags.ts';
 import {
   assertCommandPositionalArity,
   getCommandSchema,
+  isFlagSupportedForCommand,
+  mergeDefinedFlags,
+} from '@agent-device/command-surface';
+import {
   getFlagDefinition,
   getFlagDefinitions,
-  type FlagDefinition,
-  type FlagKey,
-} from '../../commands/schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../commands/schema/option-schema.ts';
+} from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { applyCommandDefaults } from '@agent-device/command-registry/registry';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import {

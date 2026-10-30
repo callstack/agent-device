@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+  },
+  // The command-registry sources this package imports read the `__OWNER_FILES__` build-time flag
+  // declared beside them; a package program that reaches registry.ts needs the declaration too.
+  "include": ["src", "../command-registry/src/global.d.ts"],
+  "references": [
+    { "path": "../ad-script" },
+    { "path": "../capture-kit" },
+    { "path": "../command-registry" },
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../provision-kit" },
+    { "path": "../replay-port" },
+    { "path": "../selectors" },
+    { "path": "../remote" },
+    { "path": "../test-kit" }
+  ]
+}

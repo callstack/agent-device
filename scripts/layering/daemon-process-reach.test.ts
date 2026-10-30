@@ -66,7 +66,7 @@ test('a type-only edge loads nothing, and the client may import the collector', 
     reach({
       'src/daemon.ts':
         "import type { Collect } from '../packages/replay-port/src/source-discovery.ts';\n",
-      'src/commands/replay/index.ts':
+      'packages/command-surface/src/replay/index.ts':
         "import '../../../packages/replay-port/src/source-discovery.ts';\n",
       [COLLECTOR]: 'export type Collect = () => [];\n',
     }),

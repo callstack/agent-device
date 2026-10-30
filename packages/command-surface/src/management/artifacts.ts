@@ -1,0 +1,45 @@
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import { stringField } from '../command-input.ts';
+import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
+import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { defineCommandFacet } from '../family/types.ts';
+import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+
+const artifactsCommandMetadata = defineFieldCommandMetadata(
+  'artifacts',
+  'List daemon or cloud provider artifacts for an active or completed session.',
+  {
+    provider: stringField(
+      'Cloud provider name, for example browserstack, aws-device-farm, or testmu.',
+    ),
+    providerSessionId: stringField('Cloud provider session id or ARN.'),
+  },
+);
+
+const artifactsCliSchema = {
+  usageOverride: 'artifacts [provider-session-id]',
+  usageFlags: ['provider'],
+  positionalArgs: ['provider-session-id?'],
+  allowedFlags: ['provider', 'providerSessionId'],
+} as const satisfies CommandSchemaOverride;
+
+const artifactsCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  provider: flags.provider,
+  providerSessionId: positionals[0] ?? flags.providerSessionId,
+});
+
+const artifactsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.artifacts);
+
+export const artifactsCommandFacet = defineCommandFacet({
+  name: 'artifacts',
+  text: {
+    summary: 'List daemon or cloud provider session artifacts',
+  },
+  metadata: artifactsCommandMetadata,
+  run: (client, input) => client.sessions.artifacts(input),
+  cliSchema: artifactsCliSchema,
+  cliReader: artifactsCliReader,
+  daemonWriter: artifactsDaemonWriter,
+});

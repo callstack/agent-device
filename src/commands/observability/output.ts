@@ -1,8 +1,8 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { BackendNetworkEntry } from '@agent-device/contracts/backend';
 import type { NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import type { NetworkEntry } from '@agent-device/contracts/observability';
-import type { CliOutput } from '../command-contract.ts';
-import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 type LogsActionFields = {
   started?: true;
@@ -168,7 +168,7 @@ export const observabilityCliOutputFormatters = {
   events: resultOutput<EventsCliResult>(eventsCliOutput),
   network: resultOutput<NetworkCliResult>(networkCliOutput),
   audio: resultOutput<AudioCliResult>(audioCliOutput),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function formatEventEntries(entries: readonly EventsCliEntry[]): string {
   const rows = entries.map(formatEventRow);

@@ -1,5 +1,5 @@
-import type { CliOutput } from '../command-contract.ts';
-import type { CliOutputFormatter } from '../output-common.ts';
+import type { CommandName } from '@agent-device/command-surface';
+import type { CliOutputFormatter, CliOutput } from '../output-common.ts';
 
 function metroCliOutput(params: { result: unknown; action?: string }): CliOutput {
   return {
@@ -14,4 +14,4 @@ function metroCliOutput(params: { result: unknown; action?: string }): CliOutput
 export const metroCliOutputFormatters = {
   metro: ({ input, result }) =>
     metroCliOutput({ result, action: input.action as string | undefined }),
-} as const satisfies Record<string, CliOutputFormatter>;
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;

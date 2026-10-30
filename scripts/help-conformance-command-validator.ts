@@ -1,7 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from '../src/cli/parser/args.ts';
-import { readInputFromCli } from '../src/commands/cli-grammar.ts';
-import { isCommandName } from '../src/commands/command-metadata.ts';
+import { isCommandName, readInputFromCli } from '@agent-device/command-surface';
 
 type ValidationKind = 'agent-device-grammar' | 'pseudo-ref';
 

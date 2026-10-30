@@ -1,5 +1,5 @@
 // The command surface a host injects into the daemon, stated as the daemon needs it: the
-// daemon's reach into the command surface without a type edge into `src/commands/`. The
+// daemon's reach into the command surface without a type edge into the command layer. The
 // composition root assigns `createCommandSurfaceAgentDevice` to this type, so the compiler
 // checks every signature against the implementation on each build.
 

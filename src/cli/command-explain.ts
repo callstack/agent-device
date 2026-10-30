@@ -9,14 +9,14 @@ import { commandDescriptors, type Command } from '@agent-device/command-registry
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import type { CommandTimeoutPolicy } from '@agent-device/command-registry/types';
 import {
+  commandFamilyName,
+  findCommandMetadata,
   getCliCommandSchema,
-  getFlagDefinitions,
-  GLOBAL_FLAG_KEYS,
-  type CommandSchema,
-  type FlagDefinition,
-  type FlagKey,
-} from '../commands/schema/command-schema.ts';
-import { commandFamilies, type CommandFamilyMetadata } from '../commands/family/registry.ts';
+} from '@agent-device/command-surface';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
+import { GLOBAL_FLAG_KEYS } from '@agent-device/command-registry/flag-groups';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 
 export type CommandFlagExplanation = {
   key: FlagKey;
@@ -102,9 +102,7 @@ function buildCommandExplanation(
   fileExists: FileExists | undefined,
   daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): CommandExplanation {
-  const family = commandFamilies.find((candidate) =>
-    candidate.metadata.some((metadata) => metadata.name === descriptor.name),
-  );
+  const family = commandFamilyName(descriptor.name);
   const cliSchema = cliCommandNames.has(descriptor.name)
     ? getCliCommandSchema(descriptor.name as Parameters<typeof getCliCommandSchema>[0])
     : undefined;
@@ -112,9 +110,9 @@ function buildCommandExplanation(
   return {
     command: descriptor.name,
     aliases: describeCliAliases(descriptor.name),
-    description: describeCommandText(descriptor, family, cliSchema),
+    description: describeCommandText(descriptor, cliSchema),
     catalog: { group: descriptor.catalog.group, key: catalogKey },
-    ...(family ? { family: family.name } : {}),
+    ...(family ? { family } : {}),
     ...describeCommandDaemon(descriptor),
     exposure: describeCommandExposure(descriptor),
     timeout: describeTimeoutPolicy(descriptor.timeoutPolicy),
@@ -122,7 +120,7 @@ function buildCommandExplanation(
     files: commandFiles(
       descriptor.name,
       ownerFilesForCommand(descriptor.name),
-      family?.name,
+      family,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
       fileExists,
       daemonRouteOwnerFiles,
@@ -191,12 +189,9 @@ function readCatalogKey(descriptor: CommandDescriptor): string {
 
 function describeCommandText(
   descriptor: CommandDescriptor,
-  family: (typeof commandFamilies)[number] | undefined,
   cliSchema: CommandSchema | undefined,
 ): string {
-  const metadata = family?.metadata.find(
-    (candidate): candidate is CommandFamilyMetadata => candidate.name === descriptor.name,
-  );
+  const metadata = findCommandMetadata(descriptor.name);
   return (
     metadata?.description ?? cliSchema?.text.description ?? `Internal command ${descriptor.name}`
   );
@@ -311,13 +306,13 @@ function commandFiles(
   const derived = ['packages/command-registry/src/registry.ts'];
   const opportunistic: string[] = [];
   if (family) {
-    derived.push(`src/commands/${family}/index.ts`);
+    derived.push(`packages/command-surface/src/${family}/index.ts`);
     opportunistic.push(
-      `src/commands/${family}/${command}.test.ts`,
-      `src/commands/${family}/index.test.ts`,
+      `packages/command-surface/src/${family}/${command}.test.ts`,
+      `packages/command-surface/src/${family}/index.test.ts`,
     );
   } else if (cliCommandNames.has(command)) {
-    derived.push('src/commands/schema/command-overrides.ts');
+    derived.push('packages/command-surface/src/schema/command-overrides.ts');
   }
   if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;

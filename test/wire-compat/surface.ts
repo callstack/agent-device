@@ -222,7 +222,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // Its embedded flag/option vocabulary is waived rather than listed — see
       // closure-policy.ts: those reach the peer inside DaemonRequest's untyped
       // `flags`/`input` bags, and ADR 0006 calls new flags additive.
-      ...from('src/commands/cli-grammar/types.ts', 'DaemonCommandRequest'),
+      ...from('packages/command-surface/src/cli-grammar/types.ts', 'DaemonCommandRequest'),
       // The lease method vocabulary the client and daemon must agree on.
       ...from('packages/contracts/src/lease-scope.ts', 'LeaseRpcCommand'),
       // Producer side: the method vocabulary a released client sends, and the

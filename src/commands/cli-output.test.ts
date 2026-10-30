@@ -1,11 +1,12 @@
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
+import { listCommandMetadata } from '@agent-device/command-surface';
 import {
-  listCommandFamilyCliOutputFormatters,
-  listCommandFamilyMetadata,
-} from './family/registry.ts';
-import { formatCliOutput, isParseableOutputCommand } from './cli-output.ts';
-import type { CommandName } from './command-metadata.ts';
+  formatCliOutput,
+  isParseableOutputCommand,
+  listCliOutputFormatters,
+} from './cli-output.ts';
+import type { CommandName } from '@agent-device/command-surface';
 
 bindTestCommandHost();
 
@@ -27,9 +28,7 @@ const PARSEABLE_OUTPUT_COMMANDS = [
 ] as const satisfies readonly CommandName[];
 
 /** Every command the registry gives a text formatter — the population the rule must cover. */
-const FORMATTER_COMMANDS = Object.keys(
-  listCommandFamilyCliOutputFormatters(),
-).sort() as CommandName[];
+const FORMATTER_COMMANDS = Object.keys(listCliOutputFormatters()).sort() as CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
   const output = await formatCliOutput({ env: process.env, name, input, result });
@@ -82,7 +81,7 @@ test('the parseable-output set is exactly the declared exceptions', () => {
  * one ever does, it owes its own printer instead of silently losing the disclosure.
  */
 test('a command with no formatter never opts out of stdout', () => {
-  const allCommands = listCommandFamilyMetadata().map((metadata) => metadata.name);
+  const allCommands = listCommandMetadata().map((metadata) => metadata.name);
   const withoutFormatter = allCommands.filter((name) => !FORMATTER_COMMANDS.includes(name));
   expect(withoutFormatter.length).toBeGreaterThan(0);
   expect(withoutFormatter.filter(isParseableOutputCommand)).toEqual([]);

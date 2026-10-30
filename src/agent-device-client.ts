@@ -53,11 +53,11 @@ import {
 } from './client/client-normalizers.ts';
 import type { AgentDeviceClient } from './client/client-types.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { buildRequestFlags } from './commands/command-flags.ts';
 import {
+  buildRequestFlags,
   prepareDaemonCommandRequest,
   type DaemonCommandName,
-} from './commands/command-projection.ts';
+} from '@agent-device/command-surface';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';

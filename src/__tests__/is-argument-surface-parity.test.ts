@@ -4,8 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { checkIsArgs, checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '@agent-device/selectors';
-import { interactionCommandMetadata } from '../commands/interaction/metadata.ts';
-import { readInputFromCli } from '../commands/cli-grammar.ts';
+import { findCommandMetadata, readInputFromCli } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 
@@ -158,7 +157,7 @@ test('command docs list every is predicate', () => {
     assert.match(predicateList, new RegExp(`\\b${predicate}\\b`));
   }
 
-  const metadata = interactionCommandMetadata.find((entry) => entry.name === 'is');
+  const metadata = findCommandMetadata('is');
   const predicateSchema = metadata?.inputSchema.properties?.predicate;
   assert.deepEqual(predicateSchema?.enum, IS_PREDICATES);
 });

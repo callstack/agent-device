@@ -1,22 +1,55 @@
-import {
-  listCommandFamilyCliOutputFormatters,
-  listCommandFamilyMetadata,
-} from './family/registry.ts';
-import type { CliOutput } from './command-contract.ts';
-import type { CommandProgressState } from './command-progress.ts';
-import { routeResponseWarnings, type CliOutputFormatter } from './output-common.ts';
-import type { CommandName } from './command-metadata.ts';
+import { findCommandMetadata, type CommandName } from '@agent-device/command-surface';
 import type { EnvMap } from '@agent-device/kernel/source-value';
+import { batchCliOutputFormatters } from './batch/output.ts';
+import { captureCliOutputFormatters } from './capture/output.ts';
+import type { CommandProgressState } from './command-progress.ts';
+import { debuggingCliOutputFormatters } from './debugging/output.ts';
+import { interactionCliOutputFormatters } from './interaction/output.ts';
+import { managementCliOutputFormatters } from './management/output.ts';
+import { metroCliOutputFormatters } from './metro/output.ts';
+import { observabilityCliOutputFormatters } from './observability/output.ts';
+import { routeResponseWarnings, type CliOutput, type CliOutputFormatter } from './output-common.ts';
+import { perfCliOutputFormatters } from './perf/output.ts';
+import { recordingCliOutputFormatters } from './recording/output.ts';
+import { replayCliOutputFormatters } from './replay/output.ts';
+import { systemCliOutputFormatters } from './system/output.ts';
 
-const cliOutputFormatters = listCommandFamilyCliOutputFormatters() as Partial<
-  Record<CommandName, CliOutputFormatter>
->;
+type CliOutputFormatters = Partial<Record<CommandName, CliOutputFormatter>>;
 
-const parseableOutputCommands = new Set(
-  listCommandFamilyMetadata()
-    .filter((metadata) => metadata.parseableOutput === true)
-    .map((metadata) => metadata.name),
-);
+const cliOutputFormatters = mergeCliOutputFormatters([
+  batchCliOutputFormatters,
+  captureCliOutputFormatters,
+  debuggingCliOutputFormatters,
+  interactionCliOutputFormatters,
+  managementCliOutputFormatters,
+  metroCliOutputFormatters,
+  observabilityCliOutputFormatters,
+  perfCliOutputFormatters,
+  recordingCliOutputFormatters,
+  replayCliOutputFormatters,
+  systemCliOutputFormatters,
+]);
+
+function mergeCliOutputFormatters(tables: readonly CliOutputFormatters[]): CliOutputFormatters {
+  const merged: CliOutputFormatters = {};
+  for (const table of tables) {
+    for (const [command, formatter] of Object.entries(table) as [
+      CommandName,
+      CliOutputFormatter,
+    ][]) {
+      if (Object.hasOwn(merged, command)) {
+        throw new Error(`Duplicate CLI output formatter: ${command}`);
+      }
+      merged[command] = formatter;
+    }
+  }
+  return merged;
+}
+
+/** @internal Introspection helper used by the CLI output parity tests. */
+export function listCliOutputFormatters(): CliOutputFormatters {
+  return { ...cliOutputFormatters };
+}
 
 /**
  * The one place a response's `Warning:` lines become text a human or an agent reads. Each formatter
@@ -43,11 +76,11 @@ export async function formatCliOutput(params: {
   return routeResponseWarnings(
     output,
     params.result,
-    parseableOutputCommands.has(params.name) ? 'stderr' : 'text',
+    isParseableOutputCommand(params.name) ? 'stderr' : 'text',
   );
 }
 
 /** Commands whose stdout is the value itself, so their warnings belong on stderr. */
 export function isParseableOutputCommand(name: CommandName): boolean {
-  return parseableOutputCommands.has(name);
+  return findCommandMetadata(name).parseableOutput === true;
 }

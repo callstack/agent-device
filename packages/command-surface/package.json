@@ -1,0 +1,30 @@
+{
+  "name": "@agent-device/command-surface",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "The command declaration surface: every command's metadata, input schema and CLI grammar, request projection, MCP output schemas, and the invoked client port, composed from per-family facets with no CLI presentation.",
+  "dependencies": {
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
+    "@agent-device/replay-port": "workspace:*",
+    "@agent-device/selectors": "workspace:*"
+  },
+  "devDependencies": {
+    "@agent-device/remote": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "vitest": "5.0.4"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
-import { findCommandMetadata } from '../../commands/command-metadata.ts';
+import { findCommandMetadata } from '@agent-device/command-surface';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
 // `batch` is the one tool whose input nests another command's input, and its

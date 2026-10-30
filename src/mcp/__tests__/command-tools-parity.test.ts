@@ -5,9 +5,9 @@ import { afterEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
-import type { CommandExecutionResult } from '../../commands/command-surface.ts';
+import type { CommandExecutionResult } from '@agent-device/command-surface';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
-import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
+import { COMMAND_OUTPUT_SCHEMAS } from '@agent-device/command-surface';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 

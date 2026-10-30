@@ -218,7 +218,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'artifacts',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/artifacts.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/artifacts.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -279,7 +281,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'devices',
     deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/device.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -298,7 +302,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'capabilities',
     deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/device.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -324,7 +330,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'doctor',
     deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/doctor.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/doctor.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -344,7 +352,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'apps',
     deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/app.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/app.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -365,7 +375,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'boot',
     deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/device.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -385,7 +397,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'shutdown',
     deviceClaimPolicy: 'transient-exclusive',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/device.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/management/device.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -403,7 +417,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'appstate',
     deviceClaimPolicy: 'observe',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/system/index.ts'] as const }
+      : {}),
     catalog: { group: 'public', key: 'appState' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
@@ -422,7 +438,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'snapshot',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/snapshot.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/capture/snapshot.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     recordsSessionAction: true,
@@ -442,7 +460,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'diff',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/capture/diff.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/capture/diff.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: true,
@@ -461,7 +481,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'find',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/command-surface/src/interaction/index.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     recordsSessionAction: true,
@@ -821,7 +843,7 @@ export function resolveCommandRecordingEffect(req: DispatchedCommand): Recording
 /**
  * @internal The commands that declare a {@link CommandResponseDataTransform}, with it.
  *
- * Consumed only by `src/commands/__tests__/command-surface-metadata.test.ts`, which
+ * Consumed only by `packages/command-surface/src/__tests__/command-surface-metadata.test.ts`, which
  * checks every transform field against that command's declared input schema. The
  * production projection of the same map is
  * {@link listCommandResponseDataTransformFieldNames}.

@@ -898,3 +898,23 @@ test.for(entries.filter((entry) => entry.denyPlatformImplementations))(
     ).toBe(0);
   },
 );
+
+// The command surface declares and projects commands; the CLI presentation (formatters, help,
+// progress) sits above it in the root. Package isolation keeps a package from importing the root,
+// so the first assertion reads the loaded graph for the direction, and the second proves the
+// published SDK entry gains no presentation module through the command port.
+function rootModulesEvaluatedBy(entryFile: string, rootFolders: readonly string[]): string[] {
+  return [...eagerClosureGraphOf(absolute(entryFile)).keys()]
+    .map((file) => path.relative(repoRoot, file).split(path.sep).join('/'))
+    .filter((file) => rootFolders.some((folder) => file.startsWith(folder)));
+}
+
+test('the command-surface entry evaluates no root module, so request projection loads no CLI presentation', () => {
+  expect(rootModulesEvaluatedBy('packages/command-surface/src/index.ts', ['src/'])).toEqual([]);
+});
+
+test('the SDK entry evaluates no CLI, MCP or command-presentation module', () => {
+  expect(
+    rootModulesEvaluatedBy('src/sdk/index.ts', ['src/commands/', 'src/cli/', 'src/mcp/']),
+  ).toEqual([]);
+});

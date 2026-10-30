@@ -37,7 +37,7 @@ const TOOLCHAIN_IDENTITY_EXEC_MESSAGE =
   'Read the toolchain identity from the selected Xcode files; an exec here can stall the runner cache decision.';
 
 const CHILD_PROCESS_BAN_ROOTS = ['src', 'packages/host-kit/src'];
-const PROVIDER_BAN_ROOTS = ['src/commands', 'src/cli/commands'];
+const PROVIDER_BAN_ROOTS = ['src/commands', 'packages/command-surface/src', 'src/cli/commands'];
 
 const MAX_FILE_LINES = 1000;
 

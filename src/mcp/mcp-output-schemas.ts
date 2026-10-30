@@ -1,6 +1,5 @@
-import type { JsonSchema } from '../commands/command-contract.ts';
+import { COMMAND_OUTPUT_SCHEMAS, type JsonSchema } from '@agent-device/command-surface';
 import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
-import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 
 const MCP_COLLECTION_OUTPUT_SCHEMAS = {
   devices: {

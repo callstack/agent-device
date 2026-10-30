@@ -1,12 +1,13 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { AppStateCommandResult } from '@agent-device/contracts/device';
 import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
 import type { KeyboardCommandResult } from '@agent-device/contracts/keyboard';
-import type { CliOutput } from '../command-contract.ts';
 import {
   messageCliOutput,
   messageOutput,
   resultOutput,
   type CliOutputFormatter,
+  type CliOutput,
 } from '../output-common.ts';
 import { withSettleCapableNotes } from '../settle-output.ts';
 
@@ -54,7 +55,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   'tv-remote': messageOutput,
   'hardware-button': messageOutput,
   telephony: messageOutput,
-} satisfies Record<string, CliOutputFormatter>);
+} satisfies Partial<Record<CommandName, CliOutputFormatter>>);
 
 function formatAppState(data: AppStateCommandResult): string {
   switch (data.platform) {

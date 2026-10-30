@@ -1,8 +1,11 @@
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import type { CommandExecutionResult } from '../commands/command-surface.ts';
+import {
+  isCommandName,
+  type CommandExecutionResult,
+  type CommandName,
+} from '@agent-device/command-surface';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,

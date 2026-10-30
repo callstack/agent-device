@@ -20,7 +20,7 @@ import { createAgentDeviceClient } from '../agent-device-client.ts';
 import type { AgentDeviceClient } from '../client/client-types.ts';
 import { parseArgs } from '../cli/parser/args.ts';
 import { runCliCommandWithOutput } from '../commands/cli-runner.ts';
-import type { CommandName } from '../commands/command-metadata.ts';
+import type { CommandName } from '@agent-device/command-surface';
 
 type SeenRequest = { command: string; noRecord?: boolean; record?: boolean };
 

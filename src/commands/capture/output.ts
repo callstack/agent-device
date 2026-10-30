@@ -1,8 +1,8 @@
+import type { CommandName } from '@agent-device/command-surface';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { dedupeInheritedSnapshotLabels } from '@agent-device/capture-kit/snapshot-label-dedup';
 import { formatSnapshotText } from '../output/snapshot.ts';
-import type { CliOutput } from '../command-contract.ts';
-import { messageOutput, type CliOutputFormatter } from '../output-common.ts';
+import { messageOutput, type CliOutputFormatter, type CliOutput } from '../output-common.ts';
 
 export async function snapshotCliOutput(params: {
   result: CaptureSnapshotResult;
@@ -49,7 +49,9 @@ export const captureCliOutputFormatters = {
     }),
   wait: messageOutput,
   alert: messageOutput,
-} as const satisfies Record<string, CliOutputFormatter>;
+  // Android permission revokes append a relaunch warning (#1796); render it for humans too.
+  settings: messageOutput,
+} as const satisfies Partial<Record<CommandName, CliOutputFormatter>>;
 
 function withoutUnchanged(data: Record<string, unknown>): Record<string, unknown> {
   const { unchanged: _unchanged, ...outputData } = data;
