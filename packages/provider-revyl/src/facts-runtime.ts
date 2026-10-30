@@ -182,7 +182,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       ...revylInteractionOperationFacts(),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
-      ...revylNavigationOperationFacts(),
+      ...revylNavigationOperationFacts(device),
       ...revylUnsupportedOperationFacts(),
       ...audioProbeRuntimeOperationFacts({
         capture: audioProbeUnavailable,

@@ -25,7 +25,6 @@ type RevylOperation = keyof ReturnType<typeof revylFacts>['operations'];
  * compile error here rather than an unclassified row.
  */
 const EXPECTED_CELLS = {
-  back: 'available',
   bootTarget: 'available',
   captureScreenshot: 'available',
   captureSnapshot: 'available',
@@ -44,6 +43,7 @@ const EXPECTED_CELLS = {
   tapPoint: 'available',
 
   acceptAlert: 'mode',
+  back: 'mode',
   actionButton: 'mode',
   appLogCleanup: 'mode',
   appLogDoctor: 'mode',
@@ -158,6 +158,20 @@ test('the refused text-entry and system-button cells name the substitute a calle
   assert.ok(appSwitcher && !appSwitcher.available);
   assert.match(typeText.hint ?? '', /fill/);
   assert.match(appSwitcher.hint ?? '', /home/);
+});
+
+test('back is an Android button; iOS refuses it with the substitute', () => {
+  const android: DeviceInfo = {
+    ...IOS_DEVICE,
+    platform: 'android',
+    appleOs: undefined,
+    id: 'revyl:android:lease-1',
+    kind: 'emulator',
+  };
+  assert.deepEqual(revylFacts(android).operations.back, { available: true });
+  const ios = revylFacts(IOS_DEVICE).operations.back;
+  assert.equal(ios.available, false);
+  assert.match(ios.available ? '' : (ios.hint ?? ''), /only on Android/);
 });
 
 test('the facts report the canonical device shape beside the provider mode', () => {

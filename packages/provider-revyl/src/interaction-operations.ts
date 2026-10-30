@@ -72,6 +72,11 @@ const orientationUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not expose orientation control.',
 );
+/** Revyl's worker answers `/back` only on Android: iOS has no system back button to press. */
+const iosBackUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  "Revyl has a back button only on Android; on iOS, click the app's own back control.",
+);
 /** `/go_home` is the only system button the worker answers. */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
@@ -150,7 +155,10 @@ export function revylInteractionOperationFacts(liveSession?: RuntimeOperationUna
  * than point actions: `back` and `home` are actions of their own, so they do not follow the point
  * cells' availability.
  */
-export function revylNavigationOperationFacts(liveSession?: RuntimeOperationUnavailability) {
+export function revylNavigationOperationFacts(
+  device: Pick<DeviceInfo, 'platform'>,
+  liveSession?: RuntimeOperationUnavailability,
+) {
   if (liveSession) {
     return Object.freeze({
       ...backRuntimeOperationFacts({ back: liveSession }),
@@ -163,7 +171,9 @@ export function revylNavigationOperationFacts(liveSession?: RuntimeOperationUnav
     });
   }
   return Object.freeze({
-    ...backRuntimeOperationFacts({ back: available }),
+    ...backRuntimeOperationFacts({
+      back: device.platform === 'android' ? available : iosBackUnavailable,
+    }),
     ...orientationRuntimeOperationFacts({
       orientation: orientationUnavailable,
       unlock: orientationUnavailable,

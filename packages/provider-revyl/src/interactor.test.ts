@@ -626,14 +626,29 @@ test('a close that names an app before any launch is refused instead of ending t
   assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
 });
 
+function relaunchInput(app: string) {
+  return {
+    target: app,
+    positionals: [app],
+    appBundleId: app,
+    surface: 'app' as const,
+    hasExistingSession: true,
+    relaunch: true,
+    prewarmRunnerBeforeOpen: false,
+    enableTestIme: false,
+    stateDir: '/tmp',
+    runtimeHints: {},
+    execution: { requestId: 'request-1' },
+  };
+}
+
 /**
- * The shared direct lifecycle closes the app it is about to launch before launching it, so this drives
- * the real binding rather than the interactor alone: a guard that only knew the session's own app would
- * refuse the close this open makes and no direct call would show it.
+ * This drives the real lifecycle binding rather than the interactor alone: the relaunch ends the
+ * running app itself, so the `close <app>` guard never sees an app the session did not launch.
  */
-test('a relaunch open into another app closes its way there instead of refusing', async () => {
+test('a relaunch open into another app ends the running app, then launches', async () => {
   const { fixture, runtime, device } = await liveInteractor('ios');
-  const launched = runtime.getInteractor(device, { appBundleId: 'com.example.app' });
+  const launched = runtime.getInteractor(device);
   if (!launched) throw new Error('Expected a live session interactor.');
   await launched.open('com.example.app');
   const before = fixture.paths().length;
@@ -644,33 +659,40 @@ test('a relaunch open into another app closes its way there instead of refusing'
     getInteractor: (target, runner) => runtime.getInteractor(target, runner),
   });
 
-  await lifecycle.openApplication({
-    target: 'com.other.app',
-    positionals: ['com.other.app'],
-    appBundleId: 'com.other.app',
-    surface: 'app',
-    hasExistingSession: true,
-    relaunch: true,
-    prewarmRunnerBeforeOpen: false,
-    enableTestIme: false,
-    stateDir: '/tmp',
-    runtimeHints: {},
-    execution: { requestId: 'request-1' },
-  });
+  await lifecycle.openApplication(relaunchInput('com.other.app'));
 
   const actions = fixture
     .paths()
     .slice(before)
     .map((request) => request.split('/').at(-1)!);
-  // The session was launched elsewhere, so the first action this request takes is the close of the app
-  // it is about to start; the refusal would have stopped the open before it began.
   assert.deepEqual(actions, ['kill_app', 'launch']);
   assert.deepEqual(fixture.bodyFor('launch'), { bundle_id: 'com.other.app' });
 });
 
-test('the same lifecycle still refuses a close that names an app no open is heading to', async () => {
+test('a relaunch on a fresh session needs no earlier launch', async () => {
   const { fixture, runtime, device } = await liveInteractor('ios');
-  const launched = runtime.getInteractor(device, { appBundleId: 'com.example.app' });
+  const lifecycle = bindRevylApplicationLifecycle({
+    device,
+    signal: new AbortController().signal,
+    getInteractor: (target, runner) => runtime.getInteractor(target, runner),
+  });
+
+  const before = fixture.paths().length;
+
+  await lifecycle.openApplication(relaunchInput('com.example.app'));
+
+  assert.deepEqual(
+    fixture
+      .paths()
+      .slice(before)
+      .map((request) => request.split('/').at(-1)),
+    ['kill_app', 'launch'],
+  );
+});
+
+test('the lifecycle refuses a close naming another app, even when the command resolves to it', async () => {
+  const { fixture, runtime, device } = await liveInteractor('ios');
+  const launched = runtime.getInteractor(device);
   if (!launched) throw new Error('Expected a live session interactor.');
   await launched.open('com.example.app');
 
@@ -683,6 +705,7 @@ test('the same lifecycle still refuses a close that names an app no open is head
     () =>
       lifecycle.closeApplication({
         positionals: ['com.unrelated.app'],
+        appBundleId: 'com.unrelated.app',
         surface: 'app',
         execution: { requestId: 'request-2' },
       }),

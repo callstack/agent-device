@@ -34,19 +34,10 @@ class RevylInteractor implements Interactor {
   private readonly session: RevylSession;
   /** The cancellation the command came in with, when the runner carried one. */
   private readonly signal: AbortSignal | undefined;
-  /**
-   * The app this command resolves to. The shared lifecycle works out that identity before it dispatches
-   * and passes it to the interactor resolver, so it is the session's app for a close and the app under
-   * launch for an open. `close` has to accept it: a relaunch open names the app it is about to start,
-   * and the lifecycle closes that app first, so a session running one app could never move to another
-   * without it.
-   */
-  private readonly requestApp: string | undefined;
 
-  constructor(session: RevylSession, signal?: AbortSignal, requestApp?: string) {
+  constructor(session: RevylSession, signal?: AbortSignal) {
     this.session = session;
     this.signal = signal;
-    this.requestApp = requestApp?.trim() || undefined;
   }
 
   async open(
@@ -89,19 +80,14 @@ class RevylInteractor implements Interactor {
 
   /**
    * Revyl's `/kill_app` carries no bundle id: it ends the app the session runs. So a close that names the
-   * app this session launched is that request, and an unnamed close is that request too. A close that
-   * names a different app, or names any app while this session has launched none, is refused: Revyl cannot
-   * name what it ends, so killing its app would report the close of an app this runtime never saw start.
-   *
-   * The app this command resolves to is allowed as well. A relaunch open names the app it is about to
-   * launch, and the shared lifecycle closes that app before starting it, so a session running one app has
-   * to be able to close its way into another.
+   * app this session launched is that request, and an unnamed close (a relaunch ending whatever runs) is
+   * that request too. A close that names a different app, or names any app while this session has
+   * launched none, is refused: killing the session's app would report the close of an app this runtime
+   * never saw start.
    */
   async close(app: string): Promise<void> {
     const target = app.trim();
-    if (target && target !== this.requestApp) {
-      this.requireCloseableApp(target, this.session.launchedApp.bundleId);
-    }
+    if (target) this.requireCloseableApp(target, this.session.launchedApp.bundleId);
     await this.workerAction('kill_app');
   }
 
@@ -359,12 +345,8 @@ class RevylInteractor implements Interactor {
   }
 }
 
-export function createRevylInteractor(
-  session: RevylSession,
-  signal?: AbortSignal,
-  requestApp?: string,
-): Interactor {
-  return new RevylInteractor(session, signal, requestApp);
+export function createRevylInteractor(session: RevylSession, signal?: AbortSignal): Interactor {
+  return new RevylInteractor(session, signal);
 }
 
 /** The plan works in a zero-origin box; a snapshot container's rect is in the same space here. */
