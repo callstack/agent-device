@@ -88,30 +88,44 @@ test('the wrapper redirects a node --test child TMPDIR and removes it after the 
 
 type LeftoverPids = { fixture: number; fixtureChild: number; tool: number };
 
+// Started with its child-pid path as argv[1]. Both files are published by rename, so a reader
+// never sees a partial pid.
+const LEFTOVER_FIXTURE_SOURCE = `const fs = require('node:fs');
+const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+fs.writeFileSync(process.argv[1] + '.tmp', String(child.pid));
+fs.renameSync(process.argv[1] + '.tmp', process.argv[1]);
+setInterval(() => {}, 1000);`;
+
 // The probe leaves a Node fixture (with a child of its own) and a non-Node tool running, both
-// detached so they outlive the probe. With `hold`, it then waits until the run is interrupted.
-function writeLeftoverProbe(evidenceRoot: string, hold: boolean): string {
-  const probeName = `node-test-tmpdir-probe-reap-${process.pid}-${crypto.randomUUID()}.test.ts`;
-  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
-  const childPidPath = path.join(evidenceRoot, 'fixture-child.txt');
-  const fixtureSource = `const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); require('node:fs').writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid)); setInterval(() => {}, 1000);`;
-  fs.writeFileSync(
-    probePath,
-    `import fs from 'node:fs';
+// detached so they outlive the probe. With REAP_HOLD set, it then waits to be interrupted.
+const LEFTOVER_PROBE_SOURCE = `import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 
 test('probe leaves a Node fixture and a non-Node tool running past its own exit', async () => {
-  const fixture = runCmdDetached(process.execPath, ['-e', ${JSON.stringify(fixtureSource)}]);
+  const root = process.env.REAP_EVIDENCE_ROOT;
+  const childPidPath = path.join(root, 'fixture-child.txt');
+  const fixture = runCmdDetached(process.execPath, ['-e', ${JSON.stringify(LEFTOVER_FIXTURE_SOURCE)}, childPidPath]);
   const tool = runCmdDetached('/bin/sleep', ['60']);
-  while (!fs.existsSync(${JSON.stringify(childPidPath)})) await new Promise((resolve) => setTimeout(resolve, 20));
-  const fixtureChild = Number(fs.readFileSync(${JSON.stringify(childPidPath)}, 'utf8'));
-  fs.writeFileSync(${JSON.stringify(path.join(evidenceRoot, 'pids.json'))}, JSON.stringify({ fixture, fixtureChild, tool }));
-  ${hold ? 'await new Promise((resolve) => setTimeout(resolve, 60_000));' : ''}
+  while (!fs.existsSync(childPidPath)) await new Promise((resolve) => setTimeout(resolve, 20));
+  const fixtureChild = Number(fs.readFileSync(childPidPath, 'utf8'));
+  const pidsPath = path.join(root, 'pids.json');
+  fs.writeFileSync(pidsPath + '.tmp', JSON.stringify({ fixture, fixtureChild, tool }));
+  fs.renameSync(pidsPath + '.tmp', pidsPath);
+  if (process.env.REAP_HOLD) await new Promise((resolve) => setTimeout(resolve, 60_000));
 });
-`,
-  );
+`;
+
+function writeLeftoverProbe(): string {
+  const probeName = `node-test-tmpdir-probe-reap-${process.pid}-${crypto.randomUUID()}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  fs.writeFileSync(probePath, LEFTOVER_PROBE_SOURCE);
   return probePath;
+}
+
+function leftoverProbeEnv(evidenceRoot: string, hold: boolean): NodeJS.ProcessEnv {
+  return { ...process.env, REAP_EVIDENCE_ROOT: evidenceRoot, REAP_HOLD: hold ? '1' : '' };
 }
 
 async function assertOnlyFixtureTreeStopped(stderr: string, pids: LeftoverPids): Promise<void> {
@@ -130,18 +144,19 @@ function killLeftovers(evidenceRoot: string): void {
   if (!fs.existsSync(evidencePath)) return;
   const pids = JSON.parse(fs.readFileSync(evidencePath, 'utf8')) as LeftoverPids;
   for (const pid of [pids.fixture, pids.fixtureChild, pids.tool]) {
-    if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+    // pid 0 or a negative pid would address a whole process group.
+    if (Number.isInteger(pid) && pid > 0 && isAlive(pid)) process.kill(pid, 'SIGKILL');
   }
 }
 
 test('the wrapper stops an orphaned Node fixture tree still using the run directory, not a shared tool', async () => {
   const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-'));
-  const probePath = writeLeftoverProbe(evidenceRoot, false);
+  const probePath = writeLeftoverProbe();
   try {
     const result = await runCmd(
       process.execPath,
       ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
-      { cwd: REPOSITORY_ROOT, timeoutMs: 30_000 },
+      { cwd: REPOSITORY_ROOT, env: leftoverProbeEnv(evidenceRoot, false), timeoutMs: 30_000 },
     );
     assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
     const pids = JSON.parse(fs.readFileSync(path.join(evidenceRoot, 'pids.json'), 'utf8'));
@@ -155,11 +170,11 @@ test('the wrapper stops an orphaned Node fixture tree still using the run direct
 
 test('an interrupted wrapper waits for its child, then stops the leftovers and exits 130', async () => {
   const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-signal-'));
-  const probePath = writeLeftoverProbe(evidenceRoot, true);
+  const probePath = writeLeftoverProbe();
   const wrapper = runCmdBackground(
     process.execPath,
     ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
-    { cwd: REPOSITORY_ROOT, allowFailure: true },
+    { cwd: REPOSITORY_ROOT, env: leftoverProbeEnv(evidenceRoot, true), allowFailure: true },
   );
   try {
     const evidencePath = path.join(evidenceRoot, 'pids.json');
@@ -172,7 +187,16 @@ test('an interrupted wrapper waits for its child, then stops the leftovers and e
       JSON.parse(fs.readFileSync(evidencePath, 'utf8')),
     );
   } finally {
-    wrapper.child.kill('SIGKILL');
+    // An early failure leaves the wrapper running: interrupt it so it stops its own child and
+    // removes the run directory, and SIGKILL it only if that does not finish in time.
+    if (wrapper.child.exitCode === null && wrapper.child.signalCode === null) {
+      wrapper.child.kill('SIGINT');
+      const settled = await Promise.race([
+        wrapper.wait.then(() => true),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 10_000)),
+      ]);
+      if (!settled) wrapper.child.kill('SIGKILL');
+    }
     await wrapper.wait;
     killLeftovers(evidenceRoot);
     fs.rmSync(probePath, { force: true });
