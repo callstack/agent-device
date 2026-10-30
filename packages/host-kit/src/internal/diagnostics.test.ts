@@ -216,3 +216,54 @@ for (const startEvent of [undefined, 'start']) {
     });
   }
 }
+
+test.each([false, true])('diagnostics preserve bigint precision with debug=%s', async (debug) => {
+  const logPath = path.join(mkdtempForTestSync('agent-device-diag-bigint-'), 'events.ndjson');
+  await withDiagnosticsScope({ debug, logPath }, async () => {
+    emitDiagnostic({
+      phase: 'owner_shutdown_failed',
+      data: {
+        observedAtNs: 9_007_199_254_740_993n,
+        samples: [1n, 42n],
+        authorization: 'Bearer secret',
+      },
+    });
+    assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+  });
+  const rows = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].data, {
+    observedAtNs: '9007199254740993',
+    samples: ['1', '42'],
+    authorization: '[REDACTED]',
+  });
+});
+
+test.each(['toJSON', 'getter'] as const)(
+  'diagnostic %s failure cannot escape emission',
+  async (fault) => {
+    const evidence =
+      fault === 'toJSON'
+        ? {
+            toJSON: () => {
+              throw new Error('serialization hook failed');
+            },
+          }
+        : Object.defineProperty({}, 'value', {
+            enumerable: true,
+            get() {
+              throw new Error('diagnostic getter failed');
+            },
+          });
+    const logPath = path.join(mkdtempForTestSync('agent-device-diag-invalid-'), 'events.ndjson');
+    await withDiagnosticsScope({ debug: true, logPath }, async () => {
+      assert.doesNotThrow(() =>
+        emitDiagnostic({ phase: 'owner_shutdown_failed', data: { evidence } }),
+      );
+    });
+  },
+);

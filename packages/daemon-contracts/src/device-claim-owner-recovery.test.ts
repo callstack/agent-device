@@ -244,3 +244,55 @@ test.each(['primary-error', 'retained'] as const)(
     expect(f.dispose).toHaveBeenCalledOnce();
   },
 );
+
+test.each([
+  ['primary-error', 'circular'],
+  ['primary-error', 'toJSON'],
+  ['primary-error', 'sink'],
+  ['retained', 'circular'],
+  ['retained', 'toJSON'],
+  ['retained', 'sink'],
+] as const)(
+  'preserves %s outcome and claim when secondary diagnostics encounter %s',
+  async (outcome, fault) => {
+    const primary = new AppError('DEVICE_IN_USE', 'reconciliation refused', {
+      reason: 'primary-refusal',
+    });
+    const retained = { status: 'retained', reason: 'screen-recording-owner-mismatch' } as const;
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const f = fixture(
+      async () => {
+        if (outcome === 'primary-error') throw primary;
+        return retained;
+      },
+      1,
+      fault === 'circular'
+        ? { evidence: circular }
+        : fault === 'toJSON'
+          ? {
+              toJSON: () => {
+                throw new Error('serialization hook failed');
+              },
+            }
+          : {},
+    );
+    if (fault === 'sink')
+      f.emit.mockImplementationOnce(() => {
+        throw new Error('diagnostic sink failed');
+      });
+    const recovery = settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env);
+    if (outcome === 'primary-error') await expect(recovery).rejects.toBe(primary);
+    else await expect(recovery).resolves.toBe(retained);
+    if (fault === 'circular') {
+      expect(f.emit).toHaveBeenCalledOnce();
+      expect(
+        f.emit.mock.calls[0]?.[0].data.error.details.failures[0].error.details.evidence.self,
+      ).toBe('[Circular]');
+    } else if (fault === 'sink') expect(f.emit).toHaveBeenCalledOnce();
+    else expect(f.emit).not.toHaveBeenCalled();
+    expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
+    expect(f.reconcileOnce).toHaveBeenCalledOnce();
+    expect(f.dispose).toHaveBeenCalledOnce();
+  },
+);

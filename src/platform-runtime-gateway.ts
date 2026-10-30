@@ -213,6 +213,7 @@ export function createComposedPlatformRuntimeGateway(options: {
                   return { owner: owner.owner, error };
                 }
               },
+              // Load errors belong to the load caller; this phase reports owner shutdown failures.
               () => undefined,
             ),
           ),
@@ -222,6 +223,7 @@ export function createComposedPlatformRuntimeGateway(options: {
         providerLoads.clear();
         const [first, ...rest] = outcomes.filter((outcome) => outcome !== undefined);
         if (first) {
+          // ADR 0027 keeps the successful gateway's eager closure flat.
           const { createPlatformRuntimeShutdownError } =
             await import('@agent-device/contracts/platform-runtime-shutdown');
           throw createPlatformRuntimeShutdownError([first, ...rest]);
