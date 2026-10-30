@@ -289,8 +289,21 @@ test.each([
       expect(
         f.emit.mock.calls[0]?.[0].data.error.details.failures[0].error.details.evidence.self,
       ).toBe('[Circular]');
-    } else if (fault === 'sink') expect(f.emit).toHaveBeenCalledOnce();
-    else expect(f.emit).not.toHaveBeenCalled();
+    } else {
+      expect(f.emit).toHaveBeenCalledOnce();
+      if (fault === 'toJSON') {
+        expect(f.emit).toHaveBeenCalledWith({
+          level: 'error',
+          phase: 'device_claim_recovery_dispose_failed',
+          data: {
+            deviceKey: f.claim.deviceKey,
+            ownerSession: f.claim.session,
+            ...(outcome === 'retained' ? { retainedReason: retained.reason } : {}),
+            reason: 'diagnostic-data-unserializable',
+          },
+        });
+      }
+    }
     expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
     expect(f.reconcileOnce).toHaveBeenCalledOnce();
     expect(f.dispose).toHaveBeenCalledOnce();

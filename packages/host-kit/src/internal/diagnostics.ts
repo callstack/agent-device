@@ -147,25 +147,25 @@ export function toDiagnosticJson(value: unknown): JsonValue {
   return JSON.parse(stringifyDiagnosticValue(value));
 }
 
-function stringifyDiagnosticValue(value: unknown): string {
+function stringifyDiagnosticValue(value: unknown, sensitiveValues: readonly string[] = []): string {
   return JSON.stringify(value, (_key, entry) =>
-    typeof entry === 'bigint' ? entry.toString() : entry,
+    typeof entry === 'bigint' || typeof entry === 'string'
+      ? replaceSensitiveValues(entry, sensitiveValues)
+      : entry,
   );
 }
 
 function stringifyDiagnosticEvent(
   event: DiagnosticEvent,
-  sensitiveValues?: readonly string[],
+  sensitiveValues: readonly string[] = [],
 ): string {
   try {
-    return stringifyDiagnosticValue(
-      sensitiveValues ? replaceSensitiveValues(event, sensitiveValues) : event,
-    );
+    return stringifyDiagnosticValue(event, sensitiveValues);
   } catch {
     const { data: _data, ...metadata } = event;
-    const fallback = { ...metadata, data: { reason: 'diagnostic-data-unserializable' } };
     return stringifyDiagnosticValue(
-      sensitiveValues ? replaceSensitiveValues(fallback, sensitiveValues) : fallback,
+      { ...metadata, data: { reason: 'diagnostic-data-unserializable' } },
+      sensitiveValues,
     );
   }
 }
@@ -187,7 +187,7 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
     scope.events.push(payload);
     scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
     if (!scope.debug && !scope.traceLogPath) return;
-    const fileLine = `${stringifyDiagnosticEvent(payload)}\n`;
+    const fileLine = `${stringifyDiagnosticEvent(payload, sortedScopeSensitiveValues(scope))}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
@@ -303,12 +303,23 @@ function sortedScopeSensitiveValues(scope: DiagnosticsScope): readonly string[] 
   return scope.sortedSensitiveValues;
 }
 
-function redactScopeData<T>(scope: DiagnosticsScope, input: T): T {
-  const redacted = redactDiagnosticData(input);
-  return replaceSensitiveValues(redacted, sortedScopeSensitiveValues(scope)) as T;
+function redactScopeData(
+  scope: DiagnosticsScope,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const values = sortedScopeSensitiveValues(scope);
+  try {
+    return replaceSensitiveValues(redactDiagnosticData(input), values) as Record<string, unknown>;
+  } catch {
+    return replaceSensitiveValues({ reason: 'diagnostic-data-unserializable' }, values) as Record<
+      string,
+      unknown
+    >;
+  }
 }
 
 function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
+  if (typeof value === 'bigint') value = value.toString();
   if (typeof value === 'string') {
     return sensitiveValues.reduce(
       (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),

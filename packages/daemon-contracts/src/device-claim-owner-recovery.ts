@@ -4,6 +4,7 @@ import {
   resolveSessionAppLogPidPath,
 } from './session-artifact-paths.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { JsonObject } from '@agent-device/contracts/client';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { toDiagnosticJson } from '@agent-device/host-kit/diagnostics';
@@ -71,6 +72,12 @@ export function createOwnerScopedDeviceClaimReconciler(
       await recovery.dispose();
     } catch (error) {
       if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
+      let failureDetails: JsonObject;
+      try {
+        failureDetails = { error: toDiagnosticJson(normalizeError(error)) };
+      } catch {
+        failureDetails = { reason: 'diagnostic-data-unserializable' };
+      }
       try {
         params.scope.diagnostics.emit({
           level: 'error',
@@ -81,7 +88,7 @@ export function createOwnerScopedDeviceClaimReconciler(
             ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
               ? { retainedReason: outcome.result.reason }
               : {}),
-            error: toDiagnosticJson(normalizeError(error)),
+            ...failureDetails,
           },
         });
       } catch {
