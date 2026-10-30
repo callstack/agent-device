@@ -134,6 +134,23 @@ test('request runtime binding caches one broad owner and projects each declared 
   expect(runtime.disposals).toEqual(['one']);
 });
 
+test('a readiness transition rebinds the same device with its fresh boot observation', async () => {
+  const runtime = makeGateway();
+  const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
+    gateway: runtime.gateway,
+    scope,
+    admitDeviceClaim,
+  });
+  const selected = { ...device('one'), booted: false };
+  const before = await bindings.bindDevice(selected, appLogInspectUse);
+  const after = await bindings.bindDevice({ ...selected, booted: true }, appLogInspectUse);
+
+  expect(before.device).toMatchObject({ id: 'one', booted: false });
+  expect(after.device).toMatchObject({ id: 'one', booted: true });
+  await bindings[Symbol.asyncDispose]();
+});
+
 test('facts inspection answers admission without creating a request binding', async () => {
   const runtime = makeGateway();
   const bindings = createRequestRuntimeBindings({

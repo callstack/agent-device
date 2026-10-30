@@ -116,7 +116,7 @@ At `9eea80f2a583e7b6b05d187114922506ee1fa3d0`, the same focused provider suite r
 
 Command: `pnpm exec vitest run --project provider-integration test/integration/provider-scenarios/install-timeout-ledger.test.ts --reporter verbose`. The disposable checkout was removed.
 
-The ledger covers shutdown Android AVD discovery, boot polling, the changed serial, foreign device claims, metadata inspection, uninstall, APK install, both bundletool phases, simulator boot, CoreDevice readiness, and URL download. Archive extraction remains bounded by size, not wall-clock time. Provider-owned install implementations remain responsible for honoring the supplied timeout.
+The final ledger also covers a running emulator that becomes ready without changing its serial. Request binding caches distinguish the old and fresh boot observations. The ledger covers shutdown Android AVD discovery, boot polling, the changed serial, foreign device claims, metadata inspection, uninstall, APK install, both bundletool phases, simulator boot, CoreDevice readiness, and URL download. Archive extraction remains bounded by size, not wall-clock time. Provider-owned install implementations remain responsible for honoring the supplied timeout.
 
 ## Limits
 

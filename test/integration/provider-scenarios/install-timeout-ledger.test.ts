@@ -47,7 +47,8 @@ type InstallRoute =
   | 'iOS physical device'
   | 'iOS simulator'
   | 'Android APK'
-  | 'Android AAB fallback';
+  | 'Android AAB fallback'
+  | 'Android AAB booting';
 
 class InstallLedger {
   readonly calls: InstallLedgerCall[] = [];
@@ -87,6 +88,7 @@ for (const route of [
   'iOS simulator',
   'Android APK',
   'Android AAB fallback',
+  'Android AAB booting',
 ] as const) {
   for (const command of ['install', 'reinstall', 'install_source', 'install_source URL'] as const) {
     test(`${route} ${command} leaves 30s for the daemon result`, async () => {
@@ -346,7 +348,7 @@ function writeCoreDeviceDetailsJson(args: readonly string[]): void {
 }
 
 async function createAndroidScenario(
-  route: 'Android APK' | 'Android AAB fallback',
+  route: Extract<InstallRoute, `Android ${string}`>,
   ledger: InstallLedger,
 ): Promise<InstallLedgerScenario> {
   const tempRoot = mkdtempForTestSync('agent-device-install-ledger-android-');
@@ -359,9 +361,13 @@ async function createAndroidScenario(
   fs.mkdirSync(path.dirname(aaptPath), { recursive: true });
   fs.writeFileSync(aaptPath, '', { mode: 0o755 });
   let installed = false;
-  let launched = false;
+  let launched = route === 'Android AAB booting';
   let bootProbeCapMs: number | undefined;
-  const device = { ...PROVIDER_SCENARIO_ANDROID, id: 'Pixel_8', booted: false };
+  const device = {
+    ...PROVIDER_SCENARIO_ANDROID,
+    id: launched ? 'emulator-5554' : 'Pixel_8',
+    booted: false,
+  };
   vi.spyOn(hostCommands, 'runCmdDetached').mockImplementation((command) => {
     assert.equal(command, 'emulator');
     launched = true;
@@ -436,7 +442,7 @@ function downloadBody(appPath: string): Readable {
   return archive;
 }
 
-function isAndroidRoute(route: InstallRoute): route is 'Android APK' | 'Android AAB fallback' {
+function isAndroidRoute(route: InstallRoute): route is Extract<InstallRoute, `Android ${string}`> {
   return route.startsWith('Android');
 }
 

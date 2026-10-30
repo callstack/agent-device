@@ -126,7 +126,7 @@ export function createRequestRuntimeBindings(params: {
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
     params.admitDevice?.(device);
-    const key = deviceIdentityKey(deviceIdentity(device));
+    const key = JSON.stringify([deviceIdentityKey(deviceIdentity(device)), device.booted === true]);
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
       const intent: DeviceBindingIntent = { kind: 'ordinary' };
