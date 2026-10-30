@@ -105,7 +105,13 @@ export function createExpiredProviderLeaseReleaser(options: {
     // The journal is dropped only once its leases are in the pending record, so a crash in between
     // leaves them in one file or the other.
     if (!persistPendingLeases()) return;
-    fs.rmSync(leaseRecordPath(options.stateDir, LIVE_LEASES_FILE), { force: true });
+    try {
+      fs.rmSync(leaseRecordPath(options.stateDir, LIVE_LEASES_FILE), { force: true });
+    } catch (error) {
+      // The leases are durable in the pending record; a journal left behind is adopted again, and the
+      // pending record already holds each of its leases once.
+      emitJournalFailure('provider_lease_journal_remove_failed', orphaned.size, error);
+    }
     emitDiagnostic({
       level: 'warn',
       phase: 'provider_lease_orphans_adopted',
@@ -114,23 +120,39 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
   adoptOrphanedLeases();
 
-  const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
+  let liveLeases: readonly DeviceLease[] = [];
+  let journalRetryTimer: Timer | undefined;
+  /**
+   * Writes the journal: the registry's live leases, plus every lease that left the registry for recovery
+   * but whose expired record is not durable yet, so a crash never finds a lease in neither file. A write
+   * that fails is retried with the latest leases until one lands.
+   */
+  const writeJournal = (): void => {
     if (!options.stateDir) return;
-    const recoverable = leases.filter((lease) =>
-      isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
+    const unpersisted = [...pendingRecoveryLeases.values()].filter(
+      (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
+    );
+    const journal = new Map(
+      [...liveLeases, ...unpersisted]
+        .filter((lease) => isRecoverableProviderAvailable(lease, options.recoverableProviderIds))
+        .map((lease) => [lease.leaseId, lease] as const),
     );
     try {
-      writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, recoverable);
+      writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
     } catch (error) {
-      emitDiagnostic({
-        level: 'error',
-        phase: 'provider_lease_journal_write_failed',
-        data: {
-          leaseCount: recoverable.length,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
+      emitJournalFailure('provider_lease_journal_write_failed', journal.size, error);
+      journalRetryTimer ??= setTimeout(() => {
+        journalRetryTimer = undefined;
+        writeJournal();
+      }, retryDelayMs);
+      journalRetryTimer.unref?.();
     }
+  };
+  const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
+    liveLeases = leases;
+    writeJournal();
   };
 
   const scheduleRetry = (): void => {
@@ -263,6 +285,8 @@ export function createExpiredProviderLeaseReleaser(options: {
     shutdown: () => {
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
     },
   };
 }
@@ -316,6 +340,14 @@ function isRecoverableProviderAvailable(
     lease.leaseProvider !== undefined &&
     recoverableProviderIds?.includes(lease.leaseProvider) === true
   );
+}
+
+function emitJournalFailure(phase: string, leaseCount: number, error: unknown): void {
+  emitDiagnostic({
+    level: 'error',
+    phase,
+    data: { leaseCount, error: error instanceof Error ? error.message : String(error) },
+  });
 }
 
 function emitPersistenceFailure(pendingLeaseCount: number, error: unknown): void {

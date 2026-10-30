@@ -218,3 +218,64 @@ test('a provider lease released before the daemon stops is not recovered again',
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('an expired lease stays journaled until its expired record is durable', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  // A directory where the expired record goes makes every write of it fail.
+  fs.mkdirSync(`${stateDir}/expired-provider-leases.json`);
+  let now = 1_000;
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const daemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+  });
+  const registry = new LeaseRegistry({
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+    onLeaseExpired: (lease) => void daemon.release(lease),
+    onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
+  });
+  try {
+    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    now = 1_011;
+    registry.consumeExpiredLease(lease.leaseId);
+
+    const journal = JSON.parse(fs.readFileSync(`${stateDir}/live-provider-leases.json`, 'utf8'));
+    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([lease.leaseId]);
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+  } finally {
+    daemon.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a journal write that fails is retried with the latest leases', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const journalPath = `${stateDir}/live-provider-leases.json`;
+  fs.mkdirSync(journalPath);
+  const daemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease: async () => undefined,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+    retryDelayMs: 10,
+  });
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
+  });
+  try {
+    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    expect(fs.statSync(journalPath).isDirectory()).toBe(true);
+
+    fs.rmdirSync(journalPath);
+    await vi.advanceTimersByTimeAsync(10);
+    const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
+    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([lease.leaseId]);
+  } finally {
+    daemon.shutdown();
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
