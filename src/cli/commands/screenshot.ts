@@ -74,8 +74,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     );
   }
 
-  // Lazy: createCommandSurfaceAgentDevice loads the client-side command runtime
-  // (including screenshot pixel diffing), which only `diff screenshot` needs.
+  // Load the capture, selector and interaction entry for `diff screenshot`.
   const [{ createCommandSurfaceAgentDevice }, { createLocalArtifactAdapter }] = await Promise.all([
     import('@agent-device/command-runtime'),
     import('../../io.ts'),

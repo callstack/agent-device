@@ -36,6 +36,19 @@ test('local artifact adapter can constrain explicit local paths to a root', asyn
         path: path.join(root, 'input.png'),
       },
     );
+    assert.equal(
+      (await adapter.resolveInput({ kind: 'path', path: '..input.png' }, { usage: 'test' })).path,
+      path.join(root, '..input.png'),
+    );
+    assert.equal(
+      (
+        await adapter.reserveOutput(
+          { kind: 'path', path: '..output.png' },
+          { field: 'path', ext: '.png', artifactType: 'screenshot' },
+        )
+      ).path,
+      path.join(root, '..output.png'),
+    );
     await assert.rejects(
       () => adapter.resolveInput({ kind: 'path', path: '../outside.png' }, { usage: 'test' }),
       /outside the artifact adapter root/,

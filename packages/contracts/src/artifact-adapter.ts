@@ -91,5 +91,6 @@ export type ArtifactAdapter = {
 export type LocalArtifactAdapterOptions = {
   cwd?: string;
   tempDir?: string;
+  /** Restricts explicit paths lexically; symlinks are not resolved. This is not a sandbox. */
   rootDir?: string;
 };

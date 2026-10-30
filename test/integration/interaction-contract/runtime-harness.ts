@@ -1,9 +1,5 @@
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
-import type {
-  CommandClock,
-  CommandSessionRecord,
-  CommandSessionStore,
-} from '@agent-device/contracts/runtime-contract';
+import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
 import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
@@ -45,16 +41,7 @@ export function createContractDevice(
   snapshot: SnapshotState,
   overrides: ContractBackendOverrides = {},
 ): ReturnType<typeof createCommandSurfaceAgentDevice> {
-  const records = new Map<string, CommandSessionRecord>([
-    ['default', { name: 'default', snapshot, ...overrides.sessionState }],
-  ]);
-  const sessions: CommandSessionStore = {
-    get: (name) => records.get(name),
-    set: (record) => {
-      records.set(record.name, record);
-    },
-  };
-  return createCommandSurfaceAgentDevice({
+  const device = createCommandSurfaceAgentDevice({
     backend: {
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
@@ -67,10 +54,11 @@ export function createContractDevice(
       resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
-    sessions,
     policy: localCommandPolicy(),
     ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
+  void device.sessions.set({ name: 'default', snapshot, ...overrides.sessionState });
+  return device;
 }
 
 /**

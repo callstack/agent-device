@@ -86,5 +86,8 @@ function resolveLocalPath(filePath: string, cwd: string, rootDir?: string): stri
 
 function isPathInside(filePath: string, rootDir: string): boolean {
   const relative = path.relative(rootDir, filePath);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return (
+    relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
 }

@@ -27,7 +27,8 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   const outputPath =
     typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
 
-  // Load the contact-sheet operation only for this action.
+  // Load the capture, selector and interaction entry for this action.
+  // The contact-sheet wrapper then loads the full runtime on demand.
   const [{ executeRecordingContactSheet }, { createLocalArtifactAdapter }] = await Promise.all([
     import('@agent-device/command-runtime'),
     import('../../io.ts'),

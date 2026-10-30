@@ -14,6 +14,12 @@ import type {
   AgentDeviceRuntimeConfig,
 } from '@agent-device/contracts/runtime-contract';
 
+import type {
+  RecordingContactSheetCommandOptions,
+  RecordingContactSheetCommandResult,
+} from './commands/recording/runtime/contact-sheet.ts';
+
+/** The in-process executor binds only capture, selectors and interaction; other families stay lazy. */
 export type CommandSurfaceAgentDevice = AgentDeviceRuntime & {
   capture: BoundCaptureCommands;
   selectors: BoundSelectorCommands;
@@ -36,12 +42,11 @@ export type {
   RecordingContactSheetCommandOptions,
   RecordingContactSheetCommandResult,
 } from './commands/recording/runtime/contact-sheet.ts';
+/** Loads the full runtime on demand for the CLI's contact-sheet action. */
 export async function executeRecordingContactSheet(
   config: AgentDeviceRuntimeConfig,
-  options: import('./commands/recording/runtime/contact-sheet.ts').RecordingContactSheetCommandOptions,
-): Promise<
-  import('./commands/recording/runtime/contact-sheet.ts').RecordingContactSheetCommandResult
-> {
+  options: RecordingContactSheetCommandOptions,
+): Promise<RecordingContactSheetCommandResult> {
   const { createAgentDevice } = await import('./runtime.ts');
   return createAgentDevice(config).recording.contactSheet(options);
 }
