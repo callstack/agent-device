@@ -200,7 +200,8 @@ test('shutdown reports a session it could not stop instead of forgetting it', as
     respond: { [stopPath]: { status: 500, body: { detail: 'backend down' } } },
   });
   const runtime = fixture.createRuntime();
-  await runtime.leaseLifecycle?.allocate?.(revylLease('ios'));
+  const lease = revylLease('ios');
+  await runtime.leaseLifecycle?.allocate?.(lease);
 
   await assert.rejects(
     async () => await runtime.shutdown(),
@@ -210,6 +211,16 @@ test('shutdown reports a session it could not stop instead of forgetting it', as
       JSON.stringify(error.details?.providerSessionIds) ===
         JSON.stringify([revylSessionIdForLease('lease-1')]),
   );
+  assert.equal(stops(fixture).length, 1);
+
+  // The lease keeps its session across the failed shutdown, so the release that follows retries the
+  // same session and reports what is still billed instead of recording a release that never happened.
+  const refused = await runtime.leaseLifecycle?.release?.(lease);
+  const warning = refused?.warnings as readonly Record<string, unknown>[] | undefined;
+  assert.equal(warning?.length, 1);
+  assert.equal(warning?.[0]?.code, 'REVYL_SESSION_STOP_FAILED');
+  assert.equal(refused?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.equal(stops(fixture).length, 2);
 });
 
 test('a session that never became ready is stopped before the failure reaches the caller', async () => {
@@ -259,7 +270,7 @@ test('a start that returns no run id stops the session it was issued', async () 
   ]);
 });
 
-test('a backend that keeps its own session identity is refused and its run canceled', async () => {
+test('a backend that keeps its own session identity is refused and that session stopped', async () => {
   const fixture = await backend({ startResponse: { session_id: 'someone-elses-session' } });
   const runtime = fixture.createRuntime();
 
@@ -268,19 +279,25 @@ test('a backend that keeps its own session identity is refused and its run cance
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'provider-session-identity-mismatch',
   );
-  // The runtime cannot address that session, so the only handle left is the run.
-  assert.deepEqual(stops(fixture), ['POST /api/v1/execution/device/status/cancel/run-1']);
+  // Revyl knows the id it named, so that is the session it has to be told to end; the failure names
+  // the same id the stop was addressed to.
+  assert.deepEqual(stops(fixture), [
+    'POST /api/v1/execution/device/sessions/someone-elses-session/stop',
+  ]);
 });
 
-test('a start canceled after it was sent stops the run Revyl answered with', async () => {
-  const fixture = await backend();
+test('a start canceled while it is in flight stops the session it rented', async () => {
+  // Revyl is still deciding when the caller hangs up, which is the case a bare signal on the request
+  // would get wrong: the answer that names the device never arrives.
+  const fixture = await backend({ startDelayMs: 200 });
   const runtime = fixture.createRuntime();
   const controller = new AbortController();
   const allocating = runtime.leaseLifecycle?.allocate?.(revylLease('ios'), {
     signal: controller.signal,
-    // Long enough that `start_device` has been answered, short enough to land before readiness.
+    // Long enough that `start_device` is in flight, short enough that readiness could never finish.
     deadline: Date.now() + 30_000,
   });
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
   controller.abort();
 
   await assert.rejects(
@@ -314,6 +331,28 @@ test('an expired allocation deadline stops the start rather than reporting a lat
   assert.deepEqual(stops(fixture), [
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
+});
+
+test('a start slower than the allocation budget is given up on and its session stopped', async () => {
+  // Revyl is still deciding when the caller's own budget runs out. The request must not be held open
+  // past it, and the session that request named must not survive it either.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+
+  await assert.rejects(
+    async () =>
+      await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+  // The readiness polls belong to a start the caller no longer has, so none may have been sent.
+  assert.equal(
+    fixture.paths().filter((path) => path.endsWith('/health')).length,
+    0,
+    'a start the caller gave up on never reaches readiness',
+  );
 });
 
 test('Revyl answers health with 503 until the worker attaches, and the start keeps polling', async () => {

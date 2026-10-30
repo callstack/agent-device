@@ -21,7 +21,7 @@ import {
   REVYL_PROVIDER,
   type RevylPlatform,
 } from './device.ts';
-import { createRevylClient, type RevylClient } from './revyl-client.ts';
+import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
 import { startRevylSession, stopRevylSession, type RevylSession } from './revyl-session.ts';
 import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -178,31 +178,34 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   /**
    * Ends every session this runtime holds and reports what it could not confirm. An allocation still
    * waiting for its device is awaited first: it has already rented one, and dropping it here would
-   * leave that device running with nobody holding its id. A stop that failed keeps shutdown reported
-   * as failed, which is how the host learns Revyl may still be billing.
+   * leave that device running with nobody holding its id. A stop that failed keeps its lease in the
+   * table, so a later release, or a daemon that survives this shutdown, can retry the same session
+   * instead of recording a release Revyl never confirmed.
    */
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
     await this.awaitInFlightAllocations();
-    const sessions = [...this.sessions.values()];
-    this.sessions.clear();
-    const failures = (
-      await Promise.allSettled(
-        sessions.map(
-          async (session) => await stopRevylSession(this.client, session.runId, session.sessionId),
-        ),
-      )
-    ).filter((settled) => settled.status === 'rejected');
-    if (failures.length === 0) return;
+    const sessions = [...this.sessions.entries()];
+    const outcomes = await Promise.all(
+      sessions.map(async ([leaseId, session]) => {
+        // `stopSession` reads Revyl's "no such session" as released; anything else keeps the lease.
+        const warning = await this.stopSession(session.runId, session.sessionId);
+        if (warning === undefined) {
+          this.sessions.delete(leaseId);
+          this.rememberRelease(leaseId, session.sessionId);
+        }
+        return { sessionId: session.sessionId, warning };
+      }),
+    );
+    const unconfirmed = outcomes.filter((outcome) => outcome.warning !== undefined);
+    if (unconfirmed.length === 0) return;
     throw new AppError(
       'COMMAND_FAILED',
-      `Revyl did not release ${failures.length} of ${sessions.length} session(s) this runtime started.`,
+      `Revyl did not release ${unconfirmed.length} of ${sessions.length} session(s) this runtime started.`,
       {
         reason: 'provider-cleanup-pending',
-        providerSessionIds: sessions.map((session) => session.sessionId),
-        causes: failures.map((settled) =>
-          settled.status === 'rejected' ? describe(settled.reason) : '',
-        ),
+        providerSessionIds: unconfirmed.map((outcome) => outcome.sessionId),
+        causes: unconfirmed.map((outcome) => outcome.warning?.message ?? ''),
         hint: 'End the listed Revyl sessions; their devices stay rented and billed until they are.',
       },
     );
@@ -404,11 +407,6 @@ function shuttingDownDuring(leaseId: string, operation: string): AppError {
     leaseId,
     hint: 'Retry the command; the daemon is ending the sessions it holds.',
   });
-}
-
-/** Revyl answers a stop for a session it no longer has with 404 or 410, which is a released device. */
-function isRevylSessionGone(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === 'provider-session-gone';
 }
 
 function describe(error: unknown): string {

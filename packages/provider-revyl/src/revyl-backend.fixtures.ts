@@ -28,6 +28,8 @@ export type RevylFixtureOptions = Readonly<{
   healthNotReady503Polls?: number;
   /** Delays every `health` answer this long, which is how a slow worker is modeled. */
   healthDelayMs?: number;
+  /** Delays the `start_device` answer this long, which is how a slow rent is modeled. */
+  startDelayMs?: number;
   /** The health screen to report. */
   screen?: Readonly<{ width: number; height: number }>;
   /** Reports no screen size at all, which is what a health answer without the fields reads as. */
@@ -116,6 +118,7 @@ export async function startRevylFixtureBackend(
           const platform = typeof body?.platform === 'string' ? body.platform : 'ios';
           started = { platform, sessionId };
           return {
+            ...(options.startDelayMs === undefined ? {} : { delayMs: options.startDelayMs }),
             body: {
               status: 'started',
               workflow_run_id: RUN_ID,
