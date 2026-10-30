@@ -400,15 +400,31 @@ test('the iOS snapshot reads the AX node tree Revyl answers with, in the root fr
   assert.equal(acquisition.nodes[0]?.type, 'Application');
 });
 
-test('an iOS hierarchy that is not a node tree is reported as an invalid response', async () => {
-  const { interactor } = await liveInteractor('ios', {
-    hierarchy: '<AppiumAUT><XCUIElementTypeApplication/></AppiumAUT>',
+for (const [name, hierarchy] of [
+  ['XML', '<AppiumAUT><XCUIElementTypeApplication/></AppiumAUT>'],
+  ['a null node', '[null]'],
+  ['a null child', '[{"type":"Application","children":[null]}]'],
+  ['a child list that is not a list', '[{"type":"Application","children":{}}]'],
+] as const) {
+  test(`an iOS hierarchy holding ${name} is reported as an invalid response`, async () => {
+    const { interactor } = await liveInteractor('ios', { hierarchy });
+    await assert.rejects(
+      async () => await interactor.snapshot({}),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'provider-response-invalid',
+    );
   });
+}
+
+test('an iOS screenshot whose density is unknown is refused rather than published at the wrong scale', async () => {
+  const { interactor } = await liveInteractor('ios', { withoutScreen: true });
+  const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-noscreen-'), 'shot.png');
   await assert.rejects(
-    async () => await interactor.snapshot({}),
+    async () => await interactor.screenshot(outPath),
     (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'provider-response-invalid',
+      error instanceof AppError && error.details?.reason === 'provider-viewport-unavailable',
   );
+  await assert.rejects(fs.access(outPath));
 });
 
 test('the Android snapshot comes back as nodes parsed from the uiautomator dump', async () => {

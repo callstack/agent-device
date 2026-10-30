@@ -85,9 +85,19 @@ function parseIosTree(hierarchy: string): IosTreeNode[] {
   } catch (error) {
     throw invalidIosHierarchy(error);
   }
-  if (Array.isArray(parsed)) return parsed as IosTreeNode[];
-  if (parsed !== null && typeof parsed === 'object') return [parsed as IosTreeNode];
-  throw invalidIosHierarchy();
+  const roots = Array.isArray(parsed) ? parsed : [parsed];
+  if (!roots.every(isIosTreeNode)) throw invalidIosHierarchy();
+  return roots;
+}
+
+/** One node object whose child lists, where present, hold node objects all the way down. */
+function isIosTreeNode(value: unknown): value is IosTreeNode {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  return [node.children, node.nodes, node.elements].every(
+    (children) =>
+      children === undefined || (Array.isArray(children) && children.every(isIosTreeNode)),
+  );
 }
 
 function invalidIosHierarchy(cause?: unknown): AppError {

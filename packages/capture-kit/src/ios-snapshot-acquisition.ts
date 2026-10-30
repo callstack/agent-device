@@ -61,7 +61,7 @@ const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
  *
  * This is the one capability the runner and the bridge genuinely need declared: a capture that
  * reported nothing about truncation is only "not truncated" when its producer would have noticed
- * (#2188 invariant 5), and `snapshotTruncationForResult` has to answer that for all four. It is a
+ * (#2188 invariant 5), and `snapshotTruncationForResult` has to answer that for every producer. It is a
  * table of its own rather than a column of the provider capabilities so that each producer states
  * this fact exactly once, in the only place that asks.
  *

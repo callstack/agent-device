@@ -99,7 +99,7 @@ export type IosSnapshotFact =
  * rather than merely wrong.
  *
  * Truncation is not a field here: it is the one fact the runner and the bridge also need
- * answered, so it has a single owner over all four producers instead
+ * answered, so it has a single owner over every producer instead
  * (`iosSnapshotTruncationEvidence`).
  */
 export type IosProviderAcquisitionCapabilities = Readonly<{

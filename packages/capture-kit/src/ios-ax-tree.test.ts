@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { flattenIosTree } from './ios-ax-tree.ts';
+import { flattenIosTree, resolveIosAxTreeViewport } from './ios-ax-tree.ts';
 
 test('variant scalar attributes become the text every snapshot producer publishes', () => {
   // The system photo picker's segmented tabs report the numbers 1/0 as AXValue, and the
@@ -47,4 +47,32 @@ test('raw mapping forwards observed Header traits and SDK role descriptions', ()
     undefined,
     undefined,
   ]);
+});
+
+test('a frame with a non-finite component is no rect at all, and the subrole is kept', () => {
+  const [root, child] = flattenIosTree({
+    type: 'Application',
+    frame: { x: 0, y: 0, width: 440, height: 956 },
+    children: [
+      {
+        type: 'TextField',
+        subrole: 'AXSecureTextField',
+        frame: { x: Number.NEGATIVE_INFINITY, y: 0, width: 10, height: 10 },
+      },
+    ],
+  });
+  expect(root?.rect).toEqual({ x: 0, y: 0, width: 440, height: 956 });
+  expect(child?.rect).toBeUndefined();
+  expect(child?.subrole).toBe('AXSecureTextField');
+});
+
+test('a root whose frame is not finite reports no viewport instead of a usable one', () => {
+  expect(
+    resolveIosAxTreeViewport([
+      { type: 'Application', frame: { x: 0, y: 0, width: Number.NaN, height: 956 } },
+    ]),
+  ).toEqual({ kind: 'missing', reason: 'not-provided' });
+  expect(
+    resolveIosAxTreeViewport([{ type: 'Application', frame: { x: 0, y: 0, width: 0, height: 0 } }]),
+  ).toEqual({ kind: 'missing', reason: 'invalid' });
 });

@@ -56,6 +56,7 @@ function mapIosNode(
     index: options.index,
     type: readIosNodeType(node),
     role: readIosNodeRole(node),
+    subrole: node.subrole ?? undefined,
     label: readIosNodeLabel(node),
     value: readIosNodeValue(node),
     identifier: readIosNodeIdentifier(node),
@@ -114,24 +115,26 @@ function readIosNodeIdentifier(node: IosTreeNode): string | undefined {
   return scalarText(node.identifier) ?? scalarText(node.AXUniqueId);
 }
 
-/** The node's screen-space rect, or undefined when the provider omitted a complete one. */
+/**
+ * The node's screen-space rect, or undefined when the provider omitted a complete one. A component that
+ * is not a finite number (an AX sentinel such as an infinite origin) makes the frame unusable.
+ */
 export function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
   const rect = node.rect ?? node.frame;
   if (
     !rect ||
-    typeof rect.x !== 'number' ||
-    typeof rect.y !== 'number' ||
-    typeof rect.width !== 'number' ||
-    typeof rect.height !== 'number'
+    !isFiniteNumber(rect.x) ||
+    !isFiniteNumber(rect.y) ||
+    !isFiniteNumber(rect.width) ||
+    !isFiniteNumber(rect.height)
   ) {
     return undefined;
   }
-  return {
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
-  };
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 export function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {

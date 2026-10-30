@@ -363,7 +363,15 @@ async function normalizeRevylIosDensity(
   screen: { width: number } | undefined,
   pixelDensity: number | undefined,
 ): Promise<void> {
-  if (screen === undefined) return;
+  // The host reports the requested density for every iOS simulator capture, so an image whose source
+  // density is unknown cannot be published under that claim.
+  if (screen === undefined) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Revyl reported no screen size for this session, so the screenshot density cannot be known.',
+      { reason: 'provider-viewport-unavailable' },
+    );
+  }
   const [{ readPngSize }, { resizePngFile }, { computeDensityScaledScreenshotSize }] =
     await Promise.all([
       import('@agent-device/capture-kit/png-size'),
