@@ -110,6 +110,83 @@ test('two allocations of one lease that overlap rent one device, and both report
   ]);
 });
 
+test('a joining allocation refuses the flags Revyl has no field for before it joins', async () => {
+  // The first caller's start is still unanswered when the second arrives with a flag Revyl reads never.
+  // An allocation that reuses a device the daemon already holds carries a profile of its own, and a join
+  // that skipped the gate would accept a flag the same caller is refused for on every other path.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const first = runtime.leaseLifecycle?.allocate?.(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+  await assert.rejects(
+    async () =>
+      await runtime.leaseLifecycle?.allocate?.(lease, { flags: { providerProject: 'team' } }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.provider === 'revyl' &&
+      error.message.includes('--provider-project'),
+  );
+
+  // The refused caller is answered at once, while the caller that rented the device is left alone.
+  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.equal(
+    fixture.paths().filter((path) => path.endsWith('/start_device')).length,
+    1,
+    'the refused join must not rent a device of its own',
+  );
+});
+
+test('a canceled joiner reports its own cancellation while the shared start runs on', async () => {
+  // Both callers wait on one start. The second hangs up first, and the rule is that this changes only
+  // what that caller hears: waiting out the first caller's patience instead would report the wrong
+  // failure, and stopping the start would take the device from the caller still waiting for it.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const first = runtime.leaseLifecycle?.allocate?.(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+  const controller = new AbortController();
+  const joining = runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
+  controller.abort();
+
+  await assert.rejects(
+    async () => await joining,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+
+  // The caller that started the device still gets it, and the runtime holds exactly one session.
+  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await runtime.shutdown();
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+});
+
+test("a joiner whose deadline expires names its own budget, not the other caller's", async () => {
+  // The deadline is the other half of the same rule: a joiner that gave Revyl 60 ms cannot be made to
+  // wait for the patience of the caller that started first, and the failure names the wait it was given.
+  const fixture = await backend({ startDelayMs: 800 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const first = runtime.leaseLifecycle?.allocate?.(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.allocate?.(lease, { deadline: Date.now() + 60 }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-not-ready' &&
+      typeof error.details?.timeoutMs === 'number' &&
+      error.details.timeoutMs < 700,
+  );
+
+  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+});
+
 test('release stops the session once, and shutdown stops the sessions a lease never released', async () => {
   const fixture = await backend();
   const runtime = fixture.createRuntime();

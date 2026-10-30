@@ -22,7 +22,14 @@ import {
   type RevylPlatform,
 } from './device.ts';
 import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
-import { startRevylSession, stopRevylSession, type RevylSession } from './revyl-session.ts';
+import {
+  revylCallerGaveUp,
+  revylCallerWait,
+  startRevylSession,
+  stopRevylSession,
+  type RevylCallerBudget,
+  type RevylSession,
+} from './revyl-session.ts';
 import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
@@ -115,7 +122,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    * One entry per lease whose device is being rented, kept until the session reaches the table. A second
    * allocation of that lease joins it rather than renting a device nobody will stop.
    */
-  private readonly pendingAllocations = new Map<string, Promise<RevylAllocation | undefined>>();
+  private readonly pendingAllocations = new Map<string, Promise<RevylAllocation>>();
   private shuttingDown = false;
   readonly provider = REVYL_PROVIDER;
 
@@ -260,25 +267,62 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    * nothing pointing at it; the second call joins the first instead. The session reaches the table while
    * the start is still registered, so a third allocation cannot arrive in the gap between one finishing
    * and the other learning about it and rent a device of its own.
+   *
+   * A caller joins only after its own flags are refused and its own budget is installed, so joining
+   * neither accepts a profile Revyl would ignore nor inherits the patience of the caller that started
+   * first.
    */
   private async allocateOncePerLease(
     lease: DeviceLease,
     context?: LeaseLifecycleContext,
   ): Promise<RevylAllocation | undefined> {
+    const platform =
+      lease.leaseProvider === this.provider
+        ? platformForRevylLeaseBackend(lease.backend)
+        : undefined;
+    if (platform === undefined) return undefined;
+    const { rejectRefusedRevylProfileFields } = await import('./session-allocation.ts');
+    // Before the join below: an allocation that reuses a live lease still carries flags of its own,
+    // and Revyl reads none of them — whether it starts a device or joins one that is starting.
+    rejectRefusedRevylProfileFields(context);
     const pending = this.pendingAllocations.get(lease.leaseId);
-    if (pending) {
-      // The device was taken by the call already running, so this one is not the one to end it.
-      const joined = await pending;
-      return joined === undefined ? undefined : { ...joined, rentedNow: false };
-    }
-    const starting = this.allocate(lease, context);
+    if (pending) return await this.joinAllocation(pending, platform, context);
+    const starting = this.allocate(lease, platform, context);
     this.pendingAllocations.set(lease.leaseId, starting);
     try {
       const allocated = await starting;
-      if (allocated && !this.shuttingDown) this.sessions.set(lease.leaseId, allocated.session);
+      // Recorded while the start is still registered, so no allocation can arrive in the gap after it
+      // and rent a device of its own.
+      if (!this.shuttingDown) this.sessions.set(lease.leaseId, allocated.session);
       return allocated;
     } finally {
       this.pendingAllocations.delete(lease.leaseId);
+    }
+  }
+
+  /**
+   * Waits for the start another caller already has running for this lease, within this caller's own
+   * budget. Hanging up here never stops that start: the device belongs to every caller that joined it, so
+   * this one reports its own cancellation or its own expired deadline and the start runs on for the
+   * callers still waiting. A joiner never took the device, so it never ends it either way.
+   */
+  private async joinAllocation(
+    pending: Promise<RevylAllocation>,
+    platform: RevylPlatform,
+    context?: LeaseLifecycleContext,
+  ): Promise<RevylAllocation> {
+    const budget = revylCallerBudget(context);
+    // The number the report names is the wait this caller was granted, so it is measured from the moment
+    // the join started rather than from the deadline's own epoch instant.
+    const joinedAt = Date.now();
+    const gaveUp = revylCallerWait<never>(budget.deadline ?? Number.POSITIVE_INFINITY, budget, () =>
+      revylCallerGaveUp(platform, budget, Math.max(0, (budget.deadline ?? joinedAt) - joinedAt)),
+    );
+    if (gaveUp === undefined) return await joinOf(pending);
+    try {
+      return await joinOf(Promise.race([pending, gaveUp.promise]));
+    } finally {
+      gaveUp.dispose();
     }
   }
 
@@ -291,21 +335,14 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   /**
-   * One allocation's session, with `rentedNow` naming whether this call is the one that took the
-   * device. A lease of another provider, or of a backend Revyl has no device for, is answered with
-   * nothing, which is how the core reads "this provider has no allocation to report".
+   * One allocation's session, with `rentedNow` naming whether this call is the one that took the device.
+   * The lease is already known to be Revyl's, and its context already refused, by the caller above.
    */
   private async allocate(
     lease: DeviceLease,
+    platform: RevylPlatform,
     context?: LeaseLifecycleContext,
-  ): Promise<RevylAllocation | undefined> {
-    if (lease.leaseProvider !== this.provider) return undefined;
-    const platform = platformForRevylLeaseBackend(lease.backend);
-    if (!platform) return undefined;
-    const { rejectRefusedRevylProfileFields } = await import('./session-allocation.ts');
-    // Before the reuse below: a repeat allocation of a live lease carries flags of its own, and
-    // Revyl reads none of them a second time.
-    rejectRefusedRevylProfileFields(context);
+  ): Promise<RevylAllocation> {
     if (this.shuttingDown) throw shuttingDownDuring(lease.leaseId, 'allocate');
     // A repeat allocation of a live lease is that same device, and Revyl is asked for nothing.
     const existing = this.sessions.get(lease.leaseId);
@@ -340,8 +377,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       appUrl: resolveRevylAppUrl(context),
       deviceModel: selection.deviceModel,
       osVersion: selection.osVersion,
-      ...(context?.signal === undefined ? {} : { signal: context.signal }),
-      ...(context?.deadline === undefined ? {} : { deadline: context.deadline }),
+      ...revylCallerBudget(context),
     });
   }
 
@@ -420,6 +456,25 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     const session = this.sessions.get(parsed.leaseId);
     return session?.platform === parsed.platform ? session : undefined;
   }
+}
+
+/**
+ * The caller's own patience, read from the lease context it arrived with. A caller that names neither
+ * waits for whatever the work takes.
+ */
+function revylCallerBudget(context?: LeaseLifecycleContext): RevylCallerBudget {
+  return {
+    ...(context?.signal === undefined ? {} : { signal: context.signal }),
+    ...(context?.deadline === undefined ? {} : { deadline: context.deadline }),
+  };
+}
+
+/**
+ * What a joined allocation reports: the device the caller that started it rented, which this call did
+ * not take and therefore does not owe ending.
+ */
+async function joinOf(pending: Promise<RevylAllocation>): Promise<RevylAllocation> {
+  return { ...(await pending), rentedNow: false };
 }
 
 /** Recovery and lifecycle calls arrive for one provider's lease; anything else is a routing bug. */

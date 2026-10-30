@@ -59,6 +59,24 @@ export type RevylStartRequestInput = Readonly<{
 }>;
 
 /**
+ * One caller's own patience: the signal it cancels with and the deadline it stops at. Both are optional,
+ * and a caller with neither waits for whatever its work takes.
+ */
+export type RevylCallerBudget = Readonly<{ signal?: AbortSignal; deadline?: number }>;
+
+/**
+ * One caller's wait for work this process is already doing, bounded by that caller's own deadline and
+ * canceled with its own signal. `settled` says whether this wait is what ended the race, which is what
+ * lets a caller report its own cancellation rather than the outcome of a shared request it stopped
+ * watching. `dispose` retires the listener once the work itself is done.
+ */
+export type RevylCallerWait<T> = Readonly<{
+  promise: Promise<T>;
+  settled: () => boolean;
+  dispose: () => void;
+}>;
+
+/**
  * What one start has to undo: the session that holds the rented device, and the run that routes to
  * it. `sessionId` is always the id the backend was told, or the one it answered with, so the end
  * always addresses what Revyl actually holds.
@@ -205,23 +223,21 @@ async function submitRevylStart(
 }
 
 /**
- * The caller's own wait for the start, bounded by its whole-allocation deadline and canceled with it,
- * or absent when the caller gave it neither and the request's timeout is all there is to wait for.
- * `settled` says whether this wait is what ended the race, which is what decides whether the session
- * the request named has to be stopped before the failure returns.
+ * One caller's wait for work this process is already doing, bounded by that caller's own deadline and
+ * canceled with its own signal. `settled` says whether this wait is what ended the race, which is what
+ * lets a caller report its own cancellation rather than the outcome of a shared request it stopped
+ * watching. `dispose` retires the listener once the work itself is done.
  */
-type RevylCallerWait = Readonly<{
-  promise: Promise<RevylStartDeviceResponse>;
-  settled: () => boolean;
-  dispose: () => void;
-}>;
-
-function callerWait(deadline: number, input: RevylStartRequestInput): RevylCallerWait | undefined {
-  if (input.deadline === undefined && input.signal === undefined) return undefined;
+export function revylCallerWait<T>(
+  deadline: number,
+  budget: RevylCallerBudget,
+  onGiveUp: () => unknown,
+): RevylCallerWait<T> | undefined {
+  if (budget.deadline === undefined && budget.signal === undefined) return undefined;
   const parts: AbortSignal[] = [];
   if (Number.isFinite(deadline))
     parts.push(AbortSignal.timeout(Math.max(0, deadline - Date.now())));
-  if (input.signal !== undefined) parts.push(input.signal);
+  if (budget.signal !== undefined) parts.push(budget.signal);
   const signal = parts.length === 1 ? parts[0]! : AbortSignal.any(parts);
   let rejected = false;
   let onAbort: () => void = () => {};
@@ -232,9 +248,9 @@ function callerWait(deadline: number, input: RevylStartRequestInput): RevylCalle
   // A signal that is already aborted never fires its listener, so that wait has to start over the
   // edge rather than sit on it.
   const promise = signal.aborted
-    ? Promise.reject(reject(startCanceled(input)))
-    : new Promise<RevylStartDeviceResponse>((_, rejectPromise) => {
-        onAbort = () => rejectPromise(reject(startCanceled(input)));
+    ? Promise.reject(reject(onGiveUp()))
+    : new Promise<T>((_, rejectPromise) => {
+        onAbort = () => rejectPromise(reject(onGiveUp()));
         signal.addEventListener('abort', onAbort, { once: true });
       });
   return Object.freeze({
@@ -242,6 +258,17 @@ function callerWait(deadline: number, input: RevylStartRequestInput): RevylCalle
     settled: () => rejected,
     dispose: () => signal.removeEventListener('abort', onAbort),
   });
+}
+
+/**
+ * The caller's own wait for the start, or absent when the caller gave it neither a deadline nor a
+ * signal and the request's timeout is all there is to wait for.
+ */
+function callerWait(
+  deadline: number,
+  input: RevylStartRequestInput,
+): RevylCallerWait<RevylStartDeviceResponse> | undefined {
+  return revylCallerWait<RevylStartDeviceResponse>(deadline, input, () => startCanceled(input));
 }
 
 /** The start phase's budget: the caller's whole-allocation deadline when it is shorter than the client's. */
@@ -256,6 +283,37 @@ function startCanceled(input: RevylStartRequestInput): AppError {
     'The Revyl device start was canceled before it was ready.',
     { reason: 'request_canceled', platform: input.platform },
     input.signal?.reason,
+  );
+}
+
+/**
+ * The failure for a caller that stopped waiting for a device: its own cancellation when it hung up, and
+ * the budget that ran out when it did not. `budgetMs` is the wait that ended, which is the number the
+ * report has to name — the readiness phase's own budget there, the caller's whole deadline for a join
+ * that never had a phase of its own.
+ */
+export function revylCallerGaveUp(
+  platform: RevylPlatform,
+  budget: RevylCallerBudget,
+  budgetMs: number,
+): AppError {
+  if (budget.signal?.aborted) {
+    return new AppError(
+      'COMMAND_FAILED',
+      'The Revyl device start was canceled before it was ready.',
+      { reason: 'request_canceled', platform },
+      budget.signal.reason,
+    );
+  }
+  return new AppError(
+    'COMMAND_FAILED',
+    `Revyl did not report a ready device within ${budgetMs} ms.`,
+    {
+      reason: 'provider-not-ready',
+      timeoutMs: budgetMs,
+      ...(budget.deadline === undefined ? {} : { deadline: budget.deadline }),
+      hint: 'Retry the command; Revyl may have had no device of that model available.',
+    },
   );
 }
 
@@ -427,20 +485,9 @@ async function untilRevylWorkerReady(
 /** Fails the moment the readiness budget is spent, whatever a poll that was already sent answers. */
 function requireTime(deadline: RevylDeadline, input: RevylStartRequestInput): void {
   if (Date.now() < deadline.at) return;
-  if (input.signal?.aborted) throw startCanceled(input);
   // The budget is the caller's deadline when it is shorter, so the number named has to be the one that
   // actually ran out.
-  const budgetMs = deadline.budgetMs;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Revyl did not report a ready device within ${budgetMs} ms.`,
-    {
-      reason: 'provider-not-ready',
-      timeoutMs: budgetMs,
-      ...(input.deadline === undefined ? {} : { deadline: input.deadline }),
-      hint: 'Retry the command; Revyl may have had no device of that model available.',
-    },
-  );
+  throw revylCallerGaveUp(input.platform, input, deadline.budgetMs);
 }
 
 /** The remaining readiness budget, so a poll that outlives it is canceled rather than awaited. */
