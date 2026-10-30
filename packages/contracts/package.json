@@ -376,6 +376,10 @@
       "types": "./src/platform-runtime-host.ts",
       "default": "./src/platform-runtime-host.ts"
     },
+    "./platform-runtime-shutdown": {
+      "types": "./src/platform-runtime-shutdown.ts",
+      "default": "./src/platform-runtime-shutdown.ts"
+    },
     "./platform-runtime-operations": {
       "types": "./src/platform-runtime-operations.ts",
       "default": "./src/platform-runtime-operations.ts"

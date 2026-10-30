@@ -29,7 +29,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -189,21 +189,14 @@ export function createComposedPlatformRuntimeGateway(options: {
     },
     shutdown: () =>
       (closing ??= Promise.resolve().then(async () => {
-        const outcomes = await Promise.allSettled(
+        const outcomes = await Promise.all(
           [...localLoads.values(), ...providerLoads.values()].map((load) =>
             load.then(
               async (owner) => {
                 try {
                   await owner.shutdown();
                 } catch (error) {
-                  const key = runtimeOwnerKey(owner.owner);
-                  const failure = normalizeError(error);
-                  throw new AppError(
-                    'COMMAND_FAILED',
-                    `Platform runtime owner ${key} failed to shut down: ${failure.message}`,
-                    { reason: 'platform-owner-shutdown-failed', owner: key, failure },
-                    error,
-                  );
+                  return { owner: owner.owner, error };
                 }
               },
               () => undefined,
@@ -213,14 +206,11 @@ export function createComposedPlatformRuntimeGateway(options: {
         loadedOwners.clear();
         localLoads.clear();
         providerLoads.clear();
-        const failures = outcomes.flatMap((outcome) =>
-          outcome.status === 'rejected' ? [outcome.reason] : [],
-        );
-        if (failures.length > 0) {
-          throw new AggregateError(
-            failures,
-            `Platform runtime owner shutdown failed: ${failures.map((failure) => failure.message).join('; ')}`,
-          );
+        const [first, ...rest] = outcomes.filter((outcome) => outcome !== undefined);
+        if (first) {
+          const { createPlatformRuntimeShutdownError } =
+            await import('@agent-device/contracts/platform-runtime-shutdown');
+          throw createPlatformRuntimeShutdownError([first, ...rest]);
         }
       })),
   });
