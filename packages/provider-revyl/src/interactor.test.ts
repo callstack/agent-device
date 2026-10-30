@@ -409,6 +409,88 @@ test('a screenshot writes the worker bytes to the requested path', async () => {
   );
 });
 
+test('two captures of one path each keep their own temporary file', async () => {
+  // Both writes land in the same directory with the same base name. If they shared a temporary sibling, the
+  // first rename would move it away and the second would fail with ENOENT on a file that is no longer there.
+  const { fixture, interactor } = await liveInteractor('ios');
+  const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-race-'), 'shot.png');
+
+  await Promise.all([interactor.screenshot(outPath), interactor.screenshot(outPath)]);
+
+  assert.equal(
+    fixture.paths().filter((request) => request.includes('/screenshot')).length,
+    2,
+    'both captures reached the worker',
+  );
+  const written = await fs.readFile(outPath);
+  assert.equal(written.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.deepEqual(
+    (await fs.readdir(path.dirname(outPath))).filter((entry) => entry !== 'shot.png'),
+    [],
+    'a capture leaves no temporary file behind',
+  );
+});
+
+test('a screenshot canceled after its bytes arrive is not published', async () => {
+  // The worker has answered, so the cancellation cannot reach the request: it lands while the local write
+  // runs. The caller that hung up is owed a failure, not a file it stopped asking for, and the bytes it
+  // canceled have to be taken back off the disk. The abort is issued the moment the temporary file appears,
+  // and the body is large enough that the write is still in flight across the next turn of the loop.
+  const controller = new AbortController();
+  const { interactor } = await liveInteractor(
+    'ios',
+    {
+      respond: {
+        'GET /api/v1/execution/device-proxy/run-1/screenshot': {
+          status: 200,
+          contentType: 'image/png',
+          body: 'P'.repeat(8 * 1024 * 1024),
+        },
+      },
+    },
+    { signal: controller.signal },
+  );
+  const directory = await mkdtempForTest('agent-device-revyl-shot-after-');
+  const outPath = path.join(directory, 'shot.png');
+
+  const capturing = interactor.screenshot(outPath);
+  await waitForWriteToStart(directory);
+  controller.abort();
+
+  await assert.rejects(
+    async () => await capturing,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(
+    await fs.stat(outPath).then(
+      () => true,
+      () => false,
+    ),
+    false,
+    'the canceled capture never reaches the requested path',
+  );
+  assert.deepEqual(
+    await fs.readdir(directory),
+    [],
+    'the bytes it wrote are taken back off the disk',
+  );
+});
+
+/**
+ * Waits until one capture's temporary sibling shows up in the directory, which is the moment its write is
+ * in flight and the abort has somewhere to land.
+ */
+async function waitForWriteToStart(directory: string): Promise<void> {
+  for (let attempt = 0; attempt < 2_000; attempt += 1) {
+    const entries = await fs.readdir(directory);
+    if (entries.some((entry) => entry.endsWith('.tmp'))) return;
+    await new Promise((resolve) => setTimeout(resolve, 0.2));
+  }
+  throw new Error(
+    'The screenshot never reached its write, so the cancellation had nothing to interrupt.',
+  );
+}
+
 test('a canceled screenshot leaves the file unwritten', async () => {
   // The worker is still composing the PNG when the caller hangs up. The request has to end there, and
   // the bytes that arrive afterwards must not reach the path the command was asked to write.

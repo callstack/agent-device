@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
@@ -244,19 +245,32 @@ class RevylInteractor implements Interactor {
   /**
    * Writes through a temporary file in the same directory and renames it into place, so a caller that
    * hangs up mid-write or a process that dies leaves either the previous screenshot or none at all, and
-   * never a truncated PNG at the path the caller asked for.
+   * never a truncated PNG at the path the caller asked for. The name is unique per capture: two sessions
+   * writing the same base name in one process must not collide on one temporary file.
    */
   async screenshot(outPath: string): Promise<void> {
     const png = await this.session.client.captureWorkerScreenshot(this.session.runId, this.signal);
     const directory = path.dirname(outPath);
     fs.mkdirSync(directory, { recursive: true });
-    const temporaryPath = path.join(directory, `.${path.basename(outPath)}.${process.pid}.tmp`);
+    const temporaryPath = path.join(
+      directory,
+      `.${path.basename(outPath)}.${process.pid}.${randomUUID()}.tmp`,
+    );
     try {
-      await fs.promises.writeFile(temporaryPath, png);
+      await fs.promises.writeFile(
+        temporaryPath,
+        png,
+        this.signal === undefined ? {} : { signal: this.signal },
+      );
+      // The capture is over once the PNG is in hand, but a caller that hung up during the write is not
+      // owed the rename: the file it canceled is unlinked rather than published.
+      if (this.signal?.aborted === true) throw this.cancellation();
       await fs.promises.rename(temporaryPath, outPath);
     } catch (error) {
       await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
-      throw error;
+      // A write the signal cut short rejects with a bare AbortError; the caller is owed the typed
+      // cancellation that names the action it stopped.
+      throw this.canceledAs(error);
     }
   }
 
