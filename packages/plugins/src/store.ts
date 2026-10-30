@@ -7,7 +7,6 @@ import {
   isVersionSelector,
   type PluginSelection,
 } from './store-legacy.ts';
-export { legacyStoreManifests };
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +23,8 @@ import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginPackageEntry } from './discovery.ts';
 import { ROUTING_PROVIDER_IDENTITIES, type PluginManifest } from './manifest.ts';
 import type { PluginCandidate } from './registry.ts';
+
+export { legacyStoreManifests };
 
 type StoreInstallation = {
   name: string;
