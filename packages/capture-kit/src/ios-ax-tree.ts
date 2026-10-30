@@ -155,7 +155,8 @@ export function resolveIosAxTreeViewport(
 
 /**
  * The root as `resolveIosViewportEvidenceFromRoots` reads it: its type, its usable rect when it has
- * one, and whether the box it reports is absent, reported, or too small to be a viewport.
+ * one, and whether the box it reports is absent, reported, or unusable. A frame that is present but
+ * incomplete, non-finite or empty is `invalid`; only a root with no frame at all is `not-provided`.
  */
 function viewportRoot(node: IosTreeNode) {
   const rawRect = node.rect ?? node.frame;

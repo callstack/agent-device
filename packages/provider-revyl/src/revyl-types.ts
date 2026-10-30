@@ -1,6 +1,6 @@
 /** The request bodies and responses of the Revyl execution API this runtime drives. */
 
-export type RevylPlatform = 'ios' | 'android';
+import type { RevylPlatform } from './device.ts';
 
 export type RevylStartDeviceRequest = Readonly<{
   platform: RevylPlatform;

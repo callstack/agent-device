@@ -17,6 +17,7 @@ import {
   revylNavigationOperationFacts,
   revylUnsupportedOperationFacts,
   REVYL_FOLD_UNAVAILABLE,
+  REVYL_PUSH_UNAVAILABLE,
   REVYL_TELEPHONY_UNAVAILABLE,
 } from './interaction-operations.ts';
 
@@ -24,10 +25,6 @@ import {
 const installUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl installs an app when the session starts. Pass --provider-app <URL> to connect, and run open afterwards.',
-);
-const pushUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'Revyl does not deliver a push notification to a session.',
 );
 const uninstallUnavailable = unavailableFact(
   'unsupported-provider-mode',
@@ -159,7 +156,7 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
       deployApp: installUnavailable,
       materializeAppSource: installUnavailable,
       deployMaterializedApp: installUnavailable,
-      sendPushNotification: pushUnavailable,
+      sendPushNotification: REVYL_PUSH_UNAVAILABLE,
       uninstallApp: uninstallUnavailable,
       appState: appStateUnavailable,
       networkDump: networkUnavailable,

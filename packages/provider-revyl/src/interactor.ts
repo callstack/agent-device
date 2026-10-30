@@ -15,7 +15,11 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatch,
+  discloseDispatchAfterSteps,
+} from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { RevylSession } from './revyl-session.ts';
 import { captureRevylSnapshot, createRevylSnapshotReader } from './snapshot.ts';
@@ -182,7 +186,12 @@ class RevylInteractor implements Interactor {
     const chars = Array.from(text);
     try {
       for (const [index, char] of chars.entries()) {
-        if (this.signal?.aborted) throw this.cancellation();
+        if (this.signal?.aborted) {
+          // Before the first character nothing has reached the device, which is a settled verdict.
+          throw dispatched === 0
+            ? discloseDispatch(this.cancellation(), 'no')
+            : this.cancellation();
+        }
         // Only the first character clears: the rest append to what the field already holds.
         await this.workerAction('input', { x, y, text: char, clear_first: dispatched === 0 });
         dispatched += 1;

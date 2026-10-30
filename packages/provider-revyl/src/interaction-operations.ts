@@ -86,7 +86,8 @@ const settingsUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not expose settings control.',
 );
-const appEventUnavailable = unavailableFact(
+/** Revyl's worker has no push action, so a push and an app event refuse with one reason. */
+export const REVYL_PUSH_UNAVAILABLE = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not deliver a push notification to a session.',
 );
@@ -203,7 +204,7 @@ export function revylUnsupportedOperationFacts(liveSession?: RuntimeOperationUna
       write: {},
     }),
     ...appEventRuntimeOperationFacts({
-      triggerAppEvent: liveSession ?? appEventUnavailable,
+      triggerAppEvent: liveSession ?? REVYL_PUSH_UNAVAILABLE,
     }),
     ...alertRuntimeOperationFacts({
       read: liveSession ?? alertUnavailable,

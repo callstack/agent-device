@@ -142,6 +142,28 @@ test('a paced fill types one character per pause and clears only on the first', 
   assert.ok(elapsed >= 290, `three paced characters must not land at once (took ${elapsed} ms)`);
 });
 
+test('a paced fill canceled before its first character says nothing was dispatched', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { fixture, interactor } = await liveInteractor(
+    'android',
+    {},
+    { signal: controller.signal },
+  );
+
+  await assert.rejects(
+    interactor.fill(80, 1250, 'abcd', 1),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'request_canceled' &&
+      error.details?.dispatched === 'no',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/input')),
+    false,
+  );
+});
+
 test('a paced fill that fails partway says how much of the text landed', async () => {
   // The third character is the one Revyl refuses.
   let typed = 0;
