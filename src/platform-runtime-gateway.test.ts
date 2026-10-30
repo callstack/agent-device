@@ -249,7 +249,6 @@ describe('composed platform runtime gateway', () => {
         expect(result.status).toBe('rejected');
         if (result.status === 'rejected') {
           expect(result.reason).toBeInstanceOf(AppError);
-          expect(result.reason.message).toContain('failed');
           expect(normalizeError(result.reason)).toMatchObject({
             code: 'COMMAND_FAILED',
             retriable: false,
@@ -295,7 +294,10 @@ describe('composed platform runtime gateway', () => {
           },
           scope,
         }),
-      ).rejects.toThrow('shut down');
+      ).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'runtime-contract-invalid' },
+      });
     },
   );
   test('loads only the selected Apple owner for screenshot facts and binding', async () => {

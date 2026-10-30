@@ -32,7 +32,7 @@ export function createPlatformRuntimeShutdownError(
     message,
     {
       ...details,
-      hint: 'Cleanup is unconfirmed; the device claim is still held. Inspect the owner failures before attempting recovery.',
+      hint: 'Cleanup is unconfirmed. Inspect the owner failures and verify claim ownership before attempting recovery.',
       retriable: false,
     },
     failures.length === 1
