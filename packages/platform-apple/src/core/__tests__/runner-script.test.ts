@@ -34,10 +34,12 @@ test('resolveRunnerScriptDevice records a macOS build as the host device', () =>
 });
 
 test('resolveRunnerScriptDevice refuses a destination that leaves the SDK to the scheme', () => {
-  assert.throws(
-    () => resolveRunnerScriptDevice('ios', 'id=5AF10197-87C1-4799-835E-3C6CBF9F3163'),
-    /must name its platform/,
-  );
+  for (const platform of ['ios', 'macos'] as const) {
+    assert.throws(
+      () => resolveRunnerScriptDevice(platform, 'id=5AF10197-87C1-4799-835E-3C6CBF9F3163'),
+      /must name its platform/,
+    );
+  }
 });
 
 test('isRunnerXcuitestScriptPlatform accepts only the platforms the build script knows', () => {

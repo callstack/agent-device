@@ -46,7 +46,7 @@
 //   - Over THE APPLE RUNNER SUBTREE: `runner/**` may not value-import `@agent-device/host-kit/*`
 //     directly (R77) — the subtree sits in the eager closure of seven Apple façade entries the
 //     eager-closure-budgets gate holds at a fixed size, so a direct host-kit edge grows all seven;
-//     host-kit reaches the runner only through `runner/host.ts`, bound in `core/runner-host.ts`.
+//     host-kit reaches the runner only through `packages/apple-runner/src/host.ts`, bound in `core/runner-host.ts`.
 //   - Over SIMCTL ARGV in production source: `tsc` holds `runXcrun` and the Apple tool port to
 //     branded simctl argv. The plain executors take any string argv, so R79 refuses every array
 //     that names simctl first outside `core/simctl.ts` and `core/tool-provider.ts`, however it

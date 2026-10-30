@@ -12,6 +12,7 @@ import {
   stubbedAppleDeveloperDir,
 } from '@agent-device/test-kit';
 import { prewarmIosRunnerSession } from '../core/runner-client.ts';
+import { appleRunnerHost } from '../core/runner-host.ts';
 import { IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT } from '../core/devicectl.ts';
 import { setAppleRunnerHostEnvironment } from '../core/runner-owner-state.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
@@ -34,6 +35,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 /** `devicectl device info details` for a phone that is awake, connected, and reporting both states. */
@@ -81,12 +83,22 @@ async function startupFailure(
           stderr: '',
         };
       }
+      if (cmd === 'plutil') {
+        return {
+          exitCode: 0,
+          stdout: args[1] === 'json' ? '{}' : '<plist><dict/></plist>',
+          stderr: '',
+        };
+      }
       const outputPath = jsonOutputPathOf(args);
       if (outputPath) fs.writeFileSync(outputPath, scripted.devicectlPayload);
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   });
   let caught: unknown;
+  const launch = vi.spyOn(appleRunnerHost, 'runCmdBackground').mockImplementation(() => {
+    throw new AppError('COMMAND_FAILED', 'scripted launch failure');
+  });
   await withCommandExecutorOverride(
     async (command, args) => {
       if (command === 'xcodebuild' && args[0] === 'test-without-building') {
@@ -121,6 +133,11 @@ async function startupFailure(
       }),
   );
   assert.ok(caught instanceof AppError, 'startup must fail with an AppError');
+  if (scripted.warmXctestrun) {
+    assert.equal(launch.mock.calls.length, 1);
+    assert.equal(launch.mock.calls[0]?.[0], 'xcodebuild');
+    assert.equal(launch.mock.calls[0]?.[1][0], 'test-without-building');
+  }
   return caught;
 }
 

@@ -235,7 +235,7 @@ The Apple XCUITest runner client is a durable implementation facet owned by the 
 It resides in the workspace package `@agent-device/apple-runner` (#2040), at `packages/apple-runner/`.
 The package serves one Apple-family engine for all Apple operating systems.
 Its only export is the named entry `src/index.ts`.
-R13 enumerates the Apple root façade and twelve named domain/mechanics facades:
+R13 enumerates the Apple root façade and thirteen named domain/mechanics facades:
 
 - `./app-lifecycle`
 - `./app-resolution`

@@ -47,11 +47,12 @@ export function resolveRunnerScriptDevice(
   platform: RunnerXcuitestScriptPlatform,
   destination: string,
 ): DeviceInfo {
+  const destinationKind = resolveRunnerScriptDestinationKind(destination);
   return {
     platform: 'apple',
     id: `runner-script-${platform}`,
     name: `Apple runner build script (${platform})`,
-    kind: platform === 'macos' ? 'device' : resolveRunnerScriptDestinationKind(destination),
+    kind: platform === 'macos' ? 'device' : destinationKind,
     target: RUNNER_SCRIPT_TARGET[platform],
     appleOs: RUNNER_SCRIPT_APPLE_OS[platform],
   };

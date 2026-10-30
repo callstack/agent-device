@@ -19,6 +19,7 @@ import {
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
 import { restoreLegacyXctestDeviceSetRedirect, runApplePressSeries } from '../index.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   REPO_ROOT_FOR_TEST,
   makeScratchDir,
@@ -296,14 +297,18 @@ test('a press series through the entry loads the sequence driver and returns its
   assert.equal(result.timingMode, 'runner-sequence');
 });
 
-test('the legacy device-set restore through the entry runs the parser module on first use', async () => {
-  const diagnostics: string[] = [];
-  const missing = path.join(REPO_ROOT_FOR_TEST, '.tmp', 'no-such-xctest-devices');
+test('the legacy device-set restore through the entry restores the backup', async () => {
+  const root = mkdtempForTestSync('runner-entry-restore-');
+  const deviceSet = path.join(root, 'XCTestDevices');
+  const backup = `${deviceSet}.agent-device-backup`;
+  const scoped = path.join(root, 'scoped');
+  fs.mkdirSync(path.join(backup, 'HOST-UDID'), { recursive: true });
+  fs.mkdirSync(scoped);
+  fs.symlinkSync(scoped, deviceSet, 'dir');
 
-  await restoreLegacyXctestDeviceSetRedirect(
-    (diagnostic) => diagnostics.push(diagnostic.phase),
-    missing,
-  );
+  await restoreLegacyXctestDeviceSetRedirect(() => {}, deviceSet);
 
-  assert.deepEqual(diagnostics, []);
+  assert.equal(fs.lstatSync(deviceSet).isSymbolicLink(), false);
+  assert.ok(fs.existsSync(path.join(deviceSet, 'HOST-UDID')));
+  assert.equal(fs.existsSync(backup), false);
 });
