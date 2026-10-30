@@ -58,7 +58,7 @@ export function createDaemonLeaver(): {
   return leaver;
 }
 
-/** Answers `/health` and answers every `/rpc` with the one JSON-RPC `result` it was given. */
+/** Answers `/health`, every `POST /rpc` with the one JSON-RPC `result` it was given, and 404 otherwise. */
 export async function startScriptedDaemon(
   result: Record<string, unknown>,
   options: { afterRpc?: () => void } = {},
@@ -69,6 +69,14 @@ export async function startScriptedDaemon(
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200);
       res.end('ok');
+      return;
+    }
+    // A stray request from outside the client under test (a port probe, a browser preview) is not
+    // a daemon request: it must not reach the JSON parse below, where an empty body would throw
+    // outside any test.
+    if (req.method !== 'POST' || new URL(req.url ?? '/', 'http://127.0.0.1').pathname !== '/rpc') {
+      res.writeHead(404);
+      res.end('not found');
       return;
     }
     const chunks: Buffer[] = [];
