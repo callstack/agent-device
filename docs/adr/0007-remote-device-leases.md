@@ -88,6 +88,7 @@ Shutdown waits for any lease-end teardown that already started before it tears s
 A daemon that dies while it holds a provider lease leaves the rented device running on the provider side, and that device stays billed.
 Thus, the daemon journals the live leases of each provider that can recover an expired lease, in `live-provider-leases.json` in its state directory.
 A daemon that starts and finds this journal hands each lease in it to the expired-lease recovery of its provider, which ends the rented device.
+It does so only after it holds the daemon registration for the state directory, because until then the journal can belong to a daemon that is still running.
 The lease itself is not restored, and its controller connects again.
 Restoring the live lease was rejected: the sessions and device claims of the dead daemon are gone, so a restored lease would name a device that no session can reach.
 A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried.

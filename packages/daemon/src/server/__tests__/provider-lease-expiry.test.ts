@@ -182,6 +182,7 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
     killedDaemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
+    restartedDaemon.adoptOrphanedLeases();
     await restartedDaemon.retryPending();
     expect(recoverExpiredLease.mock.calls.map(([lease]) => lease.leaseId)).toEqual([held.leaseId]);
     expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(false);
@@ -189,6 +190,7 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
 
     // Recovered once means recovered: the next daemon inherits nothing.
     const thirdDaemon = createExpiredProviderLeaseReleaser(options);
+    thirdDaemon.adoptOrphanedLeases();
     await thirdDaemon.retryPending();
     expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
     thirdDaemon.shutdown();
@@ -211,6 +213,7 @@ test('a provider lease released before the daemon stops is not recovered again',
     daemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
+    restartedDaemon.adoptOrphanedLeases();
     await restartedDaemon.retryPending();
     expect(recoverExpiredLease).not.toHaveBeenCalled();
     restartedDaemon.shutdown();
@@ -334,6 +337,7 @@ test('adopted leases whose record is not durable stay journaled through later jo
     ...options,
     recoverExpiredLease: () => new Promise<void>(() => {}),
   });
+  restarted.adoptOrphanedLeases();
   try {
     // The new daemon's registry is empty, so this journal write has no live leases of its own.
     restarted.recordLiveLeases([]);
@@ -341,6 +345,30 @@ test('adopted leases whose record is not durable stay journaled through later jo
     expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([orphan.leaseId]);
   } finally {
     restarted.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a releaser leaves the journal alone until its daemon holds the registration', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const options = { recoverExpiredLease, stateDir, recoverableProviderIds: ['revyl'] };
+  const runningDaemon = createExpiredProviderLeaseReleaser(options);
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => runningDaemon.recordLiveLeases(leases),
+  });
+  try {
+    registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    // A second daemon on the same state directory is built before it learns the registration is taken.
+    const refusedDaemon = createExpiredProviderLeaseReleaser(options);
+    await refusedDaemon.retryPending();
+    refusedDaemon.shutdown();
+
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+    expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(true);
+    expect(fs.existsSync(`${stateDir}/expired-provider-leases.json`)).toBe(false);
+  } finally {
+    runningDaemon.shutdown();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

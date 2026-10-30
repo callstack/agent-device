@@ -40,6 +40,12 @@ export type ExpiredProviderLeaseReleaser = {
   release: (lease: DeviceLease) => Promise<void>;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
+  /**
+   * Moves the leases a dead daemon journaled into recovery. Call it only once this process holds the
+   * daemon registration for the state directory: before that, the journal may belong to a daemon that is
+   * still running, and recovering its leases would end devices it is using.
+   */
+  adoptOrphanedLeases: () => void;
   retryPending: () => Promise<void>;
   /**
    * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
@@ -119,8 +125,6 @@ export function createExpiredProviderLeaseReleaser(options: {
       data: { leaseIds: [...orphaned.keys()] },
     });
   };
-  adoptOrphanedLeases();
-
   let liveLeases: readonly DeviceLease[] = [];
   let journalRetryTimer: Timer | undefined;
   /**
@@ -247,6 +251,8 @@ export function createExpiredProviderLeaseReleaser(options: {
     release: async (lease) => {
       if (!lease.leaseProvider) return;
       if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
+        // Set before the first await: the registry journals right after `onLeaseExpired` returns, and the
+        // journal keeps this lease only while it is pending here and not yet durable.
         pendingRecoveryLeases.set(lease.leaseId, lease);
         if (persistPendingLeases()) {
           await ensureRecoveryReleaseAttempt(lease);
@@ -264,6 +270,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       }
     },
     recordLiveLeases,
+    adoptOrphanedLeases,
     retryPending,
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A

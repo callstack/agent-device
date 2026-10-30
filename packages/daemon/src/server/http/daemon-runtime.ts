@@ -373,7 +373,6 @@ async function startDaemonRuntimeOnHost(
     recoverableProviderIds: deps.recoverableProviderIds,
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
-  void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
@@ -620,6 +619,9 @@ async function startDaemonRuntimeOnHost(
     });
   }
   const registration = acquisition.owner;
+  // Only the registered daemon may treat the journal as orphaned and start recovering provider leases.
+  expiredProviderLeaseReleaser.adoptOrphanedLeases();
+  void expiredProviderLeaseReleaser.retryPending();
   rollback.onRollback(async () => {
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
