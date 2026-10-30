@@ -19,7 +19,10 @@ test('a runner module value-importing host-kit directly is refused', () => {
   assert.equal(violation!.file, `${RUNNER_SUBTREE}runner-planted.ts`);
   assert.equal(violation!.line, 1);
   assert.match(violation!.message, /runner host port/);
-  assert.match(violation!.message, /runner\/host\.ts, bound in core\/runner-host\.ts/);
+  assert.match(
+    violation!.message,
+    /packages\/apple-runner\/src\/host\.ts, bound in core\/runner-host\.ts/,
+  );
   assert.match(violation!.message, /eager-closure-budgets/);
 });
 
