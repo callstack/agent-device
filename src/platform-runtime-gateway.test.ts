@@ -134,12 +134,13 @@ describe('composed platform runtime gateway', () => {
     expect(readyShutdown).toHaveBeenCalledOnce();
     expect(lateShutdown).toHaveBeenCalledOnce();
   });
-  test('daemon reports a composed owner failure and retains registration while completing cleanup', async () => {
+  test('daemon reports a composed owner failure with bigint details and completes cleanup', async () => {
     const ref = providerRuntimeOwner('limrun', 'failed');
     const shutdown = vi.fn(async () => {
       throw new AppError('COMMAND_FAILED', 'owner refused', {
         reason: 'owner-test-refusal',
         hint: 'Inspect the original owner failure.',
+        observedAtNs: 9_007_199_254_740_993n,
       });
     });
     const registration = providerRuntime({
@@ -203,6 +204,9 @@ describe('composed platform runtime gateway', () => {
         failures: [{ owner: ref, error: { code: 'COMMAND_FAILED', message: 'owner refused' } }],
       },
     });
+    expect(diagnostic.data.error.details.failures[0].error.details.observedAtNs).toBe(
+      '9007199254740993',
+    );
     expect(diagnostic.data).not.toHaveProperty('failures');
     expect(log).toContain('daemon_shutdown_platform_owner_failed');
     expect(log).toContain('owner refused');

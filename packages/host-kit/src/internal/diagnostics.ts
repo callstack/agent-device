@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -141,24 +142,35 @@ export type DiagnosticEventInput = {
   data?: Record<string, unknown>;
 };
 
+/** Encodes a diagnostic value for JSON-only ports without losing bigint precision. */
+export function toDiagnosticJson(value: unknown): JsonValue {
+  return JSON.parse(stringifyDiagnosticValue(value));
+}
+
+function stringifyDiagnosticValue(value: unknown): string {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === 'bigint' ? entry.toString() : entry,
+  );
+}
+
 export function emitDiagnostic(event: DiagnosticEventInput): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
-  const payload: DiagnosticEvent = {
-    ts: new Date().toISOString(),
-    level: event.level ?? 'info',
-    phase: event.phase,
-    session: scope.session,
-    requestId: scope.requestId,
-    command: scope.command,
-    durationMs: event.durationMs,
-    data: event.data ? redactScopeData(scope, event.data) : undefined,
-  };
-  scope.events.push(payload);
-  scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
-  if (!scope.debug && !scope.traceLogPath) return;
-  const fileLine = `${JSON.stringify(payload)}\n`;
   try {
+    const payload: DiagnosticEvent = {
+      ts: new Date().toISOString(),
+      level: event.level ?? 'info',
+      phase: event.phase,
+      session: scope.session,
+      requestId: scope.requestId,
+      command: scope.command,
+      durationMs: event.durationMs,
+      data: event.data ? redactScopeData(scope, event.data) : undefined,
+    };
+    scope.events.push(payload);
+    scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
+    if (!scope.debug && !scope.traceLogPath) return;
+    const fileLine = `${stringifyDiagnosticValue(payload)}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
@@ -241,7 +253,7 @@ export function flushDiagnosticsToSessionFile(
         // longer re-normalized here. Replacement output is not length-bounded:
         // a short literal can grow past `[REDACTED]`.
         const lines = pendingEvents.map((entry) =>
-          JSON.stringify(replaceSensitiveValues(entry, values)),
+          stringifyDiagnosticValue(replaceSensitiveValues(entry, values)),
         );
         appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`);
       }
@@ -259,7 +271,7 @@ export function flushDiagnosticsToSessionFile(
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
     // Same single-value-replacement re-pass as the logPath branch above.
     const lines = scope.events.map((entry) =>
-      JSON.stringify(replaceSensitiveValues(entry, values)),
+      stringifyDiagnosticValue(replaceSensitiveValues(entry, values)),
     );
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.flushedLogPath = filePath;

@@ -6,6 +6,7 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { normalizeError } from '@agent-device/kernel/errors';
+import { toDiagnosticJson } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import {
   createDeviceClaimReconciler,
@@ -70,22 +71,22 @@ export function createOwnerScopedDeviceClaimReconciler(
       await recovery.dispose();
     } catch (error) {
       if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
-      params.scope.diagnostics.emit({
-        level: 'error',
-        phase: 'device_claim_recovery_dispose_failed',
-        data: {
-          deviceKey: claim.deviceKey,
-          ownerSession: claim.session,
-          ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
-            ? { retainedReason: outcome.result.reason }
-            : {}),
-          error: JSON.parse(
-            JSON.stringify(normalizeError(error), (_key, value) =>
-              typeof value === 'bigint' ? value.toString() : value,
-            ),
-          ),
-        },
-      });
+      try {
+        params.scope.diagnostics.emit({
+          level: 'error',
+          phase: 'device_claim_recovery_dispose_failed',
+          data: {
+            deviceKey: claim.deviceKey,
+            ownerSession: claim.session,
+            ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
+              ? { retainedReason: outcome.result.reason }
+              : {}),
+            error: toDiagnosticJson(normalizeError(error)),
+          },
+        });
+      } catch {
+        // ADR 0010: secondary diagnostic failures must preserve the reconciliation outcome.
+      }
     }
     if (outcome.status === 'rejected') throw outcome.error;
     return outcome.result;

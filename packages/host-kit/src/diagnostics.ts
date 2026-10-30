@@ -8,6 +8,7 @@ export {
   getDiagnosticsMeta,
   registerDiagnosticSensitiveValue,
   type ResourceDiagnostic,
+  toDiagnosticJson,
   updateDiagnosticsScope,
   withDiagnosticsScope,
   withDiagnosticTimer,
