@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
+import { KNOWN_APP_ERROR_CODES } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
@@ -309,7 +310,7 @@ test('daemon entrypoint reaps itself when idle: exits cleanly, releases its regi
             (line) =>
               JSON.parse(line) as {
                 phase: string;
-                data?: { reason?: string; error?: { code?: string } };
+                data?: { reason?: unknown; error?: { code?: unknown } };
               },
           )
           .filter(
@@ -317,7 +318,13 @@ test('daemon entrypoint reaps itself when idle: exits cleanly, releases its regi
               phase === 'daemon_info_removal_declined' ||
               phase === 'daemon_registration_finish_failed',
           )
-          .map(({ phase, data }) => ({ phase, reason: data?.reason, code: data?.error?.code }));
+          .map(({ phase, data }) => ({
+            phase,
+            reason: ['retained', 'replaced', 'unproven', 'unreadable', 'ownerless'].find(
+              (reason) => reason === data?.reason,
+            ),
+            code: KNOWN_APP_ERROR_CODES.find((code) => code === data?.error?.code),
+          }));
       } catch {
         diagnostics = 'unavailable';
       }
