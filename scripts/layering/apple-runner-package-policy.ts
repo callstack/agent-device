@@ -38,7 +38,8 @@ const ALLOWED_WORKSPACE_PREFIXES = [
 
 // Production files outside platform-apple that may name the runner entry, and only as a type or
 // behind a deferred import: they hold the runner provider type and the lazily loaded provider scope
-// and bundle-id helpers, and never evaluate the runner engine.
+// and bundle-id helpers. A deferred import evaluates the entry, so these files call only host-free
+// symbols.
 const ROOT_CONSUMERS: ReadonlySet<string> = new Set([
   'src/platform-runtime-screen-recording-apple-runner-host.ts',
   'src/platform-runtime/request-providers.ts',
