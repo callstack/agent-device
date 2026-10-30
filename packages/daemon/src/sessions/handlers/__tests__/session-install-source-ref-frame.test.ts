@@ -56,7 +56,7 @@ test('install_source materialization failure preserves an active ref frame', asy
 
   expect(response).toMatchObject({ ok: false });
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(2);
   expect(mockMaterializeAppSourceRuntime).toHaveBeenCalledOnce();
   expect(mockDeployMaterializedAppRuntime).not.toHaveBeenCalled();
   expect(refFrameState(session)).toBe('active');
@@ -77,7 +77,7 @@ test('install_source deploy attempt expires an active ref frame when the bound o
 
   expect(response).toMatchObject({ ok: false });
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(2);
   expect(mockMaterializeAppSourceRuntime).toHaveBeenCalledOnce();
   expect(mockDeployMaterializedAppRuntime).toHaveBeenCalledOnce();
   expect(refFrameState(session)).toBe('expired');
