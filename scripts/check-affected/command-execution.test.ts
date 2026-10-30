@@ -44,6 +44,7 @@ test(
     } finally {
       child.kill('SIGKILL');
       await wait;
+      killCommandGroup(readRecordedCommandPid(cwd));
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   },
@@ -72,14 +73,8 @@ test(
       const deadline = Date.now() + 5000;
       while (!fs.existsSync(ready) && Date.now() < deadline) await setTimeout(20);
       assert.ok(fs.existsSync(ready));
-      commandPid = (
-        JSON.parse(
-          fs.readFileSync(
-            path.join(cwd, '.cache', 'agent-device', 'validation.lock.active.json'),
-            'utf8',
-          ),
-        ) as { pid: number }
-      ).pid;
+      commandPid = readRecordedCommandPid(cwd);
+      assert.ok(commandPid, 'the validation parent must record its command group');
       parent.child.kill('SIGKILL');
       await parent.wait;
       waiter = runCmdBackground(
@@ -109,14 +104,25 @@ test(
     } finally {
       parent.child.kill('SIGKILL');
       waiter?.child.kill('SIGTERM');
-      if (commandPid) {
-        try {
-          process.kill(-commandPid, 'SIGKILL');
-        } catch {}
-      }
       await parent.wait;
+      killCommandGroup(commandPid ?? readRecordedCommandPid(cwd));
       await waiter?.wait;
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   },
 );
+
+// The command group runs detached from the validation parent, so a test that fails before it
+// learns the group's pid must still find it here; otherwise the group outlives the run.
+function readRecordedCommandPid(cwd: string): number | undefined {
+  const active = path.join(cwd, '.cache', 'agent-device', 'validation.lock.active.json');
+  if (!fs.existsSync(active)) return undefined;
+  return (JSON.parse(fs.readFileSync(active, 'utf8')) as { pid: number | null }).pid ?? undefined;
+}
+
+function killCommandGroup(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {}
+}

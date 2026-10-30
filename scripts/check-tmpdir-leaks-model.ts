@@ -43,11 +43,65 @@ function isProcessAlive(pid: number): boolean {
  */
 export function liveRunDirectoryConsumers(): ReadonlySet<string> {
   const consumers = new Set<string>();
-  for (const value of readAllProcessTmpdirs()) {
-    const name = runDirectoryNameOf(value);
+  for (const { tmpdir } of readAllProcessTmpdirs()) {
+    const name = runDirectoryNameOf(tmpdir);
     if (name !== undefined) consumers.add(name);
   }
   return consumers;
+}
+
+/**
+ * SIGKILLs the orphaned Node processes that still hold `runDir` as TMPDIR, and returns one
+ * `<pid> <command>` line per process. A run's owner calls this after its test processes have
+ * exited and before it removes the directory. A Node process still inside it whose parent is
+ * gone is a test fixture whose own cleanup never ran (a killed worker, a timed-out test), and
+ * nothing else would ever stop it. A shared tool that a test happened to start first (an adb
+ * server, an emulator, watchman) runs another executable and is left alone, and so is any
+ * process whose parent still runs and can still clean it up.
+ */
+export function stopRunDirectoryConsumers(runDir: string): string[] {
+  const name = runDirectoryNameOf(runDir);
+  if (name === undefined) return [];
+  const runtime = path.basename(process.execPath);
+  const pids = readAllProcessTmpdirs()
+    .filter(
+      (entry) =>
+        entry.ppid === 1 &&
+        path.basename(entry.executable) === runtime &&
+        runDirectoryNameOf(entry.tmpdir) === name,
+    )
+    .map((entry) => entry.pid);
+  if (pids.length === 0) return [];
+  const commands = describeProcesses(pids);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {}
+  }
+  return pids.map((pid) => `${pid} ${commands.get(pid) ?? ''}`.trimEnd());
+}
+
+function describeProcesses(pids: readonly number[]): ReadonlyMap<number, string> {
+  const listing = runCmdSync('ps', ['-o', 'pid=,command=', '-p', pids.join(',')], {
+    allowFailure: true,
+  });
+  const commands = new Map<number, string>();
+  for (const line of listing.stdout.split('\n')) {
+    const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (match) commands.set(Number(match[1]), (match[2] as string).slice(0, 300));
+  }
+  return commands;
+}
+
+/** One stderr block, only when a run's teardown had to stop processes its tests left behind. */
+export function reportStoppedRunDirectoryConsumers(
+  runDir: string,
+  stopped: readonly string[],
+): void {
+  if (stopped.length === 0) return;
+  process.stderr.write(
+    `[tmpdir] stopped ${stopped.length} process${stopped.length === 1 ? '' : 'es'} still using ${runDir} at teardown:\n${stopped.map((line) => `  ${line}\n`).join('')}`,
+  );
 }
 
 /** `/tmp/agent-device-test-run-123-abc/nested` → `agent-device-test-run-123-abc`; else undefined. */
@@ -58,21 +112,32 @@ export function runDirectoryNameOf(tmpdir: string): string | undefined {
   return name.startsWith(TEST_RUN_TMP_PREFIX) ? name : undefined;
 }
 
-function readAllProcessTmpdirs(): string[] {
+/** `executable` is argv[0]. */
+type ProcessTmpdir = Readonly<{ pid: number; ppid: number; executable: string; tmpdir: string }>;
+
+function readAllProcessTmpdirs(): ProcessTmpdir[] {
   return process.platform === 'linux' ? readProcTmpdirs() : readPsTmpdirs();
 }
 
-function readProcTmpdirs(): string[] {
+function readProcTmpdirs(): ProcessTmpdir[] {
   return fs
     .readdirSync('/proc')
     .filter((entry) => /^\d+$/.test(entry))
-    .flatMap((pid) => tmpdirsOfEnviron(readEnvironOrEmpty(pid)));
+    .flatMap((pid) => {
+      const tmpdirs = tmpdirsOfEnviron(readProcFileOrEmpty(pid, 'environ'));
+      if (tmpdirs.length === 0) return [];
+      // `stat` is `<pid> (<comm>) <state> <ppid> ...`; comm may itself contain ") ".
+      const stat = readProcFileOrEmpty(pid, 'stat');
+      const ppid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+      const executable = readProcFileOrEmpty(pid, 'cmdline').split('\0')[0] ?? '';
+      return tmpdirs.map((tmpdir) => ({ pid: Number(pid), ppid, executable, tmpdir }));
+    });
 }
 
 /** Another user's process, or one that exited mid-scan, contributes nothing. */
-function readEnvironOrEmpty(pid: string): string {
+function readProcFileOrEmpty(pid: string, file: 'environ' | 'stat' | 'cmdline'): string {
   try {
-    return fs.readFileSync(`/proc/${pid}/environ`, 'latin1');
+    return fs.readFileSync(`/proc/${pid}/${file}`, 'latin1');
   } catch {
     return '';
   }
@@ -87,13 +152,22 @@ function tmpdirsOfEnviron(environ: string): string[] {
 
 // macOS (and other BSDs): -E appends the environment to each command line. Every process's
 // environment is a few MB on a busy host — well past spawnSync's 1 MB default.
-function readPsTmpdirs(): string[] {
-  const listing = runCmdSync('ps', ['-axEww', '-o', 'command='], {
+function readPsTmpdirs(): ProcessTmpdir[] {
+  const listing = runCmdSync('ps', ['-axEww', '-o', 'pid=,ppid=,command='], {
     allowFailure: true,
     maxBuffer: 64 * 1024 * 1024,
   });
   if (listing.exitCode !== 0) return [];
-  return [...listing.stdout.matchAll(/(?:^|\s)TMPDIR=(\S+)/g)].map((match) => match[1] as string);
+  return listing.stdout.split('\n').flatMap((line) => {
+    const head = /^\s*(\d+)\s+(\d+)\s+(\S+)/.exec(line);
+    if (!head) return [];
+    return [...line.matchAll(/\sTMPDIR=(\S+)/g)].map((match) => ({
+      pid: Number(head[1]),
+      ppid: Number(head[2]),
+      executable: head[3] as string,
+      tmpdir: match[1] as string,
+    }));
+  });
 }
 
 export type RunDirectoryLiveness = Readonly<{

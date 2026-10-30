@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '@agent-device/host-kit/command';
 import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-model.ts';
@@ -113,3 +114,50 @@ test('noop probe: the run itself is the subject', () => {});
     fs.rmSync(probePath, { force: true });
   }
 });
+
+test('global teardown stops a detached child a test left running in the run directory', async () => {
+  const stamp = crypto.randomUUID();
+  const probeName = `vitest-tmpdir-reap-probe-${process.pid}-${stamp}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'src', '__tests__', probeName);
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vitest-tmpdir-reap-test-'));
+  const evidencePath = path.join(evidenceRoot, 'child-pid.txt');
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs';
+import { test } from 'vitest';
+import { runCmdDetached } from '@agent-device/host-kit/command';
+
+test('probe leaves a detached child running past its own worker', () => {
+  const childPid = runCmdDetached(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+  fs.writeFileSync(${JSON.stringify(evidencePath)}, String(childPid));
+});
+`,
+  );
+  let childPid: number | undefined;
+  try {
+    const result = await runCmd(
+      path.join(REPOSITORY_ROOT, 'node_modules', '.bin', 'vitest'),
+      ['run', '--project', 'unit-core', probePath],
+      { cwd: REPOSITORY_ROOT, timeoutMs: 30_000 },
+    );
+    assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
+    childPid = Number(fs.readFileSync(evidencePath, 'utf8'));
+    const deadline = Date.now() + 5_000;
+    while (isAlive(childPid) && Date.now() < deadline) await setTimeout(100);
+    assert.equal(isAlive(childPid), false, 'the leaked child outlived its run');
+    assert.match(result.stderr, new RegExp(`\\[tmpdir\\] stopped [^]*\\n  ${childPid} `));
+  } finally {
+    if (childPid && isAlive(childPid)) process.kill(childPid, 'SIGKILL');
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

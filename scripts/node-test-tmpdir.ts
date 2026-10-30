@@ -33,6 +33,8 @@ import {
   TEST_RUN_TMP_ROOT,
   pruneAbandonedRunDirectories,
   reportPrunedRunDirectories,
+  reportStoppedRunDirectoryConsumers,
+  stopRunDirectoryConsumers,
 } from './check-tmpdir-leaks-model.ts';
 
 const forwardedArgs = process.argv.slice(2);
@@ -107,4 +109,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 const result = await wait;
+// Only after the child exits: on a forwarded signal its own cleanup may still be running.
+reportStoppedRunDirectoryConsumers(testRunTmpDir, stopRunDirectoryConsumers(testRunTmpDir));
 process.exitCode = result.exitCode;

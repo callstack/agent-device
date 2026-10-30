@@ -6,6 +6,8 @@ import {
   TEST_RUN_TMP_ROOT,
   pruneAbandonedRunDirectories,
   reportPrunedRunDirectories,
+  reportStoppedRunDirectoryConsumers,
+  stopRunDirectoryConsumers,
 } from './check-tmpdir-leaks-model.ts';
 
 // os.tmpdir() reads TMPDIR on every call, so redirecting it here covers every
@@ -55,6 +57,7 @@ export function setup(): void {
 
 // fallow-ignore-next-line unused-export
 export function teardown(): void {
+  reportStoppedRunDirectoryConsumers(testRunTmpDir, stopRunDirectoryConsumers(testRunTmpDir));
   fs.rmSync(testRunTmpDir, { recursive: true, force: true });
   restoreEnv('TMPDIR', previousTmpDir);
   restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);

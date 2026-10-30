@@ -86,6 +86,45 @@ test('the wrapper redirects a node --test child TMPDIR and removes it after the 
   }
 });
 
+test('the wrapper stops an orphaned Node fixture still using the run directory, not a shared tool', async () => {
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-'));
+  const evidencePath = path.join(evidenceRoot, 'pids.json');
+  const probeName = `node-test-tmpdir-probe-reap-${process.pid}-${crypto.randomUUID()}.test.ts`;
+  const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs';
+import { test } from 'node:test';
+import { runCmdDetached } from '@agent-device/host-kit/command';
+
+test('probe leaves a Node fixture and a non-Node tool running past its own exit', () => {
+  const fixture = runCmdDetached(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+  const tool = runCmdDetached('/bin/sleep', ['60']);
+  fs.writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify({ fixture, tool }));
+});
+`,
+  );
+  let pids: { fixture: number; tool: number } | undefined;
+  try {
+    const result = await runCmd(
+      process.execPath,
+      ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+      { cwd: REPOSITORY_ROOT, timeoutMs: 30_000 },
+    );
+    assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
+    pids = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+    await waitFor(() => !isAlive(pids!.fixture), 5_000, 'the leaked fixture outlived its run');
+    assert.match(result.stderr, new RegExp(`\\[tmpdir\\] stopped [^]*\\n  ${pids!.fixture} `));
+    assert.equal(isAlive(pids!.tool), true, 'a non-Node process is not the run’s to stop');
+  } finally {
+    for (const pid of pids ? [pids.fixture, pids.tool] : []) {
+      if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+    }
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
 test('the wrapper still cleans up and forwards a nonzero exit code when the child fails', async () => {
   // Diffing the whole shared TEST_RUN_TMP_ROOT listing is racy here: this
   // file itself runs as one of several node --test files/workers sharing
