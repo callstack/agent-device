@@ -89,11 +89,10 @@ test('a merge does not claim an origin replaced on its first parent', () => {
   fs.writeFileSync(path.join(repo, original), 'export const replacement = true;\n');
   git('commit', '-aqm', 'replace original');
   const main = git('rev-parse', 'HEAD');
-  try {
-    git('merge', '--no-ff', '--no-commit', pr);
-  } catch {
-    git('rm', original);
-  }
+  expect(() => git('merge', '--no-ff', '--no-commit', pr)).toThrow();
+  expect(git('diff', '--name-only', '--diff-filter=U')).toBe(original);
+  expect(git('status', '--short', '--', original)).toBe(`UD ${original}`);
+  git('rm', original);
   git('commit', '-qm', 'merge PR');
   expect(renamedSince(repo, main, 'HEAD').has(moved)).toBe(false);
   expect(renamedSince(repo, pr, 'HEAD').has(moved)).toBe(false);
