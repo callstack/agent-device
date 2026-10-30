@@ -296,7 +296,21 @@ class LimrunIosInteractor implements Interactor {
       y,
     });
     // Omitting the selector lets the server resolve focus.
-    await this.session.client.setElementValue(text);
+    try {
+      await this.session.client.setElementValue(text);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Limrun could not write the focused field value.',
+        {
+          reason: 'text_entry_value_write_failed',
+          dispatched: 'unknown',
+          hint: 'Inspect the field before retrying. Some apps do not expose a globally focused element to Limrun; use press and type to send key events instead.',
+        },
+        error,
+      );
+    }
     return { textEntryReadiness };
   }
 

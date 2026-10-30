@@ -149,7 +149,11 @@ test('a rejected value write fails the fill with that failure', async () => {
   const failure = new Error('element value refused');
   client.setElementValue.mockRejectedValueOnce(failure);
 
-  await expect(interactor.fill(200, 170, '你好')).rejects.toBe(failure);
+  await expect(interactor.fill(200, 170, '你好')).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'text_entry_value_write_failed', dispatched: 'unknown' },
+    cause: failure,
+  });
   expect(client.setElementValue.mock.calls).toEqual([['你好']]);
   expect(client.pressKey).not.toHaveBeenCalled();
   expect(client.typeText).not.toHaveBeenCalled();
