@@ -34,8 +34,6 @@ export type RevylRuntimeOptions = Readonly<{
   backendUrl?: string;
   /** Sent in `User-Agent` so Revyl can attribute a session to the CLI that started it. */
   clientVersion: string;
-  /** Injectable for tests; production uses the global `fetch`. */
-  fetch?: typeof fetch;
   /**
    * The device model and OS version to request, from the connect profile. Revyl picks a device from
    * them when they are set and from its own default pool when they are not.
@@ -170,7 +168,6 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       apiKey: options.apiKey,
       ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
       clientVersion: options.clientVersion,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
   }
 

@@ -1,7 +1,6 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import { REVYL_API_KEY_VARIABLE, REVYL_API_URL_VARIABLE } from './credentials.ts';
+import { setupRevylPlugin } from './plugin-setup.ts';
 
 export type RevylPluginOptions = {
   /** Used instead of `REVYL_API_KEY` when set. */
@@ -9,28 +8,6 @@ export type RevylPluginOptions = {
   /** Used instead of `REVYL_API_URL` when set; the public backend is used when neither is set. */
   apiUrl?: string;
 };
-
-/** What `setup` builds: the runtime the host leases through, and the owner it binds devices with. */
-export type RevylSetupResult = {
-  runtime: ProviderDeviceRuntime;
-  platformModule: PlatformRuntimeProviderModule;
-};
-
-// The runtime, connection, and owner code load when they are first used, so importing the package for
-// its declaration stays inside the eager-closure budget a plugin's entry is held to.
-async function createRuntime(host: ProviderPluginHost): Promise<RevylSetupResult> {
-  const { requireRevylCredentials } = await import('./credentials.ts');
-  const { createRevylRuntime } = await import('./runtime.ts');
-  const credentials = requireRevylCredentials(host.env, 'Revyl');
-  return createRevylRuntime(
-    {
-      apiKey: credentials.apiKey,
-      ...(credentials.apiUrl === undefined ? {} : { backendUrl: credentials.apiUrl }),
-      clientVersion: host.clientVersion,
-    },
-    { includePlatformModule: true },
-  );
-}
 
 /**
  * Revyl cloud devices as a plugin: a device is rented from the Revyl backend and driven through its
@@ -82,7 +59,7 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
           .createRevylConnection(withCredentials(context.host))
           .verify(context),
     },
-    setup: async (host) => await createRuntime(withCredentials(host)),
+    setup: async (host) => await setupRevylPlugin(withCredentials(host)),
   };
 }
 

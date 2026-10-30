@@ -20,6 +20,9 @@ const SERVICE = 'Revyl';
  * before a device is rented. The verify call authenticates without starting anything, so a mistyped
  * key costs one request rather than a session.
  */
+/** The connect half of the plugin, bound to one host's environment. */
+export type RevylConnection = ReturnType<typeof createRevylConnection>;
+
 export function createRevylConnection(host: ProviderPluginHost) {
   return {
     resolve: ({ flags }: { flags: CliFlags; cwd: string }) => {
