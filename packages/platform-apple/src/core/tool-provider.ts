@@ -1,4 +1,3 @@
-import { APPLE_PLIST_TIMEOUT_MS } from './config.ts';
 import {
   coerceExecResult,
   runCmd,
@@ -60,6 +59,8 @@ export type AppleToolProvider = {
   plist?: ApplePlistProvider;
   whichCommand: AppleToolAvailabilityChecker;
 };
+
+export const APPLE_PLIST_TIMEOUT_MS = 15_000;
 
 const localAppleToolProvider: AppleToolProvider = {
   runCommand: runCmd,
