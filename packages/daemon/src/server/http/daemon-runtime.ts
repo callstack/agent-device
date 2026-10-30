@@ -676,11 +676,10 @@ async function startDaemonRuntimeOnHost(
   void expiredProviderLeaseReleaser
     .recoverInherited((diagnostic) => startupDiagnostics.push(diagnostic))
     .catch((error) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'provider_lease_startup_recovery_failed',
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
+      // Startup has no request scope, so the failure goes to the daemon log directly.
+      void emitDaemonDiagnostic(logPath, 'provider_lease_startup_recovery_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
     });
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
