@@ -306,7 +306,7 @@ class LimrunIosInteractor implements Interactor {
         {
           reason: 'text_entry_value_write_failed',
           dispatched: 'unknown',
-          hint: 'Inspect the field before retrying. Some apps do not expose a globally focused element to Limrun; use press and type to send key events instead.',
+          hint: 'Inspect and assert the field or resulting screen before continuing. If the value needs correction, retry fill with the full desired value. To append with key events, focus the field with press, then use type.',
         },
         error,
       );
