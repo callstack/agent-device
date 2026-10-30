@@ -21,7 +21,7 @@ const REVYL_AGENT_HEADER = 'agent-device';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
-export const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
+const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
