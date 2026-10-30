@@ -6,6 +6,7 @@ type ProviderPluginDeclaration = Readonly<{
 
 const PROVIDER_PLUGIN_CATALOG: readonly ProviderPluginDeclaration[] = [
   { provider: 'testmu', package: '@agent-device/testmu', label: 'TestMu AI' },
+  { provider: 'webos', package: '@agent-device/webos', label: 'LG webOS' },
 ];
 
 export function getProviderPluginDeclaration(

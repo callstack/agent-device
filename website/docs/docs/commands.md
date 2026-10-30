@@ -323,6 +323,7 @@ vega virtual-device stop
 - tvOS supports the same runner-driven commands as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and selector flows). `back` is the Siri Remote Menu button, `home` is Home, and the app switcher is a double Home press; `--duration-ms` is an exact hold. Helpers that are simulator-only on iOS, such as `settings` and `push`, are simulator-only on tvOS too. tvOS refuses multi-touch gestures such as `gesture pinch`.
 - Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
 - Some Fire TV devices ship with Vega OS instead of Fire OS. Vega OS is a different OS and is supported only in the Vega Virtual Device: app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance report unsupported for Vega targets, and physical Vega OS devices are not supported. Use the VVD display as visual truth.
+- LG webOS TVs run through the optional `@agent-device/webos` plugin, which drives web apps over the Chrome DevTools Protocol. See [LG webOS](/docs/webos).
 - On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
 
 ## Desktop targets

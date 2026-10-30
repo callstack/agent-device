@@ -1,0 +1,27 @@
+{
+  "name": "@agent-device/tv-cdp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private package shared by the TV web app plugins: drives an app page over the Chrome DevTools Protocol and serves it as a provider-owned Android TV device.",
+  "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./connection": {
+      "types": "./src/connection.ts",
+      "default": "./src/connection.ts"
+    },
+    "./bundle": {
+      "types": "./src/bundle.ts",
+      "default": "./src/bundle.ts"
+    }
+  }
+}

@@ -16,19 +16,19 @@ const INTERACTIVE_ROLE_TOKENS = [
   'switch',
 ] as const;
 
+/** `isInteractive` overrides the default test for producers whose every node carries a rect. */
 export function shapeDesktopSurfaceSnapshot(
   data: SnapshotResult,
   options: Pick<SnapshotOptions, 'depth' | 'interactiveOnly' | 'scope'>,
+  isInteractive: (node: RawSnapshotNode) => boolean = isInteractiveSnapshotNode,
 ): SnapshotResult {
   let nodes = data.nodes ?? [];
   if (options.scope) {
     nodes = scopeSnapshotNodes(nodes, options.scope, (range) =>
-      options.interactiveOnly
-        ? nodes.slice(range.start, range.end).some(isInteractiveSnapshotNode)
-        : true,
+      options.interactiveOnly ? nodes.slice(range.start, range.end).some(isInteractive) : true,
     );
   }
-  if (options.interactiveOnly) nodes = filterInteractiveSnapshotNodes(nodes);
+  if (options.interactiveOnly) nodes = filterInteractiveSnapshotNodes(nodes, isInteractive);
   if (typeof options.depth === 'number') nodes = filterSnapshotNodesByDepth(nodes, options.depth);
   return { ...data, nodes };
 }
@@ -46,12 +46,15 @@ export function scopeSnapshotNodes(
   return reindexSnapshotNodes(slice, slice[0]?.depth ?? 0);
 }
 
-function filterInteractiveSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+function filterInteractiveSnapshotNodes(
+  nodes: RawSnapshotNode[],
+  isInteractive: (node: RawSnapshotNode) => boolean,
+): RawSnapshotNode[] {
   if (nodes.length === 0) return nodes;
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const keepIndexes = new Set<number>();
   for (const node of nodes) {
-    if (!isInteractiveSnapshotNode(node)) continue;
+    if (!isInteractive(node)) continue;
     let current: RawSnapshotNode | undefined = node;
     while (current) {
       if (keepIndexes.has(current.index)) break;
