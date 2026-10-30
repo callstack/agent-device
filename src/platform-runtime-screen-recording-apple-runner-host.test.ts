@@ -89,6 +89,10 @@ test.each([false, true])(
       } else {
         await expect(capture).resolves.toBeUndefined();
       }
+      expect(runnerClient.run).toHaveBeenCalledOnce();
+      const forwarded = runnerClient.run.mock.calls[0]?.[2];
+      expect(forwarded?.requestId).toBe(requestId);
+      expect(forwarded?.signal).toBe(callerSignal);
       expect(callerSignal.aborted).toBe(false);
     } finally {
       clearRequestAbortRegistration(registration);
