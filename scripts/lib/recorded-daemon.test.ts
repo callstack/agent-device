@@ -120,7 +120,10 @@ test('a state directory that records no daemon is reported, not started', async 
 
   await assert.rejects(
     send(stateDir),
-    (error: unknown) => error instanceof Error && /No daemon is running/.test(error.message),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'daemon_not_running' &&
+      error.details?.stateDir === stateDir,
   );
 
   assert.equal(fs.existsSync(resolveDaemonPaths(stateDir).infoPath), false);

@@ -23,6 +23,10 @@ import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-c
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
+  ProxyUpstreamDaemon,
+  ProxyUpstreamDaemonOptions,
+} from './daemon-client-proxy-upstream.ts';
+import type {
   DaemonRequest,
   DaemonResponse,
   DaemonTransportOptions,
@@ -396,6 +400,7 @@ async function protectArtifactUploadWithLeaseBeats(
   });
 }
 
+/** Guards a client call against cancellation before dispatch and during connection-free phases. */
 export { createRequestGuard };
 
 /**
@@ -425,17 +430,19 @@ export async function stopRecordedDaemon(
   return await stop(record, target);
 }
 
-/** What this tree would launch a daemon from, loaded on first call for the same reason. */
+/**
+ * What this tree would launch a daemon from. The package entry loads the transport closure;
+ * this helper loads the launch identity implementation on first call.
+ */
 export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeIdentity> {
   const { resolveLocalDaemonCodeIdentity: resolve } = await import('./daemon-launch-spec.ts');
   return await resolve();
 }
 
 /** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */
-export async function ensureProxyUpstreamDaemon(options: {
-  stateDir?: string;
-  host: HostEnvironment;
-}): Promise<{ httpPort: number | undefined; token: string; stateDir: string }> {
+export async function ensureProxyUpstreamDaemon(
+  options: ProxyUpstreamDaemonOptions,
+): Promise<ProxyUpstreamDaemon> {
   const { ensureProxyUpstreamDaemon: ensure } = await import('./daemon-client-proxy-upstream.ts');
   return await ensure(options);
 }

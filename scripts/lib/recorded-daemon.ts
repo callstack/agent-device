@@ -53,9 +53,11 @@ export function readRecordedDaemon(infoPath: string): RecordedDaemon | null {
 
 /**
  * Sends one request to the daemon a state directory records, through the client transport. The
- * tooling that calls this drives a daemon another build started, so it resolves the record and
- * nothing else: no daemon is started, replaced or compatibility-checked, and a timeout never
- * retires the daemon (`timeoutRecovery: 'none'`).
+ * tooling that calls this drives a daemon another build started. A held registration lock must
+ * match the recorded PID and process start time; a missing start time, foreign owner or publication
+ * in progress rejects with `daemon_registration_unproven`. With no lock, the record is sent to
+ * without ownership proof. No daemon is started, replaced or compatibility-checked, and a timeout
+ * never retires it (`timeoutRecovery: 'none'`).
  */
 export async function sendToRecordedDaemon(
   request: Omit<DaemonWireRequest, 'token'>,
@@ -66,7 +68,11 @@ export async function sendToRecordedDaemon(
     cwd: options.host.cwd,
   });
   const info = readRecordedDaemon(paths.infoPath);
-  if (!info) throw new Error(`No daemon is running for state dir ${paths.baseDir}.`);
+  if (!info)
+    throw new AppError('COMMAND_FAILED', `No daemon is running for state dir ${paths.baseDir}.`, {
+      reason: 'daemon_not_running',
+      stateDir: paths.baseDir,
+    });
   const inspection = inspectProcessLock(paths.lockPath);
   if (
     inspection.state !== 'absent' &&
