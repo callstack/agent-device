@@ -25,7 +25,7 @@ export type CaptureCommands = {
 
 export type BoundCaptureCommands = BoundOf<CaptureCommands>;
 
-export const captureCommands: CaptureCommands = {
+const captureCommands: CaptureCommands = {
   screenshot: screenshotCommand,
   diffScreenshot: diffScreenshotCommand,
   snapshot: snapshotCommand,

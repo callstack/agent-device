@@ -65,7 +65,7 @@ export type BoundAppCommands = BoundOf<AppCommands>;
 
 export type BoundAdminCommands = BoundOf<AdminCommands>;
 
-export const appCommands: AppCommands = {
+const appCommands: AppCommands = {
   open: openAppCommand,
   close: closeAppCommand,
   list: listAppsCommand,

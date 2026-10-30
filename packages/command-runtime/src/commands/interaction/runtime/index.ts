@@ -143,7 +143,7 @@ export type BoundInteractionCommands = {
   settleObservation: BoundRuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
 };
 
-export const selectorCommands: SelectorCommands = {
+const selectorCommands: SelectorCommands = {
   find: findCommand,
   get: getCommand,
   getText: getTextCommand,
@@ -155,7 +155,7 @@ export const selectorCommands: SelectorCommands = {
   waitForText: waitForTextCommand,
 };
 
-export const interactionCommands: InteractionCommands = {
+const interactionCommands: InteractionCommands = {
   click: clickCommand,
   press: pressCommand,
   fill: fillCommand,

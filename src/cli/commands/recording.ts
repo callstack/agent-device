@@ -1,7 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import type { RecordingContactSheetCommandResult } from '@agent-device/command-runtime';
+import type {
+  RecordingContactSheetCommandOptions,
+  RecordingContactSheetCommandResult,
+} from '@agent-device/command-runtime';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -39,11 +42,12 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
     policy: localCommandPolicy(),
   };
 
-  const result = await executeRecordingContactSheet(config, {
+  const options: RecordingContactSheetCommandOptions = {
     host,
     video: { kind: 'path', path: recordingPath },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
-  });
+  };
+  const result = await executeRecordingContactSheet(config, options);
 
   await writeCommandOutput(flags, result, () => formatContactSheetSummary(result));
   return true;
