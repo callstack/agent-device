@@ -220,14 +220,27 @@ class RevylInteractor implements Interactor {
    * worker chooses, so `--pixels` and `--amount` would be silently dropped.
    *
    * Revyl's `/drag` body carries endpoints only — no duration field exists — so the worker chooses
-   * how fast the finger travels and the report names no `durationMs`. `scroll --duration-ms` is
-   * therefore not honored here, and the report stays silent about it rather than echoing a duration
-   * the device never ran at.
+   * how fast the finger travels and the report names no `durationMs`. `scroll --duration-ms` is therefore
+   * refused: a drag that ran at Revyl's own speed while reporting the caller's number would be a false
+   * echo, and one that said nothing would drop what the caller asked for.
    */
   async scroll(
     direction: ScrollDirection,
     options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown>> {
+    if (options?.durationMs !== undefined) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'Revyl scrolls with one drag and cannot be told how fast the finger travels.',
+        {
+          reason: 'unsupported-provider-mode',
+          command: 'scroll',
+          flag: '--duration-ms',
+          runId: this.session.runId,
+          hint: 'Scroll without --duration-ms; the drag runs at the speed Revyl gives it.',
+        },
+      );
+    }
     const screen = this.session.screen;
     if (!screen) {
       throw new AppError(

@@ -269,10 +269,7 @@ test('type is refused with the fill hint instead of going to an unnamed point', 
 
 test('scroll dispatches the planned finger path as one drag', async () => {
   const { fixture, interactor } = await liveInteractor('ios');
-  const report = (await interactor.scroll?.('down', {
-    pixels: 300,
-    durationMs: 900,
-  })) as Record<string, unknown>;
+  const report = (await interactor.scroll?.('down', { pixels: 300 })) as Record<string, unknown>;
 
   assert.deepEqual(fixture.bodyFor('drag'), {
     start_x: 195,
@@ -282,9 +279,29 @@ test('scroll dispatches the planned finger path as one drag', async () => {
   });
   assert.equal(report.pixels, 300);
   assert.equal(report.direction, 'down');
-  // Revyl's `/drag` body has no duration field, so the report names none either: a duration the
-  // worker never ran must not appear as though it were honored.
+  // Revyl's `/drag` body has no duration field, so the report names none: a duration the worker never
+  // ran must not appear as though it were honored.
   assert.equal('durationMs' in report, false);
+});
+
+test('a scroll that names a duration is refused rather than run at another speed', async () => {
+  // The caller asked how fast the finger travels and Revyl's drag cannot be told, so the command is
+  // answered with that fact. Running the drag at Revyl's speed in silence would drop what was asked for.
+  const { fixture, interactor } = await liveInteractor('ios');
+
+  await assert.rejects(
+    () => interactor.scroll?.('down', { pixels: 300, durationMs: 900 }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'unsupported-provider-mode' &&
+      error.details?.flag === '--duration-ms',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/drag')),
+    false,
+    'the refused scroll sends no gesture',
+  );
 });
 
 test('a session whose health reported no screen refuses to plan a scroll', async () => {

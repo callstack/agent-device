@@ -26,7 +26,7 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 
 ## Shared workflow
 
-Every provider runs through the local `agent-device` daemon. `connect` checks your credentials and configuration, then saves non-secret connection state; it does not allocate a device. BrowserStack, AWS Device Farm, and TestMu AI allocate a hosted session on `open`. Limrun and Revyl allocate an instance on the first device command, such as `install` or `open`.
+Every provider runs through the local `agent-device` daemon. `connect` checks your credentials and configuration, then saves non-secret connection state; it does not allocate a device. BrowserStack, AWS Device Farm, and TestMu AI allocate a hosted session on `open`. Limrun and Revyl allocate an instance on the first device command, such as `snapshot` or `open`.
 
 Every provider follows the same steps:
 

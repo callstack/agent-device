@@ -65,8 +65,8 @@ A Revyl session runs the commands that reach a device through Revyl's device act
 - `click`, `press`, `double tap`, `longpress`, and `fill` by point or by snapshot reference, and
   `scroll` by direction. `scroll` sends one drag of the planned finger path, so `--pixels` and
   `--amount` mean the same distance they mean on a local device. Revyl's drag takes endpoints only, so
-  `scroll --duration-ms` sets no speed there and the report names no duration; `fill --delay-ms` is
-  paced by typing one character per pause.
+  `scroll --duration-ms` refuses with that reason rather than running the drag at a speed nobody chose;
+  `fill --delay-ms` is paced by typing one character per pause.
 - `open` (the session's app), `open` with a deep link or URL, and `close`.
 - `back`, and `home`.
 
