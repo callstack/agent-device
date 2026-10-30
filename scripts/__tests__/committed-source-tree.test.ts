@@ -3,7 +3,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { eagerClosureGraphOf } from '@agent-device/test-kit';
-import { createCommittedSourceTree, renamedSince } from './committed-source-tree.ts';
+import {
+  baseProductionPathOf,
+  createCommittedSourceTree,
+  renamedSince,
+} from './committed-source-tree.ts';
 import { mkGitFixtureRepo } from './eager-closure-gate-fixtures.ts';
 
 test('a PR merge retains branch rename history and measures the merged tree', () => {
@@ -11,6 +15,9 @@ test('a PR merge retains branch rename history and measures the merged tree', ()
   const git = (...args: string[]) => execFileSync('git', args, { cwd: repo }).toString().trim();
   const original = 'packages/demo/src/entry.ts';
   const moved = 'packages/demo/src/moved.ts';
+  const upstreamOriginal = 'packages/demo/src/facades/top.ts';
+  const upstreamMoved = 'packages/demo/src/facades/upstream.ts';
+  const newEntry = 'packages/demo/src/new-entry.ts';
   const base = git('rev-parse', 'HEAD');
   git('checkout', '-qb', 'pr');
   git('mv', original, moved);
@@ -19,9 +26,12 @@ test('a PR merge retains branch rename history and measures the merged tree', ()
     path.join(repo, moved),
     "export * from './main.ts';\n" + '// documentation\n'.repeat(100),
   );
+  fs.writeFileSync(path.join(repo, newEntry), 'export const newlyIntroduced = true;\n');
+  git('add', newEntry);
   git('commit', '-aqm', 'document');
   const pr = git('rev-parse', 'HEAD');
   git('checkout', '-qb', 'advanced-main', base);
+  git('mv', upstreamOriginal, upstreamMoved);
   fs.writeFileSync(path.join(repo, 'packages/demo/src/main.ts'), 'export const main = 1;\n');
   git('add', '.');
   git('commit', '-qm', 'advance main');
@@ -32,6 +42,14 @@ test('a PR merge retains branch rename history and measures the merged tree', ()
   expect(git('rev-parse', 'HEAD^2')).toBe(pr);
   expect(renamedSince(repo, main, merge).get(moved)).toBe(renamedSince(repo, base, pr).get(moved));
   expect(renamedSince(repo, main, merge).get(moved)).toBe(original);
+  const mergeRenames = renamedSince(repo, main, merge);
+  const mainTree = createCommittedSourceTree(repo, main);
+  expect(createCommittedSourceTree(repo, pr).isFile(path.join(repo, upstreamMoved))).toBe(false);
+  expect(mainTree.isFile(path.join(repo, upstreamMoved))).toBe(true);
+  expect(createCommittedSourceTree(repo, merge).isFile(path.join(repo, upstreamMoved))).toBe(true);
+  expect(mergeRenames.has(upstreamMoved)).toBe(false);
+  expect(baseProductionPathOf(repo, upstreamMoved, mainTree, mergeRenames)).toBe(upstreamMoved);
+  expect(baseProductionPathOf(repo, newEntry, mainTree, mergeRenames)).toBe(null);
   expect(
     createCommittedSourceTree(repo, merge).isFile(path.join(repo, 'packages/demo/src/main.ts')),
   ).toBe(true);

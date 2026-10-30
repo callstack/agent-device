@@ -94,7 +94,7 @@ function endOriginsChangedOnBase(
  * erase a recorded rename. Added or deleted paths end that lineage. The aggregate diff still finds
  * a move spread across commits or staged in the working tree. For a merge into the measured base,
  * follow its second parent's history, invalidate origins changed on the first parent, and apply the
- * second-parent-to-merge diff. Unlimited detection handles bulk moves.
+ * second-parent-to-merge diff to tracked lineage only. Unlimited detection handles bulk moves.
  */
 export function renamedSince(
   repoRoot: string,
@@ -104,8 +104,9 @@ export function renamedSince(
   const origins = new Map<string, string | null>();
   const ended = new Set<string>();
   const flags = ['--name-status', '-M', '--diff-filter=ADR', '-z'];
-  const follow = (status: Buffer): void => {
+  const follow = (status: Buffer, trackedOnly = false): void => {
     for (const { renamed, from, to } of nameStatusRecords(status)) {
+      if (trackedOnly && !origins.has(from)) continue;
       const origin = renamed && origins.has(from) ? origins.get(from)! : from;
       if (!renamed && typeof origins.get(from) === 'string') ended.add(from);
       origins.set(from, null);
@@ -142,7 +143,10 @@ export function renamedSince(
   );
   if (isMergeIntoBase) {
     endOriginsChangedOnBase(repoRoot, historyBase, baseCommit, origins, ended);
-    follow(git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, historyHead, measured]));
+    follow(
+      git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, historyHead, measured]),
+      true,
+    );
   }
   if (!head) follow(git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, 'HEAD']));
   const renamed = new Map<string, string>();
