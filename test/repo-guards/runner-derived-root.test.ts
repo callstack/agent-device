@@ -14,7 +14,10 @@ test('the script derived root agrees with the runner cache owner', () => {
   const root = source.match(
     /const RUNNER_DERIVED_ROOT = path\.join\(os\.homedir\(\), '([^']+)', '([^']+)'\);/,
   );
-  assert.ok(root, 'the runner derived root must have a recognizable home-relative layout');
+  assert.ok(
+    root?.[1] && root[2],
+    'the runner derived root must have a recognizable home-relative layout',
+  );
   assert.match(
     source,
     /path\.join\(RUNNER_DERIVED_ROOT, 'derived', resolveRunnerDerivedBaseName\(device\)\)/,
