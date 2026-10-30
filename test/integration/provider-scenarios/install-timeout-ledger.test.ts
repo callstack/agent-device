@@ -281,17 +281,22 @@ function createInstallLedgerAppleToolProvider(
               }),
             };
           }
-          if (args.includes('boot')) simulatorBooted = true;
-          else
-            assert.ok(
-              args.includes('bootstatus') || args.includes('install') || args.includes('uninstall'),
-              args.join(' '),
-            );
+          if (args.includes('boot')) {
+            simulatorBooted = true;
+            return ok;
+          }
+          assert.ok(
+            ['bootstatus', 'install', 'uninstall'].some((action) => args.includes(action)),
+            args.join(' '),
+          );
           return ok;
         case 'devicectl':
           assert.equal(route, 'iOS physical device');
-          if (args.includes('details')) writeCoreDeviceDetailsJson(args);
-          else assert.ok(args.includes('install') || args.includes('uninstall'), args.join(' '));
+          if (args.includes('details')) {
+            writeCoreDeviceDetailsJson(args);
+            return ok;
+          }
+          assert.ok(args.includes('install') || args.includes('uninstall'), args.join(' '));
           return ok;
         default:
           throw new Error(`Unscripted Apple install tool: ${command} ${argv.join(' ')}`);
