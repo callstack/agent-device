@@ -29,7 +29,7 @@ All rows exited with code 0 and returned success. Timeouts are in milliseconds; 
 
 ## Review follow-up: stopped AVD and current bindings
 
-Live source SHA: `7eac98d6f8257381aeca4857dd8231640841b68c`. A fresh isolated daemon ran the built plain CLI with `AGENT_DEVICE_EXEC_TRACE=true`. Android commands used `--platform android --device ReactNative_API_35B` without `--serial`. The AVD was shut down before each cold request; URL source installation also started with the fixture uninstalled.
+Live source SHA: `49ba34bdb29e008754a5ec61b4524c99b2082c6b`. A fresh isolated daemon ran the built plain CLI with `AGENT_DEVICE_EXEC_TRACE=true`. Android commands used `--platform android --device ReactNative_API_35B` without `--serial`. The AVD was shut down before each cold request; URL source installation also started with the fixture uninstalled.
 
 ```sh
 agent-device install ./proof.apk --platform android --device ReactNative_API_35B
@@ -41,15 +41,15 @@ All five requests exited 0 and returned success. Native exec traces record each 
 
 | Request | Operation | Emulator launches | Readiness `sys.boot_completed` probes | Install target | Install timeout |
 | --- | --- | --- | --- | --- | --- |
-| `a280e24cee77a8b3` | cold-install | 1 | 7 | `emulator-5554` | 120000 ms |
-| `23813cab42ec23ee` | cold-reinstall | 1 | 1 | `emulator-5554` | 120000 ms |
-| `016748f2e8388d9e` | cold-source | 1 | 1 | `emulator-5554` | 120000 ms |
-| `128e21a86874a15b` | warm-install | 0 | 0 | `emulator-5554` | 120000 ms |
-| `7405a049fab27219` | ios-install | 0 | 0 | `BC54AC11-CD86-4C10-8C4E-5101C773FFEB` | 120000 ms |
+| `795f69f4007e264c` | cold-install | 1 | 1 | `emulator-5554` | 120000 ms |
+| `0a7b6d7f9a7b9707` | cold-reinstall | 1 | 1 | `emulator-5554` | 120000 ms |
+| `40485b4773399c39` | cold-source | 1 | 1 | `emulator-5554` | 120000 ms |
+| `5b86f1caf73508ae` | warm-install | 0 | 0 | `emulator-5554` | 120000 ms |
+| `1138797a7845df53` | ios-install | 0 | 0 | `BC54AC11-CD86-4C10-8C4E-5101C773FFEB` | 120000 ms |
 
 Each cold request ran exactly one `emulator -avd ReactNative_API_35B`, then readiness probes, then `adb -s emulator-5554 install -r <artifact>`. There was no second boot. The iOS request ran `xcrun simctl install BC54AC11-CD86-4C10-8C4E-5101C773FFEB <artifact>`. Both warm requests ran after the binding-cache changes.
 
-The first plain-CLI attempt at `c1a190fd85` returned `DEVICE_NOT_FOUND`: install selection omitted stopped AVDs. The route now requests `include-stopped`. The ledger inventory fake honors `running-only` instead of returning stopped AVDs unconditionally.
+The first plain-CLI attempt at `c1a190fd85` returned `DEVICE_NOT_FOUND`: install selection omitted stopped AVDs. The command declaration now owns `include-stopped`; advisory locks, provider context, claim admission, and handlers share that policy. This preserves one cached inventory selection per request, including provider deployments. The ledger inventory fake honors `running-only` instead of returning stopped AVDs unconditionally.
 
 ## Ledger regression proof
 
@@ -61,12 +61,12 @@ At `9eea80f2a583e7b6b05d187114922506ee1fa3d0`, the same focused provider suite r
 
 Command: `pnpm exec vitest run --project provider-integration test/integration/provider-scenarios/install-timeout-ledger.test.ts --reporter verbose`. The disposable checkout was removed.
 
-At `c1a190fd85`, isolated regression cases for source readiness and push pass (3 cases); restoring the prior production code gives 2 failures and 1 pass. The same-ID source case fails on stale materialization; the push case detects the absent 15s bound. At `7eac98d6f8`, the strengthened inventory ledger passes all 23 cases; removing the stopped-AVD selection fix gives 11 failures and 12 passes. Both experiments used disposable checkouts, which were removed.
+At `c1a190fd85`, isolated regression cases for source readiness and push pass (3 cases); restoring the prior production code gives 2 failures and 1 pass. The same-ID source case fails on stale materialization; the push case detects the absent 15s bound. At `7eac98d6f8`, the strengthened inventory ledger passes all 23 cases; removing the stopped-AVD selection fix gives 11 failures and 12 passes. Both experiments ran in a disposable checkout, which was removed.
 
 The final ledger also covers a running emulator that becomes ready without changing its serial. Request binding caches distinguish the old and fresh boot observations. The ledger covers shutdown Android AVD discovery, boot polling, the changed serial, foreign device claims, metadata inspection, uninstall, APK install, both bundletool phases, simulator boot, CoreDevice readiness, and URL download. Archive extraction remains bounded by size, not wall-clock time. Provider-owned install implementations remain responsible for honoring the supplied timeout.
 
 ## Limits
 
-No physical iOS device was available; its route has provider integration coverage. The original 12-case matrix used already booted targets; the follow-up above verifies the stopped AVD with the plain CLI. The physical iOS route remains unverified on hardware.
+No physical iOS device was available; its route has provider integration coverage. The original 12-case matrix used already booted targets; the follow-up above verifies the stopped AVD with the plain CLI.
 
 No app session was opened. The temporary daemon, file server, and HTTPS tunnel are stopped after validation.
