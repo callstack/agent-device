@@ -8,7 +8,7 @@ import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
-import { buildHttpRpcPayload, resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
+import { resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import {
   startDaemonRuntime,
@@ -18,6 +18,7 @@ import {
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveSessionDir } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
+  buildScenarioRpcRequest,
   commandRequest,
   envelopeToRpcResult,
   type JsonRpcResponseEnvelope,
@@ -241,7 +242,7 @@ export async function createProviderScenarioHarness(
       const request = await withClientReplayScriptSources(
         commandRequest(runtime.token, command, positionals, flags, options),
       );
-      const payload = buildHttpRpcPayload(request, { includeTokenParam: true });
+      const payload = buildScenarioRpcRequest(request, { includeTokenParam: true });
       const { statusCode, body } = await postProviderScenarioRpc({
         port: httpPort,
         token: runtime.token,
@@ -277,7 +278,7 @@ export async function createProviderScenarioHarness(
 async function postProviderScenarioRpc(params: {
   port: number;
   token: string;
-  payload: ReturnType<typeof buildHttpRpcPayload>;
+  payload: ReturnType<typeof buildScenarioRpcRequest>;
   signal?: AbortSignal;
 }): Promise<{ statusCode: number; body: string }> {
   const body = JSON.stringify(params.payload);

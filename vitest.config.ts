@@ -144,6 +144,8 @@ export default defineConfig({
             'scripts/fuzz/validation-arbitraries-maestro.test.ts',
             'scripts/fuzz/validation-case.test.ts',
             'scripts/fuzz/envelope.test.ts',
+            // The tooling send over real loopback daemons: in-process, no device.
+            'scripts/lib/recorded-daemon.test.ts',
             'scripts/__tests__/vitest-slow-test-reporter.test.ts',
             // Artifact guards assert on Swift sources, package.json, workflows, docs and examples rather
             // than on a module under src.

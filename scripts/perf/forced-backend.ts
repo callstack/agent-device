@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
-import { sendToRecordedDaemon } from '@agent-device/daemon-client';
+import { sendToRecordedDaemon } from '../lib/recorded-daemon.ts';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { REPO_ROOT } from './config.ts';
 import type { CliResult } from './types.ts';

@@ -245,9 +245,10 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ),
       // Consumer side: the payload the client actually puts on the wire. A
       // client-only change here breaks an older daemon just as surely.
+      ...from(CLIENT_RPC, 'buildHttpRpcPayload'),
       ...from(
-        CLIENT_RPC,
-        'buildHttpRpcPayload',
+        'packages/contracts/src/lease-scope.ts',
+        'buildDaemonRpcRequest',
         'isLeaseRpcCommand',
         'leaseRpcMethodForCommand',
         'buildLeaseRpcParams',

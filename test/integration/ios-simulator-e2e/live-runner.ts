@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { sendToRecordedDaemon } from '@agent-device/daemon-client';
+import { sendToRecordedDaemon } from '../../../scripts/lib/recorded-daemon.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,

@@ -11,11 +11,11 @@ import {
   mkdtempForTestSync,
   supportsLoopbackBind,
 } from '@agent-device/test-kit';
-import { sendToRecordedDaemon } from '../index.ts';
+import { sendToRecordedDaemon } from './recorded-daemon.ts';
 
-// `sendToRecordedDaemon` is the supported way for tooling to talk to a daemon another build
-// started. It must keep every guarantee of the client transport and none of its lifecycle: nothing
-// is started, replaced or retired, whatever the daemon answers.
+// `sendToRecordedDaemon` resolves a recorded daemon and sends through the client transport. It must
+// keep every guarantee of that transport and none of its lifecycle: nothing is started, replaced or
+// retired, whatever the daemon answers.
 
 const REQUEST = { session: 'default', command: 'snapshot', positionals: [] as string[] };
 const servers: net.Server[] = [];
@@ -119,7 +119,7 @@ test('a state directory that records no daemon is reported, not started', async 
 
   await assert.rejects(
     send(stateDir),
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'daemon-not-running',
+    (error: unknown) => error instanceof Error && /No daemon is running/.test(error.message),
   );
 
   assert.equal(fs.existsSync(resolveDaemonPaths(stateDir).infoPath), false);

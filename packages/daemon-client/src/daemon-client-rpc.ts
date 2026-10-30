@@ -12,12 +12,7 @@ import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
-import {
-  leaseScopeFromRequest,
-  leaseScopeToLeaseRpcParams,
-  readLeaseAllocateProviderFlags,
-  type LeaseRpcCommand,
-} from '@agent-device/contracts/lease-scope';
+import { buildDaemonRpcRequest, leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export function handleDaemonHttpResponseBody(
   body: string,
@@ -174,60 +169,9 @@ async function resolveDaemonHttpResult(
 export function buildHttpRpcPayload(
   req: DaemonWireRequest,
   options: { includeTokenParam: boolean },
-): {
-  jsonrpc: '2.0';
-  id: string;
-  method: string;
-  params: DaemonWireRequest | Record<string, unknown>;
-} {
-  const id = req.meta?.requestId ?? createRequestId();
-  if (!isLeaseRpcCommand(req.command)) {
-    return {
-      jsonrpc: '2.0',
-      id,
-      method: 'agent_device.command',
-      params: req,
-    };
-  }
-  return {
-    jsonrpc: '2.0',
-    id,
-    method: leaseRpcMethodForCommand(req.command),
-    params: {
-      ...buildLeaseRpcParams(req, req.command, options),
-      ...(req.command === 'lease_allocate' ? readLeaseAllocateProviderFlags(req.flags) : {}),
-      ...(req.command === 'lease_allocate' && req.meta?.providerCredentialFingerprint
-        ? { providerCredentialFingerprint: req.meta.providerCredentialFingerprint }
-        : {}),
-    },
-  };
-}
-
-function isLeaseRpcCommand(command: string): command is LeaseRpcCommand {
-  return (
-    command === 'lease_allocate' || command === 'lease_heartbeat' || command === 'lease_release'
-  );
-}
-
-function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
-  switch (command) {
-    case 'lease_allocate':
-      return 'agent_device.lease.allocate';
-    case 'lease_heartbeat':
-      return 'agent_device.lease.heartbeat';
-    case 'lease_release':
-      return 'agent_device.lease.release';
-  }
-}
-
-function buildLeaseRpcParams(
-  req: DaemonWireRequest,
-  command: LeaseRpcCommand,
-  options: { includeTokenParam: boolean },
-): Record<string, unknown> {
-  return leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+): ReturnType<typeof buildDaemonRpcRequest> {
+  return buildDaemonRpcRequest(req, {
+    id: req.meta?.requestId ?? createRequestId(),
     includeTokenParam: options.includeTokenParam,
-    token: req.token,
-    session: req.session,
   });
 }

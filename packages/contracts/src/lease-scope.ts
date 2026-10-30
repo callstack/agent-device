@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
+import type { DaemonWireRequest } from './daemon-wire-request.ts';
 import type { EndedLease, LeaseDevice, LeaseDeviceSpec } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
@@ -535,4 +536,70 @@ function readFlagString(
 ): string | undefined {
   const value = flags?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * The JSON-RPC envelope a client puts on the daemon's `/rpc` endpoint for one request: the command
+ * method for an ordinary request, and the lease method with its lease params for a lease command.
+ * The caller supplies the request id, so the envelope is the same for every client.
+ */
+export function buildDaemonRpcRequest(
+  req: DaemonWireRequest,
+  options: { id: string; includeTokenParam: boolean },
+): {
+  jsonrpc: '2.0';
+  id: string;
+  method: string;
+  params: DaemonWireRequest | Record<string, unknown>;
+} {
+  const { id } = options;
+  if (!isLeaseRpcCommand(req.command)) {
+    return {
+      jsonrpc: '2.0',
+      id,
+      method: 'agent_device.command',
+      params: req,
+    };
+  }
+  return {
+    jsonrpc: '2.0',
+    id,
+    method: leaseRpcMethodForCommand(req.command),
+    params: {
+      ...buildLeaseRpcParams(req, req.command, options),
+      ...(req.command === 'lease_allocate' ? readLeaseAllocateProviderFlags(req.flags) : {}),
+      ...(req.command === 'lease_allocate' && req.meta?.providerCredentialFingerprint
+        ? { providerCredentialFingerprint: req.meta.providerCredentialFingerprint }
+        : {}),
+    },
+  };
+}
+
+function isLeaseRpcCommand(command: string): command is LeaseRpcCommand {
+  return (
+    command === 'lease_allocate' || command === 'lease_heartbeat' || command === 'lease_release'
+  );
+}
+
+function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
+  switch (command) {
+    case 'lease_allocate':
+      return 'agent_device.lease.allocate';
+    case 'lease_heartbeat':
+      return 'agent_device.lease.heartbeat';
+    case 'lease_release':
+      return 'agent_device.lease.release';
+  }
+}
+
+function buildLeaseRpcParams(
+  req: DaemonWireRequest,
+  command: LeaseRpcCommand,
+  options: { includeTokenParam: boolean },
+): Record<string, unknown> {
+  return leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+    includeTokenParam: options.includeTokenParam,
+    token: req.token,
+    session: req.session,
+  });
 }
