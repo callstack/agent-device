@@ -53,7 +53,8 @@ export function renamedSince(
   base: string,
   head?: string,
 ): ReadonlyMap<string, string> {
-  const renamed = new Map<string, string>();
+  const origins = new Map<string, string | null>();
+  const ended = new Set<string>();
   const flags = ['--name-status', '-M', '--diff-filter=ADR', '-z'];
   const follow = (status: Buffer): void => {
     const fields = status.toString('utf8').split('\0');
@@ -65,11 +66,14 @@ export function renamedSince(
       if (kind.startsWith('R')) {
         const to = fields[index++];
         if (!to) continue;
-        const origin = renamed.get(from) ?? from;
-        renamed.delete(from);
-        renamed.set(to, origin);
+        const origin = origins.has(from) ? origins.get(from)! : from;
+        origins.set(from, null);
+        origins.set(to, origin);
+        if (origin === null) ended.add(to);
+        else ended.delete(to);
       } else {
-        renamed.delete(from);
+        if (typeof origins.get(from) === 'string') ended.add(from);
+        origins.set(from, null);
       }
     }
   };
@@ -86,6 +90,10 @@ export function renamedSince(
     ]),
   );
   if (!head) follow(git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, 'HEAD']));
+  const renamed = new Map<string, string>();
+  for (const [file, origin] of origins) {
+    if (origin !== null) renamed.set(file, origin);
+  }
   const aggregate = git(repoRoot, [
     '-c',
     'diff.renameLimit=0',
@@ -101,7 +109,7 @@ export function renamedSince(
     const from = aggregate[index++];
     if (kind?.startsWith('R')) {
       const to = aggregate[index++];
-      if (from && to && !renamed.has(to)) renamed.set(to, from);
+      if (from && to && !renamed.has(to) && !ended.has(to)) renamed.set(to, from);
     }
   }
   return renamed;

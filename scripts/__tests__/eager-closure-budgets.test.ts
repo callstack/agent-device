@@ -537,10 +537,29 @@ test('later edits preserve a committed rename but deletion ends its lineage', ()
   );
   execFileSync('git', ['rm', moved], { cwd: repo });
   execFileSync('git', ['commit', '-qm', 'remove'], { cwd: repo });
-  fs.writeFileSync(path.join(repo, moved), 'export const unrelated = true;\n');
+  fs.writeFileSync(
+    path.join(repo, moved),
+    createCommittedSourceTree(repo, base).readFile(path.join(repo, 'packages/demo/src/entry.ts')),
+  );
   execFileSync('git', ['add', moved], { cwd: repo });
   execFileSync('git', ['commit', '-qm', 'new entry'], { cwd: repo });
   expect(renamedSince(repo, base, 'HEAD').has(moved)).toBe(false);
+});
+
+test('a new file at a moved source cannot claim the original lineage when renamed', () => {
+  const repo = mkGitFixtureRepo('renamed-since-reused-source-');
+  const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim();
+  const original = 'packages/demo/src/entry.ts';
+  execFileSync('git', ['mv', original, 'packages/demo/src/moved.ts'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'move'], { cwd: repo });
+  fs.writeFileSync(path.join(repo, original), 'export const a = 1;\n');
+  execFileSync('git', ['add', original], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'new source'], { cwd: repo });
+  execFileSync('git', ['mv', original, 'packages/demo/src/new.ts'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'move new source'], { cwd: repo });
+  const paired = renamedSince(repo, base, 'HEAD');
+  expect(paired.get('packages/demo/src/moved.ts')).toBe(original);
+  expect(paired.has('packages/demo/src/new.ts')).toBe(false);
 });
 
 test('rename detection survives a git mv with an edit and a hostile renameLimit', () => {
