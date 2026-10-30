@@ -6,7 +6,6 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import {
   createDeviceClaimReconciler,
@@ -71,7 +70,7 @@ export function createOwnerScopedDeviceClaimReconciler(
       await recovery.dispose();
     } catch (error) {
       if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
-      emitDiagnostic({
+      params.scope.diagnostics.emit({
         level: 'error',
         phase: 'device_claim_recovery_dispose_failed',
         data: {
@@ -80,7 +79,7 @@ export function createOwnerScopedDeviceClaimReconciler(
           ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
             ? { retainedReason: outcome.result.reason }
             : {}),
-          error: normalizeError(error),
+          error: JSON.parse(JSON.stringify(normalizeError(error))),
         },
       });
     }

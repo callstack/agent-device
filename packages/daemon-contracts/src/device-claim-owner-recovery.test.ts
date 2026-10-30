@@ -6,11 +6,6 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createPlatformRuntimeShutdownError } from '@agent-device/contracts/platform-runtime-shutdown';
 import {
-  emitDiagnostic,
-  flushDiagnosticsToSessionFile,
-  withDiagnosticsScope,
-} from '@agent-device/host-kit/diagnostics';
-import {
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecovery,
 } from './device-claim-owner-recovery.ts';
@@ -59,14 +54,14 @@ function fixture(reconcile: OwnerScopedClaimRecovery['reconcile'], failureCount:
     failureCount === 1 ? [first] : [first, second],
   );
   const reconcileOnce = vi.fn(reconcile);
-  const logPath = path.join(stateDir, 'recovery.ndjson');
+  const emit = vi.fn();
   const dispose = vi.fn(async () => {
     throw cleanupError;
   });
   const recovery = createOwnerScopedDeviceClaimReconciler({
     scope: {
       signal: new AbortController().signal,
-      diagnostics: { emit: emitDiagnostic },
+      diagnostics: { emit },
       progress: { report: () => {} },
     },
     composeGateway: () => {
@@ -80,7 +75,7 @@ function fixture(reconcile: OwnerScopedClaimRecovery['reconcile'], failureCount:
     claim,
     env,
     cleanupError,
-    logPath,
+    emit,
     dispose,
     recovery,
     reconcileOnce,
@@ -134,7 +129,7 @@ test.each([1, 2] as const)(
     expect(normalized.message).toContain('android: Android owner refused');
     if (failureCount === 2) expect(normalized.message).toContain('apple: Apple owner refused');
     expect(normalized.hint).toContain('Cleanup is unconfirmed');
-    expect(normalized.hint).toContain('claim is still held');
+    expect(normalized.hint).toContain('verify claim ownership');
     expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
     expect(f.reconcileOnce).toHaveBeenCalledOnce();
     expect(f.dispose).toHaveBeenCalledOnce();
@@ -151,11 +146,9 @@ test.each([1, 2] as const)(
       throw primary;
     }, failureCount);
 
-    await withDiagnosticsScope({ logPath: f.logPath }, async () => {
-      await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).rejects.toBe(primary);
-      flushDiagnosticsToSessionFile({ force: true });
-    });
-    expect(JSON.parse(fs.readFileSync(f.logPath, 'utf8'))).toEqual(
+    await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).rejects.toBe(primary);
+    expect(f.emit).toHaveBeenCalledOnce();
+    expect(f.emit).toHaveBeenCalledWith(
       expect.objectContaining({
         phase: 'device_claim_recovery_dispose_failed',
         data: expect.objectContaining({
@@ -182,12 +175,10 @@ test.each([1, 2] as const)(
     const retained = { status: 'retained', reason: 'screen-recording-owner-mismatch' } as const;
     const f = fixture(async () => retained, failureCount);
 
-    await withDiagnosticsScope({ logPath: f.logPath }, async () => {
-      await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).resolves.toBe(retained);
-      flushDiagnosticsToSessionFile({ force: true });
-    });
+    await expect(settleVerifiedOrphanedClaim(f.claim, f.recovery, f.env)).resolves.toBe(retained);
     expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
-    expect(JSON.parse(fs.readFileSync(f.logPath, 'utf8'))).toEqual(
+    expect(f.emit).toHaveBeenCalledOnce();
+    expect(f.emit).toHaveBeenCalledWith(
       expect.objectContaining({
         phase: 'device_claim_recovery_dispose_failed',
         data: expect.objectContaining({

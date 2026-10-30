@@ -64,6 +64,7 @@ export type ShutdownReport = {
    */
   requests: { drained: number; abandoned: number };
   sessions: { closed: number; failed: number };
+  /** `pending` exceeded the shutdown budget; `failed` settled with an owner error. Both retain registration. */
   platformOwners: 'closed' | 'pending' | 'failed';
   /** `pending` plugins were still shutting down when the budget ran out. */
   plugins: {
