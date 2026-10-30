@@ -232,8 +232,10 @@ It exposes the inventory module, runtime module, shutdown loader, and platform p
 Synchronous consumers use named domain facets without a second root compatibility surface.
 
 The Apple XCUITest runner client is a durable implementation facet owned by the Apple platform.
-It resides in `packages/apple-runner/src/` (#2040).
-R13 enumerates the root façade, the `./runner` subpath, and thirteen named domain/mechanics facades:
+It resides in the workspace package `@agent-device/apple-runner` (#2040), at `packages/apple-runner/`.
+The package serves one Apple-family engine for all Apple operating systems.
+Its only export is the named entry `src/index.ts`.
+R13 enumerates the Apple root façade and twelve named domain/mechanics facades:
 
 - `./app-lifecycle`
 - `./app-resolution`
@@ -251,11 +253,19 @@ R13 enumerates the root façade, the `./runner` subpath, and thirteen named doma
 
 Named facades replace root-only access for synchronous domain consumers without a broad compatibility barrel.
 R13 pins the exact exports and permitted consumer seams.
-The `./runner` façade subpath is the seam through which daemon and root consumers currently reach runner mechanics directly.
-The host-bound runner client and its test host remain package-internal.
-The `apple-runner` vitest project installs the test host from the package's `__tests__/host-setup.ts`.
-The facet owns its cache files and usbmux sockets.
-The ambient-host rule exempts exactly this subtree. Raw process primitives remain prohibited.
+The runner package entry is the seam through which platform-apple composition reaches runner mechanics.
+R13 limits its production importers to platform-apple and three named root consumers.
+The root consumers import it as a type or behind a deferred import.
+R65 treats the package as a concrete platform dependency of the daemon.
+The `./runner/operations` and `./runner-owner` subpaths remain the seams through which daemon and root consumers reach the host-bound operations.
+The host-bound runner client is bound once, in `core/runner-client.ts`.
+The runner test host remains package-internal and the package exports no test support.
+The `apple-runner` vitest project runs the package suites.
+platform-apple provides the real host capabilities from its own setup file, and the package's `__tests__/host-setup.ts` installs them behind the test host.
+Suites that need both the runner and Apple lifecycle, alert, or tool-provider code live in platform-apple and use the entry.
+The package owns its cache files and usbmux sockets.
+R13 does not apply the ambient-host rule to the package. Raw process primitives remain prohibited.
+The package imports no platform-apple, sibling platform, root, or daemon code.
 Host authority still enters through one focused injected port, `AppleRunnerHost`.
 Exactly one composition root constructs that port.
 The port supplies these host capabilities:
@@ -269,7 +279,7 @@ The port supplies these host capabilities:
 - Physical-device control.
 
 No current issue owns migration of the runner's direct consumers behind the composition gateway.
-If a migration retires those consumers, the `./runner` seam narrows with them.
+If a migration retires those consumers, the `./runner/operations` seam narrows with them.
 The facet is the intended ownership model, not a temporary exception.
 Each family explicitly declares mechanics facets.
 A new family adds a named facet only with an owning consumer and evidence.

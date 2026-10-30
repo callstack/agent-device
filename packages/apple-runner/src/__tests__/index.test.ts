@@ -18,6 +18,7 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
+import { restoreLegacyXctestDeviceSetRedirect, runApplePressSeries } from '../index.ts';
 import {
   REPO_ROOT_FOR_TEST,
   makeScratchDir,
@@ -269,4 +270,40 @@ test('shouldDeleteRunnerDerivedRootEntry only removes known xcode transient entr
   assert.equal(shouldDeleteRunnerDerivedRootEntry('device'), false);
   assert.equal(shouldDeleteRunnerDerivedRootEntry('macos'), false);
   assert.equal(shouldDeleteRunnerDerivedRootEntry('visionos'), false);
+});
+
+test('a press series through the entry loads the sequence driver and returns its merged result', async () => {
+  const sent: unknown[] = [];
+  const result = await runApplePressSeries(
+    iosSimulator,
+    { x: 10, y: 20 },
+    { button: 'primary', count: 2, intervalMs: 0, holdMs: 0, jitterPx: 0, doubleTap: false },
+    undefined,
+    async (command) => {
+      sent.push(command);
+      return {
+        completedSteps: 2,
+        sequenceResults: [
+          { ok: true, kind: 'tap' },
+          { ok: true, kind: 'tap' },
+        ],
+      };
+    },
+  );
+
+  assert.equal(sent.length, 1);
+  assert.equal(result.completedSteps, 2);
+  assert.equal(result.timingMode, 'runner-sequence');
+});
+
+test('the legacy device-set restore through the entry runs the parser module on first use', async () => {
+  const diagnostics: string[] = [];
+  const missing = path.join(REPO_ROOT_FOR_TEST, '.tmp', 'no-such-xctest-devices');
+
+  await restoreLegacyXctestDeviceSetRedirect(
+    (diagnostic) => diagnostics.push(diagnostic.phase),
+    missing,
+  );
+
+  assert.deepEqual(diagnostics, []);
 });

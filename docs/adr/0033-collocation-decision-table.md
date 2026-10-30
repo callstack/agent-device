@@ -101,7 +101,7 @@ All its consumers occupy one zone that already owns the operations represented b
 | File | Decision | Reason |
 | --- | --- | --- |
 | `src/runner-owner-facade.ts` | keep | This is the ADR 0005 runner-owner seam. R13 owns the platform package's composition exports. The root importer is the designated host. |
-| `src/runner/legacy-xctest-device-set.ts` | keep | Runner-internal legacy device-set parsers reside beside their runner. |
+| `src/runner/legacy-xctest-device-set.ts` | keep | Runner-internal legacy device-set parsers reside beside their runner. The runner subtree is now the `@agent-device/apple-runner` package (`packages/apple-runner/src/legacy-xctest-device-set.ts`). |
 | `src/simulator-boot.ts` | keep | ADR 0009 assigns simulator boot mechanics to the platform. The kernel device model and xctestrun preparation must remain synchronized with them in this package. |
 
 ### replay-port

@@ -297,7 +297,7 @@ The builders are in `packages/contracts/src/*-runtime.ts`. They are side-calls o
 - `packages/daemon/src/execution/sparse-fallback-screenshot.ts`
 - `src/core/snapshot-state.ts`
 - `packages/contracts/src/capture.ts`
-- `packages/apple-runner/src/snapshot-presentation.ts`
+- `packages/platform-apple/src/snapshot-presentation.ts`
 - `src/snapshot/ios-snapshot-runtime.ts`
 - Modules under `packages/capture-kit/src/ios-snapshot-engine/`:
   - engine

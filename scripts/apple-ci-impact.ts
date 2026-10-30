@@ -41,7 +41,10 @@ export function selectAppleBridgeProof(changedPaths: readonly string[] | null): 
   const checked = checkOwnership(changedPaths);
   if (checked.early) return checked.early;
   const input = changedPaths.find(
-    (file) => file.startsWith('apple/') || file.startsWith('packages/platform-apple/src/'),
+    (file) =>
+      file.startsWith('apple/') ||
+      file.startsWith('packages/platform-apple/src/') ||
+      file.startsWith('packages/apple-runner/src/'),
   );
   return input
     ? { run: true, reason: `Apple implementation changed: ${input}` }

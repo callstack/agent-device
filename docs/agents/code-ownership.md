@@ -13,6 +13,7 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>` 
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
 | Input fields and audiences | `src/commands/common-input-fields.ts`, `src/commands/input-audience.ts` |
 | Released SDK default hosts | `src/sdk/host.ts` |
+| Apple runner host port and its one binding | `packages/apple-runner/src/host.ts`, `packages/platform-apple/src/core/runner-client.ts` |
 
 For SDK entries `android-adb`, `artifacts`, `limrun`, `metro`, and `remote-config`, use `captureSdkHost` for defaults.
 For command-host readers, use `withSdkHost`.

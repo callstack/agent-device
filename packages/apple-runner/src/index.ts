@@ -20,7 +20,6 @@ export type {
   IosDeviceReadinessRemedies,
   IosPhysicalDeviceBackend,
   IosPhysicalDeviceRunnerControl,
-  IosPhysicalDeviceTunnel,
 } from './runner-physical-device.ts';
 export {
   RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
@@ -34,7 +33,6 @@ export {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
   type AppleRunnerCommandOptions,
-  type AppleRunnerLifecycleOptions,
   type AppleRunnerPrepareResult,
   type AppleRunnerProvider,
 } from './runner-provider.ts';

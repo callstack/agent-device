@@ -285,8 +285,10 @@ const workspacePackageOwnership: OwnershipRule = ({ file, isTs }) => {
   return selections;
 };
 
+// The Apple runner package is the Apple-family engine platform-apple composes, so it carries the
+// same scenario ownership as a platform package despite its name.
 const platformPackageScenarioOwnership: OwnershipRule = ({ file, isTs }) => {
-  if (!isTs || !/^packages\/platform-[^/]+\/src\//.test(file)) {
+  if (!isTs || !/^packages\/(?:platform-[^/]+|apple-runner)\/src\//.test(file)) {
     return [];
   }
   return [

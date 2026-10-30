@@ -5,6 +5,7 @@ import { selectChecks } from './model.ts';
 test('platform package source selects runtime contracts, provider scenarios, and coverage', () => {
   for (const file of [
     'packages/platform-apple/src/index.ts',
+    'packages/apple-runner/src/runner-session.ts',
     'packages/platform-harmonyos/src/inventory.test.ts',
     'packages/platform-future/src/runtime.ts',
   ]) {

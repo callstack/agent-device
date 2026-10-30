@@ -5,6 +5,7 @@ import {
   decodeXmlCharacterReferences,
   escapeXmlTextAndAttribute,
   parseXmlDocumentSync,
+  visitXmlPlistEntries,
 } from '@agent-device/xml';
 
 test('parseXmlDocumentSync preserves ordered nodes with attributes and decoded text', () => {
@@ -121,4 +122,26 @@ test('escapeXmlTextAndAttribute escapes text and quoted attribute delimiters', (
     escapeXmlTextAndAttribute(`Fish & Chips <tag value="one">it's ready</tag>`),
     'Fish &amp; Chips &lt;tag value=&quot;one&quot;&gt;it&apos;s ready&lt;/tag&gt;',
   );
+});
+
+test('visitXmlPlistEntries pairs each key with the value after it at every depth', () => {
+  const visited: Array<[string, string]> = [];
+  visitXmlPlistEntries(
+    parseXmlDocumentSync(
+      [
+        '<plist><dict>',
+        '<key>Name</key><string>Example</string>',
+        '<key>Nested</key><dict><key>Inner</key><integer>7</integer></dict>',
+        '<key></key><string>skipped: empty key</string>',
+        '</dict></plist>',
+      ].join(''),
+    ),
+    (key, valueNode) => visited.push([key, valueNode.name]),
+  );
+
+  assert.deepEqual(visited, [
+    ['Name', 'string'],
+    ['Nested', 'dict'],
+    ['Inner', 'integer'],
+  ]);
 });

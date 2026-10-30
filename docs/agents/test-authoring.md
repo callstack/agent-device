@@ -59,6 +59,8 @@ Import the subject module, not a platform barrel.
 
 Use `pnpm exec vitest run --project unit-core <path>`.
 For `packages/apple-runner/src/**`, use `--project apple-runner`.
+The package cannot import platform-apple.
+If a runner suite needs Apple lifecycle, alert, or tool-provider code, put it in `packages/platform-apple` and use the `@agent-device/apple-runner` entry.
 Local runs default to four workers.
 For a different host share, set `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>`. CI ignores it.
 Scripts tests are outside root TypeScript includes.

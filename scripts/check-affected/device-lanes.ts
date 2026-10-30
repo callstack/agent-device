@@ -52,12 +52,14 @@ const LEAF_LANES: Readonly<Record<Leaf, readonly CheckId[]>> = {
 
 // Directory segments that tag a path with a family. Apple's leaves are separate tags so a
 // macOS-only tree does not own the iOS lane; a tree tagged `apple` (or `tvos`/`visionos`/
-// `xcuitest`, whose only lanes today are the Apple family's) owns every Apple lane.
+// `xcuitest`, whose only lanes today are the Apple family's, or `apple-runner`, the Apple-family
+// runner engine package) owns every Apple lane.
 const APPLE_LEAF_TAGS: Readonly<Record<string, 'ios' | 'macos' | 'apple'>> = {
   ios: 'ios',
   'ios-snapshot-engine': 'ios',
   macos: 'macos',
   apple: 'apple',
+  'apple-runner': 'apple',
   tvos: 'apple',
   visionos: 'apple',
   xcuitest: 'apple',
