@@ -126,27 +126,21 @@ const closeTargetUnavailable = unavailableFact(
  * rented device.
  */
 export function revylLifecycleFacts(device: DeviceInfo, live: boolean) {
-  const target = isSupportedRevylRuntimeDevice(device)
+  const supported = isSupportedRevylRuntimeDevice(device);
+  const target = supported ? (live ? available : liveSessionUnavailable) : openTargetUnavailable;
+  const closeTarget = supported
     ? live
       ? available
       : liveSessionUnavailable
-    : openTargetUnavailable;
+    : closeTargetUnavailable;
   return applicationLifecycleOperationFacts({
     resolveOpenTarget: target,
     prepareApplicationOpen: target,
     openApplication: target,
     applyRuntimeHints: runtimeHintsUnavailable,
     clearRuntimeHints: runtimeHintsUnavailable,
-    closeApplication: isSupportedRevylRuntimeDevice(device)
-      ? live
-        ? available
-        : liveSessionUnavailable
-      : closeTargetUnavailable,
-    finalizeApplicationClose: isSupportedRevylRuntimeDevice(device)
-      ? live
-        ? available
-        : liveSessionUnavailable
-      : closeTargetUnavailable,
+    closeApplication: closeTarget,
+    finalizeApplicationClose: closeTarget,
     prepareAppleRunner: prepareUnavailable,
     configureProviderPortReverse: portReverseUnavailable,
   });
