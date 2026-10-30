@@ -19,9 +19,13 @@ const nativeSource = (
 ).join('\n');
 
 function nativeConstant(name: string): number {
-  const match = new RegExp(`^const NSUInteger ${name} = (\\d+);$`, 'm').exec(nativeSource);
-  assert.ok(match, `the native bridge no longer declares ${name}`);
-  return Number(match[1]);
+  const match = new RegExp(
+    `^const (?:NSUInteger|uint32_t) ${name} = (\\d+(?: \\* \\d+)*);$`,
+    'm',
+  ).exec(nativeSource);
+  const value = match?.[1];
+  assert.ok(value, `the native bridge no longer declares ${name}`);
+  return value.split(' * ').reduce((product, factor) => product * Number(factor), 1);
 }
 
 test('the first-request window matches the native bridge', () => {
@@ -29,6 +33,7 @@ test('the first-request window matches the native bridge', () => {
 });
 
 test.each([
+  ['maxResponseBytes', 'kMaximumFrameBytes'],
   ['maxTraversalDepth', 'kMaximumDepth'],
   ['maxNodes', 'kMaximumNodes'],
   ['maxDurationMs', 'kMaximumDurationMs'],

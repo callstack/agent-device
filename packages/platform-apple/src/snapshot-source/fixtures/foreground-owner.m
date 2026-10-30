@@ -179,7 +179,8 @@ int main(int argc, const char *argv[])
       else {
         NSUInteger count = 0;
         for (NSDictionary *node = result; node; node = [node[@"UIAccessibilitySnapshotKeyChildren"] firstObject]) count++;
-        require(count == depth + 1 && truncated == [scenario isEqual:@"api-depth-unknown"] && requests == (depth + 1 > kMaximumRequestLevels ? 2 : 1), @"every requested depth must include root plus permitted descendants");
+        // Each continuation re-reads its root, so one request adds at most kMaximumRequestLevels - 1 edges.
+        require(count == depth + 1 && truncated == [scenario isEqual:@"api-depth-unknown"] && requests == MAX(1, (depth + kMaximumRequestLevels - 2) / (kMaximumRequestLevels - 1)), @"every requested depth must include root plus permitted descendants");
       }
       return 0;
     }
