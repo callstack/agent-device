@@ -2,10 +2,10 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
-import { readRecordedDaemon, sendToRecordedDaemon } from '../lib/recorded-daemon.ts';
+import { sendToRecordedDaemon } from '@agent-device/daemon-client';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { REPO_ROOT } from './config.ts';
 import type { CliResult } from './types.ts';
 
@@ -65,18 +65,19 @@ function forcedBackendTransport(
     if (request.session === undefined || typeof stateDir !== 'string') {
       throw new Error('A forced-backend capture requires an explicit session and state dir.');
     }
-    const paths = resolveDaemonPaths(stateDir, { env: process.env });
-    const info = readRecordedDaemon(paths.infoPath);
-    if (!info) throw new Error(`No daemon is running for state dir ${stateDir}.`);
     return await sendToRecordedDaemon(
-      info,
       {
         ...request,
         session: request.session,
         flags: { ...request.flags, snapshotPreferredBackend: backend },
         meta: { ...request.meta, debug: true, requestId },
       },
-      { timeoutMs: FORCED_CAPTURE_TIMEOUT_MS, signal: context?.signal },
+      {
+        host: captureHostEnvironment(process),
+        stateDir,
+        timeoutMs: FORCED_CAPTURE_TIMEOUT_MS,
+        signal: context?.signal,
+      },
     );
   };
 }

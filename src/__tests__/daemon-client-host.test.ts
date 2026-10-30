@@ -1,49 +1,54 @@
+import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-
-const built = vi.hoisted(() => ({
-  clientHosts: [] as unknown[],
-  ensuringHosts: [] as unknown[],
-}));
-
-// The transports the client and the CLI build are stopped before they reach a daemon: which host
-// each is built for is what these tests pin. That a transport reads its host is pinned in the
-// daemon-client package.
-vi.mock('@agent-device/daemon-client', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/daemon-client')>()),
-  createDaemonTransport: (host: unknown) => {
-    built.clientHosts.push(host);
-    return async () => {
-      throw new Error('stop before talking to a daemon');
-    };
-  },
-  createEnsuredDaemonTransport: (options: { host?: unknown } = {}) => {
-    built.ensuringHosts.push(options.host);
-    return async () => {
-      throw new Error('stop before talking to a daemon');
-    };
-  },
-}));
-
+import { createTestHostEnvironment, supportsLoopbackBind } from '@agent-device/test-kit';
 import { runCli } from '../cli.ts';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
+import {
+  startRegisteredHttpDaemon,
+  stateDirAndPaths,
+  type RegisteredHttpDaemon,
+} from './test-utils/registered-http-daemon.ts';
 
-afterEach(() => {
+// A client or a CLI run takes the host it is given. These tests run the real client and the real
+// default CLI against a real registered daemon on the host's state directory, while the process
+// names another one: a daemon resolved from the process would be started, so launching is refused.
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmdDetachedMonitored: vi.fn(() => {
+    throw new Error('A daemon was launched: the host state directory was not used.');
+  }),
+}));
+import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
+
+let daemon: RegisteredHttpDaemon | undefined;
+
+afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  built.clientHosts.length = 0;
-  built.ensuringHosts.length = 0;
+  vi.mocked(runCmdDetachedMonitored).mockClear();
+  await daemon?.close();
+  daemon = undefined;
 });
 
-test('a client reports and uses the same state dir when its host and the process disagree', async () => {
-  vi.stubEnv('AGENT_DEVICE_STATE_DIR', '/process/state');
-  const host = { env: { AGENT_DEVICE_STATE_DIR: '/client/state' }, cwd: '/client/workspace' };
+async function bootHostAndProcess() {
+  daemon = await startRegisteredHttpDaemon();
+  const { stateDir: processStateDir } = stateDirAndPaths();
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', processStateDir);
+  const host = createTestHostEnvironment({ env: { AGENT_DEVICE_STATE_DIR: daemon.stateDir } });
+  return { host, processStateDir };
+}
+
+test('a client reports and uses the state dir of its host when the process names another', async (t) => {
+  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  const { host, processStateDir } = await bootHostAndProcess();
   const client = createAgentDeviceClient({}, { host });
 
-  await expect(client.sessions.stateDir()).resolves.toBe('/client/state');
-  await expect(client.devices.list()).rejects.toThrow('stop before talking');
+  await expect(client.sessions.stateDir()).resolves.toBe(daemon!.paths.baseDir);
+  await client.devices.list();
 
-  expect(built.clientHosts).toEqual([host]);
-  expect(built.clientHosts[0]).toBe(host);
+  expect(daemon!.commands()).toEqual(['devices']);
+  expect(vi.mocked(runCmdDetachedMonitored)).not.toHaveBeenCalled();
+  expect(fs.existsSync(`${processStateDir}/daemon.json`)).toBe(false);
 });
 
 test('a CLI run builds its transport from the host it was given', async () => {
@@ -56,15 +61,15 @@ test('a CLI run builds its transport from the host it was given', async () => {
   expect(transportForHost).toHaveBeenCalledWith(host);
 });
 
-test('a CLI run with the default transport builds its ensuring transport from the given host', async () => {
-  const host = { env: { AGENT_DEVICE_STATE_DIR: '/cli/state' }, cwd: '/cli/workspace' };
-  vi.spyOn(process, 'exit').mockImplementation((() => {
-    throw new Error('exit');
-  }) as never);
-  vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+test('a default CLI run reaches the daemon on the state dir of the host it was given', async (t) => {
+  if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
+  const { host, processStateDir } = await bootHostAndProcess();
+  const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-  await runCli(['devices', '--json'], undefined, host).catch(() => undefined);
+  await runCli(['devices', '--json'], undefined, host);
 
-  expect(built.ensuringHosts.at(-1)).toBe(host);
+  expect(daemon!.commands()).toEqual(['devices']);
+  expect(stdout).toHaveBeenCalled();
+  expect(vi.mocked(runCmdDetachedMonitored)).not.toHaveBeenCalled();
+  expect(fs.existsSync(`${processStateDir}/daemon.json`)).toBe(false);
 });

@@ -1,5 +1,8 @@
 import type { DaemonConnection, EnsureDaemonOptions } from '@agent-device/contracts/client';
-import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import {
+  resolveDaemonPaths,
+  type DaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
 import { AppError } from '@agent-device/kernel/errors';
@@ -20,7 +23,7 @@ import {
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
-import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import { isRemoteDaemon, readDaemonInfo, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
   DaemonRequest,
@@ -397,6 +400,45 @@ async function protectArtifactUploadWithLeaseBeats(
 }
 
 export { createRequestGuard };
+
+/** The JSON-RPC envelope the daemon's `/rpc` endpoint takes for a request, lease commands included. */
+export { buildHttpRpcPayload } from './daemon-client-rpc.ts';
+
+/**
+ * Sends one request to the daemon a state directory already records, for tooling that drives a
+ * daemon another build started. The request travels through the same transport as every other
+ * client request: its cancellation, request ids, typed errors, response parsing, progress and
+ * timeout budget.
+ *
+ * It starts nothing, replaces nothing and judges no compatibility. A timeout never reaches the
+ * liveness retirement (`timeoutRecovery: 'none'`), so a slow or wedged daemon is left as it is.
+ */
+export async function sendToRecordedDaemon(
+  req: Omit<DaemonRequest, 'token'>,
+  options: {
+    host: HostEnvironment;
+    stateDir: string;
+    timeoutMs: number;
+    signal?: AbortSignal;
+    onProgress?: DaemonTransportOptions['onProgress'];
+  },
+): Promise<DaemonResponse> {
+  const paths = resolveDaemonPaths(options.stateDir, {
+    env: options.host.env,
+    cwd: options.host.cwd,
+  });
+  const info = readDaemonInfo(paths.infoPath);
+  if (!info) {
+    const { daemonNotRunningError } = await import('./daemon-lifecycle-errors.ts');
+    throw daemonNotRunningError(paths.baseDir);
+  }
+  return await sendRequest(info, { ...req, token: info.token }, 'auto', paths, options.timeoutMs, {
+    host: options.host,
+    onProgress: options.onProgress,
+    signal: options.signal,
+    timeoutRecovery: 'none',
+  });
+}
 
 /**
  * Starts the local daemon on a state directory if none is usable. Loaded on first call: a client
