@@ -16,7 +16,7 @@ import { parseSync } from 'oxc-parser';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const classificationPath = path.join(
   repoRoot,
-  'packages/platform-apple/src/runner/runner-error-classification.ts',
+  'packages/apple-runner/src/runner-error-classification.ts',
 );
 const installationDocPath = path.join(repoRoot, 'website/docs/docs/installation.md');
 const cliHelpPath = path.join(repoRoot, 'src/commands/schema/cli-help.ts');

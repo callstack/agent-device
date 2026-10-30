@@ -10,7 +10,7 @@ const runnerClient = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   runAppleRunnerCommand: runnerClient.run,
 }));
-vi.mock('@agent-device/platform-apple/runner', () => ({
+vi.mock('@agent-device/apple-runner', () => ({
   resolveRunnerContainerBundleIds: () => ['com.callstack.agentdevice.runner'],
 }));
 

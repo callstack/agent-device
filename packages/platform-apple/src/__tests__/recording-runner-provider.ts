@@ -3,7 +3,7 @@ import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
   RunnerCommand,
-} from '../runner/index.ts';
+} from '@agent-device/apple-runner';
 
 export type RecordedRunnerCall = Readonly<{
   command: RunnerCommand;

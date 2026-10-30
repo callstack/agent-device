@@ -14,10 +14,7 @@ import { createMacOsDesktopWorld } from './macos-world.ts';
 import { createAppleRunnerProviderFromTranscript } from './providers.ts';
 import { runProviderScenario } from './scenario.ts';
 import { createProviderTranscript } from './transcript.ts';
-import type {
-  AppleRunnerPrepareResult,
-  AppleRunnerProvider,
-} from '@agent-device/platform-apple/runner';
+import type { AppleRunnerPrepareResult, AppleRunnerProvider } from '@agent-device/apple-runner';
 
 test('Provider-backed integration prepare uses the Apple runner lifecycle provider', async () => {
   const lifecycleCalls: string[] = [];

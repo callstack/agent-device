@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { withAppleRunnerProvider } from '../../runner/index.ts';
-import { IOS_SIMULATOR, TVOS_SIMULATOR } from '../../runner/__tests__/device-fixtures.ts';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
+import { IOS_SIMULATOR, TVOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   recordingRunnerProvider,
   type RecordedRunnerCall,

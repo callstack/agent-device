@@ -15,14 +15,12 @@ import {
   launchCoreDeviceApp,
   readIosDeviceReadiness,
   resolveCoreDeviceTunnelIp,
-  type IosDeviceReadiness,
 } from './physical-device-coredevice.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
 } from './physical-device-constants.ts';
-import type { AppleRunnerCommandExecutor, AppleRunnerCommandOptions } from '../runner/index.ts';
 import {
   captureCoreDeviceScreenshot,
   captureXctestDeviceScreenshot,
@@ -30,9 +28,12 @@ import {
 } from './physical-device-screenshot.ts';
 import { runXcrun } from './tool-provider.ts';
 import type {
+  AppleRunnerCommandExecutor,
+  AppleRunnerCommandOptions,
+  IosDeviceReadiness,
   IosPhysicalDeviceBackend,
   IosPhysicalDeviceRunnerControl,
-} from './physical-device-routing.ts';
+} from '@agent-device/apple-runner';
 
 type IosPhysicalDeviceLaunchOptions = {
   payloadUrl?: string;

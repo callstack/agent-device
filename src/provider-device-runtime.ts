@@ -21,10 +21,7 @@ import type {
   AppleRunnerScreenRecordingTransportResolver,
 } from './platform-runtime.ts';
 import type { AppleRunnerScreenRecordingTransport } from './platform-runtime-screen-recording-apple-runner-transport.ts';
-import type {
-  AppleRunnerCommandExecutor,
-  AppleRunnerProvider,
-} from '@agent-device/platform-apple/runner';
+import type { AppleRunnerCommandExecutor, AppleRunnerProvider } from '@agent-device/apple-runner';
 
 type AppleRunnerRuntimeExtension = ProviderDeviceRuntime & {
   getAppleRunnerProvider(

@@ -23,7 +23,7 @@ import {
 } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
-import type { AppleRunnerCommandOptions } from '../runner/index.ts';
+import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 import {
   isSimulatorLaunchFBSError,
   probeSimulatorLaunchContext,

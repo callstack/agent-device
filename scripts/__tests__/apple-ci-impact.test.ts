@@ -516,7 +516,7 @@ test('native runner and golden-table changes run XCTest; TypeScript runtime chan
   for (const file of [
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
     'apple/snapshot-presentation/Sources/Presenter.swift',
-    'packages/platform-apple/src/runner/runner-icon.ts',
+    'packages/apple-runner/src/runner-icon.ts',
     'contracts/fixtures/scroll-gesture.json',
     '.github/workflows/apple.yml',
     'scripts/apple-ci-impact.ts',
@@ -525,7 +525,7 @@ test('native runner and golden-table changes run XCTest; TypeScript runtime chan
   }
   for (const file of [
     'packages/platform-apple/src/snapshot-source/cache.ts',
-    'packages/platform-apple/src/runner/__tests__/runner-icon.test.ts',
+    'packages/apple-runner/src/__tests__/runner-icon.test.ts',
     'apple/fold-helper/fold-helper.c',
     'test/integration/ios-simulator-e2e/live-runner.ts',
   ]) {

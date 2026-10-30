@@ -10,7 +10,7 @@ import {
   buildScrollGesturePlan,
 } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
-import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE } from '../runner/runner-contract.ts';
+import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE } from '@agent-device/apple-runner';
 
 export type NormalizedScrollOptions = {
   amount?: number;

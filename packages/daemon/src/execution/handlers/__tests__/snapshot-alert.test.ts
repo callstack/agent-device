@@ -4,7 +4,7 @@ import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../../../sessions/handlers/snapshot.ts';
 import { snapshotRuntimeFixture } from '../../../__tests__/support/snapshot-runtime-fixture.ts';
-import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import path from 'node:path';

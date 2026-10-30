@@ -15,7 +15,7 @@ Current internal runner for iOS, tvOS, and macOS desktop automation.
 Protocol and maintenance references:
 
 - Protocol overview: [`RUNNER_PROTOCOL.md`](RUNNER_PROTOCOL.md)
-- TypeScript client: [`../../packages/platform-apple/src/runner/runner-client.ts`](../../packages/platform-apple/src/runner/runner-client.ts)
+- TypeScript client: [`../../packages/apple-runner/src/index.ts`](../../packages/apple-runner/src/index.ts)
 - Swift wire models: [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## Host App Files

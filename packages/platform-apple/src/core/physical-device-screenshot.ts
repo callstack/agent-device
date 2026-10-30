@@ -6,7 +6,10 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { writeHostBinaryFile } from '@agent-device/host-kit/host-file';
 import { runIosDevicectl } from './devicectl.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
-import type { AppleRunnerCommandExecutor, AppleRunnerCommandOptions } from '../runner/index.ts';
+import type {
+  AppleRunnerCommandExecutor,
+  AppleRunnerCommandOptions,
+} from '@agent-device/apple-runner';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
 export type IosPhysicalDeviceScreenshotOptions = {

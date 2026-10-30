@@ -36,7 +36,7 @@ import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
   type RunnerCommand,
-} from './runner/index.ts';
+} from '@agent-device/apple-runner';
 import {
   materializeIosScrollOptions,
   normalizeAppleScrollResult,

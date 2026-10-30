@@ -1,4 +1,11 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  assertProducedRunnerRequests,
+  bindTestCommandHost,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+  MACOS_DEVICE,
+  TVOS_SIMULATOR,
+} from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -10,14 +17,7 @@ import { resolveIosPhysicalDeviceControl } from '../core/physical-device-control
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { queryAppleRunnerSelector } from '../core/runner-selector-query.ts';
 import { captureScreenshotViaRunner } from '../core/screenshot.ts';
-import { withAppleRunnerProvider, type RunnerCommand } from '../runner/index.ts';
-import {
-  IOS_DEVICE,
-  IOS_SIMULATOR,
-  MACOS_DEVICE,
-  TVOS_SIMULATOR,
-} from '../runner/__tests__/device-fixtures.ts';
-import { assertProducedRunnerRequests } from '../runner/runner-requests.fixtures.ts';
+import { withAppleRunnerProvider, type RunnerCommand } from '@agent-device/apple-runner';
 import {
   recordingRunnerProvider,
   singlePointerPanPlan,
@@ -27,9 +27,9 @@ import { mkdtempForTest } from './tmp-dir.ts';
 
 bindTestCommandHost();
 
-// Every Apple runner request site outside `runner/`, driven through its production entry point and
+// Every Apple runner request site outside `@agent-device/apple-runner`, driven through its production entry point and
 // pinned to contracts/fixtures/runner-requests.json. The drives never write a request themselves;
-// runner/__tests__/index-runner-requests.test.ts reads this source to keep it that way.
+// packages/apple-runner/src/__tests__/index-runner-requests.test.ts reads this source to keep it that way.
 
 const APP = 'com.example.app';
 const XCTEST_DEVICE: DeviceInfo = { ...IOS_DEVICE, iosPhysicalDeviceBackend: 'xctest' };

@@ -1,6 +1,12 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
+import type {
+  IosDeveloperDiskImageState,
+  IosDeveloperModeState,
+  IosDeviceReadiness,
+  IosDeviceReadinessRemedies,
+} from '@agent-device/apple-runner';
 import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from './config.ts';
 import {
   IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
@@ -314,53 +320,6 @@ function readNonEmptyString(value: unknown): string | undefined {
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
-
-/**
- * The device's own report on whether it can host development tooling (#2683), published through the
- * physical-device control facet. `runner/host.ts` mirrors this shape structurally on its side of the
- * host port.
- *
- * The two states are kept apart because the device reports them apart and they fail apart. A device
- * with Developer Mode off cannot serve its developer disk image either; an image that is not up on a
- * device with the toggle on is its own failure. Deciding which one to name is the reader's job in
- * `runner/runner-device-readiness.ts`.
- *
- * The remedy travels with the states in {@link IosDeviceReadinessRemedies} rather than being worded
- * again at each site that publishes one, so the runner preflight and the `devicectl` output path
- * cannot drift apart while describing the same fix.
- *
- * `available: false` is the answer when no state can be established — the device could not be read,
- * or it read an answer that could not have been true at the moment it was asked. It carries no
- * verdict, because an unreadable device is not a diagnosed one.
- */
-export type IosDeviceReadiness =
-  | Readonly<{
-      available: true;
-      developerMode: IosDeveloperModeState;
-      developerDiskImage: IosDeveloperDiskImageState;
-      remedies: IosDeviceReadinessRemedies;
-    }>
-  | Readonly<{
-      available: false;
-      reason: 'device_readiness_unreadable';
-      hint: string;
-    }>;
-
-/**
- * What to tell a caller about each state the device can report, published with the report. Both
- * strings are owned by `core/devicectl.ts`, which answers the same two complaints when they arrive as
- * tool output instead of as a device fact (#2683).
- */
-export type IosDeviceReadinessRemedies = Readonly<{
-  developerModeOff: string;
-  developerDiskImageUnavailable: string;
-}>;
-
-/** How a device reports its own Settings > Privacy & Security > Developer Mode toggle. */
-export type IosDeveloperModeState = 'enabled' | 'disabled' | 'unknown';
-
-/** How a device reports the services that serve its developer disk image. */
-export type IosDeveloperDiskImageState = 'available' | 'unavailable' | 'unknown';
 
 const IOS_DEVICE_READINESS_TIMEOUT_MS = 10_000;
 

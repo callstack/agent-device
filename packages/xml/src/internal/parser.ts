@@ -297,3 +297,22 @@ function assertSafeXmlAttributeName(name: string): void {
     throw new Error(`Unsupported XML attribute name "${name}".`);
   }
 }
+
+/** Calls `visitor` with each `<key>` text and the value node after it, at any depth of a plist tree. */
+export function visitXmlPlistEntries(
+  nodes: XmlNode[],
+  visitor: (key: string, valueNode: XmlNode) => void,
+): void {
+  for (const node of nodes) {
+    if (node.name === 'dict') {
+      for (let index = 0; index < node.children.length - 1; index += 1) {
+        const entry = node.children[index];
+        const nextEntry = node.children[index + 1];
+        if (entry?.name === 'key' && entry.text && nextEntry) {
+          visitor(entry.text, nextEntry);
+        }
+      }
+    }
+    visitXmlPlistEntries(node.children, visitor);
+  }
+}

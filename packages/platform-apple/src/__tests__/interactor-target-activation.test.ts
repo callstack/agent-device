@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { IOS_SIMULATOR, IPADOS_SIMULATOR } from './device-fixtures.ts';
-import type { AppleRunnerProvider, RunnerCommand } from '../runner/index.ts';
+import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/apple-runner';
 import { createAppleInteractor } from '../interactor.ts';
 
 const HEALTHY_TREE = {

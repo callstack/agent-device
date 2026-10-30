@@ -6,7 +6,10 @@ import {
   type ExecResult,
   commandHostEnvironment,
 } from '@agent-device/host-kit/command';
-import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
+import type {
+  ScopedSimctlArgs,
+  ScopedSimctlCommand,
+} from '@agent-device/contracts/platform-runtime-host';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import { createLocalAppleMacOsHostProvider } from '../os/macos/host-provider.ts';
 import type {
@@ -29,11 +32,7 @@ export type {
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
 
-declare const scopedSimctlCommand: unique symbol;
-/** The xcrun argv of one simctl call: `simctl` followed by arguments already scoped to their set. */
-export type ScopedSimctlCommand = readonly ['simctl', ...string[]] & {
-  readonly [scopedSimctlCommand]: true;
-};
+export type { ScopedSimctlCommand };
 
 export function simctlCommand(args: ScopedSimctlArgs): ScopedSimctlCommand {
   return Object.freeze(['simctl', ...args] as const) as ScopedSimctlCommand;

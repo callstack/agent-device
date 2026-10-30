@@ -35,9 +35,7 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/macos',
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
-            '@agent-device/platform-apple/runner',
             '@agent-device/platform-apple/runner/operations',
-            '@agent-device/platform-apple/runner/requests-fixtures',
             '@agent-device/platform-apple/runner-owner',
             '@agent-device/platform-apple/session-observation',
             '@agent-device/platform-apple/simctl',
@@ -278,13 +276,44 @@ test('only the canonical composition root may import the private provider compos
 });
 
 test('the apple runner mechanics facet subpaths are the enumerated exception', () => {
-  // The façade subpath is the facet's consumer seam: root code may import it.
+  // The runner package entry is not a platform-apple subpath: platform-apple's composition and the
+  // named root consumers (as a type or behind a deferred import) are its production importers.
   const sources = validSources();
   sources.set(
-    'packages/daemon/src/execution/selector-runtime.ts',
-    "import type { RunnerCommand } from '@agent-device/platform-apple/runner';",
+    'src/provider-device-runtime.ts',
+    "import type { RunnerCommand } from '@agent-device/apple-runner';",
+  );
+  sources.set(
+    'src/platform-runtime/request-providers.ts',
+    "const { withAppleRunnerProvider } = await import('@agent-device/apple-runner');",
+  );
+  sources.set(
+    'packages/platform-apple/src/core/runner-client.ts',
+    "import { bindAppleRunnerHost } from '@agent-device/apple-runner';",
+  );
+  sources.set(
+    'packages/daemon/src/execution/__tests__/selector-runtime.test.ts',
+    "import { withAppleRunnerProvider } from '@agent-device/apple-runner';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
+
+  // Any other production file, or a named root consumer that evaluates it, is refused.
+  const refused = validSources();
+  refused.set(
+    'packages/daemon/src/execution/selector-runtime.ts',
+    "import type { RunnerCommand } from '@agent-device/apple-runner';",
+  );
+  refused.set(
+    'src/provider-device-runtime.ts',
+    "import { withAppleRunnerProvider } from '@agent-device/apple-runner';",
+  );
+  const refusals = messages(refused);
+  assert.equal(refusals.length, 2);
+  assert.match(
+    refusals.join('\n'),
+    /only platform-apple's composition and the named root consumers may import/,
+  );
+  assert.match(refusals.join('\n'), /as a type or behind a deferred import/);
 
   // A NEW unenumerated subpath widens the export list and fails declarations.
   const widened = declarations();
@@ -302,16 +331,16 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
 test('the runner test host is importable only from tests and __tests__ helpers', () => {
   const testHostSources = validSources();
   testHostSources.set(
-    'packages/platform-apple/src/runner/__tests__/host-setup.ts',
+    'packages/apple-runner/src/__tests__/host-setup.ts',
     "import { installAppleRunnerTestHost } from '../test-host.ts';",
   );
   testHostSources.set(
-    'packages/platform-apple/src/runner/runner-lifecycle.ts',
+    'packages/apple-runner/src/runner-lifecycle.ts',
     "import { appleRunnerTestHost } from './test-host.ts';",
   );
   assert.match(
     messages(testHostSources).join('\n'),
-    /runner\/test-host\.ts binds the runner test dispatcher/,
+    /apple-runner\/src\/test-host\.ts binds the runner test dispatcher/,
   );
   assert.equal(
     messages(testHostSources).filter((message) => message.includes('test dispatcher')).length,
@@ -353,7 +382,7 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
   // Production runner mechanics may own files/sockets (fs/net/os) directly...
   const sources = validSources();
   sources.set(
-    'packages/platform-apple/src/runner/runner-lease.ts',
+    'packages/apple-runner/src/runner-lease.ts',
     ["import fs from 'node:fs';", "import os from 'node:os';", 'export const x = fs && os;'].join(
       '\n',
     ),
@@ -362,7 +391,7 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
 
   // ...but spawning stays banned: process execution goes through the host port.
   sources.set(
-    'packages/platform-apple/src/runner/runner-artifact.ts',
+    'packages/apple-runner/src/runner-artifact.ts',
     "import { spawn } from 'node:child_process';",
   );
   assert.match(messages(sources).join('\n'), /raw process primitives/);
@@ -370,11 +399,11 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
   // Type-only naming of ChildProcess (the host port) and test-file fakes stay allowed.
   const allowed = validSources();
   allowed.set(
-    'packages/platform-apple/src/runner/host.ts',
+    'packages/apple-runner/src/host.ts',
     "import type { ChildProcess } from 'node:child_process';",
   );
   allowed.set(
-    'packages/platform-apple/src/runner/__tests__/runner-xctestrun.test.ts',
+    'packages/apple-runner/src/__tests__/runner-xctestrun.test.ts',
     "import { execFileSync } from 'node:child_process';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
@@ -383,7 +412,7 @@ test('the runner mechanics facet is exempt from ambient-host and raw-process rul
 test('platform packages may import the xml vocabulary package', () => {
   const sources = validSources();
   sources.set(
-    'packages/platform-apple/src/runner/runner-usbmux.ts',
+    'packages/apple-runner/src/runner-usbmux.ts',
     "import { parseXml } from '@agent-device/xml';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);

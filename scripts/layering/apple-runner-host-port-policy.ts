@@ -2,12 +2,11 @@
 //   Apple runner host port (`runner/host.ts`, bound in `core/runner-host.ts`) -- invisible to R13's
 //   general platform-package import rule, which admits host-kit to every platform-apple file, and
 //   invisible to typecheck, because the direct import and the port delegator have the same call
-//   shape. `packages/platform-apple/src/runner/` sits in the eager import closure of seven Apple
-//   facade entries (`app-lifecycle-facade.ts`, `app-resolution-facade.ts`, `doctor-facade.ts`,
-//   `perf-facade.ts`, `physical-device-facade.ts`, `runner-operations-facade.ts`, `runner/index.ts`)
-//   held at a fixed size by `scripts/__tests__/eager-closure-budgets.ts`: a direct host-kit value
-//   import from a runner module adds every module on its own import path to all seven closures at
-//   once.
+//   shape. `packages/apple-runner/src/` sits in the eager import closure of the Apple facade
+//   entries that reach the runner engine (`app-lifecycle-facade.ts`, `doctor-facade.ts`,
+//   `runner-operations-facade.ts`) and of the package entry itself, all held at a fixed size by
+//   `scripts/__tests__/eager-closure-budgets.ts`: a direct host-kit value import from a runner
+//   module adds every module on its own import path to all of those closures at once.
 // Evidence: #2423 measured a candidate direct `@agent-device/host-kit/command` import from
 //   `runner-cache-metadata.ts` adding 5 modules to `runner/index.ts`'s closure (13 -> 18); the
 //   review spent two rounds rediscovering the port requirement before the symbol was routed back
@@ -22,7 +21,7 @@ import { parseImports, type LayeringViolation } from './model.ts';
 const RULE = 'R77 apple-runner-host-port';
 
 /** Every file this rule polices, production and test alike -- the port has no test exception. */
-export const RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
+export const RUNNER_SUBTREE = 'packages/apple-runner/src/';
 
 const HOST_KIT_PREFIX = '@agent-device/host-kit/';
 

@@ -111,6 +111,6 @@ export async function isAppleRunnerBundleId(
   bundleId: string,
   env: Readonly<Record<string, string | undefined>>,
 ): Promise<boolean> {
-  const { resolveRunnerContainerBundleIds } = await import('@agent-device/platform-apple/runner');
+  const { resolveRunnerContainerBundleIds } = await import('@agent-device/apple-runner');
   return resolveRunnerContainerBundleIds(env).includes(bundleId);
 }

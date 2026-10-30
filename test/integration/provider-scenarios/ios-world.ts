@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
-import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { type ProviderScenarioTranscript, createProviderTranscript } from './transcript.ts';

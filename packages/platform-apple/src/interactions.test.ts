@@ -12,7 +12,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { RunnerCommand } from './runner/index.ts';
+import type { RunnerCommand } from '@agent-device/apple-runner';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
 import {
   IOS_TEST_DEVICE,

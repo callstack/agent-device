@@ -232,7 +232,7 @@ It exposes the inventory module, runtime module, shutdown loader, and platform p
 Synchronous consumers use named domain facets without a second root compatibility surface.
 
 The Apple XCUITest runner client is a durable implementation facet owned by the Apple platform.
-It resides in `packages/platform-apple/src/runner/` (#2040).
+It resides in `packages/apple-runner/src/` (#2040).
 R13 enumerates the root façade, the `./runner` subpath, and thirteen named domain/mechanics facades:
 
 - `./app-lifecycle`

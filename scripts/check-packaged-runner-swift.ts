@@ -28,7 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/platform-apple/runner';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/apple-runner';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');

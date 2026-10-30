@@ -268,7 +268,7 @@ test('a production source change fails on a unit-suite failure the related run c
   for (const changedFiles of [
     ['src/cli.ts'],
     ['packages/selectors/src/index.ts'],
-    ['packages/platform-apple/src/runner/runner-cache-metadata.ts'],
+    ['packages/apple-runner/src/runner-cache-metadata.ts'],
     ['packages/selectors/src/index.ts', 'contracts/fixtures/tap-point-policy.json'],
   ]) {
     assert.equal(await runFailingOn('check:unit', changedFiles), 23, changedFiles.join(', '));
@@ -280,7 +280,7 @@ test('a test-only change leaves the full unit suite to CI', async () => {
 });
 
 test('the related run still stands in for provider-integration on a narrowed plan', async () => {
-  const changedFiles = ['packages/platform-apple/src/runner/runner-cache-metadata.ts'];
+  const changedFiles = ['packages/apple-runner/src/runner-cache-metadata.ts'];
   const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
   assert.equal(plan.failOpen, false);
   assert.ok(plan.checks.includes('provider-integration'));

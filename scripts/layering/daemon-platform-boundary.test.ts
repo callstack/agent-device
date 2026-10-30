@@ -25,6 +25,7 @@ test('R65 rejects static, type-only, dynamic, type, and re-export dependencies w
     "export { old } from '../../../src/platforms/android/re-export.ts';",
     "export type { OldType } from '@agent-device/platform-android/types';",
     "export * from '@agent-device/platform-apple';",
+    "import { withAppleRunnerProvider } from '@agent-device/apple-runner';",
   ].join('\n');
 
   assert.deepEqual(
@@ -72,12 +73,18 @@ test('R65 rejects static, type-only, dynamic, type, and re-export dependencies w
         line: 7,
         target: '@agent-device/platform-apple',
       },
+      {
+        kind: 'static import',
+        spec: '@agent-device/apple-runner',
+        line: 8,
+        target: '@agent-device/apple-runner',
+      },
     ],
   );
 
   assert.deepEqual(
     violations(source).map(({ rule, file, line }) => ({ rule, file, line })),
-    Array.from({ length: 7 }, (_, index) => ({
+    Array.from({ length: 8 }, (_, index) => ({
       rule: DAEMON_PLATFORM_BOUNDARY_RULE,
       file: daemonFile,
       line: index + 1,

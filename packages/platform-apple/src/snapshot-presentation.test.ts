@@ -1,0 +1,541 @@
+import { IOS_SIMULATOR, MACOS_DEVICE } from './__tests__/device-fixtures.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
+import type { AppleRunnerSnapshotResult } from './snapshot-presentation.ts';
+import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from './snapshot-presentation.ts';
+
+const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
+
+function presentSparse(overrides: Partial<AppleRunnerSnapshotResult> = {}) {
+  return () =>
+    presentAppleRunnerSnapshot('device-1', undefined, {
+      nodes: [NO_VIEWPORT_ROOT],
+      truncated: true,
+      quality: {
+        state: 'sparse',
+        backend: 'private-ax',
+        reason: 'no usable snapshot backend',
+        reasonCode: 'sparse-tree',
+      },
+      ...overrides,
+    });
+}
+
+function catchPresent(overrides: Partial<AppleRunnerSnapshotResult> = {}): AppError {
+  try {
+    presentSparse(overrides)();
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    return error;
+  }
+  assert.fail('expected the presentation to refuse the payload');
+}
+
+test('a sparse-declared payload keeps the engine reason and adds the runner verdict', () => {
+  const error = catchPresent();
+
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.message, 'regular iOS snapshot presentation requires a valid viewport');
+  assert.deepEqual(error.details?.snapshotQuality, {
+    state: 'sparse',
+    backend: 'private-ax',
+    reason: 'no usable snapshot backend',
+    reasonCode: 'sparse-tree',
+  });
+  assert.match(String(error.details?.hint), /No snapshot backend could read this screen/);
+  assert.match(String(error.details?.hint), /screenshot as visual truth and coordinate taps/);
+});
+
+test('the refusal carries the viewport reason the payload actually produced', () => {
+  assert.equal(catchPresent().details?.reason, 'missing-viewport');
+  assert.equal(
+    catchPresent({ nodes: [{ ...NO_VIEWPORT_ROOT, rect: { x: 0, y: 0, width: 0, height: 0 } }] })
+      .details?.reason,
+    'invalid-viewport',
+  );
+});
+
+test('a backend the runner deferred to stays a refusal rather than becoming a retry', () => {
+  const deferred = catchPresent({
+    quality: { state: 'sparse', backend: 'private-ax', reasonCode: 'deferred' },
+  });
+
+  assert.equal(deferred.details?.retriable, undefined);
+  assert.equal(deferred.details?.reason, 'missing-viewport');
+});
+
+test('a sparse capture of a presented system surface names the surface host', () => {
+  const error = catchPresent({
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+  });
+
+  assert.match(
+    String(error.details?.hint),
+    /com\.apple\.SafariViewService hosts the surface presented over the app/,
+  );
+  assert.deepEqual(error.details?.systemSurface, {
+    bundleId: 'com.apple.SafariViewService',
+    kind: 'web-auth',
+  });
+});
+
+// The registry, not the wire, decides the kind: a payment host stamped with the wrong kind reads
+// back as `payment`, and a bundle id the registry does not know is dropped rather than surfaced.
+test('the wire reader takes surface kind from the registry and drops unregistered hosts', () => {
+  const mismatched = readAppleSnapshotResult(
+    {
+      systemSurface: { bundleId: 'com.apple.PassbookUIService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
+  assert.deepEqual(mismatched.systemSurface, {
+    bundleId: 'com.apple.PassbookUIService',
+    kind: 'payment',
+  });
+
+  const unregistered = readAppleSnapshotResult(
+    {
+      systemSurface: { bundleId: 'com.example.notahost', kind: 'payment' },
+    },
+    IOS_SIMULATOR,
+  );
+  assert.equal(unregistered.systemSurface, undefined);
+});
+
+test('a sparse payload failing another invariant still carries the verdict', () => {
+  const error = catchPresent({
+    nodes: [
+      { ...NO_VIEWPORT_ROOT, rect: { x: 0, y: 0, width: 390, height: 844 } },
+      { index: 1, parentIndex: 9, type: 'Button', label: 'Orphan' },
+    ],
+  });
+
+  assert.equal(error.details?.reason, 'invalid-presented-payload');
+  assert.deepEqual(error.details?.snapshotQuality, {
+    state: 'sparse',
+    backend: 'private-ax',
+    reason: 'no usable snapshot backend',
+    reasonCode: 'sparse-tree',
+  });
+});
+
+test('an undeclared rootless payload keeps the plain engine invariant', () => {
+  const error = catchPresent({ quality: { state: 'healthy', backend: 'tree' } });
+
+  assert.deepEqual(error.details, { reason: 'missing-viewport', field: 'viewport' });
+});
+
+test('a sparse verdict still presents the nodes it did read', () => {
+  const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [
+      {
+        index: 0,
+        type: 'Application',
+        label: 'App',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Not Now',
+        rect: { x: 40, y: 400, width: 80, height: 40 },
+        hittable: true,
+      },
+    ],
+    truncated: true,
+    quality: { state: 'sparse', backend: 'private-ax', reasonCode: 'sparse-tree' },
+  }).nodes;
+
+  assert.deepEqual(
+    nodes.map((node) => node.label),
+    ['App', 'Not Now'],
+  );
+});
+
+const SYSTEM_SHEET: IosSystemSurfaceProvenance = {
+  bundleId: 'com.apple.SafariViewService',
+  kind: 'web-auth',
+};
+
+test('a presented system surface travels with an undeclared-payload refusal as typed provenance', () => {
+  try {
+    presentAppleRunnerSnapshot('device-1', undefined, {
+      nodes: [NO_VIEWPORT_ROOT],
+      quality: { state: 'healthy', backend: 'tree' },
+      systemSurface: SYSTEM_SHEET,
+    });
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.deepEqual((error.details as Record<string, unknown>).systemSurface, SYSTEM_SHEET);
+    assert.equal((error.details as Record<string, unknown>).snapshotQuality, undefined);
+    return;
+  }
+  assert.fail('expected the presentation to refuse the payload');
+});
+
+test('readAppleSnapshotResult keeps registry-known system surface provenance only', () => {
+  const known = readAppleSnapshotResult(
+    {
+      nodes: [],
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
+  assert.deepEqual(known.systemSurface, SYSTEM_SHEET);
+
+  const unknown = readAppleSnapshotResult(
+    {
+      nodes: [],
+      systemSurface: { bundleId: 'com.example.PhishingService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
+  assert.equal(unknown.systemSurface, undefined);
+});
+
+test('a healthy payload with valid viewport roots still presents', () => {
+  const screen: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+  const button: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Not Now',
+    rect: { x: 16, y: 400, width: 80, height: 32 },
+    hittable: true,
+  };
+  const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [screen, button],
+  }).nodes;
+  assert.deepEqual(
+    nodes.map((node) => node.index),
+    [0, 1],
+  );
+});
+
+// A runner capture with no viewport box omits `hittable` on the nodes it could not decide (#2891);
+// the host presents them undecided rather than minting a value.
+test('a runner payload with the hittable bit absent presents without declaring it', () => {
+  const nodes: RawSnapshotNode[] = [
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: false,
+    },
+    { index: 1, parentIndex: 0, type: 'Other', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Not Now',
+      rect: { x: 16, y: 400, width: 80, height: 32 },
+    },
+  ];
+  for (const interactiveOnly of [false, true]) {
+    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes }).nodes;
+    const button = presented.find((node) => node.label === 'Not Now');
+    assert.ok(button, `interactiveOnly=${interactiveOnly}: the undecided button is presented`);
+    assert.equal('hittable' in button, false);
+  }
+});
+
+// The keyboard band the runner measured for a capture (#2660). The strictness budget that decides
+// what cannot be placed belongs to `readSnapshotKeyboardBandFact` in @agent-device/kernel, which owns
+// that table; this seam owns forwarding AND the proof that it forwards through that reader. The
+// same-process capture path feeds `result.keyboard` straight into the tap/click occlusion guard in
+// packages/selectors/src/keyboard-occlusion.ts before any serialization, so a seam that
+// passed the raw wire value through would hand the guard an unvalidated shape with nothing red.
+// The malformed cases below are what prove the routing; kernel/src/record.test.ts owns the table.
+
+test('the reader forwards each published keyboard band shape unchanged', () => {
+  // The landscape band #2653 confirmed on iPhone 17 Pro: the runner answers `app.keyboards` in the
+  // app's own orientation space, so the daemon reads these numbers beside node rects unchanged.
+  assert.deepEqual(
+    readAppleSnapshotResult(
+      {
+        keyboard: { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
+      },
+      IOS_SIMULATOR,
+    ).keyboard,
+    { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
+  );
+  assert.deepEqual(
+    readAppleSnapshotResult({ keyboard: { kind: 'absent' } }, IOS_SIMULATOR).keyboard,
+    {
+      kind: 'absent',
+    },
+  );
+  assert.deepEqual(
+    readAppleSnapshotResult(
+      {
+        keyboard: { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+      },
+      IOS_SIMULATOR,
+    ).keyboard,
+    { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+  );
+});
+
+// #3565: the runner classifies the presentation on the acquisition it is about to present, and this
+// seam is the only place that fact becomes a TS value. Forwarding the raw wire string would let a
+// payload spelling a state this vocabulary never declared reach settle as if a producer had read it.
+test('the reader forwards the presented-surface fact through the kernel reader (#3565)', () => {
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'presented' }, IOS_SIMULATOR).presentedSurface,
+    'presented',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'absent' }, IOS_SIMULATOR).presentedSurface,
+    'absent',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'unknown' }, IOS_SIMULATOR).presentedSurface,
+    'unknown',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'no-sheet' }, IOS_SIMULATOR).presentedSurface,
+    'unknown',
+  );
+});
+
+test('a capture the runner classified nothing publishes no presented-surface fact', () => {
+  // The terminals (a sparse payload, an AX-unavailable failure) and any older runner answer with no
+  // key. The daemon must read that as no evidence, not as a screen the producer proved clear.
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).presentedSurface, undefined);
+});
+
+test('a capture from a tier that never reads the keyboard publishes no fact at all', () => {
+  // The query sweep and private-AX tiers answer with no `keyboard` key, which is how the daemon
+  // learns to keep deriving the band from that tree instead of being told the screen is clear.
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).keyboard, undefined);
+});
+
+// Routing proof: every reason below is emitted only by the kernel reader, never by a wire producer.
+// One case per reason code — enough that a seam forwarding the raw payload fails on each branch,
+// without re-owning the shape table kernel/src/record.test.ts already pins exhaustively.
+test('a malformed keyboard payload is restated by the kernel reader, never forwarded raw', () => {
+  const cases: ReadonlyArray<readonly [unknown, string]> = [
+    ['visible', 'malformed-fact'],
+    [{ kind: 'measured' }, 'unrecognized-kind'],
+    [{ kind: 'unmeasurable' }, 'unreported-reason'],
+    [{ kind: 'visible', frame: { x: 0, y: 198, width: 0, height: 204 } }, 'invalid-visible-frame'],
+  ];
+
+  for (const [payload, reason] of cases) {
+    const read = readAppleSnapshotResult({ keyboard: payload }, IOS_SIMULATOR).keyboard;
+    assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
+  }
+});
+
+// #3182: the response publishes the box the fold already resolved for the presentation, never a
+// second box and never a zero. The viewport the validator receives and the viewport the capture
+// publishes must be the same evidence — if the fold validated against one box and the response
+// published another, a consumer scaling rects against `viewport` would scale against a screen the
+// numbers were never checked against.
+test('the published viewport is the root box the presentation validated against (#3182)', () => {
+  const screen: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+  const button: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Open',
+    rect: { x: 16, y: 400, width: 80, height: 32 },
+    hittable: true,
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [screen, button],
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('the published viewport follows the quality payload the fold prefers (#3182)', () => {
+  // A scoped capture can carry an unscoped quality payload whose Application root is the screen;
+  // the fold resolves the viewport from those roots, and the response must publish that same box.
+  const scopedRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 100, width: 390, height: 400 },
+  };
+  const qualityRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [scopedRoot],
+    qualityPayload: { nodes: [qualityRoot], truncated: false, scope: null },
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('a capture with no usable viewport box publishes no viewport, never a zero (#3182)', () => {
+  // `runnerFatal` skips presentation, so this exercises the publication seam alone: a zero-extent
+  // root is the failed Apple read, and the guard must answer with absence.
+  const fatalZero = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in fatalZero, false);
+
+  const rootless = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Other' }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in rootless, false);
+
+  // The guard itself, off the early return: raw is the projection that validates no box, so it is the
+  // one that reaches publication still holding an unchecked root. A zero-extent Application there
+  // must answer with absence rather than the failed read's dimensions.
+  const rawZero = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    },
+  );
+  assert.equal('viewport' in rawZero, false);
+});
+
+test('a raw projection publishes no viewport, because nothing validated its box (#3182)', () => {
+  // The engine validates the viewport only for the regular projection. Publishing the largest root
+  // under `raw` would hand the caller the same largest-rect guess #3182 exists to retire, labelled
+  // as a measured fact — and the regular path would refuse this very payload.
+  const presented = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [
+        { index: 0, type: 'Other', rect: { x: 0, y: 0, width: 120, height: 44 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Open',
+          rect: { x: 16, y: 900, width: 80, height: 32 },
+          hittable: true,
+        },
+      ],
+    },
+  );
+
+  assert.equal('viewport' in presented, false);
+});
+
+test('runner presented and quality nodes share RN interpretation without replacing raw evidence', () => {
+  const node = { index: 0, type: 'Other', value: 'checkbox, unchecked' };
+  const result = readAppleSnapshotResult(
+    {
+      nodes: [node],
+      qualityPayload: { nodes: [node], truncated: false },
+    },
+    IOS_SIMULATOR,
+  );
+  for (const interpreted of [result.nodes?.[0], result.qualityPayload?.nodes[0]]) {
+    assert.equal(interpreted?.checked, false);
+    assert.equal(interpreted?.value, node.value);
+    assert.equal(interpreted?.type, node.type);
+    assert.equal(interpreted?.iosValueSemantics?.role, 'checkbox');
+  }
+  assert.equal('checked' in node, false);
+});
+
+for (const device of [IOS_SIMULATOR, MACOS_DEVICE]) {
+  test(`runner ${device.appleOs} reads native states on presented and quality payloads`, () => {
+    const nodes = [
+      { index: 0, type: 'Switch', value: '0' },
+      { index: 1, type: 'SecureTextField' },
+      { index: 2, type: 'TextField', enabled: false },
+      { index: 3, type: 'Switch', value: '1', checked: false },
+      { index: 4, type: 'Other', value: 'checkbox, unchecked' },
+    ];
+    const result = readAppleSnapshotResult(
+      { nodes, qualityPayload: { nodes, truncated: false } },
+      device,
+    );
+    for (const interpreted of [result.nodes!, result.qualityPayload!.nodes]) {
+      assert.equal(interpreted[0]!.checked, false);
+      assert.deepEqual([interpreted[1]!.editable, interpreted[1]!.password], [true, true]);
+      assert.deepEqual(
+        [interpreted[2]!.enabled, interpreted[2]!.editable, interpreted[2]!.password],
+        [false, true, false],
+      );
+      assert.equal(interpreted[3]!.checked, false);
+      assert.equal(
+        interpreted[4]!.iosValueSemantics?.role,
+        device.appleOs === 'ios' ? 'checkbox' : undefined,
+      );
+    }
+    assert.equal('checked' in nodes[0]!, false);
+  });
+}
+
+test('a clipped system alert passes host validation and retains its typed quality note', () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 1 };
+  const read = readAppleSnapshotResult(
+    {
+      nodes: [
+        {
+          index: 0,
+          type: 'Alert',
+          label: 'Tracking',
+          rect: { x: 18, y: 70, width: 354, height: 716 },
+          depth: 0,
+          hittable: false,
+        },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'Ask App Not to Track',
+          rect: { x: 48, y: 700, width: 294, height: 86 },
+          depth: 1,
+          parentIndex: 0,
+          hittable: true,
+        },
+      ],
+      truncated: false,
+      snapshotQualityNotes: [note],
+    },
+    IOS_SIMULATOR,
+  );
+  const presentation = presentAppleRunnerSnapshot('device-1', { interactiveOnly: true }, read);
+  assert.equal(
+    presentation.nodes.some((node) => node.label === 'Ask App Not to Track'),
+    true,
+  );
+  assert.deepEqual(read.qualityNotes, [note]);
+  assert.equal(read.quality, undefined);
+});
+
+test('runner wire keeps real verdicts independent of clipping notes', () => {
+  const quality = { state: 'recovered', backend: 'queries', reasonCode: 'ax-rejected' };
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 2 };
+  const read = readAppleSnapshotResult(
+    { snapshotQuality: quality, snapshotQualityNotes: [note] },
+    IOS_SIMULATOR,
+  );
+  assert.equal(read.quality?.state, 'recovered');
+  assert.equal(read.quality?.backend, 'queries');
+  assert.equal(read.quality?.reasonCode, 'ax-rejected');
+  assert.deepEqual(read.qualityNotes, [note]);
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).quality, undefined);
+  assert.equal(
+    readAppleSnapshotResult({ snapshotQuality: quality }, IOS_SIMULATOR).qualityNotes,
+    undefined,
+  );
+});

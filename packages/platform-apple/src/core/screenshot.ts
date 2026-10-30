@@ -26,7 +26,7 @@ import { runAppleRunnerCommand } from './runner-client.ts';
 import {
   resolveRunnerContainerBundleIds,
   type AppleRunnerCommandOptions,
-} from '../runner/index.ts';
+} from '@agent-device/apple-runner';
 import {
   emitSimulatorStatusBarDiagnostic,
   prepareSimulatorStatusBarForScreenshot,

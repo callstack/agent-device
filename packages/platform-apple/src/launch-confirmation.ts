@@ -6,8 +6,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
-import { RUNNER_READY_PREFLIGHT_TIMEOUT_MS } from './runner/runner-contract.ts';
-import { isRunnerMainThreadTimeoutError } from './runner/runner-error-classification.ts';
+import {
+  isRunnerMainThreadTimeoutError,
+  RUNNER_READY_PREFLIGHT_TIMEOUT_MS,
+} from '@agent-device/apple-runner';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 

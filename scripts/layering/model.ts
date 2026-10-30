@@ -114,6 +114,8 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'host-kit',
   'capture-kit',
   'provision-kit',
+  // The Apple-family runner engine: composed by platform-apple, below it in the package graph.
+  'apple-runner',
   ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
   'provider-limrun',

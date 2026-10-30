@@ -36,6 +36,6 @@ export async function cleanupRunnerLeasesForOwner(
   owner: Parameters<(typeof import('./core/runner-client.ts'))['cleanupRunnerLeasesForOwner']>[0],
 ): Promise<void> {
   const { cleanupRunnerLeasesForOwner: cleanup } = await import('./core/runner-client.ts');
-  const { runnerLeaseCleanupAdapter } = await import('./runner/runner-disposal.ts');
+  const { runnerLeaseCleanupAdapter } = await import('@agent-device/apple-runner');
   await cleanup(owner, runnerLeaseCleanupAdapter);
 }

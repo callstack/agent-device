@@ -44,8 +44,8 @@ const MAX_FILE_LINES = 1000;
 // Architecture debt: lower caps as files shrink; remove entries when files fit MAX_FILE_LINES.
 const LEGACY_FILE_LINE_CAPS = {
   'packages/platform-android/src/__tests__/snapshot.test.ts': 1416,
-  'packages/platform-apple/src/runner/__tests__/runner-client-command-retry.test.ts': 1064,
-  'packages/platform-apple/src/runner/__tests__/runner-session.test.ts': 1456,
+  'packages/apple-runner/src/__tests__/index-command-retry.test.ts': 1064,
+  'packages/apple-runner/src/__tests__/runner-session.test.ts': 1456,
   'src/__tests__/agent-device-client.test.ts': 1271,
   'src/__tests__/cli-client-commands.test.ts': 1234,
   'src/__tests__/cli-config.test.ts': 1282,
@@ -256,7 +256,7 @@ export default defineConfig({
     {
       // The runner cache key reads the selected Xcode's files and execs nothing: a hosted macOS
       // runner can stall an `xcrun` exec longer than any budget (Perf Nightly run 40441065511).
-      files: ['packages/platform-apple/src/runner/runner-toolchain-identity.ts'],
+      files: ['packages/apple-runner/src/runner-toolchain-identity.ts'],
       rules: {
         'no-restricted-imports': [
           'error',

@@ -7,10 +7,10 @@ export {
 
 export async function restoreLegacyXctestDeviceSetRedirect(
   ...args: Parameters<
-    (typeof import('./runner/legacy-xctest-device-set.ts'))['restoreLegacyXctestDeviceSetRedirect']
+    (typeof import('@agent-device/apple-runner'))['restoreLegacyXctestDeviceSetRedirect']
   >
 ): Promise<void> {
   const { restoreLegacyXctestDeviceSetRedirect: restore } =
-    await import('./runner/legacy-xctest-device-set.ts');
-  restore(...args);
+    await import('@agent-device/apple-runner');
+  await restore(...args);
 }

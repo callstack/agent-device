@@ -74,12 +74,13 @@ export type EagerClosureEntry = {
 
 /**
  * A concrete platform implementation lives in a private `@agent-device/platform-<family>`
- * workspace package. The retired `src/platforms/<family>/` spelling remains matched so a
+ * workspace package, or in the Apple-family runner engine package `@agent-device/apple-runner`. The retired `src/platforms/<family>/` spelling remains matched so a
  * reintroduced legacy path cannot launder an eager edge past this guard.
  */
 export const PLATFORM_IMPLEMENTATION_PATTERNS: RegExp[] = [
   /[/\\]platforms[/\\](apple|android|harmonyos|vega|linux|web)[/\\]/,
   /[/\\]packages[/\\]platform-(apple|android|harmonyos|vega|linux|web)[/\\]/,
+  /[/\\]packages[/\\]apple-runner[/\\]/,
 ];
 
 /**
@@ -178,12 +179,13 @@ export function entryCategoryOf(entryFile: string): EntryCategory {
 }
 
 /**
- * Mechanics facets inside platform packages. Their entry surfaces ARE platform implementation,
+ * Mechanics facets inside platform packages, and the Apple runner engine's package entry. Their
+ * entry surfaces ARE platform implementation,
  * so the deny-platform assertion is meaningless for them: the whole closure is the mechanics
  * being exported. Their weight stays under the no-growth rule.
  */
 const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
-  'packages/platform-apple/src/runner/',
+  'packages/apple-runner/src/index.ts',
   'packages/platform-android/src/mechanics.ts',
   // The shared Android test fixtures ARE the mechanics exercised on archived device trees
   // (#3517); like the mechanics facet, their closure is the implementation they export.

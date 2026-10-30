@@ -52,12 +52,10 @@ test('a mutation scope holds no test another Vitest project owns', () => {
   // The apple-runner suites need that project's host setup, which Stryker's run does not install.
   assert.ok(
     !mutationTestFiles(['kernel-errors'], repoRoot).some((file) =>
-      file.startsWith('packages/platform-apple/src/runner/'),
+      file.startsWith('packages/apple-runner/src/'),
     ),
   );
-  assert.ok(
-    !isTestFile('packages/platform-apple/src/runner/__tests__/index-dispatch-disclosure.test.ts'),
-  );
+  assert.ok(!isTestFile('packages/apple-runner/src/__tests__/index-dispatch-disclosure.test.ts'));
 });
 
 test('a test that takes a kernel through a barrel re-export owns it', () => {

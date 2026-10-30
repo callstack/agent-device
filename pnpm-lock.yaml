@@ -27,6 +27,9 @@ importers:
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:packages/ad-script
+      '@agent-device/apple-runner':
+        specifier: workspace:*
+        version: link:packages/apple-runner
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:packages/capture-kit
@@ -250,6 +253,31 @@ importers:
         specifier: workspace:*
         version: link:../kernel
 
+  packages/apple-runner:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
+      '@agent-device/xml':
+        specifier: workspace:*
+        version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+
   packages/capture-kit:
     dependencies:
       '@agent-device/contracts':
@@ -355,6 +383,9 @@ importers:
         specifier: workspace:*
         version: link:../session-journal
     devDependencies:
+      '@agent-device/apple-runner':
+        specifier: workspace:*
+        version: link:../apple-runner
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:../proxy
@@ -503,6 +534,9 @@ importers:
 
   packages/platform-apple:
     dependencies:
+      '@agent-device/apple-runner':
+        specifier: workspace:*
+        version: link:../apple-runner
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -5526,7 +5560,7 @@ snapshots:
       '@loaderkit/resolve': 1.0.6
       cjs-module-lexer: 1.4.3
       fflate: 0.8.3
-      lru-cache: 11.5.2
+      lru-cache: 11.5.3
       semver: 7.8.5
       typescript: 5.6.1-rc
       validate-npm-package-name: 5.0.1

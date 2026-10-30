@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { assertProducedRunnerRequests } from '@agent-device/platform-apple/runner/requests-fixtures';
+import { assertProducedRunnerRequests } from '@agent-device/test-kit';
 import { captureAppleClockAnchor } from '../platform-runtime-screen-recording-apple-runner-host.ts';
 import { resolveAppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 

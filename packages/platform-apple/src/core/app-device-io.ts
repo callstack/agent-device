@@ -4,7 +4,7 @@ import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
-import type { AppleRunnerCommandOptions } from '../runner/index.ts';
+import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 
 export async function readIosClipboardText(device: DeviceInfo): Promise<string> {
   if (isMacOs(device)) {

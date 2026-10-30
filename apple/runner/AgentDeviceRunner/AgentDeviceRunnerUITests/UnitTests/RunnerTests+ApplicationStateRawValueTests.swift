@@ -9,7 +9,7 @@ extension RunnerTests {
   ///
   /// The host lane runs this on every PR; the simulator lane derives it from the platform branch
   /// below so the suspended case, compiled out of the macOS build, is pinned on every PR too.
-  /// `packages/platform-apple/src/runner/__tests__/target-activation.test.ts` reads these calls back
+  /// `packages/platform-apple/src/target-activation.test.ts` reads these calls back
   /// and compares them with its decode table, so a table that drifts from them fails on any host
   /// instead of waiting for a lane to report a mislabelled repair.
   func testApplicationStateRawValuesMatchTheActivationDecoder() {

@@ -1,0 +1,318 @@
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
+import {
+  iosDevice,
+  iosSimulator,
+  makeTunnelIpLookup,
+  makeTunnelIpLookupSequence,
+  RUNNER_ENDPOINT_FIXTURE,
+  runnerTransportResponse,
+  stubSuccessfulFetch,
+  usbmuxDeviceUnattachedError,
+  xctestIosDevice,
+} from './runner-transport.fixtures.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import { MACOS_DEVICE } from './device-fixtures.ts';
+import { isCommandTimeoutError } from '../host.ts';
+import type { IosPhysicalDeviceRunnerControl } from '../runner-physical-device.ts';
+
+const { mockRunCmd, mockUsbmuxPostCommand } = vi.hoisted(() => ({
+  mockRunCmd: vi.fn(),
+  mockUsbmuxPostCommand: vi.fn(),
+}));
+
+vi.mock('../runner-usbmux.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner-usbmux.ts')>();
+  return {
+    ...actual,
+    usbmuxRunnerTransport: {
+      postCommand: mockUsbmuxPostCommand,
+    },
+  };
+});
+
+import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
+import { fetchWithTimeout, sendRunnerCommandOnce } from '../runner-transport.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
+
+// The real `resolveIosPhysicalDeviceControl` resolves the CoreDevice tunnel IP
+// through root-level tooling this package cannot reach; a fake control backed
+// by `mockRunCmd` reproduces the same devicectl `--json-output` file protocol
+// so the shared `makeTunnelIpLookup` fixture keeps working unmodified.
+function parseTunnelIp(payload: unknown): string | null {
+  const info = (payload as { info?: { outcome?: string } } | null)?.info;
+  if (info?.outcome && info.outcome !== 'success') return null;
+  const tunnelIp = (
+    payload as { result?: { connectionProperties?: { tunnelIPAddress?: unknown } } } | null
+  )?.result?.connectionProperties?.tunnelIPAddress;
+  return typeof tunnelIp === 'string' && tunnelIp.length > 0 ? tunnelIp : null;
+}
+
+function fakeResolveIosPhysicalDeviceControl(device: {
+  iosPhysicalDeviceBackend?: string;
+  id: string;
+}): IosPhysicalDeviceRunnerControl {
+  return {
+    backend: device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice',
+    resolveTunnel: async (resolvedDevice) => {
+      const jsonPath = path.join(mkdtempForTestSync('runner-transport-test'), 'tunnel.json');
+      try {
+        await mockRunCmd('xcrun', [
+          'devicectl',
+          'device',
+          'info',
+          'details',
+          '--device',
+          resolvedDevice.id,
+          '--json-output',
+          jsonPath,
+        ]);
+        const payload = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as unknown;
+        return { tunnelIp: parseTunnelIp(payload) };
+      } catch {
+        return { tunnelIp: null };
+      } finally {
+        fs.rmSync(jsonPath, { force: true });
+      }
+    },
+    // Device readiness is asserted in runner-device-readiness.test.ts; this suite only ever needs
+    // the transport route, and an unreadable device is the shape that keeps it out of the way.
+    readDeviceReadiness: async () => ({
+      available: false as const,
+      reason: 'device_readiness_unreadable' as const,
+      hint: 'unreadable in this suite',
+    }),
+  };
+}
+
+beforeEach(() => {
+  clearDeviceTunnelIpCache();
+  mockRunCmd.mockReset();
+  mockUsbmuxPostCommand.mockReset();
+  mockUsbmuxPostCommand.mockResolvedValue(runnerTransportResponse());
+  appleRunnerTestHost.update({
+    resolveIosPhysicalDeviceControl: fakeResolveIosPhysicalDeviceControl,
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+test('sendRunnerCommandOnce does not retry or simulator fallback after request failure', async () => {
+  // fetchWithTimeout does not wrap fetch() failures into an AppError, so this test's
+  // real subject is the no-retry/no-fallback behavior around an opaque transport
+  // failure — assert identity of the propagated error, not any particular code.
+  const fetchError = new Error('request timed out after reaching runner');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw fetchError;
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      sendRunnerCommandOnce(
+        iosSimulator,
+        RUNNER_ENDPOINT_FIXTURE,
+        { command: 'tap', x: 120, y: 240 },
+        5_000,
+      ),
+    (error: unknown) => error === fetchError,
+  );
+
+  assert.equal(vi.mocked(fetch).mock.calls.length, 1);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('fetchWithTimeout reports its own deadline as a typed command timeout', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    }),
+  );
+
+  await assert.rejects(
+    () => fetchWithTimeout('http://127.0.0.1:8100/command', { method: 'POST' }, 5),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.timeoutMs, 5);
+      assert.equal(isCommandTimeoutError(error), true);
+      return true;
+    },
+  );
+});
+
+test('sendRunnerCommandOnce routes xctest physical devices through usbmux', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+
+  const response = await sendRunnerCommandOnce(
+    xctestIosDevice,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+    5_000,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
+    xctestIosDevice.id,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+  ]);
+});
+
+test('sendRunnerCommandOnce routes coredevice physical devices through usbmux first', async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+
+  const response = await sendRunnerCommandOnce(
+    iosDevice,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+    5_000,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  // The devicectl tunnel probe is the cost usbmux-first exists to avoid.
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.deepEqual(mockUsbmuxPostCommand.mock.calls[0]?.slice(0, 3), [
+    iosDevice.id,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+  ]);
+});
+
+test('sendRunnerCommandOnce reaches the macOS host runner on loopback, never over usbmux', async () => {
+  stubSuccessfulFetch();
+
+  const response = await sendRunnerCommandOnce(MACOS_DEVICE, RUNNER_ENDPOINT_FIXTURE, {
+    command: 'uptime',
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://127.0.0.1:8100/command');
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 0);
+  // No devicectl tunnel lookup either.
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('sendRunnerCommandOnce writes nothing for a device with no route, and says so', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  mockRunCmd.mockImplementation(makeTunnelIpLookupSequence([]));
+
+  await assert.rejects(
+    () => sendRunnerCommandOnce(iosDevice, RUNNER_ENDPOINT_FIXTURE, { command: 'tap', x: 1, y: 1 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Runner command endpoint not available');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
+test('sendRunnerCommandOnce falls back to the tunnel route when usbmux reports the device unattached', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  stubSuccessfulFetch();
+  mockRunCmd.mockImplementation(makeTunnelIpLookup('fd00::123'));
+
+  const response = await sendRunnerCommandOnce(
+    iosDevice,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+    5_000,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+  assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://[fd00::123]:8100/command');
+});
+
+test('sendRunnerCommandOnce keeps the usbmux verdict for xctest devices that have no tunnel', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  stubSuccessfulFetch();
+
+  await assert.rejects(
+    () =>
+      sendRunnerCommandOnce(xctestIosDevice, RUNNER_ENDPOINT_FIXTURE, { command: 'uptime' }, 5_000),
+    (error: unknown) => {
+      assert.equal((error as AppError).code, 'DEVICE_NOT_FOUND');
+      return true;
+    },
+  );
+  assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('falls back to the tunnel when usbmux loses the device mid-connect', async () => {
+  // usbmuxd listed the device, then answered Connect with "no such device"
+  // (result 2) because it went away in between. That must reach the same
+  // fallback as a missing ListDevices entry, or a CoreDevice device fails with
+  // a cable hint while its Wi-Fi tunnel is sitting there working.
+  mockUsbmuxPostCommand.mockRejectedValue(
+    new AppError('DEVICE_NOT_FOUND', 'iOS device is no longer available through usbmux', {
+      deviceId: iosDevice.id,
+      usbmuxDeviceAttached: false,
+      usbmuxResult: 2,
+      hint: 'Connect the device by cable, trust this Mac, keep it unlocked, and retry.',
+    }),
+  );
+  stubSuccessfulFetch();
+  mockRunCmd.mockImplementation(makeTunnelIpLookup('fd00::123'));
+
+  const response = await sendRunnerCommandOnce(
+    iosDevice,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'uptime' },
+    5_000,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://[fd00::123]:8100/command');
+});
+
+test('a cancellation during route resolution discloses that the command was never sent', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  stubSuccessfulFetch();
+  const controller = new AbortController();
+  const lookupTunnelIp = makeTunnelIpLookup('fd00::123');
+  mockRunCmd.mockImplementation(async (cmd: string, args: string[]) => {
+    controller.abort(createRequestCanceledError());
+    return await lookupTunnelIp(cmd, args);
+  });
+
+  await assert.rejects(
+    () =>
+      sendRunnerCommandOnce(
+        iosDevice,
+        RUNNER_ENDPOINT_FIXTURE,
+        { command: 'tap', x: 1, y: 1 },
+        5_000,
+        controller.signal,
+      ),
+    (error: unknown) => {
+      assert.ok(isRequestCanceledError(error));
+      assert.equal((error as AppError).details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+});

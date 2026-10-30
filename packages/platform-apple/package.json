@@ -8,6 +8,7 @@
     "verify-installed-snapshot-bridge": "node --experimental-strip-types scripts/verify-installed-snapshot-bridge.ts"
   },
   "dependencies": {
+    "@agent-device/apple-runner": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
@@ -52,10 +53,6 @@
       "types": "./src/physical-device-facade.ts",
       "default": "./src/physical-device-facade.ts"
     },
-    "./runner": {
-      "types": "./src/runner/index.ts",
-      "default": "./src/runner/index.ts"
-    },
     "./snapshot-source": {
       "types": "./src/snapshot-source-facade.ts",
       "default": "./src/snapshot-source-facade.ts"
@@ -63,10 +60,6 @@
     "./runner/operations": {
       "types": "./src/runner-operations-facade.ts",
       "default": "./src/runner-operations-facade.ts"
-    },
-    "./runner/requests-fixtures": {
-      "types": "./src/runner/runner-requests.fixtures.ts",
-      "default": "./src/runner/runner-requests.fixtures.ts"
     },
     "./runner-owner": {
       "types": "./src/runner-owner-facade.ts",

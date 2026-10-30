@@ -56,7 +56,7 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
 ];
 
 /** The `apple-runner` project's tests, which need its host setup and so run in no other project. */
-const APPLE_RUNNER_TESTS: readonly string[] = ['packages/platform-apple/src/runner/**/*.test.ts'];
+const APPLE_RUNNER_TESTS: readonly string[] = ['packages/apple-runner/src/**/*.test.ts'];
 
 /**
  * The projects `test:coverage` keeps out of the instrumented invocation, which the stamp reporter has to
@@ -250,14 +250,15 @@ export default defineConfig({
         test: {
           // The apple-runner package's own suites: same lane semantics as
           // unit-core, plus a setup that installs the real root host
-          // capabilities behind the package's test-host seam (R11 keeps the
-          // package from importing root utilities directly).
+          // capabilities behind the package's test-host seam (the package
+          // cannot import platform-apple, so platform-apple's setup provides the host).
           name: 'apple-runner',
           include: [...APPLE_RUNNER_TESTS],
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',
-            'packages/platform-apple/src/runner/__tests__/host-setup.ts',
+            'packages/platform-apple/src/__tests__/apple-runner-host-setup.ts',
+            'packages/apple-runner/src/__tests__/host-setup.ts',
           ],
         },
       },

@@ -24,6 +24,7 @@
     "@agent-device/session-journal": "workspace:*"
   },
   "devDependencies": {
+    "@agent-device/apple-runner": "workspace:*",
     "@agent-device/proxy": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
     "@types/node": "^22.20.1",

@@ -301,6 +301,7 @@
   "devDependencies": {
     "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
+    "@agent-device/apple-runner": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",

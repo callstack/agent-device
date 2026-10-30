@@ -13,7 +13,7 @@ import {
   type AppleRunnerCommandExecutor,
   type AppleRunnerProvider,
   type RunnerCommand,
-} from './runner/index.ts';
+} from '@agent-device/apple-runner';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
 import {
@@ -45,7 +45,7 @@ import {
   type AppleRunnerSnapshotPresentation,
   readAppleSnapshotResult,
   type AppleRunnerSnapshotResult,
-} from './runner/snapshot-presentation.ts';
+} from './snapshot-presentation.ts';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 

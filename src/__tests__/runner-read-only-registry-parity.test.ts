@@ -15,7 +15,7 @@ type RunnerTraits = {
 // this one cross-package parity check from adding a public subpath just for a test.
 const { isReadOnlyRunnerCommand, RUNNER_COMMAND_TRAITS } = (await import(
   fileURLToPath(
-    new URL('../../packages/platform-apple/src/runner/runner-command-traits.ts', import.meta.url),
+    new URL('../../packages/apple-runner/src/runner-command-traits.ts', import.meta.url),
   )
 )) as RunnerTraits;
 

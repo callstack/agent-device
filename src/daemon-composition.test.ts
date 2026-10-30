@@ -3,7 +3,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
-import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import {
   IOS_SIMULATOR,
   mkdtempForTestSync,

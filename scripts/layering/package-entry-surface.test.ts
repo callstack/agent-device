@@ -29,6 +29,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
       name: '@agent-device/daemon',
       exports: { '.': entry('./src/index.ts') },
     },
+    'apple-runner': {
+      name: '@agent-device/apple-runner',
+      exports: { '.': entry('./src/index.ts') },
+    },
     proxy: { name: '@agent-device/proxy' },
     contracts: { name: '@agent-device/contracts' },
   };
@@ -51,6 +55,7 @@ const SOURCE = new Map([
     'packages/daemon/src/index.ts',
     "export { startDaemonRuntime } from './server/http/daemon-runtime.ts';",
   ],
+  ['packages/apple-runner/src/index.ts', "export { bindAppleRunnerHost } from './host.ts';"],
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
@@ -83,6 +88,40 @@ test('daemon exports exactly "." and nothing else', () => {
   assert.match(extra[0]!.file, /packages\/daemon\/package\.json/);
   assert.match(extra[0]!.message, /exports exactly "\."/);
   assert.deepEqual(check(), []);
+});
+
+test('apple-runner exports exactly "." and nothing else', () => {
+  for (const exports of [
+    { '.': entry('./src/index.ts'), './test-host': entry('./src/test-host.ts') },
+    { '.': entry('./src/index.ts'), './runner/*': entry('./src/*.ts') },
+    { './runner-client': entry('./src/index.ts') },
+  ]) {
+    const found = check({ 'apple-runner': { exports } });
+    assert.equal(found.length, 1, JSON.stringify(exports));
+    assert.match(found[0]!.file, /packages\/apple-runner\/package\.json/);
+    assert.match(found[0]!.message, /exports exactly "\."/);
+  }
+});
+
+test('every apple-runner condition of "." points at src/index.ts', () => {
+  const found = check({
+    'apple-runner': { exports: { '.': { types: './src/index.ts', default: './src/host.ts' } } },
+  });
+  assert.equal(found.length, 1);
+  assert.match(found[0]!.message, /every condition of it is \.\/src\/index\.ts/);
+});
+
+test('the apple-runner entry names its exports: export * is refused', () => {
+  for (const body of [
+    "export * from './host.ts';",
+    "export { bindAppleRunnerHost } from './host.ts';\nexport * as runner from './runner-session.ts';",
+    "export type * from './host.ts';",
+  ]) {
+    const found = check({}, new Map([...SOURCE, ['packages/apple-runner/src/index.ts', body]]));
+    assert.equal(found.length, 1, body);
+    assert.match(found[0]!.file, /packages\/apple-runner\/src\/index\.ts/);
+    assert.match(found[0]!.message, /names every export explicitly/);
+  }
 });
 
 test('every daemon condition of "." points at src/index.ts', () => {

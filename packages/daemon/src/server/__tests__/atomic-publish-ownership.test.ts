@@ -11,7 +11,7 @@ const SIMPLE_PUBLISHERS = [
   ),
   new URL('../provider-lease-expiry.ts', import.meta.url),
   new URL('../../core/session-script-writer.ts', import.meta.url),
-  new URL('../../../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
+  new URL('../../../../../packages/apple-runner/src/runner-lease.ts', import.meta.url),
   new URL('../../../../../packages/remote/src/remote-connection-state.ts', import.meta.url),
 ] as const;
 

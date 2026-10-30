@@ -264,6 +264,51 @@ test.each([true, false])(
   },
 );
 
+test('close finalization awaits the runner release before it dismisses alerts, and a failed release dismisses none (#2615)', async () => {
+  const signal = new AbortController().signal;
+  const baseHost = platformRuntimeHostFixture();
+  const events: string[] = [];
+  const releaseFailure = new Error('runner artifact cleanup failed');
+  const releaseRunnerOnClose = vi.fn(async () => {
+    events.push('release');
+    await Promise.resolve();
+    events.push('released');
+  });
+  const dismissCloseAlerts = vi.fn(async () => {
+    events.push('alerts');
+  });
+  const hostWith = (release: typeof releaseRunnerOnClose) =>
+    ({
+      ...baseHost,
+      appleApplications: {
+        ...baseHost.appleApplications,
+        releaseRunnerOnClose: release,
+        dismissCloseAlerts,
+      },
+    }) as unknown as PlatformRuntimeHost;
+
+  await bindAppleApplicationLifecycle({
+    host: hostWith(releaseRunnerOnClose),
+    device,
+    signal,
+  }).finalizeApplicationClose({ surface: 'app', retainRunner: true, stateDir: '/tmp' });
+  expect(events).toEqual(['release', 'released', 'alerts']);
+
+  events.length = 0;
+  const failingRelease = vi.fn(async () => {
+    events.push('release');
+    throw releaseFailure;
+  });
+  await expect(
+    bindAppleApplicationLifecycle({
+      host: hostWith(failingRelease),
+      device,
+      signal,
+    }).finalizeApplicationClose({ surface: 'app', retainRunner: false, stateDir: '/tmp' }),
+  ).rejects.toBe(releaseFailure);
+  expect(events).toEqual(['release']);
+});
+
 test('daemon-shutdown finalization dismisses alerts and defers the runner release to the gateway (#2552)', async () => {
   const signal = new AbortController().signal;
   const baseHost = platformRuntimeHostFixture();

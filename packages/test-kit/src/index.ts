@@ -127,6 +127,13 @@ export {
   recordArticleEvidence,
 } from './target-classification-fixtures.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
+export { withRequestDeadline } from '@agent-device/host-kit/request';
+export { provideTestHostDefaults, requireTestHostDefaults } from './test-host-defaults.ts';
+export {
+  assertProducedRunnerRequests,
+  readRunnerRequestFixture,
+  REPO_ROOT,
+} from './runner-requests.fixtures.ts';
 export { likelyPlayableWebmContainer } from './video-fixtures.ts';
 export {
   installFakeManagedAgentBrowser,

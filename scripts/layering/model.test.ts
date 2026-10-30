@@ -177,8 +177,8 @@ const RECORDED_IMPORT_TYPE_CASES = [
     'DeviceShutdownRuntime',
   ],
   [
-    'packages/platform-apple/src/runner/runner-provider.ts',
-    'packages/platform-apple/src/runner/runner-artifact.ts',
+    'packages/apple-runner/src/runner-provider.ts',
+    'packages/apple-runner/src/runner-artifact.ts',
     './runner-artifact.ts',
     'RunnerStartAdmission',
   ],

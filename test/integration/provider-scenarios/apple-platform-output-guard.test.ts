@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';

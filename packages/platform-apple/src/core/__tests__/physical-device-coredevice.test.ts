@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import type { IosDeviceReadiness } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from '../config.ts';
 import {
@@ -10,7 +11,6 @@ import {
   parseIosDeviceDetailsPayload,
   readIosDeviceReadiness,
   resolveIosReadyHint,
-  type IosDeviceReadiness,
 } from '../physical-device-coredevice.ts';
 import { IOS_DEVICE_READY_TIMEOUT_MS } from '../physical-device-constants.ts';
 import { AppError } from '@agent-device/kernel/errors';

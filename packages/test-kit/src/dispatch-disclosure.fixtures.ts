@@ -45,11 +45,11 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'daemon.route.': 'packages/daemon/src/execution/request-dispatch-disclosure.test.ts',
   'post-action-guard.':
     'packages/daemon/src/execution/interaction/internal/interaction-android-escape-dispatch-disclosure.test.ts',
-  'ios-runner.': 'packages/platform-apple/src/runner/__tests__/index-dispatch-disclosure.test.ts',
+  'ios-runner.': 'packages/apple-runner/src/__tests__/index-dispatch-disclosure.test.ts',
   'ios-runner.pre-send.':
-    'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
+    'packages/apple-runner/src/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
   'ios-runner.transport.':
-    'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
+    'packages/apple-runner/src/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
   'android-adb.': 'packages/platform-android/src/__tests__/index-dispatch-disclosure.test.ts',
   'android-helper.': 'packages/platform-android/src/__tests__/index-dispatch-disclosure.test.ts',
   'android-helper.gesture-session.':

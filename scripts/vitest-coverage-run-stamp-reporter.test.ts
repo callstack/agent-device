@@ -18,7 +18,7 @@ import { COVERAGE_STAMP_FILE, type CoverageStamp } from './coverage-crap/stamp.t
 let repo: string;
 
 const UNIT_TESTS = ['src/a.test.ts', 'src/b.test.ts'];
-const APPLE_TESTS = ['packages/platform-apple/src/runner/x.test.ts'];
+const APPLE_TESTS = ['packages/apple-runner/src/x.test.ts'];
 /** The projects a full coverage pass runs, as opposed to the ones the lane splits off. */
 const LANE_PROJECTS = [
   { name: 'unit-core', testFiles: UNIT_TESTS },
@@ -44,7 +44,7 @@ function laneSpecs(): TestSpecification[] {
   return [
     spec('unit-core', path.join(repo, 'src/a.test.ts')),
     spec('unit-core', path.join(repo, 'src/b.test.ts')),
-    spec('apple-runner', path.join(repo, 'packages/platform-apple/src/runner/x.test.ts')),
+    spec('apple-runner', path.join(repo, 'packages/apple-runner/src/x.test.ts')),
   ];
 }
 

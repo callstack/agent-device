@@ -20,10 +20,6 @@ import {
   URL_OWNER_LOOKUP_TIMEOUT_MS,
 } from './launch-confirmation.ts';
 import { alertNotFound, CONFIRMATION } from './launch-confirmation.fixtures.ts';
-import {
-  buildRunnerResponseError,
-  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
-} from './runner/runner-contract.ts';
 
 vi.mock('./core/runner-client.ts', () => ({ runAppleRunnerCommand: vi.fn() }));
 
@@ -599,9 +595,8 @@ test('a matching launch title with other buttons is left unanswered on the first
 
 /** The accept as the runner answers it when its main-thread watchdog abandons the press (#3861). */
 function runnerMainThreadTimeout(): AppError {
-  return buildRunnerResponseError({
-    ok: false,
-    error: { code: MAIN_THREAD_TIMEOUT_RUNNER_CODE, message: 'main thread execution timed out' },
+  return new AppError('COMMAND_FAILED', 'main thread execution timed out', {
+    runnerErrorCode: 'MAIN_THREAD_TIMEOUT',
   });
 }
 

@@ -9,7 +9,7 @@ import { createAppleInteractor } from '../../interactor.ts';
 import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { listIosApps } from '../app-resolution.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
-import { withAppleRunnerProvider } from '../../runner/index.ts';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 

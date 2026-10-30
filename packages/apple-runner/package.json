@@ -1,0 +1,24 @@
+{
+  "name": "@agent-device/apple-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Apple XCUITest runner client: runner artifact cache, session and lease lifecycle, transports, and command execution, bound to its host capabilities once by platform-apple. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
+    "@agent-device/xml": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  }
+}

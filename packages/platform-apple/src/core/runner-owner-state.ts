@@ -1,16 +1,8 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { RunnerDeviceClaimAuthorityProbe } from '@agent-device/apple-runner';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 
-/**
- * Daemon-owned device-claim arbitration probe: does the embedding process hold
- * the host-global local device claim for exactly this device right now? The
- * probe receives the full device so the claim owner can match its canonical
- * platform-family/OS/id key — a bare id is ambiguous across families. Unbound
- * (in embedders that run no claim store, such as package tests) it answers
- * false, which keeps runner-lease takeover disabled there.
- */
-export type RunnerDeviceClaimAuthorityProbe = (device: DeviceInfo) => boolean;
+export type { RunnerDeviceClaimAuthorityProbe };
 
 type RunnerOwner = {
   leaseOwnerStateDir: string | undefined;

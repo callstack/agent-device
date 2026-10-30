@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { withAppleRunnerProvider, type RunnerCommand } from '@agent-device/platform-apple/runner';
+import { withAppleRunnerProvider, type RunnerCommand } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';

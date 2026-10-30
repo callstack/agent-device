@@ -1,7 +1,6 @@
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
-import { parseXmlDocumentSync } from '@agent-device/xml';
+import { parseXmlDocumentSync, visitXmlPlistEntries } from '@agent-device/xml';
 import { readApplePlistJson, runAppleToolCommand } from './tool-provider.ts';
-import { visitXmlPlistEntries } from './plist-xml.ts';
 
 export async function readInfoPlistString(
   infoPlistPath: string,

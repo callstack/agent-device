@@ -20,7 +20,7 @@ Run the exact route that changed. Record the commands, device, source SHA, and o
 For Android, `snapshot -i --json` must show `androidSnapshot.backend: android-helper`.
 Its `helperVersion` must match `package.json`. A UIAutomator fallback proves only that fallback.
 
-For Apple connection failures, start at `packages/platform-apple/src/runner/runner-startup-transport.ts`.
+For Apple connection failures, start at `packages/apple-runner/src/runner-startup-transport.ts`.
 Retry policy belongs in `runner-error-classification.ts`. Command typing belongs in `runner-contract.ts`.
 Keep the transport below session and client behavior. Keep xctestrun preparation outside request execution.
 After signing, run `node -e 0` before you measure Gatekeeper-sensitive startup.

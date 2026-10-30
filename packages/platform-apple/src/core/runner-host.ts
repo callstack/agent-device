@@ -1,4 +1,4 @@
-import type { AppleRunnerHost } from '../runner/index.ts';
+import type { AppleRunnerHost } from '@agent-device/apple-runner';
 import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 
 import {
@@ -39,7 +39,6 @@ import {
 
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
-import { visitXmlPlistEntries } from './plist-xml.ts';
 import {
   getAppleRunnerHostEnvironment,
   getRunnerDeviceClaimAuthorityProbe,
@@ -115,7 +114,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   buildSimctlArgsForDevice,
   simulatorAddressFor,
   resolveIosPhysicalDeviceControl,
-  visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
   runnerRuntimeSlot: runtimeSlot,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,

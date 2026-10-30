@@ -126,8 +126,8 @@ the app is in, not the one a repair would leave.
 
 The current command names and per-command traits are defined in:
 
-- `RunnerCommand` in [`../../packages/platform-apple/src/runner/runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)
-- `RUNNER_COMMAND_TRAITS` in [`../../packages/platform-apple/src/runner/runner-command-traits.ts`](../../packages/platform-apple/src/runner/runner-command-traits.ts)
+- `RunnerCommand` in [`../../packages/apple-runner/src/runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)
+- `RUNNER_COMMAND_TRAITS` in [`../../packages/apple-runner/src/runner-command-traits.ts`](../../packages/apple-runner/src/runner-command-traits.ts)
 - `CommandType` in [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## Response Shape
@@ -167,27 +167,27 @@ These behaviors are owned by code. This section only says where each one is decl
 declaration for the current rules.
 
 - **Command ids and `status` recovery.** The daemon attaches a `commandId` with `withRunnerCommandId`
-  ([`runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)). The runner records commands in
+  ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)). The runner records commands in
   `RunnerCommandJournal` ([`RunnerTests+CommandJournal.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift)) and
   answers the `status` command in `executeStatus`
   ([`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift)). The daemon's recovery
-  decisions live in [`runner-command-recovery.ts`](../../packages/platform-apple/src/runner/runner-command-recovery.ts).
+  decisions live in [`runner-command-recovery.ts`](../../packages/apple-runner/src/runner-command-recovery.ts).
 - **`runnerMainThreadBusy`.** The runner stamps successful responses with `stampingCurrentMainThreadBusy`
   ([`RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)) from `currentMainThreadBusyState()`
   ([`RunnerTests+MainThreadWork.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+MainThreadWork.swift)), applied in `jsonResponse`
-  ([`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift)). The daemon reads the stamp in [`runner-session.ts`](../../packages/platform-apple/src/runner/runner-session.ts).
+  ([`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift)). The daemon reads the stamp in [`runner-session.ts`](../../packages/apple-runner/src/runner-session.ts).
 - **`runnerFatal`.** A field of the response data (`runnerFatal` in
   [`RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)); for example, a sparse snapshot payload in
   [`RunnerTests+Snapshot.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift) sets it. The daemon reads it in
-  `resolveRunnerFatalReason` ([`runner-session.ts`](../../packages/platform-apple/src/runner/runner-session.ts)).
+  `resolveRunnerFatalReason` ([`runner-session.ts`](../../packages/apple-runner/src/runner-session.ts)).
 - **Runner error codes** (for example `RUNNER_BUSY`, `RUNNER_WEDGED`, `MAIN_THREAD_TIMEOUT`). On the runner
   side, wire codes are declared in `RunnerWireErrorCode` ([`RunnerTests.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift));
   `RUNNER_BUSY` and `RUNNER_WEDGED` come from the busy gate in
   [`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift), and `MAIN_THREAD_TIMEOUT` from
   the main-thread watchdog in [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift). The daemon
   classifies a runner-reported code in `classifyRunnerReportedError`
-  ([`runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
+  ([`runner-contract.ts`](../../packages/apple-runner/src/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
   arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, and other codes pass through as typed
   codes. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
   `RUNNER_ERROR_RULES` and the helpers beside it
-  ([`runner-error-classification.ts`](../../packages/platform-apple/src/runner/runner-error-classification.ts)).
+  ([`runner-error-classification.ts`](../../packages/apple-runner/src/runner-error-classification.ts)).

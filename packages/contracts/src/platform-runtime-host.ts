@@ -62,6 +62,12 @@ declare const scopedSimctlArgs: unique symbol;
 /** simctl argv (after the tool name) already scoped to its simulator set; minted only by platform-apple. */
 export type ScopedSimctlArgs = readonly string[] & { readonly [scopedSimctlArgs]: true };
 
+declare const scopedSimctlCommand: unique symbol;
+/** The xcrun argv of one simctl call: `simctl` followed by arguments already scoped to their set. */
+export type ScopedSimctlCommand = readonly ['simctl', ...string[]] & {
+  readonly [scopedSimctlCommand]: true;
+};
+
 export type AppleToolRequest = Readonly<{ timeoutMs?: number; allowFailure?: boolean }> &
   (
     | Readonly<{ tool: 'simctl'; args: ScopedSimctlArgs }>

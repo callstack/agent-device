@@ -1,7 +1,7 @@
 import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
-import type { AppleRunnerCommandOptions } from '../runner/index.ts';
+import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 import { isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { runAppleRunnerCommand } from './runner-client.ts';
 

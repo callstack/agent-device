@@ -99,7 +99,7 @@ The reason is that a private-AX snapshot can be served while an abandoned tree c
 
 The cost of a `RUNNER_BUSY` refusal to the caller depends on the daemon's own per-command read-only trait.
 It does not depend on any runner-side classification of the command.
-The trait is `RUNNER_COMMAND_TRAITS` in `packages/platform-apple/src/runner/runner-command-traits.ts`.
+The trait is `RUNNER_COMMAND_TRAITS` in `packages/apple-runner/src/runner-command-traits.ts`.
 `runAppleRunnerCommand` reads it through `isReadOnlyRunnerCommand` when it decides whether to wrap the send in a resend loop.
 This asymmetry is shipped, and `runner-client-busy-resend.test.ts` asserts it:
 

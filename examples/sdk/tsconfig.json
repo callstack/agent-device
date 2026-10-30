@@ -36,6 +36,7 @@
   "references": [
     { "path": "../../packages/ad-replay" },
     { "path": "../../packages/ad-script" },
+    { "path": "../../packages/apple-runner" },
     { "path": "../../packages/capture-kit" },
     { "path": "../../packages/command-registry" },
     { "path": "../../packages/contracts" },

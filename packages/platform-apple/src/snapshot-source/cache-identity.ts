@@ -2,7 +2,7 @@ import {
   readHostToolchainIdentity,
   type HostToolchainIdentity,
 } from '../native-build/toolchain-identity.ts';
-import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '../runner/apple-runner-platform.ts';
+import { SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME } from '@agent-device/apple-runner';
 import { fromNativeBuildError, snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';

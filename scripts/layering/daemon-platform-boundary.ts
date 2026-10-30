@@ -48,7 +48,9 @@ export type DaemonPlatformDependency = Readonly<{
   target: string;
 }>;
 
-const PLATFORM_PACKAGE = /^@agent-device\/platform-[^/]+(?:\/|$)/;
+// The Apple runner package holds platform implementation under a name outside the `platform-*`
+// family match, so it is a concrete platform package for this boundary too.
+const PLATFORM_PACKAGE = /^@agent-device\/(?:platform-[^/]+|apple-runner)(?:\/|$)/;
 const LEGACY_PLATFORM_ROOT = 'src/platforms';
 
 function lineOf(source: string, offset: number | null | undefined): number {

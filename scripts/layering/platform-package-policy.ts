@@ -18,6 +18,12 @@ import path from 'node:path';
 import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
+import {
+  APPLE_RUNNER_DIR,
+  APPLE_RUNNER_PACKAGE,
+  appleRunnerEntryImporterViolations,
+  appleRunnerPackageSiteViolations,
+} from './apple-runner-package-policy.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
 import { checkPlatformPackageSourcePolicy } from './platform-package-source-policy.ts';
 import { isTestOnlyExportSpecifier } from './package-export-surface.ts';
@@ -51,13 +57,15 @@ const PLATFORM_RUNTIME_HOST_FILES = new Set([
 ]);
 
 // #2040: the Apple XCUITest runner client is a platform-owned implementation
-// facet colocated in platform-apple as the src/runner/ subtree. Its subpaths
-// are the enumerated seam through which daemon/root consumers reach runner
-// mechanics directly (the runner-consumer migration behind the composition
-// gateway has no owner today; if one retires those direct consumers, the seam
-// narrows with it — the facet itself is durable Apple ownership, not a
-// temporary exception).
-export const APPLE_RUNNER_SUBTREE = 'packages/platform-apple/src/runner/';
+// facet. It lives in its own workspace package, '@agent-device/apple-runner', so it falls
+// outside the `platform-*` name match; this module polices it as the Apple-family runner
+// engine (one engine, not a per-OS split), not as a platform family of its own. Its single
+// entry is reachable from platform-apple's composition and from the named root consumers
+// below; platform-apple's own `runner/operations` and `runner-owner` subpaths remain the
+// enumerated seam through which daemon/root consumers reach the host-bound operations (the
+// runner-consumer migration behind the composition gateway has no owner today; if one retires
+// those direct consumers, the seam narrows with it — the facet itself is durable Apple
+// ownership, not a temporary exception).
 
 export function checkRetiredPlatformsZone(files: readonly string[]): LayeringViolation[] {
   return retiredPathViolations(
@@ -67,8 +75,7 @@ export function checkRetiredPlatformsZone(files: readonly string[]): LayeringVio
     'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
   );
 }
-const APPLE_RUNNER_TEST_HOST_FILE = 'packages/platform-apple/src/runner/test-host';
-const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
+const APPLE_RUNNER_TEST_HOST_FILE = 'packages/apple-runner/src/test-host';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
 // The host port is bound by the root; daemon composition registers the helper's runtime state.
@@ -80,7 +87,6 @@ const ANDROID_HOST_FACET_IMPORTERS: ReadonlySet<string> = new Set([
 const ANDROID_DEVICE_BOOT_FACADE = '@agent-device/platform-android/device-boot';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
-    APPLE_RUNNER_FACADE,
     '@agent-device/platform-apple/app-lifecycle',
     '@agent-device/platform-apple/app-resolution',
     '@agent-device/platform-apple/debug-symbols',
@@ -268,12 +274,10 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
 function checkSource(file: string, source: string): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const ownerFamily = familyForPackageFile(file);
-  // The runner mechanics facet owns its cache/lease files and usbmux sockets
-  // (fs/net/os) and reads process identity directly — that ownership is part
-  // of the facet's definition, so the ambient-host rules do not apply to it.
-  // Raw process primitives stay banned below and host tooling still enters
-  // through the AppleRunnerHost port.
-  if (ownerFamily && isProductionSourceFile(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
+  // The Apple runner package is not a platform family: it owns its cache/lease files and usbmux
+  // sockets (fs/net/os), so the ambient-host rules do not apply to it, and its own substrate rules
+  // run per import site below.
+  if (ownerFamily && isProductionSourceFile(file)) {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
   }
   for (const site of parseImports(source)) {
@@ -291,10 +295,14 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         violation(
           file,
           site.line,
-          'runner/test-host.ts binds the runner test dispatcher — only test files and __tests__ helpers may import it',
+          'apple-runner/src/test-host.ts binds the runner test dispatcher — only test files and __tests__ helpers may import it',
         ),
       );
     }
+    if (file.startsWith(APPLE_RUNNER_DIR)) {
+      violations.push(...appleRunnerPackageSiteViolations(file, site));
+    }
+    violations.push(...appleRunnerEntryImporterViolations(file, site));
     const importedFamily = concretePlatformFamily(site.spec);
     if (file.startsWith('packages/contracts/') && importedFamily) {
       violations.push(
@@ -346,6 +354,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !site.spec.startsWith('@agent-device/provision-kit/') &&
       !site.spec.startsWith('@agent-device/kernel/') &&
       site.spec !== '@agent-device/xml' &&
+      // platform-apple composes the Apple runner package; no other family may reach it.
+      !(ownerFamily === 'apple' && site.spec === APPLE_RUNNER_PACKAGE) &&
       !isAppleFacadeSubpathImport(site.spec) &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
       !isWebPackageSelectorImport(file, ownerFamily, site.spec) &&
@@ -435,5 +445,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return `R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner and android mechanics facets behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
+  return `R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the android mechanics facet and the Apple runner package behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }

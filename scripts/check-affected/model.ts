@@ -408,7 +408,7 @@ const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.startsWith('apple/runner/') ||
   file.startsWith('apple/snapshot-presentation/') ||
   file === 'apple/snapshot-bridge/ForegroundApplicationGeometry.h' ||
-  (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
+  (file.startsWith('packages/apple-runner/src/') && !file.includes('/__tests__/')) ||
   file.endsWith('.swift');
 
 const nativeDupesOwnership: OwnershipRule = ({ file }) =>

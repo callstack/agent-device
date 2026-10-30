@@ -9,7 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
-import type { AppleRunnerProvider } from '../runner/index.ts';
+import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 import { createAppleInteractor } from '../interactor.ts';
 import {
   recordingRunnerProvider,

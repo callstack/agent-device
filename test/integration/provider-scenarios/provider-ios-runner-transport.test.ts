@@ -15,8 +15,8 @@ import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
   RunnerCommand,
-} from '@agent-device/platform-apple/runner';
-import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
+} from '@agent-device/apple-runner';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
