@@ -241,10 +241,23 @@ class RevylInteractor implements Interactor {
     };
   }
 
+  /**
+   * Writes through a temporary file in the same directory and renames it into place, so a caller that
+   * hangs up mid-write or a process that dies leaves either the previous screenshot or none at all, and
+   * never a truncated PNG at the path the caller asked for.
+   */
   async screenshot(outPath: string): Promise<void> {
     const png = await this.session.client.captureWorkerScreenshot(this.session.runId, this.signal);
-    fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    await fs.promises.writeFile(outPath, png);
+    const directory = path.dirname(outPath);
+    fs.mkdirSync(directory, { recursive: true });
+    const temporaryPath = path.join(directory, `.${path.basename(outPath)}.${process.pid}.tmp`);
+    try {
+      await fs.promises.writeFile(temporaryPath, png);
+      await fs.promises.rename(temporaryPath, outPath);
+    } catch (error) {
+      await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 
   async snapshot(options?: SnapshotOptions): Promise<SnapshotRuntimeResult> {

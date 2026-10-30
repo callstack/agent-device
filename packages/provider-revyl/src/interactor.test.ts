@@ -401,6 +401,12 @@ test('a screenshot writes the worker bytes to the requested path', async () => {
   assert.equal(written[0], 0x89);
   assert.equal(written.subarray(1, 4).toString('ascii'), 'PNG');
   assert.equal(written.length, 68, 'the fixture answers a real 1x1 PNG');
+  // The write goes through a temporary file in the same directory and is renamed into place, so nothing of
+  // the capture is left behind once the path holds the PNG.
+  assert.deepEqual(
+    (await fs.readdir(path.dirname(outPath))).filter((entry) => entry !== 'shot.png'),
+    [],
+  );
 });
 
 test('a canceled screenshot leaves the file unwritten', async () => {
