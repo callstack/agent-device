@@ -43,6 +43,23 @@ export function headCommit(repoRoot: string): string {
   return git(repoRoot, ['rev-parse', 'HEAD']).toString('utf8').trim();
 }
 
+type NameStatusRecord = Readonly<{ renamed: boolean; from: string; to: string }>;
+
+/** Parses `--name-status -z` output; a path that was not renamed has the same `from` and `to`. */
+function nameStatusRecords(output: Buffer): NameStatusRecord[] {
+  const fields = output.toString('utf8').split('\0');
+  const records: NameStatusRecord[] = [];
+  for (let index = 0; index < fields.length;) {
+    const kind = fields[index++]?.trim();
+    if (!kind) continue;
+    const renamed = kind.startsWith('R');
+    const from = fields[index++];
+    const to = renamed ? fields[index++] : from;
+    if (from && to) records.push({ renamed, from, to });
+  }
+  return records;
+}
+
 /**
  * Head path -> base path. Follow committed moves before the aggregate diff, so later edits do not
  * erase a recorded rename. Added or deleted paths end that lineage. The aggregate diff still finds
@@ -57,24 +74,14 @@ export function renamedSince(
   const ended = new Set<string>();
   const flags = ['--name-status', '-M', '--diff-filter=ADR', '-z'];
   const follow = (status: Buffer): void => {
-    const fields = status.toString('utf8').split('\0');
-    for (let index = 0; index < fields.length;) {
-      const kind = fields[index++]?.trim();
-      if (!kind) continue;
-      const from = fields[index++];
-      if (!from) continue;
-      if (kind.startsWith('R')) {
-        const to = fields[index++];
-        if (!to) continue;
-        const origin = origins.has(from) ? origins.get(from)! : from;
-        origins.set(from, null);
-        origins.set(to, origin);
-        if (origin === null) ended.add(to);
-        else ended.delete(to);
-      } else {
-        if (typeof origins.get(from) === 'string') ended.add(from);
-        origins.set(from, null);
-      }
+    for (const { renamed, from, to } of nameStatusRecords(status)) {
+      const origin = renamed && origins.has(from) ? origins.get(from)! : from;
+      if (!renamed && typeof origins.get(from) === 'string') ended.add(from);
+      origins.set(from, null);
+      if (!renamed) continue;
+      origins.set(to, origin);
+      if (origin === null) ended.add(to);
+      else ended.delete(to);
     }
   };
   follow(
@@ -102,18 +109,11 @@ export function renamedSince(
     ...flags,
     base,
     ...(head ? [head] : []),
-  ])
-    .toString('utf8')
-    .split('\0');
-  for (let index = 0; index < aggregate.length;) {
-    const kind = aggregate[index++];
-    const from = aggregate[index++];
-    if (kind?.startsWith('R')) {
-      const to = aggregate[index++];
-      if (from && to && !renamed.has(to) && !ended.has(to) && !claimedOrigins.has(from)) {
-        renamed.set(to, from);
-        claimedOrigins.add(from);
-      }
+  ]);
+  for (const { renamed: isRename, from, to } of nameStatusRecords(aggregate)) {
+    if (isRename && !renamed.has(to) && !ended.has(to) && !claimedOrigins.has(from)) {
+      renamed.set(to, from);
+      claimedOrigins.add(from);
     }
   }
   return renamed;
