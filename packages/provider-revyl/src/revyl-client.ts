@@ -520,6 +520,19 @@ export function isRevylSessionGone(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === 'provider-session-gone';
 }
 
+/**
+ * Whether a WHATWG-normalized hostname is loopback: `localhost`, `[::1]`, any of `127.0.0.0/8`, or that
+ * range IPv4-mapped (`[::ffff:127.0.0.2]` normalizes to `[::ffff:7f00:2]`).
+ */
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '[::1]' ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(hostname)
+  );
+}
+
 /** HTTPS everywhere; plain HTTP only on loopback, and never with credentials, query, or fragment. */
 export function resolveRevylBackendUrl(raw: string): string {
   let url: URL;
@@ -530,8 +543,7 @@ export function resolveRevylBackendUrl(raw: string): string {
       reason: 'invalid_provider_url',
     });
   }
-  // WHATWG URL spells an IPv4-mapped loopback (`[::ffff:127.0.0.1]`) as `[::ffff:7f00:1]`.
-  const loopback = ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].includes(url.hostname);
+  const loopback = isLoopbackHostname(url.hostname);
   if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
     throw new AppError(
       'INVALID_ARGS',

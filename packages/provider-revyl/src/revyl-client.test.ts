@@ -29,6 +29,13 @@ test('keeps plain HTTP only on loopback', () => {
     resolveRevylBackendUrl('http://[::ffff:127.0.0.1]:8787'),
     'http://[::ffff:7f00:1]:8787',
   );
+  assert.equal(resolveRevylBackendUrl('http://127.0.0.2:8787'), 'http://127.0.0.2:8787');
+  assert.equal(
+    resolveRevylBackendUrl('http://[::ffff:127.0.0.2]:8787'),
+    'http://[::ffff:7f00:2]:8787',
+  );
+  assert.throws(() => resolveRevylBackendUrl('http://128.0.0.1:8787'));
+  assert.throws(() => resolveRevylBackendUrl('http://[::ffff:8000:1]:8787'));
   assert.throws(
     () => resolveRevylBackendUrl('http://backend.revyl.ai'),
     (error: unknown) =>
