@@ -111,6 +111,12 @@ importers:
       '@agent-device/testmu':
         specifier: workspace:*
         version: link:packages/provider-testmu
+      '@agent-device/tv-cdp':
+        specifier: workspace:*
+        version: link:packages/tv-cdp
+      '@agent-device/webos':
+        specifier: workspace:*
+        version: link:packages/provider-webos
       '@agent-device/xml':
         specifier: workspace:*
         version: link:packages/xml
@@ -676,6 +682,24 @@ importers:
         specifier: workspace:*
         version: link:../test-kit
 
+  packages/provider-webos:
+    devDependencies:
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      '@agent-device/tv-cdp':
+        specifier: workspace:*
+        version: link:../tv-cdp
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
+
   packages/provision-kit:
     dependencies:
       '@agent-device/contracts':
@@ -864,6 +888,21 @@ importers:
       oxc-parser:
         specifier: ^0.146.0
         version: 0.146.0
+
+  packages/tv-cdp:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/xml: {}
 

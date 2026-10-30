@@ -1,3 +1,4 @@
+export const provider = 'testmu';
 export const args = [
   '--platform',
   'android',

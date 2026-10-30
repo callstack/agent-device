@@ -113,6 +113,7 @@ export default defineConfig({
           'aws-device-farm',
           'testmu',
           'limrun',
+          'webos',
         ]),
         group('Reference', ['security-trust', 'known-limitations', 'migrating-gestures']),
       ],

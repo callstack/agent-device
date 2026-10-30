@@ -600,6 +600,16 @@ TestMu AI real-device flow:
   agent-device connect testmu --provider-device-type real --platform ios --device "iPhone 16" --provider-os-version 18 --provider-app ./MyApp.ipa
   Real iOS devices are listed by major OS version (18, not 18.0) and install a signed .ipa. Real and virtual devices have separate upload APIs, so pass an lt:// id uploaded for the pool you connect to.
 
+LG webOS TV flow (web apps, TV in Developer Mode):
+  agent-device plugins add @agent-device/webos
+  agent-device connect webos --device living-room
+  agent-device open com.example.app
+  agent-device tv-remote press down
+  agent-device snapshot -i
+  agent-device close com.example.app
+  agent-device disconnect
+  Prerequisites: the webOS CLI (npm install -g @webos-tools/cli) and the TV in Developer Mode, registered with ares-setup-device. --device names an ares-setup-device entry; connect does not contact the TV, open reads it. The TV enters as an Android TV device with id webos:<ares device>. The page is driven over the Chrome DevTools Protocol through the ares-inspect tunnel.
+
 BrowserStack hosted-device flow:
   BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=...
   agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id

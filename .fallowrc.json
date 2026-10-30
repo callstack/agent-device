@@ -7,6 +7,8 @@
     "packages/provider-testmu/test/package-smoke.mjs",
     "packages/provider-testmu/tsdown.config.ts",
     "packages/provider-testmu/src/plugin.ts",
+    "packages/provider-webos/test/package-smoke.mjs",
+    "packages/provider-webos/tsdown.config.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
@@ -94,6 +96,10 @@
     // through this workspace link to core source so typecheck needs no build; Fallow then credits
     // the source files rather than the package.
     "agent-device",
+    // Nothing in the root imports the webOS plugin or the tv-cdp package it bundles, but layering
+    // requires the root manifest to declare every workspace package.
+    "@agent-device/tv-cdp",
+    "@agent-device/webos",
     // Oxlint resolves the shared config's JS plugins dynamically from their package names.
     "@nkzw/eslint-plugin",
     "eslint-plugin-no-only-tests",
