@@ -173,12 +173,16 @@ class RevylInteractor implements Interactor {
       return;
     }
     let dispatched = 0;
+    const chars = Array.from(text);
     try {
-      for (const char of Array.from(text)) {
+      for (const [index, char] of chars.entries()) {
         if (this.signal?.aborted) throw this.cancellation();
         // Only the first character clears: the rest append to what the field already holds.
         await this.workerAction('input', { x, y, text: char, clear_first: dispatched === 0 });
         dispatched += 1;
+        // The pause goes *between* characters, so the last one has none left to wait out: a caller that
+        // hangs up after the whole text reached the device must not be told its fill was canceled.
+        if (index === chars.length - 1) return;
         await sleep(delayMs, undefined, this.signal === undefined ? {} : { signal: this.signal });
       }
     } catch (error) {

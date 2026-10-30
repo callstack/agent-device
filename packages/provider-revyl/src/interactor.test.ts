@@ -123,7 +123,7 @@ test('fill rides the input action and an empty fill rides clear_text', async () 
 test('a paced fill types one character per pause and clears only on the first', async () => {
   const { fixture, interactor } = await liveInteractor('android');
   const startedAt = Date.now();
-  await interactor.fill(80, 1250, 'abc', 40);
+  await interactor.fill(80, 1250, 'abc', 150);
   const elapsed = Date.now() - startedAt;
 
   const inputs = fixture.requests.filter((request) => request.path.endsWith('/input'));
@@ -136,7 +136,9 @@ test('a paced fill types one character per pause and clears only on the first', 
     ],
     'the field is cleared once, then each character is typed in order',
   );
-  assert.ok(elapsed >= 120, `three paced characters must not land at once (took ${elapsed} ms)`);
+  // Two pauses for three characters, which is what the paced fill waits out. That the last character does
+  // not wait out a pause of its own is what the fill's own return proves, not a clock.
+  assert.ok(elapsed >= 290, `three paced characters must not land at once (took ${elapsed} ms)`);
 });
 
 test('a paced fill that fails partway says how much of the text landed', async () => {
@@ -200,6 +202,30 @@ test('a paced fill canceled mid-text reports the characters that completed', asy
       completedInputs() === 1,
   );
   assert.equal(inputs(), 2, 'no character is typed after the cancellation');
+});
+
+test('a paced fill that has typed all its text reports no cancellation', async () => {
+  // The pause goes between characters, so after the last one there is none left to wait out: the fill is
+  // over the moment its final character is answered. A caller that hangs up then must not be told its text
+  // was canceled when every character of it reached the device.
+  const controller = new AbortController();
+  const { fixture, interactor } = await liveInteractor('android', undefined, {
+    signal: controller.signal,
+  });
+  const filling = interactor.fill(80, 1250, 'ab', 50);
+  await waitFor(
+    () => fixture.answeredPaths().filter((path) => path.endsWith('/input')).length >= 2,
+  );
+  // The answer's own beat, so the fill has returned before the caller hangs up.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  controller.abort();
+
+  await filling;
+  assert.equal(
+    fixture.requests.filter((request) => request.path.endsWith('/input')).length,
+    2,
+    'the text is typed once',
+  );
 });
 
 test('a paced fill canceled during its pause reports the typed cancellation', async () => {
