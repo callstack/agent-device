@@ -44,10 +44,9 @@ export function headCommit(repoRoot: string): string {
 }
 
 /**
- * Files renamed between `base` and `head` (the working tree unless a commit is given),
- * head path -> base path, so a rename is not a new entry. The explicit rename limit keeps
- * inexact detection on regardless of the clone's `diff.renameLimit` config — a bulk move
- * with edits (the daemon extraction) is exactly the inexact case the ratchets must see.
+ * Head path -> base path. Follow committed moves before the aggregate diff, so later edits do not
+ * erase a recorded rename. Added or deleted paths end that lineage. The aggregate diff still finds
+ * a move spread across commits or staged in the working tree. Unlimited detection handles bulk moves.
  */
 export function renamedSince(
   repoRoot: string,
@@ -55,21 +54,55 @@ export function renamedSince(
   head?: string,
 ): ReadonlyMap<string, string> {
   const renamed = new Map<string, string>();
-  const status = git(repoRoot, [
+  const flags = ['--name-status', '-M', '--diff-filter=ADR', '-z'];
+  const follow = (status: Buffer): void => {
+    const fields = status.toString('utf8').split('\0');
+    for (let index = 0; index < fields.length;) {
+      const kind = fields[index++]?.trim();
+      if (!kind) continue;
+      const from = fields[index++];
+      if (!from) continue;
+      if (kind.startsWith('R')) {
+        const to = fields[index++];
+        if (!to) continue;
+        const origin = renamed.get(from) ?? from;
+        renamed.delete(from);
+        renamed.set(to, origin);
+      } else {
+        renamed.delete(from);
+      }
+    }
+  };
+  follow(
+    git(repoRoot, [
+      '-c',
+      'diff.renameLimit=0',
+      'log',
+      '--reverse',
+      '--first-parent',
+      '--format=',
+      ...flags,
+      `${base}..${head ?? 'HEAD'}`,
+    ]),
+  );
+  if (!head) follow(git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, 'HEAD']));
+  const aggregate = git(repoRoot, [
     '-c',
     'diff.renameLimit=0',
     'diff',
-    '--name-status',
-    '-M',
-    '--diff-filter=R',
-    '-z',
+    ...flags,
     base,
     ...(head ? [head] : []),
-  ]);
-  const fields = status.toString('utf8').split('\0');
-  for (let index = 0; index + 2 < fields.length; index += 3) {
-    const [from, to] = [fields[index + 1], fields[index + 2]];
-    if (from && to) renamed.set(to, from);
+  ])
+    .toString('utf8')
+    .split('\0');
+  for (let index = 0; index < aggregate.length;) {
+    const kind = aggregate[index++];
+    const from = aggregate[index++];
+    if (kind?.startsWith('R')) {
+      const to = aggregate[index++];
+      if (from && to && !renamed.has(to)) renamed.set(to, from);
+    }
   }
   return renamed;
 }

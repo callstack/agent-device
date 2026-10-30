@@ -522,6 +522,27 @@ test('a renamed entry is followed to its path at the base, not treated as first-
   ).toBe(null);
 });
 
+test('later edits preserve a committed rename but deletion ends its lineage', () => {
+  const repo = mkGitFixtureRepo('renamed-since-history-');
+  const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim();
+  const moved = 'packages/demo/src/moved.ts';
+  execFileSync('git', ['mv', 'packages/demo/src/entry.ts', moved], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'move'], { cwd: repo });
+  fs.appendFileSync(path.join(repo, moved), '// public API documentation\n'.repeat(100));
+  execFileSync('git', ['commit', '-aqm', 'document'], { cwd: repo });
+  const paired = renamedSince(repo, base, 'HEAD');
+  expect(paired.get(moved)).toBe('packages/demo/src/entry.ts');
+  expect(baseProductionPathOf(repo, moved, createCommittedSourceTree(repo, base), paired)).toBe(
+    'packages/demo/src/entry.ts',
+  );
+  execFileSync('git', ['rm', moved], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'remove'], { cwd: repo });
+  fs.writeFileSync(path.join(repo, moved), 'export const unrelated = true;\n');
+  execFileSync('git', ['add', moved], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'new entry'], { cwd: repo });
+  expect(renamedSince(repo, base, 'HEAD').has(moved)).toBe(false);
+});
+
 test('rename detection survives a git mv with an edit and a hostile renameLimit', () => {
   // The daemon move is the load-bearing case: `git mv` PLUS a per-file edit makes the rename
   // inexact, and a clone-side `diff.renameLimit` below the file count silently disables the
