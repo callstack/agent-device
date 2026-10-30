@@ -568,18 +568,14 @@ export function formatRole(type: string): string {
 }
 
 /**
- * The channel↔producer pairs that can actually occur. One channel is fed by several producers
- * with different guarantees: `xctest` trees come from the local Apple runner, Appium
- * page-source XML, or a limrun element tree, and only the runner's output has been through the
- * runner's presentation (clip fold, effective geometry, scope). Logic that assumes
- * presentation, scope, or geometry guarantees must key on the producer, never on the channel
- * alone.
+ * The channel↔producer pairs that can actually occur. `xctest` trees come from the local Apple
+ * runner, Appium page-source XML, or a cloud provider's AX element tree (Limrun, Revyl), and only
+ * the runner's output has been through its presentation (clip fold, effective geometry, scope).
+ * Logic that assumes those guarantees must key on the producer, never on the channel alone.
  *
- * This table is the single owner of both vocabularies: the platform channel
- * (`SnapshotBackend` is its `backend` projection) and the acquisition producer (the third
- * axis beside the channel and the in-plan capture strategy `SnapshotCaptureBackend`). Every
- * carrier embeds the pair atomically — a cross-channel pair does not compile (pinned by
- * snapshot-provenance.test.ts).
+ * This table owns both vocabularies: the platform channel (`SnapshotBackend` is its `backend`
+ * projection) and the acquisition producer, beside the in-plan `SnapshotCaptureBackend`. Every
+ * carrier embeds the pair atomically, so a cross-channel pair does not compile.
  */
 export type SnapshotProvenance =
   | {
