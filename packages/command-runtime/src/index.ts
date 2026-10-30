@@ -19,7 +19,11 @@ import type {
   RecordingContactSheetCommandResult,
 } from './commands/recording/runtime/contact-sheet.ts';
 
-/** The in-process executor binds only capture, selectors and interaction; other families stay lazy. */
+/**
+ * The in-process executor shares the one construction path with `createAgentDevice`, which binds
+ * every family for the public surface. This shape binds only capture, selectors and interaction;
+ * the other families stay lazy.
+ */
 export type CommandSurfaceAgentDevice = AgentDeviceRuntime & {
   capture: BoundCaptureCommands;
   selectors: BoundSelectorCommands;

@@ -57,7 +57,10 @@ export function createContractDevice(
     policy: localCommandPolicy(),
     ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
-  void device.sessions.set({ name: 'default', snapshot, ...overrides.sessionState });
+  // The default store writes in memory, so the session exists before the device is returned.
+  if (device.sessions.set({ name: 'default', snapshot, ...overrides.sessionState }) !== undefined) {
+    throw new Error('The default session store must write synchronously');
+  }
   return device;
 }
 
