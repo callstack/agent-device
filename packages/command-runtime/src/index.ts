@@ -42,6 +42,6 @@ export async function executeRecordingContactSheet(
 ): Promise<
   import('./commands/recording/runtime/contact-sheet.ts').RecordingContactSheetCommandResult
 > {
-  const { contactSheetCommand } = await import('./commands/recording/runtime/contact-sheet.ts');
-  return contactSheetCommand(createAgentDeviceRuntime(config), options);
+  const { createAgentDevice } = await import('./runtime.ts');
+  return createAgentDevice(config).recording.contactSheet(options);
 }
