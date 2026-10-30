@@ -18,6 +18,18 @@ import type {
 } from '@agent-device/kernel/snapshot';
 
 /**
+ * What every provider tree source leaves unproven today: it reports neither traversal depth nor
+ * hittability. A producer that can prove more overrides this rather than restating it.
+ */
+const TREE_SOURCE_CAPABILITIES = {
+  acquisitionDepth: {
+    rawTraversal: { kind: 'incomplete' },
+    regularPresented: { kind: 'incomplete' },
+  },
+  hittabilityEvidence: 'unavailable',
+} as const;
+
+/**
  * The facts a *provider* acquisition leaves unproven, keyed only by the producers whose residue
  * this module derives.
  *
@@ -30,30 +42,9 @@ import type {
  * {@link IosProviderAcquisitionProducer} makes that claim not compile.
  */
 const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
-  'appium-source': {
-    producer: 'appium-source',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-    hittabilityEvidence: 'unavailable',
-  },
-  'limrun-ios-tree': {
-    producer: 'limrun-ios-tree',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-    hittabilityEvidence: 'unavailable',
-  },
-  'revyl-ios-tree': {
-    producer: 'revyl-ios-tree',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-    hittabilityEvidence: 'unavailable',
-  },
+  'appium-source': { producer: 'appium-source', ...TREE_SOURCE_CAPABILITIES },
+  'limrun-ios-tree': { producer: 'limrun-ios-tree', ...TREE_SOURCE_CAPABILITIES },
+  'revyl-ios-tree': { producer: 'revyl-ios-tree', ...TREE_SOURCE_CAPABILITIES },
 } as const satisfies Record<IosProviderAcquisitionProducer, IosProviderAcquisitionCapabilities>;
 
 /**

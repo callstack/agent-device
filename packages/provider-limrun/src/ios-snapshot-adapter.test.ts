@@ -230,3 +230,16 @@ for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam
     expect(result.acquisition.nodes[0]?.selected).toBe(row.limrun!.expected.selected);
   });
 }
+
+test('Limrun adapter publishes the AX subrole the instance reports', async () => {
+  const tree = limrunSnapshotTree();
+  tree.children![0]!.children!.push({
+    elementType: 'TextField',
+    label: 'Password',
+    subrole: 'AXSecureTextField',
+    frame: { x: 10, y: 10, width: 100, height: 30 },
+  });
+  const result = await captureLimrunIosSnapshot(createLimrunSnapshotSession(tree));
+  const field = result.acquisition.nodes.find((node) => node.label === 'Password');
+  expect(field).toMatchObject({ subrole: 'AXSecureTextField', password: true });
+});

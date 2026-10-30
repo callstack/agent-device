@@ -416,6 +416,20 @@ for (const [name, hierarchy] of [
   });
 }
 
+test('an iOS tree without a usable root frame takes the health screen as its viewport', async () => {
+  const { interactor } = await liveInteractor('ios', {
+    screen: { width: 440, height: 956 },
+    hierarchy: JSON.stringify([{ type: 'Application', AXLabel: 'App', children: [] }]),
+  });
+  const result = await interactor.snapshot({});
+  if (!('stage' in result) || result.stage !== 'acquired')
+    throw new Error('Expected an iOS acquisition');
+  assert.deepEqual(result.acquisition.viewport, {
+    kind: 'reported',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+});
+
 test('an iOS screenshot whose density is unknown is refused rather than published at the wrong scale', async () => {
   const { interactor } = await liveInteractor('ios', { withoutScreen: true });
   const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-noscreen-'), 'shot.png');

@@ -153,6 +153,10 @@ export function resolveIosAxTreeViewport(
   );
 }
 
+/**
+ * The root as `resolveIosViewportEvidenceFromRoots` reads it: its type, its usable rect when it has
+ * one, and whether the box it reports is absent, reported, or too small to be a viewport.
+ */
 function viewportRoot(node: IosTreeNode) {
   const rawRect = node.rect ?? node.frame;
   const rect = readIosNodeRect(node);

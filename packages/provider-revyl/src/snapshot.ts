@@ -42,18 +42,20 @@ export async function captureRevylSnapshot(
   // Parsing is not cancelable, so a capture the caller gave up on is refused before it is built.
   signal?.throwIfAborted();
   return session.platform === 'ios'
-    ? await captureRevylIosSnapshot(hierarchy, session.runId)
+    ? await captureRevylIosSnapshot(hierarchy, session.runId, reader.viewport())
     : await captureRevylAndroidSnapshot(hierarchy, reader.viewport());
 }
 
 /**
  * iOS: the AX node tree goes through the same reader and interpreter as Limrun's iOS tree, and comes
  * back as an acquisition for the host to present. The viewport is the tree's own application root,
- * because that is the box its frames were measured in.
+ * because that is the box its frames were measured in; without a usable root it is `health`'s screen,
+ * which Revyl reports in the same points on iOS.
  */
 async function captureRevylIosSnapshot(
   hierarchy: string,
   runId: string,
+  screen: SnapshotViewportSize | undefined,
 ): Promise<SnapshotRuntimeResult> {
   const [{ flattenIosTree, resolveIosAxTreeViewport }, { interpretIosNode }, acquisition] =
     await Promise.all([
@@ -66,7 +68,9 @@ async function captureRevylIosSnapshot(
   const viewport =
     reported?.kind === 'reported'
       ? { kind: 'derived' as const, rect: reported.rect }
-      : (reported ?? { kind: 'missing' as const, reason: 'not-provided' as const });
+      : screen !== undefined
+        ? { kind: 'reported' as const, rect: { x: 0, y: 0, ...screen } }
+        : (reported ?? { kind: 'missing' as const, reason: 'not-provided' as const });
   return acquisition.createIosSnapshotAcquisition({
     producer: 'revyl-ios-tree',
     ...acquireProviderKeyboard({
