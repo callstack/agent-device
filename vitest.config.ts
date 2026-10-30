@@ -154,6 +154,7 @@ export default defineConfig({
             'scripts/__tests__/help-conformance-sample-outputs.test.ts',
             'scripts/__tests__/help-conformance-topic-coverage.test.ts',
             'scripts/__tests__/eager-closure-budgets.test.ts',
+            'scripts/__tests__/committed-source-tree.test.ts',
             'scripts/__tests__/mutation-scope-budget.test.ts',
             'scripts/__tests__/closure-growth-rule.test.ts',
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
