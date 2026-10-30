@@ -25,6 +25,10 @@ test('uses the public Revyl backend when no URL is configured', () => {
 test('keeps plain HTTP only on loopback', () => {
   assert.equal(resolveRevylBackendUrl('http://127.0.0.1:8787'), 'http://127.0.0.1:8787');
   assert.equal(resolveRevylBackendUrl('http://localhost:8787'), 'http://localhost:8787');
+  assert.equal(
+    resolveRevylBackendUrl('http://[::ffff:127.0.0.1]:8787'),
+    'http://[::ffff:7f00:1]:8787',
+  );
   assert.throws(
     () => resolveRevylBackendUrl('http://backend.revyl.ai'),
     (error: unknown) =>

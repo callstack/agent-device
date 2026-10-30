@@ -14,10 +14,11 @@ import type {
 
 export const REVYL_DEFAULT_BACKEND_URL = 'https://backend.revyl.ai';
 
-/** Sent on every request so Revyl can attribute the sessions this runtime starts. */
-const REVYL_CLIENT_HEADER = 'agent-device';
-/** Sent on every device-proxy action; Revyl attributes the action to the driver behind it. */
-const REVYL_AGENT_HEADER = 'agent-device';
+/**
+ * How agent-device names itself to Revyl: as the client on every request, and as the agent on every
+ * device-proxy action, which is where Revyl attributes an action to the driver behind it.
+ */
+const REVYL_ATTRIBUTION = 'agent-device';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
@@ -95,7 +96,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
     Authorization: `Bearer ${options.apiKey}`,
     Accept: 'application/json',
     'User-Agent': `agent-device/${options.clientVersion}`,
-    'X-Revyl-Client': REVYL_CLIENT_HEADER,
+    'X-Revyl-Client': REVYL_ATTRIBUTION,
   };
 
   async function send(request: RevylRequest): Promise<RevylResponse> {
@@ -230,7 +231,7 @@ async function sendOnce(
   const timeout = AbortSignal.timeout(request.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
   const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
   const headers = { ...baseHeaders };
-  if (request.workerAction) headers['X-Revyl-Agent'] = REVYL_AGENT_HEADER;
+  if (request.workerAction) headers['X-Revyl-Agent'] = REVYL_ATTRIBUTION;
   if (request.body !== undefined) headers['Content-Type'] = 'application/json';
   try {
     const response = await fetchImpl(new URL(request.path, backendUrl), {
@@ -529,7 +530,8 @@ export function resolveRevylBackendUrl(raw: string): string {
       reason: 'invalid_provider_url',
     });
   }
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  // WHATWG URL spells an IPv4-mapped loopback (`[::ffff:127.0.0.1]`) as `[::ffff:7f00:1]`.
+  const loopback = ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].includes(url.hostname);
   if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
     throw new AppError(
       'INVALID_ARGS',

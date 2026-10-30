@@ -67,11 +67,15 @@ test('a frame with a non-finite component is no rect at all, and the subrole is 
 });
 
 test('a root whose frame is not finite reports no viewport instead of a usable one', () => {
+  expect(resolveIosAxTreeViewport([{ type: 'Application' }])).toEqual({
+    kind: 'missing',
+    reason: 'not-provided',
+  });
   expect(
     resolveIosAxTreeViewport([
       { type: 'Application', frame: { x: 0, y: 0, width: Number.NaN, height: 956 } },
     ]),
-  ).toEqual({ kind: 'missing', reason: 'not-provided' });
+  ).toEqual({ kind: 'missing', reason: 'invalid' });
   expect(
     resolveIosAxTreeViewport([{ type: 'Application', frame: { x: 0, y: 0, width: 0, height: 0 } }]),
   ).toEqual({ kind: 'missing', reason: 'invalid' });

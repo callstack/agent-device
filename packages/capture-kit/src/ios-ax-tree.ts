@@ -163,11 +163,10 @@ function viewportRoot(node: IosTreeNode) {
   return {
     type: node.elementType ?? node.type ?? node.role,
     ...(rect ? { rect } : {}),
-    rectStatus:
-      !rawRect || !rect
-        ? ('not-provided' as const)
-        : rect.width > 0 && rect.height > 0
-          ? ('reported' as const)
-          : ('invalid' as const),
+    rectStatus: !rawRect
+      ? ('not-provided' as const)
+      : rect && rect.width > 0 && rect.height > 0
+        ? ('reported' as const)
+        : ('invalid' as const),
   };
 }

@@ -195,8 +195,8 @@ export function revylUnsupportedOperationFacts(liveSession?: RuntimeOperationUna
     ...clipboardRuntimeOperationFacts({
       unsupported: liveSession ?? clipboardUnavailable,
     }),
-    // The gate is the device, so a live session refuses each setting for the provider-mode reason
-    // and a gone one for the session reason; no setting either platform answers.
+    // `target` admits the device as a settings target; `unsupported` then refuses every setting, for the
+    // provider-mode reason on a live session and the session reason on a gone one.
     ...settingsRuntimeOperationFacts({
       target: liveSession ?? available,
       unsupported: liveSession ?? settingsUnavailable,

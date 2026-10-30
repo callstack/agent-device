@@ -21,13 +21,13 @@ import type {
  * What every provider tree source leaves unproven today: it reports neither traversal depth nor
  * hittability. A producer that can prove more overrides this rather than restating it.
  */
-const TREE_SOURCE_CAPABILITIES = {
-  acquisitionDepth: {
-    rawTraversal: { kind: 'incomplete' },
-    regularPresented: { kind: 'incomplete' },
-  },
+const TREE_SOURCE_CAPABILITIES = Object.freeze({
+  acquisitionDepth: Object.freeze({
+    rawTraversal: Object.freeze({ kind: 'incomplete' }),
+    regularPresented: Object.freeze({ kind: 'incomplete' }),
+  }),
   hittabilityEvidence: 'unavailable',
-} as const;
+} as const);
 
 /**
  * The facts a *provider* acquisition leaves unproven, keyed only by the producers whose residue
