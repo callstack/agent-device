@@ -423,7 +423,8 @@ test('a backend that keeps its own session identity is refused and that session 
 
 test('a start canceled while it is in flight stops the session it rented', async () => {
   // Revyl is still deciding when the caller hangs up, which is the case a bare signal on the request
-  // would get wrong: the answer that names the device never arrives.
+  // would get wrong: the answer that names the device never arrives. The request is not aborted, so that
+  // answer still comes and the end is made from what it says.
   const fixture = await backend({ startDelayMs: 200 });
   const runtime = fixture.createRuntime();
   const controller = new AbortController();
@@ -439,11 +440,11 @@ test('a start canceled while it is in flight stops the session it rented', async
     async () => await allocating,
     (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
   );
-  assert.ok(
+  // The stop follows the answer, not the cancellation: the answer is what names the device.
+  await waitFor(() =>
     stops(fixture).includes(
       `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
     ),
-    `a canceled start must stop the device it rented: ${stops(fixture).join(', ')}`,
   );
 });
 
@@ -507,8 +508,8 @@ test('a start whose verdict never came back is stopped by the session it was iss
 });
 
 test('a start slower than the allocation budget is given up on and its session stopped', async () => {
-  // Revyl is still deciding when the caller's own budget runs out. The request must not be held open
-  // past it, and the session that request named must not survive it either.
+  // Revyl is still deciding when the caller's own budget runs out. The caller is answered at once, and the
+  // session the late answer names must not survive it.
   const fixture = await backend({ startDelayMs: 400 });
   const runtime = fixture.createRuntime();
 
@@ -517,15 +518,57 @@ test('a start slower than the allocation budget is given up on and its session s
       await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
     (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
   );
-  assert.deepEqual(stops(fixture), [
-    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
-  ]);
-  // The readiness polls belong to a start the caller no longer has, so none may have been sent.
+  // The readiness polls belong to a start the caller no longer has, so none may have been sent yet.
   assert.equal(
     fixture.paths().filter((path) => path.endsWith('/health')).length,
     0,
     'a start the caller gave up on never reaches readiness',
   );
+  await waitFor(() => stops(fixture).length > 0);
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+});
+
+test('a release waits for the answer of a start its caller gave up on and stops what it rented', async () => {
+  // The caller's budget ran out while Revyl was still deciding, so the device is only named by the answer
+  // that is still to come. A release that landed in the meantime would find no session and report a device
+  // Revyl is about to rent.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.allocate?.(lease, { deadline: Date.now() + 150 }),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.deepEqual(stops(fixture), [], 'the stop waits for the answer that names the device');
+
+  const released = await runtime.leaseLifecycle!.release!(lease);
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.deepEqual(released?.warnings, undefined);
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+  await runtime.shutdown();
+  assert.equal(stops(fixture).length, 1, 'the released device is not stopped twice');
+});
+
+test('shutdown stops a device whose start answered after its caller gave up', async () => {
+  // Nothing is left to release here: the caller's own failure already ended its request for the device, so
+  // the only thing standing between this runtime and a device under rent is the end waiting on the answer.
+  const fixture = await backend({ startDelayMs: 400 });
+  const runtime = fixture.createRuntime();
+
+  await assert.rejects(
+    async () =>
+      await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  await runtime.shutdown();
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
 });
 
 test('Revyl answers health with 503 until the worker attaches, and the start keeps polling', async () => {

@@ -28,6 +28,7 @@ import {
   startRevylSession,
   stopRevylSession,
   type RevylCallerBudget,
+  type RevylLateStartEnd,
   type RevylSession,
 } from './revyl-session.ts';
 import { createRevylInteractor } from './interactor.ts';
@@ -123,6 +124,12 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    * allocation of that lease joins it rather than renting a device nobody will stop.
    */
   private readonly pendingAllocations = new Map<string, Promise<RevylAllocation>>();
+  /**
+   * Ends of starts whose caller stopped waiting, one per lease. The request outlives that caller to learn
+   * what it rented, so a release or shutdown that arrives in the meantime waits for this rather than
+   * reporting a device Revyl is still holding.
+   */
+  private readonly lateStartEnds = new Map<string, Promise<RevylLateStartEnd | undefined>>();
   private shuttingDown = false;
   readonly provider = REVYL_PROVIDER;
 
@@ -194,16 +201,33 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   /**
    * Ends every session this runtime holds and reports what it could not confirm. An allocation still
    * waiting for its device is awaited first: it has already rented one, and dropping it here would
-   * leave that device running with nobody holding its id. A stop that failed keeps its lease in the
-   * table, so a later release, or a daemon that survives this shutdown, can retry the same session
-   * instead of recording a release Revyl never confirmed.
+   * leave that device running with nobody holding its id. So is a start whose caller gave up: its request
+   * is still owed the answer that names the device, and the end made from that answer is the only thing
+   * that stops it. A stop that failed keeps its lease in the table, so a later release, or a daemon that
+   * survives this shutdown, can retry the same session instead of recording a release Revyl never
+   * confirmed.
    */
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
     await this.awaitInFlightAllocations();
+    const lateEnds = await this.drainLateStartEnds();
     const sessions = [...this.sessions.entries()];
-    const outcomes = await Promise.all(
-      sessions.map(async ([leaseId, session]) => {
+    const outcomes = await Promise.all([
+      ...lateEnds.map(async (end) =>
+        end === undefined
+          ? undefined
+          : {
+              sessionId: end.sessionId,
+              warning: end.confirmed
+                ? undefined
+                : {
+                    code: 'REVYL_SESSION_STOP_FAILED',
+                    message: `Revyl did not confirm the release of the session its late start reported (${end.sessionId}).`,
+                    providerSessionId: end.sessionId,
+                  },
+            },
+      ),
+      ...sessions.map(async ([leaseId, session]) => {
         // `stopSession` reads Revyl's "no such session" as released; anything else keeps the lease.
         const warning = await this.stopSession(session.runId, session.sessionId);
         if (warning === undefined) {
@@ -212,19 +236,26 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
         }
         return { sessionId: session.sessionId, warning };
       }),
-    );
-    const unconfirmed = outcomes.filter((outcome) => outcome.warning !== undefined);
+    ]);
+    const unconfirmed = outcomes.filter((outcome) => outcome?.warning !== undefined);
     if (unconfirmed.length === 0) return;
     throw new AppError(
       'COMMAND_FAILED',
-      `Revyl did not release ${unconfirmed.length} of ${sessions.length} session(s) this runtime started.`,
+      `Revyl did not release ${unconfirmed.length} of ${sessions.length + lateEnds.length} session(s) this runtime started.`,
       {
         reason: 'provider-cleanup-pending',
-        providerSessionIds: unconfirmed.map((outcome) => outcome.sessionId),
-        causes: unconfirmed.map((outcome) => outcome.warning?.message ?? ''),
+        providerSessionIds: unconfirmed.map((outcome) => outcome!.sessionId),
+        causes: unconfirmed.map((outcome) => outcome!.warning?.message ?? ''),
         hint: 'End the listed Revyl sessions; their devices stay rented and billed until they are.',
       },
     );
+  }
+
+  /** Takes every pending end of a start whose caller gave up, so shutdown can report what they found. */
+  private async drainLateStartEnds(): Promise<Array<RevylLateStartEnd | undefined>> {
+    const pending = [...this.lateStartEnds.values()];
+    this.lateStartEnds.clear();
+    return await Promise.all(pending.map(async (end) => await end.catch(() => undefined)));
   }
 
   /** Registers one allocation as in flight, so {@link shutdown} either waits for it or refuses it. */
@@ -383,6 +414,11 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       deviceModel: selection.deviceModel,
       osVersion: selection.osVersion,
       ...revylCallerBudget(context),
+      // A start this caller gave up on still gets an answer, and that answer names the device. The end it
+      // triggers belongs to the lease, so the release that follows waits for it.
+      onLateStart: (cleanup) => {
+        this.lateStartEnds.set(lease.leaseId, cleanup);
+      },
     });
   }
 
@@ -403,6 +439,24 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // — one that failed has already stopped what it rented — and waiting is what makes the stop below see
     // the session it rented.
     await this.awaitPendingAllocation(lease.leaseId);
+    const lateEnd = await this.awaitLateStartEnd(lease.leaseId);
+    if (lateEnd !== undefined) {
+      if (!lateEnd.confirmed) {
+        return {
+          providerSessionId: lateEnd.sessionId,
+          warnings: [
+            {
+              code: 'REVYL_SESSION_STOP_FAILED',
+              message: `Revyl did not confirm the release of the session its late start reported (${lateEnd.sessionId}).`,
+              providerSessionId: lateEnd.sessionId,
+            },
+          ],
+          hint: `End the Revyl session ${lateEnd.sessionId}; the device stays rented and billed until it is.`,
+        };
+      }
+      this.rememberRelease(lease.leaseId, lateEnd.sessionId);
+      return { providerSessionId: lateEnd.sessionId };
+    }
     const session = this.sessions.get(lease.leaseId);
     if (!session) {
       const confirmed = this.confirmedReleases.get(lease.leaseId);
@@ -428,6 +482,17 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    */
   private async awaitPendingAllocation(leaseId: string): Promise<void> {
     await this.pendingAllocations.get(leaseId)?.catch(() => undefined);
+  }
+
+  /**
+   * Waits for the end of a start this lease's caller gave up on, and takes it: the release that waits
+   * reports what that end found, and a repeat release has nothing left to report.
+   */
+  private async awaitLateStartEnd(leaseId: string): Promise<RevylLateStartEnd | undefined> {
+    const end = this.lateStartEnds.get(leaseId);
+    if (end === undefined) return undefined;
+    this.lateStartEnds.delete(leaseId);
+    return await end.catch(() => undefined);
   }
 
   /**
