@@ -1,3 +1,4 @@
+import net from 'node:net';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderPluginHost } from 'agent-device/plugins';
 import {
@@ -132,38 +133,41 @@ function isPublicAppUrl(value: string): boolean {
 
 /** Hostnames only the caller's own network can answer, which is where Revyl's fetcher never reaches. */
 function isPublicHost(hostname: string): boolean {
-  // `URL.hostname` keeps the brackets around an IPv6 literal.
-  const host = hostname.replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
+  // `URL.hostname` keeps the brackets around an IPv6 literal, and a trailing dot is the root label.
+  const host = hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
   if (host === 'localhost' || host.endsWith('.localhost')) return false;
   if (host.endsWith('.local') || host.endsWith('.internal')) return false;
-  const address = host.includes(':') ? parseIpv6(host) : parseIpv4(host);
-  if (address === undefined) return true;
-  return !isNonRoutableAddress(address);
+  // `URL` has already reduced every IPv4 spelling (decimal, hex, octal, short) to dotted form, and
+  // `net` is what says which family the address it settled on belongs to.
+  const family = net.isIP(host);
+  if (family === 4) return !isNonRoutableIpv4(host.split('.').map(Number));
+  if (family === 6) return !isNonRoutableIpv6(host);
+  return true;
 }
 
-function parseIpv4(host: string): number[] | undefined {
-  const parts = host.split('.');
-  if (parts.length !== 4) return undefined;
-  const bytes = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));
-  return bytes.every((byte) => byte >= 0 && byte <= 255) ? bytes : undefined;
+/**
+ * An IPv6 address that stands for an IPv4 one reaches that v4 host, so it has to pass the v4 rules:
+ * `URL` writes the mapped form with the embedded address in hex (`::ffff:7f00:1` is 127.0.0.1), and the
+ * dotted spelling survives as digits.
+ */
+function isNonRoutableIpv6(host: string): boolean {
+  if (host === '::' || host === '::1') return true;
+  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return true;
+  const embedded = /^::ffff:(.+)$/.exec(host)?.[1];
+  if (embedded === undefined) return false;
+  if (net.isIP(embedded) === 4) return isNonRoutableIpv4(embedded.split('.').map(Number));
+  const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(embedded);
+  if (!hex) return false;
+  const upper = Number.parseInt(hex[1]!, 16);
+  const lower = Number.parseInt(hex[2]!, 16);
+  return isNonRoutableIpv4([upper >> 8, upper & 0xff, lower >> 8, lower & 0xff]);
 }
 
-function parseIpv6(host: string): string | undefined {
-  return /^[0-9a-f:]+$/.test(host) && host.includes(':') ? host : undefined;
-}
-
-function isNonRoutableAddress(address: number[] | string): boolean {
-  if (typeof address === 'string') {
-    const compressed = address.toLowerCase();
-    return (
-      compressed === '::' ||
-      compressed === '::1' ||
-      compressed.startsWith('fc') ||
-      compressed.startsWith('fd') ||
-      compressed.startsWith('fe80')
-    );
-  }
-  const [a, b] = address as [number, number, number, number];
+/** The ranges a Revyl worker can never reach: loopback, private, link-local and carrier NAT. */
+function isNonRoutableIpv4(address: number[]): boolean {
+  // `net.isIP` has already shown the host is a dotted quad, so the first two octets are there.
+  const a = address[0] ?? 0;
+  const b = address[1] ?? 0;
   // 0.0.0.0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16 (link-local), 172.16/12, 192.168/16.
   if (a === 0 || a === 10 || a === 127) return true;
   if (a === 169 && b === 254) return true;

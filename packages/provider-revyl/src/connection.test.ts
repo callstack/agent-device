@@ -119,6 +119,14 @@ test('verify refuses an app URL only the caller own network can serve', async ()
     'https://builder.local/app.zip',
     'https://vpn.internal/app.zip',
     'https://user:pass@apps.test/app.zip',
+    // The same loopback and link-local hosts written another way. `URL` reduces the first three to
+    // 127.0.0.1, and the last two are IPv6 addresses that stand for an IPv4 one, which the old textual
+    // compare read as an unfamiliar address and let through.
+    'https://2130706433/app.zip',
+    'https://0x7f.0.0.1/app.zip',
+    'https://0177.0.0.1/app.zip',
+    'https://[::ffff:127.0.0.1]/app.zip',
+    'https://[::ffff:a9fe:101]/app.zip',
   ]) {
     await assert.rejects(
       verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
@@ -134,6 +142,9 @@ test('verify refuses an app URL only the caller own network can serve', async ()
     'https://100.128.0.1/app.zip',
     'https://172.32.0.1/app.zip',
     'https://169.1.2.3/app.zip',
+    // The closest negatives to the mapped forms above: a public address in the same spelling.
+    'https://[::ffff:8.8.8.8]/app.zip',
+    'https://8.8.8.8/app.zip',
   ]) {
     await verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
       appUrl,
