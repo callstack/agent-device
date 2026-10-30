@@ -64,7 +64,11 @@ export async function resolveScreenshotGenericExecution(
   const { req, session } = params;
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
-  assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotPixelDensity(
+    session.device,
+    req.flags?.screenshotPixelDensity,
+    req.flags?.screenshotNativeDensity,
+  );
   assertSupportedScreenshotCaptureBackend(req.flags);
 
   const request = readScreenshotRequest(req, params.hostCwd);
@@ -230,6 +234,7 @@ async function executeScreenshot(
       device: session.device,
       path: captured.path,
       requestedPixelDensity: flags?.screenshotPixelDensity,
+      nativeDensity: flags?.screenshotNativeDensity,
       scale: flags?.screenshotScale,
     })),
   };

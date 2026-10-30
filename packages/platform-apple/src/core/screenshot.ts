@@ -84,7 +84,7 @@ type SimulatorScreenshotFlowDeps = {
   normalizeDensity: (
     device: DeviceInfo,
     outPath: string,
-    pixelDensity: number | undefined,
+    pixelDensity: number | 'native' | undefined,
     sourcePixelDensity: number | undefined,
   ) => Promise<void>;
   captureWithRunner: (
@@ -103,7 +103,7 @@ type SimulatorScreenshotFlowOptions = {
   env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
-  pixelDensity?: number;
+  pixelDensity?: number | 'native';
   screenMask?: ScreenshotScreenMask;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
@@ -481,9 +481,10 @@ function shouldEnsureBootedAfterSimulatorScreenshotFailure(error: unknown): bool
 async function normalizeIosSimulatorScreenshotDensity(
   device: DeviceInfo,
   outPath: string,
-  pixelDensity: number | undefined,
+  pixelDensity: number | 'native' | undefined,
   sourcePixelDensity?: number,
 ): Promise<void> {
+  if (pixelDensity === 'native') return;
   // Both the captured panel's `pointScale` and the runner's reported scale describe the image that
   // was actually taken. `SIMULATOR_MAINSCREEN_SCALE` describes one fixed panel, so on a foldable it
   // can disagree with the panel that was captured, and it is only ever consulted when nothing
