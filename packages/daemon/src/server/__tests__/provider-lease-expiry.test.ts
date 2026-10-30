@@ -314,3 +314,33 @@ test('shutdown makes the journal write a pending retry still owed', async () => 
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('adopted leases whose record is not durable stay journaled through later journal writes', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const options = {
+    recoverExpiredLease: async () => undefined,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+  };
+  const killedDaemon = createExpiredProviderLeaseReleaser(options);
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => killedDaemon.recordLiveLeases(leases),
+  });
+  const orphan = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+  killedDaemon.shutdown();
+  // The expired record cannot be written, so adoption keeps the leases only in memory and the journal.
+  fs.mkdirSync(`${stateDir}/expired-provider-leases.json`);
+  const restarted = createExpiredProviderLeaseReleaser({
+    ...options,
+    recoverExpiredLease: () => new Promise<void>(() => {}),
+  });
+  try {
+    // The new daemon's registry is empty, so this journal write has no live leases of its own.
+    restarted.recordLiveLeases([]);
+    const journal = JSON.parse(fs.readFileSync(`${stateDir}/live-provider-leases.json`, 'utf8'));
+    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([orphan.leaseId]);
+  } finally {
+    restarted.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

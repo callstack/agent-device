@@ -133,13 +133,10 @@ export function createExpiredProviderLeaseReleaser(options: {
     const unpersisted = [...pendingRecoveryLeases.values()].filter(
       (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
     );
+    // `release` admits only recoverable leases to `pendingRecoveryLeases`, so both sources are already
+    // recoverable. The recovery copy is spread last: for a lease in both, the expired one is current.
     const journal = new Map(
-      [
-        ...liveLeases,
-        ...unpersisted.filter((lease) =>
-          isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
-        ),
-      ].map((lease) => [lease.leaseId, lease] as const),
+      [...liveLeases, ...unpersisted].map((lease) => [lease.leaseId, lease] as const),
     );
     try {
       writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
@@ -296,9 +293,10 @@ export function createExpiredProviderLeaseReleaser(options: {
         clearTimeout(journalRetryTimer);
         journalRetryTimer = undefined;
         writeJournal();
-        if (journalRetryTimer) clearTimeout(journalRetryTimer);
-        journalRetryTimer = undefined;
       }
+      // A last attempt that failed re-armed the timer; nothing runs it after shutdown.
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
     },
   };
 }
