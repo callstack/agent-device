@@ -8,6 +8,6 @@ import type { DaemonConnection, EnsureDaemonOptions } from '@agent-device/contra
  * machinery.
  */
 export async function ensureDaemon(options?: EnsureDaemonOptions): Promise<DaemonConnection> {
-  const { ensureDaemon: ensure } = await import('../daemon-client/daemon-client-ensure.ts');
+  const { ensureDaemon: ensure } = await import('@agent-device/daemon-client');
   return await ensure(options);
 }

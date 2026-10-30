@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStderr } from '../__tests__/test-utils/stream-capture.ts';
+import { withCapturedStderr } from '@agent-device/test-kit';
 import { createCommandProgressState, createStderrCommandProgressSink } from './command-progress.ts';
 
 test('the stderr sink renders command progress and records that it did', () => {

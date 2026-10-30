@@ -12,10 +12,7 @@ import {
   type CoverageConfig,
   type RunSelection,
 } from './stamp.ts';
-import {
-  beginStderrCapture,
-  beginStdoutCapture,
-} from '../../src/__tests__/test-utils/stream-capture.ts';
+import { beginStderrCapture, beginStdoutCapture } from '@agent-device/test-kit';
 
 // The verdict is what CI enforces on a PR, so these run the real entrypoint against a real git
 // repo, a real fallow, a real stamp, and hand-built coverage reports — a stub of fallow could not

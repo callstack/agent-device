@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
-import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
@@ -24,6 +23,7 @@ import {
   mkdtempForTestSync,
   bindTestCommandHost,
   createTestHostEnvironment,
+  beginStdoutCapture,
 } from '@agent-device/test-kit';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 

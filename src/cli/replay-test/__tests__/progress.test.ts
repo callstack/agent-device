@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { withStreamTty } from '../../../__tests__/test-utils/stream-capture.ts';
+import { withStreamTty } from '@agent-device/test-kit';
 import { createReplayTestProgressRenderer } from '../progress.ts';
 import type { ReplayTestResult } from '../reporters/types.ts';
 

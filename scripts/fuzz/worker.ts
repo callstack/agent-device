@@ -7,7 +7,7 @@
 // caught at all: only a separate process keeps that fault off the caller, whose thread may be
 // the unit lane's test runner (#2053).
 
-import { beginStderrCapture } from '../../src/__tests__/test-utils/stream-capture.ts';
+import { beginStderrCapture } from '@agent-device/test-kit';
 import { checkCase, type FuzzFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 

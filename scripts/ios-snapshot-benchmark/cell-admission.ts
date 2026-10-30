@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { readDaemonInfo } from '../../src/daemon-client/daemon-client-metadata.ts';
+import { readRecordedDaemon } from '../lib/recorded-daemon.ts';
 import { isAgentDeviceDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import {
   openFixture,
@@ -204,7 +204,7 @@ function assertDaemonStopped(stateDir: string): void {
 }
 
 function assertDaemonRunning(stateDir: string): void {
-  const info = readDaemonInfo(resolveDaemonPaths(stateDir).infoPath);
+  const info = readRecordedDaemon(resolveDaemonPaths(stateDir).infoPath);
   if (!info?.processStartTime || !isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
     throw new BenchmarkCellAdmissionError(
       'cell-state',

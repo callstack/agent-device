@@ -6,12 +6,12 @@ import type {
 } from '@agent-device/contracts/daemon-command-surface';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import { createDaemonRuntimeDeps } from '../../daemon-composition.ts';
-import { currentDaemonCodeSignature } from './daemon-http-fixture.ts';
 
 export type PublicDaemonRuntimeFixture = Readonly<{
   stateDir: string;
@@ -58,10 +58,11 @@ export async function startPublicDaemonRuntime(
   if (!runtime) throw new Error('The public daemon runtime did not start.');
   try {
     const paths = resolveDaemonPaths(stateDir);
+    const identity = await resolveLocalDaemonCodeIdentity();
     const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as Record<string, unknown>;
     fs.writeFileSync(
       paths.infoPath,
-      `${JSON.stringify({ ...info, codeSignature: currentDaemonCodeSignature() })}\n`,
+      `${JSON.stringify({ ...info, codeSignature: identity.origin === 'checkout' ? identity.codeSignature : undefined })}\n`,
     );
     const port = runtime.httpPort ?? runtime.socketPort;
     if (port === undefined) {

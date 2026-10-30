@@ -1,4 +1,8 @@
-import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createTestHostEnvironment,
+  beginStdoutCapture,
+} from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -6,7 +10,6 @@ import { connectionWorkspace, createTestClient } from './remote-connection.fixtu
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
-import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
 bindTestCommandHost();

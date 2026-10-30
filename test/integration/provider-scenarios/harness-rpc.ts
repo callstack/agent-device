@@ -1,4 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import {
+  leaseScopeFromRequest,
+  leaseScopeToLeaseRpcParams,
+  readLeaseAllocateProviderFlags,
+} from '@agent-device/contracts/lease-scope';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { ProviderScenarioRpcResult } from './harness.ts';
 
@@ -68,6 +74,47 @@ export function envelopeToRpcResult(
       jsonrpc: '2.0',
       id,
       error: envelope.error ?? { code: statusCode, message: '' },
+    },
+  };
+}
+
+const LEASE_RPC_METHODS = {
+  lease_allocate: 'agent_device.lease.allocate',
+  lease_heartbeat: 'agent_device.lease.heartbeat',
+  lease_release: 'agent_device.lease.release',
+} as const;
+
+/**
+ * The JSON-RPC envelope a scenario posts to the daemon's `/rpc` itself: the wire a remote client
+ * speaks, built independently of the client transport so a scenario can send what no client does.
+ */
+export function buildRpcPayload(
+  req: DaemonWireRequest,
+  options: { includeTokenParam: boolean },
+): {
+  jsonrpc: '2.0';
+  id: string;
+  method: string;
+  params: DaemonWireRequest | Record<string, unknown>;
+} {
+  const id = req.meta?.requestId ?? randomUUID();
+  const leaseMethod = LEASE_RPC_METHODS[req.command as keyof typeof LEASE_RPC_METHODS];
+  if (!leaseMethod) return { jsonrpc: '2.0', id, method: 'agent_device.command', params: req };
+  const command = req.command as keyof typeof LEASE_RPC_METHODS;
+  return {
+    jsonrpc: '2.0',
+    id,
+    method: leaseMethod,
+    params: {
+      ...leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+        includeTokenParam: options.includeTokenParam,
+        token: req.token,
+        session: req.session,
+      }),
+      ...(command === 'lease_allocate' ? readLeaseAllocateProviderFlags(req.flags) : {}),
+      ...(command === 'lease_allocate' && req.meta?.providerCredentialFingerprint
+        ? { providerCredentialFingerprint: req.meta.providerCredentialFingerprint }
+        : {}),
     },
   };
 }

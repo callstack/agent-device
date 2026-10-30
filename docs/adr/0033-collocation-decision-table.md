@@ -143,7 +143,7 @@ The `client-side` logical-module policy prohibits every edge into `packages/daem
 - CLI.
 - Typed client.
 - Remote transports.
-- `src/daemon-client/`.
+- `packages/daemon-client/src/`.
 
 R78 also prohibits access through any root module reachable by the CLI process.
 #3288's `daemon-contracts` zone declared ownership below both daemon and client.

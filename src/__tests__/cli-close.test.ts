@@ -10,7 +10,7 @@ import {
   type StoredConnectionSeed,
 } from './remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import type { DaemonRequest, DaemonResponse } from '../daemon-client/daemon-client.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon-client';
 
 function runCliWithDaemonStartupFailure(argv: string[]): Promise<CapturedCliRun> {
   return runCliCapture(argv, async () => {

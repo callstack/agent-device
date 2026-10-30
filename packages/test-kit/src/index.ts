@@ -157,3 +157,22 @@ export {
 } from './metro-process.fixtures.ts';
 
 export { readMetroSessionFixture, writeMetroSessionFixture } from './metro-session.fixtures.ts';
+
+export { startHttpDaemonFixture, type HttpDaemonFixture } from './http-daemon-fixture.ts';
+export {
+  createRegisteredDaemonFixtures,
+  type RegisteredDaemonChild,
+  type RegisteredDaemonComposition,
+  type RegisteredDaemonFixtures,
+} from './registered-daemon-fixture.ts';
+export {
+  beginStderrCapture,
+  beginStdoutCapture,
+  withCapturedOutput,
+  withCapturedStderr,
+  withCapturedStderrAsync,
+  withCapturedStdoutAsync,
+  withStreamTty,
+  type StreamCapture,
+  type StreamCaptureOptions,
+} from './stream-capture.ts';

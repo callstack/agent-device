@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import { runCli } from '../cli.ts';
-import type {
-  DaemonRequest,
-  DaemonResponse,
-  sendToDaemon,
-} from '../daemon-client/daemon-client.ts';
+import type { DaemonRequest, DaemonResponse, sendToDaemon } from '@agent-device/daemon-client';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  mkdtempForTestSync,
+  beginStderrCapture,
+  beginStdoutCapture,
+} from '@agent-device/test-kit';
 
 // Every suite that imports this runs its tests as a command host.
 bindTestCommandHost();
-import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 class ExitSignal extends Error {
   public readonly code: number;

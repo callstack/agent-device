@@ -12,9 +12,22 @@ import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
-import { stopRecordedDaemon } from './daemon-client/daemon-client-stop.ts';
-import * as daemonLaunchSpec from './daemon-client/daemon-launch-spec.ts';
+import { stopRecordedDaemon } from '@agent-device/daemon-client';
 import { startAgentDevice } from './host.ts';
+
+const codeIdentity = vi.hoisted(() => ({
+  /** Replaces the code identity the host resolves, for the row that needs an installed tree. */
+  override: undefined as { origin: 'installed' } | undefined,
+}));
+
+vi.mock('@agent-device/daemon-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/daemon-client')>();
+  return {
+    ...actual,
+    resolveLocalDaemonCodeIdentity: async () =>
+      codeIdentity.override ?? (await actual.resolveLocalDaemonCodeIdentity()),
+  };
+});
 
 const composition = vi.hoisted(() => ({
   /** The candidates a host handed the embedded composition, so a row can see what it passed on. */
@@ -129,9 +142,7 @@ test('a host publishes its own process as the runtime an outside stop must not s
 });
 
 test('an installed host publishes no checkout code signature', async () => {
-  const identity = vi
-    .spyOn(daemonLaunchSpec, 'resolveLocalDaemonCodeIdentity')
-    .mockResolvedValue({ origin: 'installed' });
+  codeIdentity.override = { origin: 'installed' };
   try {
     const { stateDir, paths, host } = await bootHost();
     try {
@@ -143,7 +154,7 @@ test('an installed host publishes no checkout code signature', async () => {
       removeStateDir(stateDir);
     }
   } finally {
-    identity.mockRestore();
+    codeIdentity.override = undefined;
   }
 });
 

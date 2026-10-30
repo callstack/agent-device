@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { readDaemonInfo } from '../../../src/daemon-client/daemon-client-metadata.ts';
+import { readRecordedDaemon } from '../../../scripts/lib/recorded-daemon.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   collectPagedEventTimeline,
@@ -203,7 +203,7 @@ async function downloadDaemonArtifact(
     env: context.env,
     projectRoot: process.cwd(),
   });
-  const daemon = readDaemonInfo(daemonPaths.infoPath);
+  const daemon = readRecordedDaemon(daemonPaths.infoPath);
   assert.ok(daemon?.httpPort, `daemon HTTP metadata unavailable at ${daemonPaths.infoPath}`);
   const response = await fetch(
     `http://127.0.0.1:${daemon.httpPort}/artifacts/${encodeURIComponent(artifactId)}`,

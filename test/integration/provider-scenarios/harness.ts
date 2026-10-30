@@ -8,7 +8,7 @@ import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
-import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import { resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import {
   startDaemonRuntime,
@@ -18,10 +18,7 @@ import {
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveSessionDir } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
-  buildHttpRpcPayload,
-  handleDaemonHttpResponseBody,
-} from '../../../src/daemon-client/daemon-client-rpc.ts';
-import {
+  buildRpcPayload,
   commandRequest,
   envelopeToRpcResult,
   type JsonRpcResponseEnvelope,
@@ -213,6 +210,7 @@ export async function createProviderScenarioHarness(
   try {
     runtime = await startDaemonRuntime({
       host: createTestHostEnvironment({ env }),
+      codeIdentity: await resolveLocalDaemonCodeIdentity(),
       stdout: { write: () => undefined },
       stderr: { write: () => undefined },
       composeDeps,
@@ -227,36 +225,16 @@ export async function createProviderScenarioHarness(
   }
   const httpPort = runtime.httpPort;
   const baseUrl = `http://127.0.0.1:${httpPort}`;
-  const transport: AgentDeviceDaemonTransport = async (request, context) => {
-    const wireRequest: DaemonWireRequest = {
-      ...request,
-      token: context?.authToken ?? runtime.token,
-      session: request.session ?? 'default',
-    };
-    const payload = buildHttpRpcPayload(wireRequest, { includeTokenParam: true });
-    const { body } = await postProviderScenarioRpc({
-      port: httpPort,
-      token: wireRequest.token,
-      payload,
-      signal: context?.signal,
-    });
-    return await new Promise<DaemonResponse>((resolve, reject) => {
-      handleDaemonHttpResponseBody(body, {
-        host: createTestHostEnvironment(),
-        info: {
-          transport: 'http',
-          httpPort,
-          token: wireRequest.token,
-          pid: process.pid,
-        },
-        req: wireRequest,
-        stateDir,
-        resolve,
-        reject,
-      });
-    });
-  };
-  const client = createAgentDeviceClient({ daemonAuthToken: runtime.token }, { transport });
+  // The production client, attached to the daemon this harness started, over its HTTP endpoint.
+  const client = createAgentDeviceClient(
+    {
+      stateDir,
+      daemonLifecycle: 'attach',
+      daemonTransport: 'http',
+      daemonAuthToken: runtime.token,
+    },
+    { host: createTestHostEnvironment({ env }) },
+  );
   let closed = false;
 
   return {
@@ -264,7 +242,7 @@ export async function createProviderScenarioHarness(
       const request = await withClientReplayScriptSources(
         commandRequest(runtime.token, command, positionals, flags, options),
       );
-      const payload = buildHttpRpcPayload(request, { includeTokenParam: true });
+      const payload = buildRpcPayload(request, { includeTokenParam: true });
       const { statusCode, body } = await postProviderScenarioRpc({
         port: httpPort,
         token: runtime.token,
@@ -300,7 +278,7 @@ export async function createProviderScenarioHarness(
 async function postProviderScenarioRpc(params: {
   port: number;
   token: string;
-  payload: ReturnType<typeof buildHttpRpcPayload>;
+  payload: ReturnType<typeof buildRpcPayload>;
   signal?: AbortSignal;
 }): Promise<{ statusCode: number; body: string }> {
   const body = JSON.stringify(params.payload);

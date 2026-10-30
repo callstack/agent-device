@@ -6,8 +6,6 @@ import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { launchDaemonProcess as launchOnHost } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { createTestHostEnvironment } from '@agent-device/test-kit';
-import { resolveClientSettings } from '../daemon-client/daemon-client-lifecycle.ts';
 
 // c237027737: server-lifecycle.ts readLockInfo/acquireDaemonLock/releaseDaemonLock.
 const legacyLockProtocol = `
@@ -109,12 +107,4 @@ export function launchDaemonProcess(
   input: Omit<Parameters<typeof launchOnHost>[0], 'env' | 'cwd'>,
 ): ReturnType<typeof launchOnHost> {
   return launchOnHost({ ...input, env: process.env, cwd: process.cwd() });
-}
-
-export function devicesClientSettings(stateDir: string) {
-  return resolveClientSettings(
-    { session: 'default', command: 'devices', positionals: [], flags: { stateDir } },
-    undefined,
-    createTestHostEnvironment(),
-  );
 }

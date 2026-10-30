@@ -6,9 +6,8 @@ import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
-import { sendRequest } from '../../../src/daemon-client/daemon-client-transport.ts';
+import { createDaemonTransport } from '@agent-device/daemon-client';
 import { setTimeout as realSleep } from 'node:timers/promises';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import assert from 'node:assert/strict';
@@ -517,8 +516,7 @@ test.each([
         });
         ledger.splice(0);
         const scriptPath = path.join(isolatedHome, 'fold.ad');
-        const request: DaemonWireRequest = {
-          token: daemon.token,
+        const request: Omit<DaemonWireRequest, 'token'> = {
           session: 'default',
           command,
           positionals: command === 'replay' ? [scriptPath] : [],
@@ -542,6 +540,8 @@ test.each([
                   },
                 }),
             ...(timeoutMs === undefined ? {} : { timeoutMs }),
+            stateDir: daemon.stateDir,
+            daemonTransport: 'http',
           },
           meta: { requestId: 'composite-fold-deadline' },
         };
@@ -555,13 +555,9 @@ test.each([
         const start = Date.now();
         tracking = true;
         // Exercise the real client envelope and HTTP transport, including timeout classification.
-        const pending: Promise<DaemonResponse> = sendRequest(
-          { baseUrl: daemon.baseUrl, token: daemon.token, pid: 1 },
+        const pending: Promise<DaemonResponse> = createDaemonTransport(createTestHostEnvironment())(
           request,
-          'http',
-          resolveDaemonPaths(daemon.stateDir),
-          envelopeMs,
-          { host: createTestHostEnvironment() },
+          { daemonLifecycle: 'attach' },
         ).catch((error) => ({ ok: false, error: normalizeError(error) }));
         let settled = false;
         void pending.then(

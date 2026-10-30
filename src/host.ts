@@ -36,7 +36,7 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
     await Promise.all([
       import('@agent-device/daemon'),
       import('./daemon-composition.ts'),
-      import('./daemon-client/daemon-launch-spec.ts'),
+      import('@agent-device/daemon-client'),
     ]);
   const codeIdentity = await resolveLocalDaemonCodeIdentity();
   const output = { write: () => {} };

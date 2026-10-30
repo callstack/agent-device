@@ -6,7 +6,7 @@
  * context for a transport that honors it, and a custom transport that ignores the signal still
  * loses the race — the caller's promise rejects with the typed canceled-request error
  * (`details.dispatched: 'unknown'`). The transport-into-daemon half is covered by
- * `src/daemon-client/__tests__/daemon-client-abort.test.ts`.
+ * `src/__tests__/daemon-client-abort.test.ts`.
  */
 import assert from 'node:assert/strict';
 import { test } from 'vitest';

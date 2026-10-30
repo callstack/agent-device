@@ -59,7 +59,7 @@ import {
   type DaemonCommandName,
 } from '@agent-device/command-surface';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { createDaemonTransport } from './daemon-client/daemon-client.ts';
+import { createDaemonTransport, createRequestGuard } from '@agent-device/daemon-client';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import * as devServer from '@agent-device/react-native';
 import {
@@ -73,7 +73,6 @@ import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
-import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},

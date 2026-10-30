@@ -3,7 +3,7 @@ import http from 'node:http';
 import { test } from 'vitest';
 import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
+import { buildRpcPayload } from './harness-rpc.ts';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
@@ -54,7 +54,7 @@ test('lease_allocate over HTTP prepares the BrowserStack session end to end', as
     });
 
     try {
-      const envelope = buildHttpRpcPayload(
+      const envelope = buildRpcPayload(
         {
           token: harness.token,
           session: 'browserstack-e2e',

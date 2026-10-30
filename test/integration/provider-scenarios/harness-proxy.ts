@@ -1,10 +1,10 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import http from 'node:http';
 import { createDaemonProxyServer, type DaemonProxyAuthenticate } from '@agent-device/proxy';
-import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import {
+  buildRpcPayload,
   commandRequest,
   envelopeToRpcResult,
   type JsonRpcResponseEnvelope,
@@ -92,7 +92,7 @@ export async function createProviderScenarioProxy(
       const request = await withClientReplayScriptSources(
         commandRequest(authToken, command, positionals, flags, commandOptions),
       );
-      const payload = buildHttpRpcPayload(request, { includeTokenParam: true });
+      const payload = buildRpcPayload(request, { includeTokenParam: true });
       const result = await requestRpc(authToken, payload);
       const envelope = result.json as JsonRpcResponseEnvelope;
       const id = String(payload.id);

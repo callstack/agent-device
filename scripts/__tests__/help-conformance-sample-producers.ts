@@ -1,5 +1,5 @@
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
-import { withCapturedStderrAsync } from '../../src/__tests__/test-utils/stream-capture.ts';
+import { withCapturedStderrAsync } from '@agent-device/test-kit';
 import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,

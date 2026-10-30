@@ -50,7 +50,10 @@ test('R5 ranks a root module by its declared zone, so no lower zone reaches the 
         'src/agent-device-client.ts',
         "import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';",
       ],
-      ['src/daemon-client/daemon-client-transport.ts', 'export const createRequestGuard = 1;'],
+      [
+        'packages/daemon-client/src/daemon-client-transport.ts',
+        'export const createRequestGuard = 1;',
+      ],
     ]),
   );
 

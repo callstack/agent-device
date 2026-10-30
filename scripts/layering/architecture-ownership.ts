@@ -129,7 +129,13 @@ export const CLIENT_SIDE_POLICY_NAME = 'client-side';
 export const LOGICAL_MODULE_POLICIES = [
   {
     name: CLIENT_SIDE_POLICY_NAME,
-    roots: ['src/cli.ts', 'src/cli/', 'src/client/', 'packages/remote/src/', 'src/daemon-client/'],
+    roots: [
+      'src/cli.ts',
+      'src/cli/',
+      'src/client/',
+      'packages/remote/src/',
+      'packages/daemon-client/src/',
+    ],
     forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
   },
   {

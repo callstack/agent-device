@@ -1,0 +1,27 @@
+{
+  "name": "@agent-device/daemon-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The client side of the daemon wire: transport and JSON-RPC framing, request cancellation and progress, local daemon launch, ensure, attach and stop, and remote daemon health. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/plugins": "workspace:*",
+    "@agent-device/remote": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/proxy": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
+  }
+}

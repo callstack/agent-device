@@ -10,7 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
-import { beginStderrCapture } from '../../src/__tests__/test-utils/stream-capture.ts';
+import { beginStderrCapture } from '@agent-device/test-kit';
 import { CHECK_CATALOG } from './checks.ts';
 import { selectChecks } from './model.ts';
 import { type CommandExecutor, readChangedFiles, runChecks } from './run.ts';

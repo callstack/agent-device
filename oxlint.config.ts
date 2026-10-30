@@ -52,8 +52,8 @@ const LEGACY_FILE_LINE_CAPS = {
   'src/__tests__/cli-network.test.ts': 1092,
   'src/__tests__/remote-connection.test.ts': 2324,
   'packages/command-runtime/src/commands/interaction/runtime/settle.test.ts': 2094,
-  'src/daemon-client/__tests__/daemon-client-lifecycle.test.ts': 1169,
-  'src/daemon-client/__tests__/daemon-client.test.ts': 1340,
+  'packages/daemon-client/src/__tests__/daemon-client-lifecycle.test.ts': 1169,
+  'packages/daemon-client/src/__tests__/daemon-client.test.ts': 1340,
   'src/mcp/__tests__/command-tools.test.ts': 1029,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
   'packages/host-kit/src/internal/exec.ts': 1032,
@@ -174,7 +174,7 @@ export default defineConfig({
     },
     {
       files: [
-        'src/daemon-client/daemon-client-rpc.ts',
+        'packages/daemon-client/src/daemon-client-rpc.ts',
         'packages/daemon/src/server/downloadable-artifact-http.ts',
         'packages/remote/src/remote-request-diagnostics.ts',
         'packages/remote/src/upload-stream.ts',

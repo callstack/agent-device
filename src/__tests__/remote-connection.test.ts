@@ -1,6 +1,6 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
+import { withCapturedStdoutAsync } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import {

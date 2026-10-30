@@ -18,7 +18,7 @@ import {
   createEnsuredDaemonTransport,
   resolveRunTransport,
   sendToDaemon,
-} from './daemon-client/daemon-client.ts';
+} from '@agent-device/daemon-client';
 import fs from 'node:fs';
 import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';

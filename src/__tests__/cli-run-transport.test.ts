@@ -7,7 +7,7 @@ import {
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { runCli } from '../cli.ts';
-import type { DaemonRequest, DaemonResponse } from '../daemon-client/daemon-client.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon-client';
 import { makeTempWorkspace } from '@agent-device/test-kit';
 
 afterEach(() => {

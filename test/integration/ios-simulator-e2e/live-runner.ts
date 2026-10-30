@@ -1,4 +1,3 @@
-import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { TestContext } from 'node:test';
@@ -7,8 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { readDaemonInfo } from '../../../src/daemon-client/daemon-client-metadata.ts';
-import { sendRequest } from '../../../src/daemon-client/daemon-client-transport.ts';
+import { readRecordedDaemon, sendToRecordedDaemon } from '../../../scripts/lib/recorded-daemon.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
@@ -61,19 +59,12 @@ const sendToDaemonTransport: AgentDeviceDaemonTransport = async (request, contex
   const stateDir = request.flags?.stateDir;
   assert.ok(typeof stateDir === 'string', 'backend conformance requires the smoke state directory');
   const paths = resolveDaemonPaths(stateDir, { env: process.env });
-  const info = readDaemonInfo(paths.infoPath);
+  const info = readRecordedDaemon(paths.infoPath);
   assert.ok(info, 'backend conformance requires the daemon prepared by the built CLI');
-  return await sendRequest(
+  return await sendToRecordedDaemon(
     info,
-    { ...request, session: request.session, token: info.token },
-    'auto',
-    paths,
-    90_000,
-    {
-      host: createTestHostEnvironment(),
-      signal: context?.signal,
-      timeoutRecovery: 'none',
-    },
+    { ...request, session: request.session },
+    { timeoutMs: 90_000, signal: context?.signal },
   );
 };
 

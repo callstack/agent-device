@@ -4,9 +4,8 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { pluginHome, selectPlugin } from '@agent-device/test-kit';
+import { pluginHome, selectPlugin, beginStdoutCapture } from '@agent-device/test-kit';
 import { parseArgs, parseRawArgs, usageForCommand } from '../../parser/args.ts';
-import { beginStdoutCapture } from '../../../__tests__/test-utils/stream-capture.ts';
 
 vi.mock('../../../provider-device-runtimes.ts', () => {
   throw new Error('provider runtimes must remain unloaded');

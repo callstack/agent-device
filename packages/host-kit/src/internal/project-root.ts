@@ -21,7 +21,7 @@ export function resolveAgentDeviceProjectRoot(startDirectory: string): string {
 /**
  * The daemon's own source, relative to a project root. One path answers two questions
  * with it: whether a tree is a source checkout at all, and which entry a checkout
- * launches its daemon from (`src/daemon-client/daemon-launch-spec.ts`).
+ * launches its daemon from (`packages/daemon-client/src/daemon-launch-spec.ts`).
  */
 export const DAEMON_SOURCE_ENTRY = 'src/daemon.ts';
 
