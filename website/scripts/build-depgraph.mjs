@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -28,6 +29,7 @@ try {
     execFileSync('git', ['init', '--bare', '--quiet', temporaryGit]);
     env.GIT_DIR = temporaryGit;
     env.GIT_WORK_TREE = root;
+    // tracked-sources.ts limits production sources and package manifests to these roots.
     execFileSync('git', ['add', '--', 'src', 'packages'], { cwd: root, env });
   }
 
@@ -42,14 +44,7 @@ try {
       '<link rel="stylesheet" href="./brand.css" /><link rel="stylesheet" href="./fonts/font-face.css" /></head>',
     ),
   );
-  for (const file of [
-    'app.js',
-    'layout.js',
-    'analysis.js',
-    'graph-model.js',
-    'simulation.js',
-    'html.js',
-  ])
+  for (const file of readdirSync(viewer).filter((name) => name.endsWith('.js')))
     copyFileSync(path.join(viewer, file), path.join(output, file));
   execFileSync(
     process.execPath,

@@ -100,10 +100,6 @@ function summarizeDominator(
   };
 }
 
-export function computeDominatorSummary(entry: string, graph: GraphData): DominatorSummary {
-  return createDominatorAnalyzer(graph)(entry);
-}
-
 export type ZoneComponent = { zones: string[]; size: number };
 
 export type ZoneSccSummary = {

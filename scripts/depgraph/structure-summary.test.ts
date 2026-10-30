@@ -4,7 +4,6 @@ import { resolveImportEdges } from '../layering/model.ts';
 import { buildGraph } from './model.ts';
 import {
   computeCohesionSummary,
-  computeDominatorSummary,
   createDominatorAnalyzer,
   computeZoneSccSummary,
 } from './structure-summary.ts';
@@ -13,7 +12,7 @@ function sources(entries: Record<string, string>): Map<string, string> {
   return new Map(Object.entries(entries));
 }
 
-test('computeDominatorSummary excludes the dynamic-import seam and ranks bottlenecks by dominated subtree size', () => {
+test('the dominator analyzer excludes dynamic imports and ranks dominated subtrees', () => {
   const files = sources({
     'src/core/entry.ts': [
       "import { a } from './a.ts';",
@@ -31,7 +30,7 @@ test('computeDominatorSummary excludes the dynamic-import seam and ranks bottlen
   });
   const graph = buildGraph(files, resolveImportEdges(files));
 
-  const summary = computeDominatorSummary('src/core/entry.ts', graph);
+  const summary = createDominatorAnalyzer(graph)('src/core/entry.ts');
 
   // `lazy.ts` is reached only through a dynamic import, so it never joins the eager closure —
   // reachableFiles counts entry + a + b + shared + only-a, not the dynamically-loaded sixth file.
@@ -52,12 +51,12 @@ test('computeDominatorSummary excludes the dynamic-import seam and ranks bottlen
   );
 });
 
-test('computeDominatorSummary rejects an entry outside the layering graph', () => {
+test('the dominator analyzer rejects an entry outside the layering graph', () => {
   const files = sources({ 'src/core/entry.ts': 'export const entry = 1;' });
   const graph = buildGraph(files, resolveImportEdges(files));
 
   assert.throws(
-    () => computeDominatorSummary('src/core/missing.ts', graph),
+    () => createDominatorAnalyzer(graph)('src/core/missing.ts'),
     /src\/core\/missing\.ts is not a production source file/,
   );
 });
