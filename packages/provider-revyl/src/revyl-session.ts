@@ -41,6 +41,11 @@ export type RevylSession = Readonly<{
   snapshotChannel: (typeof REVYL_SNAPSHOT_CHANNEL)[RevylPlatform];
   client: RevylClient;
   lease: DeviceLease;
+  /**
+   * The app this session last launched, which is the only one Revyl's `/kill_app` can end: that action
+   * carries no bundle id. Held in a box so the session itself stays a frozen value.
+   */
+  launchedApp: { bundleId?: string };
 }>;
 
 export type RevylStartRequestInput = Readonly<{
@@ -147,6 +152,7 @@ export async function startRevylSession(
       snapshotChannel: REVYL_SNAPSHOT_CHANNEL[input.platform],
       client,
       lease,
+      launchedApp: {},
     };
   } catch (error) {
     const cleanup: RevylStartCleanup = { runId, sessionId };

@@ -59,8 +59,9 @@ class RevylInteractor implements Interactor {
 
   /**
    * Revyl's worker launches the app the session installed when the body names none, so a blank
-   * target is the honest request here rather than a guessed bundle id. Launch arguments have no
-   * transport: the worker starts the app the way the platform does, with no process arguments.
+   * target is the honest request here rather than a guessed bundle id. That choice is recorded, since
+   * it is the app `/kill_app` will end. Launch arguments have no transport: the worker starts the app
+   * the way the platform does, with no process arguments.
    */
   private async launch(app: string, launchArgs?: string[]): Promise<void> {
     if (launchArgs?.length) {
@@ -70,17 +71,33 @@ class RevylInteractor implements Interactor {
       });
     }
     await this.workerAction('launch', app ? { bundle_id: app } : {});
+    if (app) this.session.launchedApp.bundleId = app;
   }
 
   /** Revyl rents the device to this session alone; there is no local app or viewer to raise. */
   async openDevice(): Promise<void> {}
 
   /**
-   * Revyl's worker terminates the app the session runs; its `/kill_app` action names no bundle. So
-   * the app the caller passed is what the session's own app is, and closing without a name still
-   * closes it — which is what `close` means for a session that rents one device for one app.
+   * Revyl's `/kill_app` carries no bundle id: it ends the app the session runs. So a close that names
+   * the app this session launched is the same request, an unnamed close is that request too, and a
+   * close that names a different app is refused rather than answered by killing something else.
    */
-  async close(): Promise<void> {
+  async close(app: string): Promise<void> {
+    const target = app.trim();
+    const sessionApp = this.session.launchedApp.bundleId;
+    if (target && sessionApp && target !== sessionApp) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
+        {
+          reason: 'unsupported-provider-mode',
+          command: 'close',
+          sessionApp,
+          requestedApp: target,
+          hint: 'Revyl has no way to name an app to `/kill_app`; end the session to stop what it runs.',
+        },
+      );
+    }
     await this.workerAction('kill_app');
   }
 

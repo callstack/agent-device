@@ -390,6 +390,34 @@ test('launch names the bundle, an unnamed open lets the worker start its own app
   assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
 });
 
+test('a close that names an app the session never launched is refused rather than answered', async () => {
+  const { fixture, interactor } = await liveInteractor('ios');
+  await interactor.open('com.example.app');
+
+  // Revyl's `/kill_app` carries no bundle id, so the only honest answer is the refusal: killing the
+  // session's app would not be what the caller asked for.
+  await assert.rejects(
+    () => interactor.close('com.other.app'),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'unsupported-provider-mode',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/kill_app')),
+    false,
+  );
+
+  // The app the session did launch is still closeable.
+  await interactor.close('com.example.app');
+  assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
+});
+
+test('a close before any launch still ends the session app, which is the one Revyl runs', async () => {
+  const { fixture, interactor } = await liveInteractor('ios');
+  await interactor.close('com.example.app');
+
+  assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
+});
+
 test('a deep link opens through the URL action without launching an app', async () => {
   const { fixture, interactor } = await liveInteractor('ios');
   await interactor.open('myapp://checkout/42');
