@@ -137,7 +137,7 @@ export async function reportDaemonClose(params: {
   try {
     const report = await params.closed;
     for (const line of describeUnfinishedShutdownWork(report)) params.stderr.write(`${line}\n`);
-    return { failed: false };
+    return { failed: report.platformOwners === 'failed' };
   } catch (error) {
     params.stderr.write(`Daemon shutdown error: ${normalizeError(error).message}\n`);
     return { failed: true };

@@ -63,6 +63,13 @@ export function createComposedPlatformRuntimeGateway(options: {
   const providerLoads = new Map<PlatformRuntimeProviderModule, Promise<PlatformRuntimeOwner>>();
   const loadedOwners = new Map<string, PlatformRuntimeOwner>();
   let closing: Promise<void> | undefined;
+  const ensureOpen = () => {
+    if (closing) {
+      throw new AppError('COMMAND_FAILED', 'Platform runtime gateway is shut down', {
+        reason: 'runtime-gateway-shut-down',
+      });
+    }
+  };
   let hostLoad: Promise<PlatformRuntimeHost> | undefined;
   const loadHost = async () => {
     hostLoad ??= options.loadHost();
@@ -106,7 +113,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     return owner;
   };
   const loadLocal = async (family: Platform) => {
-    if (closing) throw runtimeContractError('Platform runtime gateway is shut down');
+    ensureOpen();
     const existing = localLoads.get(family);
     if (existing) return await existing;
     const module = options.modules.get(family);
@@ -134,7 +141,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     }
   };
   const loadProvider = async (module: PlatformRuntimeProviderModule) => {
-    if (closing) throw runtimeContractError('Platform runtime gateway is shut down');
+    ensureOpen();
     const existing = providerLoads.get(module);
     if (existing) return await existing;
     const pending = loadHost().then(async (host) => {
@@ -158,34 +165,41 @@ export function createComposedPlatformRuntimeGateway(options: {
   return Object.freeze({
     applicationLifecycle,
     inspectFacts: async (device) => {
+      ensureOpen();
       const provider = selectOrdinaryProvider(options.providerRuntimes, device);
+      let owner: PlatformRuntimeOwner;
       if (provider) {
         const module = modulesByRuntime.get(provider);
         if (!module) return unavailableProviderFacts(provider, device);
-        const owner = await loadProvider(module);
-        return await inspectAndValidate(owner, device);
+        owner = await loadProvider(module);
+      } else {
+        owner = await loadLocal(device.platform);
       }
-      return await inspectAndValidate(await loadLocal(device.platform), device);
+      ensureOpen();
+      return await inspectAndValidate(owner, device);
     },
     bind: async (request) => {
+      ensureOpen();
+      let owner: PlatformRuntimeOwner;
       if (request.intent.kind === 'exact-owner') {
-        const selected = await selectExactOwner(
+        owner = await selectExactOwner(
           request.intent.owner,
           providersByOwner,
           loadProvider,
           loadLocal,
         );
-        return await bindAndValidate(selected, request);
-      }
-      const provider = selectOrdinaryProvider(options.providerRuntimes, request.device);
-      if (provider) {
-        const module = modulesByRuntime.get(provider);
-        if (!module) {
-          return unavailableProviderBinding(provider, request.device);
+      } else {
+        const provider = selectOrdinaryProvider(options.providerRuntimes, request.device);
+        if (provider) {
+          const module = modulesByRuntime.get(provider);
+          if (!module) return unavailableProviderBinding(provider, request.device);
+          owner = await loadProvider(module);
+        } else {
+          owner = await loadLocal(request.device.platform);
         }
-        return await bindAndValidate(await loadProvider(module), request);
       }
-      return await bindAndValidate(await loadLocal(request.device.platform), request);
+      ensureOpen();
+      return await bindAndValidate(owner, request);
     },
     shutdown: () =>
       (closing ??= Promise.resolve().then(async () => {
