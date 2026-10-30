@@ -237,6 +237,42 @@ test('annotateSnapshotNodesCoveredByPolicy refuses without guessing a cover', ()
   assert.equal(result[0]?.coveredBy, undefined);
 });
 
+test('annotateSnapshotNodesCoveredByPolicy publishes the cover a backend hit test names', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    hittable: true,
+    label: 'Watch',
+    rect: { x: 136, y: 731, width: 300, height: 72 },
+  };
+  const card = {
+    type: 'button',
+    label: 'Top story',
+    rect: { x: 104, y: 208, width: 1114, height: 627 },
+  };
+
+  const [result] = annotateSnapshotNodesCoveredByPolicy([target], () => card);
+
+  assert.equal(result?.interactionBlocked, 'covered');
+  assert.equal(result?.hittable, false);
+  assert.deepEqual(result?.coveredBy, { kind: 'button', label: 'Top story', rect: card.rect });
+});
+
+test('annotateSnapshotNodesCoveredByPolicy names no cover when the hit element is an anonymous box', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    hittable: true,
+    label: 'Watch',
+    rect: { x: 136, y: 731, width: 300, height: 72 },
+  };
+
+  const [result] = annotateSnapshotNodesCoveredByPolicy([target], () => ({ type: 'group' }));
+
+  assert.equal(result?.interactionBlocked, 'covered');
+  assert.equal(result?.coveredBy, undefined);
+});
+
 test('annotateCoveredSnapshotNodes leaves an uncovered touch target unchanged', () => {
   const target: RawSnapshotNode = {
     index: 0,

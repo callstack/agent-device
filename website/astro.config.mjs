@@ -114,6 +114,7 @@ export default defineConfig({
           'testmu',
           'limrun',
           'revyl',
+          'webos',
         ]),
         {
           label: 'Reference',
