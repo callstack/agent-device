@@ -142,7 +142,11 @@ export type DiagnosticEventInput = {
   data?: Record<string, unknown>;
 };
 
-/** Encodes a diagnostic value for JSON-only ports without losing bigint precision. */
+/**
+ * Encodes diagnostic data for JSON-only ports, preserving bigints as decimal strings.
+ * Performs no redaction; the receiving diagnostics port owns redaction.
+ * Throws when serialization fails or the input does not encode as a JSON value.
+ */
 export function toDiagnosticJson(value: unknown): JsonValue {
   return JSON.parse(stringifyDiagnosticValue(value));
 }
