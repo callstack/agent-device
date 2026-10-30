@@ -167,6 +167,20 @@ test('the executable writes unfinished work to stderr after a close, and a clean
     }),
   ).toEqual({ failed: true });
 
+  for (const [platformOwners, expectedFailed, message] of [
+    ['pending', false, 'platform owners were still shutting down'],
+    ['failed', true, 'platform owner shutdown failed'],
+  ] as const) {
+    const lines: string[] = [];
+    expect(
+      await reportDaemonClose({
+        closed: Promise.resolve({ ...cleanReport, platformOwners }),
+        stderr: { write: (chunk) => lines.push(chunk) },
+      }),
+    ).toEqual({ failed: expectedFailed });
+    expect(lines).toEqual([expect.stringContaining(message)]);
+  }
+
   expect(clean).toEqual([]);
   expect(unfinished).toEqual([expect.stringMatching(/1 request\(s\) ignored cancellation/)]);
   expect(failed.join('')).toContain('Daemon shutdown error: close blew up');

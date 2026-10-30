@@ -41,32 +41,47 @@ describe('composed platform runtime gateway', () => {
     >();
   });
 
-  test('shutdown waits for an owner load already in progress', async () => {
-    const ref = providerRuntimeOwner('limrun', 'loading');
-    const shutdown = vi.fn(async () => {});
-    let finishLoad!: () => void;
-    const loadReady = new Promise<void>((resolve) => {
-      finishLoad = resolve;
-    });
-    const registration = providerRuntime({
-      ref,
-      load: async () => {
-        await loadReady;
-        return { ...runtimeOwner({ ref }), shutdown };
-      },
-    });
-    const runtimeGateway = gateway([registration]);
-    const binding = runtimeGateway.bind({
-      device,
-      intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
-      scope,
-    });
-    const closing = runtimeGateway.shutdown();
-    finishLoad();
-    await binding;
-    await closing;
-    expect(shutdown).toHaveBeenCalledOnce();
-  });
+  test.each(['bind', 'inspectFacts'] as const)(
+    'shutdown settles a loading owner without starting its suspended %s',
+    async (operation) => {
+      const ref = providerRuntimeOwner('limrun', 'loading');
+      const shutdown = vi.fn(async () => {});
+      const owner = runtimeOwner({ ref });
+      const bind = vi.fn(owner.bind);
+      const inspectFacts = vi.fn(owner.inspectFacts);
+      let finishLoad!: () => void;
+      const loadReady = new Promise<void>((resolve) => {
+        finishLoad = resolve;
+      });
+      const registration = providerRuntime({
+        ref,
+        load: async () => {
+          await loadReady;
+          return { ...owner, bind, inspectFacts, shutdown };
+        },
+      });
+      const runtimeGateway = gateway([registration]);
+      const pending =
+        operation === 'bind'
+          ? runtimeGateway.bind({
+              device,
+              intent: { kind: 'exact-owner', owner: ref, fence: { token: 'fence', generation: 1 } },
+              scope,
+            })
+          : runtimeGateway.inspectFacts(device);
+      const refused = expect(pending).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'runtime-gateway-shut-down' },
+      });
+      const closing = runtimeGateway.shutdown();
+      finishLoad();
+      await refused;
+      await closing;
+      expect(bind).not.toHaveBeenCalled();
+      expect(inspectFacts).not.toHaveBeenCalled();
+      expect(shutdown).toHaveBeenCalledOnce();
+    },
+  );
   test('an unfinished owner load does not delay shutdown of a loaded owner', async () => {
     const readyRef = providerRuntimeOwner('limrun', 'ready');
     const loadingRef = providerRuntimeOwner('limrun', 'loading');
@@ -103,6 +118,9 @@ describe('composed platform runtime gateway', () => {
       },
       scope,
     });
+    const refused = expect(loading).rejects.toMatchObject({
+      details: { reason: 'runtime-gateway-shut-down' },
+    });
     const closing = runtimeGateway.shutdown();
     try {
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -110,7 +128,7 @@ describe('composed platform runtime gateway', () => {
       expect(lateShutdown).not.toHaveBeenCalled();
     } finally {
       finishLoad();
-      await loading;
+      await refused;
       await closing;
     }
     expect(readyShutdown).toHaveBeenCalledOnce();
@@ -296,7 +314,7 @@ describe('composed platform runtime gateway', () => {
         }),
       ).rejects.toMatchObject({
         code: 'COMMAND_FAILED',
-        details: { reason: 'runtime-contract-invalid' },
+        details: { reason: 'runtime-gateway-shut-down' },
       });
     },
   );
