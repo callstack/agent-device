@@ -146,21 +146,24 @@ function isPublicHost(hostname: string): boolean {
 }
 
 /**
- * An IPv6 address that stands for an IPv4 one reaches that v4 host, so it has to pass the v4 rules:
- * `URL` writes the mapped form with the embedded address in hex (`::ffff:7f00:1` is 127.0.0.1), and the
- * dotted spelling survives as digits.
+ * An IPv6 address that stands for an IPv4 one reaches that v4 host, so it has to pass the v4 rules. Both
+ * spellings do: the mapped form (`::ffff:` and the address) and the obsolete compatible one (`::` and the
+ * address). `URL` has already written the embedded address as two hex groups — `::ffff:7f00:1` is
+ * 127.0.0.1 — so the two groups are all that has to be read back.
  */
 function isNonRoutableIpv6(host: string): boolean {
   if (host === '::' || host === '::1') return true;
+  // fc00::/7 unique-local and fe80::/10 link-local both stop at the caller's own machine.
   if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return true;
-  const embedded = /^::ffff:(.+)$/.exec(host)?.[1];
+  const embedded = /^::(?:ffff:)?([0-9a-f]{1,4}:[0-9a-f]{1,4})$/.exec(host)?.[1];
   if (embedded === undefined) return false;
-  if (net.isIP(embedded) === 4) return isNonRoutableIpv4(embedded.split('.').map(Number));
-  const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(embedded);
-  if (!hex) return false;
-  const upper = Number.parseInt(hex[1]!, 16);
-  const lower = Number.parseInt(hex[2]!, 16);
-  return isNonRoutableIpv4([upper >> 8, upper & 0xff, lower >> 8, lower & 0xff]);
+  const [upper, lower] = embedded.split(':').map((group) => Number.parseInt(group, 16));
+  return isNonRoutableIpv4([
+    (upper! >> 8) & 0xff,
+    upper! & 0xff,
+    (lower! >> 8) & 0xff,
+    lower! & 0xff,
+  ]);
 }
 
 /** The ranges a Revyl worker can never reach: loopback, private, link-local and carrier NAT. */

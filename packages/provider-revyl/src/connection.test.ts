@@ -120,13 +120,17 @@ test('verify refuses an app URL only the caller own network can serve', async ()
     'https://vpn.internal/app.zip',
     'https://user:pass@apps.test/app.zip',
     // The same loopback and link-local hosts written another way. `URL` reduces the first three to
-    // 127.0.0.1, and the last two are IPv6 addresses that stand for an IPv4 one, which the old textual
+    // 127.0.0.1, and the rest are IPv6 addresses that stand for an IPv4 one, which the old textual
     // compare read as an unfamiliar address and let through.
     'https://2130706433/app.zip',
     'https://0x7f.0.0.1/app.zip',
     'https://0177.0.0.1/app.zip',
     'https://[::ffff:127.0.0.1]/app.zip',
     'https://[::ffff:a9fe:101]/app.zip',
+    'https://[::ffff:10.1.2.3]/app.zip',
+    'https://[::ffff:c0a8:1]/app.zip',
+    // The obsolete IPv4-compatible form, which stands for its v4 host the same way.
+    'https://[::7f00:1]/app.zip',
   ]) {
     await assert.rejects(
       verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
