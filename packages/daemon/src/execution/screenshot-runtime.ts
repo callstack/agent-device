@@ -360,13 +360,17 @@ function createBoundScreenshotBackend(
     captureScreenshot: async (_context, outPath, options) => {
       const resolved = screenshotOptionsFromFlags({
         ...dispatchContext,
-        ...screenshotFlagsFromOptions(options),
+        ...screenshotFlagsFromOptions({
+          ...options,
+          pixelDensity: options?.pixelDensity === 'native' ? undefined : options?.pixelDensity,
+          nativeDensity: options?.pixelDensity === 'native' ? true : undefined,
+        }),
       });
       const facts = await captureScreenshot({
         outPath,
         options: {
           appBundleId: dispatchContext.appBundleId,
-          pixelDensity: resolved.pixelDensity,
+          pixelDensity: resolved.nativeDensity ? 'native' : resolved.pixelDensity,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
           stabilize: resolved.stabilize,
