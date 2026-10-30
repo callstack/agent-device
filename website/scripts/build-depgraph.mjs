@@ -1,8 +1,18 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brandCss } from '../src/site/brand.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const output = path.join(root, 'website/dist/depgraph');
@@ -22,8 +32,17 @@ try {
   }
 
   mkdirSync(output, { recursive: true });
+  writeFileSync(path.join(output, 'brand.css'), brandCss);
+  cpSync(path.join(root, 'website/src/fonts'), path.join(output, 'fonts'), { recursive: true });
+  const html = readFileSync(path.join(viewer, 'index.html'), 'utf8');
+  writeFileSync(
+    path.join(output, 'index.html'),
+    html.replace(
+      '</head>',
+      '<link rel="stylesheet" href="./brand.css" /><link rel="stylesheet" href="./fonts/font-face.css" /></head>',
+    ),
+  );
   for (const file of [
-    'index.html',
     'app.js',
     'layout.js',
     'analysis.js',

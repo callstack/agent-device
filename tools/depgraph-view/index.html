@@ -7,13 +7,13 @@
     <title>agent-device · dependency graph</title>
     <style>
       :root {
-        --bg: #0d1017;
-        --panel: #151a24;
-        --panel-2: #1b2130;
-        --border: #262e3f;
-        --text: #d7dce6;
-        --muted: #8b93a7;
-        --accent: #7aa2f7;
+        color-scheme: dark;
+        --bg: #0a0a0a;
+        --panel: #0a0a0a;
+        --panel-2: #161616;
+        --border: #ffffff29;
+        --text: #eeeeee;
+        --muted: #b4b4b4;
       }
       * {
         box-sizing: border-box;
@@ -27,10 +27,10 @@
         background: var(--bg);
         color: var(--text);
         font:
-          13px/1.45 ui-monospace,
-          'SF Mono',
-          Menlo,
-          monospace;
+          14px/1.45 'Switzer',
+          Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
         overflow: hidden;
         display: grid;
         grid-template-columns: 292px 1fr;
@@ -46,15 +46,30 @@
         border-bottom: 1px solid var(--border);
         background: var(--panel);
       }
+      .brand {
+        background: var(--accent);
+        color: #0a0a0a;
+        padding: 2px 5px;
+        font:
+          500 15px/1.25 'Geist Mono',
+          monospace;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .brand:hover {
+        background: var(--accent-hover);
+      }
       header h1 {
-        font-size: 13px;
+        font-size: 14px;
         margin: 0;
         font-weight: 600;
-        letter-spacing: 0.04em;
+        letter-spacing: -0.01em;
       }
       header #stats {
         color: var(--muted);
-        font-size: 11px;
+        font:
+          11px 'Geist Mono',
+          monospace;
       }
       header .grow {
         flex: 1;
@@ -64,10 +79,9 @@
         background: var(--panel-2);
         border: 1px solid var(--border);
         color: var(--text);
-        border-radius: 6px;
+        border-radius: 0;
         padding: 6px 10px;
         font: inherit;
-        outline: none;
       }
       #search:focus {
         border-color: var(--accent);
@@ -90,7 +104,12 @@
         text-transform: uppercase;
         letter-spacing: 0.12em;
         color: var(--muted);
-        font-weight: 600;
+        font-family: 'Geist Mono', monospace;
+        font-weight: 500;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
       main {
         grid-area: canvas;
@@ -117,6 +136,8 @@
         flex: 1;
         cursor: pointer;
         user-select: none;
+      }
+      #zones .row label {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -132,7 +153,7 @@
       .swatch {
         width: 10px;
         height: 10px;
-        border-radius: 3px;
+        border-radius: 0;
         flex: none;
       }
       input[type='checkbox'] {
@@ -159,7 +180,7 @@
         background: var(--panel-2);
         border: 1px solid var(--border);
         color: var(--text);
-        border-radius: 6px;
+        border-radius: 0;
         padding: 5px 10px;
         font: inherit;
         cursor: pointer;
@@ -186,7 +207,7 @@
       }
       #details .dep {
         padding: 2px 4px;
-        border-radius: 4px;
+        border-radius: 0;
         cursor: pointer;
         word-break: break-all;
       }
@@ -196,7 +217,7 @@
       #details .dep .kind {
         font-size: 10px;
         padding: 0 4px;
-        border-radius: 3px;
+        border-radius: 0;
         margin-left: 5px;
       }
       #details h3 {
@@ -209,9 +230,9 @@
       #tooltip {
         position: absolute;
         pointer-events: none;
-        background: rgba(13, 16, 23, 0.92);
+        background: rgba(10, 10, 10, 0.96);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 0;
         padding: 6px 9px;
         font-size: 11px;
         max-width: 420px;
@@ -238,6 +259,9 @@
         pointer-events: none;
         text-align: right;
       }
+      #help .mobile-help {
+        display: none;
+      }
       .hint {
         color: var(--muted);
         font-size: 11px;
@@ -246,10 +270,9 @@
         background: var(--panel-2);
         border: 1px solid var(--border);
         color: var(--text);
-        border-radius: 6px;
+        border-radius: 0;
         padding: 3px 6px;
         font: inherit;
-        outline: none;
       }
       select:focus {
         border-color: var(--accent);
@@ -275,7 +298,7 @@
       }
       .bar {
         height: 3px;
-        border-radius: 2px;
+        border-radius: 0;
         background: var(--panel-2);
         margin-top: 2px;
         overflow: hidden;
@@ -283,11 +306,11 @@
       .bar i {
         display: block;
         height: 100%;
-        border-radius: 2px;
+        border-radius: 0;
       }
       .hot {
         padding: 2.5px 4px;
-        border-radius: 4px;
+        border-radius: 0;
         cursor: pointer;
         white-space: nowrap;
         overflow: hidden;
@@ -302,8 +325,20 @@
           grid-template-rows: 46px minmax(0, 1fr) minmax(160px, 35vh);
           grid-template-areas: 'head' 'canvas' 'side';
         }
-        header #stats {
+        header #stats,
+        #help .desktop-help {
           display: none;
+        }
+        header h1 {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        #help .mobile-help {
+          display: inline;
         }
         #search {
           width: min(260px, 45vw);
@@ -371,13 +406,15 @@
       </section>
     </aside>
     <header>
-      <h1>agent-device · dep graph</h1>
+      <a class="brand" href="/docs/introduction">agent-device</a>
+      <h1>Dependency graph</h1>
       <span id="stats"></span>
       <span class="grow"></span>
       <input
         id="search"
+        aria-label="Search files"
         list="files"
-        placeholder="search file… (Enter to jump)"
+        placeholder="Search files…"
         autocomplete="off"
       />
       <datalist id="files"></datalist>
@@ -391,7 +428,10 @@
       <div id="tooltip"></div>
       <div id="status"></div>
       <div id="help">
-        drag = pan · scroll = zoom · drag node = pin · dbl-click = zoom to · Esc = clear
+        <span class="desktop-help"
+          >drag = pan · scroll = zoom · drag node = pin · dbl-click = zoom to · Esc = clear</span
+        >
+        <span class="mobile-help">drag to pan</span>
       </div>
     </main>
     <script type="module" src="./app.js"></script>

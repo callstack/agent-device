@@ -12,7 +12,8 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   'use strict';
 
   const KIND_NAMES = ['value', 'type', 'dynamic'];
-  const KIND_COLORS = ['#7aa2f7', '#bb9af7', '#9ece6a'];
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  const KIND_COLORS = [accent, '#73daca', '#e0af68'];
   const PALETTE = [
     '#f7768e',
     '#ff9e64',
@@ -399,7 +400,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
 
   function drawZoneLabels(c, pkg) {
     if (pkg.zones.length < 2) return;
-    c.font = '600 10px ui-monospace, Menlo, monospace';
+    c.font = "600 10px 'Geist Mono', monospace";
     for (const zi of pkg.zones) {
       const zr = zoneRect[zi];
       const zx = zr.x * view.k + view.x + 5;
@@ -415,15 +416,15 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   function drawPackageHeading(c, pkg, sx, sy, wpx, active, count) {
     if (wpx > 90) {
       const withCount = wpx > 260;
-      c.font = '10px ui-monospace, Menlo, monospace';
+      c.font = "10px 'Geist Mono', monospace";
       const countW = c.measureText(count).width;
-      c.font = '700 11.5px ui-monospace, Menlo, monospace';
+      c.font = "700 11.5px 'Geist Mono', monospace";
       const name = clipText(c, pkg.name, wpx - 12 - (withCount ? countW + 8 : 0));
       const nameW = c.measureText(name).width;
       c.fillStyle = active ? 'rgba(255,255,255,0.95)' : 'rgba(215,220,230,0.85)';
       c.fillText(name, sx + 2, sy - 7);
       if (withCount) {
-        c.font = '10px ui-monospace, Menlo, monospace';
+        c.font = "10px 'Geist Mono', monospace";
         c.fillStyle = 'rgba(139,147,167,0.75)';
         c.fillText(count, sx + 2 + nameW + 8, sy - 7);
       }
@@ -460,7 +461,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
 
   function drawFileLabels(c) {
     if (view.k > 0.5 || labelMinIn <= 8) {
-      c.font = '10px ui-monospace, Menlo, monospace';
+      c.font = "10px 'Geist Mono', monospace";
       c.fillStyle = 'rgba(215,220,230,0.75)';
       c.textAlign = 'center';
       for (const n of nodes) drawFileLabel(c, n);
@@ -479,7 +480,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
 
   function drawEntryLabels(c) {
     if (view.k > 1.15) {
-      c.font = '9.5px ui-monospace, Menlo, monospace';
+      c.font = "9.5px 'Geist Mono', monospace";
       c.textAlign = 'center';
       for (const n of nodes) drawEntryLabel(c, n);
     }
@@ -504,7 +505,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
 
   function render() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0d1017';
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawPackageLayer(ctx);
@@ -656,7 +657,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   );
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest('input, select, textarea, button, [contenteditable="true"]')) return;
+    if (e.target.closest('a, input, select, textarea, button, [contenteditable="true"]')) return;
     if (e.key === 'f' || e.key === 'F') fitView();
     if (e.key === 'l' || e.key === 'L') {
       labelMinIn = labelMinIn > 1 ? 1 : 45;
