@@ -1,5 +1,6 @@
 import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import net from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type {
   RevylDeviceSessionStopResponse,
@@ -520,17 +521,18 @@ export function isRevylSessionGone(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === 'provider-session-gone';
 }
 
-/**
- * Whether a WHATWG-normalized hostname is loopback: `localhost`, `[::1]`, any of `127.0.0.0/8`, or that
- * range IPv4-mapped (`[::ffff:127.0.0.2]` normalizes to `[::ffff:7f00:2]`).
- */
+/** The loopback ranges, the same set the daemon client trusts for a local daemon. */
+const LOOPBACK_BLOCK_LIST = new net.BlockList();
+LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
+LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
+LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
+/** Whether a WHATWG-normalized hostname (IPv6 in brackets) names a loopback address. */
 function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '[::1]' ||
-    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
-    /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(hostname)
-  );
+  if (hostname === 'localhost') return true;
+  const address = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+  const family = net.isIP(address);
+  return family !== 0 && LOOPBACK_BLOCK_LIST.check(address, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 /** HTTPS everywhere; plain HTTP only on loopback, and never with credentials, query, or fragment. */

@@ -80,3 +80,21 @@ test('a root whose frame is not finite reports no viewport instead of a usable o
     resolveIosAxTreeViewport([{ type: 'Application', frame: { x: 0, y: 0, width: 0, height: 0 } }]),
   ).toEqual({ kind: 'missing', reason: 'invalid' });
 });
+
+test('without a usable root the device screen is the viewport, and a bad screen is invalid', () => {
+  const rootless = [{ type: 'Application' }];
+  expect(resolveIosAxTreeViewport(rootless, { width: 440, height: 956 })).toEqual({
+    kind: 'reported',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+  expect(resolveIosAxTreeViewport(rootless, { width: 0, height: 956 })).toEqual({
+    kind: 'missing',
+    reason: 'invalid',
+  });
+  expect(
+    resolveIosAxTreeViewport(
+      [{ type: 'Application', frame: { x: 0, y: 0, width: 320, height: 240 } }],
+      { width: 440, height: 956 },
+    ),
+  ).toEqual({ kind: 'derived', rect: { x: 0, y: 0, width: 320, height: 240 } });
+});

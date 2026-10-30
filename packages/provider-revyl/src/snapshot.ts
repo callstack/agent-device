@@ -64,13 +64,7 @@ async function captureRevylIosSnapshot(
       import('@agent-device/capture-kit/ios-snapshot-acquisition'),
     ]);
   const tree = parseIosTree(hierarchy);
-  const reported = resolveIosAxTreeViewport(tree);
-  const viewport =
-    reported?.kind === 'reported'
-      ? { kind: 'derived' as const, rect: reported.rect }
-      : screen !== undefined
-        ? { kind: 'reported' as const, rect: { x: 0, y: 0, ...screen } }
-        : (reported ?? { kind: 'missing' as const, reason: 'not-provided' as const });
+  const viewport = resolveIosAxTreeViewport(tree, screen);
   return acquisition.createIosSnapshotAcquisition({
     producer: 'revyl-ios-tree',
     ...acquireProviderKeyboard({

@@ -142,15 +142,28 @@ export function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
 }
 
 /**
- * The viewport the tree's own application or window root reports, which is the box every node rect
- * in the same tree was measured in. Undefined when the tree has no such root.
+ * The viewport an AX tree acquisition uses: the tree's own application or window root when it reports a
+ * usable box, because every node rect in the tree was measured in it (`derived`); otherwise the screen
+ * size the provider reported for the device (`reported`), in the same points. Without either, the
+ * tree's own reason the box is missing.
  */
 export function resolveIosAxTreeViewport(
   tree: IosTreeNode | IosTreeNode[],
-): IosViewportEvidence | undefined {
-  return resolveIosViewportEvidenceFromRoots(
+  screen?: Readonly<{ width?: number; height?: number }>,
+): IosViewportEvidence {
+  const evidence = resolveIosViewportEvidenceFromRoots(
     (Array.isArray(tree) ? tree : [tree]).map(viewportRoot),
   );
+  if (evidence?.kind === 'reported') return { kind: 'derived', rect: evidence.rect };
+  if (screen?.width !== undefined && screen.height !== undefined) {
+    return isFiniteNumber(screen.width) &&
+      isFiniteNumber(screen.height) &&
+      screen.width > 0 &&
+      screen.height > 0
+      ? { kind: 'reported', rect: { x: 0, y: 0, width: screen.width, height: screen.height } }
+      : { kind: 'missing', reason: 'invalid' };
+  }
+  return evidence ?? { kind: 'missing', reason: 'not-provided' };
 }
 
 /**

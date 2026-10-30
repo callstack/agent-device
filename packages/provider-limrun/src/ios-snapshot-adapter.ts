@@ -14,7 +14,11 @@ export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const reported = (await session.client.elementTree()) as IosTreeNode | IosTreeNode[];
-  const viewport = readLimrunViewport(reported, session.client.deviceInfo);
+  const deviceInfo = session.client.deviceInfo;
+  const viewport = resolveIosAxTreeViewport(
+    reported,
+    deviceInfo && { width: deviceInfo.screenWidth, height: deviceInfo.screenHeight },
+  );
   const { tree, probeFailure } = await expandLimrunCollapsedTabBar(
     reported,
     viewport.kind === 'missing' ? null : viewport.rect,
@@ -31,33 +35,4 @@ export async function captureLimrunIosSnapshot(
     lineage: { targetId: session.instanceId },
     ...(probeFailure ? { collapsedTabBarProbeFailure: probeFailure } : {}),
   });
-}
-
-function readLimrunViewport(
-  tree: IosTreeNode | IosTreeNode[],
-  deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,
-) {
-  const treeEvidence = resolveIosAxTreeViewport(tree);
-  if (treeEvidence?.kind === 'reported') {
-    return { kind: 'derived' as const, rect: treeEvidence.rect };
-  }
-  return readLimrunDeviceInfoViewport(deviceInfo);
-}
-
-function readLimrunDeviceInfoViewport(
-  deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,
-) {
-  const width = deviceInfo?.screenWidth;
-  const height = deviceInfo?.screenHeight;
-  if (width === undefined || height === undefined) {
-    return { kind: 'missing' as const, reason: 'not-provided' as const };
-  }
-  if (!isPositiveFiniteNumber(width) || !isPositiveFiniteNumber(height)) {
-    return { kind: 'missing' as const, reason: 'invalid' as const };
-  }
-  return { kind: 'reported' as const, rect: { x: 0, y: 0, width, height } };
-}
-
-function isPositiveFiniteNumber(value: number): boolean {
-  return Number.isFinite(value) && value > 0;
 }

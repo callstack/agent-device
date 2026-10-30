@@ -310,11 +310,11 @@ function fixtureRoute(url: string): string {
   return 'unknown';
 }
 
-/** A lifecycle answer ends its session only when Revyl did not say it refused, as the client reads it. */
+/** A `/stop` or run cancel ends its session exactly when the client accepts the answer. */
 function lifecycleAccepted(body: unknown): boolean {
-  if (body === null || typeof body !== 'object') return true;
+  if (body === null || typeof body !== 'object') return false;
   const verdict = body as { success?: unknown; request_accepted?: unknown };
-  return verdict.success !== false && verdict.request_accepted !== false;
+  return verdict.success === true && (verdict.request_accepted ?? true) === true;
 }
 
 /** Revyl routes every device action below the run's device-proxy prefix. */

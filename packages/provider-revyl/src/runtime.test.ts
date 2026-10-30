@@ -309,6 +309,31 @@ test('a stop Revyl refuses keeps the lease for a retry and reports the session i
   assert.equal(stops(fixture).length, 2);
 });
 
+test('a stop Revyl refuses inside a 200 keeps the lease, and the retry that is accepted ends it', async () => {
+  const stopPath = `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`;
+  let stopsAnswered = 0;
+  const fixture = await backend({
+    sessionExistsOnceStarted: true,
+    respond: {
+      [stopPath]: () =>
+        (stopsAnswered += 1) === 1
+          ? { body: { success: false, request_accepted: false, message: 'worker busy' } }
+          : { body: { success: true, request_accepted: true } },
+    },
+  });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  await runtime.leaseLifecycle?.allocate?.(lease);
+
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.release?.(lease),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-cleanup-pending',
+  );
+  await runtime.leaseLifecycle?.release?.(lease);
+  assert.equal(stops(fixture).length, 2);
+});
+
 test('a stop Revyl confirms releases the lease, and a repeat release asks Revyl nothing', async () => {
   const fixture = await backend();
   const runtime = fixture.createRuntime();
