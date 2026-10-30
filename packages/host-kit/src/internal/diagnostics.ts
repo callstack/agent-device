@@ -153,6 +153,23 @@ function stringifyDiagnosticValue(value: unknown): string {
   );
 }
 
+function stringifyDiagnosticEvent(
+  event: DiagnosticEvent,
+  sensitiveValues?: readonly string[],
+): string {
+  try {
+    return stringifyDiagnosticValue(
+      sensitiveValues ? replaceSensitiveValues(event, sensitiveValues) : event,
+    );
+  } catch {
+    const { data: _data, ...metadata } = event;
+    const fallback = { ...metadata, data: { reason: 'diagnostic-data-unserializable' } };
+    return stringifyDiagnosticValue(
+      sensitiveValues ? replaceSensitiveValues(fallback, sensitiveValues) : fallback,
+    );
+  }
+}
+
 export function emitDiagnostic(event: DiagnosticEventInput): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
@@ -170,7 +187,7 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
     scope.events.push(payload);
     scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
     if (!scope.debug && !scope.traceLogPath) return;
-    const fileLine = `${stringifyDiagnosticValue(payload)}\n`;
+    const fileLine = `${stringifyDiagnosticEvent(payload)}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
@@ -252,9 +269,7 @@ export function flushDiagnosticsToSessionFile(
         // generated identifiers and internal phase names, deliberately no
         // longer re-normalized here. Replacement output is not length-bounded:
         // a short literal can grow past `[REDACTED]`.
-        const lines = pendingEvents.map((entry) =>
-          stringifyDiagnosticValue(replaceSensitiveValues(entry, values)),
-        );
+        const lines = pendingEvents.map((entry) => stringifyDiagnosticEvent(entry, values));
         appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`);
       }
       const logRecord = scope.logRecord;
@@ -270,9 +285,7 @@ export function flushDiagnosticsToSessionFile(
     const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
     // Same single-value-replacement re-pass as the logPath branch above.
-    const lines = scope.events.map((entry) =>
-      stringifyDiagnosticValue(replaceSensitiveValues(entry, values)),
-    );
+    const lines = scope.events.map((entry) => stringifyDiagnosticEvent(entry, values));
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.flushedLogPath = filePath;
     scope.events = [];
