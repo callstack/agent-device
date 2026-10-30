@@ -32,24 +32,22 @@ const COMMAND_TREES = [
 export function checkCommandsSchemaBoundary(
   edges: readonly ResolvedImportEdge[],
 ): LayeringViolation[] {
-  return edges
-    .filter((edge) =>
-      COMMAND_TREES.some(
-        (tree) =>
-          matchesDeclaredRoot(edge.file, tree.root) &&
-          !matchesDeclaredRoot(edge.file, tree.schemaRoot) &&
-          edge.file !== tree.entry &&
-          matchesDeclaredRoot(edge.target, tree.schemaRoot),
-      ),
-    )
-    .map((edge) => ({
-      rule: 'R2 commands-floor',
-      file: edge.file,
-      line: edge.line,
-      message:
-        `${edge.file} must not import ${edge.target}: commands/schema/ is the CLI/MCP schema ` +
-        'layer that renders the command facets, so it sits above the rest of commands/ and ' +
-        'reads them; commands must not import it back (#2543). The shared CommandSchema type ' +
-        'and flag grammar live in @agent-device/command-registry, below both.',
-    }));
+  return edges.flatMap((edge) => {
+    const tree = COMMAND_TREES.find(
+      (tree) =>
+        matchesDeclaredRoot(edge.file, tree.root) &&
+        !matchesDeclaredRoot(edge.file, tree.schemaRoot) &&
+        edge.file !== tree.entry &&
+        matchesDeclaredRoot(edge.target, tree.schemaRoot),
+    );
+    if (!tree) return [];
+    return [
+      {
+        rule: 'R2 commands-floor',
+        file: edge.file,
+        line: edge.line,
+        message: `${edge.file} must not import ${edge.target}: ${tree.schemaRoot} renders the command facets and sits above ${tree.root}; the rest of that tree must not import it back (#2543). The shared CommandSchema type and flag grammar live in @agent-device/command-registry, below both.`,
+      },
+    ];
+  });
 }

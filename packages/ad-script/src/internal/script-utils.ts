@@ -111,8 +111,9 @@ export const SCRIPT_FLAG_COMMANDS = Object.keys(SCRIPT_FLAG_MAPS) as readonly Sc
 
 /**
  * The script flag tokens one command's line reads, with their value kinds and flag keys
- * (#3197). Exported for the root admission test
- * (`packages/command-surface/src/replay/script-flag-admission.test.ts`), which proves the tables and the
+ * (#3197). Exported for the command-surface admission test
+ * (`packages/command-surface/src/replay/script-flag-admission.test.ts`), which proves the
+ * tables and the
  * flag declarations admit the same keys in both directions — the invariant that keeps the
  * script grammar and the flag declarations from diverging the way `--until` and
  * `wait --raw` did.

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 export function makeTempWorkspace(): { root: string; home: string; project: string } {
   const root = mkdtempForTestSync('agent-device-config-');

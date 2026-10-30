@@ -34,7 +34,7 @@ Keep a narrow fact on the descriptor when more than one projection consumes it. 
 
 Keep CLI grammar, input decoding, executable surface metadata, request projection, and client-backed invocation in `@agent-device/command-surface`. The package exposes one entry, `.`, that names its exports. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: both surfaces need that vocabulary, so a shared shape sits below both.
 
-The package declares the client port, `AgentDeviceClient` and `AgentDeviceCommandClient`, once, in contracts and command-registry vocabulary. The command definitions invoke that port. `src/client/client-types.ts` re-exports exactly those two names, so the published SDK types do not change and the package has no edge into the client layer. Add a type projection only when it removes real duplication across consumers.
+The package declares the client port, `AgentDeviceClient` and `AgentDeviceCommandClient`, once, in contracts and command-registry vocabulary. The command definitions invoke that port. `src/client/client-types.ts` re-exports exactly those two port names from the package. Its other published vocabulary is unchanged, so the published SDK types do not change and the package has no edge into the client layer. Add a type projection only when it removes real duplication across consumers.
 
 Keep CLI presentation in `src/commands/`: output formatters, the warning dispatcher, help, and progress. A formatter is keyed by `CommandName` in `src/commands/cli-output.ts`, and a duplicate key throws when the table builds. The package reaches no root module, so request projection and the SDK load no presentation.
 

@@ -8,7 +8,7 @@ import {
   readRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 
 test('CLI merges config defaults with precedence user < project < env < CLI', async () => {
   const { root, home, project } = makeTempWorkspace();

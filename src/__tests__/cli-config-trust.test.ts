@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { runCliCapture } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
 import {
   closeLoopbackServer,
+  makeTempWorkspace,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';

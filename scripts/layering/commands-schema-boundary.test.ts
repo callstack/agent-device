@@ -41,6 +41,7 @@ test('command-surface files outside schema/ must not import its schema/, except 
     violations[0]!.message,
     /must not import packages\/command-surface\/src\/schema\/command-schema\.ts/,
   );
+  assert.match(violations[0]!.message, /packages\/command-surface\/src\/schema\/ renders/);
   const entry = importEdge(
     'packages/command-surface/src/index.ts',
     'packages/command-surface/src/schema/command-schema.ts',

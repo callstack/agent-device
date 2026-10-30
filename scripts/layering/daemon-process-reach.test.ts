@@ -62,16 +62,23 @@ for (const denied of DAEMON_PROCESS_DENIED_MODULES) {
 }
 
 test('a type-only edge loads nothing, and the client may import the collector', () => {
-  assert.deepEqual(
-    reach({
-      'src/daemon.ts':
-        "import type { Collect } from '../packages/replay-port/src/source-discovery.ts';\n",
-      'packages/command-surface/src/replay/index.ts':
-        "import '../../../packages/replay-port/src/source-discovery.ts';\n",
-      [COLLECTOR]: 'export type Collect = () => [];\n',
-    }),
-    [],
+  const sources = {
+    'src/daemon.ts':
+      "import type { Collect } from '../packages/replay-port/src/source-discovery.ts';\n",
+    'packages/command-surface/src/replay/index.ts':
+      "import '../../../replay-port/src/source-discovery.ts';\n",
+    [COLLECTOR]: 'export type Collect = () => [];\n',
+  };
+  const edges = resolveImportEdges(new Map(Object.entries(sources)));
+  assert.ok(
+    edges.some(
+      (edge) =>
+        edge.file === 'packages/command-surface/src/replay/index.ts' &&
+        edge.target === COLLECTOR &&
+        !edge.typeOnly,
+    ),
   );
+  assert.deepEqual(reach(sources), []);
 });
 
 test('a renamed entry or denied module fails as stale instead of passing silently', () => {

@@ -6,7 +6,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 
 /**
  * These are planted-divergence tests, not membership snapshots. A snapshot would
@@ -20,15 +20,6 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
  * the divergence onto the live declaration, and only then imports the consumer — so what
  * it observes is the real derivation running over the planted declaration.
  */
-
-function makeTempWorkspace(): { root: string; home: string; project: string } {
-  const root = mkdtempForTestSync('agent-device-config-');
-  const home = path.join(root, 'home');
-  const project = path.join(root, 'project');
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(project, { recursive: true });
-  return { root, home, project };
-}
 
 const OPERATOR_CLI_FLAGS: CliFlags = { json: false, help: false, version: false };
 

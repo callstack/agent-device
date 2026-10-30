@@ -4,6 +4,7 @@ import { test } from 'vitest';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
   closeLoopbackServer,
+  makeTempWorkspace,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
@@ -11,7 +12,6 @@ import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import { AppError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 
 const LEASE_ID = 'abcdef0123456789abcdef0123456789';

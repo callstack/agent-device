@@ -13,7 +13,7 @@ import {
 } from './android-ime-lifecycle-world.ts';
 import { androidRepairAdbResult } from './replay-repair-world.ts';
 import { runCliCapture } from '../../../src/__tests__/cli-capture.ts';
-import { makeTempWorkspace } from '../../../src/__tests__/cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import { createCommandToolExecutor } from '../../../src/mcp/command-tools.ts';
 import { installIsolatedCliTestEnv } from '../../../src/__tests__/cli-test-env.ts';

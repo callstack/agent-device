@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCliCapture } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 
 /**
  * The retired `record` config surface (`packages/command-surface/src/schema/cli-config.ts`):

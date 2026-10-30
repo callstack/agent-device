@@ -8,7 +8,7 @@ import {
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 
 test('Limrun apps lists uploaded assets without allocating an instance', async () => {
   const { root, home, project } = makeTempWorkspace();

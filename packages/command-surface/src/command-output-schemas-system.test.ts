@@ -32,6 +32,7 @@ test('a settle-derived system entry still grafts onto the module object, not a f
   const moduleBack = SYSTEM_COMMAND_OUTPUT_SCHEMAS.back;
   const derivedBack = COMMAND_OUTPUT_SCHEMAS.back;
   assert.notEqual(derivedBack, moduleBack, 'the derivation pass must copy, never mutate in place');
+  assert.ok(derivedBack.properties?.settle);
   assert.equal(derivedBack.required, moduleBack.required, 'required list is not re-derived');
   assert.equal(
     derivedBack.properties?.mode,

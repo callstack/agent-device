@@ -8,7 +8,7 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { runCli } from '../cli.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-client/daemon-client.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.restoreAllMocks();

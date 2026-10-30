@@ -7,11 +7,11 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>` 
 | Question | Owner |
 | --- | --- |
 | Command names | `packages/command-registry/src/catalog.ts` |
-| Command declarations | `packages/command-registry/src/`: `registry.ts`, `descriptor-*.ts`, `descriptors/` |
+| Command descriptors | `packages/command-registry/src/`: `registry.ts`, `descriptor-*.ts`, `descriptors/` |
 | Daemon request-policy predicates | `packages/daemon/src/core/daemon-command-registry.ts` |
 | Interaction guarantees | `packages/contracts/src/interaction-guarantees.ts` |
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
-| Command metadata, input schemas, CLI grammar, request projection, and the client port | `packages/command-surface/src/`, through its one entry |
+| Command facets and metadata, input schemas, CLI grammar, request projection, and the client port | `packages/command-surface/src/`, through its one entry |
 | CLI output formatters, help, and progress | `src/commands/` |
 | Input fields and audiences | `packages/command-surface/src/common-input-fields.ts`, `packages/command-surface/src/input-audience.ts` |
 | Released SDK default hosts | `src/sdk/host.ts` |
@@ -24,7 +24,6 @@ Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `src/daemon-client/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
 Schema composition belongs in `packages/command-surface/src/schema`.
-Help rendering belongs in `src/commands/schema`.
 A command facet declares no output formatter. Register the formatter in `src/commands/cli-output.ts`.
 Build interaction data through `buildInteractionResponseData`.
 Change cross-language rules through `contracts/fixtures/` golden tables.

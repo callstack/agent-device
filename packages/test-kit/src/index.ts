@@ -126,6 +126,7 @@ export {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
 } from './target-classification-fixtures.ts';
+export { makeTempWorkspace } from './temp-workspace.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
 export {
   STUBBED_APPLE_TOOLCHAIN,

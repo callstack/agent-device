@@ -435,3 +435,13 @@ test('parseArgs refuses a gesture option the chosen kind never reads', () => {
     );
   }
 });
+
+test('parseArgs maps scroll until and max passes', () => {
+  const parsed = parseArgs(['scroll', 'down', '--until', 'id="row-512"', '--max-passes', '90'], {
+    strictFlags: true,
+  });
+  assert.equal(parsed.command, 'scroll');
+  assert.deepEqual(parsed.positionals, ['down']);
+  assert.equal(parsed.flags.until, 'id="row-512"');
+  assert.equal(parsed.flags.maxPasses, 90);
+});

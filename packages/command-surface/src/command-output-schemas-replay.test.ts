@@ -14,6 +14,7 @@ import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from './recording/output-schemas.ts'
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from './replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from './system/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
+import type { JsonSchema } from './command-contract.ts';
 
 test('MCP replay family output schemas are the family module entries, not copies', () => {
   assert.equal(COMMAND_OUTPUT_SCHEMAS.replay, REPLAY_COMMAND_OUTPUT_SCHEMAS.replay);
@@ -52,6 +53,17 @@ const PROJECTED_FAMILIES = [
   { name: 'recording', schemas: RECORDING_COMMAND_OUTPUT_SCHEMAS },
 ] as const;
 
+function assertSettleGrafted(published: JsonSchema, base: JsonSchema, command: string): void {
+  if (base.oneOf) {
+    assert.equal(published.oneOf?.length, base.oneOf.length, `${command} branches changed`);
+    base.oneOf.forEach((branch, index) =>
+      assertSettleGrafted(published.oneOf![index]!, branch, command),
+    );
+  } else {
+    assert.ok(published.properties?.settle, `${command} lacks settle`);
+  }
+}
+
 test('projected output-schema families claim disjoint commands and survive the composition intact', () => {
   const claimedBy = new Map<string, string>();
   for (const family of PROJECTED_FAMILIES) {
@@ -77,6 +89,7 @@ test('projected output-schema families claim disjoint commands and survive the c
           schema,
           `${family.name}.${command} carries the settle trait but was not copied by the derivation pass`,
         );
+        assertSettleGrafted(published, schema, `${family.name}.${command}`);
       } else {
         assert.equal(
           published,

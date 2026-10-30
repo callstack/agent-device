@@ -9,7 +9,7 @@ import {
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { runCliCapture } from './cli-capture.ts';
-import { makeTempWorkspace } from './cli-config-fixtures.ts';
+import { makeTempWorkspace } from '@agent-device/test-kit';
 import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 
 const limrunInstances = vi.hoisted(() => ({
