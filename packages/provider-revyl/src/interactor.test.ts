@@ -108,6 +108,52 @@ test('fill rides the input action and an empty fill rides clear_text', async () 
 
   assert.deepEqual(fixture.bodyFor('input'), { x: 80, y: 1250, text: 'hello', clear_first: true });
   assert.deepEqual(fixture.bodyFor('clear_text'), { x: 80, y: 1250 });
+  assert.equal(
+    fixture.paths().filter((request) => request.endsWith('/input')).length,
+    1,
+    'an unpaced fill is one input action',
+  );
+});
+
+test('a paced fill types one character per pause and clears only on the first', async () => {
+  const { fixture, interactor } = await liveInteractor('android');
+  const startedAt = Date.now();
+  await interactor.fill(80, 1250, 'abc', 40);
+  const elapsed = Date.now() - startedAt;
+
+  const inputs = fixture.requests.filter((request) => request.path.endsWith('/input'));
+  assert.deepEqual(
+    inputs.map((request) => request.body),
+    [
+      { x: 80, y: 1250, text: 'a', clear_first: true },
+      { x: 80, y: 1250, text: 'b', clear_first: false },
+      { x: 80, y: 1250, text: 'c', clear_first: false },
+    ],
+    'the field is cleared once, then each character is typed in order',
+  );
+  assert.ok(elapsed >= 120, `three paced characters must not land at once (took ${elapsed} ms)`);
+});
+
+test('a paced fill that fails partway says how much of the text landed', async () => {
+  // The third character is the one Revyl refuses.
+  let typed = 0;
+  const { interactor } = await liveInteractor('android', {
+    respond: {
+      'POST /api/v1/execution/device-proxy/run-1/input': () => {
+        typed += 1;
+        if (typed >= 3) return { status: 500, body: { detail: 'worker dropped the run' } };
+        return { body: { success: true } };
+      },
+    },
+  });
+
+  await assert.rejects(
+    interactor.fill(80, 1250, 'abcd', 1),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.dispatchedSteps === 2 &&
+      error.details?.dispatched === 'unknown',
+  );
 });
 
 test('type is refused with the fill hint instead of going to an unnamed point', async () => {
@@ -128,7 +174,10 @@ test('type is refused with the fill hint instead of going to an unnamed point', 
 
 test('scroll dispatches the planned finger path as one drag', async () => {
   const { fixture, interactor } = await liveInteractor('ios');
-  const report = (await interactor.scroll?.('down', { pixels: 300 })) as Record<string, unknown>;
+  const report = (await interactor.scroll?.('down', {
+    pixels: 300,
+    durationMs: 900,
+  })) as Record<string, unknown>;
 
   assert.deepEqual(fixture.bodyFor('drag'), {
     start_x: 195,
@@ -138,6 +187,9 @@ test('scroll dispatches the planned finger path as one drag', async () => {
   });
   assert.equal(report.pixels, 300);
   assert.equal(report.direction, 'down');
+  // Revyl's `/drag` body has no duration field, so the report names none either: a duration the
+  // worker never ran must not appear as though it were honored.
+  assert.equal('durationMs' in report, false);
 });
 
 test('a session whose health reported no screen refuses to plan a scroll', async () => {
@@ -152,6 +204,43 @@ test('a session whose health reported no screen refuses to plan a scroll', async
     false,
   );
 });
+
+test('a capture the caller gave up on does not report a snapshot finished afterwards', async () => {
+  // The hierarchy answer is held back, so the abort lands while the read is in flight and the tree
+  // still arrives afterwards.
+  const { fixture, interactor } = await liveInteractor('ios', {
+    respond: {
+      'GET /api/v1/execution/device-proxy/run-1/hierarchy': {
+        delayMs: 300,
+        contentType: 'application/xml',
+        body: IOS_HIERARCHY,
+      },
+    },
+  });
+  const controller = new AbortController();
+  const capture = interactor.snapshot({ signal: controller.signal });
+  await waitFor(() => fixture.paths().some((request) => request.endsWith('/hierarchy')));
+  controller.abort();
+
+  await assert.rejects(
+    async () => await capture,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(
+    fixture.paths().filter((request) => request.endsWith('/hierarchy')).length,
+    1,
+    'the aborted read is not retried',
+  );
+});
+
+/** Waits for a fixture-side fact, which is how a test races a request without a fixed sleep. */
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
+  throw new Error('The fixture never reached the expected state.');
+}
 
 test('the iOS snapshot comes back as an acquisition parsed from the hierarchy XML', async () => {
   const { interactor } = await liveInteractor('ios', { hierarchy: IOS_HIERARCHY });
@@ -180,12 +269,19 @@ test('the Android snapshot comes back as nodes parsed from the uiautomator dump'
 });
 
 test('a screenshot writes the worker bytes to the requested path', async () => {
-  const { interactor } = await liveInteractor('ios');
+  const { fixture, interactor } = await liveInteractor('ios');
   const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-'), 'shot.png');
   await interactor.screenshot(outPath);
+
+  // The bytes have to have come from this session's worker, so the read is asserted before the file.
+  assert.deepEqual(
+    fixture.paths().filter((request) => request.includes('/screenshot')),
+    ['GET /api/v1/execution/device-proxy/run-1/screenshot'],
+  );
   const written = await fs.readFile(outPath);
   assert.equal(written[0], 0x89);
   assert.equal(written.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.equal(written.length, 68, 'the fixture answers a real 1x1 PNG');
 });
 
 test('launch names the bundle, an unnamed open lets the worker start its own app, and close kills it', async () => {

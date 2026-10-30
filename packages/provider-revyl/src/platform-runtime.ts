@@ -4,6 +4,7 @@ import {
   providerRuntimeOwner,
   sameRuntimeOwner,
   type DeviceBinding,
+  type RuntimeFacts,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -113,7 +114,25 @@ function bindRevylRuntime(
     device,
     owner,
     facts,
-    operations: Object.freeze(operations),
+    operations: Object.freeze(admittedOperations(facts, operations)),
     [Symbol.asyncDispose]: async () => undefined,
   });
+}
+
+/**
+ * Drops every operation the binding's own facts refused, so a caller cannot reach an interactor for
+ * something the facts said Revyl has no action for, and an exact-owner binding for an ended session
+ * reports none of the live-session operations. Binding what the facts admitted is the rule the
+ * catalog adapter already follows; this extends it to the cells bound outside that adapter.
+ */
+function admittedOperations(
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+  operations: Partial<PlatformRuntimeOperations>,
+): Partial<PlatformRuntimeOperations> {
+  const admitted: Record<string, unknown> = {};
+  for (const [key, operation] of Object.entries(operations)) {
+    if (facts.operations[key as keyof typeof facts.operations]?.available)
+      admitted[key] = operation;
+  }
+  return admitted;
 }

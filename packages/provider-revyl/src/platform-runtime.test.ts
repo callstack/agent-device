@@ -93,6 +93,16 @@ test('a session that has ended reports the refused facts and binds no device act
   assert.equal(facts?.operations.tapPoint.available, false);
 });
 
+test('a binding whose facts refused everything exposes no operation at all', async () => {
+  // The exact-owner intent binds even without a live session so `inspectFacts` and `bind` cannot
+  // disagree, so the operations projection has to follow those facts. An operation left bound here
+  // would reach an interactor for a session that is gone.
+  const binding = await bind(
+    owner({ hasLiveSession: false, interactor: { tap: async () => {} } as unknown as Interactor }),
+  );
+  assert.deepEqual(Object.keys(binding.operations), []);
+});
+
 test('a device identity this module never built is refused at bind', async () => {
   const foreign: DeviceInfo = { ...IOS_DEVICE, id: 'other:ios:lease-1' };
   await assert.rejects(

@@ -1,10 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import {
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
-  type ScrollExecutionOptions,
-} from '@agent-device/contracts/scroll-command';
+import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
 import {
   buildScrollGesturePlan,
   type ScrollDirection,
@@ -16,7 +13,8 @@ import type {
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { RevylSession } from './revyl-session.ts';
 import { captureRevylSnapshot, createRevylSnapshotReader } from './snapshot.ts';
 
@@ -119,19 +117,37 @@ class RevylInteractor implements Interactor {
    * Replaces the field's text. The empty string is the clear request, and Revyl's `/clear_text`
    * action is the one action that empties a field without typing, so it rides that rather than
    * reporting success over an untouched value.
+   *
+   * A per-character delay is honored the way the local providers honor one: the text goes one
+   * character at a time with the pause between them. Revyl's `/input` has no pacing field, so a
+   * paced fill that fails partway names how much of the text already landed.
    */
   async fill(
     x: number,
     y: number,
     text: string,
-    _delayMs?: number,
+    delayMs?: number,
     _options?: { allowNonHittableCoordinateFallback?: boolean },
   ): Promise<void> {
     if (text === '') {
       await this.workerAction('clear_text', { x, y });
       return;
     }
-    await this.workerAction('input', { x, y, text, clear_first: true });
+    if (!delayMs || delayMs <= 0) {
+      await this.workerAction('input', { x, y, text, clear_first: true });
+      return;
+    }
+    let dispatched = 0;
+    try {
+      for (const char of Array.from(text)) {
+        // Only the first character clears: the rest append to what the field already holds.
+        await this.workerAction('input', { x, y, text: char, clear_first: dispatched === 0 });
+        dispatched += 1;
+        await sleep(delayMs);
+      }
+    } catch (error) {
+      throw discloseDispatchAfterSteps(error, dispatched);
+    }
   }
 
   /**
@@ -141,6 +157,11 @@ class RevylInteractor implements Interactor {
    * the container clamp mean the same thing here as they do locally, and the report carries the same
    * `pixels` and endpoints. Revyl's own `/swipe` is not used: it moves the finger a distance the
    * worker chooses, so `--pixels` and `--amount` would be silently dropped.
+   *
+   * Revyl's `/drag` body carries endpoints only — no duration field exists — so the worker chooses
+   * how fast the finger travels and the report names no `durationMs`. `scroll --duration-ms` is
+   * therefore not honored here, and the report stays silent about it rather than echoing a duration
+   * the device never ran at.
    */
   async scroll(
     direction: ScrollDirection,
@@ -174,7 +195,6 @@ class RevylInteractor implements Interactor {
     });
     return {
       ...plan,
-      durationMs: options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
       backend: 'revyl-device-proxy',
     };
   }

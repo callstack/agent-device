@@ -5,11 +5,10 @@ import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-oc
 import { REVYL_SNAPSHOT_CHANNEL } from './device.ts';
 import type { RevylSession } from './revyl-session.ts';
 
-/** Reads one Revyl worker's accessibility tree, screenshot, and the box its actions measure. */
+/** Reads one Revyl worker's accessibility tree and the box its actions measure. */
 export type RevylSnapshotReader = Readonly<{
   /** The platform's own hierarchy XML: XCUITest-style on iOS, a uiautomator dump on Android. */
   readHierarchyXml(signal?: AbortSignal): Promise<string>;
-  captureScreenshot(signal?: AbortSignal): Promise<Uint8Array>;
   /** `health`'s screen size — the box Revyl itself coordinates actions in. */
   viewport(): SnapshotViewportSize | undefined;
 }>;
@@ -17,7 +16,6 @@ export type RevylSnapshotReader = Readonly<{
 export function createRevylSnapshotReader(session: RevylSession): RevylSnapshotReader {
   return {
     readHierarchyXml: (signal) => session.client.getWorkerHierarchy(session.runId, signal),
-    captureScreenshot: (signal) => session.client.captureWorkerScreenshot(session.runId, signal),
     viewport: () =>
       session.screen === undefined
         ? undefined
@@ -39,6 +37,9 @@ export async function captureRevylSnapshot(
   signal?: AbortSignal,
 ): Promise<SnapshotRuntimeResult> {
   const xml = await reader.readHierarchyXml(signal);
+  // Parsing and presenting are not cancelable, so the signal is checked once more here: a capture
+  // the caller gave up on does not report a snapshot it finished building afterwards.
+  signal?.throwIfAborted();
   return session.platform === 'ios'
     ? await captureRevylIosSnapshot(xml)
     : await captureRevylAndroidSnapshot(xml, reader.viewport());

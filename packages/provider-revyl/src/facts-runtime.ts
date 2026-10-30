@@ -100,6 +100,15 @@ const audioProbeUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Revyl does not expose the audio probe.',
 );
+/**
+ * `perf` samples frame, memory and profiler counters from the host tools around a local device —
+ * xctrace, dumpsys, the app's own instrumentation. The worker answers none of them, and the captured
+ * tree the text reads fall back to says nothing about them either.
+ */
+const perfUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Revyl does not expose frame, memory, or profiler counters for a session.',
+);
 /** Only the app the session started with can be named, so an unnamed open target cannot be resolved. */
 const openTargetUnavailable = unavailableFact(
   'unsupported-provider-mode',
@@ -186,11 +195,11 @@ export function revylFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOper
         query: audioProbeUnavailable,
       }),
       ...perfRuntimeOperationFacts({
-        frames: elementTextUnavailable,
-        memorySample: elementTextUnavailable,
-        memorySnapshot: elementTextUnavailable,
-        nativeCapture: elementTextUnavailable,
-        profileReport: elementTextUnavailable,
+        frames: perfUnavailable,
+        memorySample: perfUnavailable,
+        memorySnapshot: perfUnavailable,
+        nativeCapture: perfUnavailable,
+        profileReport: perfUnavailable,
       }),
       ensureReady: available,
       bootTarget: available,
