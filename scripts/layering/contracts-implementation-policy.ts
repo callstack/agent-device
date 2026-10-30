@@ -19,6 +19,10 @@ export type ContractsProductionSource = Readonly<{ path: string; source: string 
 
 const RULE = 'R18 contracts-implementation-authority';
 const FORBIDDEN_HOST_MODULES = /^(?:node:)?(?:child_process|fs|timers)(?:\/|$)/;
+// `node:crypto` and `node:path` stay permitted: `platform-runtime.ts` derives the provider
+// runtime-instance digest beside the owner declarations it identifies, and `daemon-http.ts`
+// resolves paths. Both are the identity or the path itself, not host mechanics, and moving either
+// away would separate a declaration from what makes it stable. See ADR 0033's contracts rows.
 const FORBIDDEN_TIMER_CALLS = new Set([
   'clearImmediate',
   'clearInterval',

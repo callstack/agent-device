@@ -162,6 +162,10 @@
       "types": "./src/provider-app-log.ts",
       "default": "./src/provider-app-log.ts"
     },
+    "./provider-lease-sessions": {
+      "types": "./src/provider-lease-sessions.ts",
+      "default": "./src/provider-lease-sessions.ts"
+    },
     "./quality-warnings": {
       "types": "./src/snapshot/snapshot-presentation/quality-warnings.ts",
       "default": "./src/snapshot/snapshot-presentation/quality-warnings.ts"

@@ -20,6 +20,9 @@ Keep provider callbacks on their supplied host.
 Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `src/daemon-client/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
+The provider runtime-instance fingerprint belongs beside the owner declarations in `packages/contracts/src/platform-runtime.ts`.
+Lease-session bookkeeping shared by provider runtimes belongs in `@agent-device/capture-kit/provider-lease-sessions`.
+Keep that module free of value imports: a provider reaches it through a function-scoped `await import`.
 Schema composition belongs in `src/commands/schema`.
 Build interaction data through `buildInteractionResponseData`.
 Change cross-language rules through `contracts/fixtures/` golden tables.

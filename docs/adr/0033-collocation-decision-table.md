@@ -45,6 +45,7 @@ Re-evaluate those files against their remaining edges.
 | `src/snapshot/snapshot-evidence.ts` | keep | This is snapshot-capture mechanics. The daemon-dominated community represents consumers. A daemon-server home would force every platform and provider to depend on the daemon zone for capture evidence. |
 | `packages/capture-kit/src/snapshot/snapshot-freshness/index.ts` (moved from `src/snapshot/snapshot-freshness/index.ts` in #2385) | keep | The reason for the row above applies. This is platform-neutral freshness policy. Its consumers today are the root command layer and the daemon; capture-kit owns the module. |
 | `src/snapshot/touch-reference-frame.ts` | keep | Interaction and capture share these snapshot-geometry mechanics. Only capture-kit is below both. |
+| `src/provider-lease-sessions.ts` (new) | keep (proposed provider home rejected) | Two provider runtimes serve lease sessions and reach the same bookkeeping through their own driver. A provider package cannot import another provider, and no provider package sits below a second one, so a shared home must be below both. Only capture-kit is. Contracts was rejected: the table is session lifecycle mechanics, which R18 excludes from wire vocabulary. Keeping the module free of value imports keeps it off the boot path; a provider reaches it through a function-scoped `await import`. |
 
 ### contracts
 
@@ -64,6 +65,7 @@ All its consumers occupy one zone that already owns the operations represented b
 | `src/facades/device.ts` | keep | This is the published facade of the contracts package. Facades are the package boundary, not movable content. |
 | `src/interaction-guarantees.ts` | keep | AGENTS.md names this declaration site for interaction dispatch paths and guarantee cells under ADR 0011. Cross-language golden tables in `contracts/fixtures/` bind it to this package. |
 | `src/managed-device-allocation.ts` | move (batch 1, landed in #3287; package removed 2026-10-10) → `packages/managed-allocation` | Only managed-allocation and its dependent daemon composition consume this port and vocabulary; see [ADR 0021](0021-simlock-leased-devices.md) §4, the withdrawn design. No other contracts file or zone imports it. Types therefore belong beside their implementing operations. |
+| `src/platform-runtime.ts` (`providerRuntimeInstance`) | keep (proposed capture-kit home rejected) | The scrypt digest IS the identity that `providerRuntimeOwner` and `runtimeOwnerKey` in this file name, and every provider derives an owner from it. Splitting the hash from the declarations it identifies lets the two drift into two owners for one account. R18 bans host, process, and timer calls here; `node:crypto` is none of them, and `src/daemon-http.ts` already reaches for `node:path` for the same reason. |
 | `src/wait-runtime-plan.ts` | keep | Command-registry and daemon-server share it. Both are spine zones; contracts is the only seam below them. |
 
 ### device-selection

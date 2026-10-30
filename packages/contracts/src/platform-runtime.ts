@@ -1,3 +1,4 @@
+import { scryptSync } from 'node:crypto';
 import {
   isPlatform,
   type AppleOS,
@@ -74,6 +75,46 @@ export function providerRuntimeOwner(
     provider: normalizedProvider,
     instance: normalizedInstance,
   });
+}
+
+// Changing these re-identifies every provider runtime, so durable provider descriptors written
+// before the change name an instance no runtime claims. The output length is part of that contract:
+// a caller cannot ask for another one, since doing so would silently fork an account's identity.
+const RUNTIME_INSTANCE_KEY_LENGTH_BYTES = 32;
+const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
+const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
+
+/**
+ * The one fingerprint that turns a provider account into a runtime-owner instance. A provider's
+ * principal is the set of facts that decide which devices one runtime rents — its credentials, its
+ * region, the endpoints it attaches — and two runtimes with the same principal share one owner.
+ * The principal is hashed rather than carried: the instance travels into diagnostics and durable
+ * descriptors, so a secret must never be readable from it.
+ *
+ * `principal` is serialized with its own field order, so a provider keeps its fingerprint stable.
+ * Only the `provider` field is normalized, as `providerRuntimeOwner` normalizes it, and the salt
+ * derives from it, which is what keeps two providers with the same credentials in different
+ * instances and one account from arriving as two owners through spelling.
+ *
+ * Hashing is the mechanic R18 leaves here on purpose: the digest IS the shared identity that
+ * `providerRuntimeOwner` and `runtimeOwnerKey` name, and splitting it from them would let the two
+ * drift apart into two accounts for one provider account. `packages/contracts/src/daemon-http.ts`
+ * already reaches for `node:path` for the same reason.
+ */
+export function providerRuntimeInstance(
+  principal: Readonly<Record<string, unknown> & Readonly<{ provider: string }>>,
+): string {
+  const provider = principal.provider.trim();
+  if (provider.length === 0) {
+    throw new TypeError('Provider runtime instance requires a non-empty provider principal');
+  }
+  const fingerprint = scryptSync(
+    JSON.stringify({ ...principal, provider }),
+    `agent-device:${provider}-runtime-owner:v1`,
+    RUNTIME_INSTANCE_KEY_LENGTH_BYTES,
+    { N: RUNTIME_INSTANCE_SCRYPT_COST, r: 8, p: 1, maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY },
+  );
+  return `principal-${fingerprint.toString('hex')}`;
 }
 
 export function runtimeOwnerKey(owner: RuntimeOwnerRef): string {

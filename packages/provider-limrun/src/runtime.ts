@@ -44,6 +44,14 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type {
+  ProviderLeaseFailureReason,
+  ProviderLeaseRejection,
+  ProviderLeaseSearch,
+  ProviderLeaseSessionTable,
+  ProviderLeaseStartControl,
+  ProviderLeaseStopOutcome,
+} from '@agent-device/capture-kit/provider-lease-sessions';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import { LIMRUN_CLIENT_ID, limrunUserAgent, requireLimrunOrgClient } from './client-options.ts';
@@ -122,7 +130,6 @@ export function createLimrunRuntime(
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
-  private readonly sessions = new Map<string, LimrunRuntimeSession>();
   private readonly keepAliveTimers = new Map<string, NodeJS.Timeout>();
   /** Each lease's `--provider-network-logs` capture: live, stopped at release, or never started. */
   private readonly networkCaptures = new Map<string, NetworkCaptureState>();
@@ -134,9 +141,117 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
 
+  /**
+   * Which lease ids this runtime serves, and what releasing each one amounts to. Built on the first
+   * lease call: this module is reached from the package entry the daemon evaluates at boot, so the
+   * table's module stays off that path.
+   */
+  private leaseTable?: ProviderLeaseSessionTable<LimrunRuntimeSession, LimrunLeaseRequest>;
+  private leaseTableLoad?: Promise<void>;
+
+  private sessionsTable(): Promise<
+    ProviderLeaseSessionTable<LimrunRuntimeSession, LimrunLeaseRequest>
+  > {
+    this.leaseTableLoad ??= import('@agent-device/capture-kit/provider-lease-sessions').then(
+      ({ createProviderLeaseSessionTable }) => {
+        this.leaseTable = createProviderLeaseSessionTable<
+          LimrunRuntimeSession,
+          LimrunInstanceSearch,
+          LimrunLeaseRequest
+        >(this.leaseSessionDriver());
+      },
+    );
+    return this.leaseTableLoad.then(() => this.leaseTable!);
+  }
+
+  /**
+   * The session this process holds for a lease id. `undefined` before the first lease call, when no
+   * table exists and nothing was rented.
+   */
+  private heldSession(leaseId: string): LimrunRuntimeSession | undefined {
+    return this.leaseTable?.find(leaseId);
+  }
+
+  private leaseSessionDriver() {
+    return {
+      prepare: async (request: LimrunLeaseRequest) => {
+        const { rejectRefusedLimrunProfileFields } = await import('./session-allocation.ts');
+        // Ahead of the reuse the table may answer with, since a repeat allocation carries flags of
+        // its own, and ahead of attach as well as create, since an attached instance reads neither.
+        rejectRefusedLimrunProfileFields(request.context);
+      },
+      start: async (
+        request: LimrunLeaseRequest,
+        control: ProviderLeaseStartControl<LimrunRuntimeSession>,
+      ) => {
+        const { lease, context } = request;
+        const platform = requireLimrunLeasePlatform(lease);
+        const session =
+          (await this.attachSession(platform, lease)) ??
+          (await this.createSession(platform, lease, context));
+        control.adopt(session);
+        if (this.options.keepAlive) this.startKeepAlive(lease.leaseId, session);
+        const networkHar =
+          context?.flags?.providerNetworkLogs === true
+            ? await this.startNetworkCapture(lease, session, context)
+            : undefined;
+        return {
+          limrunInstanceId: session.instanceId,
+          providerSessionId: session.instanceId,
+          device: session.device,
+          ...(networkHar ? { networkHar } : {}),
+        };
+      },
+      reuse: async (session: LimrunRuntimeSession, request: LimrunLeaseRequest) => {
+        // A repeat allocation can opt into the capture the first one did not ask for, or retry one
+        // that could not start.
+        const networkHar =
+          request.context?.flags?.providerNetworkLogs === true &&
+          (this.networkCaptures.get(request.lease.leaseId)?.phase ?? 'unavailable') ===
+            'unavailable'
+            ? await this.startNetworkCapture(request.lease, session, request.context)
+            : undefined;
+        return {
+          limrunInstanceId: session.instanceId,
+          device: session.device,
+          ...(networkHar ? { networkHar } : {}),
+        };
+      },
+      describeRelease: async (session: LimrunRuntimeSession) => {
+        const networkCapture = await this.stopNetworkCapture(session.lease.leaseId);
+        return {
+          limrunInstanceId: session.instanceId,
+          providerSessionId: session.instanceId,
+          ...(networkCapture ? { cloudArtifacts: networkCaptureArtifacts(networkCapture) } : {}),
+        };
+      },
+      stop: async (session: LimrunRuntimeSession) => {
+        await this.terminateSession(session);
+        this.appAliases.delete(session.lease.leaseId);
+      },
+      searchLease: async (request: LimrunLeaseRequest) =>
+        await this.searchLimrunInstances(request.lease),
+      stopLease: async (found: LimrunInstanceSearch) => await this.deleteLimrunInstances(found),
+      reject: (rejection: ProviderLeaseRejection, reason: ProviderLeaseFailureReason) =>
+        limrunLeaseError(rejection, reason),
+    };
+  }
+
   readonly leaseLifecycle: LeaseLifecycleProvider = {
-    allocate: async (lease, context) => await this.allocate(lease, context),
-    release: async (lease) => await this.release(lease),
+    // A lease another provider owns, or a backend Limrun has no instance for, is not this runtime's
+    // to allocate; the daemon reads `undefined` as "nothing to do".
+    allocate: async (lease, context) => {
+      if (limrunLeasePlatform(lease) === undefined) return undefined;
+      const table = await this.sessionsTable();
+      return await table.allocate({ lease, context }, lease.leaseId, {
+        signal: context?.signal,
+        deadlineAt: context?.deadline,
+      });
+    },
+    release: async (lease) => {
+      const table = await this.sessionsTable();
+      return await table.release({ lease }, lease.leaseId);
+    },
   };
 
   readonly appCatalog: ProviderAppCatalogHandler = async (query, signal) => {
@@ -157,12 +272,15 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         leaseBackend: lease.backend,
       });
     }
-    await this.release(lease);
+    // The daemon drops a pending release once recovery resolves, so an unconfirmed stop has to keep
+    // the lease pending rather than report a device Limrun may still be holding.
+    const table = await this.sessionsTable();
+    await table.release({ lease }, lease.leaseId);
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
-    const session = this.sessions.get(request.leaseId);
+    const session = this.heldSession(request.leaseId);
     if (!session) return null;
     if (request.platform && request.platform !== session.platform) return [];
     return [session.device];
@@ -256,54 +374,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   async shutdown(): Promise<void> {
-    const sessions = [...this.sessions.values()];
-    await Promise.allSettled(sessions.map(async (session) => await this.terminateSession(session)));
-    this.sessions.clear();
-    this.appAliases.clear();
-  }
-
-  private async allocate(
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ): Promise<Record<string, unknown> | undefined> {
-    if (lease.leaseProvider !== this.provider) return undefined;
-    const platform = platformForLimrunLeaseBackend(lease.backend);
-    if (!platform) return undefined;
-    const { rejectRefusedLimrunProfileFields } = await import('./session-allocation.ts');
-    // Before the reuse below, since a repeat allocation of a live lease carries flags of its own, and
-    // ahead of attach as well as create, since an attached instance reads none of them either.
-    rejectRefusedLimrunProfileFields(context);
-    const existing = this.sessions.get(lease.leaseId);
-    if (existing) {
-      // A repeat allocation can opt into the capture the first one did not ask for, or retry one
-      // that could not start.
-      const networkHar =
-        context?.flags?.providerNetworkLogs === true &&
-        (this.networkCaptures.get(lease.leaseId)?.phase ?? 'unavailable') === 'unavailable'
-          ? await this.startNetworkCapture(lease, existing, context)
-          : undefined;
-      return {
-        limrunInstanceId: existing.instanceId,
-        device: existing.device,
-        ...(networkHar ? { networkHar } : {}),
-      };
+    try {
+      const table = await this.sessionsTable();
+      await table.shutdown();
+    } finally {
+      this.appAliases.clear();
     }
-
-    const session =
-      (await this.attachSession(platform, lease)) ??
-      (await this.createSession(platform, lease, context));
-    this.sessions.set(lease.leaseId, session);
-    if (this.options.keepAlive) this.startKeepAlive(lease.leaseId, session);
-    const networkHar =
-      context?.flags?.providerNetworkLogs === true
-        ? await this.startNetworkCapture(lease, session, context)
-        : undefined;
-    return {
-      limrunInstanceId: session.instanceId,
-      providerSessionId: session.instanceId,
-      device: session.device,
-      ...(networkHar ? { networkHar } : {}),
-    };
   }
 
   private async attachSession(
@@ -387,18 +463,58 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     };
   }
 
-  private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
-    const session = this.sessions.get(lease.leaseId);
-    if (!session) return await this.releaseRecoveredSession(lease);
-    // A retry after a failed termination finds the capture already stopped and reports it again.
-    const networkCapture = await this.stopNetworkCapture(lease.leaseId);
-    await this.terminateSession(session);
-    this.sessions.delete(lease.leaseId);
-    this.appAliases.delete(lease.leaseId);
+  /**
+   * The Limrun instances labelled for one lease. This process may not have started them: the daemon
+   * restarts, and the persisted lease is the only handle left.
+   */
+  private async searchLimrunInstances(
+    lease: DeviceLease,
+  ): Promise<ProviderLeaseSearch<LimrunInstanceSearch>> {
+    const platform = platformForLimrunLeaseBackend(lease.backend);
+    const limrun = this.limrun;
+    if (!platform || !limrun) return { status: 'absent' };
+    const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
+    try {
+      const instances =
+        platform === 'ios'
+          ? await limrun.iosInstances.list({ labelSelector })
+          : await limrun.androidInstances.list({ labelSelector });
+      return {
+        status: 'found',
+        lease: { platform, instanceIds: instances.getPaginatedItems().map((i) => i.metadata.id) },
+      };
+    } catch (error) {
+      // Reporting `absent` here would let the lease expire with its instance still rented.
+      return { status: 'unknown', cause: error };
+    }
+  }
+
+  private async deleteLimrunInstances(
+    found: LimrunInstanceSearch,
+  ): Promise<ProviderLeaseStopOutcome> {
+    const limrun = this.orgClient('Deleting an instance');
+    const deletions = await Promise.allSettled(
+      found.instanceIds.map(async (instanceId) =>
+        found.platform === 'ios'
+          ? await limrun.iosInstances.delete(instanceId)
+          : await limrun.androidInstances.delete(instanceId),
+      ),
+    );
+    const failure = deletions.find((outcome) => outcome.status === 'rejected');
+    if (failure && failure.status === 'rejected') {
+      return { stopped: false, cause: failure.reason };
+    }
+    const [firstInstanceId] = found.instanceIds;
     return {
-      limrunInstanceId: session.instanceId,
-      providerSessionId: session.instanceId,
-      ...(networkCapture ? { cloudArtifacts: networkCaptureArtifacts(networkCapture) } : {}),
+      stopped: true,
+      ...(found.instanceIds.length === 0
+        ? {}
+        : {
+            artifacts: {
+              limrunInstanceId: firstInstanceId,
+              limrunInstanceCount: found.instanceIds.length,
+            },
+          }),
     };
   }
 
@@ -487,29 +603,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     },
   };
 
-  private async releaseRecoveredSession(
-    lease: DeviceLease,
-  ): Promise<Record<string, unknown> | undefined> {
-    const platform = platformForLimrunLeaseBackend(lease.backend);
-    const limrun = this.limrun;
-    if (!platform || !limrun) return undefined;
-    const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
-    const instances =
-      platform === 'ios'
-        ? await limrun.iosInstances.list({ labelSelector })
-        : await limrun.androidInstances.list({ labelSelector });
-    const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
-    for (const instanceId of instanceIds) {
-      if (platform === 'ios') {
-        await limrun.iosInstances.delete(instanceId);
-      } else {
-        await limrun.androidInstances.delete(instanceId);
-      }
-    }
-    if (instanceIds.length === 0) return undefined;
-    return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
-  }
-
   private startKeepAlive(leaseId: string, session: LimrunRuntimeSession): void {
     const timer = setInterval(() => {
       try {
@@ -551,7 +644,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private getSessionForDevice(device: DeviceInfo): LimrunRuntimeSession | undefined {
     const parsed = parseLimrunDeviceId(device.id);
     if (!parsed) return undefined;
-    const session = this.sessions.get(parsed.leaseId);
+    const session = this.heldSession(parsed.leaseId);
     return session?.platform === parsed.platform ? session : undefined;
   }
 
@@ -591,7 +684,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   private requireAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
-    const session = this.sessions.get(leaseId);
+    const session = this.heldSession(leaseId);
     if (!session || session.platform === 'android') return session;
     throw unsupported(
       'port reverse',
@@ -699,6 +792,94 @@ function readProviderNetworkHosts(value: unknown): readonly string[] | undefined
 }
 
 const SETTLED_NETWORK_CAPTURE_LIMIT = 32;
+
+/** One Limrun allocation or release: the lease the daemon named, plus an allocation's context. */
+type LimrunLeaseRequest = Readonly<{ lease: DeviceLease; context?: LeaseLifecycleContext }>;
+
+/** The Limrun instances labelled for one lease, which this process need not have started. */
+type LimrunInstanceSearch = Readonly<{
+  platform: LimrunPlatform;
+  instanceIds: readonly string[];
+}>;
+
+/** The platform Limrun rents for a lease, or `undefined` when the lease is not this runtime's. */
+function limrunLeasePlatform(lease: DeviceLease): LimrunPlatform | undefined {
+  return lease.leaseProvider === LIMRUN_PROVIDER
+    ? platformForLimrunLeaseBackend(lease.backend)
+    : undefined;
+}
+
+function requireLimrunLeasePlatform(lease: DeviceLease): LimrunPlatform {
+  const platform = limrunLeasePlatform(lease);
+  if (!platform) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Limrun cannot serve this lease.', {
+      leaseId: lease.leaseId,
+      leaseProvider: lease.leaseProvider,
+      leaseBackend: lease.backend,
+    });
+  }
+  return platform;
+}
+
+/**
+ * Reports a lease-table failure. A stop or search that did not answer leaves the device rented, so
+ * it says cleanup is pending and keeps the provider's failure as the cause; a caller retrying the
+ * release reads that cause to tell a temporary refusal from a real end.
+ */
+function limrunLeaseError(
+  rejection: ProviderLeaseRejection,
+  reason: ProviderLeaseFailureReason,
+): AppError {
+  const cause = 'cause' in rejection ? rejection.cause : undefined;
+  const details: Record<string, unknown> = {
+    reason,
+    leaseId: 'leaseId' in rejection ? rejection.leaseId : undefined,
+  };
+  let message: string;
+  switch (rejection.reason) {
+    case 'provider-runtime-shutting-down':
+      message = 'Limrun is shutting down and takes no new lease work.';
+      break;
+    case 'provider-allocation-cancelled':
+      message =
+        `Limrun stopped the instance it rented for lease '${rejection.leaseId}' ` +
+        'because the request was cancelled.';
+      break;
+    case 'provider-start-deadline-exceeded':
+      message = `Limrun could not allocate the session for lease '${rejection.leaseId}' before its deadline.`;
+      details.deadlineAt = rejection.deadlineAt;
+      break;
+    case 'provider-stop-unconfirmed':
+      message = `Limrun could not stop the instance for lease '${rejection.leaseId}': ${errorText(cause)}`;
+      break;
+    case 'provider-drain-unconfirmed':
+      message =
+        `Limrun could not stop the instances for leases ` +
+        `'${rejection.leaseIds.join("', '")}' while shutting down.`;
+      details.leaseIds = rejection.leaseIds;
+      break;
+    case 'provider-lease-search-unanswered':
+      message =
+        `Limrun could not look up the instances for lease '${rejection.leaseId}': ` +
+        `${errorText(cause)}`;
+      break;
+    case 'provider-lease-not-releasable':
+      message =
+        `Limrun found instances for lease '${rejection.leaseId}' it cannot stop, ` +
+        'so they stay rented.';
+      break;
+  }
+  return new AppError(
+    'COMMAND_FAILED',
+    `Limrun lease operation did not complete: ${message}`,
+    details,
+    cause,
+  );
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 type SettledNetworkCapture =
   | Readonly<{
