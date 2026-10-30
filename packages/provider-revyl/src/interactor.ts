@@ -33,10 +33,19 @@ class RevylInteractor implements Interactor {
   private readonly session: RevylSession;
   /** The cancellation the command came in with, when the runner carried one. */
   private readonly signal: AbortSignal | undefined;
+  /**
+   * The app this command resolves to. The shared lifecycle works out that identity before it dispatches
+   * and passes it to the interactor resolver, so it is the session's app for a close and the app under
+   * launch for an open. `close` has to accept it: a relaunch open names the app it is about to start,
+   * and the lifecycle closes that app first, so a session running one app could never move to another
+   * without it.
+   */
+  private readonly requestApp: string | undefined;
 
-  constructor(session: RevylSession, signal?: AbortSignal) {
+  constructor(session: RevylSession, signal?: AbortSignal, requestApp?: string) {
     this.session = session;
     this.signal = signal;
+    this.requestApp = requestApp?.trim() || undefined;
   }
 
   async open(
@@ -81,11 +90,15 @@ class RevylInteractor implements Interactor {
    * Revyl's `/kill_app` carries no bundle id: it ends the app the session runs. So a close that names
    * the app this session launched is the same request, an unnamed close is that request too, and a
    * close that names a different app is refused rather than answered by killing something else.
+   *
+   * The app this command resolves to is allowed as well. A relaunch open names the app it is about to
+   * launch, and the shared lifecycle closes that app before starting it, so a session running one app
+   * has to be able to close its way into another.
    */
   async close(app: string): Promise<void> {
     const target = app.trim();
     const sessionApp = this.session.launchedApp.bundleId;
-    if (target && sessionApp && target !== sessionApp) {
+    if (target && sessionApp && target !== sessionApp && target !== this.requestApp) {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
@@ -284,8 +297,12 @@ class RevylInteractor implements Interactor {
   }
 }
 
-export function createRevylInteractor(session: RevylSession, signal?: AbortSignal): Interactor {
-  return new RevylInteractor(session, signal);
+export function createRevylInteractor(
+  session: RevylSession,
+  signal?: AbortSignal,
+  requestApp?: string,
+): Interactor {
+  return new RevylInteractor(session, signal, requestApp);
 }
 
 /** The plan works in a zero-origin box; a snapshot container's rect is in the same space here. */
