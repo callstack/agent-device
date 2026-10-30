@@ -3,10 +3,6 @@ import * as inventoryContext from '@agent-device/device-selection/device-invento
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import * as hostCommands from '@agent-device/host-kit/command';
-import {
-  withCommandExecutorOverride,
-  type CommandExecutorOverride,
-} from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import * as timers from 'node:timers/promises';
 import { pack } from 'tar-stream';
@@ -36,6 +32,7 @@ import {
 vi.mock('node:timers/promises', async (original) => ({ ...(await original<typeof timers>()) }));
 
 type InstallCommand = 'install' | 'reinstall' | 'install_source';
+type InstallCase = InstallCommand | 'install_source URL';
 
 type InstallLedgerCall = Readonly<{
   tool: string;
@@ -93,8 +90,7 @@ for (const route of [
   for (const command of ['install', 'reinstall', 'install_source', 'install_source URL'] as const) {
     test(`${route} ${command} leaves 30s for the daemon result`, async () => {
       await withInstallLedgerScenario(route, async (scenario) => {
-        if (command === 'install_source URL') await runInstallSourceFromUrlCommand(scenario);
-        else await runInstallCommand(scenario, command);
+        await runInstallCommand(scenario, command);
         const daemonCommand = command === 'install_source URL' ? 'install_source' : command;
         assertInstallLedgerPhaseCoverage(route, daemonCommand, scenario.ledger.calls);
         if (command === 'install_source URL') {
@@ -159,57 +155,53 @@ async function withInstallLedgerScenario<T>(
 
 async function runInstallCommand(
   scenario: InstallLedgerScenario,
-  command: InstallCommand,
+  command: InstallCase,
 ): Promise<void> {
   const client = scenario.daemon.client();
-  if (command === 'install') {
-    await client.apps.install({
+  if (command === 'install' || command === 'reinstall') {
+    await client.apps[command]({
       app: 'com.example.demo',
       appPath: scenario.appPath,
       ...scenario.selection,
     });
     return;
   }
-  if (command === 'reinstall') {
-    await client.apps.reinstall({
-      app: 'com.example.demo',
-      appPath: scenario.appPath,
-      ...scenario.selection,
-    });
-    return;
-  }
+  const fromUrl = command === 'install_source URL';
+  if (fromUrl) stubSourceDownload(scenario);
   await client.apps.installFromSource({
-    source: { kind: 'path', path: scenario.appPath },
+    source: fromUrl
+      ? {
+          kind: 'url',
+          url: `https://artifacts.example.com/${path.basename(scenario.appPath)}${scenario.appPath.endsWith('.app') ? '.tar' : ''}`,
+        }
+      : { kind: 'path', path: scenario.appPath },
     ...scenario.selection,
   });
 }
 
-async function runInstallSourceFromUrlCommand(scenario: InstallLedgerScenario): Promise<void> {
+function stubSourceDownload(scenario: InstallLedgerScenario): void {
   const timeouts = new WeakMap<AbortSignal, number>();
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   const any = AbortSignal.any.bind(AbortSignal);
-  const timeoutMock = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
     const signal = timeout(ms);
     timeouts.set(signal, ms);
     return signal;
   });
-  const anyMock = vi.spyOn(AbortSignal, 'any').mockImplementation((signals) => {
+  vi.spyOn(AbortSignal, 'any').mockImplementation((signals) => {
     const signal = any(signals);
     const ms = signals.map((part) => timeouts.get(part)).find((value) => value !== undefined);
     if (ms !== undefined) timeouts.set(signal, ms);
     return signal;
   });
-  const lookupMock = vi
-    .spyOn(dns, 'lookup')
-    .mockImplementation(
-      async () =>
-        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
-          ReturnType<typeof dns.lookup>
-        >,
-    );
-  const requestMock = vi
-    .spyOn(networkTransport, 'requestApprovedUrl')
-    .mockImplementation(async (request): Promise<networkTransport.InstallSourceNetworkResponse> => {
+  vi.spyOn(dns, 'lookup').mockImplementation(
+    async () =>
+      [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+        ReturnType<typeof dns.lookup>
+      >,
+  );
+  vi.spyOn(networkTransport, 'requestApprovedUrl').mockImplementation(
+    async (request): Promise<networkTransport.InstallSourceNetworkResponse> => {
       scenario.ledger.record('download', [request.url.toString()], timeouts.get(request.signal));
       return {
         statusCode: 200,
@@ -217,21 +209,8 @@ async function runInstallSourceFromUrlCommand(scenario: InstallLedgerScenario): 
         body: downloadBody(scenario.appPath),
         close: async () => {},
       };
-    });
-  try {
-    await scenario.daemon.client().apps.installFromSource({
-      source: {
-        kind: 'url',
-        url: `https://artifacts.example.com/${path.basename(scenario.appPath)}${scenario.appPath.endsWith('.app') ? '.tar' : ''}`,
-      },
-      ...scenario.selection,
-    });
-  } finally {
-    requestMock.mockRestore();
-    lookupMock.mockRestore();
-    anyMock.mockRestore();
-    timeoutMock.mockRestore();
-  }
+    },
+  );
 }
 
 async function createIosScenario(
@@ -252,15 +231,15 @@ async function createIosScenario(
           booted: false,
         };
   const { tempRoot, appPath } = createDemoIosApp('agent-device-install-ledger-ios-');
-  const commandOverride = createInstallLedgerHostCommandOverride(ledger);
-  const daemon = await withCommandExecutorOverride(
-    commandOverride,
-    async () =>
-      await createProviderScenarioHarness({
-        deviceInventoryProvider: async () => [device],
-        appleToolProvider: () => createInstallLedgerAppleToolProvider(route, device.id, ledger),
-      }),
-  );
+  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
+    assert.equal(command, 'open');
+    ledger.record(command, args, options.timeoutMs);
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  const daemon = await createProviderScenarioHarness({
+    deviceInventoryProvider: async () => [device],
+    appleToolProvider: () => createInstallLedgerAppleToolProvider(route, device.id, ledger),
+  });
   return {
     appPath,
     daemon,
@@ -282,48 +261,41 @@ function createInstallLedgerAppleToolProvider(
   let simulatorBooted = false;
   return createLocalAppleToolProvider({
     whichCommand: async () => true,
-    runCommand: async (cmd, args, options) => {
-      assert.equal(cmd, 'plutil');
-      ledger.record(cmd, args, options?.timeoutMs);
-      // Conversion and extraction can both fail before the XML reader resolves the identity.
-      return { stdout: '', stderr: '', exitCode: 1 };
-    },
-    simctl: {
-      run: async (args, options) => {
-        ledger.record('simctl', args, options?.timeoutMs);
-        if (args.includes('list')) {
-          return {
-            stdout: JSON.stringify({
-              devices: {
-                'iOS 18.5': [{ udid: deviceId, state: simulatorBooted ? 'Booted' : 'Shutdown' }],
-              },
-            }),
-            stderr: '',
-            exitCode: 0,
-          };
-        }
-        if (args.includes('boot')) {
-          simulatorBooted = true;
+    runCommand: async (command, argv, options) => {
+      const tool = command === 'xcrun' ? argv[0] : command;
+      const args = command === 'xcrun' ? argv.slice(1) : argv;
+      assert.ok(tool);
+      ledger.record(tool, args, options?.timeoutMs);
+      switch (tool) {
+        case 'plutil':
+          // Conversion and extraction can both fail before the XML reader resolves the identity.
+          return { ...ok, exitCode: 1 };
+        case 'simctl':
+          if (args.includes('list')) {
+            return {
+              ...ok,
+              stdout: JSON.stringify({
+                devices: {
+                  'iOS 18.5': [{ udid: deviceId, state: simulatorBooted ? 'Booted' : 'Shutdown' }],
+                },
+              }),
+            };
+          }
+          if (args.includes('boot')) simulatorBooted = true;
+          else
+            assert.ok(
+              args.includes('bootstatus') || args.includes('install') || args.includes('uninstall'),
+              args.join(' '),
+            );
           return ok;
-        }
-        assert.ok(
-          args.includes('bootstatus') || args.includes('install') || args.includes('uninstall'),
-          args.join(' '),
-        );
-        return ok;
-      },
-    },
-    devicectl: {
-      run: async (args, options) => {
-        ledger.record('devicectl', args, options?.timeoutMs);
-        if (args.includes('details')) {
-          writeCoreDeviceDetailsJson(args);
+        case 'devicectl':
+          assert.equal(route, 'iOS physical device');
+          if (args.includes('details')) writeCoreDeviceDetailsJson(args);
+          else assert.ok(args.includes('install') || args.includes('uninstall'), args.join(' '));
           return ok;
-        }
-        assert.equal(route, 'iOS physical device');
-        assert.ok(args.includes('install') || args.includes('uninstall'), args.join(' '));
-        return ok;
-      },
+        default:
+          throw new Error(`Unscripted Apple install tool: ${command} ${argv.join(' ')}`);
+      }
     },
   });
 }
@@ -446,14 +418,6 @@ function isAndroidRoute(route: InstallRoute): route is Extract<InstallRoute, `An
   return route.startsWith('Android');
 }
 
-function createInstallLedgerHostCommandOverride(ledger: InstallLedger): CommandExecutorOverride {
-  return (command, args, options) => {
-    assert.equal(command, 'open');
-    ledger.record(command, args, options.timeoutMs);
-    return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
-  };
-}
-
 function assertLedgerFitsEnvelope(
   route: string,
   command: InstallCommand,
@@ -501,7 +465,7 @@ function assertInstallLedgerPhaseCoverage(
   }
   for (const phase of expected) {
     assert.ok(
-      ledger.some((call) => call.tool === phase || call.args.some((arg) => arg.includes(phase))),
+      ledger.some((call) => call.tool === phase || call.args.includes(phase)),
       `${route} ${command}: missing ${phase} phase. Ledger: ${JSON.stringify(ledger)}`,
     );
   }

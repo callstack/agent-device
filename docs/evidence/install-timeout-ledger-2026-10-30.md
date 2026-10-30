@@ -10,101 +10,22 @@ All 12 matrix cases succeeded. Each source case started after uninstalling the f
 
 ## Request evidence
 
-### android-apk: install
+All rows exited with code 0 and returned success. Timeouts are in milliseconds; repeated calls remain in their recorded order.
 
-Exit 0, success true. Request `2315096768d37af3`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"adb","timeoutMs":120000}]
-```
-
-### android-apk: reinstall
-
-Exit 0, success true. Request `2f017324c2745848`.
-
-```json
-[{"command":"adb","timeoutMs":15000},{"command":"adb","timeoutMs":15000},{"command":"adb","timeoutMs":120000},{"command":"adb","timeoutMs":15000}]
-```
-
-### android-apk: source-path
-
-Exit 0, success true. Request `a85ed6f4e7cfc7bf`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"adb","timeoutMs":120000}]
-```
-
-### android-apk: source-url
-
-Exit 0, success true. Request `8dc8f16f9eb99abe`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"adb","timeoutMs":120000}]
-```
-
-### android-aab: install
-
-Exit 0, success true. Request `7a2adfa89e465908`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"unzip","timeoutMs":15000},{"command":"aapt","timeoutMs":15000},{"command":"adb","timeoutMs":15000},{"command":"bundletool","timeoutMs":120000},{"command":"bundletool","timeoutMs":120000},{"command":"adb","timeoutMs":15000}]
-```
-
-### android-aab: reinstall
-
-Exit 0, success true. Request `6af1acfe3ea0871b`.
-
-```json
-[{"command":"adb","timeoutMs":15000},{"command":"adb","timeoutMs":15000},{"command":"bundletool","timeoutMs":120000},{"command":"bundletool","timeoutMs":120000},{"command":"adb","timeoutMs":15000}]
-```
-
-### android-aab: source-path
-
-Exit 0, success true. Request `bb9b953af572935e`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"unzip","timeoutMs":15000},{"command":"aapt","timeoutMs":15000},{"command":"adb","timeoutMs":15000},{"command":"bundletool","timeoutMs":120000},{"command":"bundletool","timeoutMs":120000},{"command":"adb","timeoutMs":15000}]
-```
-
-### android-aab: source-url
-
-Exit 0, success true. Request `6b54c958085fee22`.
-
-```json
-[{"command":"unzip","timeoutMs":15000},{"command":"unzip","timeoutMs":15000},{"command":"aapt","timeoutMs":15000},{"command":"adb","timeoutMs":15000},{"command":"bundletool","timeoutMs":120000},{"command":"bundletool","timeoutMs":120000},{"command":"adb","timeoutMs":15000}]
-```
-
-### ios-simulator: install
-
-Exit 0, success true. Request `47d1332d8f86ea45`.
-
-```json
-[{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"xcrun","timeoutMs":120000}]
-```
-
-### ios-simulator: reinstall
-
-Exit 0, success true. Request `c99b595555fed5bc`.
-
-```json
-[{"command":"xcrun","timeoutMs":20000},{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"xcrun","timeoutMs":120000}]
-```
-
-### ios-simulator: source-path
-
-Exit 0, success true. Request `edc59a0093f390e8`.
-
-```json
-[{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"xcrun","timeoutMs":120000}]
-```
-
-### ios-simulator: source-url
-
-Exit 0, success true. Request `fe50368be865a97a`.
-
-```json
-[{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"plutil","timeoutMs":15000},{"command":"xcrun","timeoutMs":120000}]
-```
+| Route | Operation | Request | Recorded timeouts |
+| --- | --- | --- | --- |
+| android-apk | install | `2315096768d37af3` | unzip=15000, adb=120000 |
+| android-apk | reinstall | `2f017324c2745848` | adb=15000, adb=15000, adb=120000, adb=15000 |
+| android-apk | source-path | `a85ed6f4e7cfc7bf` | unzip=15000, adb=120000 |
+| android-apk | source-url | `8dc8f16f9eb99abe` | unzip=15000, adb=120000 |
+| android-aab | install | `7a2adfa89e465908` | unzip=15000, unzip=15000, aapt=15000, adb=15000, bundletool=120000, bundletool=120000, adb=15000 |
+| android-aab | reinstall | `6af1acfe3ea0871b` | adb=15000, adb=15000, bundletool=120000, bundletool=120000, adb=15000 |
+| android-aab | source-path | `bb9b953af572935e` | unzip=15000, unzip=15000, aapt=15000, adb=15000, bundletool=120000, bundletool=120000, adb=15000 |
+| android-aab | source-url | `6b54c958085fee22` | unzip=15000, unzip=15000, aapt=15000, adb=15000, bundletool=120000, bundletool=120000, adb=15000 |
+| ios-simulator | install | `47d1332d8f86ea45` | plutil=15000, plutil=15000, plutil=15000, xcrun=120000 |
+| ios-simulator | reinstall | `c99b595555fed5bc` | xcrun=20000, plutil=15000, plutil=15000, plutil=15000, xcrun=120000 |
+| ios-simulator | source-path | `edc59a0093f390e8` | plutil=15000, plutil=15000, plutil=15000, xcrun=120000 |
+| ios-simulator | source-url | `fe50368be865a97a` | plutil=15000, plutil=15000, plutil=15000, xcrun=120000 |
 
 ## Ledger regression proof
 
