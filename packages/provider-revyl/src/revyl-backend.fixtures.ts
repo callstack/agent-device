@@ -45,6 +45,12 @@ export type RevylFixtureBackend = Readonly<{
   requests: RevylFixtureRequest[];
   /** Paths in arrival order, each spelled `METHOD /path`, which is what the assertions read. */
   paths(): string[];
+  /**
+   * Paths whose answer has been written back, in completion order. Receipt is the wrong moment for a
+   * caller-side assertion: the client has not seen the action succeed yet, so a cancellation that lands
+   * then races the response. A test that has to abort after a completed action waits on this.
+   */
+  answeredPaths(): string[];
   /** The decoded body of the last request whose path ends with `action`. */
   bodyFor(action: string): Record<string, unknown>;
   createRuntime(
@@ -77,6 +83,8 @@ export async function startRevylFixtureBackend(
   options: RevylFixtureOptions = {},
 ): Promise<RevylFixtureBackend> {
   const requests: RevylFixtureRequest[] = [];
+  /** Each `METHOD /path` whose answer has been written back, in completion order. */
+  const answered: string[] = [];
   let connectionPolls = 0;
   let healthPolls = 0;
   let health503Polls = 0;
@@ -100,6 +108,12 @@ export async function startRevylFixtureBackend(
         authorization: header(request, 'authorization'),
         clientHeader: header(request, 'x-revyl-client'),
         agentHeader: header(request, 'x-revyl-agent'),
+      });
+      // The answer's own moment, not the request's: a test that waits on `answeredPaths()` knows the
+      // response has been written back and the client has its outcome in hand, which `requests` —
+      // recorded on receipt — cannot say.
+      response.on('finish', () => {
+        answered.push(`${method} ${url}`);
       });
       const override = overrides.get(`${method} ${url}`);
       if (override !== undefined) {
@@ -197,6 +211,7 @@ export async function startRevylFixtureBackend(
     backendUrl,
     requests,
     paths: () => requests.map((request) => `${request.method} ${request.path}`),
+    answeredPaths: () => [...answered],
     bodyFor: (action) => {
       const found = [...requests]
         .reverse()

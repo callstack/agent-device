@@ -158,29 +158,68 @@ test('a paced fill that fails partway says how much of the text landed', async (
   );
 });
 
-test('a paced fill canceled mid-text stops at the character it reached', async () => {
-  // The caller hangs up while a pause is still open. The delay has to end there: waiting it out and
-  // typing the next character would act on a device its caller already gave up on.
+test('a paced fill canceled mid-text reports the characters that completed', async () => {
+  // The second character is answered only after the caller has hung up, so the first is the last
+  // action that completed. Receipt is the wrong moment to count from: a request the backend had already
+  // served can still be rejected by the abort, which would make a request count disagree with the steps
+  // the fill actually finished.
   const controller = new AbortController();
-  const { fixture, interactor } = await liveInteractor('android', undefined, {
-    signal: controller.signal,
-  });
-  const filling = interactor.fill(80, 1250, 'abcdef', 5_000);
-  await waitFor(() => fixture.requests.some((request) => request.path.endsWith('/input')));
-  const beforeAbort = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
+  let sent = 0;
+  const { fixture, interactor } = await liveInteractor(
+    'android',
+    {
+      respond: {
+        'POST /api/v1/execution/device-proxy/run-1/input': () => {
+          sent += 1;
+          return sent >= 2
+            ? { delayMs: 3_000, body: { success: true } }
+            : { body: { success: true } };
+        },
+      },
+    },
+    { signal: controller.signal },
+  );
+  const inputs = () => fixture.requests.filter((request) => request.path.endsWith('/input')).length;
+
+  const filling = interactor.fill(80, 1250, 'abcdef', 20);
+  await waitFor(() => inputs() >= 2);
   controller.abort();
 
-  // The pause rejects with the timer's own AbortError, so the fill has to translate it: the caller
-  // needs the typed cancellation and the count of characters that are already on the device.
+  const completedInputs = () =>
+    fixture.answeredPaths().filter((path) => path.endsWith('/input')).length;
   await assert.rejects(
     async () => await filling,
     (error: unknown) =>
       error instanceof AppError &&
       error.details?.reason === 'request_canceled' &&
-      error.details?.dispatchedSteps === beforeAbort,
+      // The evidence names the completed action, not the one still on the wire.
+      error.details?.dispatchedSteps === 1 &&
+      completedInputs() === 1,
   );
-  const typed = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
-  assert.equal(typed, beforeAbort, 'no character is typed after the cancellation');
+  assert.equal(inputs(), 2, 'no character is typed after the cancellation');
+});
+
+test('a paced fill canceled during its pause reports the typed cancellation', async () => {
+  // The pause is the other boundary, and the one the timer's own `AbortError` arrives from. Where the
+  // abort lands — on the answer's heels or inside the pause — decides only how many characters made it,
+  // so the count is not asserted here; the error's type is, and the pause is orders of magnitude longer
+  // than the tick the abort needs to reach the wait.
+  const controller = new AbortController();
+  const { fixture, interactor } = await liveInteractor('android', undefined, {
+    signal: controller.signal,
+  });
+  const filling = interactor.fill(80, 1250, 'abcdef', 5_000);
+  await waitFor(() => fixture.answeredPaths().some((path) => path.endsWith('/input')));
+  controller.abort();
+
+  await assert.rejects(
+    async () => await filling,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.ok(
+    fixture.requests.filter((request) => request.path.endsWith('/input')).length <= 1,
+    'no character is typed after the cancellation',
+  );
 });
 
 test('type is refused with the fill hint instead of going to an unnamed point', async () => {
