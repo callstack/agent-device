@@ -20,8 +20,8 @@ const REVYL_CLIENT_HEADER = 'agent-device';
 const REVYL_AGENT_HEADER = 'agent-device';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const START_DEVICE_TIMEOUT_MS = 120_000;
-const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+/** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
+export const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
@@ -149,7 +149,7 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
         method: 'POST',
         path: '/api/v1/execution/start_device',
         body: request,
-        timeoutMs: START_DEVICE_TIMEOUT_MS,
+        timeoutMs: REVYL_START_DEVICE_TIMEOUT_MS,
         ...(signal === undefined ? {} : { signal }),
       });
     },
@@ -157,11 +157,22 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
       return json<RevylWorkerConnection>({
         method: 'GET',
         path: `/api/v1/execution/streaming/worker-connection/${encodeURIComponent(workflowRunId)}`,
+        // The route names the run, so Revyl's answer that there is no such run is its answer that the
+        // session is gone — the same reading `/stop` and `cancel` get.
+        route: 'session',
+        // The readiness loop is the poller: it owns the beat and the deadline, so it has to see this
+        // answer on the first attempt rather than behind a transport replay.
+        retry: false,
         ...(signal === undefined ? {} : { signal }),
       });
     },
     getWorkerHealth(workflowRunId, signal) {
-      return json<RevylWorkerHealth>(workerRequest(workflowRunId, 'health', signal));
+      return json<RevylWorkerHealth>({
+        ...workerRequest(workflowRunId, 'health', signal),
+        // Revyl answers this with 503 until the worker attaches, which is the not-ready the loop below
+        // polls on. A transport replay would hide that answer for two seconds per poll.
+        retry: false,
+      });
     },
     async getWorkerHierarchy(workflowRunId, signal) {
       return new TextDecoder().decode(
@@ -246,7 +257,7 @@ async function sendOnce(
 }
 
 function isRetryable(outcome: RevylResponse | Error): boolean {
-  return outcome instanceof Error || RETRYABLE_STATUSES.has(outcome.status);
+  return outcome instanceof Error || revylFailure('general', outcome.status).retryable;
 }
 
 function requestCanceled(request: RevylRequest, cause: unknown): AppError {
@@ -284,7 +295,7 @@ function assertSuccess(request: RevylRequest, response: RevylResponse): void {
     providerStatus: response.status,
   };
   if (detail !== undefined) details.providerDetail = detail;
-  if (uncertainStatus(response.status)) {
+  if (failure.uncertain) {
     details.hint = `Revyl did not confirm ${request.method} ${request.path}; the action may have landed.`;
   }
   throw new AppError(
@@ -391,29 +402,100 @@ function parseJson<T>(request: RevylRequest, response: RevylResponse): T {
 }
 
 /**
- * The typed failure one status names, read together with the route that answered. `session-gone` is
- * only ever a session route's answer: a 404 from `start_device` or the credential check is a request
- * the backend did not route, not a session that ended, and reading it as one sends the user to run
- * `open` on a session they already have.
+ * What one Revyl status means, in one place: the code and reason the failure carries, whether the
+ * answer left the verdict unknown, and whether the transport may replay the request. Statuses Revyl
+ * has no rule for read as a plain failed request.
  */
-function revylFailure(
-  route: RevylRoute,
-  status: number,
-): Readonly<{ code: AppErrorCode; reason: string }> {
-  if (status === 401 || status === 403) {
-    return { code: 'UNAUTHORIZED', reason: 'provider-auth-rejected' };
-  }
-  if ((status === 404 || status === 410) && route === 'session') {
-    return { code: 'SESSION_NOT_FOUND', reason: 'provider-session-gone' };
-  }
-  if (status === 409) return { code: 'COMMAND_FAILED', reason: 'provider-conflict' };
-  if (uncertainStatus(status)) return { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed' };
-  return { code: 'COMMAND_FAILED', reason: 'provider-request-failed' };
+type RevylStatusVerdict = Readonly<{
+  code: AppErrorCode;
+  reason: string;
+  /** Revyl left it unknown whether the request landed, which is what a hint has to say. */
+  uncertain: boolean;
+  /** Replaying the request is safe and may succeed, which is what the retry budget is for. */
+  retryable: boolean;
+}>;
+
+const REVYL_REQUEST_FAILED: RevylStatusVerdict = {
+  code: 'COMMAND_FAILED',
+  reason: 'provider-request-failed',
+  uncertain: false,
+  retryable: false,
+};
+
+/** A server error Revyl has no rule for: the request went in, the verdict did not come back. */
+const REVYL_SERVER_ERROR: RevylStatusVerdict = {
+  code: 'COMMAND_FAILED',
+  reason: 'provider-unconfirmed',
+  uncertain: true,
+  retryable: false,
+};
+
+/** One table for every status Revyl answers with, so no second classifier reads the same ranges. */
+const REVYL_STATUS_VERDICTS: Readonly<Record<number, RevylStatusVerdict>> = {
+  400: REVYL_REQUEST_FAILED,
+  401: {
+    code: 'UNAUTHORIZED',
+    reason: 'provider-auth-rejected',
+    uncertain: false,
+    retryable: false,
+  },
+  403: {
+    code: 'UNAUTHORIZED',
+    reason: 'provider-auth-rejected',
+    uncertain: false,
+    retryable: false,
+  },
+  404: {
+    code: 'SESSION_NOT_FOUND',
+    reason: 'provider-session-gone',
+    uncertain: false,
+    retryable: false,
+  },
+  408: {
+    code: 'COMMAND_FAILED',
+    reason: 'provider-unconfirmed',
+    uncertain: true,
+    retryable: false,
+  },
+  409: { code: 'COMMAND_FAILED', reason: 'provider-conflict', uncertain: false, retryable: false },
+  410: {
+    code: 'SESSION_NOT_FOUND',
+    reason: 'provider-session-gone',
+    uncertain: false,
+    retryable: false,
+  },
+  500: {
+    code: 'COMMAND_FAILED',
+    reason: 'provider-unconfirmed',
+    uncertain: true,
+    retryable: false,
+  },
+  502: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
+  503: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
+  504: { code: 'COMMAND_FAILED', reason: 'provider-unconfirmed', uncertain: true, retryable: true },
+};
+
+/**
+ * The verdict one status carries, read together with the route that answered. `session-gone` is only
+ * ever a session route's answer: a 404 from `start_device` or the credential check is a request the
+ * backend did not route, not a session that ended, and reading it as one sends the user to run `open`
+ * on a session they already have.
+ */
+function revylFailure(route: RevylRoute, status: number): RevylStatusVerdict {
+  const verdict =
+    REVYL_STATUS_VERDICTS[status] ?? (status >= 500 ? REVYL_SERVER_ERROR : REVYL_REQUEST_FAILED);
+  if (verdict.reason === 'provider-session-gone' && route !== 'session')
+    return REVYL_REQUEST_FAILED;
+  return verdict;
 }
 
-/** A status that leaves it unknown whether Revyl carried out what the request asked for. */
-function uncertainStatus(status: number): boolean {
-  return status === 408 || status >= 500;
+/**
+ * Whether a failure is Revyl's "no such session" (a session route's 404 or 410). A stop that meets
+ * it has already been answered: the session is gone, which is released. Every cleanup path reads it
+ * the same way.
+ */
+export function isRevylSessionGone(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'provider-session-gone';
 }
 
 /** HTTPS everywhere; plain HTTP only on loopback, and never with credentials, query, or fragment. */

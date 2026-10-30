@@ -133,6 +133,14 @@ test('reads the typed failure one status names, on the route that answered', asy
       code: 'COMMAND_FAILED',
       call: async (client) => await client.verifyCredentials(),
     },
+    {
+      // 503 is Revyl's "worker not attached", so it is both uncertain and replayable: the matrix
+      // reads the verdict, the retry rule reads the replay. A POST keeps this at one attempt.
+      status: 503,
+      reason: 'provider-unconfirmed',
+      code: 'COMMAND_FAILED',
+      call: async (client) => await client.workerAction('run-1', 'tap', { x: 1, y: 2 }),
+    },
   ];
 
   for (const testCase of cases) {
@@ -161,14 +169,14 @@ test('a status that left the verdict unknown says so in the hint', async () => {
   );
 });
 
-test('replays a GET through the retry budget and never a side-effecting action', async () => {
+test('replays a retried GET and never a side-effecting action', async () => {
   let attempts = 0;
   const client = clientResponding(() => {
     attempts += 1;
     return jsonError(503, 'worker busy');
   });
-  await assert.rejects(async () => await client.getWorkerHealth('run-1'));
-  assert.equal(attempts, 3, "a health poll is retried on Revyl's transient statuses");
+  await assert.rejects(async () => await client.getWorkerHierarchy('run-1'));
+  assert.equal(attempts, 3, 'a read the runtime waits on once is retried on transient statuses');
 
   attempts = 0;
   const action = clientResponding(() => {
@@ -177,6 +185,23 @@ test('replays a GET through the retry budget and never a side-effecting action',
   });
   await assert.rejects(async () => await action.workerAction('run-1', 'tap', { x: 1, y: 2 }));
   assert.equal(attempts, 1, 'a tap is never replayed: it may already have landed');
+});
+
+test('a readiness read answers the polling loop on its first attempt', async () => {
+  // The readiness loop owns the poll beat and the deadline, so a transport replay in front of these
+  // two would hide Revyl's not-ready answer and stall the very wait being polled for.
+  for (const read of [
+    async (client: RevylClient) => await client.getWorkerHealth('run-1'),
+    async (client: RevylClient) => await client.getWorkerConnection('run-1'),
+  ]) {
+    let attempts = 0;
+    const client = clientResponding(() => {
+      attempts += 1;
+      return jsonError(503, 'worker not attached');
+    });
+    await assert.rejects(async () => await read(client));
+    assert.equal(attempts, 1, 'the poll sees the answer, not a replay of it');
+  }
 });
 
 test('a lifecycle stop that Revyl answers with a refusal is still a refusal', async () => {
