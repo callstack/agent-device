@@ -40,6 +40,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     pixelDensity: integerField('Output screenshot pixel density in pixels per logical point.', {
       min: 1,
     }),
+    nativeDensity: booleanField("Keep the display's own pixels instead of 1x points."),
     fullscreen: booleanField(),
     scale: numberField('Screenshot scale factor.', SCREENSHOT_SCALE_LIMITS),
     maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),

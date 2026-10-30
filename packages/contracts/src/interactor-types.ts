@@ -60,7 +60,7 @@ export type { BackMode };
 
 export type ScreenshotOptions = {
   appBundleId?: string;
-  pixelDensity?: number;
+  pixelDensity?: number | 'native';
   fullscreen?: boolean;
   normalizeStatusBar?: boolean;
   stabilize?: boolean;

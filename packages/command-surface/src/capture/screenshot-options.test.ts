@@ -131,6 +131,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
@@ -145,6 +146,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'overlayRefs',
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
