@@ -168,7 +168,7 @@ const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-devic
  */
 const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'src/commands/interaction/runtime/moving-target-gate.ts#guardResolvedTargetAgainstMotion',
+  via: 'packages/command-runtime/src/commands/interaction/runtime/moving-target-gate.ts#guardResolvedTargetAgainstMotion',
   appliesTo: ['press', 'click'],
 };
 
@@ -258,7 +258,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // them is undetected.
   offscreen: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
   },
   // Promotion runs only for rows that declare it (#1656); the retarget itself
   // is still resolveActionableTouchResolution.
@@ -273,12 +273,12 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   },
   verifyEvidence: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/interactions.ts#pressCommand',
     appliesTo: ['press', 'click', 'fill'],
   },
   settleObservation: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
+    via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
   },
   targetStability: RUNTIME_TREE_TARGET_STABILITY,
 } satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;
@@ -291,17 +291,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       errorTaxonomy: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       // Full pre-action diagnostic shape; equivalent wrapper chains disclose
       // their structural collapse, while distinct subtrees never succeed.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
@@ -327,7 +327,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // provenance before it can claim exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
       },
       outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
@@ -339,7 +339,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     guarantees: {
       disambiguation: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       occlusion: {
         kind: 'runtime',
@@ -355,7 +355,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',
@@ -368,7 +368,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       responseIdentity: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/gestures.ts#dragCommand',
       },
       verifyEvidence: {
         kind: 'inapplicable',
@@ -385,7 +385,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/gestures.ts#dragCommand',
       },
       outcomeObservation: {
         kind: 'waived',
@@ -439,14 +439,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // practice, but the code path is identical.
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       // Annotation only (targetHittable/hint on the result): promotion to a
       // hittable ancestor stays a runtime-path behavior — the preflight never
       // changes which element the backend acts on.
       nonHittable: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/native-ref-interaction.ts#preflightNativeRefInteraction',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/native-ref-interaction.ts#preflightNativeRefInteraction',
       },
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
@@ -470,7 +470,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // An @ref names exactly one node by construction (same cell as runtime-ref).
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
       },
       outcomeObservation: {
         kind: 'waived',
@@ -512,7 +512,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',
@@ -525,12 +525,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       verifyEvidence: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
         appliesTo: ['press', 'click', 'fill'],
       },
       settleObservation: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
+        via: 'packages/command-runtime/src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
       },
       errorTaxonomy: {
         kind: 'runtime',

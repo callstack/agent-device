@@ -32,7 +32,10 @@ export function createCommandSurfaceAgentDevice(
   };
 }
 
-export type { RecordingContactSheetCommandResult } from './commands/recording/runtime/contact-sheet.ts';
+export type {
+  RecordingContactSheetCommandOptions,
+  RecordingContactSheetCommandResult,
+} from './commands/recording/runtime/contact-sheet.ts';
 export async function executeRecordingContactSheet(
   config: AgentDeviceRuntimeConfig,
   options: import('./commands/recording/runtime/contact-sheet.ts').RecordingContactSheetCommandOptions,

@@ -18,5 +18,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/platform-android": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*"
   }
 }

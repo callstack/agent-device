@@ -6,7 +6,7 @@ import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { test } from 'vitest';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 
 test('runtime screenshot applies scale and forwards the capture rotation', async () => {

@@ -8,7 +8,7 @@ import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';

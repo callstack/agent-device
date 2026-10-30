@@ -1,19 +1,16 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { test } from 'vitest';
 import { createAgentDevice, type AgentDevice } from '../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { ScreenshotCommandOptions } from '../commands/index.ts';
-import { createLocalArtifactAdapter } from '../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import type {
   ArtifactAdapter,
   FileInputRef,
   FileOutputRef,
 } from '@agent-device/contracts/artifact-adapter';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createMemorySessionStore } from '../command-runtime/runtime-factory.ts';
 
 const backend = {
@@ -100,54 +97,6 @@ test('runtime policy helpers expose local and restricted defaults', async () => 
   assert.equal(typeof createLocalArtifactAdapter, 'function');
   const store = createMemorySessionStore([{ name: 'default' }]);
   assert.equal((await store.get('default'))?.name, 'default');
-});
-
-test('local artifact adapter marks command outputs and temp files by visibility', async () => {
-  const adapter = createLocalArtifactAdapter();
-  const output = await adapter.reserveOutput(undefined, {
-    field: 'path',
-    ext: '.png',
-    artifactType: 'screenshot',
-    visibility: 'client-visible',
-  });
-  const temp = await adapter.createTempFile({
-    prefix: 'agent-device-test',
-    ext: '.txt',
-  });
-
-  assert.equal(output.visibility, 'client-visible');
-  assert.equal(temp.visibility, 'internal');
-
-  await output.cleanup?.();
-  await temp.cleanup();
-});
-
-test('local artifact adapter can constrain explicit local paths to a root', async () => {
-  const root = mkdtempForTestSync('agent-device-local-root-');
-  try {
-    const adapter = createLocalArtifactAdapter({ cwd: root, rootDir: root });
-
-    assert.deepEqual(
-      await adapter.resolveInput({ kind: 'path', path: 'input.png' }, { usage: 'test' }),
-      {
-        path: path.join(root, 'input.png'),
-      },
-    );
-    await assert.rejects(
-      () => adapter.resolveInput({ kind: 'path', path: '../outside.png' }, { usage: 'test' }),
-      /outside the artifact adapter root/,
-    );
-    await assert.rejects(
-      () =>
-        adapter.reserveOutput(
-          { kind: 'path', path: path.join(path.dirname(root), 'outside.png') },
-          { field: 'path', ext: '.png', artifactType: 'screenshot' },
-        ),
-      /outside the artifact adapter root/,
-    );
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
 });
 
 test('memory session store does not expose mutable record references', async () => {

@@ -6,7 +6,7 @@ import type {
   CommandSessionRecord,
   CommandSessionStore,
 } from '@agent-device/contracts/runtime-contract';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 
 /**

@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  ref,
-  selector,
-} from '../../../packages/command-runtime/src/commands/interaction/runtime/selector-read-utils.ts';
+import { ref, selector } from './runtime-harness.ts';
 import { equivalentWrapperChainSnapshot } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 

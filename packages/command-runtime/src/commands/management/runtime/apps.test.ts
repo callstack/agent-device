@@ -7,7 +7,7 @@ import type {
   BackendPushInput,
 } from '@agent-device/contracts/backend';
 import type { JsonObject } from '@agent-device/contracts/client';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import {
   localCommandPolicy,

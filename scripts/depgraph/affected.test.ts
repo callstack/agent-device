@@ -311,7 +311,7 @@ test('platform and command-surface injection both have partial command attributi
   assert.ok(handler.commands.length > 0);
   const commandSurface = await computeBlastRadius(
     repoRoot,
-    'src/command-runtime/runtime-command-surface.ts',
+    'packages/command-runtime/src/index.ts',
   );
   assert.deepEqual(commandSurface.commandAttribution, {
     kind: 'partial',

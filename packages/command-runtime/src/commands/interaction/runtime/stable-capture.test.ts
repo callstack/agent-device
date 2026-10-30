@@ -4,10 +4,15 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import { makeSnapshotState } from '@agent-device/capture-kit/snapshot-state-fixtures';
 import { iosInteractiveKeyboardCaptureNodes } from '@agent-device/capture-kit/snapshot-chrome-fixtures';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { runStableCaptureLoop } from './stable-capture.ts';
+import {
+  commandDescriptors,
+  resolveCommandPostActionObservationSupport,
+  resolveCommandTimeoutPolicy,
+} from '@agent-device/command-registry/registry';
+import { DEFAULT_STABLE_TIMEOUT_MS, runStableCaptureLoop } from './stable-capture.ts';
 import {
   elementCatalogTabSnapshot,
   elementPushedDetailSnapshot,
@@ -709,4 +714,26 @@ function withCaptureBackend(
         ? snapshot.snapshotQuality
         : ({ state: 'recovered', backend: 'private-ax' } as const),
   };
+}
+
+test('settle timeout policy default matches the runtime settle loop default', () => {
+  for (const command of settleObservationCommandNames()) {
+    const budget = resolveCommandTimeoutPolicy(command).budget;
+    assert.equal(budget.source, 'flag', `${command}: expected flag budget`);
+    assert.equal(budget.envelope, 'widen', `${command}: expected widening budget`);
+    assert.equal(
+      budget.defaultBudgetMs,
+      DEFAULT_STABLE_TIMEOUT_MS,
+      `${command}: default settle budget must match runtime default`,
+    );
+  }
+});
+
+function settleObservationCommandNames(): string[] {
+  return commandDescriptors
+    .filter(
+      (descriptor) => resolveCommandPostActionObservationSupport(descriptor.name) !== undefined,
+    )
+    .map((descriptor) => descriptor.name)
+    .sort();
 }

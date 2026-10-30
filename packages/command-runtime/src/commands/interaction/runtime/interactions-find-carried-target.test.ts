@@ -6,7 +6,7 @@ import type { PreresolvedInteractionTarget } from '@agent-device/contracts/inter
 import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { ref } from './selector-read-utils.ts';
 

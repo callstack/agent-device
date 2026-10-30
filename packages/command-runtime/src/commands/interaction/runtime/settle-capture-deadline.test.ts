@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import {

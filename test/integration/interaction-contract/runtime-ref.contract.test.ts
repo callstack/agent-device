@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
-import { ref } from '../../../packages/command-runtime/src/commands/interaction/runtime/selector-read-utils.ts';
+import { ref } from './runtime-harness.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';

@@ -19,7 +19,6 @@ import {
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
-import { NEVER_SETTLED_HINT } from '../../packages/command-runtime/src/commands/interaction/runtime/settle.ts';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -180,14 +179,18 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
   },
   {
     name: 'NOT_SETTLED_SAMPLE',
-    producer: 'the press renderer and the production NEVER_SETTLED_HINT',
+    producer: 'the press renderer with a never-settled response',
     sample: NOT_SETTLED_SAMPLE,
     render: () =>
       formatPress({
         ref: 'e12',
         x: 166,
         y: 240,
-        settle: { settled: false, waitedMs: 10_000, hint: NEVER_SETTLED_HINT },
+        settle: {
+          settled: false,
+          waitedMs: 10_000,
+          hint: 'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.',
+        },
       }),
   },
   {

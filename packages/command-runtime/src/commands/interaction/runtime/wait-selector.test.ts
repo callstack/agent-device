@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotOptions } from '@agent-device/contracts/backend';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';

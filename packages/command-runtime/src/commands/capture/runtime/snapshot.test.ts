@@ -6,7 +6,7 @@ import type {
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
 import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';

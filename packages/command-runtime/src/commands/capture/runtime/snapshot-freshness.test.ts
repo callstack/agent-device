@@ -4,7 +4,7 @@ import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/co
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 
 function snapshotDevice(

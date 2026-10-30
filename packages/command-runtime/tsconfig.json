@@ -10,14 +10,36 @@
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"],
   "references": [
-    { "path": "../ad-script" },
-    { "path": "../capture-kit" },
-    { "path": "../contracts" },
-    { "path": "../host-kit" },
-    { "path": "../kernel" },
-    { "path": "../selectors" },
-    { "path": "../session-journal" }
+    {
+      "path": "../ad-script"
+    },
+    {
+      "path": "../capture-kit"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../host-kit"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../selectors"
+    },
+    {
+      "path": "../session-journal"
+    },
+    {
+      "path": "../platform-android"
+    },
+    {
+      "path": "../test-kit"
+    },
+    {
+      "path": "../command-registry"
+    }
   ]
 }

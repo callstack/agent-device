@@ -99,6 +99,10 @@
     "./version": {
       "types": "./src/version.ts",
       "default": "./src/version.ts"
+    },
+    "./local-artifact-adapter": {
+      "types": "./src/local-artifact-adapter.ts",
+      "default": "./src/local-artifact-adapter.ts"
     }
   }
 }

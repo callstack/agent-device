@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotOptions } from '@agent-device/contracts/backend';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { createLocalArtifactAdapter } from '../../../../../../src/io.ts';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
 import { createFakeClock } from './__tests__/test-utils/index.ts';
 

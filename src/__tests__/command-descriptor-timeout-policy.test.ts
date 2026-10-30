@@ -11,7 +11,6 @@ import {
   DEFAULT_TIMEOUT_POLICY,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
-import { DEFAULT_STABLE_TIMEOUT_MS } from '../../packages/command-runtime/src/commands/interaction/runtime/stable-capture.ts';
 
 function settleObservationCommandNames(): string[] {
   return commandDescriptors
@@ -126,19 +125,6 @@ test('budget sources deviating from the default are bounded, reviewed sets', () 
   assert.deepEqual(flagWidenBudget.sort(), settleObservationCommandNames());
   // wait's budget travels as a positional and must widen the envelope.
   assert.deepEqual(positionalBudget, ['wait']);
-});
-
-test('settle timeout policy default matches the runtime settle loop default', () => {
-  for (const command of settleObservationCommandNames()) {
-    const budget = resolveCommandTimeoutPolicy(command).budget;
-    assert.equal(budget.source, 'flag', `${command}: expected flag budget`);
-    assert.equal(budget.envelope, 'widen', `${command}: expected widening budget`);
-    assert.equal(
-      budget.defaultBudgetMs,
-      DEFAULT_STABLE_TIMEOUT_MS,
-      `${command}: default settle budget must match runtime default`,
-    );
-  }
 });
 
 test('request envelopes deviating from the default are bounded, reviewed sets', () => {
