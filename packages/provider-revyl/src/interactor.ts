@@ -145,14 +145,16 @@ class RevylInteractor implements Interactor {
     let dispatched = 0;
     try {
       for (const char of Array.from(text)) {
-        this.signal?.throwIfAborted();
+        if (this.signal?.aborted) throw this.cancellation();
         // Only the first character clears: the rest append to what the field already holds.
         await this.workerAction('input', { x, y, text: char, clear_first: dispatched === 0 });
         dispatched += 1;
         await sleep(delayMs, undefined, this.signal === undefined ? {} : { signal: this.signal });
       }
     } catch (error) {
-      throw discloseDispatchAfterSteps(error, dispatched);
+      // A pause cut short by the command's signal rejects with the timer's own AbortError, which says
+      // nothing about the fill it stopped or how far that fill got.
+      throw discloseDispatchAfterSteps(this.canceledAs(error), dispatched);
     }
   }
 
@@ -206,7 +208,7 @@ class RevylInteractor implements Interactor {
   }
 
   async screenshot(outPath: string): Promise<void> {
-    const png = await this.session.client.captureWorkerScreenshot(this.session.runId);
+    const png = await this.session.client.captureWorkerScreenshot(this.session.runId, this.signal);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     await fs.promises.writeFile(outPath, png);
   }
@@ -234,6 +236,26 @@ class RevylInteractor implements Interactor {
 
   setSetting(): never {
     throw unsupported('settings', 'Revyl does not expose settings control.');
+  }
+
+  /**
+   * The typed cancellation for this command's signal, caused by whatever the interrupted wait rejected
+   * with. The device-proxy path reports its own cancellations; this covers the waits in between, whose
+   * timer rejects with a bare AbortError that says nothing about the fill it stopped.
+   */
+  private cancellation(cause?: unknown): AppError {
+    return new AppError(
+      'COMMAND_FAILED',
+      'The Revyl action was canceled before it finished.',
+      { reason: 'request_canceled', runId: this.session.runId },
+      cause ?? this.signal?.reason,
+    );
+  }
+
+  /** A failure that arrived while the command's signal was aborted becomes that cancellation. */
+  private canceledAs(error: unknown): unknown {
+    if (!this.signal?.aborted || error instanceof AppError) return error;
+    return this.cancellation(error);
   }
 
   /** Sends one device-proxy action and reports a refusal the worker returned inside a 200 body. */

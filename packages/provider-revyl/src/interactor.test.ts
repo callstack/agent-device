@@ -170,7 +170,15 @@ test('a paced fill canceled mid-text stops at the character it reached', async (
   const beforeAbort = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
   controller.abort();
 
-  await assert.rejects(async () => await filling);
+  // The pause rejects with the timer's own AbortError, so the fill has to translate it: the caller
+  // needs the typed cancellation and the count of characters that are already on the device.
+  await assert.rejects(
+    async () => await filling,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'request_canceled' &&
+      error.details?.dispatchedSteps === beforeAbort,
+  );
   const typed = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
   assert.equal(typed, beforeAbort, 'no character is typed after the cancellation');
 });
@@ -325,6 +333,41 @@ test('a screenshot writes the worker bytes to the requested path', async () => {
   assert.equal(written[0], 0x89);
   assert.equal(written.subarray(1, 4).toString('ascii'), 'PNG');
   assert.equal(written.length, 68, 'the fixture answers a real 1x1 PNG');
+});
+
+test('a canceled screenshot leaves the file unwritten', async () => {
+  // The worker is still composing the PNG when the caller hangs up. The request has to end there, and
+  // the bytes that arrive afterwards must not reach the path the command was asked to write.
+  const controller = new AbortController();
+  const { interactor } = await liveInteractor(
+    'ios',
+    {
+      respond: {
+        'GET /api/v1/execution/device-proxy/run-1/screenshot': {
+          status: 200,
+          contentType: 'image/png',
+          body: 'PNG',
+          delayMs: 400,
+        },
+      },
+    },
+    { signal: controller.signal },
+  );
+  const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-cancel-'), 'shot.png');
+  const capturing = interactor.screenshot(outPath);
+  controller.abort();
+
+  await assert.rejects(
+    async () => await capturing,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(
+    await fs.stat(outPath).then(
+      () => true,
+      () => false,
+    ),
+    false,
+  );
 });
 
 test('launch names the bundle, an unnamed open lets the worker start its own app, and close kills it', async () => {

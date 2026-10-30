@@ -15,14 +15,14 @@ import { revylTextFlag } from './session-allocation.ts';
 const PROVIDER = 'revyl';
 const SERVICE = 'Revyl';
 
-/**
- * The connect half of the plugin: what a Revyl profile carries, and what proves the credentials
- * before a device is rented. The verify call authenticates without starting anything, so a mistyped
- * key costs one request rather than a session.
- */
 /** The connect half of the plugin, bound to one host's environment. */
 export type RevylConnection = ReturnType<typeof createRevylConnection>;
 
+/**
+ * Builds the connect half of the plugin: what a Revyl profile carries, and what proves the credentials
+ * before a device is rented. The verify call authenticates without starting anything, so a mistyped
+ * key costs one request rather than a session.
+ */
 export function createRevylConnection(host: ProviderPluginHost) {
   return {
     resolve: ({ flags }: { flags: CliFlags; cwd: string }) => {
