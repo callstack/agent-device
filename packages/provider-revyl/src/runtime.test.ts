@@ -83,6 +83,33 @@ test('a repeat allocation of a live lease reuses its session without starting a 
   assert.equal(second?.providerSessionId, revylSessionIdForLease('lease-1'));
 });
 
+test('two allocations of one lease that overlap rent one device, and both report it', async () => {
+  // The second call arrives while the first `start_device` is still unanswered. Without the join, each
+  // one rents a device and the second session replaces the first in the table, leaving the first rented
+  // with nothing pointing at it — so shutdown would stop one device and Revyl would hold two.
+  const fixture = await backend({ startDelayMs: 200 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+
+  const [first, second] = await Promise.all([
+    runtime.leaseLifecycle?.allocate?.(lease),
+    runtime.leaseLifecycle?.allocate?.(lease),
+  ]);
+
+  assert.deepEqual(
+    fixture.paths().filter((path) => path.endsWith('start_device')),
+    ['POST /api/v1/execution/start_device'],
+  );
+  assert.equal(first?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.equal(second?.providerSessionId, revylSessionIdForLease('lease-1'));
+
+  // One rented device means one stop, and after it the runtime holds nothing.
+  await runtime.shutdown();
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+});
+
 test('release stops the session once, and shutdown stops the sessions a lease never released', async () => {
   const fixture = await backend();
   const runtime = fixture.createRuntime();

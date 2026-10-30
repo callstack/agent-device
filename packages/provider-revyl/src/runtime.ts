@@ -111,6 +111,11 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly confirmedReleases = new Map<string, string>();
   /** Allocations that have not settled; shutdown waits for these before it stops anything. */
   private readonly inFlightAllocations = new Set<Promise<void>>();
+  /**
+   * One entry per lease whose device is being rented, kept until the session reaches the table. A second
+   * allocation of that lease joins it rather than renting a device nobody will stop.
+   */
+  private readonly pendingAllocations = new Map<string, Promise<RevylAllocation | undefined>>();
   private shuttingDown = false;
   readonly provider = REVYL_PROVIDER;
 
@@ -239,17 +244,42 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     lease: DeviceLease,
     context?: LeaseLifecycleContext,
   ): Promise<Record<string, unknown> | undefined> {
-    const allocated = await this.allocate(lease, context);
+    const allocated = await this.allocateOncePerLease(lease, context);
     if (allocated === undefined) return undefined;
     const { session, rentedNow } = allocated;
-    if (!this.shuttingDown) {
-      this.sessions.set(lease.leaseId, session);
-      return allocationResult(session);
-    }
+    if (!this.shuttingDown) return allocationResult(session);
     if (rentedNow) {
       await stopRevylSession(this.client, session.runId, session.sessionId).catch(() => undefined);
     }
     throw shuttingDownDuring(lease.leaseId, 'allocate');
+  }
+
+  /**
+   * One device per lease. Two allocations that arrive before either finishes would otherwise each rent
+   * a device, and the second session would replace the first in the table and leave it running with
+   * nothing pointing at it; the second call joins the first instead. The session reaches the table while
+   * the start is still registered, so a third allocation cannot arrive in the gap between one finishing
+   * and the other learning about it and rent a device of its own.
+   */
+  private async allocateOncePerLease(
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ): Promise<RevylAllocation | undefined> {
+    const pending = this.pendingAllocations.get(lease.leaseId);
+    if (pending) {
+      // The device was taken by the call already running, so this one is not the one to end it.
+      const joined = await pending;
+      return joined === undefined ? undefined : { ...joined, rentedNow: false };
+    }
+    const starting = this.allocate(lease, context);
+    this.pendingAllocations.set(lease.leaseId, starting);
+    try {
+      const allocated = await starting;
+      if (allocated && !this.shuttingDown) this.sessions.set(lease.leaseId, allocated.session);
+      return allocated;
+    } finally {
+      this.pendingAllocations.delete(lease.leaseId);
+    }
   }
 
   /** Resolves once no allocation is in flight, so shutdown stops everything that exists. */
