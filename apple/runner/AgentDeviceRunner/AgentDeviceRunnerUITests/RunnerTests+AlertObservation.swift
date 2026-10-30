@@ -48,7 +48,7 @@ extension RunnerTests {
     return Date() < deadline ? observation : .deadlineExceeded
   }
 
-  private func alertSnapshots(
+  func alertSnapshots(
     in snapshot: XCUIElementSnapshot,
     source: RunnerAlertSource,
     viewport: CGRect
