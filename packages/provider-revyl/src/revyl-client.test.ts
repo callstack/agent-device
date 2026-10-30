@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   createRevylClient,
   REVYL_DEFAULT_BACKEND_URL,
+  revylFailureRefusedTheRequest,
   resolveRevylBackendUrl,
   type RevylClient,
 } from './revyl-client.ts';
@@ -322,6 +323,37 @@ test('a binary action whose failure is JSON still reports the typed error', asyn
     async () => await client.captureWorkerScreenshot('run-1'),
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'provider-session-gone',
+  );
+});
+
+test('a refusal is told from a verdict that never came back', async () => {
+  // Cleanup after `start_device` asks exactly one question of a failure: did the backend refuse the
+  // request, or is the device possibly rented. Both answers come from the status table. The device-proxy
+  // action is a POST, so none of these answers is replayed and the test reads each one as it landed.
+  const refused = clientResponding(() => jsonError(409, 'no capacity'));
+  await assert.rejects(
+    async () => await refused.workerAction('run-1', 'tap', { x: 1, y: 2 }),
+    (error: unknown) => revylFailureRefusedTheRequest(error) === true,
+    'a conflict is Revyl routing the request and saying no',
+  );
+
+  const unconfirmed = clientResponding(() => jsonError(503, 'worker not attached'));
+  await assert.rejects(
+    async () => await unconfirmed.workerAction('run-1', 'tap', { x: 1, y: 2 }),
+    (error: unknown) => revylFailureRefusedTheRequest(error) === false,
+    'a server error leaves it unknown whether the request landed',
+  );
+
+  // A backend that never answered carries no status at all, which is the least settled answer there is.
+  const unreachable = clientResponding(() => {
+    throw new TypeError('fetch failed');
+  });
+  await assert.rejects(
+    async () => await unreachable.workerAction('run-1', 'tap', { x: 1, y: 2 }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-unreachable' &&
+      revylFailureRefusedTheRequest(error) === false,
   );
 });
 

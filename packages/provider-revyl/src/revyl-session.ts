@@ -5,6 +5,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, REVYL_SNAPSHOT_CHANNEL, type RevylPlatform } from './device.ts';
 import {
   isRevylSessionGone,
+  revylFailureRefusedTheRequest,
   REVYL_START_DEVICE_TIMEOUT_MS,
   type RevylClient,
 } from './revyl-client.ts';
@@ -253,20 +254,13 @@ function startCanceled(input: RevylStartRequestInput): AppError {
 }
 
 /**
- * Whether a `start_device` that never reached the caller may still have rented a device. Only an
- * answer the backend confirmed rules that out: an auth refusal, a conflict, or any 4xx it routed. A
- * lost answer, an unreachable backend, an unconfirmed 5xx, or the caller hanging up all leave the
+ * Whether a `start_device` that never reached the caller may still have rented a device. Only a status
+ * the backend settled with a refusal rules that out, and that is one read of the client's status table.
+ * A lost answer, an unreachable backend, an unconfirmed status, or the caller hanging up all leave the
  * session possibly open under the id the request carried, which is the id this module issued.
  */
 function startMayHaveRented(error: unknown): boolean {
-  if (!(error instanceof AppError)) return true;
-  const reason = error.details?.reason;
-  return !(
-    reason === 'provider-auth-rejected' ||
-    reason === 'provider-conflict' ||
-    reason === 'provider-request-failed' ||
-    reason === 'provider-session-gone'
-  );
+  return !revylFailureRefusedTheRequest(error);
 }
 
 /**

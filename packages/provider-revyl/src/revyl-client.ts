@@ -490,6 +490,18 @@ function revylFailure(route: RevylRoute, status: number): RevylStatusVerdict {
 }
 
 /**
+ * Whether a failure is Revyl's answer that it did not carry the request out: a settled status from the
+ * table above, read off the failure's own details. Anything else — an unconfirmed status, a lost
+ * answer, an unreachable backend, a cancellation, or a throw with no status at all — leaves it unknown
+ * whether the request landed, which is what a caller cleaning up after a side-effecting request has to
+ * assume the worst about.
+ */
+export function revylFailureRefusedTheRequest(error: unknown): boolean {
+  const status = error instanceof AppError ? error.details?.providerStatus : undefined;
+  return typeof status === 'number' && !revylFailure('general', status).uncertain;
+}
+
+/**
  * Whether a failure is Revyl's "no such session" (a session route's 404 or 410). A stop that meets
  * it has already been answered: the session is gone, which is released. Every cleanup path reads it
  * the same way.

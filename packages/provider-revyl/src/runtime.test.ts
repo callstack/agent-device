@@ -333,6 +333,44 @@ test('an expired allocation deadline stops the start rather than reporting a lat
   ]);
 });
 
+test('a start Revyl refused is not cleaned up as a rented device', async () => {
+  // A refusal is the backend answering that it started nothing, so there is no session to stop: the
+  // caller's failure is the whole story.
+  const fixture = await backend({
+    respond: {
+      'POST /api/v1/execution/start_device': { status: 401, body: { detail: 'bad key' } },
+    },
+  });
+  const runtime = fixture.createRuntime();
+
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.allocate?.(revylLease('ios')),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-auth-rejected',
+  );
+  assert.deepEqual(stops(fixture), []);
+});
+
+test('a start whose verdict never came back is stopped by the session it was issued', async () => {
+  // Revyl answered 500, which says nothing about whether the device was rented, so the id the request
+  // carried is the handle cleanup has to use.
+  const fixture = await backend({
+    respond: {
+      'POST /api/v1/execution/start_device': { status: 500, body: { detail: 'backend down' } },
+    },
+  });
+  const runtime = fixture.createRuntime();
+
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.allocate?.(revylLease('ios')),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-unconfirmed',
+  );
+  assert.deepEqual(stops(fixture), [
+    `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
+  ]);
+});
+
 test('a start slower than the allocation budget is given up on and its session stopped', async () => {
   // Revyl is still deciding when the caller's own budget runs out. The request must not be held open
   // past it, and the session that request named must not survive it either.
