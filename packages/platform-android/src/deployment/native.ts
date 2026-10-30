@@ -39,13 +39,7 @@ export async function uninstallAndroidPackage(
   packageName: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const result = await runAdb(
-    host,
-    device,
-    ['uninstall', packageName],
-    signal,
-    ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
-  );
+  const result = await runAdb(host, device, ['uninstall', packageName], signal);
   if (result.exitCode === 0) return;
   const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
   if (output.includes('unknown package') || output.includes('not installed')) return;

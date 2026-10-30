@@ -9,8 +9,10 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import * as timers from 'node:timers/promises';
 import { pack } from 'tar-stream';
-import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
-import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
+import {
+  createLocalAppleToolProvider,
+  type AppleToolProvider,
+} from '@agent-device/platform-apple/tool-provider';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
@@ -248,16 +250,13 @@ function createInstallLedgerAppleToolProvider(
 ): AppleToolProvider {
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   let simulatorBooted = false;
-  return {
+  return createLocalAppleToolProvider({
     whichCommand: async () => true,
-    runCommand: async (cmd, args) => {
-      throw new Error(`Unscripted Apple install ledger host call: ${cmd} ${args.join(' ')}`);
-    },
-    plist: {
-      readJson: async () => ({
-        CFBundleIdentifier: 'com.example.demo',
-        CFBundleName: 'Demo',
-      }),
+    runCommand: async (cmd, args, options) => {
+      assert.equal(cmd, 'plutil');
+      ledger.record(cmd, args, options?.timeoutMs);
+      // Conversion and extraction can both fail before the XML reader resolves the identity.
+      return { stdout: '', stderr: '', exitCode: 1 };
     },
     simctl: {
       run: async (args, options) => {
@@ -296,7 +295,7 @@ function createInstallLedgerAppleToolProvider(
         return ok;
       },
     },
-  };
+  });
 }
 
 function writeCoreDeviceDetailsJson(args: readonly string[]): void {
@@ -340,23 +339,10 @@ async function createAndroidScenario(
     launched = true;
     return 4242;
   });
-  const provider: AndroidAdbProvider = {
-    exec: async (args, options) => {
-      ledger.record('adb', args, options?.timeoutMs);
-      if (args.join(' ') === 'shell pm list packages') {
-        return { stdout: installed ? 'package:com.example.demo\n' : '', stderr: '', exitCode: 0 };
-      }
-      assert.deepEqual(args, ['uninstall', 'com.example.demo']);
-      installed = false;
-      return { stdout: 'Success\n', stderr: '', exitCode: 0 };
-    },
-    install: async (apkPath, options) => {
-      ledger.record('adb-install', [apkPath], options?.timeoutMs);
-      installed = true;
-      return { stdout: '', stderr: '', exitCode: 0 };
-    },
-  };
-  const commands: CommandExecutorOverride = async (command, args, options) => {
+  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
+    if (command === 'adb') {
+      assert.equal(args[args.indexOf('-s') + 1], 'emulator-5554');
+    }
     if (command === 'adb' && args.some((arg) => arg.includes('sys.boot_completed'))) {
       assert.ok(options.timeoutMs);
       bootProbeCapMs ??= options.timeoutMs;
@@ -373,22 +359,33 @@ async function createAndroidScenario(
     ledger.record(command, args, options.timeoutMs);
     if (command === '/usr/bin/lsappinfo') return { stdout: '', stderr: '', exitCode: 0 };
     if (command === '/usr/sbin/sysctl') return { stdout: '1', stderr: '', exitCode: 0 };
+    if (command === 'adb') {
+      if (args.includes('install')) installed = true;
+      if (args.includes('uninstall')) installed = false;
+      return {
+        stdout:
+          args.includes('shell') && args.join(' ').includes('packages')
+            ? installed
+              ? 'package:com.example.demo\n'
+              : ''
+            : 'Success',
+        stderr: '',
+        exitCode: 0,
+      };
+    }
     if (command === 'bundletool') {
-      if (args.includes('install-apks')) installed = true;
+      if (args.includes('install-apks')) {
+        assert.equal(args[args.indexOf('--device-id') + 1], 'emulator-5554');
+        installed = true;
+      }
       return { stdout: '', stderr: '', exitCode: 0 };
     }
     assert.ok(command === 'unzip' || path.basename(command) === 'aapt', command);
     return { stdout: '', stderr: '', exitCode: 1 };
-  };
+  });
   const inventory = async () => [launched ? { ...device, id: 'emulator-5554' } : device];
   vi.spyOn(inventoryContext, 'listLocalDeviceInventory').mockImplementation(inventory);
-  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
-    const result = commands(command, args, options);
-    assert.ok(result, `Unscripted host command: ${command}`);
-    return await result;
-  });
   const daemon = await createProviderScenarioHarness({
-    androidAdbProvider: () => provider,
     deviceInventoryProvider: inventory,
     env: { PATH: tempRoot, ANDROID_HOME: tempRoot, ANDROID_SDK_ROOT: tempRoot },
   });
@@ -453,22 +450,24 @@ function assertInstallLedgerPhaseCoverage(
   const expected = isAndroidRoute(route)
     ? [
         'sys.boot_completed',
-        ...(route === 'Android APK' ? ['adb-install'] : ['build-apks', 'install-apks']),
+        ...(route === 'Android APK' ? ['install'] : ['build-apks', 'install-apks']),
       ]
     : route === 'iOS simulator'
       ? ['list', 'boot', 'bootstatus', 'open', 'install']
       : ['details', 'install'];
+  if (!isAndroidRoute(route)) expected.push('plutil', '-convert', '-extract');
   if (command === 'reinstall') expected.push('uninstall');
   if (isAndroidRoute(route)) {
     assert.ok(
-      ledger.filter((call) => call.args.join(' ') === 'shell pm list packages').length >= 2,
+      ledger.filter((call) => call.tool === 'adb' && call.args.join(' ').includes('packages'))
+        .length >= 2,
       'missing before/after package inventories',
     );
     if (command !== 'reinstall') expected.push('unzip');
   }
   for (const phase of expected) {
     assert.ok(
-      ledger.some((call) => call.tool === phase || call.args.includes(phase)),
+      ledger.some((call) => call.tool === phase || call.args.some((arg) => arg.includes(phase))),
       `${route} ${command}: missing ${phase} phase. Ledger: ${JSON.stringify(ledger)}`,
     );
   }

@@ -1,3 +1,4 @@
+import { APPLE_PLIST_TIMEOUT_MS } from './config.ts';
 import {
   coerceExecResult,
   runCmd,
@@ -192,6 +193,7 @@ async function readPlistJsonWithCommand(
   try {
     const result = await runCommand('plutil', ['-convert', 'json', '-o', '-', plistPath], {
       allowFailure: true,
+      timeoutMs: APPLE_PLIST_TIMEOUT_MS,
       signal,
     });
     if (result.exitCode !== 0 || !result.stdout.trim()) {

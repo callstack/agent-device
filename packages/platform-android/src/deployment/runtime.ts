@@ -105,7 +105,7 @@ async function deployAndroidApp(
       let artifact: MaterializedAppSource | undefined;
       try {
         if (device.booted !== true) {
-          await ensureAndroidReady(host, device, { headless: false }, signal);
+          device = await ensureAndroidReady(host, device, { headless: false }, signal);
         }
         const packageName = await host.androidDeployment.resolveAppPackage(device, input.app);
         await uninstallAndroidPackage(host, device, packageName, signal);
@@ -127,7 +127,7 @@ async function deployAndroidApp(
   let artifact: MaterializedAppSource | undefined;
   try {
     if (device.booted !== true) {
-      await ensureAndroidReady(host, device, { headless: false }, signal);
+      device = await ensureAndroidReady(host, device, { headless: false }, signal);
     }
     artifact = await host.androidDeployment.prepareArtifact(
       { source: { kind: 'path', path: input.appPath } },

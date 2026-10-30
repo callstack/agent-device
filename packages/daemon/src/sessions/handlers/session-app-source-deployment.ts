@@ -66,7 +66,7 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   try {
     resolvedSource = resolveInstallSource(req);
     const retention = resolveRetention(req);
-    const device = await resolveInstallDevice(
+    let device = await resolveInstallDevice(
       session,
       req.flags,
       sessionStore.host.env,
@@ -85,11 +85,18 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
       );
     if (unsupported) return unsupported;
 
-    const runtime = await requireRuntimeBinding(params.bindDevice)(
+    let runtime = await requireRuntimeBinding(params.bindDevice)(
       device,
       readyMaterializeAndDeployAppUse,
     );
-    await runtime.operations.ensureReady({});
+    const ready = await runtime.operations.ensureReady({});
+    if (ready.id !== device.id) {
+      runtime = await requireRuntimeBinding(params.bindDevice)(
+        ready,
+        readyMaterializeAndDeployAppUse,
+      );
+    }
+    device = ready;
     materialized = await runtime.operations.materializeAppSource({ source: resolvedSource.source });
     retained = await retainIfRequested({
       artifact: materialized,
