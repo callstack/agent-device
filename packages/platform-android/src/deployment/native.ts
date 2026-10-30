@@ -39,7 +39,13 @@ export async function uninstallAndroidPackage(
   packageName: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const result = await runAdb(host, device, ['uninstall', packageName], signal);
+  const result = await runAdb(
+    host,
+    device,
+    ['uninstall', packageName],
+    signal,
+    ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
+  );
   if (result.exitCode === 0) return;
   const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
   if (output.includes('unknown package') || output.includes('not installed')) return;
@@ -175,6 +181,7 @@ async function listInstalledPackages(
     device,
     deviceShellArgv('adb', 'shell', ['pm', 'list', 'packages']),
     signal,
+    ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
   );
   assertCommandSuccess(result, 'adb package inventory failed');
   return new Set(
@@ -203,7 +210,7 @@ async function runAdb(
   device: DeviceInfo,
   args: readonly string[],
   signal: AbortSignal,
-  timeoutMs = ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
+  timeoutMs?: number,
 ) {
   return await host.androidTools.runAdb(device, args, { timeoutMs, allowFailure: true }, signal);
 }
