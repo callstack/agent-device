@@ -7,7 +7,7 @@ import { createAppleRunnerTestHostDefaults } from './test-host-defaults.ts';
 // The apple-runner vitest project runs the package's own suites against a package-local host:
 // real host-kit and kernel capabilities with explicit Apple test adapters (`test-host-defaults.ts`),
 // overridable per test. This setup installs it and resets the overrides before each case.
-installAppleRunnerTestHost(createAppleRunnerTestHostDefaults());
+installAppleRunnerTestHost(await createAppleRunnerTestHostDefaults());
 
 // Runner code reads its settings from the command host; tests run as one whose environment is the
 // live process environment, so `vi.stubEnv` reaches it.

@@ -8,7 +8,7 @@ import type { ScopedSimctlCommand } from '@agent-device/contracts/platform-runti
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import {
   createLiveTestHostEnvironment,
-  realHostKitCapabilities,
+  loadRealHostKitCapabilities,
   runRealHostCommand,
 } from '@agent-device/test-kit';
 import type { AppleRunnerHost } from '../host.ts';
@@ -87,9 +87,9 @@ function appleToolingTestAdapters(): Pick<
  * kernel capabilities (so retry, lock, process and request semantics are genuine), the live process
  * environment, and the explicit Apple adapters above. It reads no platform-apple or root code.
  */
-export function createAppleRunnerTestHostDefaults(): AppleRunnerHost {
+export async function createAppleRunnerTestHostDefaults(): Promise<AppleRunnerHost> {
   return {
-    ...realHostKitCapabilities,
+    ...(await loadRealHostKitCapabilities()),
     ...appleToolingTestAdapters(),
     hostEnvironment: createLiveTestHostEnvironment,
     shellQuote,

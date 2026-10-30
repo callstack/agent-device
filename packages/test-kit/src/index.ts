@@ -127,13 +127,16 @@ export {
   recordArticleEvidence,
 } from './target-classification-fixtures.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
-export { withRequestDeadline } from '@agent-device/host-kit/request';
 export {
   STUBBED_APPLE_TOOLCHAIN,
   stubbedAppleDeveloperDir,
   writeXcodeFixture,
 } from './apple-toolchain-fixtures.ts';
-export { realHostKitCapabilities, runRealHostCommand } from './host-kit-capabilities.ts';
+export {
+  loadRealHostKitCapabilities,
+  runRealHostCommand,
+  withRequestDeadline,
+} from './host-kit-capabilities.ts';
 export {
   assertProducedRunnerRequests,
   readRunnerRequestFixture,
