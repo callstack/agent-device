@@ -11,7 +11,7 @@ import {
   DEFAULT_TIMEOUT_POLICY,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
-import { DEFAULT_STABLE_TIMEOUT_MS } from '../commands/interaction/runtime/stable-capture.ts';
+import { DEFAULT_STABLE_TIMEOUT_MS } from '../../packages/command-runtime/src/commands/interaction/runtime/stable-capture.ts';
 
 function settleObservationCommandNames(): string[] {
   return commandDescriptors

@@ -1,4 +1,4 @@
-import { createCommandSurfaceAgentDevice } from '../../command-runtime/runtime-command-surface.ts';
+import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 
 /**

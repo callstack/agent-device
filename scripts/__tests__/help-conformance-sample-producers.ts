@@ -19,7 +19,7 @@ import {
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
-import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
+import { NEVER_SETTLED_HINT } from '../../packages/command-runtime/src/commands/interaction/runtime/settle.ts';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,

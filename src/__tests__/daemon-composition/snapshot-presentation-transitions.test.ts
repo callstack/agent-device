@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
+import { createInteractionDevice } from '../../../packages/command-runtime/src/commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '@agent-device/capture-kit/snapshot-presentation-ios-transitions-fixtures';

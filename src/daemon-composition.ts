@@ -188,9 +188,7 @@ export async function composeDaemonRuntimeDeps(
           providerComposition.inventory,
         ),
         createCommandSurface: async (config: AgentDeviceRuntimeConfig) =>
-          (
-            await import('./command-runtime/runtime-command-surface.ts')
-          ).createCommandSurfaceAgentDevice(config),
+          (await import('@agent-device/command-runtime')).createCommandSurfaceAgentDevice(config),
         cloudArtifactProvider: providerRuntimeProviders.cloudArtifactProvider,
         providerAppCatalog: providerRuntimeProviders.providerAppCatalog,
         providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,

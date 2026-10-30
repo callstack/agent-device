@@ -24,7 +24,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // The in-process command runtime: the local artifact-adapter implementation and the assembly
   // that binds command families onto it. The backend and runtime contracts it drives moved to
   // @agent-device/contracts, so the daemon reads that vocabulary from below the daemon.
-  'command-runtime': ['src/io.ts', 'src/runtime.ts'],
+  'command-runtime': ['src/io.ts'],
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
   // private `src/platform-runtime/` submodule, and with the daemon runtime's dependency
   // construction, which names these same runtime families and keeps the same value-free direction

@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
-import { selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
+import { selector } from '../../../packages/command-runtime/src/commands/interaction/runtime/selector-read-utils.ts';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';

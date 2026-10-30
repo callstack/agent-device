@@ -39,6 +39,7 @@
     { "path": "../../packages/apple-runner" },
     { "path": "../../packages/capture-kit" },
     { "path": "../../packages/command-registry" },
+    { "path": "../../packages/command-runtime" },
     { "path": "../../packages/command-surface" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/daemon" },

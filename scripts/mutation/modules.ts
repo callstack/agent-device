@@ -56,8 +56,8 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   {
     id: 'interaction-settle',
     label: 'Interaction settle decisions',
-    mutate: ['src/commands/interaction/runtime/settle.ts'],
-    owns: ['src/commands/interaction/runtime/settle.ts'],
+    mutate: ['packages/command-runtime/src/commands/interaction/runtime/settle.ts'],
+    owns: ['packages/command-runtime/src/commands/interaction/runtime/settle.ts'],
   },
   {
     id: 'scroll-edge-state',

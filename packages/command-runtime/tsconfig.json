@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"],
+  "references": [
+    { "path": "../ad-script" },
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../selectors" },
+    { "path": "../session-journal" }
+  ]
+}

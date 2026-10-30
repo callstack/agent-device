@@ -34,6 +34,11 @@ const COMMAND_SURFACE_DIR = 'packages/command-surface';
 const COMMAND_SURFACE_PACKAGE = '@agent-device/command-surface';
 
 const ENTRY_SURFACES = [
+  {
+    packageName: '@agent-device/command-runtime',
+    dir: 'packages/command-runtime',
+    entry: ENTRY_FILE,
+  },
   { packageName: TEST_KIT_PACKAGE, dir: TEST_KIT_DIR, entry: ENTRY_FILE },
   { packageName: DAEMON_PACKAGE, dir: DAEMON_DIR, entry: ENTRY_FILE },
   { packageName: APPLE_RUNNER_PACKAGE, dir: APPLE_RUNNER_DIR, entry: ENTRY_FILE },
