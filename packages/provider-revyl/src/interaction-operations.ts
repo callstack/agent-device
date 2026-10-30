@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
   bindProviderFocusInteractor,
@@ -230,13 +231,8 @@ export function bindRevylInteractionOperations(
       signal,
       resolveInteractor,
       facts: revylInteractionOperationFacts(),
-      pause: async (milliseconds: number) => await sleep(milliseconds, signal),
+      pause: async (milliseconds: number) => await sleep(milliseconds, undefined, { signal }),
     }),
     ...bindProviderScrollInteractor({ device, signal, resolveInteractor }),
   });
-}
-
-async function sleep(milliseconds: number, signal: AbortSignal): Promise<void> {
-  const { setTimeout: delay } = await import('node:timers/promises');
-  await delay(milliseconds, undefined, { signal });
 }
