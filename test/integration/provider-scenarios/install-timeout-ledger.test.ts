@@ -367,49 +367,43 @@ async function createAndroidScenario(
     launched = true;
     return 4242;
   });
-  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
-    if (command === 'adb') {
-      assert.equal(args[args.indexOf('-s') + 1], 'emulator-5554');
-    }
-    if (command === 'adb' && args.some((arg) => arg.includes('sys.boot_completed'))) {
+  const ok = { stdout: '', stderr: '', exitCode: 0 };
+  function runAdb(args: readonly string[], options: hostCommands.ExecOptions) {
+    assert.equal(args[args.indexOf('-s') + 1], 'emulator-5554');
+    if (args.some((arg) => arg.includes('sys.boot_completed'))) {
       assert.ok(options.timeoutMs);
       bootProbeCapMs ??= options.timeoutMs;
       const ready = options.timeoutMs < bootProbeCapMs;
       // Leave room for the poll sleep; complete only when the real boot deadline narrows a probe.
-      ledger.record(
-        command,
-        args,
-        options.timeoutMs,
-        ready ? undefined : options.timeoutMs - 1_001,
-      );
-      return { stdout: ready ? '1' : '0', stderr: '', exitCode: 0 };
+      ledger.record('adb', args, options.timeoutMs, ready ? undefined : options.timeoutMs - 1_001);
+      return { ...ok, stdout: ready ? '1' : '0' };
     }
+    ledger.record('adb', args, options.timeoutMs);
+    if (args.includes('install')) installed = true;
+    if (args.includes('uninstall')) installed = false;
+    if (args.join(' ').includes('packages')) {
+      return { ...ok, stdout: installed ? 'package:com.example.demo\n' : '' };
+    }
+    return { ...ok, stdout: 'Success' };
+  }
+  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
+    if (command === 'adb') return runAdb(args, options);
     ledger.record(command, args, options.timeoutMs);
-    if (command === '/usr/bin/lsappinfo') return { stdout: '', stderr: '', exitCode: 0 };
-    if (command === '/usr/sbin/sysctl') return { stdout: '1', stderr: '', exitCode: 0 };
-    if (command === 'adb') {
-      if (args.includes('install')) installed = true;
-      if (args.includes('uninstall')) installed = false;
-      return {
-        stdout:
-          args.includes('shell') && args.join(' ').includes('packages')
-            ? installed
-              ? 'package:com.example.demo\n'
-              : ''
-            : 'Success',
-        stderr: '',
-        exitCode: 0,
-      };
+    switch (command) {
+      case '/usr/bin/lsappinfo':
+        return ok;
+      case '/usr/sbin/sysctl':
+        return { ...ok, stdout: '1' };
+      case 'bundletool':
+        if (args.includes('install-apks')) {
+          assert.equal(args[args.indexOf('--device-id') + 1], 'emulator-5554');
+          installed = true;
+        }
+        return ok;
+      default:
+        assert.ok(command === 'unzip' || path.basename(command) === 'aapt', command);
+        return { ...ok, exitCode: 1 };
     }
-    if (command === 'bundletool') {
-      if (args.includes('install-apks')) {
-        assert.equal(args[args.indexOf('--device-id') + 1], 'emulator-5554');
-        installed = true;
-      }
-      return { stdout: '', stderr: '', exitCode: 0 };
-    }
-    assert.ok(command === 'unzip' || path.basename(command) === 'aapt', command);
-    return { stdout: '', stderr: '', exitCode: 1 };
   });
   const inventory = async () => [launched ? { ...device, id: 'emulator-5554' } : device];
   vi.spyOn(inventoryContext, 'listLocalDeviceInventory').mockImplementation(inventory);
