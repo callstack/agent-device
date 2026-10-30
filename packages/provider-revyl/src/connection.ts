@@ -164,8 +164,9 @@ function isNonRoutableAddress(address: number[] | string): boolean {
     );
   }
   const [a, b] = address as [number, number, number, number];
-  // 0.0.0.0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16, 172.16/12, 192.168/16.
-  if (a === 0 || a === 10 || a === 127 || a === 169) return true;
+  // 0.0.0.0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16 (link-local), 172.16/12, 192.168/16.
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
   if (a === 100 && b >= 64 && b <= 127) return true;
   if (a === 172 && b >= 16 && b <= 31) return true;
   return a === 192 && b === 168;

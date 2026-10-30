@@ -130,7 +130,11 @@ test('verify refuses an app URL only the caller own network can serve', async ()
     );
   }
   // A publicly reachable host is accepted, including one in a range that only looks private.
-  for (const appUrl of ['https://100.128.0.1/app.zip', 'https://172.32.0.1/app.zip']) {
+  for (const appUrl of [
+    'https://100.128.0.1/app.zip',
+    'https://172.32.0.1/app.zip',
+    'https://169.1.2.3/app.zip',
+  ]) {
     await verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
       appUrl,
     });
