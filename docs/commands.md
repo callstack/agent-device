@@ -642,7 +642,7 @@ agent-device install com.example.app ./build/MyApp.app --platform ios
 - Supports Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices. On xctrace-only devices, install the app with Xcode before opening it by bundle ID.
 - Formats: Android `.apk`/`.aab`, iOS `.app`/`.ipa`, HarmonyOS `.hap`. For an `.ipa` with several app bundles, `<app>` picks one by bundle id or name.
 - `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`; it installs a universal APK.
-- Remote daemons upload local app files automatically; prefix the path with `remote:` to use a path on the daemon host as is.
+- Remote daemons upload local app files automatically; prefix the path with `remote:` to use a path on the daemon host as is. A daemon that serves the public remote surface (proxy marker or auth hook) refuses daemon host paths with reason `REMOTE_HOST_INPUT_DENIED`.
 
 ## App reinstall (fresh state)
 
@@ -687,6 +687,7 @@ agent-device push com.example.app '{"action":"com.example.app.PUSH","extras":{"t
 
 - `push <bundle|package> <payload.json|inline-json>` simulates push notification delivery to the session device or the one named by `--platform`, `--device`, `--udid`, or `--serial`.
 - iOS: simulator only, with an APNs-style JSON object payload.
+- A daemon that serves the public remote surface accepts only an inline JSON object payload. It refuses payload file paths with reason `REMOTE_HOST_INPUT_DENIED`.
 - Android: sends a broadcast with the payload `{"action":"<intent-action>","receiver":"<optional component>","extras":{...}}`. Extras may be strings, booleans, or numbers.
 
 ## App event triggers (app hook)
