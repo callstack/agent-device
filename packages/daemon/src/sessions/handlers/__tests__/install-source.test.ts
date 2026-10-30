@@ -43,6 +43,7 @@ import { handleInstallFromSourceDeploymentCommand } from '../session-app-source-
 type SourceRuntimeOptions = Readonly<{
   materializationAvailable?: boolean;
   readinessAvailable?: boolean;
+  readyDevice?: DeviceInfo;
   providerMode?: RuntimeFacts<PlatformRuntimeOperations>['device']['providerMode'];
 }>;
 
@@ -71,7 +72,7 @@ function makeRequest(
   };
 }
 
-test('install_source materializes and deploys through one admitted runtime binding', async () => {
+test('install_source materializes and deploys through the admitted ready runtime', async () => {
   const store = makeStore();
   const session = makeSession({
     platform: 'android',
@@ -111,7 +112,7 @@ test('install_source materializes and deploys through one admitted runtime bindi
     },
   });
   expect(runtime.inspectFacts).toHaveBeenCalledOnce();
-  expect(runtime.bindCalls).toHaveBeenCalledOnce();
+  expect(runtime.bindCalls).toHaveBeenCalledTimes(2);
   expect(runtime.bindCalls.mock.calls[0]?.[1]).toMatchObject({
     required: ['ensureReady', 'materializeAppSource', 'deployMaterializedApp'],
   });
@@ -119,6 +120,50 @@ test('install_source materializes and deploys through one admitted runtime bindi
   expect(materialize).toHaveBeenCalledOnce();
   expect(deploy).toHaveBeenCalledOnce();
 });
+
+test.each(['emulator-5554', 'emulator-5556'])(
+  'install_source adopts readiness metadata before materialization and deployment (%s)',
+  async (readyId) => {
+    const store = makeStore();
+    const session = makeSession({
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: false,
+    });
+    store.publish(session.name, session);
+    const readyDevice = { ...session.device, id: readyId, booted: true };
+    const staleOperation = async (): Promise<never> => {
+      throw new AppError('COMMAND_FAILED', 'Deployment used the unready binding');
+    };
+    const initial = createSourceRuntime(session.device, staleOperation, staleOperation, {
+      readyDevice,
+    });
+    const cleanup = vi.fn(async () => {});
+    const ready = createSourceRuntime(
+      readyDevice,
+      async () => ({ installablePath: '/tmp/materialized/app.apk', cleanup }),
+      async () => ({ packageName: 'com.example.app' }),
+    );
+    const bindDevice: BindDeviceRuntime = async (device, use) =>
+      await (device.booted ? ready : initial).bindDevice(device, use);
+
+    const response = await handleInstallFromSourceDeploymentCommand({
+      platformServices: daemonPlatformServicesFixture(),
+      req: makeRequest({ kind: 'path', path: '/tmp/app.apk' }),
+      sessionName: session.name,
+      sessionStore: store,
+      inspectFacts: initial.inspectFacts,
+      bindDevice,
+    });
+
+    expect(response).toMatchObject({ ok: true, data: { packageName: 'com.example.app' } });
+    expect(initial.ensureReady).toHaveBeenCalledOnce();
+    expect(ready.ensureReady).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  },
+);
 
 test('install_source rejects unavailable facts before binding or materializing', async () => {
   const store = makeStore();
@@ -244,7 +289,7 @@ test('install_source cleans materialized paths when deployment fails after admis
 
   expect(response).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED' } });
   expect(runtime.inspectFacts).toHaveBeenCalledOnce();
-  expect(runtime.bindCalls).toHaveBeenCalledOnce();
+  expect(runtime.bindCalls).toHaveBeenCalledTimes(2);
   expect(runtime.ensureReady).toHaveBeenCalledOnce();
   expect(cleanup).toHaveBeenCalledOnce();
 });
@@ -399,7 +444,7 @@ function createSourceRuntime(
   options: SourceRuntimeOptions = {},
 ) {
   const facts = sourceRuntimeFacts(device, options);
-  const ensureReady = vi.fn(async () => ({ ...device, booted: true }));
+  const ensureReady = vi.fn(async () => options.readyDevice ?? { ...device, booted: true });
   const binding = sourceRuntimeBinding({
     device,
     facts,

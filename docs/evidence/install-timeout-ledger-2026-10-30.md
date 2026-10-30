@@ -32,7 +32,7 @@ All rows exited with code 0 and returned success. Timeouts are in milliseconds; 
 At `9eea80f2a583e7b6b05d187114922506ee1fa3d0`, the same focused provider suite ran in a disposable checkout:
 
 - Unmodified head: 19 passed.
-- Restore the PR’s 330s/420s envelopes: 9 failed, 10 passed; failures report the missing daemon-result margin.
+- Apply a reduced 330s/420s envelope mutation (the PR ships 480s/600s): 9 failed, 10 passed; failures report the missing daemon-result margin.
 - Raise the real Android install/bundletool bound from 120s to 200s: 4 failed, 15 passed; the ledger captures the changed production call bounds.
 
 Command: `pnpm exec vitest run --project provider-integration test/integration/provider-scenarios/install-timeout-ledger.test.ts --reporter verbose`. The disposable checkout was removed.

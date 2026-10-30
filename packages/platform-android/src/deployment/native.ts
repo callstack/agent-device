@@ -77,7 +77,13 @@ export async function pushAndroidNotification(
     appendBroadcastExtra(words, key, value);
     extrasCount += 1;
   }
-  const result = await runAdb(host, device, deviceShellArgv('adb', 'shell', words), signal);
+  const result = await runAdb(
+    host,
+    device,
+    deviceShellArgv('adb', 'shell', words),
+    signal,
+    ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
+  );
   assertCommandSuccess(result, 'adb push broadcast failed');
   return { action, extrasCount };
 }
@@ -210,7 +216,7 @@ async function runAdb(
   device: DeviceInfo,
   args: readonly string[],
   signal: AbortSignal,
-  timeoutMs?: number,
+  timeoutMs: number,
 ) {
   return await host.androidTools.runAdb(device, args, { timeoutMs, allowFailure: true }, signal);
 }

@@ -85,18 +85,10 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
       );
     if (unsupported) return unsupported;
 
-    let runtime = await requireRuntimeBinding(params.bindDevice)(
-      device,
-      readyMaterializeAndDeployAppUse,
-    );
-    const ready = await runtime.operations.ensureReady({});
-    if (ready.id !== device.id) {
-      runtime = await requireRuntimeBinding(params.bindDevice)(
-        ready,
-        readyMaterializeAndDeployAppUse,
-      );
-    }
-    device = ready;
+    const bindDevice = requireRuntimeBinding(params.bindDevice);
+    const readiness = await bindDevice(device, readyMaterializeAndDeployAppUse);
+    device = await readiness.operations.ensureReady({});
+    const runtime = await bindDevice(device, readyMaterializeAndDeployAppUse);
     materialized = await runtime.operations.materializeAppSource({ source: resolvedSource.source });
     retained = await retainIfRequested({
       artifact: materialized,

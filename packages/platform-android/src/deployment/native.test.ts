@@ -136,7 +136,7 @@ test('preserves missing-package uninstall and typed push extras', async () => {
   expect(run).toHaveBeenLastCalledWith(
     expect.objectContaining({
       args: expect.arrayContaining(['--es', 'title', 'Hello', '--ez', 'enabled', 'true']),
-      timeoutMs: undefined,
+      timeoutMs: 15_000,
     }),
     signal,
   );
