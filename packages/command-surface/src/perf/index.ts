@@ -23,7 +23,7 @@ import {
   type PerfArea,
   type PerfKind,
   type PerfSubject,
-} from './perf-command-contract.ts';
+} from '@agent-device/contracts/observability';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 

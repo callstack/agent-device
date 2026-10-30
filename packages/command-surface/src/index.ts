@@ -1,5 +1,5 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import { createBatchDaemonWriter } from './batch/index.ts';
+import { createBatchDaemonWriter } from './batch/projection.ts';
 import type { AnyDaemonWriter, CommandInput, DaemonCommandRequest } from './cli-grammar/types.ts';
 import { findCommandMetadata } from './command-metadata.ts';
 import { refuseRetiredCommonInput } from './common-input-fields.ts';
@@ -17,7 +17,7 @@ export { COMMON_INPUT_AUDIENCE } from './common-input-fields.ts';
 export { operatorAudience, operatorInputRefusal } from './input-audience.ts';
 export { buildRequestFlags } from './command-flags.ts';
 export { runCommand } from './command-surface.ts';
-export { readInputFromCli } from './cli-grammar.ts';
+export { readInputFromCli } from './cli-grammar/registry.ts';
 export { readCliBatchStepsJson } from './batch/batch-steps.ts';
 export { readMetroPrepareKind } from './metro/prepare-kind.ts';
 export {
@@ -36,10 +36,10 @@ export { isFlagSupportedForCommand } from './schema/option-schema.ts';
 export { resolveConfigBackedFlagDefaults } from './schema/cli-config.ts';
 export { mergeDefinedFlags } from './schema/merge-flags.ts';
 
-const daemonWriters: Record<string, AnyDaemonWriter> = {
+const daemonWriters = {
   ...listCommandFamilyDaemonWriters(),
   batch: createBatchDaemonWriter(prepareBatchDaemonCommandRequest),
-};
+} satisfies Record<string, AnyDaemonWriter>;
 
 export type DaemonCommandName = keyof typeof daemonWriters;
 
@@ -75,6 +75,7 @@ async function prepareBatchDaemonCommandRequest(
   }
 }
 
+/** Projects client options; `AgentDeviceClient` owns each command's option contract. */
 export async function prepareDaemonCommandRequest(
   command: DaemonCommandName,
   input: CommandInput,

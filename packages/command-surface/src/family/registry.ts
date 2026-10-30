@@ -38,6 +38,11 @@ export const commandFamilies = [
 export type CommandFamilyCommandName = (typeof commandFamilies)[number]['metadata'][number]['name'];
 export type CommandFamilyMetadata = (typeof commandFamilies)[number]['metadata'][number];
 export type CommandFamilyDefinition = (typeof commandFamilies)[number]['definitions'][number];
+type CommandFamilyDaemonCommandName = (typeof commandFamilies)[number] extends infer Family
+  ? Family extends { daemonWriters: infer Writers }
+    ? keyof Writers
+    : never
+  : never;
 
 export function commandFamilyName(command: string): string | undefined {
   return commandFamilies.find((family) =>
@@ -61,8 +66,14 @@ export function listCommandFamilyCliReaders(): Record<CommandFamilyCommandName, 
   return mergeFamilyRecords('cliReaders') as Record<CommandFamilyCommandName, CliReader>;
 }
 
-export function listCommandFamilyDaemonWriters(): Record<string, AnyDaemonWriter> {
-  return mergeFamilyRecords('daemonWriters');
+export function listCommandFamilyDaemonWriters(): Record<
+  CommandFamilyDaemonCommandName,
+  AnyDaemonWriter
+> {
+  return mergeFamilyRecords('daemonWriters') as Record<
+    CommandFamilyDaemonCommandName,
+    AnyDaemonWriter
+  >;
 }
 
 function mergeFamilyRecords<TKey extends keyof CommandFamilyRecordMap>(

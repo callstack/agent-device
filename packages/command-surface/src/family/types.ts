@@ -70,7 +70,17 @@ type CommandFacetDefinitions<TCommands extends readonly CommandFacet[]> = {
 };
 
 type CommandFacetName<TCommands extends readonly CommandFacet[]> = TCommands[number]['name'];
+type DaemonCommandFacetName<TCommands extends readonly CommandFacet[]> = Extract<
+  TCommands[number],
+  { daemonWriter: AnyDaemonWriter }
+>['name'];
 
+export function defineCommandFacet<const TCommandName extends string, Input, Result>(
+  command: CommandFacetInput<TCommandName, Input, Result> & { daemonWriter: AnyDaemonWriter },
+): CommandFacet<TCommandName, Result> & { daemonWriter: AnyDaemonWriter };
+export function defineCommandFacet<const TCommandName extends string, Input, Result>(
+  command: CommandFacetInput<TCommandName, Input, Result>,
+): CommandFacet<TCommandName, Result>;
 export function defineCommandFacet<const TCommandName extends string, Input, Result>(
   command: CommandFacetInput<TCommandName, Input, Result>,
 ): CommandFacet<TCommandName, Result> {
@@ -113,7 +123,7 @@ export function defineParameterlessCommandFacet<
     client: AgentDeviceClient,
     input: InferCommandInput<Record<never, never>>,
   ) => Promise<Result>;
-}): CommandFacet<TCommandName, Result> {
+}): CommandFacet<TCommandName, Result> & { daemonWriter: AnyDaemonWriter } {
   return defineCommandFacet({
     name: command.name,
     text: command.text,
@@ -150,7 +160,7 @@ export function defineCommandFamilyFromFacets<
     ) as CommandFacetDefinitions<TCommands>,
     cliSchemas: cliSchemas as Partial<Record<CommandFacetName<TCommands>, CommandSchema>>,
     cliReaders: cliReaders as Record<CommandFacetName<TCommands>, CliReader>,
-    daemonWriters,
+    daemonWriters: daemonWriters as Record<DaemonCommandFacetName<TCommands>, AnyDaemonWriter>,
   } satisfies CommandFamilyFacet<CommandFacetName<TCommands>> & {
     metadata: CommandFacetMetadata<TCommands>;
     definitions: CommandFacetDefinitions<TCommands>;

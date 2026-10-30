@@ -27,8 +27,58 @@ const PARSEABLE_OUTPUT_COMMANDS = [
   'record',
 ] as const satisfies readonly CommandName[];
 
-/** Every command the registry gives a text formatter — the population the rule must cover. */
-const FORMATTER_COMMANDS = Object.keys(listCliOutputFormatters()).sort() as CommandName[];
+const FORMATTER_COMMANDS = [
+  'action-button',
+  'alert',
+  'app-switcher',
+  'apps',
+  'appstate',
+  'artifacts',
+  'audio',
+  'back',
+  'batch',
+  'boot',
+  'capabilities',
+  'click',
+  'clipboard',
+  'close',
+  'debug',
+  'devices',
+  'doctor',
+  'events',
+  'fill',
+  'find',
+  'fold',
+  'get',
+  'hardware-button',
+  'home',
+  'hover',
+  'install',
+  'install-from-source',
+  'is',
+  'keyboard',
+  'logs',
+  'longpress',
+  'metro',
+  'network',
+  'open',
+  'orientation',
+  'perf',
+  'prepare',
+  'press',
+  'record',
+  'reinstall',
+  'replay',
+  'scroll',
+  'session',
+  'settings',
+  'shutdown',
+  'snapshot',
+  'telephony',
+  'tv-remote',
+  'viewport',
+  'wait',
+] as const satisfies readonly CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
   const output = await formatCliOutput({ env: process.env, name, input, result });
@@ -75,6 +125,10 @@ test('the parseable-output set is exactly the declared exceptions', () => {
   );
 });
 
+test('every command with a dedicated text response retains its dispatcher binding', () => {
+  expect(Object.keys(listCliOutputFormatters()).sort()).toEqual(FORMATTER_COMMANDS);
+});
+
 /**
  * The commands with no formatter answer through the CLI's generic path, which routes the same way.
  * None of them may declare `parseableOutput`, because that path has no second stream to split — if
@@ -82,7 +136,9 @@ test('the parseable-output set is exactly the declared exceptions', () => {
  */
 test('a command with no formatter never opts out of stdout', () => {
   const allCommands = listCommandMetadata().map((metadata) => metadata.name);
-  const withoutFormatter = allCommands.filter((name) => !FORMATTER_COMMANDS.includes(name));
+  const withoutFormatter = allCommands.filter(
+    (name) => !(FORMATTER_COMMANDS as readonly CommandName[]).includes(name),
+  );
   expect(withoutFormatter.length).toBeGreaterThan(0);
   expect(withoutFormatter.filter(isParseableOutputCommand)).toEqual([]);
 });

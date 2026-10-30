@@ -11,7 +11,7 @@ import type { CommandSchemaOverride } from '@agent-device/command-registry/comma
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { LOG_ACTION_VALUES, type LogAction } from './log-command-contract.ts';
+import { LOG_ACTION_VALUES, type LogAction } from '@agent-device/contracts/observability';
 import {
   commonInputFromFlags,
   direct,
