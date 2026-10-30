@@ -32,6 +32,7 @@ afterEach(async () => {
 async function liveInteractor(
   platform: 'ios' | 'android',
   options?: Parameters<typeof startRevylFixtureBackend>[0],
+  runner?: { signal: AbortSignal },
 ): Promise<
   Readonly<{
     fixture: RevylFixtureBackend;
@@ -50,7 +51,7 @@ async function liveInteractor(
     })
   )?.[0];
   if (!device) throw new Error('Expected the live session to be listed.');
-  const interactor = runtime.getInteractor(device);
+  const interactor = runtime.getInteractor(device, runner);
   if (!interactor) throw new Error('Expected a live session interactor.');
   return { fixture, interactor, runtime };
 }
@@ -155,6 +156,23 @@ test('a paced fill that fails partway says how much of the text landed', async (
       error.details?.dispatchedSteps === 2 &&
       error.details?.dispatched === 'unknown',
   );
+});
+
+test('a paced fill canceled mid-text stops at the character it reached', async () => {
+  // The caller hangs up while a pause is still open. The delay has to end there: waiting it out and
+  // typing the next character would act on a device its caller already gave up on.
+  const controller = new AbortController();
+  const { fixture, interactor } = await liveInteractor('android', undefined, {
+    signal: controller.signal,
+  });
+  const filling = interactor.fill(80, 1250, 'abcdef', 5_000);
+  await waitFor(() => fixture.requests.some((request) => request.path.endsWith('/input')));
+  const beforeAbort = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
+  controller.abort();
+
+  await assert.rejects(async () => await filling);
+  const typed = fixture.requests.filter((request) => request.path.endsWith('/input')).length;
+  assert.equal(typed, beforeAbort, 'no character is typed after the cancellation');
 });
 
 test('type is refused with the fill hint instead of going to an unnamed point', async () => {
