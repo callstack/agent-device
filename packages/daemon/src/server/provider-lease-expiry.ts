@@ -17,7 +17,8 @@ const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
  * file inherited it from one that died without releasing them, so every lease in it is recovered.
  */
 const LIVE_LEASES_FILE = 'live-provider-leases.json';
-const PENDING_RELEASES_VERSION = 1;
+/** The format version of both lease records: the expired record and the live journal. */
+const LEASE_RECORD_VERSION = 1;
 const PERSISTED_LEASE_STRING_FIELDS = [
   'leaseId',
   'tenantId',
@@ -29,7 +30,7 @@ const PERSISTED_LEASE_NUMBER_FIELDS = ['createdAt', 'heartbeatAt', 'expiresAt'] 
 
 type Timer = ReturnType<typeof setTimeout>;
 
-type PersistedExpiredProviderLeases = {
+type PersistedProviderLeaseRecord = {
   version: number;
   leases: DeviceLease[];
 };
@@ -133,9 +134,12 @@ export function createExpiredProviderLeaseReleaser(options: {
       (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
     );
     const journal = new Map(
-      [...liveLeases, ...unpersisted]
-        .filter((lease) => isRecoverableProviderAvailable(lease, options.recoverableProviderIds))
-        .map((lease) => [lease.leaseId, lease] as const),
+      [
+        ...liveLeases,
+        ...unpersisted.filter((lease) =>
+          isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
+        ),
+      ].map((lease) => [lease.leaseId, lease] as const),
     );
     try {
       writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
@@ -151,7 +155,9 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
-    liveLeases = leases;
+    liveLeases = leases.filter((lease) =>
+      isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
+    );
     writeJournal();
   };
 
@@ -285,8 +291,14 @@ export function createExpiredProviderLeaseReleaser(options: {
     shutdown: () => {
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
-      if (journalRetryTimer) clearTimeout(journalRetryTimer);
-      journalRetryTimer = undefined;
+      if (journalRetryTimer) {
+        // One last attempt, so a journal that a retry was still owed does not outlive this daemon stale.
+        clearTimeout(journalRetryTimer);
+        journalRetryTimer = undefined;
+        writeJournal();
+        if (journalRetryTimer) clearTimeout(journalRetryTimer);
+        journalRetryTimer = undefined;
+      }
     },
   };
 }
@@ -368,8 +380,8 @@ function writeLeaseRecord(stateDir: string, file: string, leases: readonly Devic
     return;
   }
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const record: PersistedExpiredProviderLeases = {
-    version: PENDING_RELEASES_VERSION,
+  const record: PersistedProviderLeaseRecord = {
+    version: LEASE_RECORD_VERSION,
     leases: [...leases],
   };
   publishFileSync({ destination: filePath, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
@@ -380,8 +392,8 @@ function loadLeaseRecord(stateDir: string | undefined, file: string): Map<string
   if (!stateDir) return new Map();
   const filePath = leaseRecordPath(stateDir, file);
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedExpiredProviderLeases;
-    if (parsed.version !== PENDING_RELEASES_VERSION || !Array.isArray(parsed.leases)) {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedProviderLeaseRecord;
+    if (parsed.version !== LEASE_RECORD_VERSION || !Array.isArray(parsed.leases)) {
       throw new Error('unsupported expiry release record');
     }
     return new Map(

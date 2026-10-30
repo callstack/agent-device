@@ -287,3 +287,30 @@ test('a journal write that fails is retried with the latest leases', async () =>
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('shutdown makes the journal write a pending retry still owed', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const journalPath = `${stateDir}/live-provider-leases.json`;
+  fs.mkdirSync(journalPath);
+  const daemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease: async () => undefined,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+    retryDelayMs: 60_000,
+  });
+  const registry = new LeaseRegistry({
+    onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
+  });
+  try {
+    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    fs.rmdirSync(journalPath);
+    // The retry is a minute away; shutdown must not leave the journal unwritten until then.
+    daemon.shutdown();
+    const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
+    expect(journal.leases.map((entry: DeviceLease) => entry.leaseId)).toEqual([lease.leaseId]);
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
