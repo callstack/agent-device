@@ -163,7 +163,13 @@ async function resolveInstallDevice(
   if (session) {
     return session.device;
   }
-  return await resolveCommandDevice({ session, flags, env, platformServices });
+  return await resolveCommandDevice({
+    session,
+    flags,
+    env,
+    androidAvdSelection: 'include-stopped',
+    platformServices,
+  });
 }
 
 function normalizePlatform(

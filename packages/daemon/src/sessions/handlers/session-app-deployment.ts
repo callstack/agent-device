@@ -87,6 +87,7 @@ export async function handleAppDeploymentCommand(params: {
       session,
       flags,
       env: sessionStore.host.env,
+      androidAvdSelection: 'include-stopped',
       platformServices: params.platformServices,
     });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);

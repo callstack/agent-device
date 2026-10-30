@@ -4,6 +4,7 @@ import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/regi
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import * as hostCommands from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import * as timers from 'node:timers/promises';
 import { pack } from 'tar-stream';
 import {
@@ -388,7 +389,12 @@ async function createAndroidScenario(
         return { ...ok, exitCode: 1 };
     }
   });
-  const inventory = async () => [launched ? { ...device, id: 'emulator-5554' } : device];
+  const inventory = async (request: DeviceInventoryRequest = {}) =>
+    launched
+      ? [{ ...device, id: 'emulator-5554' }]
+      : request.androidAvdSelection === 'running-only'
+        ? []
+        : [device];
   vi.spyOn(inventoryContext, 'listLocalDeviceInventory').mockImplementation(inventory);
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: inventory,
