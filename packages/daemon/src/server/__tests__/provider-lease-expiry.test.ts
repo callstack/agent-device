@@ -182,7 +182,14 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
     killedDaemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
-    await restartedDaemon.recoverInherited();
+    const startupDiagnostics: { phase: string; data: Record<string, unknown> }[] = [];
+    await restartedDaemon.recoverInherited((diagnostic) => startupDiagnostics.push(diagnostic));
+    expect(startupDiagnostics).toEqual([
+      expect.objectContaining({
+        phase: 'provider_lease_orphans_adopted',
+        data: { leaseIds: [held.leaseId] },
+      }),
+    ]);
     expect(recoverExpiredLease.mock.calls.map(([lease]) => lease.leaseId)).toEqual([held.leaseId]);
     expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(false);
     restartedDaemon.shutdown();

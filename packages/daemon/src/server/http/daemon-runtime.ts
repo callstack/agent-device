@@ -619,8 +619,6 @@ async function startDaemonRuntimeOnHost(
     });
   }
   const registration = acquisition.owner;
-  // Only the registered daemon may read the state directory's lease records and act on them.
-  void expiredProviderLeaseReleaser.recoverInherited();
   rollback.onRollback(async () => {
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
@@ -673,6 +671,11 @@ async function startDaemonRuntimeOnHost(
     scope: createRecoveryPlatformScope(),
     onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
   });
+  // Only the registered daemon may read the state directory's lease records and act on them. Loading and
+  // adoption run before the first await, so their report reaches this startup's diagnostics.
+  void expiredProviderLeaseReleaser.recoverInherited((diagnostic) =>
+    startupDiagnostics.push(diagnostic),
+  );
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
     purposes: ['simctl-screen-recording'],

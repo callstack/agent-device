@@ -7,7 +7,7 @@ import type {
 } from '@agent-device/contracts/device';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
@@ -47,7 +47,7 @@ export type ExpiredProviderLeaseReleaser = {
    * still running, and acting on them would end devices it is using. Until then the releaser touches no
    * file in the state directory.
    */
-  recoverInherited: () => Promise<void>;
+  recoverInherited: (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void) => Promise<void>;
   retryPending: () => Promise<void>;
   /**
    * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
@@ -108,7 +108,7 @@ export function createExpiredProviderLeaseReleaser(options: {
     }
   };
 
-  const adoptOrphanedLeases = (): void => {
+  const adoptOrphanedLeases = (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void): void => {
     const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE);
     if (orphaned.size === 0 || !options.stateDir) return;
     for (const [leaseId, lease] of orphaned) {
@@ -124,9 +124,11 @@ export function createExpiredProviderLeaseReleaser(options: {
       // pending record already holds each of its leases once.
       emitJournalFailure('provider_lease_journal_remove_failed', orphaned.size, error);
     }
-    emitDiagnostic({
-      level: 'warn',
+    // Startup runs outside any request, so the report goes to the daemon log through the startup
+    // diagnostics rather than a request scope that does not exist yet.
+    onDiagnostic?.({
       phase: 'provider_lease_orphans_adopted',
+      resourcePath: leaseRecordPath(options.stateDir, LIVE_LEASES_FILE),
       data: { leaseIds: [...orphaned.keys()] },
     });
   };
@@ -160,14 +162,16 @@ export function createExpiredProviderLeaseReleaser(options: {
       journalRetryTimer.unref?.();
     }
   };
-  const recoverInherited = async (): Promise<void> => {
+  const recoverInherited = async (
+    onDiagnostic?: (diagnostic: ResourceDiagnostic) => void,
+  ): Promise<void> => {
     if (inherited) return;
     inherited = true;
     for (const [leaseId, lease] of loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE)) {
       pendingRecoveryLeases.set(leaseId, lease);
       persistedRecoveryLeaseIds.add(leaseId);
     }
-    adoptOrphanedLeases();
+    adoptOrphanedLeases(onDiagnostic);
     await retryPending();
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
