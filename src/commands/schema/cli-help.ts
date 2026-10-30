@@ -535,7 +535,7 @@ Providers:
   AWS Device Farm: agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
   TestMu AI (plugin, install separately): agent-device connect testmu verifies credentials and the exact virtual device (emulator or simulator) or, with --provider-device-type real, real device and OS version, then stores a local provider profile. --provider-app takes an lt:// app reference, an https URL, or a local path: connect looks an lt:// id up among your uploads for that device pool, while URL and local sources are uploaded and validated when open creates the session. It does not create a hub session.
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
-  Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app public https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
+  Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
 
 Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
 ${providerPluginHelp()}
@@ -639,7 +639,7 @@ Revyl cloud-device flow (plugin, install separately):
   agent-device snapshot -i
   agent-device close
   agent-device disconnect
-  Revyl starts a device from its own pool, so --device and --provider-os-version are preferences it picks from rather than a catalog lookup, and --provider-app must be a public https URL it can download. connect verifies the key without renting a device; the device is rented on the first command that needs it and released on close or disconnect.
+  Revyl starts a device from its own pool, so --device and --provider-os-version are preferences it picks from rather than a catalog lookup, and --provider-app must be an https URL it can download. connect verifies the key without renting a device; the device is rented on the first command that needs it and released on close or disconnect.
 
 Local profile flow:
   agent-device connect --remote-config ./remote-config.json

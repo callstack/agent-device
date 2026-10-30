@@ -1,4 +1,3 @@
-import net from 'node:net';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderPluginHost } from 'agent-device/plugins';
 import {
@@ -7,13 +6,12 @@ import {
 } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RevylPlatform } from './device.ts';
+import { REVYL_PROVIDER, type RevylPlatform } from './device.ts';
 import { requireRevylCredentials, type RevylCredentials } from './credentials.ts';
 import { createRevylClient } from './revyl-client.ts';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
 import { revylTextFlag } from './session-allocation.ts';
 
-const PROVIDER = 'revyl';
 const SERVICE = 'Revyl';
 
 /** The connect half of the plugin, bound to one host's environment. */
@@ -28,7 +26,7 @@ export function createRevylConnection(host: ProviderPluginHost) {
   return {
     resolve: ({ flags }: { flags: CliFlags; cwd: string }) => {
       rejectRefusedProviderProfileFields(flags, REVYL_PROFILE_FIELDS);
-      requireRevylCredentials(host.env, `connect ${PROVIDER}`);
+      requireRevylCredentials(host.env, `connect ${REVYL_PROVIDER}`);
       const platform = requireConnectPlatform(flags);
       const app = requireAppUrl(flags.providerApp, host);
       // Stored through the same canonicalizer allocation reads with, so the profile and the
@@ -37,7 +35,7 @@ export function createRevylConnection(host: ProviderPluginHost) {
       const osVersion = revylTextFlag(flags.providerOsVersion);
       return {
         profile: {
-          leaseProvider: PROVIDER,
+          leaseProvider: REVYL_PROVIDER,
           platform,
           ...(deviceModel === undefined ? {} : { device: deviceModel }),
           providerApp: app,
@@ -53,7 +51,7 @@ export function createRevylConnection(host: ProviderPluginHost) {
       const deviceModel = revylTextFlag(flags.device);
       const osVersion = revylTextFlag(flags.providerOsVersion);
       return await verifyRevylProfile(
-        requireRevylCredentials(host.env, `connect ${PROVIDER}`),
+        requireRevylCredentials(host.env, `connect ${REVYL_PROVIDER}`),
         host.clientVersion,
         requireResolvedProfilePlatform(flags.platform, SERVICE),
         {
@@ -84,18 +82,18 @@ export async function verifyRevylProfile(
     clientVersion,
   });
   await client.verifyCredentials();
-  if (!isPublicAppUrl(profile.appUrl)) {
+  if (!isRevylAppUrl(profile.appUrl)) {
     throw new AppError(
       'INVALID_ARGS',
-      'Revyl installs the app from a URL, so --provider-app must be a public https URL.',
+      'Revyl installs the app from a URL, so --provider-app must be an https URL.',
       {
         reason: 'invalid_provider_app',
-        hint: 'Publish the build where Revyl can read it and pass that URL; a local path cannot be.',
+        hint: 'Pass the URL Revyl can read the build from; a local path cannot be.',
       },
     );
   }
   return {
-    provider: PROVIDER,
+    provider: REVYL_PROVIDER,
     service: SERVICE,
     verificationMessage: 'Credentials verified; Revyl picks the device when the session starts.',
     device: {
@@ -109,80 +107,31 @@ export async function verifyRevylProfile(
     app: {
       status: 'configured',
       reference: profile.appUrl,
-      message: 'Public app URL configured; Revyl fetches and installs it when the session starts.',
+      message: 'App URL configured; Revyl fetches and installs it when the session starts.',
     },
   };
 }
 
 /**
- * A public https URL with no credentials, which is the shape Revyl's `app_url` takes. Revyl fetches
- * the build from its own network, so a URL that resolves inside the caller's — loopback, a private
- * range, or a `.local`/`.internal` name — can never be read there and is refused here rather than at
- * the first session start.
+ * The shape Revyl's `app_url` takes: an https URL with no credentials. Revyl downloads the build from
+ * its own network and reports what it cannot reach, so the URL's reachability is Revyl's to answer and
+ * only its shape is checked here.
  */
-function isPublicAppUrl(value: string): boolean {
+function isRevylAppUrl(value: string | undefined): boolean {
+  if (value === undefined) return false;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return false;
   }
-  if (url.protocol !== 'https:' || url.username || url.password) return false;
-  return isPublicHost(url.hostname);
-}
-
-/** Hostnames only the caller's own network can answer, which is where Revyl's fetcher never reaches. */
-function isPublicHost(hostname: string): boolean {
-  // `URL.hostname` keeps the brackets around an IPv6 literal, and a trailing dot is the root label.
-  const host = hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
-  if (host === 'localhost' || host.endsWith('.localhost')) return false;
-  if (host.endsWith('.local') || host.endsWith('.internal')) return false;
-  // `URL` has already reduced every IPv4 spelling (decimal, hex, octal, short) to dotted form, and
-  // `net` is what says which family the address it settled on belongs to.
-  const family = net.isIP(host);
-  if (family === 4) return !isNonRoutableIpv4(host.split('.').map(Number));
-  if (family === 6) return !isNonRoutableIpv6(host);
-  return true;
-}
-
-/**
- * An IPv6 address that stands for an IPv4 one reaches that v4 host, so it has to pass the v4 rules. Both
- * spellings do: the mapped form (`::ffff:` and the address) and the obsolete compatible one (`::` and the
- * address). `URL` has already written the embedded address as two hex groups — `::ffff:7f00:1` is
- * 127.0.0.1 — so the two groups are all that has to be read back.
- */
-function isNonRoutableIpv6(host: string): boolean {
-  if (host === '::' || host === '::1') return true;
-  // fc00::/7 unique-local and fe80::/10 link-local both stop at the caller's own machine.
-  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return true;
-  const embedded = /^::(?:ffff:)?([0-9a-f]{1,4}:[0-9a-f]{1,4})$/.exec(host)?.[1];
-  if (embedded === undefined) return false;
-  const [upper, lower] = embedded.split(':').map((group) => Number.parseInt(group, 16));
-  return isNonRoutableIpv4([
-    (upper! >> 8) & 0xff,
-    upper! & 0xff,
-    (lower! >> 8) & 0xff,
-    lower! & 0xff,
-  ]);
-}
-
-/** The ranges a Revyl worker can never reach: loopback, private, link-local and carrier NAT. */
-function isNonRoutableIpv4(address: number[]): boolean {
-  // `net.isIP` has already shown the host is a dotted quad, so the first two octets are there.
-  const a = address[0] ?? 0;
-  const b = address[1] ?? 0;
-  // 0.0.0.0/8, 10/8, 100.64/10 (carrier NAT), 127/8, 169.254/16 (link-local), 172.16/12, 192.168/16.
-  if (a === 0 || a === 10 || a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  return a === 192 && b === 168;
+  return url.protocol === 'https:' && !url.username && !url.password;
 }
 
 /** Revyl rents a phone or a tablet, so only the two mobile platforms resolve. */
 function requireConnectPlatform(flags: CliFlags): RevylPlatform {
   if (flags.platform === 'ios' || flags.platform === 'android') return flags.platform;
-  throw new AppError('INVALID_ARGS', `connect ${PROVIDER} requires --platform ios|android.`, {
+  throw new AppError('INVALID_ARGS', `connect ${REVYL_PROVIDER} requires --platform ios|android.`, {
     reason: 'unsupported_platform',
   });
 }
@@ -192,13 +141,13 @@ function requireAppUrl(app: string | undefined, host: ProviderPluginHost): strin
   if (!value) {
     throw host.createError(
       'INVALID_ARGS',
-      `connect ${PROVIDER} requires --provider-app <https-url> with the build to install.`,
+      `connect ${REVYL_PROVIDER} requires --provider-app <https-url> with the build to install.`,
     );
   }
-  if (!isPublicAppUrl(value)) {
+  if (!isRevylAppUrl(value)) {
     throw host.createError(
       'INVALID_ARGS',
-      `connect ${PROVIDER} installs the app from a public https URL; "${value}" is not one.`,
+      `connect ${REVYL_PROVIDER} installs the app from an https URL; "${value}" is not one.`,
     );
   }
   return value;

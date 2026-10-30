@@ -57,7 +57,7 @@ test('verify authenticates with the cheap call and reports the profile without r
   assert.deepEqual(result.app, {
     status: 'configured',
     reference: 'https://apps.test/app.zip',
-    message: 'Public app URL configured; Revyl fetches and installs it when the session starts.',
+    message: 'App URL configured; Revyl fetches and installs it when the session starts.',
   });
 });
 
@@ -105,49 +105,19 @@ test('verify refuses an app source Revyl cannot fetch', async () => {
   }
 });
 
-test('verify refuses an app URL only the caller own network can serve', async () => {
+/**
+ * The app URL's shape is the only thing checked here. Revyl downloads the build from its own network
+ * and reports a URL it cannot read, and a caller-side guess about reachability would have to resolve
+ * names and classify every address spelling to do better than that.
+ */
+test('verify accepts any well-formed https app URL and leaves reachability to Revyl', async () => {
   const fixture = await backend();
-  // Revyl fetches the build from its own network, so these can never be read there.
+  // Every address spelling is accepted, including ones only the caller's own network could serve.
   for (const appUrl of [
     'https://localhost:8443/app.zip',
     'https://127.0.0.1/app.zip',
-    'https://10.1.2.3/app.zip',
-    'https://192.168.0.7/app.zip',
-    'https://172.16.0.7/app.zip',
-    'https://169.254.1.1/app.zip',
-    'https://[::1]/app.zip',
-    'https://builder.local/app.zip',
-    'https://vpn.internal/app.zip',
-    'https://user:pass@apps.test/app.zip',
-    // The same loopback and link-local hosts written another way. `URL` reduces the first three to
-    // 127.0.0.1, and the rest are IPv6 addresses that stand for an IPv4 one, which the old textual
-    // compare read as an unfamiliar address and let through.
-    'https://2130706433/app.zip',
-    'https://0x7f.0.0.1/app.zip',
-    'https://0177.0.0.1/app.zip',
     'https://[::ffff:127.0.0.1]/app.zip',
-    'https://[::ffff:a9fe:101]/app.zip',
-    'https://[::ffff:10.1.2.3]/app.zip',
-    'https://[::ffff:c0a8:1]/app.zip',
-    // The obsolete IPv4-compatible form, which stands for its v4 host the same way.
-    'https://[::7f00:1]/app.zip',
-  ]) {
-    await assert.rejects(
-      verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
-        appUrl,
-      }),
-      (error: unknown) =>
-        error instanceof AppError && error.details?.reason === 'invalid_provider_app',
-      appUrl,
-    );
-  }
-  // A publicly reachable host is accepted, including one in a range that only looks private.
-  for (const appUrl of [
-    'https://100.128.0.1/app.zip',
-    'https://172.32.0.1/app.zip',
-    'https://169.1.2.3/app.zip',
-    // The closest negatives to the mapped forms above: a public address in the same spelling.
-    'https://[::ffff:8.8.8.8]/app.zip',
+    'https://builder.internal/app.zip',
     'https://8.8.8.8/app.zip',
   ]) {
     await verifyRevylProfile({ apiKey: 'k', apiUrl: fixture.backendUrl }, '0.0.0-test', 'ios', {
@@ -231,14 +201,12 @@ test('resolve keeps the device, OS version and app URL and refuses a non-mobile 
   );
 });
 
-test('resolve refuses an app that is not a public https URL', () => {
+test('resolve refuses an app that is not an https URL', () => {
   const connection = createRevylConnection(HOST);
   for (const providerApp of [
     undefined,
     './build/app.ipa',
     'https://user@apps.test/app.zip',
-    'https://localhost:8443/app.zip',
-    'https://192.168.0.7/app.zip',
     'http://apps.test/app.zip',
   ]) {
     assert.throws(

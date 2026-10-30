@@ -188,7 +188,7 @@ test('connect revyl refuses a local app path and a device type before saving a p
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'INVALID_ARGS');
-        assert.match(error.message, /public https URL/);
+        assert.match(error.message, /https URL/);
         return true;
       },
     );
