@@ -451,8 +451,8 @@ agent-device alert dismiss
 agent-device click @e1
 agent-device click @e1 --button secondary   # macOS secondary click / context menu
 agent-device focus @e2
-agent-device fill @e2 "text"          # Clear then type
-agent-device fill @e2 "search" --delay-ms 100
+agent-device fill @e2 "text"          # Replace the field value
+agent-device fill @e2 "search" --delay-ms 100 # No delay on Limrun iOS fill
 printf %s "$PASSWORD" | agent-device fill @e2 --text-stdin   # Text from stdin, kept out of argv
 agent-device type "text"              # Type into focused field without clearing
 agent-device type "query" --delay-ms 100
@@ -485,14 +485,16 @@ A `click` or `press` whose target the daemon resolves to a point (`@ref` or sele
 
 ### Text entry
 
-- `fill` clears then types. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.
-- Use plain `fill` or `type` first. Add `--delay-ms` only when a debounced or search-as-you-type field misses characters, or the app must receive each incremental update; delayed typing enters characters one at a time instead of using a clipboard-style fallback.
+- `fill` replaces the field value. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.
+- Use plain `fill` or `type` first. Add `--delay-ms` only when a debounced or search-as-you-type field misses characters, or the app must receive each incremental update; delayed typing enters characters one at a time instead of using a clipboard-style fallback. On Limrun iOS, `--delay-ms` has no effect on `fill`; use `press` to focus the field and `type --delay-ms` for intentional key-event input.
 - `fill --text-stdin` reads the text from stdin so a secret never appears in process arguments. Pipe it with `printf %s`. It reads at most 64 KiB, removes one trailing newline, and refuses a terminal, empty input, invalid UTF-8, or an extra text argument. Output shows the value as `${VAR}` with `--record-as <VAR>` and as `[REDACTED]` otherwise, including in error messages and details, and in the `requested`, `before`, and `after` read-back of an unconfirmed fill, which can hold a reformatted form of the value. With `--settle`, the diff line text and tail labels are replaced whole, so text around the value in the field is not shown either; refs and counts stay. While script recording is armed, pass `--record-as <VAR>` or `--no-record`; passing neither is an error. Batch steps don't accept it.
 - The privacy controls for typed input (`--text-stdin` and `--record-as`) keep the literal out of agent-device's own responses, diagnostics, and recorded scripts. They do not rewrite what the platform records: on iOS, XCTest writes its own diagnostic logs and its `.xcresult` bundle, and typed text can appear in both, on a simulator or a physical device. Treat those as sensitive, and use test-only credentials when they may be kept or shared. See [Security and trust](/docs/security-trust).
 - Android text entry is owned by `agent-device`. Don't fall back to raw `adb`, clipboard, or paste; if non-ASCII is unsupported on the current backend, report the gap. Android `fill` verifies the text and fails instead of retrying when the IME captures input.
 
 Text-entry errors and what to do:
 
+- `text_entry_focus_not_observed` (Limrun iOS `fill`): the tap did not establish focus on the target, so no value was written. Run `snapshot -i` and choose the input again.
+- `text_entry_value_write_failed` (Limrun iOS `fill`): the write outcome is unknown. Inspect and assert the field or resulting screen before continuing. Retry `fill` with the full value only if it needs correction. See [Limrun iOS text entry](/docs/limrun).
 - `TEXT_INPUT_NOT_FOCUSED` (`type`): focus a visible text input and retry. If accessibility does not expose the input, focus it by coordinates.
 - `NO_TEXT_INPUT_AT_POINT` (iOS `fill` under a degraded XCTest channel — coordinate, ref, selector, and replay fills all aim at a point): the runner identified no text input under that point and refused before dispatching anything (`error.details.reason` is `no_text_input_at_point`, `dispatched: no`), so no field changed. A ref or selector fill aims at the centre of the rect it resolved to, so an outer container or a non-input node can land outside the real field: run `snapshot -i`, pick the input node itself, and aim inside its rect.
 - `TEXT_INPUT_PROBE_UNAVAILABLE` (iOS `fill` under a degraded XCTest channel — coordinate, ref, selector, and replay fills all aim at a point): the runner's input lookup could not answer, so it refused before dispatching anything (`error.details.reason` is `text_input_probe_unavailable`, `dispatched: no`). This does not mean the point has no input. Retry the fill, or run `snapshot -i` once its capture reads back. A ref or selector fill aims at the centre of its resolved rect.
