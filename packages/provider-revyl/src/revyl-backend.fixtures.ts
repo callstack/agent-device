@@ -35,7 +35,7 @@ export type RevylFixtureOptions = Readonly<{
   screen?: Readonly<{ width: number; height: number }>;
   /** Reports no screen size at all, which is what a health answer without the fields reads as. */
   withoutScreen?: boolean;
-  /** The XML every `hierarchy` answer carries. */
+  /** The body every `hierarchy` answer carries: iOS JSON or Android XML. */
   hierarchy?: string;
   /** The start response body; a run id is generated when absent. */
   startResponse?: Record<string, unknown>;
@@ -158,7 +158,10 @@ export async function startRevylFixtureBackend(
         },
         'worker-connection': () => ({ body: nextWorkerConnection() }),
         health: () => nextHealth(),
-        hierarchy: () => ({ contentType: 'application/xml', body: options.hierarchy ?? '' }),
+        hierarchy: () => ({
+          contentType: options.hierarchy?.startsWith('<') ? 'application/xml' : 'application/json',
+          body: options.hierarchy ?? '',
+        }),
         screenshot: () => ({ contentType: 'image/png', body: pngBytes() }),
         stop: () => {
           // With `sessionExistsOnceStarted`, a stop that arrives before the start has answered names a

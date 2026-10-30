@@ -846,7 +846,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/provider-webdriver',
     '@agent-device/provider-webdriver/android-snapshot',
     '@agent-device/provider-webdriver/connection-verification',
-    '@agent-device/provider-webdriver/ios-snapshot',
     '@agent-device/provider-webdriver/plugin',
     '@agent-device/provider-webdriver/providers',
   ]);

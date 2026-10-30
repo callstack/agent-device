@@ -1,6 +1,10 @@
 import type { IosCollapsedTabBarProbeFailure } from '@agent-device/contracts/ios-snapshot';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readIosNodeChildren,
+  readIosNodeRect,
+  type IosTreeNode,
+} from '@agent-device/capture-kit/ios-ax-tree';
 
 type Point = { x: number; y: number };
 

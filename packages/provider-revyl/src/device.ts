@@ -9,16 +9,6 @@ export const REVYL_PROVIDER = 'revyl';
 /** How the service names itself to a user, in every message and display name this package writes. */
 export const REVYL_SERVICE = 'Revyl';
 
-/**
- * The snapshot channel each platform's `hierarchy` XML is presented on. Revyl answers the iOS
- * hierarchy with XCUITest-style XML and the Android hierarchy with a uiautomator dump, so each
- * platform reuses the reader that already parses that shape.
- */
-export const REVYL_SNAPSHOT_CHANNEL = {
-  ios: 'xctest',
-  android: 'android',
-} as const;
-
 /** Revyl picks the device from the platform, an optional model and OS version, and an app URL. */
 export function platformForRevylLeaseBackend(backend: string): RevylPlatform | undefined {
   if (backend === 'ios-instance') return 'ios';

@@ -2,7 +2,11 @@ import type { CloudTextEntryReadiness } from '@agent-device/contracts/interactor
 import { AppError } from '@agent-device/kernel/errors';
 import { type Rect } from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readIosNodeChildren,
+  readIosNodeRect,
+  type IosTreeNode,
+} from '@agent-device/capture-kit/ios-ax-tree';
 
 /** The trait a Limrun iOS instance puts on the element that owns text entry. */
 const LIMRUN_IOS_TEXT_ENTRY_TRAIT = 'IsEditing';

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 const FIELD_RECT = Object.freeze({ x: 24, y: 142, width: 354, height: 56 });
 

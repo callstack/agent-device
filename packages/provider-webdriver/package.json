@@ -28,10 +28,6 @@
       "types": "./src/connection-verification.ts",
       "default": "./src/connection-verification.ts"
     },
-    "./ios-snapshot": {
-      "types": "./src/webdriver-ios-snapshot.ts",
-      "default": "./src/webdriver-ios-snapshot.ts"
-    },
     "./android-snapshot": {
       "types": "./src/webdriver-android-source.ts",
       "default": "./src/webdriver-android-source.ts"

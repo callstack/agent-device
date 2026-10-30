@@ -78,6 +78,10 @@
       "types": "./src/durable-json.ts",
       "default": "./src/durable-json.ts"
     },
+    "./ios-ax-tree": {
+      "types": "./src/ios-ax-tree.ts",
+      "default": "./src/ios-ax-tree.ts"
+    },
     "./ios-node-interpretation": {
       "types": "./src/ios-node-interpretation.ts",
       "default": "./src/ios-node-interpretation.ts"

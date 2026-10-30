@@ -1,4 +1,4 @@
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 /**
  * Trees shaped from live Limrun iOS instances (issue #3349 evidence). The shapes are what the

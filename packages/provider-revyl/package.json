@@ -22,6 +22,7 @@
     "./package.json": "./package.json"
   },
   "devDependencies": {
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",

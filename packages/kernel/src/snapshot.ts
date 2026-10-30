@@ -584,7 +584,12 @@ export function formatRole(type: string): string {
 export type SnapshotProvenance =
   | {
       backend: 'xctest';
-      producer: 'apple-runner' | 'simulator-ax-bridge' | 'appium-source' | 'limrun-ios-tree';
+      producer:
+        | 'apple-runner'
+        | 'simulator-ax-bridge'
+        | 'appium-source'
+        | 'limrun-ios-tree'
+        | 'revyl-ios-tree';
     }
   | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' }
   | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }

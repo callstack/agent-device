@@ -1,21 +1,26 @@
 import type { SnapshotViewportSize } from '@agent-device/kernel/snapshot';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotRuntimeResult } from '@agent-device/contracts/interactor-types';
 import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
-import { REVYL_SNAPSHOT_CHANNEL, type RevylPlatform } from './device.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
+import type { RevylPlatform } from './device.ts';
 import type { RevylSession } from './revyl-session.ts';
 
 /** Reads one Revyl worker's accessibility tree and the box its actions measure. */
 export type RevylSnapshotReader = Readonly<{
-  /** The platform's own hierarchy XML: XCUITest-style on iOS, a uiautomator dump on Android. */
-  readHierarchyXml(signal?: AbortSignal): Promise<string>;
+  /**
+   * The worker's `hierarchy` answer as text: a JSON array of accessibility nodes on iOS (the
+   * simulator's AX tree, in points) and a uiautomator XML dump on Android.
+   */
+  readHierarchy(signal?: AbortSignal): Promise<string>;
   /** `health`'s screen size — the box Revyl itself coordinates actions in. */
   viewport(): SnapshotViewportSize | undefined;
 }>;
 
 export function createRevylSnapshotReader(session: RevylSession): RevylSnapshotReader {
   return {
-    readHierarchyXml: (signal) => session.client.getWorkerHierarchy(session.runId, signal),
+    readHierarchy: (signal) => session.client.getWorkerHierarchy(session.runId, signal),
     viewport: () =>
       session.screen === undefined
         ? undefined
@@ -24,44 +29,80 @@ export function createRevylSnapshotReader(session: RevylSession): RevylSnapshotR
 }
 
 /**
- * Reads one provider snapshot from one Revyl worker.
- *
- * The host presents what this returns: `producer` and `nodes` drive selector resolution and the
- * recorded replay, and an iOS acquisition goes through the host's iOS presenter. Each platform's XML
- * is parsed by the reader that already parses that shape on a WebDriver-backed device, so a selector
- * written against a local simulator or an adb-connected phone resolves here from the same node facts.
+ * Reads one provider snapshot from one Revyl worker. Each platform's tree goes through the reader that
+ * already parses that shape for another provider, so a selector written against a local device resolves
+ * here from the same node facts.
  */
 export async function captureRevylSnapshot(
-  session: Readonly<{ platform: RevylPlatform }>,
+  session: Readonly<{ platform: RevylPlatform; runId: string }>,
   reader: RevylSnapshotReader,
   signal?: AbortSignal,
 ): Promise<SnapshotRuntimeResult> {
-  const xml = await reader.readHierarchyXml(signal);
-  // Parsing and presenting are not cancelable, so the signal is checked once more here: a capture
-  // the caller gave up on does not report a snapshot it finished building afterwards.
+  const hierarchy = await reader.readHierarchy(signal);
+  // Parsing is not cancelable, so a capture the caller gave up on is refused before it is built.
   signal?.throwIfAborted();
   return session.platform === 'ios'
-    ? await captureRevylIosSnapshot(xml)
-    : await captureRevylAndroidSnapshot(xml, reader.viewport());
+    ? await captureRevylIosSnapshot(hierarchy, session.runId)
+    : await captureRevylAndroidSnapshot(hierarchy, reader.viewport());
 }
 
 /**
- * iOS: the XCUITest-style XML goes through the same source reader, viewport reader, appearance
- * interpreter and keyboard observer the WebDriver-backed iOS devices use, and comes back as an
- * acquisition for the host to present. The viewport is the tree's own window root frame, because
- * that is the box the tree's rects were measured in; `health`'s screen size is not the same claim.
+ * iOS: the AX node tree goes through the same reader and interpreter as Limrun's iOS tree, and comes
+ * back as an acquisition for the host to present. The viewport is the tree's own application root,
+ * because that is the box its frames were measured in.
  */
-async function captureRevylIosSnapshot(xml: string): Promise<SnapshotRuntimeResult> {
-  const { acquireWebDriverIosSnapshot } =
-    await import('@agent-device/provider-webdriver/ios-snapshot');
-  return acquireWebDriverIosSnapshot(xml);
+async function captureRevylIosSnapshot(
+  hierarchy: string,
+  runId: string,
+): Promise<SnapshotRuntimeResult> {
+  const [{ flattenIosTree, resolveIosAxTreeViewport }, { interpretIosNode }, acquisition] =
+    await Promise.all([
+      import('@agent-device/capture-kit/ios-ax-tree'),
+      import('@agent-device/capture-kit/ios-node-interpretation'),
+      import('@agent-device/capture-kit/ios-snapshot-acquisition'),
+    ]);
+  const tree = parseIosTree(hierarchy);
+  const reported = resolveIosAxTreeViewport(tree);
+  const viewport =
+    reported?.kind === 'reported'
+      ? { kind: 'derived' as const, rect: reported.rect }
+      : (reported ?? { kind: 'missing' as const, reason: 'not-provided' as const });
+  return acquisition.createIosSnapshotAcquisition({
+    producer: 'revyl-ios-tree',
+    ...acquireProviderKeyboard({
+      nodes: flattenIosTree(tree).map((node) => interpretIosNode(node)),
+      viewport: viewport.kind === 'missing' ? null : viewport.rect,
+    }),
+    viewport,
+    lineage: { targetId: runId },
+  });
+}
+
+function parseIosTree(hierarchy: string): IosTreeNode[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(hierarchy);
+  } catch (error) {
+    throw invalidIosHierarchy(error);
+  }
+  if (Array.isArray(parsed)) return parsed as IosTreeNode[];
+  if (parsed !== null && typeof parsed === 'object') return [parsed as IosTreeNode];
+  throw invalidIosHierarchy();
+}
+
+function invalidIosHierarchy(cause?: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'Revyl returned an iOS hierarchy that is not an accessibility node tree.',
+    { reason: 'provider-response-invalid' },
+    cause,
+  );
 }
 
 /**
  * Android: the uiautomator dump goes through the same parser the WebDriver-backed Android devices
- * use, including the system-bar subtree labelling, and is presented as a plain snapshot result. The
- * keyboard fact is observed from the tree against the session's screen box, which is the only box
- * Revyl reports; Revyl has no keyboard probe to add to it.
+ * use, including the system-bar subtree labelling. The keyboard fact is observed from the tree against
+ * the session's screen box, which is the only box Revyl reports.
  */
 async function captureRevylAndroidSnapshot(
   xml: string,
@@ -74,7 +115,7 @@ async function captureRevylAndroidSnapshot(
     viewport: viewport === undefined ? null : { x: 0, y: 0, ...viewport },
   });
   return {
-    backend: REVYL_SNAPSHOT_CHANNEL.android,
+    backend: 'android',
     producer: 'appium-source',
     nodes,
     keyboard,

@@ -13,9 +13,8 @@ import {
   type RevylFixtureBackend,
 } from './revyl-backend.fixtures.ts';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+import { REVYL_IOS_HIERARCHY } from './revyl-ios-hierarchy.fixtures.ts';
 
-const IOS_HIERARCHY =
-  '<AppiumAUT><XCUIElementTypeApplication name="Calculator" x="0" y="0" width="390" height="844"><XCUIElementTypeButton label="Seven" name="seven" x="16" y="600" width="80" height="60" /></XCUIElementTypeApplication></AppiumAUT>';
 const ANDROID_HIERARCHY =
   '<hierarchy rotation="0"><android.widget.FrameLayout class="android.widget.FrameLayout" package="com.example" resource-id="android:id/content" bounds="[0,0][1080,2400]"><android.widget.Button class="android.widget.Button" package="com.example" text="Login" bounds="[40,1200][300,1300]" displayed="true" enabled="true" /></android.widget.FrameLayout></hierarchy>';
 
@@ -324,8 +323,8 @@ test('a capture the caller gave up on does not report a snapshot finished afterw
     respond: {
       'GET /api/v1/execution/device-proxy/run-1/hierarchy': {
         delayMs: 300,
-        contentType: 'application/xml',
-        body: IOS_HIERARCHY,
+        contentType: 'application/json',
+        body: REVYL_IOS_HIERARCHY,
       },
     },
   });
@@ -351,13 +350,17 @@ test('a capture whose tree arrives after the caller gave up reports no snapshot'
   const controller = new AbortController();
   let deliverTree: () => void = () => {};
   const reader: RevylSnapshotReader = {
-    readHierarchyXml: () =>
+    readHierarchy: () =>
       new Promise<string>((resolve) => {
-        deliverTree = () => resolve(IOS_HIERARCHY);
+        deliverTree = () => resolve(REVYL_IOS_HIERARCHY);
       }),
     viewport: () => undefined,
   };
-  const capture = captureRevylSnapshot({ platform: 'ios' }, reader, controller.signal);
+  const capture = captureRevylSnapshot(
+    { platform: 'ios', runId: 'run-1' },
+    reader,
+    controller.signal,
+  );
   controller.abort();
   // The tree lands after the abort, which is the race the check after the read has to lose on purpose.
   deliverTree();
@@ -378,16 +381,31 @@ async function waitFor(condition: () => boolean): Promise<void> {
   throw new Error('The fixture never reached the expected state.');
 }
 
-test('the iOS snapshot comes back as an acquisition parsed from the hierarchy XML', async () => {
-  const { interactor } = await liveInteractor('ios', { hierarchy: IOS_HIERARCHY });
+test('the iOS snapshot reads the AX node tree Revyl answers with, in the root frame', async () => {
+  const { interactor } = await liveInteractor('ios', { hierarchy: REVYL_IOS_HIERARCHY });
   const result = await interactor.snapshot({});
   if ('stage' in result === false || result.stage !== 'acquired')
     throw new Error('Expected an iOS acquisition');
-  assert.equal(result.acquisition.producer, 'appium-source');
-  assert.equal(result.acquisition.nodes[0]?.type, 'XCUIElementTypeApplication');
-  assert.ok(
-    result.acquisition.nodes.some((node) => node.label === 'Seven'),
-    'the button label must survive the parse',
+  const { acquisition } = result;
+  assert.equal(acquisition.producer, 'revyl-ios-tree');
+  assert.deepEqual(acquisition.viewport, {
+    kind: 'derived',
+    rect: { x: 0, y: 0, width: 440, height: 956 },
+  });
+  assert.deepEqual(acquisition.lineage, { targetId: 'run-1' });
+  const row = acquisition.nodes.find((node) => node.label?.startsWith('Activity Indicators'));
+  assert.deepEqual(row?.rect, { x: 0, y: 116, width: 440, height: 44 });
+  assert.equal(acquisition.nodes[0]?.type, 'Application');
+});
+
+test('an iOS hierarchy that is not a node tree is reported as an invalid response', async () => {
+  const { interactor } = await liveInteractor('ios', {
+    hierarchy: '<AppiumAUT><XCUIElementTypeApplication/></AppiumAUT>',
+  });
+  await assert.rejects(
+    async () => await interactor.snapshot({}),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-response-invalid',
   );
 });
 

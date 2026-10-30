@@ -758,6 +758,9 @@ importers:
 
   packages/provider-revyl:
     devDependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

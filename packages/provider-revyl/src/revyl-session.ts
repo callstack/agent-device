@@ -2,7 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildRevylDevice, REVYL_SNAPSHOT_CHANNEL, type RevylPlatform } from './device.ts';
+import { buildRevylDevice, type RevylPlatform } from './device.ts';
 import { revylFailureRefusedTheRequest, type RevylClient } from './revyl-client.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 import type {
@@ -32,8 +32,6 @@ export type RevylSession = Readonly<{
   /** Read from `health`; a snapshot without it cannot measure a keyboard band. */
   screen: RevylScreenSize | undefined;
   device: DeviceInfo;
-  /** The channel a `hierarchy` answer is parsed and presented on for this platform. */
-  snapshotChannel: (typeof REVYL_SNAPSHOT_CHANNEL)[RevylPlatform];
   client: RevylClient;
   lease: DeviceLease;
   /**
@@ -178,7 +176,6 @@ export async function startRevylSession(
         sessionId,
         screen: readRevylScreenSize(health),
         device: buildRevylDevice(input.platform, lease, runId),
-        snapshotChannel: REVYL_SNAPSHOT_CHANNEL[input.platform],
         client,
         lease,
         launchedApp: {},

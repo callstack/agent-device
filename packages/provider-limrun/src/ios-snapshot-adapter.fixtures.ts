@@ -1,5 +1,5 @@
 import type { LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 export const LIMRUN_SNAPSHOT_SCREEN: Readonly<{ width: number; height: number }> = Object.freeze({
   width: 320,

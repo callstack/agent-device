@@ -65,6 +65,7 @@ const DEFAULT_QUIET_MS_BY_PRODUCER = {
   'simulator-ax-bridge': 300,
   'appium-source': DEFAULT_STABLE_QUIET_MS,
   'limrun-ios-tree': DEFAULT_STABLE_QUIET_MS,
+  'revyl-ios-tree': DEFAULT_STABLE_QUIET_MS,
   'android-uiautomator': DEFAULT_STABLE_QUIET_MS,
   'harmonyos-uitest': DEFAULT_STABLE_QUIET_MS,
   'macos-helper': DEFAULT_STABLE_QUIET_MS,

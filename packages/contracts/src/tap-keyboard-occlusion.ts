@@ -33,7 +33,7 @@ import { normalizeType } from './snapshot-text.ts';
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
  * costs no round trip. This is the path for Android captures that could not list every window and for
- * the producers that never see the app's windows (`appium-source`, `limrun-ios-tree`, the runner's own query-sweep tier).
+ * the producers that never see the app's windows (`appium-source`, `limrun-ios-tree`, `revyl-ios-tree`, the runner's own query-sweep tier).
  * Derivation, the rules that decide whether reported geometry may be measured at all, and the verdict
  * on a point are proven against `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule
  * only through that table.
@@ -268,7 +268,7 @@ function measureDockedKeyboardFrame(params: {
   // (ADR 0004). A capture from either of those now answers this question from its own measured band
   // and never reaches here (#2660), so what still does is a capture that declares no space at all:
   // the runner's query-sweep tier, whose flat query has no window ancestry to read one from, and the
-  // `appium-source` and `limrun-ios-tree` producers. Unnormalized landscape geometry measured on
+  // `appium-source`, `limrun-ios-tree` and `revyl-ios-tree` producers. Unnormalized landscape geometry measured on
   // iPhone 17 Pro reports a 162 x 327 key plane and a dock button at y 8 of a 402 pt viewport while
   // the screenshot shows the keyboard full width across the bottom 327 pt. A band from that would
   // refuse app content the keyboard is nowhere near while missing the keyboard itself, which is

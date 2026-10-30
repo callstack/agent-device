@@ -12,7 +12,7 @@ import {
   limrunScreenTree,
   limrunTabButton,
 } from './ios-snapshot-adapter.fixtures.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 afterEach(() => {
   vi.useRealTimers();

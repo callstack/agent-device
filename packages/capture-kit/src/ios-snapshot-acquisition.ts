@@ -46,6 +46,14 @@ const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
     },
     hittabilityEvidence: 'unavailable',
   },
+  'revyl-ios-tree': {
+    producer: 'revyl-ios-tree',
+    acquisitionDepth: {
+      rawTraversal: { kind: 'incomplete' },
+      regularPresented: { kind: 'incomplete' },
+    },
+    hittabilityEvidence: 'unavailable',
+  },
 } as const satisfies Record<IosProviderAcquisitionProducer, IosProviderAcquisitionCapabilities>;
 
 /**
@@ -65,6 +73,7 @@ const IOS_SNAPSHOT_TRUNCATION_EVIDENCE = {
   'simulator-ax-bridge': 'available',
   'appium-source': 'unavailable',
   'limrun-ios-tree': 'unavailable',
+  'revyl-ios-tree': 'unavailable',
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
 export function iosSnapshotTruncationEvidence(

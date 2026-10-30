@@ -12,7 +12,7 @@ import {
   limrunLocationAlertTree,
 } from './alert-detection.fixtures.ts';
 import { handleLimrunIosAlert, type LimrunIosAlertClient } from './alert.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 /**
  * The legs share the tree-alert driver, whose polls sleep between captures on the shared

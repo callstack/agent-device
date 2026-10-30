@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 import { expect, test, vi } from 'vitest';
 import { captureLimrunIosSnapshot } from './ios-snapshot-adapter.ts';
 import {

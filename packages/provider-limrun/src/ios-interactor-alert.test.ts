@@ -8,7 +8,7 @@ import {
   limrunAttAlertTree,
 } from './alert-detection.fixtures.ts';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 // The legs load `./alert.ts` per call (ADR-0019 laziness inside the provider), and that module
 // carries the shared tree-alert driver from `@agent-device/capture-kit/alert-tree-driver`. Warm
