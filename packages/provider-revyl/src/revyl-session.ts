@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -304,15 +304,11 @@ function throwIfStartStopFailed(
       reason: 'provider-cleanup-pending',
       providerSessionId: cleanup.sessionId,
       ...(cleanup.runId === undefined ? {} : { runId: cleanup.runId }),
-      cause: describe(stopFailure),
+      cause: errorMessage(stopFailure),
       hint: `End the Revyl session ${cleanup.sessionId}; the device stays rented and billed until it is.`,
     },
     startFailure,
   );
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** The readiness budget: the instant it runs out, and how much of it the caller was given. */

@@ -14,7 +14,7 @@ import type {
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { matchesPlatformSelector } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   parseRevylDeviceId,
   platformForRevylLeaseBackend,
@@ -401,7 +401,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       if (isRevylSessionGone(error)) return undefined;
       return {
         code: 'REVYL_SESSION_STOP_FAILED',
-        message: describe(error),
+        message: errorMessage(error),
         providerSessionId,
       };
     }
@@ -439,10 +439,6 @@ function shuttingDownDuring(leaseId: string, operation: string): AppError {
     leaseId,
     hint: 'Retry the command; the daemon is ending the sessions it holds.',
   });
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function loadRevylPlatformRuntime(
