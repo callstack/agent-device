@@ -94,6 +94,7 @@ export function renamedSince(
   for (const [file, origin] of origins) {
     if (origin !== null) renamed.set(file, origin);
   }
+  const claimedOrigins = new Set(renamed.values());
   const aggregate = git(repoRoot, [
     '-c',
     'diff.renameLimit=0',
@@ -109,7 +110,10 @@ export function renamedSince(
     const from = aggregate[index++];
     if (kind?.startsWith('R')) {
       const to = aggregate[index++];
-      if (from && to && !renamed.has(to) && !ended.has(to)) renamed.set(to, from);
+      if (from && to && !renamed.has(to) && !ended.has(to) && !claimedOrigins.has(from)) {
+        renamed.set(to, from);
+        claimedOrigins.add(from);
+      }
     }
   }
   return renamed;

@@ -560,6 +560,16 @@ test('a new file at a moved source cannot claim the original lineage when rename
   const paired = renamedSince(repo, base, 'HEAD');
   expect(paired.get('packages/demo/src/moved.ts')).toBe(original);
   expect(paired.has('packages/demo/src/new.ts')).toBe(false);
+  fs.appendFileSync(
+    path.join(repo, 'packages/demo/src/moved.ts'),
+    '// public API documentation\n'.repeat(100),
+  );
+  fs.writeFileSync(path.join(repo, 'packages/demo/src/copy.ts'), 'export const a = 1;\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'copy old content'], { cwd: repo });
+  const withCopy = renamedSince(repo, base, 'HEAD');
+  expect(withCopy.get('packages/demo/src/moved.ts')).toBe(original);
+  expect(withCopy.has('packages/demo/src/copy.ts')).toBe(false);
 });
 
 test('rename detection survives a git mv with an edit and a hostile renameLimit', () => {
