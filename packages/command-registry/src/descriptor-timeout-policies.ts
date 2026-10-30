@@ -17,8 +17,6 @@ export const PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   onTimeout: 'preserve-daemon',
 };
 
-// Installs run long device subprocesses; their envelope stays above the longest
-// platform install subprocess timeout (see INSTALL_REQUEST_TIMEOUT_MS).
 export const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,

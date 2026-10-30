@@ -8,6 +8,7 @@ import {
 import {
   COMPOSITE_TIMEOUT_POLICIES,
   DEFAULT_TIMEOUT_POLICY,
+  INSTALL_SOURCE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from '../timeout-policy.ts';
 import {
@@ -17,7 +18,6 @@ import {
   ownerFilesEnabled,
   type RawCommandDescriptor,
 } from '../descriptor-traits.ts';
-import { INSTALL_SOURCE_REQUEST_TIMEOUT_MS } from '../timeout-policy.ts';
 import { INSTALL_TIMEOUT_POLICY } from '../descriptor-timeout-policies.ts';
 import {
   deployAppUse,

@@ -4,6 +4,8 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { resolveAndroidSdkRoots } from './sdk.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 
+const ARCHIVE_INSPECTION_TIMEOUT_MS = 15_000;
+
 const RES_XML_TYPE = 0x0003;
 const RES_STRING_POOL_TYPE = 0x0001;
 const RES_XML_START_ELEMENT_TYPE = 0x0102;
@@ -46,6 +48,7 @@ async function readZipEntry(
     const result = await runCmd('unzip', ['-p', archivePath, entry], {
       allowFailure: true,
       binaryStdout: true,
+      timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
       signal,
     });
     if (result.exitCode !== 0 || !result.stdoutBuffer || result.stdoutBuffer.length === 0) {
@@ -327,6 +330,7 @@ async function resolveAndroidArchivePackageNameWithAapt(
   if (!aaptPath) return undefined;
   const result = await runCmd(aaptPath, ['dump', 'badging', archivePath], {
     allowFailure: true,
+    timeoutMs: ARCHIVE_INSPECTION_TIMEOUT_MS,
     signal,
   });
   if (result.exitCode !== 0) return undefined;

@@ -1,17 +1,20 @@
+import * as inventoryContext from '@agent-device/device-selection/device-inventory-context';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
+import * as hostCommands from '@agent-device/host-kit/command';
 import {
   withCommandExecutorOverride,
   type CommandExecutorOverride,
 } from '@agent-device/host-kit/command';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import * as timers from 'node:timers/promises';
+import { pack } from 'tar-stream';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
-import { INSTALL_SOURCE_DOWNLOAD_TIMEOUT_MS } from '@agent-device/provision-kit/install-source';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test, vi } from 'vitest';
@@ -27,10 +30,12 @@ import {
   type ProviderScenarioHarness,
 } from './harness.ts';
 
+vi.mock('node:timers/promises', async (original) => ({ ...(await original<typeof timers>()) }));
+
 type InstallCommand = 'install' | 'reinstall' | 'install_source';
 
 type InstallLedgerCall = Readonly<{
-  tool: 'adb' | 'adb-install' | 'bundletool' | 'download' | 'open' | 'simctl' | 'devicectl';
+  tool: string;
   args: readonly string[];
   timeoutMs: number;
 }>;
@@ -41,25 +46,36 @@ type InstallRoute =
   | 'Android APK'
   | 'Android AAB fallback';
 
-type InstallLedgerClock = Readonly<{
-  advanceByLedgerTimeout(timeoutMs: number): void;
-}>;
+class InstallLedger {
+  readonly calls: InstallLedgerCall[] = [];
+  now = 1_700_000_000_000;
+
+  record(
+    tool: string,
+    args: readonly string[],
+    timeoutMs: number | undefined,
+    elapsedMs?: number,
+  ): void {
+    assert.ok(
+      typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0,
+      `Unbounded install phase: ${tool} ${args.join(' ')}`,
+    );
+    this.calls.push({ tool, args: [...args], timeoutMs });
+    this.now += Math.max(0, elapsedMs ?? timeoutMs - 1);
+  }
+}
 
 type InstallLedgerScenario = ClosableProviderScenarioResource &
   Readonly<{
     appPath: string;
-    clock: InstallLedgerClock;
     daemon: ProviderScenarioHarness;
-    ledger: InstallLedgerCall[];
+    ledger: InstallLedger;
     selection: Readonly<
-      { platform: 'android'; serial: string } | { platform: 'ios'; udid: string }
+      { platform: 'android'; device: string } | { platform: 'ios'; udid: string }
     >;
   }>;
 
 const REQUIRED_DAEMON_RESULT_MARGIN_MS = 30_000;
-// The native deployment unit asserts this is the timeout passed to bundletool; the fake
-// executable can only report argv back across the daemon HTTP boundary.
-const ANDROID_BUNDLETOOL_TIMEOUT_MS = 120_000;
 let nextAppleScenarioId = 0;
 
 for (const route of [
@@ -68,54 +84,43 @@ for (const route of [
   'Android APK',
   'Android AAB fallback',
 ] as const) {
-  test(`install-family request envelope covers the ${route} worst-case ledger`, async () => {
-    for (const command of ['install', 'reinstall', 'install_source'] as const) {
+  for (const command of ['install', 'reinstall', 'install_source', 'install_source URL'] as const) {
+    test(`${route} ${command} leaves 30s for the daemon result`, async () => {
       await withInstallLedgerScenario(route, async (scenario) => {
-        await runInstallCommand(scenario, command);
-        assertInstallLedgerPhaseCoverage(route, command, scenario.ledger);
-        assertLedgerFitsEnvelope(route, command, scenario.ledger);
+        if (command === 'install_source URL') await runInstallSourceFromUrlCommand(scenario);
+        else await runInstallCommand(scenario, command);
+        const daemonCommand = command === 'install_source URL' ? 'install_source' : command;
+        assertInstallLedgerPhaseCoverage(route, daemonCommand, scenario.ledger.calls);
+        if (command === 'install_source URL') {
+          assert.ok(scenario.ledger.calls.some((call) => call.tool === 'download'));
+        }
+        assertLedgerFitsEnvelope(route, daemonCommand, scenario.ledger.calls);
       });
-    }
-  }, 20_000);
+    });
+  }
 }
-
-test('install_source request envelope covers URL download before the Android AAB fallback ledger', async () => {
-  await withInstallLedgerScenario('Android AAB fallback', async (scenario) => {
-    await runInstallSourceFromUrlCommand(scenario);
-    assertInstallLedgerPhaseCoverage('Android AAB fallback', 'install_source', scenario.ledger);
-    assert.ok(
-      scenario.ledger.some((call) => call.tool === 'download'),
-      `install_source URL ledger is missing the download phase.\nLedger:\n${JSON.stringify(
-        scenario.ledger,
-        null,
-        2,
-      )}`,
-    );
-    assertLedgerFitsEnvelope('Android AAB fallback URL source', 'install_source', scenario.ledger);
-  });
-}, 20_000);
 
 async function withInstallLedgerScenario<T>(
   route: InstallRoute,
   run: (scenario: InstallLedgerScenario) => Promise<T>,
 ): Promise<T> {
-  let virtualNowMs = 1_700_000_000_000;
-  const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => virtualNowMs);
-  const clock: InstallLedgerClock = {
-    advanceByLedgerTimeout: (timeoutMs) => {
-      virtualNowMs += Math.max(0, timeoutMs - 1);
-    },
-  };
-  const scenario = isAndroidRoute(route)
-    ? await createAndroidScenario(route, clock)
-    : await createIosScenario(route, clock);
+  const ledger = new InstallLedger();
+  vi.spyOn(Date, 'now').mockImplementation(() => ledger.now);
+  vi.spyOn(timers, 'setTimeout').mockImplementation(async (ms = 1, value) => {
+    ledger.record('sleep', [], ms, ms);
+    return value;
+  });
+  let scenario: InstallLedgerScenario | undefined;
   try {
+    scenario = isAndroidRoute(route)
+      ? await createAndroidScenario(route, ledger)
+      : await createIosScenario(route, ledger);
     return await run(scenario);
   } finally {
     try {
-      await scenario.close();
+      await scenario?.close();
     } finally {
-      dateNow.mockRestore();
+      vi.restoreAllMocks();
     }
   }
 }
@@ -148,6 +153,20 @@ async function runInstallCommand(
 }
 
 async function runInstallSourceFromUrlCommand(scenario: InstallLedgerScenario): Promise<void> {
+  const timeouts = new WeakMap<AbortSignal, number>();
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const any = AbortSignal.any.bind(AbortSignal);
+  const timeoutMock = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const signal = timeout(ms);
+    timeouts.set(signal, ms);
+    return signal;
+  });
+  const anyMock = vi.spyOn(AbortSignal, 'any').mockImplementation((signals) => {
+    const signal = any(signals);
+    const ms = signals.map((part) => timeouts.get(part)).find((value) => value !== undefined);
+    if (ms !== undefined) timeouts.set(signal, ms);
+    return signal;
+  });
   const lookupMock = vi
     .spyOn(dns, 'lookup')
     .mockImplementation(
@@ -159,36 +178,34 @@ async function runInstallSourceFromUrlCommand(scenario: InstallLedgerScenario): 
   const requestMock = vi
     .spyOn(networkTransport, 'requestApprovedUrl')
     .mockImplementation(async (request): Promise<networkTransport.InstallSourceNetworkResponse> => {
-      recordLedgerCall(
-        scenario.ledger,
-        'download',
-        [request.url.toString()],
-        INSTALL_SOURCE_DOWNLOAD_TIMEOUT_MS,
-        scenario.clock,
-      );
+      scenario.ledger.record('download', [request.url.toString()], timeouts.get(request.signal));
       return {
         statusCode: 200,
         headers: {},
-        body: Readable.from([fs.readFileSync(scenario.appPath)]),
+        body: downloadBody(scenario.appPath),
         close: async () => {},
       };
     });
   try {
     await scenario.daemon.client().apps.installFromSource({
-      source: { kind: 'url', url: 'https://artifacts.example.com/Demo.aab' },
+      source: {
+        kind: 'url',
+        url: `https://artifacts.example.com/${path.basename(scenario.appPath)}${scenario.appPath.endsWith('.app') ? '.tar' : ''}`,
+      },
       ...scenario.selection,
     });
   } finally {
     requestMock.mockRestore();
     lookupMock.mockRestore();
+    anyMock.mockRestore();
+    timeoutMock.mockRestore();
   }
 }
 
 async function createIosScenario(
   route: 'iOS physical device' | 'iOS simulator',
-  clock: InstallLedgerClock,
+  ledger: InstallLedger,
 ): Promise<InstallLedgerScenario> {
-  const ledger: InstallLedgerCall[] = [];
   const scenarioId = ++nextAppleScenarioId;
   const device =
     route === 'iOS physical device'
@@ -203,19 +220,17 @@ async function createIosScenario(
           booted: false,
         };
   const { tempRoot, appPath } = createDemoIosApp('agent-device-install-ledger-ios-');
-  const commandOverride = createInstallLedgerHostCommandOverride(ledger, clock);
+  const commandOverride = createInstallLedgerHostCommandOverride(ledger);
   const daemon = await withCommandExecutorOverride(
     commandOverride,
     async () =>
       await createProviderScenarioHarness({
         deviceInventoryProvider: async () => [device],
-        appleToolProvider: () =>
-          createInstallLedgerAppleToolProvider(route, device.id, ledger, clock),
+        appleToolProvider: () => createInstallLedgerAppleToolProvider(route, device.id, ledger),
       }),
   );
   return {
     appPath,
-    clock,
     daemon,
     ledger,
     selection: { platform: 'ios', udid: device.id },
@@ -229,8 +244,7 @@ async function createIosScenario(
 function createInstallLedgerAppleToolProvider(
   route: 'iOS physical device' | 'iOS simulator',
   deviceId: string,
-  ledger: InstallLedgerCall[],
-  clock: InstallLedgerClock,
+  ledger: InstallLedger,
 ): AppleToolProvider {
   const ok = { stdout: '', stderr: '', exitCode: 0 };
   let simulatorBooted = false;
@@ -247,7 +261,7 @@ function createInstallLedgerAppleToolProvider(
     },
     simctl: {
       run: async (args, options) => {
-        recordLedgerCall(ledger, 'simctl', args, options?.timeoutMs, clock);
+        ledger.record('simctl', args, options?.timeoutMs);
         if (args.includes('list')) {
           return {
             stdout: JSON.stringify({
@@ -272,7 +286,7 @@ function createInstallLedgerAppleToolProvider(
     },
     devicectl: {
       run: async (args, options) => {
-        recordLedgerCall(ledger, 'devicectl', args, options?.timeoutMs, clock);
+        ledger.record('devicectl', args, options?.timeoutMs);
         if (args.includes('details')) {
           writeCoreDeviceDetailsJson(args);
           return ok;
@@ -306,133 +320,107 @@ function writeCoreDeviceDetailsJson(args: readonly string[]): void {
 
 async function createAndroidScenario(
   route: 'Android APK' | 'Android AAB fallback',
-  clock: InstallLedgerClock,
+  ledger: InstallLedger,
 ): Promise<InstallLedgerScenario> {
-  const ledger: InstallLedgerCall[] = [];
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-ledger-android-'));
+  const tempRoot = mkdtempForTestSync('agent-device-install-ledger-android-');
   const appPath = path.join(tempRoot, route === 'Android APK' ? 'Demo.apk' : 'Demo.aab');
-  const bundletoolPath = path.join(tempRoot, 'bundletool');
-  const bundletoolLedgerPath = path.join(tempRoot, 'bundletool-ledger.jsonl');
-  fs.writeFileSync(appPath, 'placeholder apk');
-  writeBundletoolLedgerScript(bundletoolPath);
-  fs.chmodSync(bundletoolPath, 0o755);
+  fs.writeFileSync(appPath, 'placeholder artifact');
+  for (const tool of ['adb', 'emulator', 'bundletool']) {
+    fs.writeFileSync(path.join(tempRoot, tool), '', { mode: 0o755 });
+  }
+  const aaptPath = path.join(tempRoot, 'build-tools', '99.0.0', 'aapt');
+  fs.mkdirSync(path.dirname(aaptPath), { recursive: true });
+  fs.writeFileSync(aaptPath, '', { mode: 0o755 });
   let installed = false;
-  let syncedBundletoolCallCount = 0;
-  const syncBundletoolLedger = () => {
-    if (!fs.existsSync(bundletoolLedgerPath)) return;
-    const lines = fs.readFileSync(bundletoolLedgerPath, 'utf8').split('\n').filter(Boolean);
-    for (; syncedBundletoolCallCount < lines.length; syncedBundletoolCallCount += 1) {
-      const line = lines[syncedBundletoolCallCount];
-      assert.ok(line !== undefined);
-      const parsedArgs = JSON.parse(line) as unknown;
-      assert.ok(Array.isArray(parsedArgs) && parsedArgs.every((arg) => typeof arg === 'string'));
-      const bundletoolArgs = parsedArgs as string[];
-      recordLedgerCall(ledger, 'bundletool', bundletoolArgs, ANDROID_BUNDLETOOL_TIMEOUT_MS, clock);
-      if (bundletoolArgs.includes('install-apks')) installed = true;
-    }
-  };
+  let launched = false;
+  let bootProbeCapMs: number | undefined;
+  const device = { ...PROVIDER_SCENARIO_ANDROID, id: 'Pixel_8', booted: false };
+  vi.spyOn(hostCommands, 'runCmdDetached').mockImplementation((command) => {
+    assert.equal(command, 'emulator');
+    launched = true;
+    return 4242;
+  });
   const provider: AndroidAdbProvider = {
     exec: async (args, options) => {
-      syncBundletoolLedger();
-      recordLedgerCall(ledger, 'adb', args, options?.timeoutMs, clock);
-      const key = args.join(' ');
-      if (key === 'shell pm list packages') {
-        return {
-          stdout: installed ? 'package:com.example.demo\n' : '',
-          stderr: '',
-          exitCode: 0,
-        };
+      ledger.record('adb', args, options?.timeoutMs);
+      if (args.join(' ') === 'shell pm list packages') {
+        return { stdout: installed ? 'package:com.example.demo\n' : '', stderr: '', exitCode: 0 };
       }
-      if (key === 'uninstall com.example.demo') {
-        installed = false;
-        return { stdout: 'Success\n', stderr: '', exitCode: 0 };
-      }
-      throw new Error(`Unscripted Android install ledger adb call: ${key}`);
+      assert.deepEqual(args, ['uninstall', 'com.example.demo']);
+      installed = false;
+      return { stdout: 'Success\n', stderr: '', exitCode: 0 };
     },
     install: async (apkPath, options) => {
-      recordLedgerCall(ledger, 'adb-install', [apkPath], options?.timeoutMs, clock);
+      ledger.record('adb-install', [apkPath], options?.timeoutMs);
       installed = true;
       return { stdout: '', stderr: '', exitCode: 0 };
     },
   };
-  const commandOverride = createInstallLedgerHostCommandOverride(ledger, clock, {
-    onBundletoolInstallApks: () => {
-      installed = true;
-    },
+  const commands: CommandExecutorOverride = async (command, args, options) => {
+    if (command === 'adb' && args.some((arg) => arg.includes('sys.boot_completed'))) {
+      assert.ok(options.timeoutMs);
+      bootProbeCapMs ??= options.timeoutMs;
+      const ready = options.timeoutMs < bootProbeCapMs;
+      // Leave room for the poll sleep; complete only when the real boot deadline narrows a probe.
+      ledger.record(
+        command,
+        args,
+        options.timeoutMs,
+        ready ? undefined : options.timeoutMs - 1_001,
+      );
+      return { stdout: ready ? '1' : '0', stderr: '', exitCode: 0 };
+    }
+    ledger.record(command, args, options.timeoutMs);
+    if (command === '/usr/bin/lsappinfo') return { stdout: '', stderr: '', exitCode: 0 };
+    if (command === '/usr/sbin/sysctl') return { stdout: '1', stderr: '', exitCode: 0 };
+    if (command === 'bundletool') {
+      if (args.includes('install-apks')) installed = true;
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    assert.ok(command === 'unzip' || path.basename(command) === 'aapt', command);
+    return { stdout: '', stderr: '', exitCode: 1 };
+  };
+  const inventory = async () => [launched ? { ...device, id: 'emulator-5554' } : device];
+  vi.spyOn(inventoryContext, 'listLocalDeviceInventory').mockImplementation(inventory);
+  vi.spyOn(hostCommands, 'runCmd').mockImplementation(async (command, args, options = {}) => {
+    const result = commands(command, args, options);
+    assert.ok(result, `Unscripted host command: ${command}`);
+    return await result;
   });
-  const daemon = await withCommandExecutorOverride(
-    commandOverride,
-    async () =>
-      await createProviderScenarioHarness({
-        androidAdbProvider: () => provider,
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-        env: {
-          AGENT_DEVICE_BUNDLETOOL_LEDGER: bundletoolLedgerPath,
-          PATH: `${tempRoot}${path.delimiter}${process.env.PATH ?? ''}`,
-        },
-      }),
-  );
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => provider,
+    deviceInventoryProvider: inventory,
+    env: { PATH: tempRoot, ANDROID_HOME: tempRoot, ANDROID_SDK_ROOT: tempRoot },
+  });
   return {
     appPath,
-    clock,
     daemon,
     ledger,
-    selection: { platform: 'android', serial: PROVIDER_SCENARIO_ANDROID.id },
+    selection: { platform: 'android', device: device.name },
     close: async () => {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
       await daemon.close();
     },
   };
 }
 
-function writeBundletoolLedgerScript(bundletoolPath: string): void {
-  fs.writeFileSync(
-    bundletoolPath,
-    [
-      '#!/usr/bin/env node',
-      "const fs = require('node:fs');",
-      'const ledger = process.env.AGENT_DEVICE_BUNDLETOOL_LEDGER;',
-      String.raw`if (ledger) fs.appendFileSync(ledger, JSON.stringify(process.argv.slice(2)) + '\n');`,
-    ].join('\n'),
-  );
+function downloadBody(appPath: string): Readable {
+  if (!appPath.endsWith('.app')) return Readable.from([fs.readFileSync(appPath)]);
+  const archive = pack();
+  archive.entry({ name: 'Demo.app/Info.plist' }, fs.readFileSync(path.join(appPath, 'Info.plist')));
+  archive.finalize();
+  return archive;
 }
 
 function isAndroidRoute(route: InstallRoute): route is 'Android APK' | 'Android AAB fallback' {
   return route.startsWith('Android');
 }
 
-function createInstallLedgerHostCommandOverride(
-  ledger: InstallLedgerCall[],
-  clock: InstallLedgerClock,
-  hooks: Readonly<{ onBundletoolInstallApks?: () => void }> = {},
-): CommandExecutorOverride {
+function createInstallLedgerHostCommandOverride(ledger: InstallLedger): CommandExecutorOverride {
   return (command, args, options) => {
-    if (command === 'open') {
-      recordLedgerCall(ledger, 'open', args, options.timeoutMs, clock);
-      return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
-    }
-    if (command === 'bundletool' || command === 'java') {
-      recordLedgerCall(ledger, 'bundletool', args, options.timeoutMs, clock);
-      if (args.includes('install-apks')) hooks.onBundletoolInstallApks?.();
-      return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
-    }
-    return undefined;
+    assert.equal(command, 'open');
+    ledger.record(command, args, options.timeoutMs);
+    return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
   };
-}
-
-function recordLedgerCall(
-  ledger: InstallLedgerCall[],
-  tool: InstallLedgerCall['tool'],
-  args: readonly string[],
-  timeoutMs: number | undefined,
-  clock: InstallLedgerClock,
-): void {
-  assert.ok(
-    Number.isFinite(timeoutMs) && timeoutMs! > 0,
-    `install ledger call has no bounded timeoutMs: ${tool} ${args.join(' ')}`,
-  );
-  ledger.push({ tool, args: [...args], timeoutMs: timeoutMs! });
-  clock.advanceByLedgerTimeout(timeoutMs!);
 }
 
 function assertLedgerFitsEnvelope(
@@ -462,61 +450,26 @@ function assertInstallLedgerPhaseCoverage(
   command: InstallCommand,
   ledger: readonly InstallLedgerCall[],
 ): void {
-  assert.ok(ledger.length > 0, `${route} ${command} ledger recorded no calls`);
-  assert.ok(
-    ledger.some(
-      (call) => call.args.some((arg) => arg.includes('install')) || call.tool === 'adb-install',
-    ),
-    `${route} ${command} ledger is missing the install phase.\nLedger:\n${JSON.stringify(
-      ledger,
-      null,
-      2,
-    )}`,
-  );
-  if (command === 'reinstall') {
+  const expected = isAndroidRoute(route)
+    ? [
+        'sys.boot_completed',
+        ...(route === 'Android APK' ? ['adb-install'] : ['build-apks', 'install-apks']),
+      ]
+    : route === 'iOS simulator'
+      ? ['list', 'boot', 'bootstatus', 'open', 'install']
+      : ['details', 'install'];
+  if (command === 'reinstall') expected.push('uninstall');
+  if (isAndroidRoute(route)) {
     assert.ok(
-      ledger.some((call) => call.args.includes('uninstall')),
-      `${route} reinstall ledger is missing the uninstall phase`,
+      ledger.filter((call) => call.args.join(' ') === 'shell pm list packages').length >= 2,
+      'missing before/after package inventories',
     );
+    if (command !== 'reinstall') expected.push('unzip');
   }
-  if (route === 'iOS physical device') {
+  for (const phase of expected) {
     assert.ok(
-      ledger.some((call) => call.args.includes('details')),
-      `${route} ${command} ledger is missing the readiness phase`,
-    );
-  }
-  if (route === 'iOS simulator') {
-    assert.ok(
-      ledger.some((call) => call.args.includes('list')),
-      `${route} ${command} ledger is missing the boot-state probe phase`,
-    );
-    assert.ok(
-      ledger.some((call) => call.args.includes('boot')),
-      `${route} ${command} ledger is missing the simulator boot phase`,
-    );
-    assert.ok(
-      ledger.some((call) => call.args.includes('bootstatus')),
-      `${route} ${command} ledger is missing the simulator bootstatus phase`,
-    );
-    assert.ok(
-      ledger.some((call) => call.tool === 'open' && call.args.includes('Simulator')),
-      `${route} ${command} ledger is missing the Simulator.app reveal phase`,
-    );
-  }
-  if (isAndroidRoute(route) && (command === 'install' || command === 'install_source')) {
-    assert.ok(
-      ledger.some((call) => call.args.join(' ') === 'shell pm list packages'),
-      `${route} ${command} ledger is missing the package-inventory phase`,
-    );
-  }
-  if (route === 'Android AAB fallback') {
-    assert.ok(
-      ledger.some((call) => call.args.includes('build-apks')),
-      `${route} ${command} ledger is missing the bundle build phase`,
-    );
-    assert.ok(
-      ledger.some((call) => call.args.includes('install-apks')),
-      `${route} ${command} ledger is missing the bundle install phase`,
+      ledger.some((call) => call.tool === phase || call.args.includes(phase)),
+      `${route} ${command}: missing ${phase} phase. Ledger: ${JSON.stringify(ledger)}`,
     );
   }
 }

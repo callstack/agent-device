@@ -145,11 +145,11 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
   const EXPECTED_ENVELOPES: Record<string, number | 'unbounded'> = {
     // prepare: daemon-side runner budget (PREPARE_STARTUP_BUDGET_MS) plus the daemon-result margin.
     prepare: 270_000,
-    install: 330_000,
-    reinstall: 330_000,
-    uninstall: 330_000,
-    'install-from-source': 420_000,
-    install_source: 420_000,
+    install: 480_000,
+    reinstall: 480_000,
+    uninstall: 480_000,
+    'install-from-source': 600_000,
+    install_source: 600_000,
     // longpress: proven by the worst-case ledger test in
     // test/integration/provider-scenarios/android-longpress-ledger.test.ts.
     longpress: 320_000,
@@ -312,15 +312,15 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
   );
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('install'), { ...base }),
-    330_000,
+    480_000,
   );
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('reinstall'), { ...base }),
-    330_000,
+    480_000,
   );
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('install_source'), { ...base }),
-    420_000,
+    600_000,
   );
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('prepare'), {

@@ -8,10 +8,10 @@ const DAEMON_REQUEST_TIMEOUT_MS = 90_000;
 
 // Covers the install/reinstall/uninstall route's worst-case ledger plus the daemon-result margin.
 // Proven by the ledger test: `test/integration/provider-scenarios/install-timeout-ledger.test.ts`.
-export const INSTALL_REQUEST_TIMEOUT_MS = 330_000;
+export const INSTALL_REQUEST_TIMEOUT_MS = 480_000;
 
 // Adds room for install-from-source URL materialization before the same platform install ledgers.
-export const INSTALL_SOURCE_REQUEST_TIMEOUT_MS = 420_000;
+export const INSTALL_SOURCE_REQUEST_TIMEOUT_MS = 600_000;
 
 // Margin over a daemon-side budget so the daemon's own timeout result (with
 // diagnostics) wins the race against the client envelope. Never shrinks the
