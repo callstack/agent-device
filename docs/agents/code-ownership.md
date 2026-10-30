@@ -25,6 +25,8 @@ Per-call abort guards belong beside transports in `src/daemon-client/daemon-clie
 Contracts shared across layers belong in `packages/contracts/src`.
 Schema composition belongs in `packages/command-surface/src/schema`.
 A command facet declares no output formatter. Register the formatter in `src/commands/cli-output.ts`.
+Command execution and bound runtime families belong in `packages/command-runtime/src`.
+The local artifact adapter belongs in `@agent-device/host-kit/local-artifact-adapter`.
 Build interaction data through `buildInteractionResponseData`.
 Change cross-language rules through `contracts/fixtures/` golden tables.
 
