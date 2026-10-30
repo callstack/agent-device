@@ -619,9 +619,8 @@ async function startDaemonRuntimeOnHost(
     });
   }
   const registration = acquisition.owner;
-  // Only the registered daemon may treat the journal as orphaned and start recovering provider leases.
-  expiredProviderLeaseReleaser.adoptOrphanedLeases();
-  void expiredProviderLeaseReleaser.retryPending();
+  // Only the registered daemon may read the state directory's lease records and act on them.
+  void expiredProviderLeaseReleaser.recoverInherited();
   rollback.onRollback(async () => {
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });

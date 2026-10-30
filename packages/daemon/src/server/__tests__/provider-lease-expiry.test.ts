@@ -75,12 +75,12 @@ test('retries a persisted expired provider lease after daemon restart', async ()
       ...options,
       recoverableProviderIds: [],
     });
-    await daemonWithoutLimrun.retryPending();
+    await daemonWithoutLimrun.recoverInherited();
     expect(release).toHaveBeenCalledTimes(1);
     daemonWithoutLimrun.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
-    await restartedDaemon.retryPending();
+    await restartedDaemon.recoverInherited();
     expect(release).toHaveBeenCalledTimes(2);
     expect(release).toHaveBeenLastCalledWith(lease);
     restartedDaemon.shutdown();
@@ -182,16 +182,14 @@ test('a daemon killed while holding a provider lease recovers it on restart', as
     killedDaemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
-    restartedDaemon.adoptOrphanedLeases();
-    await restartedDaemon.retryPending();
+    await restartedDaemon.recoverInherited();
     expect(recoverExpiredLease.mock.calls.map(([lease]) => lease.leaseId)).toEqual([held.leaseId]);
     expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(false);
     restartedDaemon.shutdown();
 
     // Recovered once means recovered: the next daemon inherits nothing.
     const thirdDaemon = createExpiredProviderLeaseReleaser(options);
-    thirdDaemon.adoptOrphanedLeases();
-    await thirdDaemon.retryPending();
+    await thirdDaemon.recoverInherited();
     expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
     thirdDaemon.shutdown();
   } finally {
@@ -213,8 +211,7 @@ test('a provider lease released before the daemon stops is not recovered again',
     daemon.shutdown();
 
     const restartedDaemon = createExpiredProviderLeaseReleaser(options);
-    restartedDaemon.adoptOrphanedLeases();
-    await restartedDaemon.retryPending();
+    await restartedDaemon.recoverInherited();
     expect(recoverExpiredLease).not.toHaveBeenCalled();
     restartedDaemon.shutdown();
   } finally {
@@ -337,8 +334,8 @@ test('adopted leases whose record is not durable stay journaled through later jo
     ...options,
     recoverExpiredLease: () => new Promise<void>(() => {}),
   });
-  restarted.adoptOrphanedLeases();
   try {
+    void restarted.recoverInherited();
     // The new daemon's registry is empty, so this journal write has no live leases of its own.
     restarted.recordLiveLeases([]);
     const journal = JSON.parse(fs.readFileSync(`${stateDir}/live-provider-leases.json`, 'utf8'));
@@ -349,7 +346,7 @@ test('adopted leases whose record is not durable stay journaled through later jo
   }
 });
 
-test('a releaser leaves the journal alone until its daemon holds the registration', async () => {
+test('a daemon refused the registration leaves the live journal byte-identical and recovers nothing', async () => {
   const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
   const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
   const options = { recoverExpiredLease, stateDir, recoverableProviderIds: ['revyl'] };
@@ -359,13 +356,15 @@ test('a releaser leaves the journal alone until its daemon holds the registratio
   });
   try {
     registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
-    // A second daemon on the same state directory is built before it learns the registration is taken.
+    const journalBefore = fs.readFileSync(`${stateDir}/live-provider-leases.json`);
+    // A second daemon on the same state directory is built, then refused the registration: it never
+    // reaches `recoverInherited`, and nothing it does before that may touch the live daemon's records.
     const refusedDaemon = createExpiredProviderLeaseReleaser(options);
     await refusedDaemon.retryPending();
     refusedDaemon.shutdown();
 
     expect(recoverExpiredLease).not.toHaveBeenCalled();
-    expect(fs.existsSync(`${stateDir}/live-provider-leases.json`)).toBe(true);
+    expect(fs.readFileSync(`${stateDir}/live-provider-leases.json`)).toEqual(journalBefore);
     expect(fs.existsSync(`${stateDir}/expired-provider-leases.json`)).toBe(false);
   } finally {
     runningDaemon.shutdown();

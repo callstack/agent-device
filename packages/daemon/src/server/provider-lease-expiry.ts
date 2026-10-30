@@ -41,11 +41,13 @@ export type ExpiredProviderLeaseReleaser = {
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   /**
-   * Moves the leases a dead daemon journaled into recovery. Call it only once this process holds the
-   * daemon registration for the state directory: before that, the journal may belong to a daemon that is
-   * still running, and recovering its leases would end devices it is using.
+   * Reads the lease records an earlier daemon left in the state directory (the expired record and the
+   * live journal), moves the journal's leases into recovery, and starts recovering. Call it only once
+   * this process holds the daemon registration: before that, both records may belong to a daemon that is
+   * still running, and acting on them would end devices it is using. Until then the releaser touches no
+   * file in the state directory.
    */
-  adoptOrphanedLeases: () => void;
+  recoverInherited: () => Promise<void>;
   retryPending: () => Promise<void>;
   /**
    * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
@@ -68,8 +70,9 @@ export function createExpiredProviderLeaseReleaser(options: {
   retryDelayMs?: number;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
-  const pendingRecoveryLeases = loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE);
-  const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
+  const pendingRecoveryLeases = new Map<string, DeviceLease>();
+  const persistedRecoveryLeaseIds = new Set<string>();
+  let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   const activeReleaseAttempts = new Map<string, Promise<void>>();
@@ -96,6 +99,8 @@ export function createExpiredProviderLeaseReleaser(options: {
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
       }
+      // Leases now durable in the expired record no longer need the journal to hold them.
+      writeJournal();
       return true;
     } catch (error) {
       emitPersistenceFailure(pendingRecoveryLeases.size, error);
@@ -154,6 +159,16 @@ export function createExpiredProviderLeaseReleaser(options: {
       }, retryDelayMs);
       journalRetryTimer.unref?.();
     }
+  };
+  const recoverInherited = async (): Promise<void> => {
+    if (inherited) return;
+    inherited = true;
+    for (const [leaseId, lease] of loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE)) {
+      pendingRecoveryLeases.set(leaseId, lease);
+      persistedRecoveryLeaseIds.add(leaseId);
+    }
+    adoptOrphanedLeases();
+    await retryPending();
   };
   const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
     liveLeases = leases.filter((lease) =>
@@ -270,7 +285,7 @@ export function createExpiredProviderLeaseReleaser(options: {
       }
     },
     recordLiveLeases,
-    adoptOrphanedLeases,
+    recoverInherited,
     retryPending,
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
