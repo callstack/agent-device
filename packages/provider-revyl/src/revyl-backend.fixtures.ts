@@ -1,6 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { REVYL_PROVIDER } from './device.ts';
 import { createRevylRuntime, type RevylRuntime } from './runtime.ts';
 
 /** One request the fake backend received, with its JSON body decoded. */
@@ -243,7 +244,7 @@ export function revylLease(platform: 'ios' | 'android', leaseId = 'lease-1'): De
     tenantId: 'tenant',
     runId: 'client-run',
     backend: platform === 'ios' ? 'ios-instance' : 'android-instance',
-    leaseProvider: 'revyl',
+    leaseProvider: REVYL_PROVIDER,
     createdAt: now,
     heartbeatAt: now,
     expiresAt: now + 60_000,

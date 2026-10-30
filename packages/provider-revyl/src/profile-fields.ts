@@ -1,4 +1,5 @@
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
+import { REVYL_PROVIDER } from './device.ts';
 
 /**
  * How Revyl treats each connect profile flag. Revyl starts a device from the platform, an optional
@@ -7,7 +8,7 @@ import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/pr
  * provider field; `--provider-device-type` selects a TestMu AI device pool, which Revyl has none of.
  */
 export const REVYL_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
-  provider: 'revyl',
+  provider: REVYL_PROVIDER,
   label: 'Revyl',
   fields: {
     providerApp: 'consumed',

@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { isSupportedRevylRuntimeDevice } from './device.ts';
+import { REVYL_PROVIDER, isSupportedRevylRuntimeDevice } from './device.ts';
 import {
   providerRuntimeOwner,
   sameRuntimeOwner,
@@ -36,7 +36,7 @@ export type RevylPlatformRuntimeOwnerOptions = Readonly<{
 export function createRevylPlatformRuntimeOwner(
   options: RevylPlatformRuntimeOwnerOptions,
 ): PlatformRuntimeOwner {
-  const owner = providerRuntimeOwner('revyl', options.runtimeInstance);
+  const owner = providerRuntimeOwner(REVYL_PROVIDER, options.runtimeInstance);
   const ownsDevice = (device: DeviceInfo) =>
     isSupportedRevylRuntimeDevice(device) && options.ownsDevice(device);
   const hasLiveSession = (device: DeviceInfo) =>

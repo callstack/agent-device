@@ -1,4 +1,5 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import { REVYL_PROVIDER } from './device.ts';
 import { REVYL_API_KEY_VARIABLE, REVYL_API_URL_VARIABLE } from './credentials.ts';
 import { setupRevylPlugin } from './plugin-setup.ts';
 
@@ -34,7 +35,7 @@ function revyl(options: RevylPluginOptions = {}): AgentDevicePlugin {
   ];
   return {
     apiVersion: 2,
-    provider: 'revyl',
+    provider: REVYL_PROVIDER,
     credentials: { variables: environmentVariables },
     connection: {
       capabilities: {
