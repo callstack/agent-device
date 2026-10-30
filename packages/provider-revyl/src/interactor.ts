@@ -10,6 +10,7 @@ import {
 import type {
   ApplicationLaunchReport,
   Interactor,
+  ScreenshotOptions,
   SnapshotRuntimeResult,
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
@@ -264,8 +265,12 @@ class RevylInteractor implements Interactor {
    * hangs up mid-write or a process that dies leaves either the previous screenshot or none at all, and
    * never a truncated PNG at the path the caller asked for. The name is unique per capture: two sessions
    * writing the same base name in one process must not collide on one temporary file.
+   *
+   * An iOS capture arrives at the simulator's native scale (3x on current iPhones). The host reports an
+   * iOS simulator screenshot at the requested pixel density, 1x by default, which is also the point
+   * space taps use, so the image is rescaled from the density `health`'s point size implies.
    */
-  async screenshot(outPath: string): Promise<void> {
+  async screenshot(outPath: string, options?: ScreenshotOptions): Promise<void> {
     const png = await this.session.client.captureWorkerScreenshot(this.session.runId, this.signal);
     const directory = path.dirname(outPath);
     fs.mkdirSync(directory, { recursive: true });
@@ -279,6 +284,9 @@ class RevylInteractor implements Interactor {
         png,
         this.signal === undefined ? {} : { signal: this.signal },
       );
+      if (this.session.platform === 'ios') {
+        await normalizeRevylIosDensity(temporaryPath, this.session.screen, options?.pixelDensity);
+      }
       // The capture is over once the PNG is in hand, but a caller that hung up during the write is not
       // owed the rename: the file it canceled is unlinked rather than published.
       if (this.signal?.aborted === true) throw this.cancellation();
@@ -347,6 +355,24 @@ class RevylInteractor implements Interactor {
 
 export function createRevylInteractor(session: RevylSession, signal?: AbortSignal): Interactor {
   return new RevylInteractor(session, signal);
+}
+
+/** Rescales an iOS capture from the density its point size implies to the one the caller asked for. */
+async function normalizeRevylIosDensity(
+  file: string,
+  screen: { width: number } | undefined,
+  pixelDensity: number | undefined,
+): Promise<void> {
+  if (screen === undefined) return;
+  const [{ readPngSize }, { resizePngFile }, { computeDensityScaledScreenshotSize }] =
+    await Promise.all([
+      import('@agent-device/capture-kit/png-size'),
+      import('@agent-device/capture-kit/png-resize'),
+      import('@agent-device/capture-kit/screenshot-density'),
+    ]);
+  const size = await readPngSize(file);
+  const target = computeDensityScaledScreenshotSize(size, size.width / screen.width, pixelDensity);
+  if (target) await resizePngFile(file, target.width, target.height);
 }
 
 /** The plan works in a zero-origin box; a snapshot container's rect is in the same space here. */

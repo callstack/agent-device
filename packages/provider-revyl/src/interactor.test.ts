@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
+import { PNG } from '@agent-device/capture-kit/png';
+import { readPngSize } from '@agent-device/capture-kit/png-size';
 import { AppError } from '@agent-device/kernel/errors';
 import { captureRevylSnapshot, type RevylSnapshotReader } from './snapshot.ts';
 import { bindRevylApplicationLifecycle } from './lifecycle.ts';
@@ -423,7 +425,7 @@ test('the Android snapshot comes back as nodes parsed from the uiautomator dump'
 });
 
 test('a screenshot writes the worker bytes to the requested path', async () => {
-  const { fixture, interactor } = await liveInteractor('ios');
+  const { fixture, interactor } = await liveInteractor('android');
   const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-'), 'shot.png');
   await interactor.screenshot(outPath);
 
@@ -444,10 +446,32 @@ test('a screenshot writes the worker bytes to the requested path', async () => {
   );
 });
 
+test('an iOS screenshot is rescaled from its native scale to the requested density', async () => {
+  // Revyl captures a 2x2-point screen at 3x; the host reports iOS simulator screenshots at 1x unless
+  // the caller asks for another density.
+  const native = new PNG({ width: 6, height: 6 });
+  const { interactor } = await liveInteractor('ios', {
+    screen: { width: 2, height: 2 },
+    respond: {
+      'GET /api/v1/execution/device-proxy/run-1/screenshot': () => ({
+        contentType: 'image/png',
+        body: [...PNG.sync.write(native)],
+      }),
+    },
+  });
+  const directory = await mkdtempForTest('agent-device-revyl-shot-density-');
+
+  await interactor.screenshot(path.join(directory, 'default.png'));
+  await interactor.screenshot(path.join(directory, 'native.png'), { pixelDensity: 3 });
+
+  assert.deepEqual(await readPngSize(path.join(directory, 'default.png')), { width: 2, height: 2 });
+  assert.deepEqual(await readPngSize(path.join(directory, 'native.png')), { width: 6, height: 6 });
+});
+
 test('two captures of one path each keep their own temporary file', async () => {
   // Both writes land in the same directory with the same base name. If they shared a temporary sibling, the
   // first rename would move it away and the second would fail with ENOENT on a file that is no longer there.
-  const { fixture, interactor } = await liveInteractor('ios');
+  const { fixture, interactor } = await liveInteractor('android');
   const outPath = path.join(await mkdtempForTest('agent-device-revyl-shot-race-'), 'shot.png');
 
   await Promise.all([interactor.screenshot(outPath), interactor.screenshot(outPath)]);
@@ -473,7 +497,7 @@ test('a screenshot canceled after its bytes arrive is not published', async () =
   // and the body is large enough that the write is still in flight across the next turn of the loop.
   const controller = new AbortController();
   const { interactor } = await liveInteractor(
-    'ios',
+    'android',
     {
       respond: {
         'GET /api/v1/execution/device-proxy/run-1/screenshot': {
@@ -531,7 +555,7 @@ test('a canceled screenshot leaves the file unwritten', async () => {
   // the bytes that arrive afterwards must not reach the path the command was asked to write.
   const controller = new AbortController();
   const { interactor } = await liveInteractor(
-    'ios',
+    'android',
     {
       respond: {
         'GET /api/v1/execution/device-proxy/run-1/screenshot': {
