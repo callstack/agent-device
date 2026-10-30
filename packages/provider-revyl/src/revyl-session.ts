@@ -1,13 +1,9 @@
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, REVYL_SNAPSHOT_CHANNEL, type RevylPlatform } from './device.ts';
-import {
-  isRevylSessionGone,
-  revylFailureRefusedTheRequest,
-  type RevylClient,
-} from './revyl-client.ts';
+import { revylFailureRefusedTheRequest, type RevylClient } from './revyl-client.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 import type {
   RevylStartDeviceRequest,
@@ -55,19 +51,7 @@ export type RevylStartRequestInput = Readonly<{
   signal?: AbortSignal;
   /** Epoch-ms deadline the caller has for the whole allocation; it outranks the runtime's own. */
   deadline?: number;
-  /**
-   * Receives the work that ends a start the caller stopped waiting for, which runs on after this call has
-   * already failed. A runtime that can still release the lease takes it, so its release or shutdown waits
-   * for that device instead of reporting a release it never made.
-   */
-  onLateStart?: (end: Promise<RevylLateStartEnd | undefined>) => void;
 }>;
-
-/**
- * What ending a start that landed late reports: the session it addressed, and whether Revyl confirmed it
- * is gone. Absent when the answer showed nothing was rented.
- */
-export type RevylLateStartEnd = Readonly<{ sessionId: string; confirmed: boolean }>;
 
 /**
  * One caller's own patience: the signal it cancels with and the deadline it stops at. Both are optional,
@@ -88,48 +72,64 @@ export type RevylCallerWait<T> = Readonly<{
 }>;
 
 /**
- * What one start has to undo: the session that holds the rented device, and the run that routes to
- * it. `sessionId` is always the id the backend was told, or the one it answered with, so the end
- * always addresses what Revyl actually holds.
+ * The session one start left under rent: the session that holds the device, and the run that routes to
+ * it. `sessionId` is always the id the backend was told, or the one it answered with, so the end always
+ * addresses what Revyl actually holds.
  */
-type RevylStartCleanup = Readonly<{ runId?: string; sessionId: string }>;
+export type RevylRentedSession = Readonly<{ runId?: string; sessionId: string }>;
+
+/**
+ * What one start amounted to. A start either hands over a ready device, or fails and says whether it left
+ * a session behind: `rented` is what has to be stopped, absent when Revyl settled with a refusal that
+ * started nothing.
+ *
+ * This is the whole shape of the cleanup contract: the start names what it rented and never ends it, so
+ * the one place that holds the lease holds the only handle for ending it.
+ */
+export type RevylStart =
+  | Readonly<{ status: 'ready'; session: RevylSession }>
+  | Readonly<{ status: 'failed'; error: unknown; rented?: RevylRentedSession }>;
 
 /**
  * Starts a Revyl device and waits until it answers: `start_device`, then the worker-connection poll,
- * then `health` until the device reports connected. A start that never became ready is stopped before
- * the failure reaches the caller, so a failed allocate never leaves a rented device running — and a
- * stop that failed is named in the failure, because the device is still rented.
+ * then `health` until the device reports connected. Whatever the outcome, the answer says what Revyl is
+ * holding, so the caller can end it — including when the answer lands after the caller stopped waiting,
+ * which is the case a discarded request would get wrong.
  */
 export async function startRevylSession(
   client: RevylClient,
   lease: DeviceLease,
   input: RevylStartRequestInput,
-): Promise<RevylSession> {
+): Promise<RevylStart> {
   // The runtime issues the session id rather than reading it back, so a session this lease started
   // can be ended from the lease alone — including from a process that never started it.
   const sessionId = revylSessionIdForLease(lease.leaseId);
-  const request: RevylStartDeviceRequest = {
-    platform: input.platform,
-    is_simulation: true,
-    session_id: sessionId,
-    idle_timeout_seconds: DEFAULT_IDLE_TIMEOUT_SECONDS,
-    ...(input.appUrl === undefined ? {} : { app_url: input.appUrl }),
-    ...(input.deviceModel === undefined ? {} : { device_model: input.deviceModel }),
-    ...(input.osVersion === undefined ? {} : { os_version: input.osVersion }),
-  };
-  const started = await submitRevylStart(client, request, sessionId, input);
+  // Nothing has been sent yet, so nothing is rented: this caller is answered with its own cancellation and
+  // the entry closes without asking Revyl for a session it never made.
+  if (input.signal?.aborted) return { status: 'failed', error: startCanceled(input) };
+  let started: RevylStartDeviceResponse;
+  try {
+    started = await submitRevylStart(client, input, sessionId);
+  } catch (error) {
+    // The request went out and never came back with a refusal, so a session may be open under the id it
+    // carried. That id is the handle the caller has to end.
+    return {
+      status: 'failed',
+      error,
+      ...(startMayHaveRented(error) ? { rented: { sessionId } } : {}),
+    };
+  }
   const runId = typeof started.workflow_run_id === 'string' ? started.workflow_run_id : undefined;
   const echoed = typeof started.session_id === 'string' ? started.session_id : undefined;
   if (runId && echoed && echoed !== sessionId) {
     // Every later stop addresses the session by the id the runtime issued, and an expired-lease
     // recovery in another process derives that same id from the lease. A backend that kept its own
     // identity therefore has to be refused, and the id it named is the only handle that still names
-    // the device: that is what gets stopped and what the failure reports.
-    const cleanup: RevylStartCleanup = { runId, sessionId: echoed };
-    throwIfStartStopFailed(
-      cleanup,
-      await stopStartedSession(client, cleanup),
-      new AppError(
+    // the device: that is what `rented` reports, and what the failure names.
+    return {
+      status: 'failed',
+      rented: { runId, sessionId: echoed },
+      error: new AppError(
         'COMMAND_FAILED',
         `Revyl started the device as session ${echoed} instead of ${sessionId}.`,
         {
@@ -139,16 +139,15 @@ export async function startRevylSession(
           hint: 'Retry the command; agent-device ends a Revyl session by the identity it issued.',
         },
       ),
-    );
+    };
   }
   if (!runId) {
     // Revyl opened a session and only failed to hand back a run. The id it echoes names that session
-    // when it kept its own, so cleanup addresses the session the backend actually holds.
-    const cleanup: RevylStartCleanup = { sessionId: echoed ?? sessionId };
-    throwIfStartStopFailed(
-      cleanup,
-      await stopStartedSession(client, cleanup),
-      new AppError(
+    // when it kept its own, so the end addresses the session the backend actually holds.
+    return {
+      status: 'failed',
+      rented: { sessionId: echoed ?? sessionId },
+      error: new AppError(
         'COMMAND_FAILED',
         `Revyl did not start a ${input.platform} device: ${started.error ?? started.message ?? 'no workflow run was returned'}`,
         {
@@ -157,106 +156,62 @@ export async function startRevylSession(
           ...(started.trace_id === undefined ? {} : { traceId: started.trace_id }),
         },
       ),
-    );
+    };
   }
-  // Revyl may have answered a run for a start the caller already gave up on. That device is rented
-  // either way, so it is stopped here before the cancellation reaches the caller.
+  // Revyl may have answered a run for a start whose caller has already hung up. The device is rented
+  // either way, so the answer still reports it as what is owed an end.
   if (input.signal?.aborted) {
-    const cleanup: RevylStartCleanup = { runId, sessionId };
-    throwIfStartStopFailed(
-      cleanup,
-      await stopStartedSession(client, cleanup),
-      startCanceled(input),
-    );
+    return {
+      status: 'failed',
+      rented: { runId, sessionId },
+      error: startCanceled(input),
+    };
   }
   const deadline = readinessDeadline(input);
   try {
     const health = await awaitRevylDeviceReady(client, runId, deadline, input);
     return {
-      platform: input.platform,
-      runId,
-      sessionId,
-      screen: readRevylScreenSize(health),
-      device: buildRevylDevice(input.platform, lease, runId),
-      snapshotChannel: REVYL_SNAPSHOT_CHANNEL[input.platform],
-      client,
-      lease,
-      launchedApp: {},
+      status: 'ready',
+      session: {
+        platform: input.platform,
+        runId,
+        sessionId,
+        screen: readRevylScreenSize(health),
+        device: buildRevylDevice(input.platform, lease, runId),
+        snapshotChannel: REVYL_SNAPSHOT_CHANNEL[input.platform],
+        client,
+        lease,
+        launchedApp: {},
+      },
     };
   } catch (error) {
-    const cleanup: RevylStartCleanup = { runId, sessionId };
-    throwIfStartStopFailed(cleanup, await stopStartedSession(client, cleanup), error);
+    return { status: 'failed', error, rented: { runId, sessionId } };
   }
 }
 
 /**
- * Sends `start_device` within the caller's budget. The request rents a device even when the caller
- * hangs up, so two things keep that from leaking: the request keeps the client's own start budget rather
- * than the caller's shorter one, so an answer still comes back, and the session id is issued before the
- * request goes out, so an answer nobody read still leaves a session that can be stopped by that id. The
- * caller's cancellation never travels on the request itself: aborting the fetch discards the answer, and
- * an answer nobody read is a rented device with no run id.
+ * Sends `start_device` and returns its answer. The caller's cancellation never travels on the request:
+ * aborting the fetch discards the answer, and an answer nobody read is a rented device with no run id. The
+ * session id is issued before the request goes out for the same reason — an answer nobody read still leaves
+ * a session that can be stopped by that id — and the request keeps the client's own start budget rather
+ * than the caller's shorter one, so an answer still comes back to name what was rented.
  */
 async function submitRevylStart(
   client: RevylClient,
-  request: RevylStartDeviceRequest,
-  sessionId: string,
   input: RevylStartRequestInput,
+  sessionId: string,
 ): Promise<RevylStartDeviceResponse> {
   if (input.signal?.aborted) throw startCanceled(input);
-  const callerDeadline = input.deadline ?? Number.POSITIVE_INFINITY;
-  // No signal of the caller's travels on the request, and the caller's shorter deadline is not put on it
-  // either: the request keeps the client's own start budget, so a caller that stops waiting still leaves
-  // an answer to come back, and that answer is the only thing that names the rented device.
-  const start = client.startDevice(request);
-  const gaveUp = callerWait(callerDeadline, input);
-  try {
-    return await (gaveUp === undefined ? start : Promise.race([start, gaveUp.promise]));
-  } catch (error) {
-    if (gaveUp?.settled() === true) {
-      // The caller stopped waiting, and the request is still owed an answer that names the device. A stop
-      // sent now could only address the id this side issued, which a backend that has not created the
-      // session yet answers as gone, so the request is left running and what it returns is what gets ended.
-      input.onLateStart?.(endStartTheCallerGaveUpOn(client, sessionId, start));
-      throw startCanceled(input);
-    }
-    // The request went out and never reached the caller, so something may be rented under the id it
-    // carried; that id is the handle, and the caller's failure stays the reported one.
-    if (startMayHaveRented(error)) {
-      const cleanup: RevylStartCleanup = { sessionId };
-      throwIfStartStopFailed(cleanup, await stopStartedSession(client, cleanup), error);
-    }
-    throw error;
-  } finally {
-    gaveUp?.dispose();
-  }
-}
-
-/**
- * Ends a start the caller stopped waiting for, once Revyl has said what it made. The answer names the
- * device, so the request is not discarded; a start Revyl refused with a settled verdict rented nothing to
- * undo, and one that never answered at all is ended by the id the request carried. The caller has already
- * been answered with its own cancellation, so the work is handed to `onLateStart` rather than reported.
- */
-async function endStartTheCallerGaveUpOn(
-  client: RevylClient,
-  sessionId: string,
-  start: Promise<RevylStartDeviceResponse>,
-): Promise<RevylLateStartEnd | undefined> {
-  const cleanup = await start.then(
-    (started) => {
-      const runId =
-        typeof started.workflow_run_id === 'string' ? started.workflow_run_id : undefined;
-      const echoed = typeof started.session_id === 'string' ? started.session_id : undefined;
-      return { ...(runId === undefined ? {} : { runId }), sessionId: echoed ?? sessionId };
-    },
-    (error: unknown) =>
-      // Revyl settled the request with a refusal, so nothing was rented.
-      startMayHaveRented(error) ? { sessionId } : undefined,
-  );
-  if (cleanup === undefined) return undefined;
-  const failure = await stopStartedSession(client, cleanup);
-  return { sessionId: cleanup.sessionId, confirmed: failure === undefined };
+  const request: RevylStartDeviceRequest = {
+    platform: input.platform,
+    is_simulation: true,
+    session_id: sessionId,
+    idle_timeout_seconds: DEFAULT_IDLE_TIMEOUT_SECONDS,
+    ...(input.appUrl === undefined ? {} : { app_url: input.appUrl }),
+    ...(input.deviceModel === undefined ? {} : { device_model: input.deviceModel }),
+    ...(input.osVersion === undefined ? {} : { os_version: input.osVersion }),
+  };
+  return await client.startDevice(request);
 }
 
 /**
@@ -295,17 +250,6 @@ export function revylCallerWait<T>(
     settled: () => rejected,
     dispose: () => signal.removeEventListener('abort', onAbort),
   });
-}
-
-/**
- * The caller's own wait for the start, or absent when the caller gave it neither a deadline nor a
- * signal and the request's timeout is all there is to wait for.
- */
-function callerWait(
-  deadline: number,
-  input: RevylStartRequestInput,
-): RevylCallerWait<RevylStartDeviceResponse> | undefined {
-  return revylCallerWait<RevylStartDeviceResponse>(deadline, input, () => startCanceled(input));
 }
 
 function startCanceled(input: RevylStartRequestInput): AppError {
@@ -359,42 +303,24 @@ function startMayHaveRented(error: unknown): boolean {
 }
 
 /**
- * Ends what one start rented, and reports the failure instead of swallowing it: a caller that cannot
- * reach Revyl has to hear that the device it asked for is still rented. A session Revyl no longer has
- * is the success this path wants, so it is not a failure.
+ * Reports a rented device a start could not hand back. The caller's own failure becomes the cause: what is
+ * still billed outranks why the start did not finish, and the session id in the details is what has to be
+ * ended by hand.
  */
-async function stopStartedSession(
-  client: RevylClient,
-  cleanup: RevylStartCleanup,
-): Promise<unknown | undefined> {
-  try {
-    await stopRevylSession(client, cleanup.runId, cleanup.sessionId);
-    return undefined;
-  } catch (error) {
-    return isRevylSessionGone(error) ? undefined : error;
-  }
-}
-
-/**
- * Reports a rented device the start could not hand back. The caller's own failure becomes the cause:
- * what is still billed outranks why the start did not finish, and the session id in the details is
- * what has to be ended by hand.
- */
-function throwIfStartStopFailed(
-  cleanup: RevylStartCleanup,
-  stopFailure: unknown | undefined,
+export function revylStartUndoFailed(
+  rented: RevylRentedSession,
+  stopFailure: string,
   startFailure: unknown,
-): never {
-  if (stopFailure === undefined) throw startFailure;
-  throw new AppError(
+): AppError {
+  return new AppError(
     'COMMAND_FAILED',
-    `Revyl did not release the session it started (${cleanup.sessionId}).`,
+    `Revyl did not release the session it started (${rented.sessionId}).`,
     {
       reason: 'provider-cleanup-pending',
-      providerSessionId: cleanup.sessionId,
-      ...(cleanup.runId === undefined ? {} : { runId: cleanup.runId }),
-      cause: errorMessage(stopFailure),
-      hint: `End the Revyl session ${cleanup.sessionId}; the device stays rented and billed until it is.`,
+      providerSessionId: rented.sessionId,
+      ...(rented.runId === undefined ? {} : { runId: rented.runId }),
+      cause: stopFailure,
+      hint: `End the Revyl session ${rented.sessionId}; the device stays rented and billed until it is.`,
     },
     startFailure,
   );

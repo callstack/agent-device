@@ -39,6 +39,12 @@ export type RevylFixtureOptions = Readonly<{
   hierarchy?: string;
   /** The start response body; a run id is generated when absent. */
   startResponse?: Record<string, unknown>;
+  /**
+   * Holds the session back until `start_device` has answered. A `/stop` sent in that window names a session
+   * Revyl never had, which is how a test catches a cleanup that raced the start and read its own 404 as a
+   * confirmed release.
+   */
+  sessionExistsOnceStarted?: boolean;
 }>;
 
 export type RevylFixtureBackend = Readonly<{
@@ -91,6 +97,14 @@ export async function startRevylFixtureBackend(
   let health503Polls = 0;
   /** The platform and session id of the last `start_device`, which is what later answers report. */
   let started: { platform: string; sessionId: string } | undefined;
+  /**
+   * Whether Revyl would hold a session right now. A session is made when `start_device` is *answered* —
+   * with a start delay, later than the request — and a confirmed `/stop` ends it, so a stop sent inside
+   * that gap names a session that does not exist yet.
+   */
+  const sessionIsOpen = () =>
+    answered.some((path) => path.endsWith('/start_device')) &&
+    !answered.some((path) => path.endsWith('/stop'));
   const screen = options.screen ?? DEFAULT_IOS_SCREEN;
 
   const overrides = new Map(Object.entries(options.respond ?? {}));
@@ -146,13 +160,20 @@ export async function startRevylFixtureBackend(
         health: () => nextHealth(),
         hierarchy: () => ({ contentType: 'application/xml', body: options.hierarchy ?? '' }),
         screenshot: () => ({ contentType: 'image/png', body: pngBytes() }),
-        stop: () => ({
-          body: {
-            success: true,
-            request_accepted: true,
-            session_id: sessionIdIn(url) ?? started?.sessionId ?? FALLBACK_SESSION_ID,
-          },
-        }),
+        stop: () => {
+          // With `sessionExistsOnceStarted`, a stop that arrives before the start has answered names a
+          // session Revyl never made. The caller must not read that 404 as a release it never got.
+          if (options.sessionExistsOnceStarted && !sessionIsOpen()) {
+            return { status: 404, body: { detail: 'no such session', error: 'Not Found' } };
+          }
+          return {
+            body: {
+              success: true,
+              request_accepted: true,
+              session_id: sessionIdIn(url) ?? started?.sessionId ?? FALLBACK_SESSION_ID,
+            },
+          };
+        },
         // Every device-proxy action: Revyl answers a working action with success in a 200 body.
         action: () => ({ body: { success: true, action: lastPathSegment(url) } }),
       };

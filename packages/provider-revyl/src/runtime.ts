@@ -25,11 +25,13 @@ import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl
 import {
   revylCallerGaveUp,
   revylCallerWait,
+  revylStartUndoFailed,
   startRevylSession,
   stopRevylSession,
   type RevylCallerBudget,
-  type RevylLateStartEnd,
+  type RevylRentedSession,
   type RevylSession,
+  type RevylStart,
 } from './revyl-session.ts';
 import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -60,27 +62,48 @@ export type RevylRuntime = ProviderDeviceRuntime & {
   hasLiveSession(device: DeviceInfo): boolean;
 };
 
-/** A release Revyl did not confirm, reported so the rented device is not lost. */
-type RevylReleaseWarning = Readonly<{
-  code: 'REVYL_SESSION_STOP_FAILED';
-  message: string;
+/** What one lease's start ended with, as the entry that owns its cleanup records it. */
+type RevylStartOutcome =
+  | Readonly<{ status: 'ready'; session: RevylSession }>
+  | Readonly<{ status: 'failed'; error: unknown }>;
+
+/** What ending one lease amounted to: the session Revyl was told to end, and what it left owed. */
+type RevylStopOutcome = Readonly<{
   providerSessionId: string;
+  /** The ended session's own report, so a release answers with the device it let go of. */
+  data?: Record<string, unknown>;
+  /** Why Revyl did not confirm the stop; absent once the device is no longer rented. */
+  failure?: string;
 }>;
 
-/** What ending one lease's session amounted to: what to report, and what is still unconfirmed. */
-type RevylReleaseOutcome = Readonly<{
-  providerSessionId: string;
-  warnings: RevylReleaseWarning[];
-}>;
+/**
+ * One lease's place in {@link RevylRuntimeImplementation.leases}: the start that rents its device, the
+ * session that start produced, and the `/stop` that has not been confirmed yet.
+ */
+class RevylLeaseEntry {
+  /**
+   * Settles once this lease's `start_device` has answered and the stop that a failed start owed has
+   * settled with it, so a reader that awaits it cannot miss a rented device.
+   */
+  readonly start: Promise<RevylStartOutcome>;
+  /** The live device, while this lease has one. */
+  session: RevylSession | undefined;
+  /** The session this start left under rent; absent while the request has not answered yet. */
+  stop: RevylRentedSession | undefined;
+  /** Whether Revyl confirmed `/stop` for {@link stop}. Only this lets the entry leave the map. */
+  stopConfirmed: boolean;
 
-/** What one allocation produced, and whether this call is the one that took the device. */
-type RevylAllocation = Readonly<{
-  session: RevylSession;
-  rentedNow: boolean;
-}>;
-
-/** How many confirmed releases are remembered, which is comfortably above a daemon's live leases. */
-const CONFIRMED_RELEASE_MEMORY = 256;
+  /**
+   * `start` fills this entry in as it goes; it may write the entry's own fields, but it must never wait
+   * on them, because the assignment below has not happened while its body first runs.
+   */
+  constructor(start: (entry: RevylLeaseEntry) => Promise<RevylStartOutcome>) {
+    this.session = undefined;
+    this.stop = undefined;
+    this.stopConfirmed = false;
+    this.start = start(this);
+  }
+}
 
 /**
  * Builds the Revyl runtime and the owner the host loads its bindings through. The owner's module is
@@ -110,59 +133,43 @@ export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRe
 class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly client: RevylClient;
   private readonly options: RevylRuntimeOptions;
-  /** One session per lease, keyed so a repeat allocation of a live lease reuses its device. */
-  private readonly sessions = new Map<string, RevylSession>();
   /**
-   * Leases whose release Revyl confirmed, oldest first and bounded. A repeat release reports the
-   * release already made instead of asking Revyl for a session it no longer holds.
+   * A lease entry exists from the moment `start_device` is sent until Revyl confirms `/stop` for every
+   * session that start produced. Only a confirmed stop removes it. Allocate, join, release, recovery and
+   * shutdown all read and write this one entry; nothing else holds a cleanup handle.
+   *
+   * `start` is how every reader learns what the lease rented, including a start whose caller stopped
+   * waiting for it: the request outlives that caller to learn what it rented, and until it answers,
+   * nobody knows whether there is a device to stop. `stop` is what the entry owes, so an entry that is
+   * still here is an unconfirmed release, and one that rented nothing is not here at all.
    */
-  private readonly confirmedReleases = new Map<string, string>();
-  /** Allocations that have not settled; shutdown waits for these before it stops anything. */
-  private readonly inFlightAllocations = new Set<Promise<void>>();
-  /**
-   * One entry per lease whose device is being rented, kept until the session reaches the table. A second
-   * allocation of that lease joins it rather than renting a device nobody will stop.
-   */
-  private readonly pendingAllocations = new Map<string, Promise<RevylAllocation>>();
-  /**
-   * Ends of starts whose caller stopped waiting, one per lease. The request outlives that caller to learn
-   * what it rented, so a release or shutdown that arrives in the meantime waits for this rather than
-   * reporting a device Revyl is still holding.
-   */
-  private readonly lateStartEnds = new Map<string, Promise<RevylLateStartEnd | undefined>>();
+  private readonly leases = new Map<string, RevylLeaseEntry>();
   private shuttingDown = false;
   readonly provider = REVYL_PROVIDER;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
-    // The in-flight entry is recorded before the first `await`, so a shutdown that races a start
-    // cannot miss a device that is already being rented.
-    allocate: (lease, context) => this.trackAllocation(lease, context),
+    allocate: (lease, context) => this.allocate(lease, context),
     release: async (lease) => await this.release(lease),
   };
 
   readonly recoverExpiredLease: ProviderExpiredLeaseRecovery = async (lease) => {
     requireRevylLease(lease, 'recover');
-    const { providerSessionId, warnings } = await this.stopLeaseSession(lease);
-    // The daemon forgets a pending release once recovery resolves, so a stop Revyl did not confirm
-    // has to keep the lease pending rather than report a device Revyl may still be holding.
-    if (warnings.length > 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Revyl did not confirm the release of expired lease ${lease.leaseId}.`,
-        {
-          reason: 'provider-cleanup-pending',
-          leaseId: lease.leaseId,
-          providerSessionId,
-          warnings,
-          hint: `End the Revyl session ${providerSessionId}; the device stays rented and billed until it is.`,
-        },
-      );
-    }
+    const entry = this.leases.get(lease.leaseId);
+    const providerSessionId = revylSessionIdForLease(lease.leaseId);
+    // The daemon restarted and holds a persisted lease with no entry beside it. The id derived from the
+    // lease is the only handle left, and Revyl answers a session it never had as gone.
+    const failure = entry
+      ? (await this.endLease(lease.leaseId, entry))?.failure
+      : await this.stopRented({ sessionId: providerSessionId });
+    // The daemon forgets a pending release once recovery resolves, so a stop Revyl did not confirm has to
+    // keep the lease pending rather than report a device Revyl may still be holding.
+    if (failure !== undefined)
+      throw revylReleasePending(lease.leaseId, { providerSessionId, failure });
   };
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
-    const session = this.sessions.get(request.leaseId);
+    const session = this.leases.get(request.leaseId)?.session;
     if (!session) return null;
     // `--platform ios` names the same device as `--platform apple`, so the request is answered with
     // the platform selector's own rule rather than a field compare that would drop it.
@@ -199,116 +206,48 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   /**
-   * Ends every session this runtime holds and reports what it could not confirm. An allocation still
-   * waiting for its device is awaited first: it has already rented one, and dropping it here would
-   * leave that device running with nobody holding its id. So is a start whose caller gave up: its request
-   * is still owed the answer that names the device, and the end made from that answer is the only thing
-   * that stops it. A stop that failed keeps its lease in the table, so a later release, or a daemon that
-   * survives this shutdown, can retry the same session instead of recording a release Revyl never
-   * confirmed.
+   * Ends every session this runtime holds and reports what it could not confirm. Every entry is awaited
+   * first, whether or not its start has answered: a start already in flight has a device on its way, and
+   * a start whose caller gave up is still owed the answer that names the device it rented. A stop that
+   * failed keeps its entry in the map, so a release that follows, or a daemon that survives this
+   * shutdown, retries the same session instead of recording a release Revyl never confirmed.
    */
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
-    await this.awaitInFlightAllocations();
-    const lateEnds = await this.drainLateStartEnds();
-    const sessions = [...this.sessions.entries()];
-    const outcomes = await Promise.all([
-      ...lateEnds.map(async (end) =>
-        end === undefined
-          ? undefined
-          : {
-              sessionId: end.sessionId,
-              warning: end.confirmed
-                ? undefined
-                : {
-                    code: 'REVYL_SESSION_STOP_FAILED',
-                    message: `Revyl did not confirm the release of the session its late start reported (${end.sessionId}).`,
-                    providerSessionId: end.sessionId,
-                  },
-            },
-      ),
-      ...sessions.map(async ([leaseId, session]) => {
-        // `stopSession` reads Revyl's "no such session" as released; anything else keeps the lease.
-        const warning = await this.stopSession(session.runId, session.sessionId);
-        if (warning === undefined) {
-          this.sessions.delete(leaseId);
-          this.rememberRelease(leaseId, session.sessionId);
-        }
-        return { sessionId: session.sessionId, warning };
-      }),
-    ]);
-    const unconfirmed = outcomes.filter((outcome) => outcome?.warning !== undefined);
+    // Snapshot first: `allocate` refuses once the flag is set, and it does that before it sends anything,
+    // so no entry can be added while this runs.
+    const entries = [...this.leases.entries()];
+    const outcomes = await Promise.all(
+      entries.map(async ([leaseId, entry]) => await this.endLease(leaseId, entry)),
+    );
+    const ended = outcomes.filter((outcome) => outcome !== undefined);
+    const unconfirmed = ended.filter((outcome) => outcome!.failure !== undefined);
     if (unconfirmed.length === 0) return;
     throw new AppError(
       'COMMAND_FAILED',
-      `Revyl did not release ${unconfirmed.length} of ${sessions.length + lateEnds.length} session(s) this runtime started.`,
+      `Revyl did not release ${unconfirmed.length} of ${ended.length} session(s) this runtime started.`,
       {
         reason: 'provider-cleanup-pending',
-        providerSessionIds: unconfirmed.map((outcome) => outcome!.sessionId),
-        causes: unconfirmed.map((outcome) => outcome!.warning?.message ?? ''),
+        providerSessionIds: unconfirmed.map((outcome) => outcome!.providerSessionId),
+        causes: unconfirmed.map((outcome) => outcome!.failure ?? ''),
         hint: 'End the listed Revyl sessions; their devices stay rented and billed until they are.',
       },
     );
   }
 
-  /** Takes every pending end of a start whose caller gave up, so shutdown can report what they found. */
-  private async drainLateStartEnds(): Promise<Array<RevylLateStartEnd | undefined>> {
-    const pending = [...this.lateStartEnds.values()];
-    this.lateStartEnds.clear();
-    return await Promise.all(pending.map(async (end) => await end.catch(() => undefined)));
-  }
-
-  /** Registers one allocation as in flight, so {@link shutdown} either waits for it or refuses it. */
-  private trackAllocation(
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ): Promise<Record<string, unknown> | undefined> {
-    const run = this.runAllocation(lease, context);
-    const inFlight = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.inFlightAllocations.add(inFlight);
-    return run.finally(() => {
-      this.inFlightAllocations.delete(inFlight);
-    });
-  }
-
   /**
-   * One allocation. A start that became ready while shutdown was already running has rented a device
-   * no lease list holds, so it ends that device itself and reports the refusal rather than handing the
-   * session to a runtime that is gone. A repeat allocation of a session the runtime already held needs
-   * no such cleanup: shutdown stops that one with the rest.
-   */
-  private async runAllocation(
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ): Promise<Record<string, unknown> | undefined> {
-    const allocated = await this.allocateOncePerLease(lease, context);
-    if (allocated === undefined) return undefined;
-    const { session, rentedNow } = allocated;
-    if (!this.shuttingDown) return allocationResult(session);
-    if (rentedNow) {
-      await stopRevylSession(this.client, session.runId, session.sessionId).catch(() => undefined);
-    }
-    throw shuttingDownDuring(lease.leaseId, 'allocate');
-  }
-
-  /**
-   * One device per lease. Two allocations that arrive before either finishes would otherwise each rent
-   * a device, and the second session would replace the first in the table and leave it running with
-   * nothing pointing at it; the second call joins the first instead. The session reaches the table while
-   * the start is still registered, so a third allocation cannot arrive in the gap between one finishing
-   * and the other learning about it and rent a device of its own.
+   * One allocation of one lease. A lease already in the map is joined rather than started again, so two
+   * allocations that overlap share the one device the first of them rents; a lease not in the map has its
+   * entry registered before the request goes out, which is what makes it the only handle for what that
+   * request rents.
    *
-   * A caller joins only after its own flags are refused and its own budget is installed, so joining
-   * neither accepts a profile Revyl would ignore nor inherits the patience of the caller that started
-   * first.
+   * A caller that ran out of its own patience reports that, and leaves the entry alone: the device belongs
+   * to every caller that joined the start, and the ones still waiting get the answer this one gave up on.
    */
-  private async allocateOncePerLease(
+  private async allocate(
     lease: DeviceLease,
     context?: LeaseLifecycleContext,
-  ): Promise<RevylAllocation | undefined> {
+  ): Promise<Record<string, unknown> | undefined> {
     const platform =
       lease.leaseProvider === this.provider
         ? platformForRevylLeaseBackend(lease.backend)
@@ -318,35 +257,99 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // Before the join below: an allocation that reuses a live lease still carries flags of its own,
     // and Revyl reads none of them — whether it starts a device or joins one that is starting.
     rejectRefusedRevylProfileFields(context);
-    const pending = this.pendingAllocations.get(lease.leaseId);
-    if (pending) return await this.joinAllocation(pending, platform, context);
-    // Registration happens inside the published start, so a caller that waits for it — a release that
-    // comes in while the device is still being rented — always finds the session it has to end.
-    const starting = this.allocate(lease, platform, context).then((allocated) => {
-      // Recorded while the start is still registered, so no allocation can arrive in the gap after it
-      // and rent a device of its own.
-      if (!this.shuttingDown) this.sessions.set(lease.leaseId, allocated.session);
-      return allocated;
-    });
-    this.pendingAllocations.set(lease.leaseId, starting);
-    try {
-      return await starting;
-    } finally {
-      this.pendingAllocations.delete(lease.leaseId);
+    // Nothing between here and the entry's registration awaits, so one caller can never miss another's.
+    if (this.shuttingDown) throw shuttingDownDuring(lease.leaseId, 'allocate');
+    const existing = this.leases.get(lease.leaseId);
+    // The caller that started the device waits on it the same way a joiner does: one entry, one awaitable,
+    // each caller bounded by its own patience.
+    const entry = existing ?? this.rent(lease, platform, context);
+    const outcome = await this.join(entry, platform, context);
+    if (this.shuttingDown) {
+      // The device this start rented is already an entry shutdown is ending, so this caller only reports
+      // the refusal rather than handing a session to a runtime that is gone.
+      throw shuttingDownDuring(lease.leaseId, 'allocate');
     }
+    if (outcome.status === 'failed') throw outcome.error;
+    return allocationResult(outcome.session);
   }
 
   /**
-   * Waits for the start another caller already has running for this lease, within this caller's own
-   * budget. Hanging up here never stops that start: the device belongs to every caller that joined it, so
-   * this one reports its own cancellation or its own expired deadline and the start runs on for the
-   * callers still waiting. A joiner never took the device, so it never ends it either way.
+   * Rents the lease's device and returns the entry that owns what the request rents. The entry is in the
+   * map before the first `await`, so an allocation that arrives mid-start joins it instead of renting a
+   * second device, and a release that arrives then has somewhere to find the session.
    */
-  private async joinAllocation(
-    pending: Promise<RevylAllocation>,
+  private rent(lease: DeviceLease, platform: RevylPlatform, context?: LeaseLifecycleContext) {
+    const entry = new RevylLeaseEntry((target) => this.runStart(target, lease, platform, context));
+    this.leases.set(lease.leaseId, entry);
+    return entry;
+  }
+
+  /**
+   * Starts the lease's device, records what it rented in its entry, and ends from that entry a start that
+   * never became ready — before the failure reaches the caller, so a failed allocate never leaves a device
+   * running with only a later release to end it. A start Revyl refused outright rented nothing, so its
+   * entry is closed rather than kept.
+   */
+  private async runStart(
+    entry: RevylLeaseEntry,
+    lease: DeviceLease,
     platform: RevylPlatform,
     context?: LeaseLifecycleContext,
-  ): Promise<RevylAllocation> {
+  ): Promise<RevylStartOutcome> {
+    const leaseId = lease.leaseId;
+    let started: RevylStart;
+    try {
+      started = await this.startLeaseDevice(lease, platform, context);
+    } catch (error) {
+      // The start failed somewhere this module does not model, and the request may already have gone out,
+      // so the id it carried is the handle the entry has to end.
+      started = {
+        status: 'failed',
+        error,
+        rented: { sessionId: revylSessionIdForLease(leaseId) },
+      };
+    }
+    if (started.status === 'ready') {
+      entry.session = started.session;
+      entry.stop = { runId: started.session.runId, sessionId: started.session.sessionId };
+      return { status: 'ready', session: started.session };
+    }
+    const rented = started.rented;
+    // Revyl settled with a refusal: no session came of this start, so the entry owes nothing and is not
+    // kept for a stop that would only answer 404.
+    if (rented === undefined) {
+      entry.stopConfirmed = true;
+      this.closeLease(leaseId, entry);
+      return { status: 'failed', error: started.error };
+    }
+    entry.stop = rented;
+    // The entry ends what a failed start rented rather than waiting for a release to ask: the device is
+    // billed from the moment Revyl made it, and this is the first moment its id is known.
+    const failure = await this.stopRented(rented);
+    if (failure === undefined) {
+      entry.stopConfirmed = true;
+      this.closeLease(leaseId, entry);
+      return { status: 'failed', error: started.error };
+    }
+    // What is still billed outranks why the start did not finish, so the stop's failure is reported with
+    // the session id that has to be ended by hand.
+    return { status: 'failed', error: revylStartUndoFailed(rented, failure, started.error) };
+  }
+
+  /**
+   * Joins the start another caller already has running for this lease, within this caller's own budget.
+   * Hanging up here never stops that start and never closes the entry: this caller took no device, so it
+   * ends none, and the callers still waiting are owed the same answer.
+   */
+  private async join(
+    entry: RevylLeaseEntry,
+    platform: RevylPlatform,
+    context?: LeaseLifecycleContext,
+  ): Promise<RevylStartOutcome> {
+    const live = entry.session;
+    // A repeat allocation of a session this runtime already holds is that same device, and Revyl is asked
+    // for nothing.
+    if (live) return { status: 'ready', session: live };
     const budget = revylCallerBudget(context);
     // The number the report names is the wait this caller was granted, so it is measured from the moment
     // the join started rather than from the deadline's own epoch instant.
@@ -354,47 +357,92 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     const gaveUp = revylCallerWait<never>(budget.deadline ?? Number.POSITIVE_INFINITY, budget, () =>
       revylCallerGaveUp(platform, budget, Math.max(0, (budget.deadline ?? joinedAt) - joinedAt)),
     );
-    if (gaveUp === undefined) return await joinOf(pending);
+    if (gaveUp === undefined) return await entry.start;
     try {
-      return await joinOf(Promise.race([pending, gaveUp.promise]));
+      return await Promise.race([entry.start, gaveUp.promise]);
     } finally {
       gaveUp.dispose();
     }
   }
 
-  /** Resolves once no allocation is in flight, so shutdown stops everything that exists. */
-  private async awaitInFlightAllocations(): Promise<void> {
-    const pending = [...this.inFlightAllocations];
-    if (pending.length === 0) return;
-    await Promise.allSettled(pending);
-    await this.awaitInFlightAllocations();
+  /**
+   * Ends one entry: waits for its start, sends the `/stop` it owes, and closes it only when Revyl confirms
+   * the session is gone. Every path that ends a device comes through here, so an unconfirmed stop stays in
+   * the map for the next release, recovery, or shutdown to retry on the same session.
+   *
+   * The wait is what makes a release that lands mid-start stop the device that start rents. A release
+   * arrives that way when the daemon drops a lease whose caller is gone while a caller still waits for the
+   * shared start.
+   */
+  private async endLease(
+    leaseId: string,
+    entry: RevylLeaseEntry,
+  ): Promise<RevylStopOutcome | undefined> {
+    await entry.start;
+    const target = entry.stop;
+    // Nothing owed means nothing rented: the start was refused, or its stop is already confirmed.
+    if (target === undefined) return undefined;
+    const session = entry.session;
+    // A failed start has already ended its own session before this point, and a caller that releases such
+    // a lease must not make Revyl see a second stop for a session already gone.
+    const failure = entry.stopConfirmed ? undefined : await this.stopRented(target);
+    if (failure === undefined) {
+      entry.stopConfirmed = true;
+      this.closeLease(leaseId, entry);
+    }
+    return {
+      providerSessionId: target.sessionId,
+      ...(session === undefined ? {} : { data: allocationResult(session) }),
+      ...(failure === undefined ? {} : { failure }),
+    };
+  }
+
+  /** Removes an entry once Revyl has confirmed its stop, and only while it is still the map's entry. */
+  private closeLease(leaseId: string, entry: RevylLeaseEntry): void {
+    if (this.leases.get(leaseId) === entry) this.leases.delete(leaseId);
   }
 
   /**
-   * One allocation's session, with `rentedNow` naming whether this call is the one that took the device.
-   * The lease is already known to be Revyl's, and its context already refused, by the caller above.
+   * Ends the lease's session and reports what is still owed, or throws so the daemon keeps the release
+   * pending and retries it. A device Revyl still holds is never reported as released.
    */
-  private async allocate(
-    lease: DeviceLease,
-    platform: RevylPlatform,
-    context?: LeaseLifecycleContext,
-  ): Promise<RevylAllocation> {
-    if (this.shuttingDown) throw shuttingDownDuring(lease.leaseId, 'allocate');
-    // A repeat allocation of a live lease is that same device, and Revyl is asked for nothing.
-    const existing = this.sessions.get(lease.leaseId);
-    if (existing) return { session: existing, rentedNow: false };
-    return { session: await this.createSession(platform, lease, context), rentedNow: true };
+  private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
+    if (lease.leaseProvider !== this.provider || !platformForRevylLeaseBackend(lease.backend)) {
+      return undefined;
+    }
+    const entry = this.leases.get(lease.leaseId);
+    // No entry means nothing is owed: this lease never rented, or a confirmed stop already closed it, and
+    // Revyl is not asked again for a release it has already confirmed.
+    if (!entry) return undefined;
+    const outcome = await this.endLease(lease.leaseId, entry);
+    if (outcome === undefined) return undefined;
+    if (outcome.failure !== undefined) throw revylReleasePending(lease.leaseId, outcome);
+    return outcome.data ?? { providerSessionId: outcome.providerSessionId };
   }
 
   /**
-   * Starts the device. A start that never became ready is already cleaned up inside
-   * `startRevylSession`, which stops the run it started before it reports the failure.
+   * One `/stop`, with Revyl's own "no such session" read as released: that device is not rented. The
+   * failure's message is what the caller reports; `undefined` is the confirmation the entry needs.
    */
-  private async createSession(
-    platform: RevylPlatform,
+  private async stopRented(target: RevylRentedSession): Promise<string | undefined> {
+    try {
+      await stopRevylSession(this.client, target.runId, target.sessionId);
+      return undefined;
+    } catch (error) {
+      return isRevylSessionGone(error) ? undefined : errorMessage(error);
+    }
+  }
+
+  /**
+   * One start. The caller's own budget rides along, so a start that runs past it fails as that caller's
+   * expired patience rather than as a device nobody asked for; the request itself keeps the client's
+   * longer budget, because its answer is the only thing that names what was rented.
+   */
+  private async startLeaseDevice(
     lease: DeviceLease,
+    platform: RevylPlatform,
     context?: LeaseLifecycleContext,
-  ): Promise<RevylSession> {
+  ): Promise<RevylStart> {
     const { resolveRevylAppUrl, resolveRevylDeviceSelection } =
       await import('./session-allocation.ts');
     const selection = resolveRevylDeviceSelection(
@@ -414,132 +462,13 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       deviceModel: selection.deviceModel,
       osVersion: selection.osVersion,
       ...revylCallerBudget(context),
-      // A start this caller gave up on still gets an answer, and that answer names the device. The end it
-      // triggers belongs to the lease, so the release that follows waits for it.
-      onLateStart: (cleanup) => {
-        this.lateStartEnds.set(lease.leaseId, cleanup);
-      },
     });
-  }
-
-  /**
-   * Ends what one lease rented and reports the verdict instead of throwing it away: a stop Revyl
-   * refused or never answered leaves a device under rent, and the caller has to hear that. The lease
-   * keeps its session until the stop is confirmed, so the daemon's retry path retries the same
-   * session rather than reporting a release that never happened.
-   */
-  private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
-    if (lease.leaseProvider !== this.provider || !platformForRevylLeaseBackend(lease.backend)) {
-      return undefined;
-    }
-    // A release can arrive while the device is still being rented: the daemon releases the lease when a
-    // joining caller is canceled, and the start that caller joined belongs to somebody still waiting for
-    // it. Until that start settles, its session is not in the table and there would be nothing to stop,
-    // so the release would report a device Revyl is holding. The start's own outcome is not the release's
-    // — one that failed has already stopped what it rented — and waiting is what makes the stop below see
-    // the session it rented.
-    await this.awaitPendingAllocation(lease.leaseId);
-    const lateEnd = await this.awaitLateStartEnd(lease.leaseId);
-    if (lateEnd !== undefined) {
-      if (!lateEnd.confirmed) {
-        return {
-          providerSessionId: lateEnd.sessionId,
-          warnings: [
-            {
-              code: 'REVYL_SESSION_STOP_FAILED',
-              message: `Revyl did not confirm the release of the session its late start reported (${lateEnd.sessionId}).`,
-              providerSessionId: lateEnd.sessionId,
-            },
-          ],
-          hint: `End the Revyl session ${lateEnd.sessionId}; the device stays rented and billed until it is.`,
-        };
-      }
-      this.rememberRelease(lease.leaseId, lateEnd.sessionId);
-      return { providerSessionId: lateEnd.sessionId };
-    }
-    const session = this.sessions.get(lease.leaseId);
-    if (!session) {
-      const confirmed = this.confirmedReleases.get(lease.leaseId);
-      return confirmed === undefined ? undefined : { providerSessionId: confirmed };
-    }
-    const warning = await this.stopSession(session.runId, session.sessionId);
-    if (warning) {
-      return {
-        ...allocationResult(session),
-        warnings: [warning],
-        hint: `End the Revyl session ${session.sessionId}; the device stays rented and billed until it is.`,
-      };
-    }
-    this.sessions.delete(lease.leaseId);
-    this.rememberRelease(lease.leaseId, session.sessionId);
-    return allocationResult(session);
-  }
-
-  /**
-   * Waits for the start this lease has running, if it has one. Its outcome is not the waiter's to
-   * report: a start that never became ready has already stopped what it rented, and what matters here is
-   * only that a start that did rent a device has put its session where the stop can find it.
-   */
-  private async awaitPendingAllocation(leaseId: string): Promise<void> {
-    await this.pendingAllocations.get(leaseId)?.catch(() => undefined);
-  }
-
-  /**
-   * Waits for the end of a start this lease's caller gave up on, and takes it: the release that waits
-   * reports what that end found, and a repeat release has nothing left to report.
-   */
-  private async awaitLateStartEnd(leaseId: string): Promise<RevylLateStartEnd | undefined> {
-    const end = this.lateStartEnds.get(leaseId);
-    if (end === undefined) return undefined;
-    this.lateStartEnds.delete(leaseId);
-    return await end.catch(() => undefined);
-  }
-
-  /**
-   * Stops one lease's session whether or not this process started it. With no session in hand the id
-   * is derived from the lease, which is the identity `start_device` was given for it, so a recovery
-   * in a restarted daemon still names the session.
-   */
-  private async stopLeaseSession(lease: DeviceLease): Promise<RevylReleaseOutcome> {
-    const session = this.sessions.get(lease.leaseId);
-    const providerSessionId = session?.sessionId ?? revylSessionIdForLease(lease.leaseId);
-    const warning = await this.stopSession(session?.runId, providerSessionId);
-    if (!warning && session) {
-      this.sessions.delete(lease.leaseId);
-      this.rememberRelease(lease.leaseId, providerSessionId);
-    }
-    return { providerSessionId, warnings: warning === undefined ? [] : [warning] };
-  }
-
-  /** One stop, with Revyl's own "no such session" read as released: that device is not rented. */
-  private async stopSession(
-    runId: string | undefined,
-    providerSessionId: string,
-  ): Promise<RevylReleaseWarning | undefined> {
-    try {
-      await stopRevylSession(this.client, runId, providerSessionId);
-      return undefined;
-    } catch (error) {
-      if (isRevylSessionGone(error)) return undefined;
-      return {
-        code: 'REVYL_SESSION_STOP_FAILED',
-        message: errorMessage(error),
-        providerSessionId,
-      };
-    }
-  }
-
-  private rememberRelease(leaseId: string, providerSessionId: string): void {
-    this.confirmedReleases.set(leaseId, providerSessionId);
-    if (this.confirmedReleases.size <= CONFIRMED_RELEASE_MEMORY) return;
-    const oldest = this.confirmedReleases.keys().next();
-    if (!oldest.done) this.confirmedReleases.delete(oldest.value);
   }
 
   private sessionForDevice(device: DeviceInfo): RevylSession | undefined {
     const parsed = parseRevylDeviceId(device.id);
     if (!parsed) return undefined;
-    const session = this.sessions.get(parsed.leaseId);
+    const session = this.leases.get(parsed.leaseId)?.session;
     return session?.platform === parsed.platform ? session : undefined;
   }
 }
@@ -555,12 +484,15 @@ function revylCallerBudget(context?: LeaseLifecycleContext): RevylCallerBudget {
   };
 }
 
-/**
- * What a joined allocation reports: the device the caller that started it rented, which this call did
- * not take and therefore does not owe ending.
- */
-async function joinOf(pending: Promise<RevylAllocation>): Promise<RevylAllocation> {
-  return { ...(await pending), rentedNow: false };
+/** The failure for a release Revyl did not confirm, with the session an operator has to end by hand. */
+function revylReleasePending(leaseId: string, outcome: RevylStopOutcome): AppError {
+  return new AppError('COMMAND_FAILED', `Revyl did not confirm the release of lease ${leaseId}.`, {
+    reason: 'provider-cleanup-pending',
+    leaseId,
+    providerSessionId: outcome.providerSessionId,
+    cause: outcome.failure ?? '',
+    hint: `End the Revyl session ${outcome.providerSessionId}; the device stays rented and billed until it is.`,
+  });
 }
 
 /** Recovery and lifecycle calls arrive for one provider's lease; anything else is a routing bug. */

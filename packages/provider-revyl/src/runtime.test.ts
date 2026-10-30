@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { afterEach, describe, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   revylLease,
@@ -251,16 +251,33 @@ test('a stop Revyl refuses keeps the lease for a retry and reports the session i
   const lease = revylLease('ios');
   await runtime.leaseLifecycle?.allocate?.(lease);
 
-  // The refusal is reported, not thrown away, and the release is not claimed.
-  const refused = await runtime.leaseLifecycle?.release?.(lease);
-  const warning = refused?.warnings as readonly Record<string, unknown>[] | undefined;
-  assert.equal(warning?.length, 1);
-  assert.equal(warning?.[0]?.code, 'REVYL_SESSION_STOP_FAILED');
-  assert.equal(refused?.providerSessionId, revylSessionIdForLease('lease-1'));
+  // A stop Revyl did not confirm is never reported as a release: the release fails, so the daemon keeps
+  // the lease pending instead of recording a device Revyl is still holding and billing.
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.release?.(lease),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-cleanup-pending' &&
+      error.details?.providerSessionId === revylSessionIdForLease('lease-1'),
+  );
 
-  // The lease keeps its session, so the daemon's retry path can try again on the same handle.
-  await runtime.leaseLifecycle?.release?.(lease);
+  // The entry keeps its session, so the daemon's retry path retries the same handle.
+  await assert.rejects(async () => await runtime.leaseLifecycle?.release?.(lease));
   assert.equal(stops(fixture).length, 2);
+});
+
+test('a stop Revyl confirms releases the lease, and a repeat release asks Revyl nothing', async () => {
+  const fixture = await backend();
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  await runtime.leaseLifecycle?.allocate?.(lease);
+
+  const released = await runtime.leaseLifecycle!.release!(lease);
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+
+  // The entry is gone, so there is nothing left to stop and nothing left to report.
+  assert.equal(await runtime.leaseLifecycle!.release!(lease), undefined);
+  assert.equal(stops(fixture).length, 1);
 });
 
 test('a stop that Revyl answers as a gone session reads as released and forgets the lease', async () => {
@@ -272,12 +289,13 @@ test('a stop that Revyl answers as a gone session reads as released and forgets 
   const lease = revylLease('ios');
   await runtime.leaseLifecycle?.allocate?.(lease);
 
+  // Revyl has nothing left to release, which is the confirmation the entry needed.
   const released = await runtime.leaseLifecycle?.release?.(lease);
-  assert.equal(released?.warnings, undefined);
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
   assert.equal(stops(fixture).length, 1);
 
-  // Revyl has nothing left to release, so a repeat release does not reach the backend again.
-  await runtime.leaseLifecycle?.release?.(lease);
+  // A repeat release does not reach the backend again.
+  assert.equal(await runtime.leaseLifecycle?.release?.(lease), undefined);
   assert.equal(stops(fixture).length, 1);
 });
 
@@ -287,20 +305,172 @@ test('shutdown waits for a start already in flight and releases the device it re
   const fixture = await backend({ healthDelayMs: 200 });
   const runtime = fixture.createRuntime();
   const allocating = runtime.leaseLifecycle?.allocate?.(revylLease('ios'));
-  await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
-  await runtime.shutdown();
-
-  await assert.rejects(
+  // The handler goes on before shutdown is asked for, so the rejection below is never unhandled.
+  const refused = assert.rejects(
     async () => await allocating,
     (error: unknown) =>
       error instanceof AppError && error.details?.reason === 'runtime-shutting-down',
   );
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
+  await runtime.shutdown();
+  await refused;
+
   assert.ok(
     stops(fixture).includes(
       `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
     ),
     `shutdown must release the session a start finished renting: ${stops(fixture).join(', ')}`,
   );
+});
+
+test('a release that lands mid-start stops the session only once Revyl has made it', async () => {
+  // Revyl creates the session when it answers `start_device`, not when it is asked. A `/stop` sent inside
+  // that gap names a session Revyl never had, and Revyl's 404 is exactly what a stop reads as "already
+  // gone" — so a cleanup that raced the start would report a release and leave the device billed. The fake
+  // backend answers such a premature stop with that 404, which makes the ordering the thing under test.
+  const fixture = await backend({ startDelayMs: 300, sessionExistsOnceStarted: true });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+
+  const allocating = runtime.leaseLifecycle?.allocate?.(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+  // The release lands while the start is in flight. It waits for the answer rather than stopping the id it
+  // only has from the lease, and that is what makes the stop below land after the session exists.
+  const released = await runtime.leaseLifecycle!.release!(lease);
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.equal((await allocating)?.providerSessionId, revylSessionIdForLease('lease-1'));
+
+  const answered = fixture.answeredPaths();
+  const stopAt = answered.findIndex((path) => path.endsWith('/stop'));
+  const startedAt = answered.findIndex((path) => path.endsWith('/start_device'));
+  assert.ok(stopAt >= 0 && startedAt >= 0, `both requests reached Revyl: ${answered.join(', ')}`);
+  assert.ok(
+    stopAt > startedAt,
+    `the stop must follow the answer that names the device: ${answered.join(', ')}`,
+  );
+});
+
+/**
+ * The sequences every lease fix has had to satisfy, each one asserted the same way: exactly one confirmed
+ * `/stop` per session Revyl actually rented, no stop that Revyl never confirmed read as a release, and
+ * never a second device for one lease.
+ */
+describe('the lease invariant', () => {
+  test('a start that answers after its caller gave up is stopped once, by release', async () => {
+    const fixture = await backend({ startDelayMs: 300 });
+    const runtime = fixture.createRuntime();
+    const lease = revylLease('ios');
+
+    await assert.rejects(
+      async () => await runtime.leaseLifecycle!.allocate!(lease, { deadline: Date.now() + 120 }),
+    );
+    await runtime.leaseLifecycle!.release!(lease);
+
+    assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+    await runtime.shutdown();
+    assert.equal(stops(fixture).length, 1, 'one rented session, one stop');
+  });
+
+  test('a start that answers after its caller gave up is stopped once, by shutdown', async () => {
+    const fixture = await backend({ startDelayMs: 300 });
+    const runtime = fixture.createRuntime();
+
+    await assert.rejects(
+      async () =>
+        await runtime.leaseLifecycle!.allocate!(revylLease('ios'), { deadline: Date.now() + 120 }),
+    );
+    await runtime.shutdown();
+
+    assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+  });
+
+  test('a cancelled joiner takes no device and stops none', async () => {
+    const fixture = await backend({ startDelayMs: 300 });
+    const runtime = fixture.createRuntime();
+    const lease = revylLease('ios');
+    const first = runtime.leaseLifecycle!.allocate!(lease);
+    await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+
+    const controller = new AbortController();
+    const joining = runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
+    controller.abort();
+    await assert.rejects(async () => await joining);
+
+    assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+    await runtime.shutdown();
+    assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+  });
+
+  test('a failed stop is retried on the same session until Revyl confirms it', async () => {
+    const stopPath = stopPathFor('lease-1');
+    let refused = false;
+    const fixture = await backend({
+      respond: {
+        [stopPath]: () => {
+          refused = !refused;
+          return refused
+            ? { status: 500, body: { detail: 'backend down' } }
+            : { body: { success: true, request_accepted: true } };
+        },
+      },
+    });
+    const runtime = fixture.createRuntime();
+    const lease = revylLease('ios');
+    await runtime.leaseLifecycle!.allocate!(lease);
+
+    await assert.rejects(
+      async () => await runtime.leaseLifecycle!.release!(lease),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'provider-cleanup-pending',
+    );
+    // The retry is what confirms it, and only then is the lease let go.
+    assert.equal(
+      (await runtime.leaseLifecycle!.release!(lease))?.providerSessionId,
+      revylSessionIdForLease('lease-1'),
+    );
+    assert.equal(stops(fixture).length, 2);
+
+    await runtime.shutdown();
+    assert.equal(stops(fixture).length, 2, 'a confirmed stop is never sent again');
+  });
+
+  test('a retry during an in-flight start joins it instead of renting a second device', async () => {
+    const fixture = await backend({ startDelayMs: 300 });
+    const runtime = fixture.createRuntime();
+    const lease = revylLease('ios');
+
+    const first = runtime.leaseLifecycle!.allocate!(lease);
+    await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
+    const second = await runtime.leaseLifecycle!.allocate!(lease);
+
+    assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+    assert.equal(second?.providerSessionId, revylSessionIdForLease('lease-1'));
+    assert.equal(
+      fixture.paths().filter((path) => path.endsWith('/start_device')).length,
+      1,
+      'one lease rents one device',
+    );
+    await runtime.shutdown();
+    assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+  });
+
+  test('shutdown during an in-flight start stops the device it rents', async () => {
+    const fixture = await backend({ healthDelayMs: 200 });
+    const runtime = fixture.createRuntime();
+    const allocating = runtime.leaseLifecycle!.allocate!(revylLease('ios'));
+    // The handler goes on before shutdown is asked for, so the rejection below is never unhandled.
+    const refused = assert.rejects(
+      async () => await allocating,
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'runtime-shutting-down',
+    );
+    await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
+
+    await runtime.shutdown();
+    await refused;
+    assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+  });
 });
 
 /** Waits for a fixture-side fact, which is how a test races a start without a fixed sleep. */
@@ -310,6 +480,11 @@ async function waitFor(condition: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
   throw new Error('The fixture never reached the expected state.');
+}
+
+/** The `/stop` path one lease's session is addressed by. */
+function stopPathFor(leaseId: string): string {
+  return `POST /api/v1/execution/device/sessions/${revylSessionIdForLease(leaseId)}/stop`;
 }
 
 test('shutdown refuses a new allocation instead of renting a device nobody will release', async () => {
@@ -348,13 +523,15 @@ test('shutdown reports a session it could not stop instead of forgetting it', as
   );
   assert.equal(stops(fixture).length, 1);
 
-  // The lease keeps its session across the failed shutdown, so the release that follows retries the
-  // same session and reports what is still billed instead of recording a release that never happened.
-  const refused = await runtime.leaseLifecycle?.release?.(lease);
-  const warning = refused?.warnings as readonly Record<string, unknown>[] | undefined;
-  assert.equal(warning?.length, 1);
-  assert.equal(warning?.[0]?.code, 'REVYL_SESSION_STOP_FAILED');
-  assert.equal(refused?.providerSessionId, revylSessionIdForLease('lease-1'));
+  // The lease keeps its entry across the failed shutdown, so the release that follows retries the same
+  // session and fails again rather than recording a release Revyl never confirmed.
+  await assert.rejects(
+    async () => await runtime.leaseLifecycle?.release?.(lease),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-cleanup-pending' &&
+      error.details?.providerSessionId === revylSessionIdForLease('lease-1'),
+  );
   assert.equal(stops(fixture).length, 2);
 });
 
@@ -464,6 +641,8 @@ test('an expired allocation deadline stops the start rather than reporting a lat
     fixture.paths().includes(healthPath),
     'the readiness read is what the deadline cuts short',
   );
+  // The deadline cuts the readiness read short, and the entry ends the session that read was for.
+  await waitFor(() => stops(fixture).length > 0);
   assert.deepEqual(stops(fixture), [
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
@@ -513,10 +692,12 @@ test('a start slower than the allocation budget is given up on and its session s
   const fixture = await backend({ startDelayMs: 400 });
   const runtime = fixture.createRuntime();
 
+  // The wait that ran out is the caller's, so the failure names that budget rather than a cancellation the
+  // caller never made.
   await assert.rejects(
     async () =>
       await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'provider-not-ready',
   );
   // The readiness polls belong to a start the caller no longer has, so none may have been sent yet.
   assert.equal(
@@ -540,13 +721,12 @@ test('a release waits for the answer of a start its caller gave up on and stops 
 
   await assert.rejects(
     async () => await runtime.leaseLifecycle?.allocate?.(lease, { deadline: Date.now() + 150 }),
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'provider-not-ready',
   );
   assert.deepEqual(stops(fixture), [], 'the stop waits for the answer that names the device');
 
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
-  assert.deepEqual(released?.warnings, undefined);
   assert.deepEqual(stops(fixture), [
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
@@ -555,15 +735,15 @@ test('a release waits for the answer of a start its caller gave up on and stops 
 });
 
 test('shutdown stops a device whose start answered after its caller gave up', async () => {
-  // Nothing is left to release here: the caller's own failure already ended its request for the device, so
-  // the only thing standing between this runtime and a device under rent is the end waiting on the answer.
+  // Nothing is left to release here: the caller's own budget ran out, and the entry that outlived it is the
+  // only thing standing between this runtime and a device under rent.
   const fixture = await backend({ startDelayMs: 400 });
   const runtime = fixture.createRuntime();
 
   await assert.rejects(
     async () =>
       await runtime.leaseLifecycle?.allocate?.(revylLease('ios'), { deadline: Date.now() + 150 }),
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'provider-not-ready',
   );
   await runtime.shutdown();
   assert.deepEqual(stops(fixture), [
