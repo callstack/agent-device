@@ -265,9 +265,6 @@ const SCREENSHOT_SCRIPT_STRING_FLAGS = [
   },
 ] as const;
 
-/** A density in pixels per point, or `native` for the display's own pixels. */
-export type ScreenshotPixelDensity = number | 'native';
-
 export type ScreenshotRequestFlags = {
   out?: string;
   overlayRefs?: boolean;
@@ -309,7 +306,8 @@ export type ScreenshotRuntimeFlags = Pick<
 export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
-  pixelDensity?: ScreenshotPixelDensity;
+  pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
@@ -321,7 +319,8 @@ export type ScreenshotPublicOptions = {
 export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
-  pixelDensity?: ScreenshotPixelDensity;
+  pixelDensity?: number;
+  nativeDensity?: boolean;
   screenMask?: ScreenshotScreenMask;
   fullscreen?: boolean;
   scale?: number;
@@ -336,7 +335,8 @@ export function screenshotOptionsFromFlags(
   return stripUndefined({
     overlayRefs: flags?.overlayRefs,
     cropOn: flags?.screenshotCropOn,
-    pixelDensity: flags?.screenshotNativeDensity ? 'native' : flags?.screenshotPixelDensity,
+    pixelDensity: flags?.screenshotPixelDensity,
+    nativeDensity: flags?.screenshotNativeDensity,
     screenMask: readScreenshotScreenMask(flags?.screenshotScreenMask),
     fullscreen: flags?.screenshotFullscreen,
     scale: flags?.screenshotScale,
@@ -353,11 +353,8 @@ export function screenshotFlagsFromOptions(
   return stripUndefined({
     overlayRefs: options.overlayRefs,
     screenshotCropOn: options.screenshotCropOn ?? options.cropOn,
-    screenshotPixelDensity:
-      options.screenshotPixelDensity ??
-      (options.pixelDensity === 'native' ? undefined : options.pixelDensity),
-    screenshotNativeDensity:
-      options.screenshotNativeDensity ?? (options.pixelDensity === 'native' ? true : undefined),
+    screenshotPixelDensity: options.screenshotPixelDensity ?? options.pixelDensity,
+    screenshotNativeDensity: options.screenshotNativeDensity ?? options.nativeDensity,
     screenshotScreenMask: readScreenshotScreenMask(
       options.screenshotScreenMask ?? options.screenMask,
     ),
