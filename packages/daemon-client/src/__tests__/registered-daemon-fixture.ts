@@ -10,8 +10,6 @@ const actualCommand = await vi.importActual<typeof import('@agent-device/host-ki
 );
 
 export const {
-  registeredDaemonFixtureArgs,
-  launchRegisteredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   waitForFixtureFile,
   waitForRegisteredDaemonFixture,
