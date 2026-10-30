@@ -9,10 +9,10 @@ static NSString *const elementKey = @"UIAccessibilitySnapshotKeyElement";
 // trees the AX server rejects a request that would return more than about 62 levels (measured on
 // iOS 26.5), so there the first request is rejected once and the halving ladder settles at 32,
 // which the host then sends as a depth hint.
-static const NSUInteger maximumRequestLevels = 65;
+const NSUInteger kMaximumRequestLevels = 65;
 // Sized for the daemon's default depth bound (128 levels). Each root-to-leaf path needs one
 // continuation per accepted-depth window, so the budget scales with the depth it must cover.
-static const NSUInteger maximumRequests = 64;
+const NSUInteger kMaximumRequests = 64;
 
 @interface SnapshotTreeCapture : NSObject
 @property(nonatomic, copy) SnapshotElementReader reader;
@@ -31,7 +31,7 @@ static const NSUInteger maximumRequests = 64;
 {
   NSUInteger attemptDepth = MIN(depth, self.acceptedDepth);
   for (NSUInteger retries = 0;; retries++) {
-    if (self.requests >= maximumRequests) {
+    if (self.requests >= kMaximumRequests) {
       if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:1
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation request budget exhausted"}];
       return nil;
@@ -130,7 +130,7 @@ NSDictionary *captureSnapshotTree(id element, NSUInteger maxDepth, NSUInteger ma
 {
   SnapshotTreeCapture *capture = [SnapshotTreeCapture new];
   capture.reader = reader;
-  NSUInteger firstRequestLevels = nativeLevelsHint > 0 ? MIN(nativeLevelsHint, maximumRequestLevels) : maximumRequestLevels;
+  NSUInteger firstRequestLevels = nativeLevelsHint > 0 ? MIN(nativeLevelsHint, kMaximumRequestLevels) : kMaximumRequestLevels;
   capture.acceptedDepth = MIN(maxDepth + 1, firstRequestLevels);
   capture.remainingNodes = maxNodes;
   capture.maximumNodes = maxNodes;

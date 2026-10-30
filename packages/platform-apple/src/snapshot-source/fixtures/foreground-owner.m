@@ -151,7 +151,7 @@ int main(int argc, const char *argv[])
     NSString *scenario = @(argv[1]);
     if ([scenario isEqual:@"identity"] || [scenario isEqual:@"request-budget"] || [scenario hasPrefix:@"api-depth-"]) {
       BOOL budget = [scenario isEqual:@"request-budget"];
-      NSUInteger depth = [scenario hasPrefix:@"api-depth-"] ? [[scenario substringFromIndex:10] integerValue] : 64;
+      NSUInteger depth = [scenario hasPrefix:@"api-depth-"] ? [[scenario substringFromIndex:10] integerValue] : kMaximumRequestLevels - 1;
       NSMutableArray *children = [NSMutableArray array];
       for (NSUInteger i = 0; i < (budget ? 80 : 2); i++) {
         [children addObject:@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[],
@@ -165,7 +165,7 @@ int main(int argc, const char *argv[])
         requests++;
         if ([scenario hasPrefix:@"api-depth-"]) {
           NSUInteger start = [element isKindOfClass:NSNumber.class] ? [element unsignedIntegerValue] : 0;
-          require(levels == MIN(depth + 1 - start, 65), @"native levels must include the root exactly once, at most 65 per request");
+          require(levels == MIN(depth + 1 - start, kMaximumRequestLevels), @"native levels must include the root exactly once, at most kMaximumRequestLevels per request");
           NSUInteger end = MIN(start + levels, depth + 1);
           NSDictionary *tree = nil;
           for (NSUInteger level = end; level-- > start;) tree = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyElement": @(level), @"UIAccessibilitySnapshotKeyChildrenCount": [scenario isEqual:@"api-depth-unknown"] ? [NSNull null] : @(level < depth ? 1 : 0), @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]};
@@ -174,12 +174,12 @@ int main(int argc, const char *argv[])
         if ([element isEqual:@"root"]) return root;
         return @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[]}]};
       }, &truncated, NULL, &failure);
-      if (budget) require(!result && failure.code == 1 && requests == 64, @"request budget must fail without publishing partial content");
+      if (budget) require(!result && failure.code == 1 && requests == kMaximumRequests, @"request budget must fail without publishing partial content");
       else if ([scenario isEqual:@"identity"]) require(result == root && requests == 1, @"healthy capture must reuse the native tree");
       else {
         NSUInteger count = 0;
         for (NSDictionary *node = result; node; node = [node[@"UIAccessibilitySnapshotKeyChildren"] firstObject]) count++;
-        require(count == depth + 1 && truncated == [scenario isEqual:@"api-depth-unknown"] && requests == (depth + 1 > 65 ? 2 : 1), @"every requested depth must include root plus permitted descendants");
+        require(count == depth + 1 && truncated == [scenario isEqual:@"api-depth-unknown"] && requests == (depth + 1 > kMaximumRequestLevels ? 2 : 1), @"every requested depth must include root plus permitted descendants");
       }
       return 0;
     }
@@ -193,7 +193,7 @@ int main(int argc, const char *argv[])
     NSString *expectedCode = nil;
     NSUInteger expectedCaptures = 0;
     if ([scenario isEqual:@"runtime-budget"]) {
-      expectedCaptures = 64;
+      expectedCaptures = kMaximumRequests;
       expectedCode = @"continuation-budget-exhausted";
     } else if ([scenario hasPrefix:@"wide-"] || [scenario isEqual:@"zero-depth"]) {
       expectedCaptures = [scenario isEqual:@"wide-continuation"] ? 2 : 1;
