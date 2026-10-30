@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
@@ -186,33 +187,40 @@ test('the platform module surfaces an aborted request inside the app-state reade
 });
 
 test('a network capture writes a private HAR with its failures on artifacts and at release', async () => {
+  const harDir = mkdtempForTestSync('limrun-har-');
   const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-har-') },
+    { apiKey: 'lim_test_key', networkHarDir: harDir },
     testDependencies(),
   );
   const lease = androidLease('lease-capture');
+  const harPath = path.join(harDir, `${lease.leaseId}.har`);
+  // A HAR left by an earlier capture becomes private when it is rewritten.
+  fs.writeFileSync(harPath, '', { mode: 0o644 });
   try {
     // A repeat allocation of the live lease starts the capture it newly asks for.
     await runtime.leaseLifecycle.allocate?.(lease);
     await runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } });
-    for (let index = 0; index < 500; index += 1) {
+    for (let index = 0; index < 499; index += 1) {
       state.onInspectionEvent?.(completedRequest(`https://api.example.com/${index}`));
     }
     state.onInspectionEvent?.(
       completedRequest('https://missing.example.com/', 'client_dial_failed'),
     );
+    // Truncation is a buffer statistic, so it keeps the failure that came before it.
+    state.onInspectionEvent?.(completedRequest('https://api.example.com/last'));
 
     const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
-    const harPath = String(listed?.cloudArtifacts[0]?.url);
+    assert.equal(listed?.cloudArtifacts[0]?.url, harPath);
     const har = JSON.parse(fs.readFileSync(harPath, 'utf8'));
     assert.equal(har.log.entries.length, 500);
-    assert.equal(har.log.entries.at(-1).response.status, 0);
+    assert.equal(har.log.entries.at(-2).response.status, 0);
     assert.equal(fs.statSync(harPath).mode & 0o777, 0o600);
     assert.deepEqual(listed?.cloudArtifacts[0]?.metadata, {
       failures: {
-        count: 2,
+        count: 1,
         last: { kind: 'request-failed', host: 'missing.example.com', port: 443 },
         lastDialFailure: 'dns_not_found',
+        truncated: 1,
       },
     });
 
@@ -229,6 +237,32 @@ test('a network capture writes a private HAR with its failures on artifacts and 
       leaseId: lease.leaseId,
     });
     assert.equal(afterClose?.cloudArtifacts[0]?.url, harPath);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('released captures past the record limit forget the oldest released lease first', async () => {
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-har-') },
+    testDependencies(),
+  );
+  const live = androidLease('lease-live-unavailable');
+  try {
+    await runtime.leaseLifecycle.allocate?.(live, {
+      flags: { providerNetworkLogs: true, providerNetworkHosts: 'not a host' },
+    });
+    for (let index = 0; index < 33; index += 1) {
+      const lease = androidLease(`lease-released-${index}`);
+      await runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } });
+      await runtime.leaseLifecycle.release?.(lease);
+    }
+    const list = async (leaseId: string) =>
+      (await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId }))?.status;
+    assert.equal(await list('lease-released-0'), undefined);
+    assert.equal(await list('lease-released-1'), undefined);
+    assert.equal(await list('lease-released-32'), 'ready');
+    assert.equal(await list(live.leaseId), 'unavailable');
   } finally {
     await runtime.shutdown();
   }

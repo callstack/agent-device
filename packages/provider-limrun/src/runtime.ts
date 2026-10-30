@@ -326,8 +326,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       const { writeLimrunHar } = await import('./network-har.ts');
       await writeLimrunHar(state.harPath, state.capture.entries());
       return { phase: 'written', harPath: state.harPath, failures };
-    } catch {
-      return { phase: 'unavailable', reason: 'har-write-failed' };
+    } catch (error) {
+      return {
+        phase: 'unavailable',
+        reason: 'har-write-failed',
+        message: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -424,10 +428,14 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (!session) return await this.releaseRecoveredSession(lease);
     const live = this.networkCaptures.get(lease.leaseId);
     const capture = await this.writeNetworkCapture(lease.leaseId);
-    if (capture) this.networkCaptures.set(lease.leaseId, capture);
-    for (const [leaseId, state] of this.networkCaptures) {
+    if (capture) {
+      // Re-insertion keeps the map in settle order, so the oldest released record goes first.
+      this.networkCaptures.delete(lease.leaseId);
+      this.networkCaptures.set(lease.leaseId, capture);
+    }
+    for (const leaseId of this.networkCaptures.keys()) {
       if (this.networkCaptures.size <= SETTLED_NETWORK_CAPTURE_LIMIT) break;
-      if (state.phase !== 'capturing') this.networkCaptures.delete(leaseId);
+      if (!this.sessions.has(leaseId)) this.networkCaptures.delete(leaseId);
     }
     if (live?.phase === 'capturing') live.capture.close();
     await this.terminateSession(session);
@@ -668,18 +676,19 @@ function networkArtifacts(capture: SettledNetworkCapture): CloudArtifactsResult 
       ],
     };
   }
-  const { count, last, lastDialFailure } = capture.failures;
+  const { count, last, lastDialFailure, truncated } = capture.failures;
   const summary = [
     `Network capture failures: ${count}`,
     ...(last
       ? [`last ${last.kind}${last.host ? ` ${last.host}${last.port ? `:${last.port}` : ''}` : ''}`]
       : []),
     ...(lastDialFailure ? [`last dial failure ${lastDialFailure}`] : []),
+    ...(truncated > 0 ? [`${truncated} oldest requests left the HAR`] : []),
   ].join('; ');
   return {
     provider: LIMRUN_PROVIDER,
     status: 'ready',
-    ...(count > 0 || lastDialFailure ? { message: summary } : {}),
+    ...(count > 0 || lastDialFailure || truncated > 0 ? { message: summary } : {}),
     cloudArtifacts: [
       {
         provider: LIMRUN_PROVIDER,

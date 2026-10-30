@@ -112,7 +112,7 @@ A request that can't reach its host appears in the HAR with status `0`. When the
 Network capture failures: 2; last request-failed api.example.com:443; last dial failure dns_not_found
 ```
 
-The count includes these kinds: `request-failed` (the host didn't resolve, refused, timed out, or failed TLS), `inspection-error` (usually a certificate-pinned host), `inspection-gap` and `inspection-stream-error` (the HAR misses requests), and `har-truncated` (an old request left the HAR). `last dial failure` is Limrun's reason for the most recent failed connection. `artifacts --json` returns the same values in `data.cloudArtifacts[0].metadata.failures`.
+The count includes these kinds: `request-failed` (the host didn't resolve, refused, timed out, or failed TLS), `inspection-error` (usually a certificate-pinned host), and `inspection-gap` and `inspection-stream-error` (the HAR misses requests). `last dial failure` is Limrun's reason for the most recent failed connection. The HAR keeps the latest 500 requests, with each body cut to 64 KiB, so a capture can hold tens of MB in the daemon. When older requests left the HAR, the summary says how many, and the count doesn't include them. `artifacts --json` returns the same values in `data.cloudArtifacts[0].metadata.failures`.
 
 Now and then, a request skips the capture: it is missing from the HAR and from the failure count. If a request you expect is missing, repeat it. If the HAR stays empty while the app makes requests, run `close` and `disconnect`, then connect again.
 

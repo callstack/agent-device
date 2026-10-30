@@ -50,20 +50,20 @@ export type LimrunHarTunnelClient = Readonly<{
  * - `request-failed`: the tunnel could not complete a request; its HAR entry has status 0.
  * - `inspection-error`: the tunnel could not inspect a connection, usually a pinned certificate.
  * - `inspection-gap`, `inspection-stream-error`: the HAR misses requests.
- * - `har-truncated`: the oldest entry left the HAR to keep it under `HAR_MAX_ENTRIES`.
  */
 export type LimrunNetworkFailureKind =
   | 'request-failed'
   | 'inspection-error'
   | 'inspection-gap'
-  | 'inspection-stream-error'
-  | 'har-truncated';
+  | 'inspection-stream-error';
 
 export type LimrunNetworkFailures = Readonly<{
   count: number;
   last?: Readonly<{ kind: LimrunNetworkFailureKind; host?: string; port?: number }>;
   /** The tunnel's most recent dial failure reason, such as `dns_not_found`. */
   lastDialFailure?: string;
+  /** How many of the oldest entries left the HAR to keep it under `HAR_MAX_ENTRIES`. */
+  truncated: number;
 }>;
 
 export type LimrunHarCapture = Readonly<{
@@ -83,6 +83,7 @@ export async function startLimrunHarCapture(
 ): Promise<LimrunHarCaptureResult> {
   const entries: DestinationTunnelHAREntry[] = [];
   let failures: { count: number; last?: LimrunNetworkFailures['last'] } = { count: 0 };
+  let truncated = 0;
   const fail = (kind: LimrunNetworkFailureKind, host?: unknown, port?: unknown): void => {
     failures = {
       count: failures.count + 1,
@@ -107,7 +108,7 @@ export async function startLimrunHarCapture(
         if (entry) entries.push(entry);
         if (entries.length > HAR_MAX_ENTRIES) {
           entries.shift();
-          fail('har-truncated');
+          truncated += 1;
         }
         if (event.type === 'complete' && event.data._limrun.error) {
           const url = URL.parse(event.data.request.url);
@@ -126,7 +127,7 @@ export async function startLimrunHarCapture(
         entries: () => [...entries],
         failures: async () => {
           const lastDialFailure = closed ? undefined : await readLastDialFailure(client, tunnel);
-          return { ...failures, ...(lastDialFailure ? { lastDialFailure } : {}) };
+          return { ...failures, ...(lastDialFailure ? { lastDialFailure } : {}), truncated };
         },
         close: () => {
           closed = true;
