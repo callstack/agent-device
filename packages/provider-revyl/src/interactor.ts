@@ -88,31 +88,49 @@ class RevylInteractor implements Interactor {
   async openDevice(): Promise<void> {}
 
   /**
-   * Revyl's `/kill_app` carries no bundle id: it ends the app the session runs. So a close that names
-   * the app this session launched is the same request, an unnamed close is that request too, and a
-   * close that names a different app is refused rather than answered by killing something else.
+   * Revyl's `/kill_app` carries no bundle id: it ends the app the session runs. So a close that names the
+   * app this session launched is that request, and an unnamed close is that request too. A close that
+   * names a different app, or names any app while this session has launched none, is refused: Revyl cannot
+   * name what it ends, so killing its app would report the close of an app this runtime never saw start.
    *
    * The app this command resolves to is allowed as well. A relaunch open names the app it is about to
-   * launch, and the shared lifecycle closes that app before starting it, so a session running one app
-   * has to be able to close its way into another.
+   * launch, and the shared lifecycle closes that app before starting it, so a session running one app has
+   * to be able to close its way into another.
    */
   async close(app: string): Promise<void> {
     const target = app.trim();
-    const sessionApp = this.session.launchedApp.bundleId;
-    if (target && sessionApp && target !== sessionApp && target !== this.requestApp) {
+    if (target && target !== this.requestApp) {
+      this.requireCloseableApp(target, this.session.launchedApp.bundleId);
+    }
+    await this.workerAction('kill_app');
+  }
+
+  /** Refuses a close naming an app this session cannot be ending, and names the one it would end. */
+  private requireCloseableApp(target: string, sessionApp: string | undefined): void {
+    if (sessionApp === undefined) {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
-        `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
+        `This Revyl session has not launched ${target}, so it has no app to end.`,
         {
-          reason: 'unsupported-provider-mode',
+          reason: 'provider-app-not-launched',
           command: 'close',
-          sessionApp,
           requestedApp: target,
-          hint: 'Revyl has no way to name an app to `/kill_app`; end the session to stop what it runs.',
+          hint: 'Close without an app name to end the app this session runs, or open the app first.',
         },
       );
     }
-    await this.workerAction('kill_app');
+    if (target === sessionApp) return;
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `Revyl ends the app this session launched (${sessionApp}), not ${target}.`,
+      {
+        reason: 'unsupported-provider-mode',
+        command: 'close',
+        sessionApp,
+        requestedApp: target,
+        hint: 'Revyl has no way to name an app to `/kill_app`; end the session to stop what it runs.',
+      },
+    );
   }
 
   async tap(x: number, y: number): Promise<void> {

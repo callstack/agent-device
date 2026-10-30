@@ -567,10 +567,27 @@ test('a close that names an app the session never launched is refused rather tha
   assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
 });
 
-test('a close before any launch still ends the session app, which is the one Revyl runs', async () => {
+test('a close that names an app before any launch is refused instead of ending the session app', async () => {
+  // Nothing has launched on this session, so Revyl's app-killing action would end whatever its worker
+  // happens to run — an app the caller never named. The refusal says so, and an unnamed close is still
+  // allowed, because then the caller is asking for the session's own app.
   const { fixture, interactor } = await liveInteractor('ios');
-  await interactor.close('com.example.app');
 
+  await assert.rejects(
+    () => interactor.close('com.example.app'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.details?.reason === 'provider-app-not-launched' &&
+      error.details?.requestedApp === 'com.example.app',
+  );
+  assert.equal(
+    fixture.paths().filter((request) => request.endsWith('/kill_app')).length,
+    0,
+    'the refused close sends nothing',
+  );
+
+  await interactor.close('');
   assert.deepEqual(fixture.paths().at(-1), 'POST /api/v1/execution/device-proxy/run-1/kill_app');
 });
 
