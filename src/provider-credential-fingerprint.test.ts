@@ -1,10 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import {
-  providerCredentialFingerprint as fingerprintFor,
-  readDaemonProviderCredentials as daemonCredentialsFor,
-} from './provider-credential-fingerprint.ts';
+import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
+import { readDaemonProviderCredentials as daemonCredentialsFor } from './provider-credential-fingerprint.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { pluginHome, selectPluginManifest } from '@agent-device/test-kit';

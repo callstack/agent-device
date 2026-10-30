@@ -1,9 +1,19 @@
+import {
+  legacyStoreManifests,
+  readPluginConfig,
+  validatePluginSelection,
+  storeHome,
+  installationDirectory,
+  isVersionSelector,
+  type PluginSelection,
+} from './store-legacy.ts';
+export { legacyStoreManifests };
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   acquireProcessLock,
@@ -12,46 +22,8 @@ import {
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { PluginPackageEntry } from './discovery.ts';
-import {
-  readPluginManifest,
-  ROUTING_PROVIDER_IDENTITIES,
-  type PluginManifest,
-} from './manifest.ts';
+import { ROUTING_PROVIDER_IDENTITIES, type PluginManifest } from './manifest.ts';
 import type { PluginCandidate } from './registry.ts';
-
-type PluginSelection = {
-  installation: string;
-  version?: string;
-  options?: Record<string, unknown>;
-};
-type PluginConfig = Record<string, unknown> & { plugins?: Record<string, PluginSelection> };
-function readPluginConfig(env: NodeJS.ProcessEnv): PluginConfig {
-  const configPath = resolveUserConfigPath(env);
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as PluginConfig;
-    if (!isRecord(config) || (config.plugins !== undefined && !isRecord(config.plugins)))
-      throw new AppError('INVALID_ARGS', 'Plugin config must contain an object');
-    return config;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
-    if (error instanceof SyntaxError)
-      throw new AppError('INVALID_ARGS', `Invalid plugin JSON: ${configPath}`, {}, error);
-    throw error;
-  }
-}
-
-function validatePluginSelection(name: string, selection: PluginSelection): void {
-  if (
-    !isPackageName(name) ||
-    !isRecord(selection) ||
-    typeof selection.installation !== 'string' ||
-    !/^[a-f0-9-]{36}$/.test(selection.installation) ||
-    (selection.version !== undefined && !isVersionSelector(selection.version)) ||
-    (selection.options !== undefined && !isRecord(selection.options))
-  ) {
-    throw new AppError('INVALID_ARGS', `Invalid plugin selection: ${name}`);
-  }
-}
 
 type StoreInstallation = {
   name: string;
@@ -60,14 +32,6 @@ type StoreInstallation = {
   selection: PluginSelection;
   entry: PluginPackageEntry;
 };
-
-function storeHome(env: NodeJS.ProcessEnv): string {
-  return path.dirname(resolveUserConfigPath(env));
-}
-
-function installationDirectory(home: string, name: string, installation: string): string {
-  return path.join(home, 'plugins', installation, 'node_modules', name);
-}
 
 async function describeInstallation(
   name: string,
@@ -165,31 +129,6 @@ async function readSelectionVersion(
   } catch {
     return {};
   }
-}
-
-/**
- * The v1 manifests in the store, read without executing anything, including those of a package
- * that also exports `./agent-device`; unreadable selections are skipped.
- */
-export function legacyStoreManifests(env: NodeJS.ProcessEnv): PluginManifest[] {
-  const home = storeHome(env);
-  let selections: [string, PluginSelection][];
-  try {
-    selections = Object.entries(readPluginConfig(env).plugins ?? {});
-  } catch {
-    return [];
-  }
-  return selections.flatMap(([name, selection]) => {
-    try {
-      validatePluginSelection(name, selection);
-      const manifest = readPluginManifest(
-        installationDirectory(home, name, selection.installation),
-      );
-      return manifest.name === name ? [manifest] : [];
-    } catch {
-      return [];
-    }
-  });
 }
 
 export async function listPlugins(env: NodeJS.ProcessEnv, builtinProviders: readonly string[]) {
@@ -338,14 +277,4 @@ function assertUniqueLegacyProviders(
       );
     providers.add(agentDevicePlugin.provider);
   }
-}
-
-function isPackageName(value: string): boolean {
-  return /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(value);
-}
-
-function isVersionSelector(value: unknown): value is string {
-  return (
-    typeof value === 'string' && /^[a-zA-Z0-9*^~<>=| .+-]+$/.test(value) && value.trim().length > 0
-  );
 }

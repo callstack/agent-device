@@ -214,7 +214,7 @@ async function readLocalProviderCredentialFingerprint(
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
   if (!provider) return undefined;
   const [{ providerCredentialFingerprint }, { readPluginInventory }] = await Promise.all([
-    import('../provider-credential-fingerprint.ts'),
+    import('@agent-device/plugins/credential-fingerprint'),
     import('@agent-device/contracts/plugin-inventory'),
   ]);
   return providerCredentialFingerprint(

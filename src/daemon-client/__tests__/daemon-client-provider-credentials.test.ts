@@ -15,7 +15,7 @@ import {
   mkdtempForTestSync,
   supportsLoopbackBind,
 } from '@agent-device/test-kit';
-import { providerCredentialFingerprint as fingerprintFor } from '../../provider-credential-fingerprint.ts';
+import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
 import { builtinPluginInventory } from '../../__tests__/test-utils/builtin-plugin-inventory.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { LIMRUN_CREDENTIAL_VARIABLES } from '../../provider-limrun-credentials.ts';
