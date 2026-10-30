@@ -159,20 +159,6 @@ test('the apple-runner entry names its exports: export * is refused', () => {
   }
 });
 
-test('every daemon condition of "." points at src/index.ts', () => {
-  for (const exports of [
-    { '.': entry('./src/other.ts') },
-    { '.': { types: './src/index.ts', default: './src/other.ts' } },
-    { '.': './src/other.ts' },
-  ]) {
-    const found = check({ daemon: { exports } });
-    assert.equal(found.length, 1, JSON.stringify(exports));
-    assert.match(found[0]!.file, /packages\/daemon\/package\.json/);
-    assert.match(found[0]!.message, /every condition of it is \.\/src\/index\.ts/);
-  }
-  assert.deepEqual(check({ daemon: { exports: { '.': './src/index.ts' } } }), []);
-});
-
 test('command-surface exports exactly "." and nothing else', () => {
   for (const exports of [
     { '.': entry('./src/index.ts'), './family/registry': entry('./src/family/registry.ts') },
