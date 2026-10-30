@@ -71,7 +71,6 @@ export function createOwnerScopedDeviceClaimReconciler(
     try {
       await recovery.dispose();
     } catch (error) {
-      if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
       let failureDetails: JsonObject;
       try {
         failureDetails = { error: toDiagnosticJson(normalizeError(error)) };
@@ -94,6 +93,7 @@ export function createOwnerScopedDeviceClaimReconciler(
       } catch {
         // ADR 0010: secondary diagnostic failures must preserve the reconciliation outcome.
       }
+      if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
     }
     if (outcome.status === 'rejected') throw outcome.error;
     return outcome.result;
