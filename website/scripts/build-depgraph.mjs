@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const output = path.join(root, 'website/dist/dependency-graph');
+const output = path.join(root, 'website/dist/depgraph');
 const viewer = path.join(root, 'tools/depgraph-view');
 // Vercel can omit .git from the build input. Index the clean checkout in a temporary
 // repository so the graph still uses the layering scan's tracked-file selection.

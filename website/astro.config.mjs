@@ -120,7 +120,7 @@ export default defineConfig({
             'docs/security-trust',
             'docs/known-limitations',
             'docs/migrating-gestures',
-            { label: 'Dependency graph', link: '/dependency-graph/' },
+            { label: 'Dependency graph', link: '/depgraph/' },
           ],
         },
       ],

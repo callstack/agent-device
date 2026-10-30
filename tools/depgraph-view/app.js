@@ -34,7 +34,7 @@ import { createGraphModel, refreshPairKinds, visibleCycleFocus } from './graph-m
   let raw;
   let entryManifest;
   try {
-    const response = await fetch('/dependency-graph/graph.json');
+    const response = await fetch('/depgraph/graph.json');
     if (!response.ok) throw new Error('Graph data unavailable');
     raw = await response.json();
     entryManifest = raw.entries;
