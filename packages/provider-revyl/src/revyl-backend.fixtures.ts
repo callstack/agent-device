@@ -67,6 +67,7 @@ export async function startRevylFixtureBackend(
   let healthPolls = 0;
   const screen = options.screen ?? DEFAULT_IOS_SCREEN;
 
+  const overrides = new Map(Object.entries(options.respond ?? {}));
   const server = http.createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -83,7 +84,7 @@ export async function startRevylFixtureBackend(
         clientHeader: header(request, 'x-revyl-client'),
         agentHeader: header(request, 'x-revyl-agent'),
       });
-      const override = options.respond?.[`${method} ${url}`];
+      const override = overrides.get(`${method} ${url}`);
       if (typeof override === 'function') {
         const value = override();
         respondWith(response, { body: value });

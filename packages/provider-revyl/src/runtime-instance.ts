@@ -1,5 +1,10 @@
-import { createHash } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 import { REVYL_DEFAULT_BACKEND_URL } from './revyl-client.ts';
+
+const RUNTIME_INSTANCE_KEY_LENGTH = 16;
+const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
+const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
+const RUNTIME_INSTANCE_SALT = 'agent-device:revyl-runtime-owner:v1';
 
 /**
  * The stable identity of one Revyl runtime, and so of one owner. Two runtimes that rent devices for
@@ -17,5 +22,11 @@ export function resolveRevylRuntimeInstance(
     backendUrl: options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL,
     apiKey: options.apiKey,
   });
-  return `principal-${createHash('sha256').update(principal).digest('hex').slice(0, 32)}`;
+  const fingerprint = scryptSync(principal, RUNTIME_INSTANCE_SALT, RUNTIME_INSTANCE_KEY_LENGTH, {
+    N: RUNTIME_INSTANCE_SCRYPT_COST,
+    r: 8,
+    p: 1,
+    maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY,
+  });
+  return `principal-${fingerprint.toString('hex')}`;
 }
