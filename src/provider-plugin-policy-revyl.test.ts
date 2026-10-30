@@ -5,7 +5,7 @@ import { afterEach, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { resolveProviderPlugins, startProviderRegistry } from '@agent-device/plugins/registry';
 import revyl from '@agent-device/revyl';
-import { PROVIDER_PLUGIN_POLICY } from '../provider-plugin-policy.ts';
+import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 const servers: http.Server[] = [];
 
