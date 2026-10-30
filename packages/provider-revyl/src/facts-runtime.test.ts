@@ -177,10 +177,20 @@ test('a device this runtime does not own refuses the open and close targets', ()
   assert.equal(facts.openApplication?.available, false);
   assert.equal(facts.closeApplication?.available, false);
   assert.equal(facts.finalizeApplicationClose?.available, false);
-  // The refusal names the rule that decided it: a device outside the Revyl id space is not a target
-  // this runtime can open or close an app on, however live its own session is.
-  assert.equal(facts.resolveOpenTarget?.reason, 'unsupported-provider-mode');
-  assert.equal(facts.closeApplication?.reason, 'unsupported-provider-mode');
+  // Every cell names the rule that decided it: a device outside the Revyl id space is not a target
+  // this runtime can open or close an app on, however live its own session is. The reason is asserted
+  // per cell so a wrong refusal category cannot pass here.
+  for (const cell of [
+    'resolveOpenTarget',
+    'prepareApplicationOpen',
+    'openApplication',
+    'closeApplication',
+    'finalizeApplicationClose',
+  ] as const) {
+    const fact = facts[cell];
+    assert.ok(fact && !fact.available, cell);
+    assert.equal(fact.reason, 'unsupported-provider-mode', cell);
+  }
 });
 
 test('a session that has ended refuses the application-lifecycle targets', () => {
