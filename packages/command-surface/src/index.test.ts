@@ -1,5 +1,6 @@
-import { expect, test } from 'vitest';
-import { prepareDaemonCommandRequest } from './index.ts';
+import { expect, expectTypeOf, test } from 'vitest';
+import { prepareDaemonCommandRequest, type DaemonCommandName } from './index.ts';
+import type { BatchCommandName } from './batch/projection.ts';
 
 const host = { env: {}, cwd: '/workspace' };
 
@@ -24,4 +25,8 @@ test('projection rejects an invalid shared client option', async () => {
   await expect(prepareDaemonCommandRequest('scroll', { direction: 3 }, host)).rejects.toThrow(
     'scroll requires direction',
   );
+});
+
+test('every structured batch command has a daemon writer', () => {
+  expectTypeOf<BatchCommandName>().toExtend<DaemonCommandName>();
 });
