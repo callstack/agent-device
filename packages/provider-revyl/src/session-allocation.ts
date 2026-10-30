@@ -1,4 +1,5 @@
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { REVYL_PROFILE_FIELDS } from './profile-fields.ts';
 
@@ -39,6 +40,50 @@ export function resolveRevylDeviceSelection(
     ...optionalFlag(context?.flags?.device, 'deviceModel'),
     ...optionalFlag(context?.flags?.providerOsVersion, 'osVersion'),
   };
+}
+
+/** What one allocation asks Revyl to start: the app to install and the device to pick. */
+export type RevylStartRequest = Readonly<{
+  appUrl?: string;
+  deviceModel?: string;
+  osVersion?: string;
+}>;
+
+export function resolveRevylStartRequest(
+  context: LeaseLifecycleContext | undefined,
+  fallback: Readonly<{ deviceModel?: string; osVersion?: string }>,
+): RevylStartRequest {
+  const appUrl = resolveRevylAppUrl(context);
+  return {
+    ...(appUrl === undefined ? {} : { appUrl }),
+    ...resolveRevylDeviceSelection(context, fallback),
+  };
+}
+
+/**
+ * Refuses an allocation that joins a lease whose device was started for a different app or device.
+ * A field the joiner leaves unset accepts whatever the lease has; one it names has to match, because
+ * the joiner would otherwise be handed a device it did not ask for.
+ */
+export function requireSameRevylStartRequest(
+  leaseId: string,
+  started: RevylStartRequest,
+  joining: RevylStartRequest,
+): void {
+  const differing = (Object.keys(joining) as (keyof RevylStartRequest)[]).filter(
+    (field) => joining[field] !== undefined && joining[field] !== started[field],
+  );
+  if (differing.length === 0) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Revyl lease ${leaseId} already has a device started for a different ${differing.join(', ')}.`,
+    {
+      reason: 'provider-lease-request-mismatch',
+      leaseId,
+      fields: differing,
+      hint: 'Disconnect and connect again to rent a device for the new app or device selection.',
+    },
+  );
 }
 
 /** One text selection a profile or flag carries: trimmed, and absent when it is blank. */

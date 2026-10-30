@@ -37,6 +37,7 @@ import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
+import type { RevylStartRequest } from './session-allocation.ts';
 
 export type RevylRuntimeOptions = Readonly<{
   apiKey: string;
@@ -81,6 +82,8 @@ type RevylStopOutcome = Readonly<{
  * session that start produced, and the `/stop` that has not been confirmed yet.
  */
 class RevylLeaseEntry {
+  /** What the start was asked for, which a joining allocation has to ask for too. */
+  readonly request: RevylStartRequest;
   /**
    * Settles once this lease's `start_device` has answered and the stop that a failed start owed has
    * settled with it, so a reader that awaits it cannot miss a rented device.
@@ -92,15 +95,26 @@ class RevylLeaseEntry {
   stop: RevylRentedSession | undefined;
   /** Whether Revyl confirmed `/stop` for {@link stop}. Only this lets the entry leave the map. */
   stopConfirmed: boolean;
+  /**
+   * The `/stop` in flight for {@link stop}, shared by every release, recovery and shutdown that arrives
+   * while it runs, so Revyl sees one stop per attempt. Cleared once it settles, so a failed stop is
+   * retried by the next caller.
+   */
+  stopping: Promise<string | undefined> | undefined;
 
   /**
    * `start` fills this entry in as it goes; it may write the entry's own fields, but it must never wait
    * on them, because the assignment below has not happened while its body first runs.
    */
-  constructor(start: (entry: RevylLeaseEntry) => Promise<RevylStartOutcome>) {
+  constructor(
+    request: RevylStartRequest,
+    start: (entry: RevylLeaseEntry) => Promise<RevylStartOutcome>,
+  ) {
+    this.request = request;
     this.session = undefined;
     this.stop = undefined;
     this.stopConfirmed = false;
+    this.stopping = undefined;
     this.start = start(this);
   }
 }
@@ -251,16 +265,25 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
         ? platformForRevylLeaseBackend(lease.backend)
         : undefined;
     if (platform === undefined) return undefined;
-    const { rejectRefusedRevylProfileFields } = await import('./session-allocation.ts');
+    const {
+      rejectRefusedRevylProfileFields,
+      requireSameRevylStartRequest,
+      resolveRevylStartRequest,
+    } = await import('./session-allocation.ts');
     // Before the join below: an allocation that reuses a live lease still carries flags of its own,
     // and Revyl reads none of them — whether it starts a device or joins one that is starting.
     rejectRefusedRevylProfileFields(context);
+    const request = resolveRevylStartRequest(context, {
+      ...(this.options.deviceModel === undefined ? {} : { deviceModel: this.options.deviceModel }),
+      ...(this.options.osVersion === undefined ? {} : { osVersion: this.options.osVersion }),
+    });
     // Nothing between here and the entry's registration awaits, so one caller can never miss another's.
     if (this.shuttingDown) throw shuttingDownDuring(lease.leaseId, 'allocate');
     const existing = this.leases.get(lease.leaseId);
+    if (existing) requireSameRevylStartRequest(lease.leaseId, existing.request, request);
     // The caller that started the device waits on it the same way a joiner does: one entry, one awaitable,
     // each caller bounded by its own patience.
-    const entry = existing ?? this.rent(lease, platform, context);
+    const entry = existing ?? this.rent(lease, platform, request, context);
     const outcome = await this.join(entry, platform, context);
     if (this.shuttingDown) {
       // The device this start rented is already an entry shutdown is ending, so this caller only reports
@@ -276,8 +299,15 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
    * map before the first `await`, so an allocation that arrives mid-start joins it instead of renting a
    * second device, and a release that arrives then has somewhere to find the session.
    */
-  private rent(lease: DeviceLease, platform: RevylPlatform, context?: LeaseLifecycleContext) {
-    const entry = new RevylLeaseEntry((target) => this.runStart(target, lease, platform, context));
+  private rent(
+    lease: DeviceLease,
+    platform: RevylPlatform,
+    request: RevylStartRequest,
+    context?: LeaseLifecycleContext,
+  ) {
+    const entry = new RevylLeaseEntry(request, (target) =>
+      this.runStart(target, lease, platform, context),
+    );
     this.leases.set(lease.leaseId, entry);
     return entry;
   }
@@ -297,7 +327,13 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     const leaseId = lease.leaseId;
     let started: RevylStart;
     try {
-      started = await this.startLeaseDevice(lease, platform, context);
+      started = await startRevylSession(this.client, lease, {
+        platform,
+        appUrl: entry.request.appUrl,
+        deviceModel: entry.request.deviceModel,
+        osVersion: entry.request.osVersion,
+        ...revylCallerBudget(context),
+      });
     } catch (error) {
       // The start failed somewhere this module does not model, and the request may already have gone out,
       // so the id it carried is the handle the entry has to end.
@@ -323,7 +359,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     entry.stop = rented;
     // The entry ends what a failed start rented rather than waiting for a release to ask: the device is
     // billed from the moment Revyl made it, and this is the first moment its id is known.
-    const failure = await this.stopRented(rented);
+    const failure = await this.stopOwed(entry, rented);
     if (failure === undefined) {
       entry.stopConfirmed = true;
       this.closeLease(leaseId, entry);
@@ -383,7 +419,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     const session = entry.session;
     // A failed start has already ended its own session before this point, and a caller that releases such
     // a lease must not make Revyl see a second stop for a session already gone.
-    const failure = entry.stopConfirmed ? undefined : await this.stopRented(target);
+    const failure = entry.stopConfirmed ? undefined : await this.stopOwed(entry, target);
     if (failure === undefined) {
       entry.stopConfirmed = true;
       this.closeLease(leaseId, entry);
@@ -418,6 +454,17 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     return outcome.data ?? { providerSessionId: outcome.providerSessionId };
   }
 
+  /** The entry's one in-flight `/stop`, started by the first caller and joined by the rest. */
+  private stopOwed(
+    entry: RevylLeaseEntry,
+    target: RevylRentedSession,
+  ): Promise<string | undefined> {
+    entry.stopping ??= this.stopRented(target).finally(() => {
+      entry.stopping = undefined;
+    });
+    return entry.stopping;
+  }
+
   /**
    * One `/stop`, with Revyl's own "no such session" read as released: that device is not rented. The
    * failure's message is what the caller reports; `undefined` is the confirmation the entry needs.
@@ -429,38 +476,6 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     } catch (error) {
       return isRevylSessionGone(error) ? undefined : errorMessage(error);
     }
-  }
-
-  /**
-   * One start. The caller's own budget rides along, so a start that runs past it fails as that caller's
-   * expired patience rather than as a device nobody asked for; the request itself keeps the client's
-   * longer budget, because its answer is the only thing that names what was rented.
-   */
-  private async startLeaseDevice(
-    lease: DeviceLease,
-    platform: RevylPlatform,
-    context?: LeaseLifecycleContext,
-  ): Promise<RevylStart> {
-    const { resolveRevylAppUrl, resolveRevylDeviceSelection } =
-      await import('./session-allocation.ts');
-    const selection = resolveRevylDeviceSelection(
-      context,
-      this.options.deviceModel === undefined && this.options.osVersion === undefined
-        ? {}
-        : {
-            ...(this.options.deviceModel === undefined
-              ? {}
-              : { deviceModel: this.options.deviceModel }),
-            ...(this.options.osVersion === undefined ? {} : { osVersion: this.options.osVersion }),
-          },
-    );
-    return await startRevylSession(this.client, lease, {
-      platform,
-      appUrl: resolveRevylAppUrl(context),
-      deviceModel: selection.deviceModel,
-      osVersion: selection.osVersion,
-      ...revylCallerBudget(context),
-    });
   }
 
   private sessionForDevice(device: DeviceInfo): RevylSession | undefined {

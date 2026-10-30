@@ -1,6 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { isRecord } from '@agent-device/kernel/record';
 import { REVYL_PROVIDER } from './device.ts';
 import { createRevylRuntime, type RevylRuntime } from './runtime.ts';
 
@@ -98,13 +99,11 @@ export async function startRevylFixtureBackend(
   /** The platform and session id of the last `start_device`, which is what later answers report. */
   let started: { platform: string; sessionId: string } | undefined;
   /**
-   * Whether Revyl would hold a session right now. A session is made when `start_device` is *answered* —
-   * with a start delay, later than the request — and a confirmed `/stop` ends it, so a stop sent inside
-   * that gap names a session that does not exist yet.
+   * The sessions Revyl would hold right now, by id. A session is made when its `start_device` is
+   * *answered* — with a start delay, later than the request — and a confirmed `/stop` for that id ends
+   * it, so a stop sent inside that gap names a session that does not exist yet.
    */
-  const sessionIsOpen = () =>
-    answered.some((path) => path.endsWith('/start_device')) &&
-    !answered.some((path) => path.endsWith('/stop'));
+  const openSessions = new Set<string>();
   const screen = options.screen ?? DEFAULT_IOS_SCREEN;
 
   const overrides = new Map(Object.entries(options.respond ?? {}));
@@ -129,6 +128,13 @@ export async function startRevylFixtureBackend(
       // recorded on receipt — cannot say.
       response.on('finish', () => {
         answered.push(`${method} ${url}`);
+        if (response.statusCode !== 200) return;
+        const startedId = isRecord(recorded) ? recorded.session_id : undefined;
+        if (url.endsWith('/start_device') && typeof startedId === 'string') {
+          openSessions.add(startedId);
+        }
+        const stoppedId = sessionIdIn(url);
+        if (stoppedId !== undefined) openSessions.delete(stoppedId);
       });
       const override = overrides.get(`${method} ${url}`);
       if (override !== undefined) {
@@ -166,7 +172,8 @@ export async function startRevylFixtureBackend(
         stop: () => {
           // With `sessionExistsOnceStarted`, a stop that arrives before the start has answered names a
           // session Revyl never made. The caller must not read that 404 as a release it never got.
-          if (options.sessionExistsOnceStarted && !sessionIsOpen()) {
+          const stopping = sessionIdIn(url);
+          if (options.sessionExistsOnceStarted && (!stopping || !openSessions.has(stopping))) {
             return { status: 404, body: { detail: 'no such session', error: 'Not Found' } };
           }
           return {

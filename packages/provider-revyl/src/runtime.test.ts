@@ -110,6 +110,31 @@ test('two allocations of one lease that overlap rent one device, and both report
   ]);
 });
 
+test('a joining allocation for a different app or device is refused, not handed the first device', async () => {
+  const fixture = await backend({ startDelayMs: 200 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const first = runtime.leaseLifecycle?.allocate?.(lease, {
+    initialApp: 'https://apps.test/a.zip',
+  });
+
+  await assert.rejects(
+    async () =>
+      await runtime.leaseLifecycle?.allocate?.(lease, {
+        initialApp: 'https://apps.test/b.zip',
+        flags: { device: 'iPhone 16' },
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'provider-lease-request-mismatch' &&
+      JSON.stringify(error.details?.fields) === JSON.stringify(['appUrl', 'deviceModel']),
+  );
+  // A joiner that names nothing of its own accepts the device the lease already has.
+  const [started, joined] = await Promise.all([first, runtime.leaseLifecycle?.allocate?.(lease)]);
+  assert.equal(joined?.providerSessionId, started?.providerSessionId);
+  assert.equal(fixture.paths().filter((path) => path.endsWith('start_device')).length, 1);
+});
+
 test('a joining allocation refuses the flags Revyl has no field for before it joins', async () => {
   // The first caller's start is still unanswered when the second arrives with a flag Revyl reads never.
   // An allocation that reuses a device the daemon already holds carries a profile of its own, and a join
@@ -240,6 +265,24 @@ test('release stops the session once, and shutdown stops the sessions a lease ne
     stopPath,
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-2')}/stop`,
   ]);
+});
+
+test('a release, a recovery and a shutdown that overlap send one stop between them', async () => {
+  const stopPath = `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`;
+  const fixture = await backend({
+    respond: { [stopPath]: { delayMs: 150, body: { success: true, request_accepted: true } } },
+  });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  await runtime.leaseLifecycle?.allocate?.(lease);
+
+  await Promise.all([
+    runtime.leaseLifecycle?.release?.(lease),
+    runtime.recoverExpiredLease(lease),
+    runtime.shutdown(),
+  ]);
+
+  assert.deepEqual(stops(fixture), [stopPath]);
 });
 
 test('a stop Revyl refuses keeps the lease for a retry and reports the session it could not release', async () => {
