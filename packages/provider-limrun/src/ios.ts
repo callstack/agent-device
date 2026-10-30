@@ -295,10 +295,7 @@ class LimrunIosInteractor implements Interactor {
       x,
       y,
     });
-    // One value write on the focused element. The SDK omits the selector so the
-    // server resolves focus, and the whole string is the value, including an empty
-    // clear and characters that have no key code. A supplied delay stays on this
-    // signature for callers; per-character timing stays on `type`.
+    // Omitting the selector lets the server resolve focus.
     await this.session.client.setElementValue(text);
     return { textEntryReadiness };
   }

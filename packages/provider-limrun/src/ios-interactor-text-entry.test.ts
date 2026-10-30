@@ -87,45 +87,23 @@ test('fill waits for text-entry focus to arrive and only then sets the value', a
   expect(client.typeText).not.toHaveBeenCalled();
 });
 
-test('fill sets Chinese, mixed, and emoji text in one write after focus', async () => {
-  for (const text of ['你好', 'qa@例子.com', '👋']) {
-    const { interactor, client, calls } = sessionWithTrees([emailField(false), emailField(true)]);
+test.each([
+  ['你好', undefined],
+  ['qa@例子.com', undefined],
+  ['👋', undefined],
+  ['replacement', undefined],
+  ['', undefined],
+  ['你好a', 1],
+  ['', 1],
+])('fill writes %s once with delay %s', async (text, delayMs) => {
+  const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
 
-    const result = await interactor.fill(200, 170, text);
+  const result = await interactor.fill(200, 170, text, delayMs);
 
-    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
-    expect(calls.indexOf('tap')).toBeLessThan(calls.lastIndexOf('elementTree'));
-    expect(calls.lastIndexOf('elementTree')).toBeLessThan(calls.indexOf('setElementValue'));
-    expect(client.setElementValue.mock.calls).toEqual([[text]]);
-    expect(client.pressKey).not.toHaveBeenCalled();
-    expect(client.typeText).not.toHaveBeenCalled();
-  }
-});
-
-test('fill replaces an ASCII value and clears with an empty string on the same path', async () => {
-  for (const text of ['replacement', '']) {
-    const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
-
-    const result = await interactor.fill(200, 170, text);
-
-    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
-    expect(client.setElementValue.mock.calls).toEqual([[text]]);
-    expect(client.pressKey).not.toHaveBeenCalled();
-    expect(client.typeText).not.toHaveBeenCalled();
-  }
-});
-
-test('a delayed fill still sets the complete value once', async () => {
-  for (const text of ['你好a', '']) {
-    const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
-
-    const result = await interactor.fill(200, 170, text, 1);
-
-    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
-    expect(client.setElementValue.mock.calls).toEqual([[text]]);
-    expect(client.pressKey).not.toHaveBeenCalled();
-    expect(client.typeText).not.toHaveBeenCalled();
-  }
+  expect(result).toEqual({ textEntryReadiness: 'focused-element' });
+  expect(client.setElementValue.mock.calls).toEqual([[text]]);
+  expect(client.pressKey).not.toHaveBeenCalled();
+  expect(client.typeText).not.toHaveBeenCalled();
 });
 
 test('a session that cannot answer the focus read fails before the device is touched', async () => {
