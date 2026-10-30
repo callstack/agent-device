@@ -16,9 +16,9 @@
 // alike — without touching any of them, exactly like the Vitest lane.
 //
 // Cleanup runs from the process 'exit' event rather than only a try/finally,
-// so it fires for normal completion, a thrown error, AND a signal this
-// process forwards to a still-running child (Ctrl-C locally, or a CI job
-// cancellation): the signal handlers below call `process.exit()`, which
+// so it fires for normal completion, a thrown error, AND a signal (Ctrl-C
+// locally, or a CI job cancellation): the first signal is forwarded and the
+// run ends when the child exits; a second one calls `process.exit()`, which
 // triggers 'exit' synchronously before the process actually terminates.
 // Only a SIGKILL against this wrapper itself bypasses all of that; the next
 // run on the host prunes what such a kill left behind (see
@@ -100,15 +100,18 @@ const { child, wait } = runCmdBackground(process.execPath, forwardedArgs, {
   allowFailure: true,
 });
 
+// A forwarded signal waits for the child: its own cleanup may still be running, and leftovers
+// are stopped only after it exits. A second signal stops waiting.
+let signalExitCode: number | undefined;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    child.kill(signal);
+    if (signalExitCode !== undefined) process.exit(signalExitCode);
     // 128 + signal number is the shell convention for a signal-terminated exit.
-    process.exit(signal === 'SIGINT' ? 130 : 143);
+    signalExitCode = signal === 'SIGINT' ? 130 : 143;
+    child.kill(signal);
   });
 }
 
 const result = await wait;
-// Only after the child exits: on a forwarded signal its own cleanup may still be running.
-reportStoppedRunDirectoryConsumers(testRunTmpDir, stopRunDirectoryConsumers(testRunTmpDir));
-process.exitCode = result.exitCode;
+reportStoppedRunDirectoryConsumers(testRunTmpDir, await stopRunDirectoryConsumers(testRunTmpDir));
+process.exitCode = signalExitCode ?? result.exitCode;

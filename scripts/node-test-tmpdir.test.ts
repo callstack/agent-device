@@ -86,25 +86,57 @@ test('the wrapper redirects a node --test child TMPDIR and removes it after the 
   }
 });
 
-test('the wrapper stops an orphaned Node fixture still using the run directory, not a shared tool', async () => {
-  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-'));
-  const evidencePath = path.join(evidenceRoot, 'pids.json');
+type LeftoverPids = { fixture: number; fixtureChild: number; tool: number };
+
+// The probe leaves a Node fixture (with a child of its own) and a non-Node tool running, both
+// detached so they outlive the probe. With `hold`, it then waits until the run is interrupted.
+function writeLeftoverProbe(evidenceRoot: string, hold: boolean): string {
   const probeName = `node-test-tmpdir-probe-reap-${process.pid}-${crypto.randomUUID()}.test.ts`;
   const probePath = path.join(REPOSITORY_ROOT, 'scripts', probeName);
+  const childPidPath = path.join(evidenceRoot, 'fixture-child.txt');
+  const fixtureSource = `const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); require('node:fs').writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid)); setInterval(() => {}, 1000);`;
   fs.writeFileSync(
     probePath,
     `import fs from 'node:fs';
 import { test } from 'node:test';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 
-test('probe leaves a Node fixture and a non-Node tool running past its own exit', () => {
-  const fixture = runCmdDetached(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+test('probe leaves a Node fixture and a non-Node tool running past its own exit', async () => {
+  const fixture = runCmdDetached(process.execPath, ['-e', ${JSON.stringify(fixtureSource)}]);
   const tool = runCmdDetached('/bin/sleep', ['60']);
-  fs.writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify({ fixture, tool }));
+  while (!fs.existsSync(${JSON.stringify(childPidPath)})) await new Promise((resolve) => setTimeout(resolve, 20));
+  const fixtureChild = Number(fs.readFileSync(${JSON.stringify(childPidPath)}, 'utf8'));
+  fs.writeFileSync(${JSON.stringify(path.join(evidenceRoot, 'pids.json'))}, JSON.stringify({ fixture, fixtureChild, tool }));
+  ${hold ? 'await new Promise((resolve) => setTimeout(resolve, 60_000));' : ''}
 });
 `,
   );
-  let pids: { fixture: number; tool: number } | undefined;
+  return probePath;
+}
+
+async function assertOnlyFixtureTreeStopped(stderr: string, pids: LeftoverPids): Promise<void> {
+  await waitFor(
+    () => !isAlive(pids.fixture) && !isAlive(pids.fixtureChild),
+    5_000,
+    'the leaked fixture or its child outlived its run',
+  );
+  assert.match(stderr, new RegExp(`\\[tmpdir\\] stopped [^]*\\n  ${pids.fixture} `));
+  assert.match(stderr, new RegExp(`\\[tmpdir\\] stopped [^]*\\n  ${pids.fixtureChild} `));
+  assert.equal(isAlive(pids.tool), true, 'a non-Node process is not the run’s to stop');
+}
+
+function killLeftovers(evidenceRoot: string): void {
+  const evidencePath = path.join(evidenceRoot, 'pids.json');
+  if (!fs.existsSync(evidencePath)) return;
+  const pids = JSON.parse(fs.readFileSync(evidencePath, 'utf8')) as LeftoverPids;
+  for (const pid of [pids.fixture, pids.fixtureChild, pids.tool]) {
+    if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+  }
+}
+
+test('the wrapper stops an orphaned Node fixture tree still using the run directory, not a shared tool', async () => {
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-'));
+  const probePath = writeLeftoverProbe(evidenceRoot, false);
   try {
     const result = await runCmd(
       process.execPath,
@@ -112,14 +144,37 @@ test('probe leaves a Node fixture and a non-Node tool running past its own exit'
       { cwd: REPOSITORY_ROOT, timeoutMs: 30_000 },
     );
     assert.equal(result.exitCode, 0, `probe run failed:\n${result.stdout}\n${result.stderr}`);
-    pids = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
-    await waitFor(() => !isAlive(pids!.fixture), 5_000, 'the leaked fixture outlived its run');
-    assert.match(result.stderr, new RegExp(`\\[tmpdir\\] stopped [^]*\\n  ${pids!.fixture} `));
-    assert.equal(isAlive(pids!.tool), true, 'a non-Node process is not the run’s to stop');
+    const pids = JSON.parse(fs.readFileSync(path.join(evidenceRoot, 'pids.json'), 'utf8'));
+    await assertOnlyFixtureTreeStopped(result.stderr, pids);
   } finally {
-    for (const pid of pids ? [pids.fixture, pids.tool] : []) {
-      if (isAlive(pid)) process.kill(pid, 'SIGKILL');
-    }
+    killLeftovers(evidenceRoot);
+    fs.rmSync(probePath, { force: true });
+    fs.rmSync(evidenceRoot, { recursive: true, force: true });
+  }
+});
+
+test('an interrupted wrapper waits for its child, then stops the leftovers and exits 130', async () => {
+  const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'node-test-tmpdir-reap-signal-'));
+  const probePath = writeLeftoverProbe(evidenceRoot, true);
+  const wrapper = runCmdBackground(
+    process.execPath,
+    ['--experimental-strip-types', WRAPPER, '--experimental-strip-types', '--test', probePath],
+    { cwd: REPOSITORY_ROOT, allowFailure: true },
+  );
+  try {
+    const evidencePath = path.join(evidenceRoot, 'pids.json');
+    await waitFor(() => fs.existsSync(evidencePath), 20_000, 'probe never reported its pids');
+    wrapper.child.kill('SIGINT');
+    const result = await wrapper.wait;
+    assert.equal(result.exitCode, 130, result.stderr);
+    await assertOnlyFixtureTreeStopped(
+      result.stderr,
+      JSON.parse(fs.readFileSync(evidencePath, 'utf8')),
+    );
+  } finally {
+    wrapper.child.kill('SIGKILL');
+    await wrapper.wait;
+    killLeftovers(evidenceRoot);
     fs.rmSync(probePath, { force: true });
     fs.rmSync(evidenceRoot, { recursive: true, force: true });
   }
