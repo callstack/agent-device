@@ -146,8 +146,13 @@ try {
   await client.interactions.click({ selector: 'label="Continue"' });
 } finally {
   // Releasing the lease ends the Revyl session, so a failure cannot leave a device rented.
-  await host.client.leases.release({ ...scope, leaseId: lease.leaseId });
-  await host.close();
+  // The inner finally closes the host even when the release itself fails; otherwise the embedded
+  // daemon stays alive and nothing retries the release.
+  try {
+    await host.client.leases.release({ ...scope, leaseId: lease.leaseId });
+  } finally {
+    await host.close();
+  }
 }
 ```
 
