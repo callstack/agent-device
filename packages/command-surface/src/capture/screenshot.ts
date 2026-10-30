@@ -46,6 +46,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
       SCREENSHOT_SCREEN_MASKS,
       'Fill the iOS simulator screen outline with black for this capture. Requires simctl; omit for the default image.',
     ),
+    nativeDensity: booleanField("Keep the display's own pixels instead of 1x points."),
     fullscreen: booleanField(),
     scale: numberField('Screenshot scale factor.', SCREENSHOT_SCALE_LIMITS),
     maxSize: retiredField(RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot),

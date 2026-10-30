@@ -71,7 +71,7 @@ export type BackendFindTextResult = {
 export type BackendScreenshotOptions = {
   fullscreen?: boolean;
   overlayRefs?: boolean;
-  pixelDensity?: number;
+  pixelDensity?: number | 'native';
   screenMask?: ScreenshotScreenMask;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;
