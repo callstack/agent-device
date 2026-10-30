@@ -367,5 +367,5 @@ export async function restoreLegacyXctestDeviceSetRedirect(
 ): Promise<void> {
   const { restoreLegacyXctestDeviceSetRedirect: restore } =
     await import('./legacy-xctest-device-set.ts');
-  restore(...args);
+  await restore(...args);
 }
