@@ -210,7 +210,7 @@ export async function startRevylFixtureBackend(
           ? {}
           : { deviceModel: runtimeOptions.deviceModel }),
         ...(runtimeOptions?.osVersion === undefined ? {} : { osVersion: runtimeOptions.osVersion }),
-      }),
+      }).runtime,
     close: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

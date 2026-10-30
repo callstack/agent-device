@@ -106,6 +106,24 @@ test('a plugin with no key in either place refuses before it reaches the backend
   assert.deepEqual(fixture.paths(), []);
 });
 
+test('setup builds the runtime and owner from the credential options, not the environment', async () => {
+  const fixture = await backend();
+  // The environment holds neither variable, so only the options can reach the runtime it builds.
+  const plugin = revyl({ apiKey: 'option-key', apiUrl: fixture.backendUrl });
+  const setup = await plugin.setup(host({}));
+  if (!('runtime' in setup)) throw new Error('Revyl sets up a runtime, not a WebDriver descriptor');
+
+  // The owner identity hashes the key and the origin together, so this equality says both came from
+  // the options. A runtime built from another credential would be a second owner for one account,
+  // and the two would race over the same sessions.
+  assert.equal(
+    setup.platformModule.owner.instance,
+    resolveRevylRuntimeInstance({ apiKey: 'option-key', backendUrl: fixture.backendUrl }),
+  );
+  assert.equal(setup.runtime.provider, 'revyl');
+  await setup.runtime.shutdown();
+});
+
 test('one account and origin is one runtime identity whatever the URL spelling', () => {
   const base = resolveRevylRuntimeInstance({ apiKey: 'k', backendUrl: REVYL_DEFAULT_BACKEND_URL });
   // Trailing slash, and the default spelled out, are one account against one origin. Two identities

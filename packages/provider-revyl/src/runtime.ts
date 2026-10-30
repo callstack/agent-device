@@ -75,21 +75,12 @@ type RevylAllocation = Readonly<{
 const CONFIRMED_RELEASE_MEMORY = 256;
 
 /**
- * Builds the Revyl runtime, and with `includePlatformModule` the owner the host loads bindings
- * through. The owner module is loaded on first bind, so a session that only rents a device never
- * evaluates the platform-runtime graph.
+ * Builds the Revyl runtime and the owner the host loads its bindings through. The owner's module is
+ * loaded on first bind, so a session that only rents a device never evaluates the platform-runtime
+ * graph.
  */
-export function createRevylRuntime(
-  options: RevylRuntimeOptions,
-  mode: Readonly<{ includePlatformModule: true }>,
-): RevylRuntimeRegistration;
-export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntime;
-export function createRevylRuntime(
-  options: RevylRuntimeOptions,
-  mode?: Readonly<{ includePlatformModule: true }>,
-): RevylRuntime | RevylRuntimeRegistration {
+export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRegistration {
   const runtime = new RevylRuntimeImplementation(options);
-  if (!mode?.includePlatformModule) return runtime;
   const owner = providerRuntimeOwner(
     REVYL_PROVIDER,
     resolveRevylRuntimeInstance({

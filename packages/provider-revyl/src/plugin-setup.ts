@@ -15,12 +15,9 @@ export async function setupRevylPlugin(
   const { requireRevylCredentials } = await import('./credentials.ts');
   const { createRevylRuntime } = await import('./runtime.ts');
   const credentials = requireRevylCredentials(host.env, 'Revyl');
-  return createRevylRuntime(
-    {
-      apiKey: credentials.apiKey,
-      ...(credentials.apiUrl === undefined ? {} : { backendUrl: credentials.apiUrl }),
-      clientVersion: host.clientVersion,
-    },
-    { includePlatformModule: true },
-  );
+  return createRevylRuntime({
+    apiKey: credentials.apiKey,
+    ...(credentials.apiUrl === undefined ? {} : { backendUrl: credentials.apiUrl }),
+    clientVersion: host.clientVersion,
+  });
 }
