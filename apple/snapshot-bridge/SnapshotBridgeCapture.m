@@ -12,7 +12,7 @@ static NSString *const elementKey = @"UIAccessibilitySnapshotKeyElement";
 const NSUInteger kMaximumRequestLevels = 65;
 // Sized for the daemon's default depth bound (128 levels). Each root-to-leaf path needs one
 // continuation per accepted-depth window, so the budget scales with the depth it must cover.
-const NSUInteger kMaximumRequests = 64;
+const NSUInteger kMaximumRequestsPerCapture = 64;
 
 @interface SnapshotTreeCapture : NSObject
 @property(nonatomic, copy) SnapshotElementReader reader;
@@ -31,7 +31,7 @@ const NSUInteger kMaximumRequests = 64;
 {
   NSUInteger attemptDepth = MIN(depth, self.acceptedDepth);
   for (NSUInteger retries = 0;; retries++) {
-    if (self.requests >= kMaximumRequests) {
+    if (self.requests >= kMaximumRequestsPerCapture) {
       if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:1
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation request budget exhausted"}];
       return nil;

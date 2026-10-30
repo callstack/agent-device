@@ -5,7 +5,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Native levels one request reads at most; deeper levels arrive through continuations.
 extern const NSUInteger kMaximumRequestLevels;
 /// Requests one acquisition may issue before it fails as continuation-budget-exhausted.
-extern const NSUInteger kMaximumRequests;
+extern const NSUInteger kMaximumRequestsPerCapture;
 
 typedef id _Nullable (^SnapshotElementReader)(id element, NSUInteger depth, NSUInteger nodes, NSError **error);
 

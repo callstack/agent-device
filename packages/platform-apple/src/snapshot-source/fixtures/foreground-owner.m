@@ -174,7 +174,7 @@ int main(int argc, const char *argv[])
         if ([element isEqual:@"root"]) return root;
         return @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[]}]};
       }, &truncated, NULL, &failure);
-      if (budget) require(!result && failure.code == 1 && requests == kMaximumRequests, @"request budget must fail without publishing partial content");
+      if (budget) require(!result && failure.code == 1 && requests == kMaximumRequestsPerCapture, @"request budget must fail without publishing partial content");
       else if ([scenario isEqual:@"identity"]) require(result == root && requests == 1, @"healthy capture must reuse the native tree");
       else {
         NSUInteger count = 0;
@@ -194,7 +194,7 @@ int main(int argc, const char *argv[])
     NSString *expectedCode = nil;
     NSUInteger expectedCaptures = 0;
     if ([scenario isEqual:@"runtime-budget"]) {
-      expectedCaptures = kMaximumRequests;
+      expectedCaptures = kMaximumRequestsPerCapture;
       expectedCode = @"continuation-budget-exhausted";
     } else if ([scenario hasPrefix:@"wide-"] || [scenario isEqual:@"zero-depth"]) {
       expectedCaptures = [scenario isEqual:@"wide-continuation"] ? 2 : 1;
