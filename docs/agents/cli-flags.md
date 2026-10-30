@@ -40,7 +40,7 @@ Pass a flag only through layers that consume it:
 - If the first positional selects an action, declare `flagsByAction` on the CLI schema.
   Map each action to the options it reads. Derive `allowedFlags` from that table.
   From caller-supplied keys, the parser rejects typed options that the action never reads.
-  Config, env, and remote-config defaults do not become a request.
+  Options the selected action ignores stay out of its request, even when config, env, or remote-config defaults set them. Thus, `AGENT_DEVICE_FPS=30` never breaks `record stop`.
   Exclude options that every action reads from the table.
   The parser rejects only options in rows. If it rejected `--json`, it would reject the command.
 - Keep command-specific usage/flag metadata with the command family metadata that owns the command.
