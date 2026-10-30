@@ -110,7 +110,7 @@ export function createExpiredProviderLeaseReleaser(options: {
 
   const adoptOrphanedLeases = (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void): void => {
     if (!options.stateDir) return;
-    const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE);
+    const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE, onDiagnostic);
     if (orphaned.size === 0) return;
     for (const [leaseId, lease] of orphaned) {
       if (!pendingRecoveryLeases.has(leaseId)) pendingRecoveryLeases.set(leaseId, lease);
@@ -169,7 +169,11 @@ export function createExpiredProviderLeaseReleaser(options: {
     if (inherited) return;
     inherited = true;
     // Everything in the expired record is durable by definition, which is what the persisted ids track.
-    for (const [leaseId, lease] of loadLeaseRecord(options.stateDir, PENDING_RELEASES_FILE)) {
+    for (const [leaseId, lease] of loadLeaseRecord(
+      options.stateDir,
+      PENDING_RELEASES_FILE,
+      onDiagnostic,
+    )) {
       pendingRecoveryLeases.set(leaseId, lease);
     }
     for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
@@ -414,22 +418,30 @@ function writeLeaseRecord(stateDir: string, file: string, leases: readonly Devic
   fs.chmodSync(filePath, 0o600);
 }
 
-function loadLeaseRecord(stateDir: string | undefined, file: string): Map<string, DeviceLease> {
+/**
+ * Reads one lease record. A record that exists but cannot be read is left on disk and reported with its
+ * path, so an operator can tell which record it is and end its leases by hand.
+ */
+function loadLeaseRecord(
+  stateDir: string | undefined,
+  file: string,
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void,
+): Map<string, DeviceLease> {
   if (!stateDir) return new Map();
   const filePath = leaseRecordPath(stateDir, file);
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedProviderLeaseRecord;
     if (parsed.version !== LEASE_RECORD_VERSION || !Array.isArray(parsed.leases)) {
-      throw new Error('unsupported expiry release record');
+      throw new Error(`unsupported lease record (version ${String(parsed.version)})`);
     }
     return new Map(
       parsed.leases.filter(isPersistedDeviceLease).map((lease) => [lease.leaseId, lease]),
     );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'provider_lease_expiry_record_read_failed',
+    onDiagnostic?.({
+      phase: 'provider_lease_record_read_failed',
+      resourcePath: filePath,
       data: { error: error instanceof Error ? error.message : String(error) },
     });
     return new Map();

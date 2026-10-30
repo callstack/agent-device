@@ -388,3 +388,31 @@ test('daemon startup recovers inherited lease records only after it holds the re
   expect(recovery).toBeGreaterThan(refused);
   expect(source.indexOf('expiredProviderLeaseReleaser.retryPending()')).toBe(-1);
 });
+
+test('an unreadable live journal is reported with its path and left on disk', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  const journalPath = `${stateDir}/live-provider-leases.json`;
+  fs.writeFileSync(journalPath, JSON.stringify({ version: 99, leases: [] }));
+  const recoverExpiredLease = vi.fn(async () => undefined);
+  const daemon = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['revyl'],
+  });
+  try {
+    const startupDiagnostics: { phase: string; resourcePath: string }[] = [];
+    await daemon.recoverInherited((diagnostic) => startupDiagnostics.push(diagnostic));
+
+    expect(startupDiagnostics).toEqual([
+      expect.objectContaining({
+        phase: 'provider_lease_record_read_failed',
+        resourcePath: journalPath,
+      }),
+    ]);
+    expect(fs.existsSync(journalPath)).toBe(true);
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+  } finally {
+    daemon.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
