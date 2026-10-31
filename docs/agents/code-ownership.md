@@ -25,7 +25,7 @@ Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `packages/daemon-client/src/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
 Schema composition belongs in `packages/command-surface/src/schema`.
-A command facet declares no output formatter. Register the formatter in `packages/command-output/src/cli-output.ts`.
+Command facets declare no formatter. Register formatters in `packages/command-output/src/cli-output.ts`.
 Command execution and bound runtime families belong in `packages/command-runtime/src`.
 Build interaction data through `buildInteractionResponseData`.
 Change cross-language rules through `contracts/fixtures/` golden tables.
