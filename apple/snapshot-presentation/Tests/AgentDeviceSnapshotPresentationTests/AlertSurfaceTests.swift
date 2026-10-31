@@ -3,13 +3,16 @@ import Foundation
 import XCTest
 @testable import AgentDeviceSnapshotPresentation
 
-/// A tree recorded by `pnpm capture:alert-surface`, and what the alert rules must find in it.
-/// `nodes` are never edited by hand. `expect` names, for each source, the one surface that source
-/// must find; a source it does not name must find nothing.
+/// Two trees of one screen recorded by `pnpm capture:alert-surface`, and what the alert rules must
+/// find in the honor-modal tree. Trees are never edited by hand. `expect` names, for each source,
+/// the one surface that source must find; a source it does not name must find nothing.
 private struct RecordedAlertSurface: Decodable {
+  static let format = 2
+
   struct Node: Decodable {
     let index: Int
     let parentIndex: Int?
+    let element: String
     let type: String
     let identifier: String
     let label: String
@@ -21,11 +24,30 @@ private struct RecordedAlertSurface: Decodable {
     let buttons: [String]
   }
 
-  let capture: [String: String]
+  let format: Int
   let expect: [String: Expectation]
-  let nodes: [Node]
+  let plain: [Node]
+  let honorModal: [Node]
 
-  func tree() throws -> AlertSurfaceNode {
+  static func load(_ file: URL) throws -> RecordedAlertSurface {
+    let recorded = try JSONDecoder().decode(RecordedAlertSurface.self, from: Data(contentsOf: file))
+    guard recorded.format == format, isPreorder(recorded.plain), isPreorder(recorded.honorModal) else {
+      throw CocoaError(.coderReadCorrupt)
+    }
+    return recorded
+  }
+
+  // Each node's index is its position, and its parent comes before it.
+  private static func isPreorder(_ nodes: [Node]) -> Bool {
+    !nodes.isEmpty && nodes.indices.allSatisfy { position in
+      let node = nodes[position]
+      guard node.index == position else { return false }
+      guard let parent = node.parentIndex else { return position == 0 }
+      return parent >= 0 && parent < position
+    }
+  }
+
+  static func tree(_ nodes: [Node]) -> AlertSurfaceNode {
     var children: [Int: [Int]] = [:]
     for node in nodes {
       if let parent = node.parentIndex { children[parent, default: []].append(node.index) }
@@ -40,29 +62,33 @@ private struct RecordedAlertSurface: Decodable {
         children: (children[index] ?? []).map(build)
       )
     }
-    // A preorder list: each node's index is its position, and its parent comes before it.
-    let wellFormed = nodes.indices.allSatisfy { position in
-      let node = nodes[position]
-      guard node.index == position else { return false }
-      guard let parent = node.parentIndex else { return position == 0 }
-      return parent >= 0 && parent < position
-    }
-    guard wellFormed, !nodes.isEmpty else { throw CocoaError(.coderReadCorrupt) }
     return build(0)
   }
+
+  static func modalScopeNodes(_ nodes: [Node]) -> [ModalScopeNode] {
+    nodes.map { node in
+      ModalScopeNode(
+        element: node.element,
+        parentElement: node.parentIndex.map { nodes[$0].element },
+        frame: node.rect.cgRect
+      )
+    }
+  }
+}
+
+private func recordedAlertSurfaces() throws -> [(name: String, recorded: RecordedAlertSurface)] {
+  try FileManager.default.contentsOfDirectory(at: alertSurfaceCorpusURL(), includingPropertiesForKeys: nil)
+    .filter { $0.pathExtension == "json" }
+    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    .map { ($0.lastPathComponent, try RecordedAlertSurface.load($0)) }
 }
 
 final class AlertSurfaceTests: XCTestCase {
   func testEveryRecordedSurfaceIsFoundByItsSourceOnly() throws {
-    let files = try FileManager.default.contentsOfDirectory(at: alertSurfaceCorpusURL(), includingPropertiesForKeys: nil)
-      .filter { $0.pathExtension == "json" }
-      .sorted { $0.lastPathComponent < $1.lastPathComponent }
-    XCTAssertFalse(files.isEmpty)
-    let decoder = JSONDecoder()
-    for file in files {
-      let name = file.lastPathComponent
-      let recorded = try decoder.decode(RecordedAlertSurface.self, from: Data(contentsOf: file))
-      let root = try recorded.tree()
+    let recordings = try recordedAlertSurfaces()
+    XCTAssertFalse(recordings.isEmpty)
+    for (name, recorded) in recordings {
+      let root = RecordedAlertSurface.tree(recorded.honorModal)
       for key in recorded.expect.keys {
         XCTAssertNotNil(AlertSurfaceSource(rawValue: key), "\(name): unknown source \(key)")
       }
@@ -73,6 +99,23 @@ final class AlertSurfaceTests: XCTestCase {
         XCTAssertEqual(found.map(\.title), expected.map { [$0.title] } ?? [], "\(name): \(source) title")
         XCTAssertEqual(found.map(\.buttons), expected.map { [$0.buttons] } ?? [], "\(name): \(source) buttons")
       }
+    }
+  }
+
+  /// The positive control for the honor-modal read: a recorded prompt hides content from it, and a
+  /// screen without a prompt hides nothing.
+  func testEveryRecordedPromptHidesContentFromTheHonorModalTree() throws {
+    for (name, recorded) in try recordedAlertSurfaces() {
+      let pairing = ModalScopePair.pair(
+        plain: RecordedAlertSurface.modalScopeNodes(recorded.plain),
+        honorModal: RecordedAlertSurface.modalScopeNodes(recorded.honorModal),
+        confirmingHonorModal: RecordedAlertSurface.modalScopeNodes(recorded.honorModal)
+      )
+      guard case let .paired(removedNodeCount) = pairing else {
+        XCTFail("\(name): \(pairing)")
+        continue
+      }
+      XCTAssertEqual(removedNodeCount > 0, !recorded.expect.isEmpty, "\(name): \(removedNodeCount) removed")
     }
   }
 

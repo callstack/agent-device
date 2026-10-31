@@ -1,4 +1,4 @@
-#import "RunnerAXSnapshotBridge.h"
+#import "RunnerAXSnapshotBridge+Internal.h"
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/message.h>
@@ -301,6 +301,35 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                 maxNodes:(NSInteger)maxNodes
                                    error:(NSError **)error
 {
+  return [self rootSnapshotFromClient:axClient
+                               target:target
+                           attributes:attributes
+                           parameters:[self snapshotParametersForClient:axClient maxDepth:maxDepth maxNodes:maxNodes]
+                                error:error];
+}
+
++ (NSMutableDictionary *)snapshotParametersForClient:(id)axClient
+                                            maxDepth:(NSInteger)maxDepth
+                                            maxNodes:(NSInteger)maxNodes
+{
+  NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
+  id defaults = [self objectFrom:axClient selectorName:@"defaultParameters"];
+  if ([defaults isKindOfClass:NSDictionary.class]) {
+    [parameters addEntriesFromDictionary:(NSDictionary *)defaults];
+  }
+  parameters[@"maxDepth"] = @(MAX(0, maxDepth));
+  parameters[@"maxChildren"] = @(MAX(1, maxNodes));
+  parameters[@"maxArrayCount"] = @(MAX(1, maxNodes));
+  parameters[@"traverseFromParentsToChildren"] = @YES;
+  return parameters;
+}
+
++ (nullable id)rootSnapshotFromClient:(id)axClient
+                               target:(id)target
+                           attributes:(NSArray *)attributes
+                           parameters:(NSDictionary *)parameters
+                                error:(NSError **)error
+{
   SEL requestSelector = NSSelectorFromString(@"requestSnapshotForElement:attributes:parameters:error:");
   if (![axClient respondsToSelector:requestSelector]) {
     if (NULL != error) {
@@ -313,16 +342,6 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
     return nil;
   }
-  NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
-  id defaults = [self objectFrom:axClient selectorName:@"defaultParameters"];
-  if ([defaults isKindOfClass:NSDictionary.class]) {
-    [parameters addEntriesFromDictionary:(NSDictionary *)defaults];
-  }
-  parameters[@"maxDepth"] = @(MAX(0, maxDepth));
-  parameters[@"maxChildren"] = @(MAX(1, maxNodes));
-  parameters[@"maxArrayCount"] = @(MAX(1, maxNodes));
-  parameters[@"traverseFromParentsToChildren"] = @YES;
-
   RunnerAXSnapshotMsgSend send = (RunnerAXSnapshotMsgSend)objc_msgSend;
   id result = send(axClient, requestSelector, target, attributes, parameters.copy, error);
   if (nil == result) {
@@ -339,7 +358,9 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 
 + (NSArray *)snapshotAttributes
 {
-  NSArray<NSString *> *keyPaths = @[
+  // The mapper expands keypaths with extra attributes that are disproportionately expensive for
+  // the AX server to compute on large trees. Keep only what is consumed here.
+  return [self attributesForKeyPaths:@[
     @"elementType",
     @"identifier",
     @"label",
@@ -350,7 +371,15 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     @"selected",
     @"hasFocus",
     @"children",
-  ];
+  ]
+                    consumedSuffixes:@[ @"ElementType", @"Identifier", @"Label", @"Value",
+                                        @"PlaceholderValue", @"Frame", @"Enabled", @"Selected",
+                                        @"Focus" ]];
+}
+
++ (NSArray *)attributesForKeyPaths:(NSArray<NSString *> *)keyPaths
+                  consumedSuffixes:(NSArray<NSString *> *)consumedSuffixes
+{
   // The AX server expects real accessibility attribute identifiers, not snapshot keypath strings;
   // raw keypaths silently drop attributes (frame came back zeroed). XCElementSnapshot owns the
   // keypath -> AX attribute mapping.
@@ -365,14 +394,10 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
       mapped = [(NSSet *)mapped allObjects];
     }
     if ([mapped isKindOfClass:NSArray.class] && [(NSArray *)mapped count] > 0) {
-      // The mapper expands keypaths with extra attributes that are disproportionately expensive
-      // for the AX server to compute on large trees. Keep only what is consumed here.
-      NSArray *needed = @[ @"ElementType", @"Identifier", @"Label", @"Value", @"PlaceholderValue",
-                           @"Frame", @"Enabled", @"Selected", @"Focus" ];
       NSMutableArray *filtered = [NSMutableArray array];
       for (id attribute in (NSArray *)mapped) {
         NSString *name = [attribute description];
-        for (NSString *suffix in needed) {
+        for (NSString *suffix in consumedSuffixes) {
           if ([name hasSuffix:suffix]) {
             [filtered addObject:attribute];
             break;
@@ -822,6 +847,17 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 
 + (NSDictionary *)frameValueForSnapshot:(id)snapshot
 {
+  CGRect frame = [self frameForSnapshot:snapshot];
+  return @{
+    @"x": @(CGRectGetMinX(frame)),
+    @"y": @(CGRectGetMinY(frame)),
+    @"width": @(CGRectGetWidth(frame)),
+    @"height": @(CGRectGetHeight(frame)),
+  };
+}
+
++ (CGRect)frameForSnapshot:(id)snapshot
+{
   CGRect frame = CGRectZero;
   @try {
     id value = [snapshot valueForKey:@"frame"];
@@ -835,12 +871,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   if (CGRectIsNull(frame) || CGRectIsInfinite(frame)) {
     frame = CGRectZero;
   }
-  return @{
-    @"x": @(CGRectGetMinX(frame)),
-    @"y": @(CGRectGetMinY(frame)),
-    @"width": @(CGRectGetWidth(frame)),
-    @"height": @(CGRectGetHeight(frame)),
-  };
+  return frame;
 }
 
 @end
