@@ -49,7 +49,9 @@ function nomac(options: NomacPluginOptions = {}): AgentDevicePlugin {
         requiresAppAttachment: false,
         requiresRemoteDaemon: false,
         supportsArtifacts: false,
-        supportsDeferredAppSelection: true,
+        // NoMac keeps no uploaded apps to pick at allocation: a phone starts empty and `install` fills it,
+        // so `open <bundle id>` allocates like any other command and never passes the app as --provider-app.
+        supportsDeferredAppSelection: false,
         supportsDirectPortReverse: false,
         usesCloudWebDriverLease: false,
       },

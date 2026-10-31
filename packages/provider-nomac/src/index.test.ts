@@ -21,6 +21,7 @@ test('the plugin declares itself as agent-device version 2 expects, reading NOMA
   expect(plugin.connection?.capabilities).toMatchObject({
     leaseKind: 'direct-device-provider',
     requiresRemoteDaemon: false,
+    supportsDeferredAppSelection: false,
     usesCloudWebDriverLease: false,
   });
   expect(nomac({ apiKey: 'nmk_x' }).credentials.variables).toEqual(['NOMAC_API_URL']);
