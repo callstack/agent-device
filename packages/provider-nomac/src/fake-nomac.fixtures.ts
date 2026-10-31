@@ -1,5 +1,5 @@
-import { deflateSync } from 'node:zlib';
-import type { NomacTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
+import { crc32, deflateSync } from 'node:zlib';
 
 /** One request the fake NoMac took, as a test reads it back. */
 export type SeenRequest = {
@@ -10,13 +10,15 @@ export type SeenRequest = {
   auth?: string | null;
 };
 
-/** A 1x1 PNG, so the screenshot path needs no JPEG decoder. */
+/** A valid 1x1 PNG (each chunk with its CRC), so the screenshot path needs no JPEG decoder. */
 export function tinyPng(): Buffer {
   const chunk = (type: string, data: Buffer) => {
     const head = Buffer.alloc(8);
     head.writeUInt32BE(data.length, 0);
     head.write(type, 4, 'ascii');
-    return Buffer.concat([head, data, Buffer.alloc(4)]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
+    return Buffer.concat([head, data, crc]);
   };
   const ihdr = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
   return Buffer.concat([
@@ -27,7 +29,12 @@ export function tinyPng(): Buffer {
   ]);
 }
 
-export const SIGN_IN_TREE: NomacTreeNode[] = [
+/**
+ * The sign-in screen of simulator-use's SwiftUI demo as a NoMac phone's `ui_look` saves it, cut down to
+ * the elements that matter: AXe's own shapes, so a secure field is a `TextField` with the
+ * `AXSecureTextField` subrole and a switch is a `CheckBox` with `AXSwitch`, its value a number.
+ */
+export const SIGN_IN_TREE: IosTreeNode[] = [
   {
     type: 'Application',
     role: 'AXApplication',
@@ -35,30 +42,38 @@ export const SIGN_IN_TREE: NomacTreeNode[] = [
     frame: { x: 0, y: 0, width: 402, height: 874 },
     children: [
       {
+        type: 'Heading',
+        role: 'AXHeading',
+        AXLabel: 'Sign In',
+        traits: ['Header'],
+        frame: { x: 16, y: 119.67, width: 107.67, height: 40.67 },
+      },
+      {
         type: 'TextField',
         role: 'AXTextField',
-        AXLabel: 'Email',
         AXUniqueId: 'email',
+        AXValue: 'Email',
         enabled: true,
-        frame: { x: 20, y: 180, width: 362, height: 44 },
+        frame: { x: 32, y: 183, width: 338, height: 22 },
       },
       {
-        type: 'SecureTextField',
+        type: 'TextField',
         role: 'AXTextField',
         subrole: 'AXSecureTextField',
-        AXLabel: 'Password',
         AXUniqueId: 'password',
+        AXValue: 'Password',
         enabled: true,
-        frame: { x: 20, y: 236, width: 362, height: 44 },
+        frame: { x: 32, y: 235.67, width: 338, height: 21 },
       },
       {
-        type: 'Switch',
-        role: 'AXSwitch',
+        type: 'CheckBox',
+        role: 'AXCheckBox',
+        subrole: 'AXSwitch',
         AXLabel: 'Remember me',
         AXUniqueId: 'remember',
-        AXValue: 0,
+        AXValue: '0',
         enabled: true,
-        frame: { x: 20, y: 292, width: 362, height: 44 },
+        frame: { x: 16, y: 272, width: 370, height: 52 },
       },
       {
         type: 'Button',
@@ -66,15 +81,15 @@ export const SIGN_IN_TREE: NomacTreeNode[] = [
         AXLabel: 'Sign In',
         AXUniqueId: 'signIn',
         enabled: true,
-        traits: ['Button'],
-        frame: { x: 20, y: 348, width: 362, height: 44 },
+        frame: { x: 16, y: 324, width: 370, height: 52 },
       },
       {
         type: 'StaticText',
         role: 'AXStaticText',
-        AXLabel: 'Sign In',
-        traits: ['Header'],
-        frame: { x: 20, y: 100, width: 200, height: 40 },
+        AXLabel: 'Not signed in',
+        AXUniqueId: 'status',
+        enabled: true,
+        frame: { x: 16, y: 376, width: 370, height: 52 },
       },
     ],
   },
@@ -96,6 +111,8 @@ export function fakeNomac(
   options: {
     readyAfter?: number;
     failStart?: string;
+    /** The tree behind the file link: the sign-in screen unless set. */
+    tree?: unknown;
     toolAnswers?: Record<
       string,
       (args: any) => { text: string; isError?: boolean; image?: string }
@@ -204,7 +221,7 @@ export function fakeNomac(
     });
     if (url.host === 'storage.test') return new Response(null, { status: 200 });
     if (url.pathname.startsWith('/api/v1/simulator/files/'))
-      return new Response(JSON.stringify(SIGN_IN_TREE));
+      return new Response(JSON.stringify(options.tree === undefined ? SIGN_IN_TREE : options.tree));
     if (url.pathname === '/api/v1/simulator/sessions')
       return method === 'POST' ? startPhone(body) : listPhones(url.searchParams.get('label'));
     const m = /^\/api\/v1\/simulator\/sessions\/(ses_\d+)(\/.*)?$/.exec(url.pathname);
