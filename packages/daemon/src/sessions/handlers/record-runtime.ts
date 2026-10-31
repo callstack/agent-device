@@ -372,6 +372,7 @@ function screenRecordingStartInput(
 ): ScreenRecordingStartInput {
   return {
     sessionId: params.sessionName,
+    requestId: params.req.meta?.requestId,
     outputPath: outputPaths.outputPath,
     clientOutputPath: outputPaths.clientOutputPath,
     scope: prepared.scope,
