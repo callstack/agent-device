@@ -248,12 +248,16 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
       ];
       const verdict = { state: 'recovered', backend: 'private-ax' } as SnapshotQualityVerdict;
       return (
-        await formatCommandText('snapshot', {
-          nodes,
-          backend: 'private-ax',
-          snapshotQuality: verdict,
-          warnings: renderSnapshotQualityWarnings(verdict, nodes),
-        })
+        await formatCommandText(
+          'snapshot',
+          {
+            nodes,
+            backend: 'private-ax',
+            snapshotQuality: verdict,
+            warnings: renderSnapshotQualityWarnings(verdict, nodes),
+          },
+          { interactiveOnly: true },
+        )
       ).trimEnd();
     },
   },
@@ -310,7 +314,11 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         row(11, 'e12', 'Developer', 1290),
       ];
       return (
-        await formatCommandText('snapshot', { nodes, backend: 'xctest', truncated: false })
+        await formatCommandText(
+          'snapshot',
+          { nodes, backend: 'xctest', truncated: false },
+          { interactiveOnly: true },
+        )
       ).trimEnd();
     },
   },

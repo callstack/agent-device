@@ -1,5 +1,4 @@
 import { findCommandMetadata, type CommandName } from '@agent-device/command-surface';
-import type { EnvMap } from '@agent-device/kernel/source-value';
 import { batchCliOutputFormatters } from './batch/output.ts';
 import { captureCliOutputFormatters } from './capture/output.ts';
 import { debuggingCliOutputFormatters } from './debugging/output.ts';
@@ -12,7 +11,7 @@ import {
   routeResponseWarnings,
   type CliOutput,
   type CliOutputFormatter,
-  type CommandProgressState,
+  type CliOutputFormatterParams,
 } from './output-common.ts';
 import { perfCliOutputFormatters } from './perf/output.ts';
 import { recordingCliOutputFormatters } from './recording/output.ts';
@@ -56,15 +55,9 @@ export function listCliOutputFormatters(): CliOutputFormatters {
   return { ...cliOutputFormatters };
 }
 
-export type FormatCliOutputParams = {
+export type FormatCliOutputParams = Omit<CliOutputFormatterParams, 'input'> & {
   name: CommandName;
   input: unknown;
-  result: unknown;
-  progress?: CommandProgressState;
-  /** The caller's host environment; a formatter that styles output reads color from it. */
-  env: EnvMap;
-  /** Whether the caller's stderr is a terminal; the root boundary reads it from its process. */
-  stderrIsTTY: boolean;
 };
 
 /**

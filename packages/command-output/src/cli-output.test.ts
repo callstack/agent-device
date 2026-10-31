@@ -1,7 +1,8 @@
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
 import { findCommandMetadata, listCommandMetadata } from '@agent-device/command-surface';
-import { dispatchCliOutput, listCliOutputFormatters } from './cli-output.ts';
+import { listCliOutputFormatters } from './cli-output.ts';
+import { formatCliOutput } from './index.ts';
 import { responseWarningRoute } from './output-common.ts';
 import type { CommandName } from '@agent-device/command-surface';
 
@@ -78,7 +79,7 @@ const FORMATTER_COMMANDS = [
 ] as const satisfies readonly CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
-  const output = await dispatchCliOutput({
+  const output = await formatCliOutput({
     env: process.env,
     stderrIsTTY: false,
     name,

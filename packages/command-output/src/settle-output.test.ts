@@ -17,6 +17,10 @@ const SETTLE_OBSERVATION_COMMANDS = [
 test('post-action observation CLI output formatters follow descriptor traits', async () => {
   const formatters = listCliOutputFormatters();
   for (const command of SETTLE_OBSERVATION_COMMANDS) {
+    assert.ok(
+      commandSupportsSettleObservation(command),
+      `${command}: missing settle observation trait`,
+    );
     assert.ok(formatters[command], `${command}: missing CLI output formatter`);
   }
   const settledResult = { message: 'ok', settle: { settled: true, waitedMs: 12 } };

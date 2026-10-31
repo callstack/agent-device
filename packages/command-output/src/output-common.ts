@@ -1,3 +1,4 @@
+import type { CommandMetadata } from '@agent-device/command-surface';
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
@@ -96,9 +97,9 @@ export function appendWarningLinesText(
 export type ResponseWarningRoute = 'text' | 'stderr';
 
 /** The route a command's descriptor metadata declares: a parseable-output command warns on stderr. */
-export function responseWarningRoute(metadata: {
-  readonly parseableOutput?: true;
-}): ResponseWarningRoute {
+export function responseWarningRoute(
+  metadata: Pick<CommandMetadata, 'parseableOutput'>,
+): ResponseWarningRoute {
   return metadata.parseableOutput === true ? 'stderr' : 'text';
 }
 
@@ -125,7 +126,7 @@ export function routeResponseWarnings(
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
-  return warning.replaceAll(/\s*\n\s*/g, ' ');
+  return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
 }
 
 /**
