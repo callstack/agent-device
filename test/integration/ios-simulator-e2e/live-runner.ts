@@ -477,7 +477,6 @@ async function assertCapture(context: LiveContext): Promise<void> {
   assertPngFile(screenshotPath);
   verifyCommand(context, C.screenshot, 'captured fixture file has a valid PNG signature');
 
-  await assertWaitSelector(context, 'id="home-open-catalog" visible=true');
   const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
   const recording = await runStep(context, 'start screen recording', [
     'record',
@@ -489,8 +488,8 @@ async function assertCapture(context: LiveContext): Promise<void> {
   assert.equal(recording.json?.data?.recording, 'started', JSON.stringify(recording.json));
   assert.equal(recording.json?.data?.recordingBackend, 'simctl recordVideo');
   assert.equal(recording.json?.data?.activeSessionApp?.bundleId, context.appId);
-  await runStep(context, 'record a visible mutation', ['press', 'id="home-open-catalog"']);
-  await assertWaitSelector(context, 'id="catalog-title" visible=true');
+  await runStep(context, 'record a visible mutation', ['click', 'label="Form"']);
+  await assertWaitText(context, 'Checkout form');
   const stopped = await runStep(context, 'stop screen recording', ['record', 'stop']);
   assert.equal(stopped.json?.data?.recording, 'stopped', JSON.stringify(stopped.json));
   await assertMp4File(recordingPath);
