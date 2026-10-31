@@ -22,6 +22,7 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*"
+    "@agent-device/test-kit": "workspace:*",
+    "vitest": "5.0.4"
   }
 }

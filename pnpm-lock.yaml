@@ -351,6 +351,9 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+      vitest:
+        specifier: 5.0.4
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
 
   packages/command-registry:
     dependencies:

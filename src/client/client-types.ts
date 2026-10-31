@@ -27,7 +27,7 @@ export type {
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
 
-// Contracts/kernel types re-exported into the PUBLISHED surface: `agent-device-client.ts` picks
+// Contracts/kernel types re-exported into the PUBLISHED surface: `src/sdk/index.ts` picks
 // these up via `export type *`, and that is their only job — every internal consumer imports
 // them from the declaring module instead. Deleting one would remove a name from the package's
 // public types.
