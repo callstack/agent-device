@@ -59,7 +59,7 @@ test('entry declarations permit process reads but do not permit ambient command-
     'packages/maestro/src/daemon-port/run-script-http-child.ts',
     'packages/react-native/src/companion/client-companion-tunnel-worker.ts',
     'src/sdk/host.ts',
-    'src/io.ts',
+    'packages/host-kit/src/local-artifact-adapter.ts',
   ]) {
     assert.deepEqual(check('process.env; process.on("SIGINT", stop);', file), [], file);
     assert.equal(check('commandHostEnvironment();', file).length, 1, file);

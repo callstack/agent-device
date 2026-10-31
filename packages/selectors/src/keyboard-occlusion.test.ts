@@ -18,7 +18,7 @@ import { assertTapTargetClearOfVisibleKeyboard } from './keyboard-occlusion.ts';
 // The guard's own contribution: the refusal it raises for a decision the classifier already made.
 // Which geometry decides is the classifier's suite (packages/contracts/src/tap-keyboard-occlusion.test.ts,
 // golden-table-driven), and which doors run the guard is proven where each door lives — the interaction
-// leaf's in src/commands/interaction/runtime/target-visibility-stages-keyboard-occlusion.test.ts, the
+// leaf's in packages/command-runtime/src/commands/interaction/runtime/target-visibility-stages-keyboard-occlusion.test.ts, the
 // mutating-`find` seam's in packages/daemon/src/execution/interaction/internal/__tests__/. Every one
 // of those suites measures this same #2589 capture. The coordinate path's disclosure string is proven
 // through that leaf's production door (`describeKeyboardOccludedPointWarning` has exactly one caller),

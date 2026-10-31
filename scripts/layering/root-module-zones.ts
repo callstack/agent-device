@@ -8,7 +8,7 @@
  *
  * This reduces `(root)` in the logical graph only: the declared modules still live directly under
  * `src/`, and classifying them is not collocating them. The table bridges that layout and should
- * shrink. When a group moves into a folder named for its zone (`src/command-runtime/`,
+ * shrink. When a group moves into a folder named for its zone (`packages/command-runtime/`,
  * `packages/daemon-contracts/`, ...) or into a package, `topFolder` derives the same zone and the
  * group's rows are deleted. The end state: renaming a module within its owner needs no edit here,
  * while a forbidden dependency still fails R5 or R80.
@@ -21,10 +21,8 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts', 'src/host.ts'],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
-  // The in-process command runtime: the local artifact-adapter implementation and the assembly
-  // that binds command families onto it. The backend and runtime contracts it drives moved to
-  // @agent-device/contracts, so the daemon reads that vocabulary from below the daemon.
-  'command-runtime': ['src/io.ts', 'src/runtime.ts'],
+  // If `src/io.ts` serves `agent-device/io`, keep its root zone.
+  'command-runtime': ['src/io.ts'],
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
   // private `src/platform-runtime/` submodule, and with the daemon runtime's dependency
   // construction, which names these same runtime families and keeps the same value-free direction

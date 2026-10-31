@@ -25,6 +25,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
     'platform-apple': { name: '@agent-device/platform-apple' },
     'provider-testmu': { name: '@agent-device/testmu' },
     'provider-limrun': { name: '@agent-device/provider-limrun' },
+    'command-runtime': {
+      name: '@agent-device/command-runtime',
+      exports: { '.': entry('./src/index.ts') },
+    },
     daemon: {
       name: '@agent-device/daemon',
       exports: { '.': entry('./src/index.ts') },
@@ -53,6 +57,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
 }
 
 const SOURCE = new Map([
+  [
+    'packages/command-runtime/src/index.ts',
+    "export { createCommandSurfaceAgentDevice } from './surface.ts';",
+  ],
   ['packages/test-kit/src/index.ts', "export { a } from './a.ts';"],
   ['packages/test-kit/src/a.ts', "import { x } from '@agent-device/kernel/errors';"],
   [
@@ -246,3 +254,16 @@ for (const dir of ['daemon', 'test-kit', 'command-surface']) {
     }
   });
 }
+
+test('command-runtime rejects subpaths and star exports', () => {
+  const extra = check({
+    'command-runtime': {
+      exports: { '.': entry('./src/index.ts'), './internal': entry('./src/internal.ts') },
+    },
+  });
+  assert.equal(extra.length, 1);
+  assert.match(extra[0]!.file, /packages\/command-runtime\/package\.json/);
+  const sources = new Map(SOURCE);
+  sources.set('packages/command-runtime/src/index.ts', "export * from './surface.ts';");
+  assert.equal(check({}, sources)[0]!.file, 'packages/command-runtime/src/index.ts');
+});

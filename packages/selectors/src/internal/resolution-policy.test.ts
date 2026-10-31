@@ -8,7 +8,7 @@ import { SELECTOR_RESOLUTION_POLICIES, selectorResolutionKnobs } from './resolut
  * only place in the repo that names them and the only place a knob-vs-row
  * mismatch can be introduced. The row-level BEHAVIOR each mapping produces is
  * pinned separately, through the public interface, in
- * src/commands/interaction/runtime/__tests__/resolution-policy-parity.test.ts.
+ * packages/command-runtime/src/commands/interaction/runtime/__tests__/resolution-policy-parity.test.ts.
  */
 test('knobs stay consistent with the ambiguity each knob-backed row names', () => {
   for (const [name, policy] of Object.entries(SELECTOR_RESOLUTION_POLICIES)) {

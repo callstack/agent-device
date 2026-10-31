@@ -1,6 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import type { RecordingContactSheetCommandResult } from '../../commands/recording/runtime/contact-sheet.ts';
+import type {
+  RecordingContactSheetCommandOptions,
+  RecordingContactSheetCommandResult,
+} from '@agent-device/command-runtime';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -23,12 +27,13 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   const outputPath =
     typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
 
-  // Lazy: createAgentDevice pulls in the client-side command runtime, which only this action needs.
-  const [{ createAgentDevice }, { createLocalArtifactAdapter }] = await Promise.all([
-    import('../../runtime.ts'),
-    import('../../io.ts'),
+  // The package has one entry, so importing it evaluates the capture, selector and interaction
+  // bindings; the contact-sheet wrapper then loads the full runtime on demand.
+  const [{ executeRecordingContactSheet }, { createLocalArtifactAdapter }] = await Promise.all([
+    import('@agent-device/command-runtime'),
+    import('@agent-device/host-kit/local-artifact-adapter'),
   ]);
-  const runtime = createAgentDevice({
+  const config: AgentDeviceRuntimeConfig = {
     backend: { platform: 'ios' },
     artifacts: createLocalArtifactAdapter({ cwd: host.cwd }),
     sessions: {
@@ -36,13 +41,14 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
       set: () => {},
     },
     policy: localCommandPolicy(),
-  });
+  };
 
-  const result = await runtime.recording.contactSheet({
+  const options: RecordingContactSheetCommandOptions = {
     host,
     video: { kind: 'path', path: recordingPath },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
-  });
+  };
+  const result = await executeRecordingContactSheet(config, options);
 
   await writeCommandOutput(flags, result, () => formatContactSheetSummary(result));
   return true;

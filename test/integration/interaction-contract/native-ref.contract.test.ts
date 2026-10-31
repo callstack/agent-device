@@ -1,8 +1,8 @@
+import { ref, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
@@ -13,7 +13,6 @@ import {
   keyboardCoveredTabBarSnapshot,
   nonHittableCellSnapshot,
 } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
 
 // ADR 0011 Layer 3, native-ref path: click @ref / fill @ref dispatch straight
 // to backend.tapTarget/fillTarget. Path forcing is natural: the backend

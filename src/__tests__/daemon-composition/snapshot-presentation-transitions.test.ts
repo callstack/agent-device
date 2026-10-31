@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
+import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
+import { createLocalArtifactAdapter } from '@agent-device/host-kit/local-artifact-adapter';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '@agent-device/capture-kit/snapshot-presentation-ios-transitions-fixtures';
@@ -58,11 +60,18 @@ test('promoted navigation title dispatches as its presented button semantics, no
   expect(title).toEqual(expect.objectContaining({ type: 'Button', enabled: true }));
 
   let tappedPoint: { x: number; y: number } | undefined;
-  const device = createInteractionDevice(snapshot, {
-    tap: async (_context, point) => {
-      tappedPoint = point;
+  const device = createCommandSurfaceAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => ({ snapshot }),
+      tap: async (_context, point) => {
+        tappedPoint = point;
+      },
     },
+    artifacts: createLocalArtifactAdapter(),
+    policy: localCommandPolicy(),
   });
+  await device.sessions.set({ name: 'default', snapshot });
 
   await device.interactions.click({ kind: 'ref', ref: `@${title!.ref}` }, { session: 'default' });
 

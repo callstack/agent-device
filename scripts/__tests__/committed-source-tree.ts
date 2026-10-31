@@ -43,33 +43,130 @@ export function headCommit(repoRoot: string): string {
   return git(repoRoot, ['rev-parse', 'HEAD']).toString('utf8').trim();
 }
 
+type NameStatusRecord = Readonly<{ renamed: boolean; from: string; to: string }>;
+
+/** Parses `--name-status -z` output; a path that was not renamed has the same `from` and `to`. */
+function nameStatusRecords(output: Buffer): NameStatusRecord[] {
+  const fields = output.toString('utf8').split('\0');
+  const records: NameStatusRecord[] = [];
+  for (let index = 0; index < fields.length;) {
+    const kind = fields[index++]?.trim();
+    if (!kind) continue;
+    const renamed = kind.startsWith('R');
+    const from = fields[index++];
+    const to = renamed ? fields[index++] : from;
+    if (from && to) records.push({ renamed, from, to });
+  }
+  return records;
+}
+
+function endOriginsChangedOnBase(
+  repoRoot: string,
+  historyBase: string,
+  baseCommit: string,
+  origins: Map<string, string | null>,
+  ended: Set<string>,
+): void {
+  const changed = nameStatusRecords(
+    git(repoRoot, [
+      '-c',
+      'diff.renameLimit=0',
+      'log',
+      '--first-parent',
+      '--format=',
+      '--name-status',
+      '-M',
+      '-z',
+      `${historyBase}..${baseCommit}`,
+    ]),
+  );
+  const changedPaths = new Set(changed.flatMap(({ from, to }) => [from, to]));
+  for (const [file, origin] of origins) {
+    if (origin !== null && changedPaths.has(origin)) {
+      origins.set(file, null);
+      ended.add(file);
+    }
+  }
+}
+
 /**
- * Files renamed between `base` and `head` (the working tree unless a commit is given),
- * head path -> base path, so a rename is not a new entry. The explicit rename limit keeps
- * inexact detection on regardless of the clone's `diff.renameLimit` config — a bulk move
- * with edits (the daemon extraction) is exactly the inexact case the ratchets must see.
+ * Head path -> base path. Follow committed moves before the aggregate diff, so later edits do not
+ * erase a recorded rename. Added or deleted paths end that lineage. The aggregate diff still finds
+ * a move spread across commits or staged in the working tree. For a merge into the measured base,
+ * follow its second parent's history, invalidate origins changed on the first parent, and apply the
+ * second-parent-to-merge diff to tracked lineage only. Unlimited detection handles bulk moves.
  */
 export function renamedSince(
   repoRoot: string,
   base: string,
   head?: string,
 ): ReadonlyMap<string, string> {
+  const origins = new Map<string, string | null>();
+  const ended = new Set<string>();
+  const flags = ['--name-status', '-M', '--diff-filter=ADR', '-z'];
+  const follow = (status: Buffer, trackedOnly = false): void => {
+    for (const { renamed, from, to } of nameStatusRecords(status)) {
+      if (trackedOnly && !origins.has(from)) continue;
+      const origin = renamed && origins.has(from) ? origins.get(from)! : from;
+      if (!renamed && typeof origins.get(from) === 'string') ended.add(from);
+      origins.set(from, null);
+      if (!renamed) continue;
+      origins.set(to, origin);
+      if (origin === null) ended.add(to);
+      else ended.delete(to);
+    }
+  };
+  const measured = head ?? 'HEAD';
+  const parents = git(repoRoot, ['rev-list', '--parents', '-n', '1', measured])
+    .toString('utf8')
+    .trim()
+    .split(' ');
+  const baseCommit = git(repoRoot, ['rev-parse', `${base}^{commit}`])
+    .toString('utf8')
+    .trim();
+  const isMergeIntoBase = parents.length === 3 && parents[1] === baseCommit;
+  const historyHead = isMergeIntoBase ? parents[2]! : measured;
+  const historyBase = isMergeIntoBase
+    ? git(repoRoot, ['merge-base', baseCommit, historyHead]).toString('utf8').trim()
+    : base;
+  follow(
+    git(repoRoot, [
+      '-c',
+      'diff.renameLimit=0',
+      'log',
+      '--reverse',
+      '--first-parent',
+      '--format=',
+      ...flags,
+      `${historyBase}..${historyHead}`,
+    ]),
+  );
+  if (isMergeIntoBase) {
+    endOriginsChangedOnBase(repoRoot, historyBase, baseCommit, origins, ended);
+    follow(
+      git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, historyHead, measured]),
+      true,
+    );
+  }
+  if (!head) follow(git(repoRoot, ['-c', 'diff.renameLimit=0', 'diff', ...flags, 'HEAD']));
   const renamed = new Map<string, string>();
-  const status = git(repoRoot, [
+  for (const [file, origin] of origins) {
+    if (origin !== null) renamed.set(file, origin);
+  }
+  const claimedOrigins = new Set(renamed.values());
+  const aggregate = git(repoRoot, [
     '-c',
     'diff.renameLimit=0',
     'diff',
-    '--name-status',
-    '-M',
-    '--diff-filter=R',
-    '-z',
+    ...flags,
     base,
     ...(head ? [head] : []),
   ]);
-  const fields = status.toString('utf8').split('\0');
-  for (let index = 0; index + 2 < fields.length; index += 3) {
-    const [from, to] = [fields[index + 1], fields[index + 2]];
-    if (from && to) renamed.set(to, from);
+  for (const { renamed: isRename, from, to } of nameStatusRecords(aggregate)) {
+    if (isRename && !renamed.has(to) && !ended.has(to) && !claimedOrigins.has(from)) {
+      renamed.set(to, from);
+      claimedOrigins.add(from);
+    }
   }
   return renamed;
 }

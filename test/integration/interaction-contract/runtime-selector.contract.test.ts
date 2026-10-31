@@ -1,9 +1,9 @@
+import { selector, createContractClock, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
-import { selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
@@ -23,7 +23,6 @@ import {
   settledWelcomeSnapshot,
   viewportOnlySnapshot,
 } from './fixtures.ts';
-import { createContractClock, createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, runtime-selector path: daemon tree capture, selector

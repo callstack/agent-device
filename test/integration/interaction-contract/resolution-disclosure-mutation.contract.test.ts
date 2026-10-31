@@ -1,8 +1,7 @@
+import { ref, selector, createContractDevice } from './runtime-harness.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { ref, selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { equivalentWrapperChainSnapshot } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
 
 // ADR 0012 mutation contract, daemon half: diagnosticRef tokens are not refs.
 // The MCP half (never ref-issued/pinned) lives in src/mcp/__tests__/command-tools.test.ts.

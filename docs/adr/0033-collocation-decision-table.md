@@ -130,7 +130,9 @@ Examples are `command-runtime` at rank 3 and `platform-runtime` at rank 4.
 The maintainer decision does not classify this as completed collocation.
 Physical moves under #3294, a #3276 child, replace per-file declarations with folder-derived ownership.
 
-`runtime-command-surface.ts` and `runtime-factory.ts` now reside in `src/command-runtime/`.
+The command runtime resides in `packages/command-runtime`.
+Its single entry binds capture, selector, and interaction commands for daemon composition.
+The contact-sheet operation loads on demand for the CLI.
 The complete `daemon-contracts` zone resides in `packages/daemon-contracts`, behind narrow per-file subpath exports.
 Folders and packages derive these zones, so moved files no longer need `ROOT_MODULE_ZONES` rows.
 
@@ -164,8 +166,8 @@ They are not independent proof that the placement is optimal.
 | `src/provider-credential-fingerprint.ts` | keep (type extracted) | Like `daemon-policy-file.ts`, this shared daemon/client contract follows #2559. #3288 declares its zone beside the provider composition that reads the credentials this file fingerprints. Daemon extraction PR 6 moved only the `DaemonProviderCredentials` declaration to `packages/daemon-contracts` at `./provider-credentials`. This is the same shared-below-both landing as the policy file. The implementation remains here because it reads the installed-plugin manifest. |
 | `src/provider-limrun-runtime.ts` | keep | The proposed provider-limrun destination has no seam. Its constructor builds the root dependency factory `src/sdk/limrun-runtime-dependencies.ts`, which is the ADR 0019 composition seam. This loads the root adb-host binder, core Android interactor, and platform-runtime app-state helpers, all prohibited package imports. Moving the class also moves that composition. That is a design change, not a move. |
 | `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | This follows #2559's shared-contract decision. The client reads it statically through `daemon-client-progress.ts`; the server reads it through `packages/daemon/src/server/`. Only shared placement and wire-compat ledgers constrain it. #3288 declared `daemon-contracts`; extraction made it physical and moved wire-ledger keys with it. Contracts was rejected because R18 excludes envelope validation mechanics. |
-| `src/runtime-command-surface.ts` | moved → `src/command-runtime/runtime-command-surface.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | The command-surface binding resides beside `runtime-factory.ts` as one assembly group. Their folder derives `command-runtime` ownership. `topFolder` replaces per-file `ROOT_MODULE_ZONES` declarations. |
-| `src/runtime-factory.ts` | moved → `src/command-runtime/runtime-factory.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | The runtime assembly folder derives `command-runtime` ownership without per-file `ROOT_MODULE_ZONES` declarations. |
+| `src/runtime-command-surface.ts` | moved → `packages/command-runtime/src/index.ts` (after [#3299](https://github.com/callstack/agent-device/pull/3299) into `src/command-runtime/`) | The binding now owns the `@agent-device/command-runtime` entry. It retains the three-family daemon load shape. |
+| `src/runtime-factory.ts` | moved → `packages/command-runtime/src/command-runtime/runtime-factory.ts` (after [#3299](https://github.com/callstack/agent-device/pull/3299) into `src/command-runtime/`) | The runtime factory serves the package entry `index.ts` and the internal `runtime.ts` assembly. |
 
 ### sdk
 

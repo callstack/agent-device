@@ -191,7 +191,9 @@ test('the real guarantee matrix contributes module-qualified rows', () => {
   const rows = guaranteeRows();
   assert.ok(rows.length > 0);
   assert.ok(
-    rows.some((row) => row.via.startsWith('src/') && row.via.includes('#')),
+    rows.some(
+      (row) => row.via.startsWith('packages/command-runtime/src/') && row.via.includes('#'),
+    ),
     'expected at least one runtime cell naming a module',
   );
 });
@@ -311,7 +313,7 @@ test('platform and command-surface injection both have partial command attributi
   assert.ok(handler.commands.length > 0);
   const commandSurface = await computeBlastRadius(
     repoRoot,
-    'src/command-runtime/runtime-command-surface.ts',
+    'packages/command-runtime/src/index.ts',
   );
   assert.deepEqual(commandSurface.commandAttribution, {
     kind: 'partial',

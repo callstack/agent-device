@@ -2,9 +2,8 @@ import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
-import { createAgentDevice } from '../../../src/runtime.ts';
+import { createCommandSurfaceAgentDevice } from '@agent-device/command-runtime';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { createMemorySessionStore } from '../../../src/command-runtime/runtime-factory.ts';
 
 type ContractBackendOverrides = Partial<
   Pick<
@@ -41,8 +40,8 @@ type ContractBackendOverrides = Partial<
 export function createContractDevice(
   snapshot: SnapshotState,
   overrides: ContractBackendOverrides = {},
-): ReturnType<typeof createAgentDevice> {
-  return createAgentDevice({
+): ReturnType<typeof createCommandSurfaceAgentDevice> {
+  const device = createCommandSurfaceAgentDevice({
     backend: {
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
@@ -55,12 +54,14 @@ export function createContractDevice(
       resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
-    sessions: createMemorySessionStore([
-      { name: 'default', snapshot, ...overrides.sessionState } as CommandSessionRecord,
-    ]),
     policy: localCommandPolicy(),
     ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
+  // The default store writes in memory, so the session exists before the device is returned.
+  if (device.sessions.set({ name: 'default', snapshot, ...overrides.sessionState }) !== undefined) {
+    throw new Error('The default session store must write synchronously');
+  }
+  return device;
 }
 
 /**
@@ -79,4 +80,20 @@ export function createContractClock(startMs = 0): {
       elapsed += Math.max(ms, 0);
     },
   };
+}
+
+export function ref(
+  value: string,
+  options: { fallbackLabel?: string } = {},
+): import('@agent-device/contracts/interaction').RefTarget {
+  return {
+    kind: 'ref',
+    ref: value,
+    ...(options.fallbackLabel ? { fallbackLabel: options.fallbackLabel } : {}),
+  };
+}
+export function selector(
+  value: string,
+): import('@agent-device/contracts/interaction').SelectorTarget {
+  return { kind: 'selector', selector: value };
 }

@@ -30,7 +30,7 @@ test('a kernel is owned by the mirrored test that imports it directly', () => {
   );
   assert.ok(
     deriver
-      .ownersOf('src/commands/interaction/runtime/settle.test.ts')
+      .ownersOf('packages/command-runtime/src/commands/interaction/runtime/settle.test.ts')
       .includes('interaction-settle'),
   );
 });

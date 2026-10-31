@@ -19,7 +19,6 @@ import {
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
-import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -33,6 +32,11 @@ import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality
 import { printHumanError } from '../../src/commands/output/error.ts';
 import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
 import { captureHelpConformanceErrorRoutes } from '../../test/integration/provider-scenarios/help-conformance-error-routes.ts';
+import {
+  createContractClock,
+  createContractDevice,
+} from '../../test/integration/interaction-contract/runtime-harness.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 // The production renderer behind each captured sample in
 // scripts/help-conformance-sample-outputs.mjs, as data rather than as one test
@@ -180,15 +184,37 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
   },
   {
     name: 'NOT_SETTLED_SAMPLE',
-    producer: 'the press renderer and the production NEVER_SETTLED_HINT',
+    producer: 'the press renderer with a never-settled runtime response',
     sample: NOT_SETTLED_SAMPLE,
-    render: () =>
-      formatPress({
+    render: async () => {
+      let captures = 0;
+      const snapshot = () =>
+        makeSnapshotState([
+          {
+            index: 0,
+            depth: 0,
+            type: 'StaticText',
+            label: `Tick ${captures++}`,
+            rect: { x: 10, y: 20, width: 100, height: 40 },
+          },
+        ]);
+      const before = snapshot();
+      const device = createContractDevice(before, {
+        clock: createContractClock(),
+        captureSnapshot: async () => ({ snapshot: snapshot() }),
+      });
+      const settle = await device.interactions.settleObservation({
+        session: 'default',
+        baseline: { nodes: before.nodes },
+        timeoutMs: 10_000,
+      });
+      return formatPress({
         ref: 'e12',
         x: 166,
         y: 240,
-        settle: { settled: false, waitedMs: 10_000, hint: NEVER_SETTLED_HINT },
-      }),
+        settle: { ...settle, waitedMs: 10_000 },
+      });
+    },
   },
   {
     name: 'PRIVATE_AX_RECOVERY_SAMPLE',

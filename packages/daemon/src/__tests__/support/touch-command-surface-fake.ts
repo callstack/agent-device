@@ -63,7 +63,7 @@ import {
  * `READ_CAPTURE_OPTIONS`, while a point or `@ref` read captures nothing; `--verify` evidence is a
  * placeholder digest (`fake-digest-<n>`). Daemon suites assert how the daemon passes, records and
  * discloses these values, never their content; the real predicate, capture and evidence values are
- * asserted against the real command surface in `src/commands/interaction/runtime/`.
+ * asserted against the real command surface in `packages/command-runtime/src/commands/interaction/runtime/`.
  */
 
 /** The runtime configs this surface was assembled with, oldest first. */

@@ -29,7 +29,7 @@ beforeEach(() => {
 // either producer (click or fill) stops attaching the channel, or the handler stops forwarding it,
 // which a hand-built request cannot catch. That the command family then acts on the carried node
 // rather than re-resolving the ref is pinned beside it in
-// src/commands/interaction/runtime/interactions-find-carried-target.test.ts.
+// packages/command-runtime/src/commands/interaction/runtime/interactions-find-carried-target.test.ts.
 
 const findRouteContextFromFlags = (flags: CommandFlags | undefined) => ({
   count: flags?.count,
