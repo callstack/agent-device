@@ -1,18 +1,12 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  enum RunnerAlertSource {
-    case blockingSystemModal
-    case appAlert
-    case safariDialog
-    case dismissPopup
-  }
-
   struct RunnerAlert {
     let root: XCUIElement
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
-    let source: RunnerAlertSource
+    let source: AlertSurfaceSource
     /// The window hosting a SpringBoard modal; nil routes through `ownerApp`.
     let window: XCUIElement?
   }
@@ -58,7 +52,7 @@ extension RunnerTests {
       return runnerAlert(root: alert, ownerApp: activeApp, source: .appAlert)
     }
     if let dialog = firstExistingElement(in: safeElementsQuery {
-      activeApp.otherElements.matching(identifier: Self.safariDialogIdentifier).allElementsBoundByIndex
+      activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
     }) {
       return runnerAlert(root: dialog, ownerApp: activeApp, source: .safariDialog)
     }
@@ -255,7 +249,7 @@ extension RunnerTests {
   private func runnerAlert(
     root: XCUIElement,
     ownerApp: XCUIApplication,
-    source: RunnerAlertSource
+    source: AlertSurfaceSource
   ) -> RunnerAlert? {
     let buttons = actionableElements(in: root).filter { isEnabledElement($0) }
     guard !buttons.isEmpty else {
@@ -268,10 +262,6 @@ extension RunnerTests {
     elements.first { isVisibleElement($0) }
   }
 
-  /// Safari draws its page prompts, such as "Open this page in …?" and JavaScript dialogs, as a
-  /// view rather than an alert, so they are found by the view's identifier.
-  static let safariDialogIdentifier = "SFDialogView"
-
   /// The marker is matched inside XCTest's query, so the screen is read once per query. Reading each
   /// descendant instead costs one round trip per element, and on a screen whose tree changes while
   /// it is read (a loading web view) each vanished element adds XCTest's retry cycle. `containing`
@@ -282,15 +272,11 @@ extension RunnerTests {
     })
   }
 
-  /// The one definition of a popover's dismiss region: a label or identifier that reads "dismiss
-  /// popup", in any case, with any surrounding whitespace. XCTest queries take it as a format predicate.
-  private static let dismissPopupMarkerPattern = #"\s*dismiss popup\s*"#
   private static let dismissPopupMarker = NSPredicate(
     format: "label MATCHES[c] %@ OR identifier MATCHES[c] %@",
-    dismissPopupMarkerPattern,
-    dismissPopupMarkerPattern
+    AlertSurface.dismissPopupMarkerPattern,
+    AlertSurface.dismissPopupMarkerPattern
   )
-  private static let dismissPopupMarkerText = NSPredicate(format: "SELF MATCHES[c] %@", dismissPopupMarkerPattern)
 
   // Internal, not private: the dismiss-popup wiring is pinned by
   // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
@@ -349,7 +335,7 @@ extension RunnerTests {
 
   private func isGenericAlertLabel(_ label: String) -> Bool {
     let normalized = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return isDismissPopupMarker(normalized) ||
+    return AlertSurface.isDismissPopupMarker(normalized) ||
       normalized.hasPrefix("vertical scroll bar") ||
       normalized.hasPrefix("horizontal scroll bar") ||
       normalized == "tab bar"
@@ -398,9 +384,5 @@ extension RunnerTests {
       hittable = button.exists && button.isHittable
     })
     return hittable
-  }
-
-  func isDismissPopupMarker(_ text: String) -> Bool {
-    Self.dismissPopupMarkerText.evaluate(with: text)
   }
 }

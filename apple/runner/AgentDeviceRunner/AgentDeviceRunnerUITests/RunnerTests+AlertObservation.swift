@@ -2,18 +2,18 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  func captureAlertPresentation(_ element: XCUIElement) -> RunnerAlertPresentation? {
-    var presentation: RunnerAlertPresentation?
+  func captureAlertPresentation(_ element: XCUIElement) -> AlertSurfacePresentation? {
+    var presentation: AlertSurfacePresentation?
     _ = RunnerObjCExceptionCatcher.catchException {
       guard let snapshot = try? element.snapshot() else { return }
-      presentation = self.alertPresentation(snapshot)
+      presentation = AlertSurface.presentation(of: self.alertSurfaceNode(snapshot))
     }
     return presentation
   }
 
   func observeAlert(
     in ownerApp: XCUIApplication,
-    source: RunnerAlertSource,
+    source: AlertSurfaceSource,
     observesApplicationRoot: Bool,
     deadline: Date
   ) -> RunnerAlertObservation {
@@ -37,62 +37,33 @@ extension RunnerTests {
       }
       guard Date() < deadline, let snapshot = try? ownerApp.snapshot(),
             !snapshot.children.isEmpty, !snapshot.frame.isNull, !snapshot.frame.isEmpty else { return }
+      let root = self.alertSurfaceNode(snapshot)
       if observesApplicationRoot {
-        observation = .visible(self.alertPresentation(snapshot))
+        observation = .visible(AlertSurface.presentation(of: root))
         return
       }
-      let candidates = self.alertSnapshots(in: snapshot, source: source, viewport: snapshot.frame)
+      let candidates = AlertSurface.candidates(in: root, source: source, viewport: root.frame)
       guard candidates.count <= 1 else { return }
-      observation = candidates.first.map { .visible(self.alertPresentation($0)) } ?? .absent
+      observation = candidates.first.map { .visible(AlertSurface.presentation(of: $0)) } ?? .absent
     }
     return Date() < deadline ? observation : .deadlineExceeded
   }
 
-  func alertSnapshots(
-    in snapshot: XCUIElementSnapshot,
-    source: RunnerAlertSource,
-    viewport: CGRect
-  ) -> [XCUIElementSnapshot] {
-    let frame = snapshot.frame
-    let matches: Bool
-    switch source {
-    case .blockingSystemModal:
-      matches = snapshot.elementType == .alert || snapshot.elementType == .sheet
-    case .appAlert:
-      matches = snapshot.elementType == .alert
-    case .safariDialog:
-      matches = snapshot.identifier == Self.safariDialogIdentifier
-    case .dismissPopup:
-      matches = snapshot.elementType == .window && containsDismissPopupMarker(snapshot)
+  /// The tree the alert rules read. Snapshot output has no names for alerts and sheets, so the
+  /// rules name them here.
+  func alertSurfaceNode(_ snapshot: XCUIElementSnapshot) -> AlertSurfaceNode {
+    let type: String
+    switch snapshot.elementType {
+    case .alert: type = "Alert"
+    case .sheet: type = "Sheet"
+    default: type = elementTypeName(snapshot.elementType)
     }
-    if matches && Self.isPlaced(frame, in: viewport) { return [snapshot] }
-    // A window is placed in the box it sits in, and is itself the box of what it hosts.
-    let childViewport = snapshot.elementType == .window && SnapshotGeometry.isPositiveFinite(frame) ? frame : viewport
-    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: childViewport) }
-  }
-
-  private func containsDismissPopupMarker(_ snapshot: XCUIElementSnapshot) -> Bool {
-    [snapshot.label, snapshot.identifier].contains { isDismissPopupMarker($0) } ||
-      snapshot.children.contains { containsDismissPopupMarker($0) }
-  }
-
-  private func alertPresentation(_ snapshot: XCUIElementSnapshot) -> RunnerAlertPresentation {
-    var content: [String] = []
-    var buttons: [String] = []
-    func collect(_ node: XCUIElementSnapshot) {
-      let label = node.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      if actionableTypes.contains(node.elementType) {
-        buttons.append(label)
-      } else if !label.isEmpty {
-        content.append(label)
-      }
-      node.children.forEach(collect)
-    }
-    snapshot.children.forEach(collect)
-    return RunnerAlertPresentation(
-      title: snapshot.label.trimmingCharacters(in: .whitespacesAndNewlines),
-      content: content,
-      buttons: buttons
+    return AlertSurfaceNode(
+      type: type,
+      identifier: snapshot.identifier,
+      label: snapshot.label,
+      frame: snapshot.frame,
+      children: snapshot.children.map { alertSurfaceNode($0) }
     )
   }
 

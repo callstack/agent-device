@@ -235,15 +235,11 @@ final class RunnerTests: XCTestCase {
   var textInputProbeIssues: TextInputProbeIssues?
   let suppressedIssueLock = NSLock()
   var suppressedAxSnapshotIssueCount = 0
-  // Keep blocker actions narrow to avoid false positives from generic hittable containers.
-  let actionableTypes: Set<XCUIElement.ElementType> = [
-    .button,
-    .cell,
-    .link,
-    .menuItem,
-    .checkBox,
-    .switch
-  ]
+  let actionableTypes: Set<XCUIElement.ElementType> = Set(
+    RunnerTests.elementTypeNamesByRawValue.compactMap { rawValue, name in
+      AlertSurface.actionableTypes.contains(name) ? XCUIElement.ElementType(rawValue: rawValue) : nil
+    }
+  )
 
   // MARK: - XCTest Entry
 

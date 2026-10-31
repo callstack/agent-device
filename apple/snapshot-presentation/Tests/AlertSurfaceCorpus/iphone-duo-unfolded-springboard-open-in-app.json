@@ -1,0 +1,66 @@
+{
+  "capture": {
+    "bundle": "com.apple.springboard",
+    "device": "iPhone Duo (fixtures)",
+    "runtime": "iOS-27-1",
+    "commit": "f3b09b4748"
+  },
+  "expect": {
+    "blockingSystemModal": {
+      "title": "Open in “Agent Device Tester”?",
+      "buttons": [
+        "Cancel",
+        "Open"
+      ]
+    },
+    "appAlert": {
+      "title": "Open in “Agent Device Tester”?",
+      "buttons": [
+        "Cancel",
+        "Open"
+      ]
+    }
+  },
+  "nodes": [
+    {"identifier":"","index":0,"label":" ","rect":{"height":678,"width":466,"x":0,"y":0},"type":"Application"},
+    {"identifier":"","index":1,"label":"","parentIndex":0,"rect":{"height":951,"width":669,"x":0,"y":0},"type":"Window"},
+    {"identifier":"","index":2,"label":"","parentIndex":1,"rect":{"height":951,"width":669,"x":0,"y":0},"type":"Other"},
+    {"identifier":"","index":3,"label":"Open in “Agent Device Tester”?","parentIndex":2,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Alert"},
+    {"identifier":"","index":4,"label":"","parentIndex":3,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":5,"label":"","parentIndex":4,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":6,"label":"","parentIndex":5,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":7,"label":"","parentIndex":5,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":8,"label":"","parentIndex":7,"rect":{"height":320,"width":46.333333333333314,"x":267.3333333333333,"y":315.33333333333326},"type":"ScrollView"},
+    {"identifier":"","index":9,"label":"","parentIndex":8,"rect":{"height":320,"width":46.333333333333314,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":10,"label":"Open in “Agent Device Tester”?","parentIndex":9,"rect":{"height":260,"width":20.333333333333314,"x":289.3333333333333,"y":345.33333333333326},"type":"StaticText"},
+    {"identifier":"","index":11,"label":"Vertical scroll bar, 1 page","parentIndex":8,"rect":{"height":30,"width":46.333333333333314,"x":267.3333333333333,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":12,"label":"","parentIndex":11,"rect":{"height":3,"width":36,"x":228.33333333333331,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":13,"label":"Horizontal scroll bar, 1 page","parentIndex":8,"rect":{"height":320,"width":23.16666666666663,"x":287.5,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":14,"label":"","parentIndex":13,"rect":{"height":36,"width":3,"x":307.66666666666663,"y":638.3333333333333},"type":"Other"},
+    {"identifier":"","index":15,"label":"Vertical scroll bar, 1 page","parentIndex":8,"rect":{"height":30,"width":46.333333333333314,"x":267.3333333333333,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":16,"label":"","parentIndex":15,"rect":{"height":3,"width":36,"x":228.33333333333331,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":17,"label":"Horizontal scroll bar, 1 page","parentIndex":8,"rect":{"height":320,"width":23.16666666666663,"x":287.5,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":18,"label":"","parentIndex":17,"rect":{"height":36,"width":3,"x":307.66666666666663,"y":638.3333333333333},"type":"Other"},
+    {"identifier":"","index":19,"label":"","parentIndex":7,"rect":{"height":320,"width":80,"x":313.6666666666667,"y":315.33333333333326},"type":"ScrollView"},
+    {"identifier":"","index":20,"label":"","parentIndex":19,"rect":{"height":320,"width":80,"x":313.6666666666667,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":21,"label":"","parentIndex":20,"rect":{"height":288,"width":48,"x":329.6666666666667,"y":331.33333333333326},"type":"Other"},
+    {"identifier":"","index":22,"label":"Cancel","parentIndex":21,"rect":{"height":139.99999999999994,"width":48,"x":329.6666666666667,"y":479.3333333333333},"type":"Button"},
+    {"identifier":"","index":23,"label":"Open","parentIndex":21,"rect":{"height":140.00000000000006,"width":48,"x":329.6666666666667,"y":331.33333333333326},"type":"Button"},
+    {"identifier":"","index":24,"label":"Vertical scroll bar, 1 page","parentIndex":19,"rect":{"height":30,"width":80,"x":313.6666666666667,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":25,"label":"","parentIndex":24,"rect":{"height":3,"width":7,"x":403.6666666666667,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":26,"label":"Horizontal scroll bar, 1 page","parentIndex":19,"rect":{"height":320,"width":30,"x":360.6666666666667,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":27,"label":"","parentIndex":26,"rect":{"height":7,"width":3,"x":387.6666666666667,"y":538.3333333333333},"type":"Other"},
+    {"identifier":"","index":28,"label":"Vertical scroll bar, 1 page","parentIndex":19,"rect":{"height":30,"width":80,"x":313.6666666666667,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":29,"label":"","parentIndex":28,"rect":{"height":3,"width":7,"x":403.6666666666667,"y":318.33333333333326},"type":"Other"},
+    {"identifier":"","index":30,"label":"Horizontal scroll bar, 1 page","parentIndex":19,"rect":{"height":320,"width":30,"x":360.6666666666667,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":31,"label":"","parentIndex":30,"rect":{"height":7,"width":3,"x":387.6666666666667,"y":538.3333333333333},"type":"Other"},
+    {"identifier":"","index":32,"label":"","parentIndex":3,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":33,"label":"","parentIndex":32,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":34,"label":"","parentIndex":33,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":35,"label":"","parentIndex":34,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":36,"label":"","parentIndex":35,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":37,"label":"","parentIndex":36,"rect":{"height":466,"width":678,"x":267.3333333333333,"y":169.33333333333326},"type":"Other"},
+    {"identifier":"","index":38,"label":"","parentIndex":34,"rect":{"height":320,"width":126.33333333333331,"x":267.3333333333333,"y":315.33333333333326},"type":"Other"},
+    {"identifier":"","index":39,"label":"","parentIndex":38,"rect":{"height":466,"width":678,"x":267.3333333333333,"y":169.33333333333326},"type":"Other"}
+  ]
+}

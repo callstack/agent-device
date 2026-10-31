@@ -327,38 +327,5 @@ extension RunnerTests {
     XCTAssertEqual(inspection.data?.items?.sorted(), ["Cancel", "OK"])
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
   }
-
-  @MainActor
-  func testSafariDialogObservationMatchesOnlyTheDialogView() {
-    let dialog = ElementAttributesFixture(.other, CGRect(x: 20, y: 300, width: 360, height: 120), identifier: Self.safariDialogIdentifier)
-    let alert = ElementAttributesFixture(.alert, CGRect(x: 20, y: 500, width: 360, height: 120))
-    let page = ElementAttributesFixture(.other, CGRect(x: 0, y: 100, width: 402, height: 600), identifier: "WebView")
-    let window = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 402, height: 874), children: [page, alert, dialog])
-    XCTAssertEqual(
-      alertSnapshots(in: window, source: .safariDialog, viewport: window.frame).map(\.identifier),
-      [Self.safariDialogIdentifier]
-    )
-    XCTAssertEqual(alertSnapshots(in: window, source: .appAlert, viewport: window.frame).map(\.elementType), [.alert])
-  }
-
-  @MainActor
-  func testDismissPopupWindowIsPlacedInTheBoxItSitsIn() {
-    let viewport = CGRect(x: 0, y: 0, width: 402, height: 874)
-    let popup = { (x: CGFloat) in
-      ElementAttributesFixture(.window, CGRect(x: x, y: 0, width: 402, height: 874), children: [
-        ElementAttributesFixture(.other, CGRect(x: x, y: 0, width: 402, height: 874), label: "dismiss popup")
-      ])
-    }
-    XCTAssertEqual(alertSnapshots(in: popup(0), source: .dismissPopup, viewport: viewport).count, 1)
-    XCTAssertTrue(alertSnapshots(in: popup(1000), source: .dismissPopup, viewport: viewport).isEmpty)
-  }
-
-  @MainActor
-  func testAnInnerPanelAlertIsPlacedInItsWindowNotTheApplicationFrame() {
-    let alert = ElementAttributesFixture(.alert, CGRect(x: 341, y: 250, width: 270, height: 170))
-    let innerPanel = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 951, height: 669), children: [alert])
-    let root = ElementAttributesFixture(.application, CGRect(x: 0, y: 0, width: 466, height: 678), children: [innerPanel])
-    XCTAssertEqual(alertSnapshots(in: root, source: .appAlert, viewport: root.frame).map(\.elementType), [.alert])
-  }
 #endif
 }
