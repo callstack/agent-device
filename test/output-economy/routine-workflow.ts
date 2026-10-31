@@ -1,8 +1,7 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
-import type { AgentDeviceClient } from '@agent-device/command-surface';
+import type { AgentDeviceClient, CommandName } from '@agent-device/command-surface';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { formatCliOutput } from '@agent-device/command-output';
-import type { CommandName } from '@agent-device/command-surface';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import { REF_TOKEN_PATTERN, type EconomySample } from './economy-metrics.ts';
 import { SETTLE_ADDED_REF_RESULT, SNAPSHOT_DAEMON_RESULT, SNAPSHOT_RESULT } from './fixtures.ts';
