@@ -86,9 +86,7 @@ function createProbeLeg(deadlineAtMs: number): {
 
 function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
   const probe = createProbeLeg(deadlineAtMs);
-  // `readDaemonInfo` accepts any positive integer port, and `transport.request` throws on one out
-  // of range; this leg builds detached, so the throw would reach the caller as an unhandled
-  // rejection.
+  // This leg builds detached. Catch transport-construction errors here so they settle the probe.
   void (async () => {
     try {
       const transport = await loadNodeHttpRequester('http:');
