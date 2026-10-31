@@ -207,8 +207,10 @@ typedef unsigned long long (*RunnerAXUnsignedLongLongMsgSend)(id, SEL);
   }
   NSInteger index = (NSInteger)nodes.count;
   [nodes addObject:node];
-  // The request caps the server at maxNodes nodes and maxDepth levels, so a tree that reaches
-  // either cap may have lost nodes past it.
+  // The request bounds the server's reply only per element (maxChildren, maxArrayCount) and per
+  // level (maxDepth), not in total. The total cap is this count of kept nodes. It also covers an
+  // element the server clipped at maxChildren, because that element's children alone reach
+  // maxNodes. A tree that reaches either cap may be missing nodes.
   if ((NSInteger)nodes.count >= maxNodes || depth >= maxDepth - 1) {
     *truncated = YES;
     return YES;
