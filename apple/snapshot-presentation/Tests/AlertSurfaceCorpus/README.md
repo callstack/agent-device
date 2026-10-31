@@ -14,8 +14,14 @@ prompt fails without a device.
    The capture builds its runner with its own bundle id, so it runs beside the session's runner.
 3. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
    buttons. A source you leave out must find nothing, and `{}` marks a screen with no prompt.
+4. Add `expectModalScope`, which `ModalSurfaceTests` replays through `ModalSurface`. For a screen
+   whose honor-modal tree removes nothing, write `{"reading": "noExclusion"}`. Otherwise write
+   `"reading": "modal"` and give each surface's `host` and `roots` as `honorModal` indexes, with the
+   labels of the `actions` it offers. Then give the `excludedActions`: the labels of the
+   `honorModal` actions that no surface offers.
 
-Don't edit the trees by hand. Capture again instead; the script keeps the existing `expect`.
+Don't edit the trees by hand. Capture again instead. The script keeps the existing `expect` and
+`expectModalScope`, but a new capture can move the indexes in `expectModalScope`.
 
 ## Format
 
@@ -32,6 +38,18 @@ gives the read `order` and the `milliseconds` each read took.
 Each node has its preorder `index`, its `parentIndex`, and its AX identity `element`
 (`pid:elementOrHash.elementID`). The same element can appear under two parents in one tree.
 `viewClass` and `viewControllerClass` are present only when the AX server reports them.
+
+## Modal surfaces
+
+`ModalSurface` reads the pair, not one tree. Its surface is the children that `honorModal` keeps
+under a node where it removes others. When a kept child holds a surface of its own, that inner
+surface replaces the outer one. A keyboard branch offers no actions. On these recordings:
+
+- A SpringBoard alert removes content at three levels. The innermost surface is the alert.
+- A page sheet keeps one container that holds the sheet and its dimming view, `dismiss popup`.
+- A Safari prompt removes only the page's scroll view, so Safari's toolbar buttons are excluded.
+- A screen without a modal removes nothing, which reads as `noExclusion`. That reading does not
+  prove that no modal is shown.
 
 ## What it covers
 

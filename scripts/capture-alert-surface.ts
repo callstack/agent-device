@@ -94,7 +94,10 @@ const [runtime, device] =
     .flatMap(([key, list]) => list.map((entry) => [key, entry] as const))
     .find(([, entry]) => entry.udid === udid) ?? [];
 const previous = fs.existsSync(fixture)
-  ? (JSON.parse(fs.readFileSync(fixture, 'utf8')) as { expect?: unknown })
+  ? (JSON.parse(fs.readFileSync(fixture, 'utf8')) as {
+      expect?: unknown;
+      expectModalScope?: unknown;
+    })
   : {};
 const [xcode = 'unknown', build = 'unknown'] = execFileSync('xcodebuild', ['-version'], {
   encoding: 'utf8',
@@ -117,6 +120,9 @@ const recorded = {
     }).trim(),
   },
   ...(previous.expect === undefined ? {} : { expect: previous.expect }),
+  ...(previous.expectModalScope === undefined
+    ? {}
+    : { expectModalScope: previous.expectModalScope }),
 };
 // One node per line, so a recapture reads as a reviewable diff of changed nodes.
 const header = JSON.stringify(recorded, null, 2).replace(/\n}$/, '');
@@ -131,6 +137,6 @@ console.log(
 );
 console.log(
   previous.expect === undefined
-    ? `Wrote ${path.relative(root, fixture)}. Add "expect" from what the screen shows.`
-    : `Wrote ${path.relative(root, fixture)}. Kept its "expect".`,
+    ? `Wrote ${path.relative(root, fixture)}. Add "expect" and "expectModalScope" from what the screen shows.`
+    : `Wrote ${path.relative(root, fixture)}. Kept its "expect" and "expectModalScope"; check that the node positions still hold.`,
 );

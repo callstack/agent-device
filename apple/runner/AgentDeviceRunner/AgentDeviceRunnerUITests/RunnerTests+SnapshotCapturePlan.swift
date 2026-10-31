@@ -105,7 +105,7 @@ extension RunnerTests {
         DataPayload(nodes: $0, truncated: result.truncated)
       },
       qualityNotes: result.qualityNotes,
-      presentedSurface: SnapshotPresentedSurface.classify(acquisition)
+      presentedSurface: SnapshotPresentedSurface.classify(acquisition, modalScope: nil)
     )
   }
 

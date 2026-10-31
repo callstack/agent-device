@@ -33,6 +33,22 @@
       ]
     }
   },
+  "expectModalScope": {
+    "reading": "modal",
+    "surfaces": [
+      {
+        "host": 2,
+        "roots": [
+          3
+        ],
+        "actions": [
+          "Cancel",
+          "Open"
+        ]
+      }
+    ],
+    "excludedActions": []
+  },
   "plain": [
     {"element":"99943:0.1","identifier":"","index":0,"label":"","rect":{"height":678,"width":466,"x":0,"y":0},"type":"Application","viewClass":"UISystemShellApplication"},
     {"element":"99943:4734391296.7","identifier":"","index":1,"label":"","parentIndex":0,"rect":{"height":951,"width":669,"x":0,"y":0},"type":"Window","viewClass":"UIWindow"},
