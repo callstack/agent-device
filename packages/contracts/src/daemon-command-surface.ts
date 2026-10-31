@@ -67,6 +67,7 @@ export type DaemonScreenshotResult = Readonly<{
   path: string;
   artifacts?: ArtifactDescriptor[];
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
   warnings?: string[];
 }>;
