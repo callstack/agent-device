@@ -361,6 +361,7 @@
     "oxlint": "^1.79.0",
     "pngjs": "^7.0.0",
     "publint": "^0.3.24",
+    "rollup-plugin-license": "^3.7.1",
     "tar-stream": "^3.2.0",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",

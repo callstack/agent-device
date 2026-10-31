@@ -2,6 +2,7 @@ import { buildEntries } from './scripts/build-entries.ts';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
+import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
@@ -174,7 +175,13 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
-  plugins: [dropAmbientDeclarationImports],
+  plugins: [
+    dropAmbientDeclarationImports,
+    bundledLicenseNotices(
+      import.meta.dirname,
+      fileURLToPath(new URL('./dist/src', import.meta.url)),
+    ),
+  ],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),
