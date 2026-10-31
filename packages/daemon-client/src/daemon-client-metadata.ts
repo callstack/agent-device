@@ -73,6 +73,7 @@ export type LocalDaemonObservation = {
 /**
  * Reads the admitted registration without starting or compatibility-checking a daemon.
  * Missing or foreign registrations return null; `required: true` uses the normal not-running error.
+ * Unreadable or invalid records use the unreadable-record refusal.
  * An unproven registration always uses the normal ownership refusal.
  */
 export function readRegisteredDaemon(
@@ -94,7 +95,12 @@ export async function readRegisteredDaemon(
     const { daemonRegistrationUnprovenError } = await import('./daemon-lifecycle-errors.ts');
     throw daemonRegistrationUnprovenError(paths, inspection);
   }
-  let info = readDaemonInfo(paths.infoPath);
+  const record = readDaemonRecord(paths.infoPath);
+  let info = record.status === 'present' ? parseDaemonInfo(record.record) : null;
+  if (!info && record.status !== 'absent') {
+    const { daemonRecordUnreadableError } = await import('./daemon-lifecycle-errors.ts');
+    throw daemonRecordUnreadableError(paths);
+  }
   if (info && inspection.state !== 'absent') {
     if (
       !processLockHoldsDaemonIdentity(inspection, {
@@ -114,7 +120,10 @@ export async function readRegisteredDaemon(
 export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   const read = readDaemonRecord(infoPath);
   if (read.status !== 'present') return null;
-  const parsed = read.record;
+  return parseDaemonInfo(read.record);
+}
+
+function parseDaemonInfo(parsed: Readonly<Record<string, unknown>>): DaemonInfo | null {
   const token = readRequiredDaemonToken(parsed);
   const ports = readDaemonInfoPorts(parsed);
   const pid = parsed.pid;

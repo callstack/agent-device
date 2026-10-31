@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
@@ -10,7 +11,18 @@ export async function connectToDaemon(settings: DaemonClientSettings): Promise<E
     return await ensureManagedDaemon(settings);
   }
   const stateDir = settings.paths.baseDir;
-  const observed = await observeLocalDaemon(settings, { refineUnreachable: true });
+  const observed = await observeLocalDaemon(settings, { refineUnreachable: true }).catch(
+    (error: unknown) => {
+      if (
+        settings.daemonBinding &&
+        error instanceof AppError &&
+        error.details?.reason === 'daemon-record-unreadable'
+      ) {
+        throw daemonBindingMismatchError(settings.daemonBinding, null, stateDir);
+      }
+      throw error;
+    },
+  );
   if (!observed) {
     if (settings.daemonBinding) {
       throw daemonBindingMismatchError(settings.daemonBinding, null, stateDir);

@@ -229,3 +229,15 @@ export function daemonRegistrationUnprovenError(
     hint: resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
   });
 }
+
+export function daemonRecordUnreadableError(paths: DaemonPaths): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `The daemon record on ${paths.baseDir} cannot identify a usable daemon.`,
+    {
+      reason: 'daemon-record-unreadable',
+      stateDir: paths.baseDir,
+      hint: 'No daemon was started, replaced or signaled. Inspect the retained record and its ownership before retrying.',
+    },
+  );
+}

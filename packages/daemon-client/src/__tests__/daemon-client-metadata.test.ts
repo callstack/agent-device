@@ -84,11 +84,17 @@ test('registered admission requires a valid process identity, token and endpoint
     [{ pid: 1, token: 'x', httpPort: 65535 }, true],
   ] as const) {
     fs.writeFileSync(file, JSON.stringify(record));
-    assert.equal(
-      (await readRegisteredDaemon(resolveDaemonPaths(dir))) !== null,
-      valid,
-      JSON.stringify(record),
-    );
+    if (valid) assert.ok(await readRegisteredDaemon(resolveDaemonPaths(dir)));
+    else {
+      for (const options of [undefined, { required: true }] as const) {
+        await assert.rejects(
+          readRegisteredDaemon(resolveDaemonPaths(dir), options),
+          (error: unknown) =>
+            error instanceof AppError && error.details?.reason === 'daemon-record-unreadable',
+          JSON.stringify(record),
+        );
+      }
+    }
   }
 });
 
@@ -102,4 +108,28 @@ test('unproven ownership is refused before nullable or required record lookup', 
     error.details?.stateDir === stateDir;
   await assert.rejects(readRegisteredDaemon(paths), unproven);
   await assert.rejects(readRegisteredDaemon(paths, { required: true }), unproven);
+});
+
+test('present invalid or unreadable metadata never admits a new daemon', async () => {
+  for (const contents of ['{not json', '[]', 'null', '{}']) {
+    const [stateDir] = scratchStateDir();
+    const paths = resolveDaemonPaths(stateDir);
+    fs.writeFileSync(paths.infoPath, contents);
+    for (const options of [undefined, { required: true }] as const) {
+      await assert.rejects(
+        readRegisteredDaemon(paths, options),
+        (error: unknown) =>
+          error instanceof AppError && error.details?.reason === 'daemon-record-unreadable',
+      );
+    }
+    assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), contents);
+  }
+  const [stateDir] = scratchStateDir();
+  const paths = resolveDaemonPaths(stateDir);
+  fs.mkdirSync(paths.infoPath);
+  await assert.rejects(
+    readRegisteredDaemon(paths),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'daemon-record-unreadable',
+  );
 });

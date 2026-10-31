@@ -90,6 +90,7 @@ const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
+/** Judges the registered daemon against this client, changing nothing. */
 export async function observeLocalDaemon(
   settings: DaemonObservationSettings,
   options: DaemonObservationOptions = {},

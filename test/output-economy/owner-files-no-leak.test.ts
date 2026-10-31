@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import {
@@ -18,7 +19,7 @@ function collectJsFiles(dir: string): string[] {
 describe('owner-file metadata', () => {
   test('does not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
     const sharedDistPath = path.join(repoRoot, 'dist');
-    const sharedDistModified = fs.statSync(sharedDistPath, { throwIfNoEntry: false })?.mtimeMs;
+    const sharedDistContents = readBuildOutputs(sharedDistPath);
     const distPath = path.join(mkdtempForTestSync('owner-files-no-leak-'), 'dist');
 
     const build = runCmdSync(
@@ -35,9 +36,9 @@ describe('owner-file metadata', () => {
     );
     expect(build.exitCode, build.stderr).toBe(0);
     expect(
-      fs.statSync(sharedDistPath, { throwIfNoEntry: false })?.mtimeMs,
-      'the metadata build must preserve the shared dist used by other tests',
-    ).toBe(sharedDistModified);
+      readBuildOutputs(sharedDistPath),
+      'the metadata build must preserve the shared dist contents used by other tests',
+    ).toEqual(sharedDistContents);
 
     expect(
       fs.existsSync(path.join(distPath, 'sdk-selectors.js')),
@@ -65,3 +66,22 @@ describe('owner-file metadata', () => {
     }
   });
 });
+
+function readBuildOutputs(dir: string): Record<string, string> | null {
+  if (!fs.existsSync(dir)) return null;
+  return Object.fromEntries(
+    fs
+      .readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .sort()
+      .map((name) => {
+        const file = path.join(dir, name);
+        const stat = fs.lstatSync(file);
+        const contents = stat.isDirectory()
+          ? 'directory'
+          : stat.isSymbolicLink()
+            ? `symlink:${fs.readlinkSync(file)}`
+            : createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+        return [name, contents];
+      }),
+  );
+}

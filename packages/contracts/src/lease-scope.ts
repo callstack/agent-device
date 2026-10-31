@@ -542,6 +542,7 @@ function readFlagString(
  * The JSON-RPC envelope a client puts on the daemon's `/rpc` endpoint for one request: the command
  * method for an ordinary request, and the lease method with its lease params for a lease command.
  * The caller supplies the request id, so the envelope is the same for every client.
+ * Provider values are forwarded verbatim; lease-provider normalization belongs to the daemon.
  */
 export function buildDaemonRpcRequest(
   req: DaemonWireRequest,
