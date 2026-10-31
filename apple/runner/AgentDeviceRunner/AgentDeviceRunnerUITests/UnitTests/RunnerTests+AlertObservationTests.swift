@@ -352,5 +352,13 @@ extension RunnerTests {
     XCTAssertEqual(alertSnapshots(in: popup(0), source: .dismissPopup, viewport: viewport).count, 1)
     XCTAssertTrue(alertSnapshots(in: popup(1000), source: .dismissPopup, viewport: viewport).isEmpty)
   }
+
+  @MainActor
+  func testAnInnerPanelAlertIsPlacedInItsWindowNotTheApplicationFrame() {
+    let alert = ElementAttributesFixture(.alert, CGRect(x: 341, y: 250, width: 270, height: 170))
+    let innerPanel = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 951, height: 669), children: [alert])
+    let root = ElementAttributesFixture(.application, CGRect(x: 0, y: 0, width: 466, height: 678), children: [innerPanel])
+    XCTAssertEqual(alertSnapshots(in: root, source: .appAlert, viewport: root.frame).map(\.elementType), [.alert])
+  }
 #endif
 }
