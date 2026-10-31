@@ -114,6 +114,7 @@ export default defineConfig({
           'testmu',
           'limrun',
           'revyl',
+          'nomac',
         ]),
         {
           label: 'Reference',

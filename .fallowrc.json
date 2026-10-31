@@ -11,6 +11,8 @@
     "packages/provider-revyl/test/package-smoke.mjs",
     "packages/provider-revyl/tsdown.config.ts",
     "packages/provider-revyl/src/plugin.ts",
+    "packages/provider-nomac/test/package-smoke.mjs",
+    "packages/provider-nomac/tsdown.config.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",

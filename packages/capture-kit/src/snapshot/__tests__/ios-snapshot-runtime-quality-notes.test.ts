@@ -36,6 +36,7 @@ test('host iOS presentation publishes shared clipping notes without inventing a 
     'appium-source',
     'limrun-ios-tree',
     'revyl-ios-tree',
+    'nomac-ios-tree',
   ] as const) {
     for (const row of fixture.cases) {
       const acquired = createIosSnapshotAcquisition({

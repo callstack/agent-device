@@ -486,6 +486,7 @@ export const cloud = {
     { name: 'TestMu AI', href: '/docs/testmu' },
     { name: 'Limrun', href: '/docs/limrun' },
     { name: 'Revyl', href: '/docs/revyl' },
+    { name: 'NoMac', href: '/docs/nomac' },
     { name: 'Expo Simulators', href: '/docs/device-clouds#expo-simulators' },
   ],
   team: {

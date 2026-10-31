@@ -536,9 +536,7 @@ Providers:
   TestMu AI (plugin, install separately): agent-device connect testmu verifies credentials and the exact virtual device (emulator or simulator) or, with --provider-device-type real, real device and OS version, then stores a local provider profile. --provider-app takes an lt:// app reference, an https URL, or a local path: connect looks an lt:// id up among your uploads for that device pool, while URL and local sources are uploaded and validated when open creates the session. It does not create a hub session.
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
   Revyl (plugin, install separately): agent-device connect revyl verifies credentials against the Revyl backend, then stores a local provider profile with the platform, optional --device model and --provider-os-version, and a required --provider-app https URL: Revyl downloads and installs that build when it starts the device. It does not rent a device.
-
-Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
-${providerPluginHelp()}
+  NoMac (plugin, install separately): agent-device connect nomac verifies the key against NoMac, then stores a local provider profile with the optional --device phone (iphone, iphone-pro-max, or ipad) and --provider-os-version 27. It does not start a phone; install then takes a Simulator .app, or a .zip or .tar.gz of one.
 
 After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
@@ -548,9 +546,12 @@ After direct-provider connect:
   Do not run devices as a pre-open catalog probe for direct providers; it can allocate the deferred provider session. Limrun is the exception for apps: before allocation it lists uploaded assets for the selected platform.
 
 Device cloud interfaces:
-  CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm/testmu/revyl, then use normal open/snapshot/click/close/disconnect commands; artifacts are provider-dependent.
+  CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm/testmu/revyl/nomac, then use normal open/snapshot/click/close/disconnect commands; artifacts are provider-dependent.
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
   MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
+
+Plugin installation: the lines below name the plugin each provider needs, and plugin help is available before installation. plugins list --json reports your installed plugins. A missing plugin returns reason plugin-not-installed with its installation command; a selected plugin that cannot supply the provider returns plugin-unavailable instead. After changing plugins, close sessions and stop an existing local daemon with the same --state-dir before the next device command.
+${providerPluginHelp()}
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
@@ -657,9 +658,9 @@ Rules:
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
-  Use Limrun, BrowserStack, AWS Device Farm, TestMu AI, and Revyl through local provider profiles; they do not accept a remote agent-device daemon URL.
-  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. TestMu AI uses LT_USERNAME and LT_ACCESS_KEY. Revyl uses REVYL_API_KEY, with REVYL_API_URL to point at another Revyl backend. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
-  A local daemon keeps the Limrun, BrowserStack, TestMu AI, and Revyl credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
+  Use Limrun, BrowserStack, AWS Device Farm, TestMu AI, Revyl, and NoMac through local provider profiles; they do not accept a remote agent-device daemon URL.
+  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. TestMu AI uses LT_USERNAME and LT_ACCESS_KEY. Revyl uses REVYL_API_KEY, with REVYL_API_URL to point at another Revyl backend. NoMac uses NOMAC_API_KEY, with NOMAC_API_URL to point at another NoMac address. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  A local daemon keeps the Limrun, BrowserStack, TestMu AI, Revyl, and NoMac credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
   A lease for a provider the daemon has no runtime for refuses with UNSUPPORTED_OPERATION, reason provider-not-registered, and lists the registered providers, plus the plugins that failed to register as failedPlugins; no lease is recorded. Restart the daemon with the provider configured. Provider-less leases, proxy, and cloud need no provider runtime.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.

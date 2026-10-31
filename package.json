@@ -372,6 +372,7 @@
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0",
     "@agent-device/testmu": "workspace:*",
-    "@agent-device/revyl": "workspace:*"
+    "@agent-device/revyl": "workspace:*",
+    "@agent-device/nomac": "workspace:*"
   }
 }

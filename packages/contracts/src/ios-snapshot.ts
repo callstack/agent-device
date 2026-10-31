@@ -12,12 +12,13 @@ export type IosSnapshotProducer =
   | 'simulator-ax-bridge'
   | 'appium-source'
   | 'limrun-ios-tree'
-  | 'revyl-ios-tree';
+  | 'revyl-ios-tree'
+  | 'nomac-ios-tree';
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 export type IosProviderAcquisitionProducer = Extract<
   IosAcquisitionProducer,
-  'appium-source' | 'limrun-ios-tree' | 'revyl-ios-tree'
+  'appium-source' | 'limrun-ios-tree' | 'revyl-ios-tree' | 'nomac-ios-tree'
 >;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
@@ -88,8 +89,8 @@ export type IosSnapshotFact =
  * What a *provider* acquisition leaves unproven, declared so capture-kit can derive the residue
  * for a producer that hands over a bare tree and nothing else.
  *
- * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Limrun
- * element tree — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
+ * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Limrun, Revyl
+ * and NoMac element trees — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
  * `simulator-ax-bridge` build their own residue at the source, so a capability declared for
  * them here would be a claim nothing consults: exactly the shape that let the table say the
  * Simulator bridge had hittability evidence while the bridge adapter published none and emitted

@@ -62,6 +62,8 @@ try {
     project,
   );
   const manifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
+  // A version 1 manifest names the provider; a version 2 plugin's smoke fixture does.
+  const provider = manifest.agentDevicePlugin?.provider ?? fixture.provider;
   const installed = JSON.parse(
     await fs.readFile(path.join(project, 'node_modules', manifest.name, 'package.json'), 'utf8'),
   );
@@ -115,7 +117,7 @@ globalThis.fetch = (input, init) => {
   assert.equal(listed.code, undefined, listed.stderr);
   const rejected = await command([
     'connect',
-    manifest.agentDevicePlugin.provider,
+    provider,
     ...fixture.args,
     '--state-dir',
     path.join(scratch, 'state'),
@@ -128,7 +130,7 @@ globalThis.fetch = (input, init) => {
   rejectCredentials = false;
   const connected = await command([
     'connect',
-    manifest.agentDevicePlugin.provider,
+    provider,
     ...fixture.args,
     '--state-dir',
     path.join(scratch, 'state'),

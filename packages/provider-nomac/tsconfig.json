@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
+    "rootDir": ".",
+    "paths": {
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../kernel" },
+    { "path": "../plugins" }
+  ]
+}

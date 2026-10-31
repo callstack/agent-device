@@ -22,6 +22,7 @@ import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/prov
 import type { RunHostCommand } from '@agent-device/provider-webdriver';
 import testmuPlugin from '@agent-device/testmu';
 import revylPlugin from '@agent-device/revyl';
+import nomacPlugin from '@agent-device/nomac';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
   PlatformRuntimeHost,
@@ -319,6 +320,72 @@ async function revylSupport(
   }
 }
 
+/**
+ * NoMac's REST API as far as one allocation reads it: the start, which answers a ready phone, and
+ * the stop at shutdown. Facts never reach NoMac; every other path is refused so a new call shows up
+ * here.
+ */
+async function nomacFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = new URL(String(input instanceof Request ? input.url : input));
+  const method = init?.method ?? 'GET';
+  const phone = { id: 'ses_matrix', state: 'ready', device: 'iphone' };
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  if (method === 'POST' && url.pathname === '/api/v1/simulator/sessions') {
+    return json({ session: phone }, 202);
+  }
+  if (method === 'DELETE' && url.pathname === `/api/v1/simulator/sessions/${phone.id}`) {
+    return json({ session: { ...phone, state: 'stopping' } });
+  }
+  return json({ error: { code: 'not_found', message: `no fixture for ${url.pathname}` } }, 404);
+}
+
+/** Facts for a NoMac column, read from the plugin's own runtime after one allocation. */
+async function nomacSupport(
+  target: Target & { readonly kind: 'nomac' },
+  host: PlatformRuntimeHost,
+  commands: readonly string[],
+): Promise<TargetFacts> {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = nomacFetch as typeof fetch;
+  try {
+    const plugin = nomacPlugin({
+      apiKey: 'nomac-placeholder-key',
+      baseUrl: 'https://nomac.invalid.test',
+    });
+    if (!plugin.setup) throw new Error('The NoMac plugin exposes no setup().');
+    const created = await plugin.setup({ env: {}, clientVersion: '0.0.0' } as never);
+    if (!('runtime' in created)) throw new Error('The NoMac plugin built no device runtime.');
+    const runtime = created.runtime as unknown as ProviderDeviceRuntime;
+    const owner = (await created.platformModule.loadRuntime(host as never)) as PlatformRuntimeOwner;
+    const leaseId = `lease-${target.platform}`;
+    await runtime.leaseLifecycle?.allocate?.(
+      {
+        leaseId,
+        leaseProvider: 'nomac',
+        backend: target.backend,
+        tenantId: 't',
+        runId: 'run-1',
+      } as never,
+      { flags: {} } as never,
+    );
+    const devices = await runtime.deviceInventoryProvider?.({
+      leaseProvider: 'nomac',
+      leaseId,
+    } as never);
+    const device = devices?.[0];
+    if (!device) throw new Error('NoMac invented no device for its lease.');
+    const facts = targetFacts(await owner.inspectFacts(device), commands);
+    await runtime.shutdown?.();
+    return facts;
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}
+
 /** Re-raises a fact-collection failure with the column whose collection produced it. */
 async function namingTarget(target: Target, collect: () => Promise<void>): Promise<void> {
   try {
@@ -368,6 +435,13 @@ export async function collectCommandSupport(host: PlatformRuntimeHost): Promise<
     if (target.kind !== 'revyl') continue;
     await namingTarget(target, async () => {
       record(target.id, await revylSupport(target, host, commands));
+    });
+  }
+
+  for (const target of TARGETS) {
+    if (target.kind !== 'nomac') continue;
+    await namingTarget(target, async () => {
+      record(target.id, await nomacSupport(target, host, commands));
     });
   }
 

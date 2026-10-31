@@ -451,7 +451,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /uploaded artifacts remain supported/);
   assert.match(
     help,
-    /Limrun, BrowserStack, AWS Device Farm, TestMu AI, and Revyl through local provider profiles/,
+    /Limrun, BrowserStack, AWS Device Farm, TestMu AI, Revyl, and NoMac through local provider profiles/,
   );
   assert.match(help, /plugins add @agent-device\/testmu/);
   assert.match(help, /TestMu AI uses LT_USERNAME and LT_ACCESS_KEY/);
@@ -479,6 +479,12 @@ test('usageForCommand resolves remote help topic', async () => {
   );
   assert.match(revylFlow, /must be an https URL/);
   assert.match(revylFlow, /agent-device disconnect/);
+  assert.match(help, /NoMac uses NOMAC_API_KEY/);
+  assert.match(help, /plugins add @agent-device\/nomac/);
+  assert.match(
+    help,
+    /NoMac \(plugin, install separately\): agent-device connect nomac verifies the key/,
+  );
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
   assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);
   assert.match(help, /Limrun Android supports direct ADB port reverse/);

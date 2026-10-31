@@ -104,6 +104,7 @@ test('truncation evidence is declared for every iOS producer', () => {
     'appium-source': 'unavailable',
     'limrun-ios-tree': 'unavailable',
     'revyl-ios-tree': 'unavailable',
+    'nomac-ios-tree': 'unavailable',
   } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
   for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {

@@ -56,6 +56,7 @@ const IOS_PROVENANCE_LITERALS: ReadonlySet<string> = new Set([
   'appium-source',
   'limrun-ios-tree',
   'revyl-ios-tree',
+  'nomac-ios-tree',
 ]);
 
 export function snapshotAssemblyPresentationViolations(
