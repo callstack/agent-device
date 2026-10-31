@@ -92,7 +92,7 @@ extension ModalSurface {
   private static func actions(in node: AlertSurfaceNode, keyboardOwned: Bool) -> [AlertSurfaceNode] {
     let keyboardOwned = SnapshotKeyboardSurface.isInputAssistant(type: node.type, identifier: node.identifier)
       ? false
-      : keyboardOwned || node.type == "Keyboard" || node.type == "Key"
+      : keyboardOwned || SnapshotKeyboardSurface.isKeyboardOrKey(type: node.type)
     let isAction = !keyboardOwned
       && (AlertSurface.actionableTypes.contains(node.type)
         || AlertSurface.isDismissPopupMarker(node.label) || AlertSurface.isDismissPopupMarker(node.identifier))
