@@ -29,6 +29,7 @@ export {
   resolveRunnerRequestSignal,
   type RunnerCommand,
 } from './runner-contract.ts';
+export { runnerCommandResolvesSurface } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
 export {
   withAppleRunnerProvider,

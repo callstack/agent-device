@@ -1,5 +1,5 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import type { AppleLitPanel } from '@agent-device/contracts/interactor-types';
+import type { RunnerCommand } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
@@ -411,28 +411,15 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
 }
 
 /**
- * The panel to name in a runner request, from a panel table read.
- *
- * Absent unless panel power itself decided one panel. A capture may still name the `primary` panel
- * when panel power decides nothing (ADR 0025), because a capture has to name some display or refuse;
- * a surface fact has no such pressure, and naming a panel the table did not settle would have the
- * runner refuse the panel the user is actually looking at. The `primary` flag plays no part here: a
- * payload can decide which panel is lit and still omit that flag.
- *
- * A panel the runtime names display 0 cannot be sent: 0 is the wire's "no panel named" identity, so
- * such a display would look panel-carrying on the request and behave single-panel in the runner.
+ * The panel a runner request names, only when panel power decided exactly one panel. Unlike a
+ * capture, a surface request does not fall back to the `primary` panel: it can keep the runner's
+ * historic route instead of guessing. Display 0 is the runtime's "no display" identity.
  */
-export function appleLitPanel(inventory: AppleDisplayInventory): AppleLitPanel | undefined {
-  // `activeDisplay` is set only by a table that named a panel to capture, and an incomplete table
-  // names none: a panel the parser dropped may be the lit one, and naming the survivor would send
-  // every surface request to a display that can be dark.
-  if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) {
-    return undefined;
-  }
+export function appleLitPanel(inventory: AppleDisplayInventory): RunnerCommand['litPanel'] {
+  if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
   const litPanels = inventory.displays.filter((display) => display.power === 'lit');
   const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
   if (!panel || panel.displayId <= 0) return undefined;
-  if (!panel.pointScale || !Number.isFinite(panel.pointScale)) return undefined;
   return {
     displayId: panel.displayId,
     widthPt: panel.widthPx / panel.pointScale,

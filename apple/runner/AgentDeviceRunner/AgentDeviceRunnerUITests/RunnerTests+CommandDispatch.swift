@@ -7,8 +7,6 @@ extension RunnerTests {
   func executeAccepted(command: Command) throws -> Response {
     commandJournal.start(command: command)
     pendingTargetActivation = nil
-    // Before anything the command resolves: every surface resolver this command reaches reads the
-    // panel it named, and one that named none must not inherit the previous command's.
     setRequestLitPanel(from: command)
     do {
       let response = try executeDispatched(command: command)
@@ -435,9 +433,7 @@ extension RunnerTests {
           outputPath: resolvedOutPath,
           fps: command.fps.map { Int32($0) }
         )
-        // One panel for the whole clip, taken while this request still owns the slot: the writer is
-        // sized from the bootstrap frame, so a pump that asked again later could book the remaining
-        // frames on the panel of whatever command happened to follow `recordStart`.
+        // The pump outlives this request, so the clip keeps the panel its `recordStart` named.
         let clipLitPanel = requestSurfacePanel
         try startRecording(recorder) { [weak self] in
           guard let self else { return .failure(.unresolvedScreen) }

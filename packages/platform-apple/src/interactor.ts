@@ -154,10 +154,7 @@ export function createAppleInteractor(
       );
     },
     setOrientation: async (orientation) => {
-      // A rotation asks the panel table itself rather than answering from the window a surface probe
-      // may have opened: the two routes differ in correctness, and the historic one reports a
-      // rotation a foldable never performed.
-      if (await isAppleFoldableSimulator(device, runnerOpts.signal, { askPanelTableAgain: true })) {
+      if (await isAppleFoldableSimulator(device, runnerOpts.signal)) {
         return await setAppleFoldableOrientation(device, orientation, {
           signal: runnerOpts.signal,
         });

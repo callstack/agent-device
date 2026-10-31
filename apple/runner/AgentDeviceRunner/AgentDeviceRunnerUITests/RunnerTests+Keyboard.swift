@@ -241,13 +241,10 @@ extension RunnerTests {
     requiredConsecutiveMatches: Int
   ) {
     let deadline = Date().addingTimeInterval(timeout)
-    // One panel for the whole settle loop: samples taken against two panels could never match, and a
-    // loop that outlives its request must not follow the command that replaced it.
-    let litPanel = requestSurfacePanel
-    var samples: [Data?] = [screenshotFingerprintForStabilityCheck(app: app, litPanel: litPanel)]
+    var samples: [Data?] = [screenshotFingerprintForStabilityCheck(app: app)]
     while Date() < deadline {
       sleepFor(sampleInterval)
-      samples.append(screenshotFingerprintForStabilityCheck(app: app, litPanel: litPanel))
+      samples.append(screenshotFingerprintForStabilityCheck(app: app))
       if runnerScreenshotStabilitySettled(samples, requiredConsecutiveMatches: requiredConsecutiveMatches) {
         logScreenshotStability(samples: samples, settled: true)
         return
@@ -268,11 +265,8 @@ extension RunnerTests {
     )
   }
 
-  private func screenshotFingerprintForStabilityCheck(
-    app: XCUIApplication,
-    litPanel: RunnerLitPanel
-  ) -> Data? {
-    guard let image = captureRunnerFrame(app: app, litPanel: litPanel) else { return nil }
+  private func screenshotFingerprintForStabilityCheck(app: XCUIApplication) -> Data? {
+    guard let image = captureRunnerFrame(app: app) else { return nil }
     return runnerPngData(for: image)
   }
 

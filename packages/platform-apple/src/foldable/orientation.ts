@@ -9,7 +9,10 @@ import {
   IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS,
 } from '../core/config.ts';
 import { readAppleDeviceOrientation } from '../core/device-orientation.ts';
-import { queryAppleDisplayInventory } from '../core/display-inventory.ts';
+import {
+  queryAppleDisplayInventory,
+  type AppleDisplayInventory,
+} from '../core/display-inventory.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
 import { createFoldHelper } from './fold-helper.ts';
 import { appleFoldableFacts } from './runtime.ts';
@@ -26,62 +29,47 @@ const ORIENTATION_UNVERIFIED_HINT =
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
 
-// A panel table the runtime would not answer is retried, but not once per command: every runner
-// request that resolves a surface asks this question, and an unbounded retry pays the probe cost on
-// each of them. A few seconds absorbs one command burst; it is short enough that the next request
-// minutes after a transient CoreDevice failure asks the panel table again. `apple_panel_table_retry_
-// pending` names the window during which a foldable is treated as single-panel.
-const PANEL_TABLE_RETRY_MS = 5_000;
-const panelTableRetriesAt = createTtlMemo<string, true>({
-  ttlMs: PANEL_TABLE_RETRY_MS,
-  scheduleExpiry: true,
-});
-
 /**
  * Whether a rotation must go through guest HID: a simulator the `fold` fact admits that has more
  * than one integrated panel. XCUIDevice rotation has no effect there, and its readback repeats
  * the requested value.
- *
- * `askPanelTableAgain` skips the retry window and reads the table now. A caller that asks once per
- * command, such as a rotation, takes that route: a surface probe is paid on every runner request, so
- * only it may answer from the window, and holding a rotation there would send a foldable through the
- * route whose readback repeats the request and reports a rotation that never happened.
  */
 export async function isAppleFoldableSimulator(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
-  options: { askPanelTableAgain?: boolean } = {},
 ): Promise<boolean> {
   if (!appleFoldableFacts(device).setFoldPose.available) return false;
   const known = multiPanelByDevice.get(device.id);
   if (known !== undefined) return known;
-  if (!options.askPanelTableAgain && panelTableRetriesAt.get(device.id)) {
-    // The caller cannot tell this answer from a device it proved single-panel, so the reason has to
-    // be in the log: a runner request that follows takes its historic first-window surface route.
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'apple_panel_table_retry_pending',
-      data: {
-        deviceId: device.id,
-        retryInMs: PANEL_TABLE_RETRY_MS,
-        hint: 'The panel table would not answer, so until it is asked again this device is treated as single-panel: a runner request carries no lit panel.',
-      },
-    });
-    return false;
-  }
   const inventory = await queryAppleDisplayInventory(device, { signal });
-  if (inventory.unresolved) {
-    // A probe the caller cancelled is not evidence that the panel table will not answer, so it must
-    // not spend the retry window: the next request asks again instead of inheriting this one's
-    // single-panel fallback for the whole window. The caller's own cancellation surfaces downstream,
-    // where the request it belongs to reaches the transport.
-    if (!signal?.aborted) {
-      panelTableRetriesAt.set(device.id, true);
-    }
-    return false;
-  }
+  if (inventory.unresolved) return false;
   multiPanelByDevice.set(device.id, inventory.multiScreen);
   return inventory.multiScreen;
+}
+
+// Every surface command reads the panel table, so one that would not answer is not asked again
+// for a few seconds: a failing probe can cost its whole timeout.
+const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
+
+/**
+ * One panel-table read of a multi-panel simulator, or undefined for a device the `fold` fact refuses,
+ * one known to have a single panel, or a table that would not answer. It records the panel count it
+ * reads, so a single-panel simulator pays one read per daemon.
+ */
+export async function readFoldablePanelTable(
+  device: DeviceInfo,
+  signal: AbortSignal | undefined,
+): Promise<AppleDisplayInventory | undefined> {
+  if (!appleFoldableFacts(device).setFoldPose.available) return undefined;
+  if (multiPanelByDevice.get(device.id) === false) return undefined;
+  if (unansweredPanelTables.get(device.id)) return undefined;
+  const inventory = await queryAppleDisplayInventory(device, { signal });
+  if (inventory.unresolved) {
+    if (!signal?.aborted) unansweredPanelTables.set(device.id, true);
+    return undefined;
+  }
+  multiPanelByDevice.set(device.id, inventory.multiScreen);
+  return inventory.multiScreen ? inventory : undefined;
 }
 
 /** Rotates a foldable simulator through guest HID and verifies the rotation through CoreDevice. */
