@@ -9,7 +9,6 @@ import {
   assertElementTextAfterScrolling,
   assertFilesDiffer,
   assertJsonContains,
-  assertMp4File,
   assertNonEmptyFile,
   assertWaitText,
   capturePng,
@@ -281,18 +280,6 @@ export async function assertObservabilityAndArtifacts(context: LiveContext): Pro
   assertJsonContains(traceStop, tracePath, 'trace stop should retain the requested output path');
   assertNonEmptyFile(tracePath, 'trace');
   verifyCommand(context, C.trace, 'traced press produces a non-empty trace at the requested path');
-
-  const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
-  await runStep(context, 'start screen recording', [
-    'record',
-    'start',
-    recordingPath,
-    '--hide-touches',
-  ]);
-  await runStep(context, 'record a visible mutation', ['press', 'id="automation-press"']);
-  await runStep(context, 'stop screen recording', ['record', 'stop']);
-  await assertMp4File(recordingPath);
-  verifyCommand(context, C.record, 'visible mutation produces a non-empty playable MP4');
 
   const batch = await runStep(context, 'run semantic read batch', [
     'batch',

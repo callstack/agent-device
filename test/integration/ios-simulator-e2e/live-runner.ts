@@ -14,6 +14,7 @@ import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,
   assertJsonContains,
+  assertMp4File,
   assertWaitSelector,
   assertWaitText,
   capturePng,
@@ -475,6 +476,29 @@ async function assertCapture(context: LiveContext): Promise<void> {
   assertJsonContains(screenshot, screenshotPath, 'screenshot response should return artifact path');
   assertPngFile(screenshotPath);
   verifyCommand(context, C.screenshot, 'captured fixture file has a valid PNG signature');
+
+  await assertWaitSelector(context, 'id="home-open-catalog" visible=true');
+  const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
+  const recording = await runStep(context, 'start screen recording', [
+    'record',
+    'start',
+    recordingPath,
+    '--hide-touches',
+    '--debug',
+  ]);
+  assert.equal(recording.json?.data?.recording, 'started', JSON.stringify(recording.json));
+  assert.equal(recording.json?.data?.recordingBackend, 'simctl recordVideo');
+  assert.equal(recording.json?.data?.activeSessionApp?.bundleId, context.appId);
+  await runStep(context, 'record a visible mutation', ['press', 'id="home-open-catalog"']);
+  await assertWaitSelector(context, 'id="catalog-title" visible=true');
+  const stopped = await runStep(context, 'stop screen recording', ['record', 'stop']);
+  assert.equal(stopped.json?.data?.recording, 'stopped', JSON.stringify(stopped.json));
+  await assertMp4File(recordingPath);
+  verifyCommand(
+    context,
+    C.record,
+    'active-session capture records a visible mutation into a playable MP4',
+  );
 }
 
 async function assertClose(context: LiveContext): Promise<void> {
