@@ -165,3 +165,21 @@ test('a surface command probes the panel table within its own timeout', async ()
   assert.equal(mockPanelTable.mock.lastCall?.[0].timeoutMs, 1_200);
   assert.equal(calls[0]?.command.litPanel?.displayId, 1);
 });
+
+test('a slow failed read does not back off over a newer read that resolved', async () => {
+  const device = simulator();
+  let failSlowRead!: (error: Error) => void;
+  mockPanelTable.mockImplementationOnce(
+    () => new Promise((_resolve, reject) => (failSlowRead = reject)),
+  );
+  const slow = resolveRunnerRequestLitPanel(device, {});
+  answering(IPHONE_DUO_CLOSED);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 1);
+  failSlowRead(new Error('devicectl does not report displays'));
+  assert.equal(await slow, undefined);
+  assert.equal(
+    (await resolveRunnerRequestLitPanel(device, {}))?.displayId,
+    1,
+    'the stale failure must not hold the next request on the historic route',
+  );
+});

@@ -32,10 +32,19 @@ const multiPanelByDevice = new Map<string, boolean>();
 // Every surface command reads the panel table, so one that would not answer is not asked again
 // for a few seconds: a failing probe can cost its whole timeout.
 const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
+// Reads overlap, so a failure may finish after a read that started later and already resolved.
+// Each read takes a sequence number, and a failure never overrides a newer resolved read.
+let panelTableReads = 0;
+const latestResolvedRead = new Map<string, number>();
 
-function recordPanelTable(device: DeviceInfo, inventory: AppleDisplayInventory): void {
+function recordPanelTable(
+  device: DeviceInfo,
+  inventory: AppleDisplayInventory,
+  read: number,
+): void {
   multiPanelByDevice.set(device.id, inventory.multiScreen);
   unansweredPanelTables.delete(device.id);
+  latestResolvedRead.set(device.id, Math.max(read, latestResolvedRead.get(device.id) ?? 0));
 }
 
 /**
@@ -50,9 +59,10 @@ export async function isAppleFoldableSimulator(
   if (!appleFoldableFacts(device).setFoldPose.available) return false;
   const known = multiPanelByDevice.get(device.id);
   if (known !== undefined) return known;
+  const read = ++panelTableReads;
   const inventory = await queryAppleDisplayInventory(device, { signal });
   if (inventory.unresolved) return false;
-  recordPanelTable(device, inventory);
+  recordPanelTable(device, inventory, read);
   return inventory.multiScreen;
 }
 
@@ -68,12 +78,14 @@ export async function readFoldablePanelTable(
   if (!appleFoldableFacts(device).setFoldPose.available) return undefined;
   if (multiPanelByDevice.get(device.id) === false) return undefined;
   if (unansweredPanelTables.get(device.id)) return undefined;
+  const read = ++panelTableReads;
   const inventory = await queryAppleDisplayInventory(device, options);
   if (inventory.unresolved) {
-    if (!options.signal?.aborted) unansweredPanelTables.set(device.id, true);
+    const newerReadResolved = (latestResolvedRead.get(device.id) ?? 0) > read;
+    if (!options.signal?.aborted && !newerReadResolved) unansweredPanelTables.set(device.id, true);
     return undefined;
   }
-  recordPanelTable(device, inventory);
+  recordPanelTable(device, inventory, read);
   return inventory.multiScreen ? inventory : undefined;
 }
 

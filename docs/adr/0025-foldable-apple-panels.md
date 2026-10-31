@@ -718,9 +718,9 @@ Decision: the host names the lit panel in each runner request that resolves a sc
 
 With a named panel, the runner walks at most eight windows. It books the first window on the lit display whose frame is the panel's native box, upright or turned. If no window fills the panel, it books the largest window on the lit display. A window that the walk cannot place refuses the request with `APP_SCREEN_UNRESOLVED`, even if a full-panel window follows it. A list past the cap with no full-panel window refuses the same way. An app whose windows are all on another display is `APP_SCREEN_OFF_LIT_PANEL`. An app with no window at all is `APP_SCREEN_WINDOW_UNRESOLVED`.
 
-The request books the window before it acts. A refusal is returned before any gesture or snapshot, and every later read in the request uses the booked window. Dispatch, the coordinate fallback, and the viewport therefore never fall back to the application's own frame. Capture asks the system surface only when the app has no window. An app on the dark panel is refused instead.
+The request books the window before it acts. A refusal is returned before any gesture or snapshot. Dispatch, the coordinate fallback, and the snapshot viewport reuse the booked window, so they never fall back to the application's own frame. Capture resolves its own window with the same rule. It asks the system surface only when the app has no window, and it refuses an app on the dark panel.
 
-A regular snapshot runs only the tree tier, because only that tier can prove which display a window is on. It keeps only the windows whose element snapshot reports the lit display. A window that reports no display is dropped. If no window is proven, the snapshot refuses with `APP_SCREEN_UNRESOLVED`. The root takes the panel's native box.
+A regular snapshot runs only the tree tier, because only that tier can prove which display a window is on. It traverses the application's tree, not only the booked window, and keeps every window whose element snapshot reports the lit display. A window that reports no display is dropped. If no window is proven, the snapshot refuses with `APP_SCREEN_UNRESOLVED`. The root takes the panel's native box.
 
 Rejected alternatives:
 
