@@ -76,6 +76,8 @@ export type ScreenshotOptions = {
  */
 export type ScreenshotCaptureFacts = Readonly<{
   displayRotation?: DeviceRotation;
+  /** Pixels per point of a capture kept at the display's own pixels. */
+  sourcePixelDensity?: number;
   /** Actual physical iOS capture route, including any fallback from CoreDevice to XCTest. */
   iosPhysicalCaptureBackend?: 'coredevice' | 'xctest';
 }>;

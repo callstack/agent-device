@@ -158,6 +158,7 @@ export async function captureScreenshotArtifact(
 type CapturedScreenshot = Readonly<{
   path: string;
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
   warnings?: string[];
 }>;
@@ -233,6 +234,7 @@ async function executeScreenshot(
       path: captured.path,
       requestedPixelDensity: flags?.screenshotPixelDensity,
       nativeDensity: flags?.screenshotNativeDensity,
+      sourcePixelDensity: captured.sourcePixelDensity,
       scale: flags?.screenshotScale,
     })),
   };
@@ -398,7 +400,14 @@ function createBoundScreenshotBackend(
         });
         crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
       }
-      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
+      return facts.displayRotation || facts.sourcePixelDensity !== undefined
+        ? {
+            ...(facts.displayRotation ? { displayRotation: facts.displayRotation } : {}),
+            ...(facts.sourcePixelDensity !== undefined
+              ? { pixelDensity: facts.sourcePixelDensity }
+              : {}),
+          }
+        : undefined;
     },
   };
 }
