@@ -11,6 +11,7 @@ export {
   routeResponseWarnings,
 } from './output-common.ts';
 export { colorize, supportsColor } from './output/color.ts';
+export type { ColorStream } from './output/color.ts';
 export { formatErrorCandidateViews, formatHumanErrorLines } from './output/error.ts';
 export { formatDeliveredArtifactLines, serializeDevice } from './output/result-serialization.ts';
 

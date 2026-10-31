@@ -74,7 +74,7 @@ describe('openCliOutput', () => {
   // the CLI resolves, not a helper mock), printing the same interactive tree
   // lines `snapshot -i` prints after the open confirmation.
   test('production formatter route renders the composed --foreground snapshot tree on default output', async () => {
-    const { dispatchCliOutput } = await import('../cli-output.ts');
+    const { formatCliOutput } = await import('../index.ts');
     const { attachRefs } = await import('@agent-device/kernel/snapshot');
     const nodes = attachRefs([
       { index: 0, type: 'Button', label: 'Sign In', depth: 0, hittable: true },
@@ -89,7 +89,7 @@ describe('openCliOutput', () => {
     };
 
     const openOutput = await withNoColorAsync(() =>
-      dispatchCliOutput({
+      formatCliOutput({
         env: process.env,
         stderrIsTTY: false,
         name: 'open',
@@ -98,7 +98,7 @@ describe('openCliOutput', () => {
       }),
     );
     const snapshotOutput = await withNoColorAsync(() =>
-      dispatchCliOutput({
+      formatCliOutput({
         env: process.env,
         stderrIsTTY: false,
         name: 'snapshot',

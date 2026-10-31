@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { appendWarningLinesText, routeResponseWarnings } from './output-common.ts';
+import { collapseWarningText } from './index.ts';
 
 const WARNING = 'The session app was not foreground when this command arrived.';
 
@@ -102,4 +103,12 @@ test('routeResponseWarnings preserves jsonData alongside a routed warning', () =
     'stderr',
   );
   assert.deepEqual(output.jsonData, { warnings: [WARNING] });
+});
+
+test('warning collapse preserves horizontal whitespace and folds newline-separated whitespace', () => {
+  const tabs = '\t'.repeat(20_000);
+  assert.equal(collapseWarningText(`first${tabs}last`), `first${tabs}last`);
+  assert.equal(collapseWarningText(`first${tabs}\r\n${tabs}last`), 'first last');
+  assert.equal(collapseWarningText('  first \t last  '), '  first \t last  ');
+  assert.equal(collapseWarningText('first\n \n\tlast'), 'first last');
 });
