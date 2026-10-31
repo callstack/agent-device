@@ -21,7 +21,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts', 'src/host.ts'],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
-  // The published IO facade retains its zone while host-kit owns the artifact adapter.
+  // If `src/io.ts` serves `agent-device/io`, keep its root zone.
   'command-runtime': ['src/io.ts'],
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
   // private `src/platform-runtime/` submodule, and with the daemon runtime's dependency
