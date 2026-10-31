@@ -422,6 +422,7 @@ test('runner_endpoint_probe_exhausted is decided by the typed reason, not the me
 test('a refused screen capture keeps the runner reason and stays off the wire code', () => {
   assert.deepEqual([...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].sort(), [
     'APP_SCREEN_CAPTURE_UNRENDERABLE',
+    'APP_SCREEN_OFF_LIT_PANEL',
     'APP_SCREEN_UNRESOLVED',
     'APP_SCREEN_WINDOW_UNRESOLVED',
   ]);

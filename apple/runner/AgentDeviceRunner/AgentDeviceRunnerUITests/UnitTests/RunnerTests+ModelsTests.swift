@@ -55,16 +55,22 @@ extension RunnerTests {
     let plans = requests.compactMap { $0["gesturePlan"] as? [String: Any] }
     let pointers = plans.flatMap { $0["pointers"] as? [[String: Any]] ?? [] }
     let samples = pointers.flatMap { $0["samples"] as? [[String: Any]] ?? [] }
+    let litPanels = requests.compactMap { $0["litPanel"] as? [String: Any] }
     let commands = try entries.map { try decodeProductionRunnerRequest($0.request, $0.name) }
     let command = try XCTUnwrap(commands.first, "no production request")
     let plan = try XCTUnwrap(
       commands.compactMap(\.gesturePlan).first,
       "no production request carries a gesturePlan"
     )
+    let litPanel = try XCTUnwrap(
+      commands.compactMap(\.litPanel).first,
+      "no production request carries a litPanel, so a foldable's surface route would go unpinned"
+    )
     let step = try JSONDecoder().decode(SequenceStep.self, from: Data(#"{"kind":"tap"}"#.utf8))
     let sample = try XCTUnwrap(plan.pointers.first?.samples.first)
     assertEveryStoredField(of: command, appearsIn: requests, "Command")
     assertEveryStoredField(of: step, appearsIn: steps, "SequenceStep")
+    assertEveryStoredField(of: litPanel, appearsIn: litPanels, "RunnerLitPanelFact")
     assertEveryStoredField(of: plan, appearsIn: plans, "RunnerGesturePlan")
     assertEveryStoredField(
       of: plan.viewport,

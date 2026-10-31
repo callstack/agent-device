@@ -2,6 +2,7 @@ import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
   IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS,
@@ -25,6 +26,17 @@ const ORIENTATION_UNVERIFIED_HINT =
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
 
+// A panel table the runtime would not answer is retried, but not once per command: every runner
+// request that resolves a surface asks this question, and an unbounded retry pays the probe cost on
+// each of them. A few seconds absorbs one command burst; it is short enough that the next request
+// minutes after a transient CoreDevice failure asks the panel table again. `apple_panel_table_retry_
+// pending` names the window during which a foldable is treated as single-panel.
+const PANEL_TABLE_RETRY_MS = 5_000;
+const panelTableRetriesAt = createTtlMemo<string, true>({
+  ttlMs: PANEL_TABLE_RETRY_MS,
+  scheduleExpiry: true,
+});
+
 /**
  * Whether a rotation must go through guest HID: a simulator the `fold` fact admits that has more
  * than one integrated panel. XCUIDevice rotation has no effect there, and its readback repeats
@@ -37,8 +49,25 @@ export async function isAppleFoldableSimulator(
   if (!appleFoldableFacts(device).setFoldPose.available) return false;
   const known = multiPanelByDevice.get(device.id);
   if (known !== undefined) return known;
+  if (panelTableRetriesAt.get(device.id)) {
+    // The caller cannot tell this answer from a device it proved single-panel, so the reason has to
+    // be in the log: a runner request that follows takes its historic first-window surface route.
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'apple_panel_table_retry_pending',
+      data: {
+        deviceId: device.id,
+        retryInMs: PANEL_TABLE_RETRY_MS,
+        hint: 'The panel table would not answer, so until it is asked again this device is treated as single-panel: a runner request carries no lit panel and rotation uses the historic route.',
+      },
+    });
+    return false;
+  }
   const inventory = await queryAppleDisplayInventory(device, { signal });
-  if (inventory.unresolved) return false;
+  if (inventory.unresolved) {
+    panelTableRetriesAt.set(device.id, true);
+    return false;
+  }
   multiPanelByDevice.set(device.id, inventory.multiScreen);
   return inventory.multiScreen;
 }

@@ -14,6 +14,7 @@ import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
 import type {
+  AppleLitPanel,
   CoordinateTapTextInputEvidence,
   ElementSelectorKey,
 } from '@agent-device/contracts/interactor-types';
@@ -154,6 +155,13 @@ export type RunnerCommand = {
   fullscreen?: boolean;
   inlineScreenshot?: boolean;
   synthesized?: boolean;
+  /**
+   * The panel the host reports as lit, sent only for a device whose panel table reports more than one
+   * integrated panel and only on a command that resolves a screen. Absent means "single-panel device"
+   * or "the panel table decided nothing": the runner then keeps its historic first-window surface
+   * route rather than guessing a panel (ADR 0025).
+   */
+  litPanel?: AppleLitPanel;
   steps?: RunnerSequenceStep[];
 };
 
@@ -261,12 +269,19 @@ export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCC
 const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
 const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
 const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
+const RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE = 'APP_SCREEN_OFF_LIT_PANEL';
 
-/** Every runner code meaning "this capture did not happen", covering the display and the image. */
+/**
+ * Every runner code meaning "this capture did not happen", covering the display, the image, and the
+ * panel. The last one is a foldable's own refusal: the request named a lit panel and neither the
+ * target app nor the system surface had a window on it. The capture does not fall back to the dark
+ * panel, which would answer with a valid all-black PNG, so this code is what the host sees.
+ */
 export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
   RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
+  RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE,
 ]);
 
 /**

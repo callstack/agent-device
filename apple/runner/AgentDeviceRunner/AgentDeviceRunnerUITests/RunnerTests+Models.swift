@@ -219,6 +219,33 @@ struct CoordinateTapTextInputEvidence: Codable {
   let textInputRects: [RunnerGestureViewport]
 }
 
+/// The panel the host reports as lit, in the units the host's panel table reports it: which display is
+/// powered and that panel's own native box in points.
+///
+/// Only the host can name this. The runner has no hinge to read, and geometry cannot say which of two
+/// panels is powered — the dark panel's window has a perfectly good frame — so the host reads the
+/// panel table for the request and sends the answer with it (ADR 0025). A request that carries no
+/// panel is a single-panel device's request, and keeps the runner's historic first-window route.
+///
+/// `widthPt`/`heightPt` are the panel's *native* box, not the box an app shows on it: the system
+/// presents the inner panel turned, so its interaction space swaps the side lengths.
+///
+/// The field names are the wire spelling and the request side's own convention (`commandId`,
+/// `appBundleId`), so the id keeps its lowercase `d` here even though the surface rule's own type
+/// spells the runtime's `XCUIScreen.displayID` property the runtime's way.
+struct RunnerLitPanelFact: Codable {
+  let displayId: UInt
+  let widthPt: Double
+  let heightPt: Double
+}
+
+extension RunnerLitPanelFact {
+  /// The panel in the units the surface rule compares a window against.
+  var surfacePanel: RunnerLitPanel {
+    RunnerLitPanel(displayID: displayId, widthPt: CGFloat(widthPt), heightPt: CGFloat(heightPt))
+  }
+}
+
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -258,6 +285,10 @@ struct Command: Codable {
   let inlineScreenshot: Bool?
   let synthesized: Bool?
   let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
+  /// The lit panel, sent by the host only for a device whose panel table reports more than one panel.
+  /// Absent means "single-panel device": every surface resolver then takes its historic first-window
+  /// route and reads no display identity at all.
+  let litPanel: RunnerLitPanelFact?
   let steps: [SequenceStep]?
 }
 

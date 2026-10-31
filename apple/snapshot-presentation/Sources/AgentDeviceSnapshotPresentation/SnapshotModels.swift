@@ -86,7 +86,11 @@ public struct RawAXNode: Equatable {
     self.actions = actions
   }
 
-  func replacing(rect: SnapshotRect, hittable: Bool?) -> RawAXNode {
+  /// The node with a new box and a new actionability verdict, every other fact kept. Published because
+  /// the runner's surface rule rewrites a root's box against the box it resolved, the same way the
+  /// coordinate-space pass rewrites frames in the app's orientation space (#2661); both need the
+  /// keyboard-ownership and custom-action fields to survive the copy.
+  public func replacing(rect: SnapshotRect, hittable: Bool?) -> RawAXNode {
     var updated = self
     updated.rect = rect
     updated.hittable = hittable

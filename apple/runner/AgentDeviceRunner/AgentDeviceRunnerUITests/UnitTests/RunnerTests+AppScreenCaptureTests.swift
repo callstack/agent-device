@@ -49,6 +49,12 @@ extension RunnerTests {
       RunnerAppScreenCaptureFailure.unrenderableImage.rawValue,
       "APP_SCREEN_CAPTURE_UNRENDERABLE"
     )
+    // A panel refusal has a system surface left to ask, so it is its own code too: "the app has
+    // nothing on the lit panel" and "no window anywhere" send an operator to different places.
+    XCTAssertEqual(
+      RunnerAppScreenCaptureFailure(.offLitPanel).rawValue,
+      "APP_SCREEN_OFF_LIT_PANEL"
+    )
     // A success-shaped reason cannot become a success: the only way here is a caller that forgot to
     // branch, and the capture it describes did not happen.
     XCTAssertEqual(
@@ -118,6 +124,30 @@ extension RunnerTests {
       )
     }
 
+    /// Every window the session app has is on the dark panel: that says nothing about where the lit
+    /// panel's content is, because the home screen is SpringBoard's window. So the panel refusal moves
+    /// the question on exactly like an unresolved window does.
+    func testObservedScreenCaptureAsksTheSystemSurfaceWhenEveryAppWindowIsOffTheLitPanel() {
+      var askedSystemSurface = false
+      let outcome = selectObservedScreenCapture(
+        resolving: { .failure(.offLitPanel) },
+        fallingBack: {
+          askedSystemSurface = true
+          return .success(
+            CapturedAppScreen(
+              image: UIImage(),
+              displayID: 3,
+              pixelWidth: 2852,
+              pixelHeight: 2006,
+              pixelsPerPoint: 3
+            )
+          )
+        }
+      )
+      XCTAssertTrue(askedSystemSurface, "the lit panel's content belongs to another process")
+      XCTAssertEqual(try? outcome.get().displayID, 3)
+    }
+
     /// A window that resolved and then refused to name its display is the failure the host has to
     /// see; asking a second process would replace a real refusal with an unrelated capture.
     func testObservedScreenCaptureReportsADisplayRefusalWithoutAskingTheSystemSurface() {
@@ -129,7 +159,10 @@ extension RunnerTests {
           return .failure(.unrenderableImage)
         }
       )
-      XCTAssertFalse(askedSystemSurface, "only an unresolved window may reach the system surface")
+      XCTAssertFalse(
+        askedSystemSurface,
+        "only an unresolved window or a panel refusal may reach the system surface"
+      )
       guard case .failure(let refusal) = outcome else {
         return XCTFail("a display that refused must not become a capture")
       }

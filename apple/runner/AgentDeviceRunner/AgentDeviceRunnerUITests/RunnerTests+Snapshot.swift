@@ -185,6 +185,7 @@ extension RunnerTests {
 
   @MainActor
   func recursiveTreeSnapshotAcquisition(
+    app: XCUIApplication,
     context: SnapshotTraversalContext,
     hint: CaptureHint,
     processingDeadline: Date
@@ -214,22 +215,84 @@ extension RunnerTests {
         parentIndex: nil
       )
     )
-    if Self.canDescendAtRawDepth(0, hint: hint) {
-      appendCollapsedTabFallbackNodes(
-        to: &nodes,
-        containerSnapshot: context.rootSnapshot,
-        resolveCandidates: collapsedTabCandidatesOnce,
-        depth: 1,
-        parentIndex: 0
+    var seen = Set<String>()
+    try walkSnapshotChildren(
+      of: context.rootSnapshot,
+      parentIndex: 0,
+      depth: 0,
+      into: &nodes,
+      seen: &seen,
+      hint: hint,
+      collapsedTabStep: { [self] nodes, container, depth, parentIndex in
+        self.appendCollapsedTabFallbackNodes(
+          to: &nodes,
+          containerSnapshot: container,
+          resolveCandidates: collapsedTabCandidatesOnce,
+          depth: depth,
+          parentIndex: parentIndex
+        )
+      }
+    )
+
+    // A foldable's application subtree can hold only another panel's window: on a Duo home screen it
+    // reported the outer panel's window and the lit panel's icons were absent. The window the surface
+    // rule resolved is then the only remaining way to read the screen the request named, and one read
+    // of it is what makes its content addressable (ADR 0025). Only a request that named a panel asks
+    // this question: a single-panel app legitimately has no window child for its own frame, and a
+    // second read there would be a cost the historic route never paid.
+    let surface = context.viewport.rect
+    if let surface, requestSurfacePanel.displayID != 0,
+      !RunnerPanelSurfaceTree.carriesSurfaceWindow(
+        context.rootSnapshot.children,
+        surface: surface,
+        isSurface: { Self.surfaceElementTypes.contains($0.elementType) },
+        frame: { $0.frame }
+      )
+    {
+      outcome = try graftSurfaceWindowNodes(
+        app: app,
+        surface: surface,
+        into: &nodes,
+        seen: seen,
+        hint: hint,
+        outcome: outcome,
+        processingDeadline: processingDeadline
       )
     }
 
-    var seen = Set<String>()
-    var stack: [SnapshotTraversalEntry] = []
-    if Self.canDescendAtRawDepth(0, hint: hint) {
-      stack = context.rootSnapshot.children.map {
-        SnapshotTraversalEntry(snapshot: $0, depth: 1, parentIndex: 0)
-      }
+    return (
+      SnapshotAcquisition(
+        hint: hint,
+        nodes: nodes,
+        truncated: outcome == .deadlineExhausted,
+        effectiveDepth: nil,
+        viewport: context.viewport
+      ),
+      outcome
+    )
+  }
+
+  /// The element types a whole surface arrives as, in the platform's own vocabulary. The tree reports
+  /// `Other` for most containers, so it is deliberately absent: a container is not a screen.
+  static let surfaceElementTypes: Set<XCUIElement.ElementType> = [.window, .sheet, .drawer]
+
+  /// One subtree of the walk, applying the walk's own bounds: raw traversal depth, the node cap, and
+  /// identity de-duplication. Shared by the application walk and by the panel-surface graft so the two
+  /// cannot disagree about what a payload's nodes mean (#2661).
+  @MainActor
+  private func walkSnapshotChildren(
+    of snapshot: XCUIElementSnapshot,
+    parentIndex: Int,
+    depth: Int,
+    into nodes: inout [RawAXNode],
+    seen: inout Set<String>,
+    hint: CaptureHint,
+    collapsedTabStep: ((inout [RawAXNode], XCUIElementSnapshot, Int, Int) -> Void)?
+  ) throws {
+    guard Self.canDescendAtRawDepth(depth, hint: hint) else { return }
+    collapsedTabStep?(&nodes, snapshot, depth + 1, parentIndex)
+    var stack: [SnapshotTraversalEntry] = snapshot.children.map {
+      SnapshotTraversalEntry(snapshot: $0, depth: depth + 1, parentIndex: parentIndex)
     }
 
     while let entry = stack.popLast() {
@@ -272,27 +335,111 @@ extension RunnerTests {
         throw regularSnapshotTooLargeFailure(nodeCount: nodes.count)
       }
       if Self.canDescendAtRawDepth(depth, hint: hint) {
-        appendCollapsedTabFallbackNodes(
-          to: &nodes,
-          containerSnapshot: snapshot,
-          resolveCandidates: collapsedTabCandidatesOnce,
-          depth: depth + 1,
-          parentIndex: node.index
-        )
+        collapsedTabStep?(&nodes, snapshot, depth + 1, node.index)
       }
     }
-
-    return (
-      SnapshotAcquisition(
-        hint: hint,
-        nodes: nodes,
-        truncated: outcome == .deadlineExhausted,
-        effectiveDepth: nil,
-        viewport: context.viewport
-      ),
-      outcome
-    )
   }
+
+  /// The window the surface rule resolved, read once and grafted onto the application root as a sibling
+  /// of the windows the application subtree already carried.
+  ///
+  /// The read is bounded by what the tier has left: a snapshot that cannot start inside the remaining
+  /// slice is not started, because XCTest cannot cancel one and an abandoned read stalls main for the
+  /// whole plan. A graft that cannot finish leaves the tree exactly as it was walked, with the nodes and
+  /// dedup keys its abandoned read produced discarded, so the payload stays one the host can validate:
+  /// the tier that already read the screen is never failed or marked truncated by a graft on top of it.
+  @MainActor
+  private func graftSurfaceWindowNodes(
+    app: XCUIApplication,
+    surface: CGRect,
+    into nodes: inout [RawAXNode],
+    seen: Set<String>,
+    hint: CaptureHint,
+    outcome: SnapshotTierOutcome,
+    processingDeadline: Date
+  ) -> SnapshotTierOutcome {
+    guard Self.xctestQueryCanStart(deadline: processingDeadline, now: Date(), expectedCost: Self.surfaceWindowReadFloor) else {
+      // A graft that cannot start leaves the tier's own outcome alone: the tree already walked is
+      // complete, and calling it `deadlineExhausted` would discard it and penalize the backend.
+      NSLog("AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=budget_exhausted")
+      return outcome
+    }
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+      NSLog("AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=window-unresolved")
+      return outcome
+    }
+    guard resolved.frame.width.isFinite, resolved.frame.height.isFinite,
+      RunnerPanelSurfaceTree.liesOnSurface(resolved.frame, surface)
+    else {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=window-off-panel frame=(%g,%g %gx%g)",
+        resolved.frame.origin.x,
+        resolved.frame.origin.y,
+        resolved.frame.size.width,
+        resolved.frame.size.height
+      )
+      return outcome
+    }
+    // The window walk above is itself an unbounded XCTest read, so the slice is tested again here:
+    // what the tier has left after it, and not before, is what the snapshot may still use.
+    let sliceLeft = processingDeadline.timeIntervalSinceNow
+    guard Self.xctestQueryCanStart(deadline: processingDeadline, now: Date(), expectedCost: Self.surfaceWindowReadFloor) else {
+      NSLog("AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=budget_exhausted")
+      return outcome
+    }
+    // `seen` arrives as a copy on purpose: the walk's dedup keys are kept only when its nodes are, and
+    // keys for nodes nobody published would hide content that arrives later by the app route.
+    let graftStart = nodes.count
+    var seenByGraft = seen
+    do {
+      guard let windowSnapshot = try captureSnapshotRootBounded(
+        resolved.window,
+        sliceSeconds: sliceLeft
+      ) else {
+        NSLog("AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=read-failed")
+        return outcome
+      }
+      let windowNode = makeSnapshotNode(
+        snapshot: windowSnapshot,
+        evaluation: evaluateSnapshot(windowSnapshot),
+        depth: 1,
+        index: nodes.count,
+        parentIndex: 0
+      )
+      nodes.append(windowNode)
+      try walkSnapshotChildren(
+        of: windowSnapshot,
+        parentIndex: windowNode.index,
+        depth: 1,
+        into: &nodes,
+        seen: &seenByGraft,
+        hint: hint,
+        collapsedTabStep: nil
+      )
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_GRAFTED frame=(%g,%g %gx%g) nodes=%ld",
+        resolved.frame.origin.x,
+        resolved.frame.origin.y,
+        resolved.frame.size.width,
+        resolved.frame.size.height,
+        nodes.count
+      )
+    } catch {
+      // The tree walked before the graft was publishable as it stands, so a graft that cannot be
+      // finished never fails the tier: the payload goes out without it, and without the dedup keys its
+      // abandoned read had added, since those live only in this scope's copy of `seen`.
+      nodes.removeLast(nodes.count - graftStart)
+      let failure = error as? SnapshotCaptureFailure
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE_SKIPPED reason=graft-failed code=\(failure?.code ?? "unknown") nodes=\(graftStart)"
+      )
+    }
+    return outcome
+  }
+
+  /// The least a second snapshot can usefully be given. Below it the read would be abandoned on its way
+  /// in, which costs the plan more than the tree it would have added.
+  static let surfaceWindowReadFloor: TimeInterval = 0.25
 
   // See `snapshotFast` above: the single production entry point, no unit-test overload.
   func snapshotRaw(target: SnapshotCaptureTarget, options: PresentationOptions) throws -> DataPayload {

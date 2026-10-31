@@ -3,6 +3,8 @@
 #import "RunnerAXSnapshotBridge.h"
 // The shared full-screen rule, from the snapshot bridge; found via HEADER_SEARCH_PATHS.
 #import "ForegroundApplicationGeometry.h"
+// The panel rule this file's window walk applies.
+#import "RunnerPanelSurface.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <XCTest/XCTest.h>
 #import <math.h>
@@ -109,51 +111,69 @@ static NSString *RunnerApplicationScreenFailureDescription(
       return @"no resolved application window";
     case RunnerApplicationScreenFailureUnresolvedScreen:
       return @"no resolved window display ID";
+    case RunnerApplicationScreenFailureOffLitPanel:
+      return @"every application window is off the lit panel";
     case RunnerApplicationScreenFailureNone:
       return @"application screen resolved";
   }
 }
 
-// One window read. Both answers are required: an app with no window answers `frame` with
-// `(0,0 0x0)` without raising, so only `exists` says whether the window is there. The window
-// object is handed back because resolving this instance is what its `screen` will answer from.
-// The frame is reported even when refused, so a refusal names what it looked at.
-static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
-  id application,
-  id _Nullable *window,
-  CGRect *observedFrame
-) {
-  __block id readWindow = nil;
+BOOL RunnerReadWindowExistsAndFrame(id window, CGRect *observedFrame) {
   __block CGRect frame = CGRectNull;
   __block BOOL resolved = NO;
   NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
-    id candidate = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
-    NSNumber *present = [candidate valueForKey:@"exists"];
+    NSNumber *present = [window valueForKey:@"exists"];
     resolved = [present isKindOfClass:NSNumber.class] && present.boolValue;
-    NSValue *frameValue = [candidate valueForKey:@"frame"];
+    // A window that says it is not there is not asked for its frame. XCTest records an issue for a
+    // frame read on a vanished element, an unmuted issue ends the runner session, and the walk asks
+    // several candidates (#2995).
+    if (!resolved) {
+      return;
+    }
+    NSValue *frameValue = [window valueForKey:@"frame"];
     [frameValue getValue:&frame size:sizeof(frame)];
-    readWindow = candidate;
   }];
   *observedFrame = frame;
-  if (exception != nil || !resolved || !AgentDeviceForegroundFrameIsMeasurable(frame)) {
-    NSLog(
-      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@ resolved=%@",
-      frame.origin.x,
-      frame.origin.y,
-      frame.size.width,
-      frame.size.height,
-      exception != nil ? @"yes" : @"no",
-      resolved ? @"yes" : @"no"
-    );
-    return RunnerApplicationScreenFailureUnresolvedWindow;
+  if (exception != nil) {
+    NSLog(@"AGENT_DEVICE_RUNNER_APP_WINDOW_FRAME_RAISED frame raised=%@", exception);
+    return NO;
   }
-  *window = readWindow;
-  return RunnerApplicationScreenFailureNone;
+  return resolved && AgentDeviceForegroundFrameIsMeasurable(frame);
+}
+
+NSArray *RunnerCopyApplicationWindowElements(
+  id application,
+  NSUInteger maxCount,
+  NSUInteger *reportedCount
+) {
+  if (reportedCount != NULL) {
+    *reportedCount = 0;
+  }
+  __block NSArray *windows = nil;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    id elements = [[application valueForKey:@"windows"] valueForKey:@"allElementsBoundByIndex"];
+    if ([elements isKindOfClass:NSArray.class]) {
+      windows = elements;
+    }
+  }];
+  if (exception != nil) {
+    NSLog(@"AGENT_DEVICE_RUNNER_APP_WINDOWS_UNRESOLVED raised=%@", exception);
+    return nil;
+  }
+  if (windows == nil) {
+    return nil;
+  }
+  // The count is the list the query named, before the cap trims it, so a device whose window list
+  // outgrows the walk is visible to whoever reads the marker.
+  if (reportedCount != NULL) {
+    *reportedCount = windows.count;
+  }
+  return windows.count <= maxCount ? windows : [windows subarrayWithRange:NSMakeRange(0, maxCount)];
 }
 
 // The screen read that must follow window resolution on that same window instance: before the frame
 // is asked for, `screen` can still name main, so this never merges into the read ahead of it.
-static RunnerApplicationScreenFailure RunnerReadResolvedWindowScreen(
+RunnerApplicationScreenFailure RunnerReadResolvedWindowScreen(
   id window,
   CGRect windowFrame,
   id _Nullable *screen,
@@ -181,13 +201,148 @@ static RunnerApplicationScreenFailure RunnerReadResolvedWindowScreen(
     );
     return RunnerApplicationScreenFailureUnresolvedScreen;
   }
-  *screen = readScreen;
+  if (screen != NULL) {
+    *screen = readScreen;
+  }
   *displayID = readDisplayID;
+  return RunnerApplicationScreenFailureNone;
+}
+
+static RunnerApplicationScreenFailure RunnerSurfaceFailureFromPanelSelection(
+  RunnerPanelSurfaceSelection selection
+) {
+  switch (selection) {
+    case RunnerPanelSurfaceSelectionLitPanelWindow:
+    case RunnerPanelSurfaceSelectionLitDisplayWindow:
+      return RunnerApplicationScreenFailureNone;
+    case RunnerPanelSurfaceSelectionOffLitPanel:
+      return RunnerApplicationScreenFailureOffLitPanel;
+    case RunnerPanelSurfaceSelectionNoWindow:
+      return RunnerApplicationScreenFailureUnresolvedWindow;
+  }
+}
+
+RunnerApplicationScreenFailure RunnerResolveSurfaceWindow(
+  id application,
+  RunnerLitPanel litPanel,
+  id _Nullable *window,
+  CGRect *windowFrame,
+  CGRect *observedFrame
+) {
+  *window = nil;
+  *windowFrame = CGRectNull;
+  *observedFrame = CGRectNull;
+
+  if (!RunnerLitPanelIsNamed(litPanel)) {
+    // The historic read, and the only one a single-panel device ever takes: the first window the
+    // query names that exists with a measurable box, and no display identity is asked for at all.
+    // Each candidate is asked twice at most, and the walk stops at the answer, so a transient window
+    // that vanishes mid-read is the only thing that can widen it (#2995).
+    __block CGRect refusedFrame = CGRectNull;
+    for (id candidate in RunnerCopyApplicationWindowElements(
+           application, AGENT_DEVICE_MAX_PANEL_SURFACE_WINDOWS, NULL)) {
+      CGRect frame = CGRectNull;
+      if (!RunnerReadWindowExistsAndFrame(candidate, &frame)) {
+        refusedFrame = frame;
+        continue;
+      }
+      *window = candidate;
+      *windowFrame = frame;
+      *observedFrame = frame;
+      return RunnerApplicationScreenFailureNone;
+    }
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) resolved=no",
+      refusedFrame.origin.x,
+      refusedFrame.origin.y,
+      refusedFrame.size.width,
+      refusedFrame.size.height
+    );
+    *observedFrame = refusedFrame;
+    return RunnerApplicationScreenFailureUnresolvedWindow;
+  }
+
+  NSUInteger reported = 0;
+  NSArray *candidates = RunnerCopyApplicationWindowElements(
+    application,
+    AGENT_DEVICE_MAX_PANEL_SURFACE_WINDOWS,
+    &reported
+  );
+  NSMutableArray<id> *placed = [NSMutableArray array];
+  RunnerPanelWindowFact facts[AGENT_DEVICE_MAX_PANEL_SURFACE_WINDOWS];
+  NSUInteger factCount = 0;
+  BOOL sawUnplaceableWindow = NO;
+  for (id candidate in candidates) {
+    if (factCount == AGENT_DEVICE_MAX_PANEL_SURFACE_WINDOWS) {
+      break;
+    }
+    CGRect frame = CGRectNull;
+    if (!RunnerReadWindowExistsAndFrame(candidate, &frame)) {
+      continue;
+    }
+    NSUInteger displayID = 0;
+    if (RunnerReadResolvedWindowScreen(candidate, frame, NULL, &displayID) !=
+        RunnerApplicationScreenFailureNone) {
+      // The window is there but the runtime will not say which display shows it, so the panel rule
+      // cannot place it. The rest of the walk still gets its chance.
+      sawUnplaceableWindow = YES;
+      *observedFrame = frame;
+      continue;
+    }
+    facts[factCount] = (RunnerPanelWindowFact){.displayID = displayID, .frame = frame};
+    factCount += 1;
+    [placed addObject:candidate];
+  }
+
+  RunnerPanelWindowFact chosen = {.displayID = 0, .frame = CGRectNull};
+  NSUInteger chosenIndex = NSUIntegerMax;
+  RunnerPanelSurfaceSelection selection = RunnerPanelSurfaceSelectionNoWindow;
+  if (factCount > 0) {
+    selection = RunnerPanelSurfaceSelectWindow(
+      facts,
+      factCount,
+      litPanel,
+      &chosen,
+      &chosenIndex
+    );
+  }
+  NSLog(
+    @"AGENT_DEVICE_RUNNER_PANEL_SURFACE lit=%lu(%.1fx%.1f) reported=%lu placed=%lu unplaceable=%@ selection=%lu frame=(%g,%g %gx%g)",
+    (unsigned long)litPanel.displayID,
+    litPanel.widthPt,
+    litPanel.heightPt,
+    (unsigned long)reported,
+    (unsigned long)factCount,
+    sawUnplaceableWindow ? @"yes" : @"no",
+    (unsigned long)selection,
+    chosen.frame.origin.x,
+    chosen.frame.origin.y,
+    chosen.frame.size.width,
+    chosen.frame.size.height
+  );
+  // `observedFrame` keeps the last frame the walk measured, so on a refusal it names what the walk
+  // refused instead of a null box.
+  RunnerApplicationScreenFailure failure = RunnerSurfaceFailureFromPanelSelection(selection);
+  if (failure != RunnerApplicationScreenFailureNone) {
+    if (factCount == 0 && sawUnplaceableWindow) {
+      return RunnerApplicationScreenFailureUnresolvedScreen;
+    }
+    return failure;
+  }
+  *observedFrame = chosen.frame;
+  // The rule indexes the windows it was handed, so this cannot trip; it bounds the subscript that
+  // follows rather than trusting the index across the rule boundary.
+  if (chosenIndex >= placed.count) {
+    return RunnerApplicationScreenFailureUnresolvedWindow;
+  }
+  *window = placed[chosenIndex];
+  *windowFrame = chosen.frame;
   return RunnerApplicationScreenFailureNone;
 }
 
 BOOL RunnerResolveApplicationScreen(
   id application,
+  RunnerLitPanel litPanel,
   id _Nullable *screen,
   NSUInteger *displayID,
   RunnerApplicationScreenFailure *failure
@@ -196,7 +351,8 @@ BOOL RunnerResolveApplicationScreen(
   *displayID = 0;
   id window = nil;
   CGRect windowFrame = CGRectNull;
-  *failure = RunnerResolveUsableWindow(application, &window, &windowFrame);
+  CGRect observedFrame = CGRectNull;
+  *failure = RunnerResolveSurfaceWindow(application, litPanel, &window, &windowFrame, &observedFrame);
   if (*failure != RunnerApplicationScreenFailureNone) {
     return NO;
   }
