@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { readDaemonInfo, type DaemonInfo } from '../daemon-client-metadata.ts';
+import {
+  readDaemonInfo,
+  readRegisteredDaemon,
+  type DaemonInfo,
+} from '../daemon-client-metadata.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 // The reuse decision is only as good as the identity that survives the round trip
@@ -62,4 +67,39 @@ test('a daemon record without capabilities reads as a daemon with none', () => {
     JSON.stringify({ httpPort: 41_234, token: 'new', pid: 1, capabilities: ['quiesce', 'future'] }),
   );
   assert.deepEqual(readDaemonInfo(infoPath)?.capabilities, ['quiesce']);
+});
+
+test('registered admission requires a valid process identity, token and endpoint', async () => {
+  const dir = mkdtempForTestSync('record-validation-');
+  const file = resolveDaemonPaths(dir).infoPath;
+  for (const [record, valid] of [
+    [{ pid: 1, token: '', port: 1 }, false],
+    [{ pid: 0, token: 'x', port: 1234 }, false],
+    [{ pid: -1, token: 'x', port: 1234 }, false],
+    [{ pid: 1, token: 'x' }, false],
+    [{ pid: 1, token: 'x', port: -1 }, false],
+    [{ pid: 1, token: 'x', httpPort: 65536 }, false],
+    [{ pid: 1, token: 'x', port: 1234, transport: 'socket' }, true],
+    [{ pid: 1, token: 'x', httpPort: 1234, transport: 'http' }, true],
+    [{ pid: 1, token: 'x', httpPort: 65535 }, true],
+  ] as const) {
+    fs.writeFileSync(file, JSON.stringify(record));
+    assert.equal(
+      (await readRegisteredDaemon(resolveDaemonPaths(dir))) !== null,
+      valid,
+      JSON.stringify(record),
+    );
+  }
+});
+
+test('unproven ownership is refused before nullable or required record lookup', async () => {
+  const [stateDir] = scratchStateDir();
+  const paths = resolveDaemonPaths(stateDir);
+  fs.writeFileSync(paths.lockPath, 'not a lock directory');
+  const unproven = (error: unknown) =>
+    error instanceof AppError &&
+    error.details?.reason === 'daemon_registration_unproven' &&
+    error.details?.stateDir === stateDir;
+  await assert.rejects(readRegisteredDaemon(paths), unproven);
+  await assert.rejects(readRegisteredDaemon(paths, { required: true }), unproven);
 });

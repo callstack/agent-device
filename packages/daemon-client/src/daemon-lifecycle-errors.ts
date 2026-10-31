@@ -15,8 +15,9 @@ import {
   getDaemonMetadataState,
   resolveDaemonStartupHint,
   type DaemonInfo,
+  type DaemonTakeoverCause,
 } from './daemon-client-metadata.ts';
-import { resolveLocalDaemonCodeIdentity, type DaemonTakeoverCause } from './daemon-launch-spec.ts';
+import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
 // The ways an explicit lifecycle stops short of a usable daemon, whether this client judged it or the
 // daemon answered it: `busy` is the daemon's own refusal, carried through so one constant names it on

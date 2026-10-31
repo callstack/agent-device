@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { readRecordedDaemon } from '../lib/recorded-daemon.ts';
+import { readRegisteredDaemon } from '@agent-device/daemon-client';
 import { isAgentDeviceDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import {
   openFixture,
@@ -53,7 +53,7 @@ export function prepareCellState(options: CellAdmissionOptions): void {
   }
 }
 
-export function prepareSampleState(options: CellAdmissionOptions): void {
+export async function prepareSampleState(options: CellAdmissionOptions): Promise<void> {
   if (options.state === 'cold-cold') {
     prepareColdColdState(options);
     return;
@@ -67,7 +67,7 @@ export function prepareSampleState(options: CellAdmissionOptions): void {
     assertAppStopped(options.udid, options.fixture.app);
     return;
   }
-  assertReadyState(options);
+  await assertReadyState(options);
 }
 
 export async function admitReadyCell(
@@ -135,12 +135,12 @@ function prepareColdColdState(options: CellAdmissionOptions): void {
   assertAppStopped(options.udid, options.fixture.app);
 }
 
-function admitWarmSample(
+async function admitWarmSample(
   options: CellAdmissionOptions,
   result: CliResult,
   previousAppPid: number | undefined,
-): number {
-  assertReadyState(options);
+): Promise<number> {
+  await assertReadyState(options);
   requireFixtureAnchor(result.payload, options.fixture, 'sample');
   const appPid = assertAppRunning(options.udid, options.fixture.app);
   if (previousAppPid !== undefined && appPid !== previousAppPid) {
@@ -158,7 +158,7 @@ async function admitOpenedFixture(
   options: CellAdmissionOptions,
 ): Promise<number> {
   assertSimulatorState(options.udid, 'Booted');
-  assertDaemonRunning(options.stateDir);
+  await assertDaemonRunning(options.stateDir);
   assertAppRunning(options.udid, options.fixture.app);
   await prepareFixture(options.fixture, {
     observe: () =>
@@ -175,9 +175,9 @@ async function admitOpenedFixture(
   return appPid;
 }
 
-function assertReadyState(options: CellAdmissionOptions): void {
+async function assertReadyState(options: CellAdmissionOptions): Promise<void> {
   assertSimulatorState(options.udid, 'Booted');
-  assertDaemonRunning(options.stateDir);
+  await assertDaemonRunning(options.stateDir);
   assertAppRunning(options.udid, options.fixture.app);
 }
 
@@ -203,8 +203,8 @@ function assertDaemonStopped(stateDir: string): void {
   }
 }
 
-function assertDaemonRunning(stateDir: string): void {
-  const info = readRecordedDaemon(resolveDaemonPaths(stateDir).infoPath);
+async function assertDaemonRunning(stateDir: string): Promise<void> {
+  const info = await readRegisteredDaemon(resolveDaemonPaths(stateDir));
   if (!info?.processStartTime || !isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
     throw new BenchmarkCellAdmissionError(
       'cell-state',

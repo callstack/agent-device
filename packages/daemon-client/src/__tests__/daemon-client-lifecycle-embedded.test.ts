@@ -12,7 +12,8 @@ import {
   skipWhenLoopbackUnavailable,
   listenOnLoopback,
 } from '@agent-device/test-kit';
-import * as startup from '../daemon-client-startup.ts';
+import * as metadata from '../daemon-client-metadata.ts';
+import { retireDaemonForTakeover } from '../daemon-client-startup.ts';
 import type { DaemonBinding } from '@agent-device/contracts/client';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
@@ -33,7 +34,6 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { createDaemonTransport, type sendToDaemon } from '../index.ts';
 import { resolveClientSettings, resolveTimeoutRecovery } from '../daemon-client-lifecycle.ts';
-import { readDaemonInfo } from '../daemon-client-metadata.ts';
 
 const spawn = vi.mocked(runCmdDetachedMonitored);
 
@@ -129,7 +129,7 @@ async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' |
   if (ownership === 'unrecognized') {
     const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
     fs.writeFileSync(paths.infoPath, JSON.stringify({ ...record, ownership: 'sideways' }));
-    assert.equal(readDaemonInfo(paths.infoPath)?.ownership, 'unknown');
+    assert.equal(metadata.readDaemonInfo(paths.infoPath)?.ownership, 'unknown');
   }
   process.kill(registered.child.pid, 'SIGKILL');
   await registered.child.exited;
@@ -157,7 +157,7 @@ for (const [ownership, reason, message, hint] of [
     if (ownership !== 'embedded') {
       const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
       fs.writeFileSync(paths.infoPath, JSON.stringify({ ...record, ownership }));
-      assert.equal(readDaemonInfo(paths.infoPath)?.ownership, 'unknown');
+      assert.equal(metadata.readDaemonInfo(paths.infoPath)?.ownership, 'unknown');
     }
     const killSpy = vi.spyOn(process, 'kill');
     try {
@@ -171,7 +171,7 @@ for (const [ownership, reason, message, hint] of [
       assert.equal(spawn.mock.calls.length, 0);
       assert.deepEqual(signalsSent(killSpy), []);
       assert.equal(isProcessAlive(child.pid), true);
-      assert.equal(readDaemonInfo(paths.infoPath)?.pid, child.pid);
+      assert.equal(metadata.readDaemonInfo(paths.infoPath)?.pid, child.pid);
     } finally {
       await closeLoopbackServer(daemon.server);
     }
@@ -183,13 +183,13 @@ test('takeover refuses an embedded registration without a recorded host start ti
   const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
   delete record.processStartTime;
   fs.writeFileSync(paths.infoPath, JSON.stringify(record));
-  const info = readDaemonInfo(paths.infoPath);
+  const info = metadata.readDaemonInfo(paths.infoPath);
   assert.ok(info);
   assert.equal(info.processStartTime, undefined);
   const before = fs.readFileSync(paths.infoPath, 'utf8');
   const killSpy = vi.spyOn(process, 'kill');
 
-  const refusal = await refusalFrom(startup.retireDaemonForTakeover(info, paths));
+  const refusal = await refusalFrom(retireDaemonForTakeover(info, paths));
 
   assert.equal(refusal.details?.reason, DAEMON_LIFECYCLE_REASONS.ownerEmbedded);
   assert.match(String(refusal.details?.hint), /owned by host process \d+\. Close it there/);
@@ -215,7 +215,7 @@ test('the same record with no host owner is still the takeover this client perfo
   const killSpy = vi.spyOn(process, 'kill');
 
   try {
-    assert.equal(readDaemonInfo(paths.infoPath)?.ownership, 'detached');
+    assert.equal(metadata.readDaemonInfo(paths.infoPath)?.ownership, 'detached');
     const response = await createDaemonTransport(createTestHostEnvironment())(request(stateDir));
 
     assert.equal(response.ok, true);
@@ -249,7 +249,7 @@ for (const ownership of ['embedded', 'unrecognized', 'detached'] as const)
       assert.equal(spawn.mock.calls.length, 1, 'the state directory was taken over, not wedged');
       // The dead owner's record is gone: the fresh daemon's registration names a live process, and the
       // dead lifetime received no signal — its exit was proved from the process table, not caused.
-      assert.notEqual(readDaemonInfo(paths.infoPath)?.pid, child.pid);
+      assert.notEqual(metadata.readDaemonInfo(paths.infoPath)?.pid, child.pid);
       assert.deepEqual(
         signalsSent(killSpy).filter(([target]) => target === child.pid),
         [],
@@ -360,7 +360,7 @@ test('a pinned client refuses an instance that is not the one it pins', async (t
     assert.equal(isProcessAlive(child.pid), true);
     // The refusal read the record and changed nothing about it: the pinned-away instance still owns
     // the state directory, which is what a client that pins must leave behind.
-    assert.equal(readDaemonInfo(paths.infoPath)?.pid, child.pid);
+    assert.equal(metadata.readDaemonInfo(paths.infoPath)?.pid, child.pid);
   } finally {
     await closeLoopbackServer(daemon.server);
   }
@@ -373,7 +373,7 @@ test('a pinned client refuses a state directory that registers no daemon', async
   const { info } = await registerDaemon(paths, { socketPort: daemon.port });
   const pin = pinTo(info);
   await finishRegisteredDaemonFixtures();
-  assert.equal(readDaemonInfo(paths.infoPath), null);
+  assert.equal(metadata.readDaemonInfo(paths.infoPath), null);
 
   try {
     const transport = createDaemonTransport(createTestHostEnvironment());
@@ -476,8 +476,8 @@ test('replacement after binding lookup cannot authenticate a pinned request with
   const daemon = await startRecordingSocketDaemon(() => token);
   const { info } = await registerDaemon(paths, { socketPort: daemon.port, ownership: 'embedded' });
   token = info.token;
-  const observe = startup.observeLocalDaemon;
-  const lookup = vi.spyOn(startup, 'observeLocalDaemon').mockImplementation(async (...args) => {
+  const observe = metadata.observeLocalDaemon;
+  const lookup = vi.spyOn(metadata, 'observeLocalDaemon').mockImplementation(async (...args) => {
     const observed = await observe(...args);
     // The replacement reuses the endpoint and process lifetime after this lookup. Its auth token
     // changes, so a request can only succeed here if the client incorrectly adopts the new token.

@@ -49,7 +49,7 @@ async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
     appPid = await admitReadyCell(context, options);
     const samples: RawSample[] = [];
     for (let index = 0; index < options.samples; index += 1) {
-      if (index > 0) prepareSampleState(options);
+      if (index > 0) await prepareSampleState(options);
       const result = runMeasuredCommand(context, options);
       if (result.ok) {
         appPid = await admitSuccessfulSample(context, options, result, appPid);

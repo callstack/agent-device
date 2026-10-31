@@ -12,7 +12,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveLocalDaemonSettings } from './daemon-client-lifecycle.ts';
 import {
   assertDaemonPolicyMatches,
-  observeLocalDaemon,
   retireDaemonForTakeover,
   startLocalDaemon,
   stopDaemonForTakeover,
@@ -20,7 +19,11 @@ import {
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { DAEMON_LEAVE_WAIT_MS, requestDaemonLifecycle } from './daemon-client-lifecycle-request.ts';
 import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
-import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
+import {
+  observeLocalDaemon,
+  observedDaemonIdentityOf,
+  type DaemonInfo,
+} from './daemon-client-metadata.ts';
 import {
   DAEMON_CONTENDED_REASON,
   daemonIdentityOf,

@@ -20,7 +20,7 @@ import {
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
-import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 import type {
   ProxyUpstreamDaemon,
@@ -33,7 +33,8 @@ import type {
 } from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type { DaemonRequest, DaemonResponse };
+export type { DaemonRequest, DaemonResponse, DaemonInfo };
+export { readRegisteredDaemon };
 
 /** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(

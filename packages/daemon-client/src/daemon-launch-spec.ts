@@ -13,7 +13,7 @@ import {
   computeDaemonCodeSignature,
   resolveDaemonCodeOrigin,
 } from '@agent-device/host-kit/code-signature';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import type { DaemonInfo, DaemonTakeoverDecision } from './daemon-client-metadata.ts';
 
 type DaemonLaunchSpec = {
   root: string;
@@ -106,19 +106,6 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
     codeSignature: await resolveCachedDaemonCodeSignature(launchSpec.srcPath, launchSpec.root),
   };
 }
-
-/**
- * Why a daemon is not the one this client would use. `transport` means alive but not on the
- * transport this client uses: the ladder only ever answers `unreachable` for it, and a caller that
- * must not kill a live daemon refines it with `observeLocalDaemon`.
- */
-export type DaemonTakeoverCause = 'version' | 'code' | 'transport' | 'unreachable';
-
-/** What to do with the daemon already running on this state directory. */
-export type DaemonTakeoverDecision =
-  | { kind: 'reuse' }
-  | { kind: 'replace'; reason: string; cause: DaemonTakeoverCause }
-  | { kind: 'refuseNewer'; daemonVersion: string; clientVersion: string };
 
 /**
  * Reuse needs the daemon on the transport this client will route through; refusal needs only

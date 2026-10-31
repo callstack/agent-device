@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -25,13 +24,14 @@ import type {
   DaemonPaths,
   DaemonTransportPreference,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  resolveDaemonLaunchSpec,
-  resolveDaemonTakeover,
-  type DaemonTakeoverDecision,
-} from './daemon-launch-spec.ts';
+import { resolveDaemonLaunchSpec, resolveDaemonTakeover } from './daemon-launch-spec.ts';
 import {
   getDaemonMetadataState,
+  observeLocalDaemon,
+  type DaemonTakeoverDecision,
+  type LocalDaemonObservation,
+  type DaemonObservationSettings,
+  type DaemonObservationOptions,
   observedDaemonIdentityOf,
   readDaemonInfo,
   resolveDaemonStartupHint,
@@ -44,11 +44,6 @@ import {
   daemonStopCommand,
 } from './daemon-lifecycle-errors.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
-
-type LocalDaemonObservation = {
-  info: DaemonInfo;
-  decision: DaemonTakeoverDecision;
-};
 
 type DaemonStartupWaitResult =
   | { kind: 'ready'; daemon: EnsuredDaemon }
@@ -94,21 +89,12 @@ const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
-/** Judges the registered daemon against this client, changing nothing. */
-export async function observeLocalDaemon(
-  settings: DaemonClientSettings,
-  options: {
-    deadline?: number;
-    waitForLiveStartup?: boolean;
-    refineUnreachable?: boolean;
-  } = {},
+export async function observeRegisteredDaemon(
+  existing: DaemonInfo,
+  settings: DaemonObservationSettings,
+  options: DaemonObservationOptions = {},
 ): Promise<LocalDaemonObservation | null> {
   const { deadline } = options;
-  const inspection = inspectProcessLock(settings.paths.lockPath);
-  if (inspection.state === 'unproven') throw daemonRegistrationUnprovenError(settings, inspection);
-  const existing = readDaemonInfo(settings.paths.infoPath);
-  if (!existing) return null;
-  if (!registrationAllowsDaemonObservation(inspection, existing)) return null;
   if (options.waitForLiveStartup && (await isAwaitingDaemonStartup(existing, deadline)))
     return null;
 
@@ -166,28 +152,15 @@ async function isAwaitingDaemonStartup(
   );
 }
 
-function registrationAllowsDaemonObservation(
-  inspection: ProcessLockInspection,
-  info: DaemonInfo,
-): boolean {
-  return (
-    inspection.state === 'absent' ||
-    processLockHoldsDaemonIdentity(inspection, {
-      pid: info.pid,
-      startTime: info.processStartTime ?? null,
-    })
-  );
-}
-
-function daemonRegistrationUnprovenError(
-  settings: DaemonClientSettings,
+export function daemonRegistrationUnprovenError(
+  paths: DaemonPaths,
   inspection?: ProcessLockInspection,
 ): AppError {
   return new AppError('COMMAND_FAILED', 'Daemon registration ownership could not be verified.', {
     reason: 'daemon_registration_unproven',
     inspection,
-    stateDir: settings.paths.baseDir,
-    hint: resolveDaemonStartupHint(getDaemonMetadataState(settings.paths), settings.paths),
+    stateDir: paths.baseDir,
+    hint: resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
   });
 }
 
@@ -552,7 +525,7 @@ async function judgeExitedDaemonStartup(
 ): Promise<DaemonStartupWaitResult | null> {
   const kind = classifyDaemonStartupExit(exit);
   if (kind === 'unproven')
-    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings) };
+    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings.paths) };
   if (kind === 'failed') return { kind: 'early_exit', exit };
   return await observeContendingDaemon(settings, deadline);
 }
@@ -649,7 +622,7 @@ async function observeContendingDaemon(
   if (winner) return { kind: 'ready', daemon: { info: winner, startedByClient: false } };
   const inspection = inspectProcessLock(settings.paths.lockPath);
   if (inspection.state === 'unproven')
-    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings, inspection) };
+    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings.paths, inspection) };
   return isRegistrationAvailable(inspection) ? { kind: 'retry' } : null;
 }
 

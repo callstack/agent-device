@@ -12,7 +12,8 @@ import {
   supportsLoopbackBind,
 } from '@agent-device/test-kit';
 import { tryAcquireProcessLock } from '@agent-device/host-kit/file';
-import { readRecordedDaemon, sendToRecordedDaemon } from './recorded-daemon.ts';
+import { sendToRecordedDaemon } from './recorded-daemon.ts';
+import { readRegisteredDaemon } from '@agent-device/daemon-client';
 
 // `sendToRecordedDaemon` resolves a recorded daemon and sends through the client transport. It must
 // keep every guarantee of that transport and none of its lifecycle: nothing is started, replaced or
@@ -122,27 +123,11 @@ test('a state directory that records no daemon is reported, not started', async 
     send(stateDir),
     (error: unknown) =>
       error instanceof AppError &&
-      error.details?.reason === 'daemon_not_running' &&
+      error.details?.reason === 'daemon-not-running' &&
       error.details?.stateDir === stateDir,
   );
 
   assert.equal(fs.existsSync(resolveDaemonPaths(stateDir).infoPath), false);
-});
-
-test('record admission requires a token and a usable endpoint', () => {
-  const dir = mkdtempForTestSync('record-validation-');
-  const file = resolveDaemonPaths(dir).infoPath;
-  for (const [record, valid] of [
-    [{ pid: 1, token: '', port: 1 }, false],
-    [{ pid: 1, token: 'x' }, false],
-    [{ pid: 1, token: 'x', port: -1 }, false],
-    [{ pid: 1, token: 'x', httpPort: 65536 }, false],
-    [{ pid: 1, token: 'x', port: 1234, transport: 'socket' }, true],
-    [{ pid: 1, token: 'x', httpPort: 1234, transport: 'http' }, true],
-  ] as const) {
-    fs.writeFileSync(file, JSON.stringify(record));
-    assert.equal(readRecordedDaemon(file) !== null, valid, JSON.stringify(record));
-  }
 });
 
 test('recorded daemon requires a matching held registration claim', async (t) => {
@@ -153,20 +138,22 @@ test('recorded daemon requires a matching held registration claim', async (t) =>
   assert.equal(lock.status, 'acquired');
   if (lock.status !== 'acquired') return;
   try {
+    assert.equal(await readRegisteredDaemon(daemon.paths), null);
     await assert.rejects(
       send(daemon.stateDir),
       (error: unknown) =>
-        error instanceof AppError && error.details?.reason === 'daemon_registration_unproven',
+        error instanceof AppError && error.details?.reason === 'daemon-not-running',
     );
     const record = JSON.parse(fs.readFileSync(daemon.paths.infoPath, 'utf8'));
     fs.writeFileSync(
       daemon.paths.infoPath,
       JSON.stringify({ ...record, processStartTime: 'other' }),
     );
+    assert.equal(await readRegisteredDaemon(daemon.paths), null);
     await assert.rejects(
       send(daemon.stateDir),
       (error: unknown) =>
-        error instanceof AppError && error.details?.reason === 'daemon_registration_unproven',
+        error instanceof AppError && error.details?.reason === 'daemon-not-running',
     );
     fs.writeFileSync(
       daemon.paths.infoPath,
@@ -205,8 +192,7 @@ test('a publishing registration cannot be used', async (t) => {
   fs.writeFileSync(daemon.paths.lockPath.replace(/\.lock$/, '.reclaim.lock'), '');
   await assert.rejects(
     send(daemon.stateDir),
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'daemon_registration_unproven',
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'daemon-not-running',
   );
   assert.equal(daemon.connections(), 0);
 });
