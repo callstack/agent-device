@@ -31,7 +31,7 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   // bindings; the contact-sheet wrapper then loads the full runtime on demand.
   const [{ executeRecordingContactSheet }, { createLocalArtifactAdapter }] = await Promise.all([
     import('@agent-device/command-runtime'),
-    import('../../io.ts'),
+    import('@agent-device/host-kit/local-artifact-adapter'),
   ]);
   const config: AgentDeviceRuntimeConfig = {
     backend: { platform: 'ios' },
