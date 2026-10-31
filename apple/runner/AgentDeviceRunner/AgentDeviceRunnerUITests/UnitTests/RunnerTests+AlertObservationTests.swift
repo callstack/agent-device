@@ -105,6 +105,39 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testAlertActivationRefusesAnUnreadableHostWindowWithoutTapping() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let resolved = try resolveAlertBeforeTheCommand()
+    let alert = RunnerAlert(
+      root: resolved.root,
+      ownerApp: resolved.ownerApp,
+      buttons: resolved.buttons,
+      source: resolved.source,
+      window: app.windows.matching(identifier: "agent-device-missing-window").firstMatch
+    )
+    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+
+    let frame = button.frame
+    let options = XCTExpectedFailure.Options()
+    options.issueMatcher = { $0.compactDescription.contains("agent-device-missing-window") }
+    var outcome: RunnerInteractionOutcome?
+    XCTExpectFailure("The unreadable window is the condition under test", options: options) {
+      outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+    }
+
+    guard case .unsupported? = outcome else {
+      return XCTFail("an unreadable host window must refuse the tap, got \(String(describing: outcome))")
+    }
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
+  @MainActor
   func testAlertDeadlineDuringSynthesisPreparationLeavesTheOriginalUntouched() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"]
     app.launch()
@@ -306,6 +339,26 @@ extension RunnerTests {
       [Self.safariDialogIdentifier]
     )
     XCTAssertEqual(alertSnapshots(in: window, source: .appAlert, viewport: window.frame).map(\.elementType), [.alert])
+  }
+
+  @MainActor
+  func testDismissPopupWindowIsPlacedInTheBoxItSitsIn() {
+    let viewport = CGRect(x: 0, y: 0, width: 402, height: 874)
+    let popup = { (x: CGFloat) in
+      ElementAttributesFixture(.window, CGRect(x: x, y: 0, width: 402, height: 874), children: [
+        ElementAttributesFixture(.other, CGRect(x: x, y: 0, width: 402, height: 874), label: "dismiss popup")
+      ])
+    }
+    XCTAssertEqual(alertSnapshots(in: popup(0), source: .dismissPopup, viewport: viewport).count, 1)
+    XCTAssertTrue(alertSnapshots(in: popup(1000), source: .dismissPopup, viewport: viewport).isEmpty)
+  }
+
+  @MainActor
+  func testAnInnerPanelAlertIsPlacedInItsWindowNotTheApplicationFrame() {
+    let alert = ElementAttributesFixture(.alert, CGRect(x: 341, y: 250, width: 270, height: 170))
+    let innerPanel = ElementAttributesFixture(.window, CGRect(x: 0, y: 0, width: 951, height: 669), children: [alert])
+    let root = ElementAttributesFixture(.application, CGRect(x: 0, y: 0, width: 466, height: 678), children: [innerPanel])
+    XCTAssertEqual(alertSnapshots(in: root, source: .appAlert, viewport: root.frame).map(\.elementType), [.alert])
   }
 #endif
 }

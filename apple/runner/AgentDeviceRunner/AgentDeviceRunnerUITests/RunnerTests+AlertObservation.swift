@@ -54,7 +54,6 @@ extension RunnerTests {
     viewport: CGRect
   ) -> [XCUIElementSnapshot] {
     let frame = snapshot.frame
-    let hostWindow = snapshot.elementType == .window && SnapshotGeometry.isPositiveFinite(frame) ? frame : viewport
     let matches: Bool
     switch source {
     case .blockingSystemModal:
@@ -66,8 +65,10 @@ extension RunnerTests {
     case .dismissPopup:
       matches = snapshot.elementType == .window && containsDismissPopupMarker(snapshot)
     }
-    if matches && Self.isPlaced(frame, in: hostWindow) { return [snapshot] }
-    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: hostWindow) }
+    if matches && Self.isPlaced(frame, in: viewport) { return [snapshot] }
+    // A window is placed in the box it sits in, and is itself the box of what it hosts.
+    let childViewport = snapshot.elementType == .window && SnapshotGeometry.isPositiveFinite(frame) ? frame : viewport
+    return snapshot.children.flatMap { alertSnapshots(in: $0, source: source, viewport: childViewport) }
   }
 
   private func containsDismissPopupMarker(_ snapshot: XCUIElementSnapshot) -> Bool {
