@@ -41,7 +41,17 @@ export type LimrunTarget = Readonly<{
   device: DeviceInfo;
 }>;
 
-export type Target = LocalTarget | CloudWebDriverTarget | LimrunTarget;
+/** A Revyl column: the device comes from the plugin's own inventory once the lease is allocated. */
+export type RevylTarget = Readonly<{
+  kind: 'revyl';
+  id: string;
+  label: string;
+  group: TargetGroup;
+  backend: 'ios-instance' | 'android-instance';
+  platform: 'ios' | 'android';
+}>;
+
+export type Target = LocalTarget | CloudWebDriverTarget | LimrunTarget | RevylTarget;
 
 const booted = { booted: true } as const;
 
@@ -394,6 +404,22 @@ export const TARGETS: readonly Target[] = [
       target: 'mobile',
       ...booted,
     },
+  },
+  {
+    kind: 'revyl',
+    id: 'revyl-ios',
+    label: 'Revyl iOS',
+    group: 'provider',
+    backend: 'ios-instance',
+    platform: 'ios',
+  },
+  {
+    kind: 'revyl',
+    id: 'revyl-android',
+    label: 'Revyl Android',
+    group: 'provider',
+    backend: 'android-instance',
+    platform: 'android',
   },
 ];
 

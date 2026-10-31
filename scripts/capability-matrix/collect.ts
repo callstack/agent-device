@@ -21,7 +21,8 @@ import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/pl
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 import type { RunHostCommand } from '@agent-device/provider-webdriver';
 import testmuPlugin from '@agent-device/testmu';
-import type { DeviceLease } from '@agent-device/contracts/device';
+import revylPlugin from '@agent-device/revyl';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOwner,
@@ -252,6 +253,73 @@ async function limrunSupport(
   return support;
 }
 
+/**
+ * Revyl's execution API as far as one allocation reads it: the start, the worker's readiness, and
+ * health. Facts never reach a real backend; every other path is refused so a new call shows up here.
+ */
+async function revylFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = new URL(String(input instanceof Request ? input.url : input));
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+  if (url.pathname.endsWith('/start_device')) {
+    const request = JSON.parse(String(init?.body ?? '{}')) as { session_id?: string };
+    return json({ workflow_run_id: 'run-1', session_id: request.session_id });
+  }
+  if (url.pathname.includes('/streaming/worker-connection/')) {
+    return json({ status: 'ready', worker_ws_url: 'wss://revyl.invalid.test/ws' });
+  }
+  if (url.pathname.endsWith('/health')) {
+    return json({ device_connected: true, screen_width: 440, screen_height: 956 });
+  }
+  return new Response(JSON.stringify({ detail: `no fixture for ${url.pathname}` }), {
+    status: 404,
+  });
+}
+
+/** Facts for a Revyl column, read from the plugin's own runtime after one allocation. */
+async function revylSupport(
+  target: Target & { readonly kind: 'revyl' },
+  host: PlatformRuntimeHost,
+  commands: readonly string[],
+): Promise<TargetFacts> {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = revylFetch as typeof fetch;
+  try {
+    const plugin = revylPlugin({
+      apiKey: 'revyl-placeholder-key',
+      apiUrl: 'https://revyl.invalid.test',
+    });
+    if (!plugin.setup) throw new Error('The Revyl plugin exposes no setup().');
+    const created = (await plugin.setup({ env: {}, clientVersion: '0.0.0' } as never)) as {
+      runtime: ProviderDeviceRuntime;
+      platformModule: { loadRuntime(host: PlatformRuntimeHost): Promise<PlatformRuntimeOwner> };
+    };
+    const owner = await created.platformModule.loadRuntime(host);
+    const leaseId = `lease-${target.platform}`;
+    await created.runtime.leaseLifecycle?.allocate?.(
+      {
+        leaseId,
+        leaseProvider: 'revyl',
+        backend: target.backend,
+        tenantId: 't',
+        runId: 'run-1',
+      } as never,
+      { flags: {} } as never,
+    );
+    const devices = await created.runtime.deviceInventoryProvider?.({
+      leaseProvider: 'revyl',
+      leaseId,
+    } as never);
+    const device = devices?.[0];
+    if (!device) throw new Error('Revyl invented no device for its lease.');
+    const facts = targetFacts(await owner.inspectFacts(device), commands);
+    await created.runtime.shutdown?.();
+    return facts;
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}
+
 /** Re-raises a fact-collection failure with the column whose collection produced it. */
 async function namingTarget(target: Target, collect: () => Promise<void>): Promise<void> {
   try {
@@ -295,6 +363,13 @@ export async function collectCommandSupport(host: PlatformRuntimeHost): Promise<
   );
   for (const [id, facts] of await limrunSupport(limrunTargets, host, commands)) {
     record(id, facts);
+  }
+
+  for (const target of TARGETS) {
+    if (target.kind !== 'revyl') continue;
+    await namingTarget(target, async () => {
+      record(target.id, await revylSupport(target, host, commands));
+    });
   }
 
   return { commands, support, operations };
