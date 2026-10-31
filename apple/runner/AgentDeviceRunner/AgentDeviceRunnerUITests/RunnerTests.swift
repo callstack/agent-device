@@ -68,6 +68,11 @@ final class RunnerTests: XCTestCase {
   // Set while serving a command that had to re-activate the bound app, and stamped onto that
   // command's response before it leaves the execution queue (#2682).
   var pendingTargetActivation: TargetActivationFactPayload?
+  // The lit panel the command being served names, and the lock that guards it. A foldable's surface
+  // resolvers read it through `requestSurfacePanel`; see RunnerRequestPanel.swift for why it is not
+  // main-owned state and what an abandoned command's read can cost.
+  let requestPanelLock = NSLock()
+  var requestLitPanel: RunnerLitPanelFact?
   // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
   // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
   // input is a scoped witness for the immediately-following bare type; lifecycle and non-text

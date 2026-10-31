@@ -21,11 +21,16 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   case unresolvedWindow = "APP_SCREEN_WINDOW_UNRESOLVED"
   case unresolvedScreen = "APP_SCREEN_UNRESOLVED"
   case unrenderableImage = "APP_SCREEN_CAPTURE_UNRENDERABLE"
+  /// The request named a lit panel and every window it found is on the other one. Guessing the bigger
+  /// window would capture a screen nobody is looking at, so the capture refuses with this instead.
+  case offLitPanel = "APP_SCREEN_OFF_LIT_PANEL"
 
   init(_ failure: RunnerApplicationScreenFailure) {
     switch failure {
     case .unresolvedWindow:
       self = .unresolvedWindow
+    case .offLitPanel:
+      self = .offLitPanel
     default:
       self = .unresolvedScreen
     }
@@ -39,6 +44,8 @@ enum RunnerAppScreenCaptureFailure: String, Error {
       return "The resolved app window did not report the display it is shown on."
     case .unrenderableImage:
       return "The resolved display handed back an image that could not be drawn upright."
+    case .offLitPanel:
+      return "Every window the app and the system surface reported is on the panel the host reports as dark."
     }
   }
 
@@ -50,19 +57,26 @@ enum RunnerAppScreenCaptureFailure: String, Error {
       return "Retry the capture. If it persists, the XCTest runtime is not reporting the window's display; runner.log names the window frame it resolved."
     case .unrenderableImage:
       return "Retry the capture. The display was resolved, so this is the capture itself failing, not a panel question."
+    case .offLitPanel:
+      return "Read the device's fold pose and panel table: the host named a lit panel no window occupies. runner.log names the panel and the window frames it refused."
     }
   }
 }
 
 extension RunnerTests {
-  /// The target rule, kept apart from the two queries so the rule itself is testable: an unresolved
-  /// window asks the system surface, and nothing else does.
+  /// The target rule, kept apart from the two queries so the rule itself is testable: a process that
+  /// names no window, or none on the lit panel, asks the system surface, and nothing else does.
+  ///
+  /// A panel refusal moves on for the same reason an unresolved window does: the home screen is
+  /// SpringBoard's window, so an app with nothing on the lit panel says nothing about where the lit
+  /// panel's content is. The system surface is asked, and if neither names a surface on it, the
+  /// panel refusal is the answer the host needs.
   func selectObservedScreenCapture(
     resolving: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
     fallingBack: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     let outcome = resolving()
-    if case .failure(.unresolvedWindow) = outcome {
+    if case .failure(let failure) = outcome, failure == .unresolvedWindow || failure == .offLitPanel {
       return fallingBack()
     }
     return outcome
@@ -82,14 +96,18 @@ extension RunnerTests {
   ///
   /// Never activates `app`: an observation must not change which app is foregrounded just to get a
   /// screen, so the caller passes the app context it already intends to observe.
+  ///
+  /// The lit panel is read on the command queue before the hop to main, so the panel the request named
+  /// is the panel this capture books against wherever the hop runs.
   func captureResolvedAppScreen(
     app: XCUIApplication
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     var outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> = .failure(
       .unresolvedScreen
     )
+    let litPanel = requestSurfacePanel
     let capture = {
-      outcome = Self.resolveCapturedAppScreen(app: app)
+      outcome = Self.resolveCapturedAppScreen(app: app, litPanel: litPanel)
     }
     if Thread.isMainThread {
       capture()
@@ -106,9 +124,9 @@ extension RunnerTests {
   /// keeps that capture honest — it names a display a window actually occupies instead of reaching
   /// for `XCUIScreen.main`, which on a foldable is one fixed panel whether or not it is dark (#2728).
   ///
-  /// Only an unresolved *window* moves on to the system surface. A window that resolved and then
-  /// refused to name its display is the failure the host has to see, and no second question about a
-  /// different process should bury it.
+  /// Only an unresolved window or a panel refusal moves on to the system surface. A window that
+  /// resolved on the right panel and then refused to name its display is the failure the host has to
+  /// see, and no second question about a different process should bury it.
   func captureObservedScreen(app: XCUIApplication) -> Result<
     CapturedAppScreen, RunnerAppScreenCaptureFailure
   > {
@@ -119,12 +137,13 @@ extension RunnerTests {
   }
 
   private static func resolveCapturedAppScreen(
-    app: XCUIApplication
+    app: XCUIApplication,
+    litPanel: RunnerLitPanel
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     var screen: AnyObject?
     var displayID: UInt = 0
     var resolution: RunnerApplicationScreenFailure = .unresolvedScreen
-    guard RunnerResolveApplicationScreen(app, &screen, &displayID, &resolution),
+    guard RunnerResolveApplicationScreen(app, litPanel, &screen, &displayID, &resolution),
       let captureScreen = screen as? XCUIScreen
     else {
       return .failure(RunnerAppScreenCaptureFailure(resolution))

@@ -360,6 +360,7 @@ extension RunnerTests {
             hint.isRaw
               ? (try self.rawTreeSnapshotAcquisition(context: context, hint: hint), .completed)
               : try self.recursiveTreeSnapshotAcquisition(
+                app: app,
                 context: context,
                 hint: hint,
                 processingDeadline: processingDeadline
@@ -417,12 +418,29 @@ extension RunnerTests {
     // The one coordinate-space pass (#2661): reported frames become the app's orientation space
     // before presentation reads them. A backend with unknown orientation (the windowless sweep)
     // turns nothing.
-    let normalizedAcquisition = acquisition.replacingNodes(
-      SnapshotGeometrySpace.normalized(
-        nodes: acquisition.nodes,
-        viewport: acquisition.viewport
-      )
+    let normalizedNodes = SnapshotGeometrySpace.normalized(
+      nodes: acquisition.nodes,
+      viewport: acquisition.viewport
     )
+    // On a multi-panel device the app element's frame names a panel, not the panel in use, and the host
+    // reads that root node as the box the whole payload is measured in. Publishing the resolved surface
+    // box, and dropping what cannot be seen on it, is what the request's panel fact says about this tree.
+    // Raw is exempt by its own contract: it retains reported frames, and publishes no viewport box the
+    // host would have to agree with, so a caller asking for the platform's report keeps the whole report.
+    var publishedNodes = normalizedNodes
+    if requestSurfacePanel.displayID != 0, !hint.isRaw, let surface = acquisition.viewport.rect,
+      let published = RunnerPanelSurfaceTree.publishing(nodes: publishedNodes, surface: surface)
+    {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE republishedRoot=%@ droppedSurfaces=%ld nodes=%ld->%ld",
+        published.republishedRoot ? "yes" : "no",
+        published.droppedSurfaces,
+        normalizedNodes.count,
+        published.nodes.count
+      )
+      publishedNodes = published.nodes
+    }
+    let normalizedAcquisition = acquisition.replacingNodes(publishedNodes)
 
     let presented: SnapshotBackendCapture
     do {

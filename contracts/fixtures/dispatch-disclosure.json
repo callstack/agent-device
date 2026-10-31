@@ -242,6 +242,12 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.APP_SCREEN_OFF_LIT_PANEL",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_OFF_LIT_PANEL: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.ELEMENT_NOT_FOUND",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code ELEMENT_NOT_FOUND: a selector refusal before any gesture",

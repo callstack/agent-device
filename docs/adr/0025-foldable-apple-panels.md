@@ -708,3 +708,31 @@ It is refused as `single-panel-device`, the same typed reason as a single-panel 
 Keyframes and panel geometry remain Apple-only.
 The emulator console supports only fixed postures.
 Android reports the app window on the next snapshot instead of a panel.
+
+## Amendment: the lit panel chooses the window, not the window list (2026-10-31)
+
+Resolving a screen had two authorities. Capture asked CoreDevice which panel is lit; the runner took the application's first window. The first changes when the device folds and the second does not, so on a foldable the two disagreed.
+
+SpringBoard keeps a window per panel. On a Duo home screen, its first reported window is the 226x155.3 status-bar window on the outer panel, whichever panel is lit. Four paths booked against that window: the interaction viewport, the synthesized reference frame, the snapshot viewport, and the capture's display read. Every home-screen gesture therefore entered a panel that might be dark, and the snapshot viewport was 223x317 on a 951x669 screen. One resolver owns all four paths: `RunnerResolveSurfaceWindow` (`RunnerXCTestEventBridge.m`). It reads each window's `exists`, frame, and `screen.displayID` once, and applies the rule in `RunnerPanelSurface.m`.
+
+Which panel is lit is a host fact. The runner has no hinge to read, and geometry cannot settle it, because the dark panel's window has a full-size frame at the origin. So the request carries it. The host reads the panel table per request (`resolveRunnerRequestLitPanel`) and names the panel in `litPanel` (`displayId`, `widthPt`, `heightPt`) only for a device whose table reports more than one integrated panel, and only on a command that resolves a screen. Selection requires a named display. A frame equal to the panel's box, or that box transposed, is the panel's surface; otherwise the largest window on that display is the surface. Both sizes are the panel's native points, never rotated, because the system presents the inner panel turned and its interaction space swaps the side lengths.
+
+A request naming no panel is a single-panel device's request. It keeps the historic read: the first window with a usable frame, and no display identity is asked for at all. This is why the fact travels per request rather than as runner state. An iPhone pays nothing it did not pay before, and a fold cannot be answered from a stale panel, because the next request asks again.
+
+Rejected alternatives:
+
+- **The largest window: rejected.** It guesses power from size. It picks the 951x669 inner window while the device is closed, the same class of error as the implicit capture default.
+- **Panel points derived in the runner: rejected.** The host already measures panel power, and the runner's own screen read can name the dark panel.
+- **Threading one optional panel through every Swift signature: rejected.** Forty call sites, four of which have no `Command` in scope, for one answer per command. The runner holds the panel of the command in flight in one lock-guarded slot (`RunnerRequestPanel.swift`), which is the only place that answers the question.
+- **Choosing a panel when the table decides nothing: rejected.** Capture may fall back to the `primary` panel because it must name some display or refuse; a surface fact has no such pressure, and naming the wrong panel would refuse the screen the user is looking at. Such a request names no panel.
+- **A `--screen outer|inner` flag for gestures: rejected again, for the same reason as for capture.** The panel is measured. It is not asked for.
+
+Consequences:
+
+- A multi-panel device whose every window is on the dark panel refuses instead of booking there, with the typed code `APP_SCREEN_OFF_LIT_PANEL`. The system surface is asked first, as for an unresolved window, so only a device with nothing on the lit panel refuses.
+- `runner.log` names the decision: `AGENT_DEVICE_RUNNER_PANEL_SURFACE lit=<id>(<w>x<h>) reported=<n> placed=<n> unplaceable=<yes|no> selection=<n> frame=(…)` reports the panel a window was booked against and the frame that won. `reported` is what the window query named before the cap, `placed` is how many of those the runtime would say a display for. `selection` is the rule's answer: 0 `litPanelWindow`, 1 `litDisplayWindow`, 2 `offLitPanel`, 3 `noWindow`. A single-panel device takes the historic walk and prints none of this.
+- A Duo's SpringBoard names 40-43 windows, so the cap is active on the device this fix targets: the marker reads `reported=40 placed=8`. The lit panel's full-screen window sits inside the first eight in every pose observed. `reported` above `placed` with `selection=2|3` means the walk refused before reaching it, which is a loud typed refusal and not a silent wrong-panel booking; read it as "the cap cut the list short" before anything else.
+- A regular capture of a multi-panel device reports what the panel fact said about its tree: `AGENT_DEVICE_RUNNER_PANEL_SURFACE_TREE republishedRoot=<yes|no> droppedSurfaces=<n> nodes=<n>-><n>`, and `…_TREE_GRAFTED frame=(…) nodes=<n>` when the application's own subtree carried no window for the lit panel. `…_TREE_SKIPPED reason=<budget_exhausted|window-unresolved|window-off-panel|read-failed|graft-failed>` names why a graft did not happen, and `graft-failed` carries the capture code that refused it. A skipped graft leaves the tree as it was walked, with the nodes and dedup keys its abandoned read produced discarded; it never fails the tier and never marks it exhausted.
+- Main-queue work abandoned by the execution watchdog can read the panel of the command that replaced it. The log line makes such a resolution visible. A single-panel device reads no panel, so it has nothing to repair.
+- Recording, keyboard settling, and a read by point name their panel too: `recordStart`, `keyboardDismiss`, and `readText` resolve a screen (each samples it or places a point in it), so they carry the fact. Without it a clip of a foldable's dark panel is a black video whose bootstrap succeeded.
+- The wire field is a two-declaration contract like the capture metadata: `AppleLitPanel` in `@agent-device/contracts/interactor-types` and `RunnerLitPanelFact` in `RunnerTests+Models.swift`.

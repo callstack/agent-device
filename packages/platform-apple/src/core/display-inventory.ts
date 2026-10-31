@@ -1,4 +1,5 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { AppleLitPanel } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
@@ -407,6 +408,31 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
       hint: 'The panel table reported the primary panel as at least as large as the other panel. Its `primary` flag still selects the capture fallback; verify the device type capabilities.',
     },
   });
+}
+
+/**
+ * The panel to name in a runner request, from a panel table read.
+ *
+ * Absent unless panel power itself decided one panel. A capture may still name the `primary` panel
+ * when panel power decides nothing (ADR 0025), because a capture has to name some display or refuse;
+ * a surface fact has no such pressure, and naming a panel the table did not settle would have the
+ * runner refuse the panel the user is actually looking at. The `primary` flag plays no part here: a
+ * payload can decide which panel is lit and still omit that flag.
+ *
+ * A panel the runtime names display 0 cannot be sent: 0 is the wire's "no panel named" identity, so
+ * such a display would look panel-carrying on the request and behave single-panel in the runner.
+ */
+export function appleLitPanel(inventory: AppleDisplayInventory): AppleLitPanel | undefined {
+  if (!inventory.multiScreen || inventory.unresolved) return undefined;
+  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
+  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  if (!panel || panel.displayId <= 0) return undefined;
+  if (!panel.pointScale || !Number.isFinite(panel.pointScale)) return undefined;
+  return {
+    displayId: panel.displayId,
+    widthPt: panel.widthPx / panel.pointScale,
+    heightPt: panel.heightPx / panel.pointScale,
+  };
 }
 
 /**

@@ -243,17 +243,16 @@ extension RunnerTests {
   // transformed subtrees, so a closed drawer at negative x inflates it and
   // out-of-window coordinates still pass containment. Falls back to app.frame
   // when no window frame is readable.
-  /// The app window interactions and captures are booked against: the first window the app
-  /// reports with a non-empty frame, and no window at all when none qualifies. The viewport,
-  /// the interaction anchor, and the synthesized reference frame all resolve through here, so a
-  /// fold, a sheet, or a rotation moves every consumer to the same window in the same pass.
-  /// Synthesized gestures route their display ID through the returned window so the record's
+  /// The app window interactions and captures are booked against, and no window at all when none
+  /// qualifies. The viewport, the interaction anchor, and the synthesized reference frame all resolve
+  /// through here, so a fold, a sheet, or a rotation moves every consumer to the same window in the
+  /// same pass. Synthesized gestures route their display ID through the returned window so the record's
   /// display can never name a different window than the one the reference frame was measured on.
   ///
-  /// Stops at the first qualifying window. Reading a window that will be discarded is not free: a
-  /// transient candidate that disappears between its `exists` answer and its `frame` fetch makes
-  /// XCTest record an issue, and an issue `record(_:)` does not mute ends the runner session
-  /// (ADR 0004, ADR 0005, #2995).
+  /// Which window qualifies is `RunnerResolveSurfaceWindow`'s decision, and this only asks it: on a
+  /// single-panel device that is the first window with a non-empty frame, and on a foldable it is a
+  /// window on the panel the request named as lit, which is how a home-screen tap stops landing on
+  /// SpringBoard's status-bar window on the dark panel.
   ///
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID
@@ -265,17 +264,24 @@ extension RunnerTests {
     return (resolved.window, resolved.frame)
   }
 
-  /// The app's first window with a usable frame, or nil. Unlike `resolveRunnerWindow` it never falls
-  /// back to `app.frame`: when the windows query fails because XCTest cannot serialize the app's
-  /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
+  /// The app's surface window, or nil. Unlike `resolveRunnerWindow` it never falls back to
+  /// `app.frame`: when the windows query fails because XCTest cannot serialize the app's tree, that
+  /// read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
-    for window in app.windows.allElementsBoundByIndex where window.exists {
-      let frame = window.frame
-      if !frame.isEmpty {
-        return (window, frame)
-      }
+    var resolvedWindow: AnyObject?
+    var windowFrame = CGRect.null
+    var observedFrame = CGRect.null
+    let failure = RunnerResolveSurfaceWindow(
+      app,
+      requestSurfacePanel,
+      &resolvedWindow,
+      &windowFrame,
+      &observedFrame
+    )
+    guard failure == .none, let window = resolvedWindow as? XCUIElement else {
+      return nil
     }
-    return nil
+    return (window, windowFrame)
   }
 
   func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
