@@ -1,4 +1,4 @@
-// The shape of the pinned package entries (R83): test-kit, daemon, daemon-client and apple-runner publish a
+// The shape of the pinned package entries (R83): test-kit, daemon, daemon-client, command-output and apple-runner publish a
 // single entry that names its exports, and test-kit also runs the shared isolation walk
 // (package-isolation.test.ts) under its policy.
 
@@ -46,6 +46,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
       name: '@agent-device/daemon-client',
       exports: { '.': entry('./src/index.ts') },
     },
+    'command-output': {
+      name: '@agent-device/command-output',
+      exports: { '.': entry('./src/index.ts') },
+    },
     proxy: { name: '@agent-device/proxy' },
     contracts: { name: '@agent-device/contracts' },
   };
@@ -75,6 +79,7 @@ const SOURCE = new Map([
   ['packages/apple-runner/src/index.ts', "export { bindAppleRunnerHost } from './host.ts';"],
   ['packages/command-surface/src/index.ts', "export { runCommand } from './command-surface.ts';"],
   ['packages/daemon-client/src/index.ts', "export { sendToDaemon } from './transport.ts';"],
+  ['packages/command-output/src/index.ts', "export { colorize } from './output/color.ts';"],
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
@@ -94,7 +99,7 @@ test('test-kit exports exactly "." and nothing else', () => {
   assert.equal(check({ 'test-kit': { exports: { './tmp-dir': entry('./x.ts') } } }).length, 1);
 });
 
-for (const dir of ['daemon', 'daemon-client']) {
+for (const dir of ['daemon', 'daemon-client', 'command-output']) {
   test(`${dir} exports exactly "." and nothing else`, () => {
     const extra = check({
       [dir]: {
@@ -216,7 +221,7 @@ test('text that only mentions a star is not an export', () => {
   assert.deepEqual(check({}, new Map([...SOURCE, ['packages/test-kit/src/index.ts', body]])), []);
 });
 
-for (const dir of ['daemon', 'daemon-client']) {
+for (const dir of ['daemon', 'daemon-client', 'command-output']) {
   test(`the ${dir} entry names its exports: export * is refused`, () => {
     const sources = new Map(SOURCE);
     sources.set(`packages/${dir}/src/index.ts`, "export * from './transport.ts';");
@@ -250,7 +255,14 @@ test('the shared isolation walk runs under the test-kit policy', () => {
   assert.match(found[0]!.message, /test-kit -> @agent-device\/daemon/);
 });
 
-for (const dir of ['daemon', 'daemon-client', 'apple-runner', 'test-kit', 'command-surface']) {
+for (const dir of [
+  'daemon',
+  'daemon-client',
+  'command-output',
+  'apple-runner',
+  'test-kit',
+  'command-surface',
+]) {
   test(`${dir} refuses a missing or renamed entry source`, () => {
     for (const renamed of [false, true]) {
       const sources = new Map(SOURCE);

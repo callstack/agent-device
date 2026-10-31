@@ -34,11 +34,14 @@ const COMMAND_HOST_BOUNDARIES = new Set([
   'packages/platform-linux/src/tool-provider.ts',
   'src/platform-runtime-android-adb-host.ts',
 ]);
+// Presentation packages take terminal facts as input, so they reach no process member at all.
+const PURE_PRESENTATION_ROOTS = ['packages/command-output/src/'];
 const PROCESS_MEMBERS = new Set(['env', 'cwd', 'on', 'once', 'exit', 'emitWarning']);
 
 /**
  * Catches ambient configuration and process lifecycle in reusable modules, plus command-host
- * scope reads outside spawn adapters. Uses the existing OXC layering parser; no debt baseline.
+ * scope reads outside spawn adapters. A pure presentation package also reaches no stream or
+ * terminal member of `process`. Uses the existing OXC layering parser; no debt baseline.
  * Test support, including packages/test-kit, uses the shared production-source classification.
  * Workers and children receive serializable configuration at their declared entry boundary.
  * Kill criterion: retire only if reusable sources may own process configuration and lifecycle.
@@ -51,6 +54,7 @@ export function processGlobalsViolations(
     if (!isProductionSourceFile(file)) continue;
     const processEntry = PROCESS_ENTRIES.has(file) || file.startsWith('src/cli/');
     const commandBoundary = COMMAND_HOST_BOUNDARIES.has(file);
+    const purePresentation = PURE_PRESENTATION_ROOTS.some((root) => file.startsWith(root));
     if (processEntry && commandBoundary) continue;
     const program = parseSync(file, source).program;
     const processNames = new Set(['process']);
@@ -185,9 +189,10 @@ export function processGlobalsViolations(
           (!parent.computed || asNode(parent.property)?.type === 'Literal') &&
           memberName(parent) !== undefined &&
           !PROCESS_MEMBERS.has(memberName(parent)!);
-        if (isProcess(node) && !bindingOrKey && !nonConfigurationMember) {
-          message =
-            'process capture belongs at a declared process entry; pass the owning host explicitly';
+        if (isProcess(node) && !bindingOrKey && (!nonConfigurationMember || purePresentation)) {
+          message = purePresentation
+            ? 'presentation modules read no process member; the root boundary passes terminal facts as input'
+            : 'process capture belongs at a declared process entry; pass the owning host explicitly';
         } else if (
           (node.type === 'VariableDeclarator' || node.type === 'AssignmentExpression') &&
           ['globalThis', 'global'].includes(String(asNode(node.init ?? node.right)?.name)) &&

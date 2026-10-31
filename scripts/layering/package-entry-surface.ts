@@ -5,8 +5,9 @@
 //   place a barrel is allowed, so a subpath or a star re-export there publishes the daemon graph
 //   under an unowned name (ADR 0033). The daemon client's entry names its production transport API
 //   and lazy lifecycle operations. The client entry names the client factory and its one result
-//   helper. The Apple runner and command surface entries name their
-//   explicit production APIs. Subpaths or star re-exports would publish internals under unowned
+//   helper. The command output entry names the shared presentation helpers and loads its formatter
+//   tables on first call. The Apple runner and command surface entries name their explicit
+//   production APIs. Subpaths or star re-exports would publish internals under unowned
 //   names (ADR 0008).
 // Evidence: the pinned packages each assert the same entry shape.
 // Cost: one pass over the pinned manifests and their entry sources.
@@ -36,6 +37,8 @@ const COMMAND_SURFACE_DIR = 'packages/command-surface';
 const COMMAND_SURFACE_PACKAGE = '@agent-device/command-surface';
 const CLIENT_DIR = 'packages/client';
 const CLIENT_PACKAGE = '@agent-device/client';
+const COMMAND_OUTPUT_DIR = 'packages/command-output';
+const COMMAND_OUTPUT_PACKAGE = '@agent-device/command-output';
 const DAEMON_CLIENT_DIR = 'packages/daemon-client';
 const DAEMON_CLIENT_PACKAGE = '@agent-device/daemon-client';
 
@@ -51,6 +54,7 @@ const ENTRY_SURFACES = [
   { packageName: COMMAND_SURFACE_PACKAGE, dir: COMMAND_SURFACE_DIR, entry: ENTRY_FILE },
   { packageName: CLIENT_PACKAGE, dir: CLIENT_DIR, entry: ENTRY_FILE },
   { packageName: DAEMON_CLIENT_PACKAGE, dir: DAEMON_CLIENT_DIR, entry: ENTRY_FILE },
+  { packageName: COMMAND_OUTPUT_PACKAGE, dir: COMMAND_OUTPUT_DIR, entry: ENTRY_FILE },
 ] as const;
 
 function stringLeaves(value: unknown): string[] {
