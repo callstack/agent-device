@@ -82,13 +82,21 @@ extension ModalSurface {
     return found.isEmpty ? .unknown(.noSurvivingSurface) : .modal(found)
   }
 
-  /// The actions under a surface root, in preorder. A keyboard and the input assistant above it are
-  /// not part of the modal, so their branches offer none.
+  /// The actions under a surface root, in preorder. A keyboard's controls are not part of the modal,
+  /// so they offer none. The input assistant also hosts the app's own bar buttons, so it ends the
+  /// keyboard's claim on its subtree.
   public static func actions(in root: AlertSurfaceNode) -> [AlertSurfaceNode] {
-    if SnapshotKeyboardSurface.isKeyboardBranch(type: root.type, identifier: root.identifier) { return [] }
-    let isAction = AlertSurface.actionableTypes.contains(root.type)
-      || AlertSurface.isDismissPopupMarker(root.label) || AlertSurface.isDismissPopupMarker(root.identifier)
-    return (isAction ? [root] : []) + root.children.flatMap { actions(in: $0) }
+    actions(in: root, keyboardOwned: false)
+  }
+
+  private static func actions(in node: AlertSurfaceNode, keyboardOwned: Bool) -> [AlertSurfaceNode] {
+    let keyboardOwned = SnapshotKeyboardSurface.isInputAssistant(type: node.type, identifier: node.identifier)
+      ? false
+      : keyboardOwned || node.type == "Keyboard" || node.type == "Key"
+    let isAction = !keyboardOwned
+      && (AlertSurface.actionableTypes.contains(node.type)
+        || AlertSurface.isDismissPopupMarker(node.label) || AlertSurface.isDismissPopupMarker(node.identifier))
+    return (isAction ? [node] : []) + node.children.flatMap { actions(in: $0, keyboardOwned: keyboardOwned) }
   }
 
   /// Each node's children, in order. A read lists every node after its parent, so a node's parent

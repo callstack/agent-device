@@ -140,19 +140,28 @@ final class ModalSurfaceTests: XCTestCase {
     XCTAssertEqual(reading, .unknown(.unorderedRead))
   }
 
-  func testKeyboardBranchesOfferNoActions() {
-    func leaf(_ type: String, _ label: String, identifier: String = "") -> AlertSurfaceNode {
-      AlertSurfaceNode(type: type, identifier: identifier, label: label, frame: screen, children: [])
+  // The app's inputAssistantItem bar buttons ride the input assistant, which can sit inside the
+  // keyboard. The keyboard's own controls offer nothing.
+  func testKeyboardControlsOfferNoActionsButTheAssistantsAppButtonsDo() {
+    func leaf(_ type: String, _ label: String) -> AlertSurfaceNode {
+      AlertSurfaceNode(type: type, identifier: "", label: label, frame: screen, children: [])
     }
     func branch(_ type: String, identifier: String = "", _ children: [AlertSurfaceNode]) -> AlertSurfaceNode {
       AlertSurfaceNode(type: type, identifier: identifier, label: "", frame: screen, children: children)
     }
+    let assistant = { (children: [AlertSurfaceNode]) in
+      branch("Other", identifier: "SystemInputAssistantView", children)
+    }
     let root = branch("Other", [
       leaf("Other", "Dismiss Popup"),
       branch("Other", [leaf("Button", "Done")]),
-      branch("Keyboard", [leaf("Key", "a"), leaf("Button", "Next keyboard")]),
-      branch("Other", identifier: "SystemInputAssistantView", [leaf("Button", "Dictate")]),
+      assistant([leaf("Button", "Bold")]),
+      branch("Keyboard", [
+        leaf("Key", "a"),
+        leaf("Button", "Next keyboard"),
+        assistant([leaf("Button", "Save draft")]),
+      ]),
     ])
-    XCTAssertEqual(ModalSurface.actions(in: root).map(\.label), ["Dismiss Popup", "Done"])
+    XCTAssertEqual(ModalSurface.actions(in: root).map(\.label), ["Dismiss Popup", "Done", "Bold", "Save draft"])
   }
 }

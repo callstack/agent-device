@@ -4,8 +4,9 @@ import XCTest
 
 /// Cross-language parity for the presented-surface rule (#3565): every case in
 /// `contracts/fixtures/ios-presented-surface.json` runs through the runner entry point, which reads no
-/// class names, so each must answer the table's `classBlindExpected`, and `modalScopeExpected` for each
-/// modal-scope reading a case states.
+/// class names, so each must answer the table's `classBlindExpected`. A case that states
+/// `modalScopeExpected` must give the answer for all three modal-scope readings: `modal`,
+/// `noExclusion` and `unknown`.
 final class SnapshotPresentedSurfaceTests: XCTestCase {
   private struct Vocabulary: Decodable {
     let presentingElementTypes: [PresentingElementType]

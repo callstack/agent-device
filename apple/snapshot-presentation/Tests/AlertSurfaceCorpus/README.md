@@ -43,7 +43,8 @@ Each node has its preorder `index`, its `parentIndex`, and its AX identity `elem
 
 `ModalSurface` reads the pair, not one tree. Its surface is the children that `honorModal` keeps
 under a node where it removes others. When a kept child holds a surface of its own, that inner
-surface replaces the outer one. A keyboard branch offers no actions. On these recordings:
+surface replaces the outer one. A keyboard's controls offer no actions, but the app's buttons
+under the input assistant do. No recording here shows a keyboard. On these recordings:
 
 - A SpringBoard alert removes content at three levels. The innermost surface is the alert.
 - A page sheet keeps one container that holds the sheet and its dimming view, `dismiss popup`.
