@@ -105,6 +105,24 @@ final class BackgroundInteractionTests: XCTestCase {
       scrollContentOverflow(area: area, contentFrames: [document, empty], isVertical: true), 1400)
   }
 
+  /// A secondary click succeeds only on a menu window of the session app: another app's open menu
+  /// or one of the app's ordinary windows must not count as the menu it opened.
+  func testOnlyTheAppsOwnMenuWindowsCountAsAnOpenedMenu() {
+    func window(pid: Int32, layer: Int, number: Int) -> [String: Any] {
+      [
+        kCGWindowOwnerPID as String: pid, kCGWindowLayer as String: layer,
+        kCGWindowNumber as String: number,
+      ]
+    }
+    let menuLayer = Int(CGWindowLevelForKey(.popUpMenuWindow))
+    let windowInfo = [
+      window(pid: 42, layer: 0, number: 1),
+      window(pid: 42, layer: menuLayer, number: 2),
+      window(pid: 7, layer: menuLayer, number: 3),
+    ]
+    XCTAssertEqual(popUpMenuWindowNumbers(pid: 42, windowInfo: windowInfo), [2])
+  }
+
   /// Chromium marks wrapper groups pressable; only a control role may win the press outright.
   func testWrapperGroupsAreNotPressableControls() {
     XCTAssertTrue(isPressableControlRole("AXButton"))
