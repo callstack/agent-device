@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { parseArgs } from '../cli/parser/args.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import { runCliCommandWithOutput } from './cli-runner.ts';

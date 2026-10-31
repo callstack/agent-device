@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { connectionWorkspace, createTestClient } from './remote-connection.fixtures.ts';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';

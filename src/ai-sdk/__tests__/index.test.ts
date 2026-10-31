@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { ToolResult } from '../../mcp/command-tools.ts';
 
 const createClientCalls: unknown[] = [];
@@ -17,7 +17,7 @@ let executeResult: (
   input: Record<string, unknown>,
 ) => Promise<ToolResult> = async () => defaultExecuteResult;
 
-vi.mock('../../agent-device-client.ts', () => ({
+vi.mock('@agent-device/client', () => ({
   createAgentDeviceClient: (config: unknown) => {
     createClientCalls.push(config);
     return { marker: 'stub-client' } as unknown as AgentDeviceClient;

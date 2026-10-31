@@ -26,7 +26,7 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
+import type { BatchStep, Lease, LeaseDevice } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isSessionRuntimePlatform,
@@ -35,10 +35,9 @@ import {
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { readMetroPrepareKind } from '@agent-device/command-surface';
+import { readMetroPrepareKind, type AgentDeviceClient } from '@agent-device/command-surface';
 import {
   connectionProviderCapabilities,
   primeProviderConnection,

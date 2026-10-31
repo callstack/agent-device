@@ -14,7 +14,7 @@ import {
 import { androidRepairAdbResult } from './replay-repair-world.ts';
 import { runCliCapture } from '../../../src/__tests__/cli-capture.ts';
 import { makeTempWorkspace } from '@agent-device/test-kit';
-import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { createCommandToolExecutor } from '../../../src/mcp/command-tools.ts';
 import { installIsolatedCliTestEnv } from '../../../src/__tests__/cli-test-env.ts';
 

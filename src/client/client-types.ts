@@ -9,8 +9,8 @@
 // `@agent-device/command-surface`: the command definitions invoke that port, and the published SDK
 // re-exports exactly those two names here (ADR 0008).
 //
-// The published surface is assembled in agent-device-client.ts, which re-exports BOTH homes, so no
-// name became unreachable from the package entrypoint.
+// The published surface is assembled in `src/sdk/index.ts`, which re-exports this module, so no
+// name became unreachable from the package entrypoint. The factory lives in `@agent-device/client`.
 
 export type { AgentDeviceClient, AgentDeviceCommandClient } from '@agent-device/command-surface';
 

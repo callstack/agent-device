@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, supportsLoopbackBind } from '@agent-device/test-kit';
 import { runCli } from '../cli.ts';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import {
   startRegisteredHttpDaemon,
   stateDirAndPaths,

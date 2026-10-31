@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,

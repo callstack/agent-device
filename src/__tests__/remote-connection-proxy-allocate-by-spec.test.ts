@@ -3,7 +3,7 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   createTestClient,
   grantedLease,

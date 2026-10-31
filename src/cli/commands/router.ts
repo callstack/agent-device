@@ -1,5 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { AgentDeviceClient } from '../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandHandlerMap, ClientCommandParams } from './router-types.ts';
 

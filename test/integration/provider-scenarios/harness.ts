@@ -6,8 +6,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
-import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import {

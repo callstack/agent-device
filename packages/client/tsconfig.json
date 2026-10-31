@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../command-registry" },
+    { "path": "../command-surface" },
+    { "path": "../contracts" },
+    { "path": "../daemon-client" },
+    { "path": "../daemon-contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../platform-apple" },
+    { "path": "../react-native" },
+    { "path": "../test-kit" }
+  ]
+}

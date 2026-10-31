@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
 import { findCommandMetadata } from '@agent-device/command-surface';
 import { createCommandToolExecutor } from '../command-tools.ts';

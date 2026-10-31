@@ -1,4 +1,3 @@
-import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
 import { isParseableOutputCommand } from '../../commands/cli-output.ts';
 import { routeResponseWarnings, type CliOutput } from '../../commands/output-common.ts';
@@ -10,7 +9,7 @@ import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput, writeCliOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
-import type { LeaseDevice } from '@agent-device/contracts/client';
+import type { CommandRequestResult, LeaseDevice } from '@agent-device/contracts/client';
 import { isRecord } from '@agent-device/kernel/record';
 
 export async function runGenericClientBackedCommand({

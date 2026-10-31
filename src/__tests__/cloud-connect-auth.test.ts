@@ -5,7 +5,7 @@ import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   mkdtempForTestSync,
   bindTestCommandHost,

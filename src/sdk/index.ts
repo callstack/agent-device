@@ -1,6 +1,6 @@
 import type { AgentDeviceHost, StartAgentDeviceOptions } from './host-types.ts';
 
-export { createAgentDeviceClient } from '../agent-device-client.ts';
+export { createAgentDeviceClient } from '@agent-device/client';
 export type { AgentDeviceHost, StartAgentDeviceOptions } from './host-types.ts';
 
 /** Starts an in-process daemon, loading its runtime only when called. */

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import {
   createPublicWaitCommandSurface,
   startPublicDaemonRuntime,

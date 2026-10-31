@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,

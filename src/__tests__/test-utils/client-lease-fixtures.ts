@@ -1,4 +1,4 @@
-import type { AgentDeviceClient } from '../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 export const TAKEOVER_CLI_FLAGS: CliFlags = { json: true, help: false, version: false };

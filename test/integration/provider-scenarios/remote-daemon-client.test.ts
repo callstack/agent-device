@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { prepareRemoteRequestArtifacts } from '@agent-device/remote/daemon-artifacts';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';

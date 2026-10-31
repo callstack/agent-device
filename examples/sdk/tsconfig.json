@@ -38,6 +38,7 @@
     { "path": "../../packages/ad-script" },
     { "path": "../../packages/apple-runner" },
     { "path": "../../packages/capture-kit" },
+    { "path": "../../packages/client" },
     { "path": "../../packages/command-registry" },
     { "path": "../../packages/command-runtime" },
     { "path": "../../packages/command-surface" },

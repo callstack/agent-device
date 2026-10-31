@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 

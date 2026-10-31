@@ -20,18 +20,19 @@ import {
   sendToDaemon,
 } from '@agent-device/daemon-client';
 import fs from 'node:fs';
-import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
 import {
   createCommandProgressState,
   createStderrCommandProgressSink,
   type CommandProgressState,
 } from './commands/command-progress.ts';
-import {
-  createAgentDeviceClient,
-  type AgentDeviceClientConfig,
-  type AgentDeviceDaemonTransport,
-} from './agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
+import type {
+  AgentDeviceClientConfig,
+  AgentDeviceDaemonTransport,
+  BatchStep,
+  LeaseDevice,
+} from '@agent-device/contracts/client';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import { readCliBatchStepsJson } from '@agent-device/command-surface';

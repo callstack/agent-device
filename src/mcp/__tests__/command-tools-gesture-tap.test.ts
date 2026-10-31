@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createAgentDeviceClient } from '../../agent-device-client.ts';
-import { createTransport } from '../../__tests__/client-transport-fixture.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
+import { createClientTransport } from '@agent-device/test-kit';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
 test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
@@ -29,7 +29,10 @@ test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
 });
 
 test('MCP gesture tap sends its contacts and series to the daemon', async () => {
-  const setup = createTransport(() => ({ ok: true, data: { message: 'Tapped 2 points 3 times' } }));
+  const setup = createClientTransport(() => ({
+    ok: true,
+    data: { message: 'Tapped 2 points 3 times' },
+  }));
   const executor = createCommandToolExecutor({
     createClient: () => createAgentDeviceClient(setup.config, { transport: setup.transport }),
   });

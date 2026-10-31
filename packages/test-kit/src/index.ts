@@ -14,6 +14,8 @@ export {
   type BoundaryFaultMatrix,
   type BoundaryInvariant,
 } from './boundary-fault-matrix.ts';
+export { createClientTransport } from './client-transport-fixture.ts';
+export { HUMAN_CONTROL_HOLD, HUMAN_CONTROL_SCOPE } from './client-human-control-fixtures.ts';
 export { withNoColor, withNoColorAsync } from './color.ts';
 export { publishDaemonRegistration } from './daemon-registration-fixtures.ts';
 export { deviceClaimFilePath } from './device-claim-fixtures.ts';

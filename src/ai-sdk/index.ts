@@ -1,9 +1,8 @@
 import type { jsonSchema, ToolApprovalStatus, ToolSet } from 'ai';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import { AppError, type NormalizedError } from '@agent-device/kernel/errors';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
-import type { AgentDeviceClient } from '../client/client-types.ts';
-import type { JsonSchema } from '@agent-device/command-surface';
+import { createAgentDeviceClient } from '@agent-device/client';
+import type { AgentDeviceClient, JsonSchema } from '@agent-device/command-surface';
 import { resolveCommandFrameworkTier } from '@agent-device/command-registry/registry';
 import { createCommandToolExecutor, listCommandTools } from '../mcp/command-tools.ts';
 import { MCP_TOOL_CONFIG_KEYS } from '../mcp/tool-control-fields.ts';
