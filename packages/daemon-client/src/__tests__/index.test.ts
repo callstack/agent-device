@@ -19,7 +19,7 @@ import { sendToDaemon } from '../index.ts';
 import { currentDaemonCodeSignature } from './code-signature-fixture.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
-import { resolveDaemonStartupHint } from '../daemon-client-metadata.ts';
+import { resolveDaemonStartupHint } from '../daemon-lifecycle-errors.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';

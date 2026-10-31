@@ -13,7 +13,7 @@ import {
   listenOnLoopback,
 } from '@agent-device/test-kit';
 import * as metadata from '../daemon-client-metadata.ts';
-import { retireDaemonForTakeover } from '../daemon-client-startup.ts';
+import * as startup from '../daemon-client-startup.ts';
 import type { DaemonBinding } from '@agent-device/contracts/client';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
@@ -189,7 +189,7 @@ test('takeover refuses an embedded registration without a recorded host start ti
   const before = fs.readFileSync(paths.infoPath, 'utf8');
   const killSpy = vi.spyOn(process, 'kill');
 
-  const refusal = await refusalFrom(retireDaemonForTakeover(info, paths));
+  const refusal = await refusalFrom(startup.retireDaemonForTakeover(info, paths));
 
   assert.equal(refusal.details?.reason, DAEMON_LIFECYCLE_REASONS.ownerEmbedded);
   assert.match(String(refusal.details?.hint), /owned by host process \d+\. Close it there/);
@@ -476,8 +476,8 @@ test('replacement after binding lookup cannot authenticate a pinned request with
   const daemon = await startRecordingSocketDaemon(() => token);
   const { info } = await registerDaemon(paths, { socketPort: daemon.port, ownership: 'embedded' });
   token = info.token;
-  const observe = metadata.observeLocalDaemon;
-  const lookup = vi.spyOn(metadata, 'observeLocalDaemon').mockImplementation(async (...args) => {
+  const observe = startup.observeLocalDaemon;
+  const lookup = vi.spyOn(startup, 'observeLocalDaemon').mockImplementation(async (...args) => {
     const observed = await observe(...args);
     // The replacement reuses the endpoint and process lifetime after this lookup. Its auth token
     // changes, so a request can only succeed here if the client incorrectly adopts the new token.

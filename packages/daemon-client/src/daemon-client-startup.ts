@@ -26,15 +26,13 @@ import type {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveDaemonLaunchSpec, resolveDaemonTakeover } from './daemon-launch-spec.ts';
 import {
-  getDaemonMetadataState,
-  observeLocalDaemon,
+  readRegisteredDaemon,
   type DaemonTakeoverDecision,
   type LocalDaemonObservation,
   type DaemonObservationSettings,
   type DaemonObservationOptions,
   observedDaemonIdentityOf,
   readDaemonInfo,
-  resolveDaemonStartupHint,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
 import { canConnect, isDaemonTransportUnavailableError } from './daemon-client-transport.ts';
@@ -42,6 +40,9 @@ import {
   daemonContendedError,
   daemonTakeoverRetirementError,
   daemonStopCommand,
+  daemonRegistrationUnprovenError,
+  getDaemonMetadataState,
+  resolveDaemonStartupHint,
 } from './daemon-lifecycle-errors.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 
@@ -89,12 +90,13 @@ const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
-export async function observeRegisteredDaemon(
-  existing: DaemonInfo,
+export async function observeLocalDaemon(
   settings: DaemonObservationSettings,
   options: DaemonObservationOptions = {},
 ): Promise<LocalDaemonObservation | null> {
   const { deadline } = options;
+  const existing = await readRegisteredDaemon(settings.paths);
+  if (!existing) return null;
   if (options.waitForLiveStartup && (await isAwaitingDaemonStartup(existing, deadline)))
     return null;
 
@@ -150,18 +152,6 @@ async function isAwaitingDaemonStartup(
   return (
     isProcessAlive(info.pid) && !(await canConnect(info, 'auto', remainingStartupBudget(deadline)))
   );
-}
-
-export function daemonRegistrationUnprovenError(
-  paths: DaemonPaths,
-  inspection?: ProcessLockInspection,
-): AppError {
-  return new AppError('COMMAND_FAILED', 'Daemon registration ownership could not be verified.', {
-    reason: 'daemon_registration_unproven',
-    inspection,
-    stateDir: paths.baseDir,
-    hint: resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
-  });
 }
 
 export async function stopDaemonForTakeover(

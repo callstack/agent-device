@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { isProcessPid } from '@agent-device/host-kit/process';
 
@@ -92,7 +91,7 @@ export async function readRegisteredDaemon(
     await import('@agent-device/daemon-contracts/daemon-registration');
   const inspection = inspectProcessLock(paths.lockPath);
   if (inspection.state === 'unproven') {
-    const { daemonRegistrationUnprovenError } = await import('./daemon-client-startup.ts');
+    const { daemonRegistrationUnprovenError } = await import('./daemon-lifecycle-errors.ts');
     throw daemonRegistrationUnprovenError(paths, inspection);
   }
   let info = readDaemonInfo(paths.infoPath);
@@ -111,22 +110,6 @@ export async function readRegisteredDaemon(
   }
   return info;
 }
-
-/** Judges the admitted registration while keeping lifecycle machinery lazy. */
-export async function observeLocalDaemon(
-  settings: DaemonObservationSettings,
-  options: DaemonObservationOptions = {},
-): Promise<LocalDaemonObservation | null> {
-  const existing = await readRegisteredDaemon(settings.paths);
-  if (!existing) return null;
-  const { observeRegisteredDaemon } = await import('./daemon-client-startup.ts');
-  return await observeRegisteredDaemon(existing, settings, options);
-}
-
-type DaemonMetadataState = {
-  hasInfo: boolean;
-  hasLock: boolean;
-};
 
 export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   const read = readDaemonRecord(infoPath);
@@ -202,23 +185,6 @@ function readDaemonPort(value: unknown): number | undefined {
     : undefined;
 }
 
-export function getDaemonMetadataState(paths: DaemonPaths): DaemonMetadataState {
-  return {
-    hasInfo: fs.existsSync(paths.infoPath),
-    hasLock: fs.existsSync(paths.lockPath),
-  };
-}
-
 export function isRemoteDaemon(info: DaemonInfo): boolean {
   return typeof info.baseUrl === 'string' && info.baseUrl.length > 0;
-}
-
-export function resolveDaemonStartupHint(
-  state: { hasInfo: boolean; hasLock: boolean },
-  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'>,
-): string {
-  const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]
-    .filter(Boolean)
-    .join(' and ');
-  return `Daemon startup did not establish a reachable owner. ${artifacts ? `State was retained at ${artifacts}. ` : ''}Retry with --debug and inspect daemon diagnostics. Before upgrading, stop all older clients and daemons with their original CLI and prevent them from returning to this state directory. Unverified lock state requires confirming every user stopped before manual recovery; deleting metadata alone is not a safe reset.`;
 }

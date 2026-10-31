@@ -1,6 +1,5 @@
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
-import { assertDaemonPolicyMatches } from './daemon-client-startup.ts';
-import { observeLocalDaemon } from './daemon-client-metadata.ts';
+import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { daemonBindingMismatchError } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';

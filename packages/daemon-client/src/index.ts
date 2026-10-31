@@ -33,7 +33,7 @@ import type {
 } from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type { DaemonRequest, DaemonResponse, DaemonInfo };
+export type { DaemonRequest, DaemonResponse };
 export { readRegisteredDaemon };
 
 /** The released default: a process-level client, which reads the process's own host. */

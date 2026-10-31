@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_LIFECYCLE_REASONS,
@@ -11,12 +13,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
-import {
-  getDaemonMetadataState,
-  resolveDaemonStartupHint,
-  type DaemonInfo,
-  type DaemonTakeoverCause,
-} from './daemon-client-metadata.ts';
+import type { DaemonInfo, DaemonTakeoverCause } from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
 
 // The ways an explicit lifecycle stops short of a usable daemon, whether this client judged it or the
@@ -197,4 +194,38 @@ export function daemonNotRetirableError(params: {
       hint: embeddedCloseHint(info.pid),
     },
   );
+}
+
+type DaemonMetadataState = {
+  hasInfo: boolean;
+  hasLock: boolean;
+};
+
+export function getDaemonMetadataState(paths: DaemonPaths): DaemonMetadataState {
+  return {
+    hasInfo: fs.existsSync(paths.infoPath),
+    hasLock: fs.existsSync(paths.lockPath),
+  };
+}
+
+export function resolveDaemonStartupHint(
+  state: { hasInfo: boolean; hasLock: boolean },
+  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'>,
+): string {
+  const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]
+    .filter(Boolean)
+    .join(' and ');
+  return `Daemon startup did not establish a reachable owner. ${artifacts ? `State was retained at ${artifacts}. ` : ''}Retry with --debug and inspect daemon diagnostics. Before upgrading, stop all older clients and daemons with their original CLI and prevent them from returning to this state directory. Unverified lock state requires confirming every user stopped before manual recovery; deleting metadata alone is not a safe reset.`;
+}
+
+export function daemonRegistrationUnprovenError(
+  paths: DaemonPaths,
+  inspection?: ProcessLockInspection,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon registration ownership could not be verified.', {
+    reason: 'daemon_registration_unproven',
+    inspection,
+    stateDir: paths.baseDir,
+    hint: resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
+  });
 }
