@@ -16,11 +16,10 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
-import type { AgentDeviceClient } from '../client/client-types.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { parseArgs } from '../cli/parser/args.ts';
 import { runCliCommandWithOutput } from '../commands/cli-runner.ts';
-import type { CommandName } from '@agent-device/command-surface';
+import type { AgentDeviceClient, CommandName } from '@agent-device/command-surface';
 
 type SeenRequest = { command: string; noRecord?: boolean; record?: boolean };
 

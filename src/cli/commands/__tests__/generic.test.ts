@@ -7,7 +7,7 @@ import {
   createTestHostEnvironment,
   withCapturedStdoutAsync,
 } from '@agent-device/test-kit';
-import { createAgentDeviceClient } from '../../../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientBackedCliCommandName } from '../client-backed.ts';

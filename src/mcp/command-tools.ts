@@ -1,5 +1,4 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
-import type { AgentDeviceClient } from '../client/client-types.ts';
 import {
   COMMON_INPUT_AUDIENCE,
   findCommandMetadata,
@@ -8,6 +7,7 @@ import {
   listMcpCommandMetadata,
   operatorAudience,
   operatorInputRefusal,
+  type AgentDeviceClient,
   type CommandExecutionResult,
   type CommandMetadata,
   type CommandName,
@@ -254,7 +254,7 @@ async function createClient(
   host: HostEnvironment,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
-  const { createAgentDeviceClient } = await import('../agent-device-client.ts');
+  const { createAgentDeviceClient } = await import('@agent-device/client');
   const { createEnsuredDaemonTransport } = await import('@agent-device/daemon-client');
   // One client per tool call, so each call ensures the daemon it is about to use.
   const ensuring = createEnsuredDaemonTransport({ host });

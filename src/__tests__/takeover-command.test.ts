@@ -1,13 +1,12 @@
-import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { createTestHostEnvironment, HUMAN_CONTROL_HOLD } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { createAgentDeviceClient } from '../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import {
   renderTakeoverStarted,
   renderTakeoverStatus,
   takeoverCommand,
 } from '../cli/commands/takeover.ts';
-import { HUMAN_CONTROL_HOLD } from '../client/human-control.fixtures.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 

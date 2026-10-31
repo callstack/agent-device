@@ -10,7 +10,7 @@ const PROCESS_ENTRIES = new Set([
   'src/bin.ts',
   'src/cli.ts',
   'src/daemon.ts',
-  'src/agent-device-client.ts',
+  'packages/client/src/index.ts',
   'src/host.ts',
   'packages/capture-kit/src/png-worker.ts',
   'packages/react-native/src/companion/companion-tunnel.ts',

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { createAgentDeviceClient } from './agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { startPublicDaemonRuntime } from './__tests__/test-utils/public-daemon-runtime.ts';
 

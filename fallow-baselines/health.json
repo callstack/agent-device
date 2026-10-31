@@ -98,7 +98,7 @@
     "packages/daemon/src/core/daemon-command-registry.ts:high impact",
     "packages/daemon/src/sessions/handlers/session-doctor-output.ts:high impact",
     "packages/platform-apple/src/core/perf-xml.ts:high impact",
-    "src/client/screenshot-result.ts:high impact",
+    "packages/client/src/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
     "packages/platform-android/src/settings.ts:complexity",
     "packages/capture-kit/src/snapshot/snapshot-presentation/text-surface.ts:high impact",

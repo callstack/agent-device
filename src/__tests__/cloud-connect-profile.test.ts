@@ -11,7 +11,7 @@ import {
   readRemoteConnectionState,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';

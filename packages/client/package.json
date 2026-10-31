@@ -1,0 +1,28 @@
+{
+  "name": "@agent-device/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The typed Node.js client factory: createAgentDeviceClient builds the AgentDeviceClient over the daemon transport, with request normalizers, lease client, and screenshot result shaping. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/command-surface": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-client": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/platform-apple": "workspace:*",
+    "@agent-device/react-native": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
+    "vitest": "5.0.4"
+  }
+}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   arrayEqual,
   assertCommandCall,
@@ -644,6 +644,9 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     JSON.stringify(world.adbCalls),
   );
 
+  // The log follower's 500ms pid probe shares this ADB provider; stop it before the exact window.
+  const logsStop = await client.observability.logs({ action: 'stop', ...selection });
+  assert.equal(logsStop.stopped, true);
   const frameCallStart = world.adbCalls.length;
   const frames = await client.observability.perf({
     area: 'frames',
@@ -665,9 +668,6 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
   assertRpcError(invalidPerfAction, 400, 'INVALID_ARGS', /perf action must be/i);
-
-  const logsStop = await client.observability.logs({ action: 'stop', ...selection });
-  assert.equal(logsStop.stopped, true);
 
   fs.writeFileSync(appLogPath, 'before-clear', 'utf8');
   fs.writeFileSync(`${appLogPath}.1`, 'older', 'utf8');

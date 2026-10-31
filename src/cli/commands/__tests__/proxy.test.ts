@@ -46,7 +46,7 @@ vi.mock('@agent-device/proxy', async (importOriginal) => {
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 
 import { proxyCommand, renderProxyStartup } from '../proxy.ts';
-import type { AgentDeviceClient } from '../../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 
 bindTestCommandHost();
 

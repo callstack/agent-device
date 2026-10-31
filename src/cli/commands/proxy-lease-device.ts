@@ -17,10 +17,10 @@ import {
   deviceSpecUnsupportedError,
   requireLeaseDeviceSpec,
 } from '@agent-device/contracts/lease-scope';
-import type { LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
+import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contracts/client';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([

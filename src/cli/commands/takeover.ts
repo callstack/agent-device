@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceClient } from '../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type { HumanControlHold } from '@agent-device/contracts/client';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';

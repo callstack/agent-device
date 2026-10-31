@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { resolveCommandRecordsSessionAction } from '@agent-device/command-registry/registry';
 import { COMMAND_OUTPUT_SCHEMAS } from '@agent-device/command-surface';

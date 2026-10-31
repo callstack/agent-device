@@ -2,7 +2,7 @@ import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { tryRunClientBackedCommand } from '../cli/commands/router.ts';
 
 const REACHED_CLIENT = new Error('reached the client');

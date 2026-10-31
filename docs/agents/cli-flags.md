@@ -21,7 +21,7 @@ Pass a flag only through layers that consume it:
    MCP and AI SDK tool schemas thus exclude parameters for the model to write that input.
    For a shared common key, declare the same audience in its `packages/command-surface/src/common-input-fields.ts` row instead.
 5. If Node.js exposes the option, update the public typed client option in the owning `packages/contracts/src/client-*.ts` type.
-6. If the request still needs public-to-internal translation, update daemon flag normalization in `src/client/client-normalizers.ts`.
+6. If the request still needs public-to-internal translation, update daemon flag normalization in `packages/client/src/client-normalizers.ts`.
 7. If the field enters platform dispatch, add it to `packages/daemon/src/core/context.ts` and `packages/daemon/src/core/dispatch-context.ts`.
 8. Only after the command surface, grammar, and projection prove applicability, pass the option through handler/platform modules.
 9. In `scripts/integration-progress-model.ts`, classify the flag as device-observable or intentionally-outside.

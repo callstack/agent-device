@@ -133,6 +133,7 @@ export const LOGICAL_MODULE_POLICIES = [
       'src/cli.ts',
       'src/cli/',
       'src/client/',
+      'packages/client/src/',
       'packages/remote/src/',
       'packages/daemon-client/src/',
     ],

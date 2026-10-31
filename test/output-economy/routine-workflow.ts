@@ -1,5 +1,5 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
-import type { AgentDeviceClient } from '../../src/client/client-types.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';

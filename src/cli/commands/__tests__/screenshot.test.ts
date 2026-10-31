@@ -5,7 +5,7 @@ import {
 } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createAgentDeviceClient } from '../../../agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { screenshotCommand, diffCommand } from '../screenshot.ts';

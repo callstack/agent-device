@@ -304,6 +304,7 @@
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/apple-runner": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/client": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/command-runtime": "workspace:*",
     "@agent-device/command-surface": "workspace:*",

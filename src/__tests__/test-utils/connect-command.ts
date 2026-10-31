@@ -1,7 +1,7 @@
 import { beginStdoutCapture, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { connectCommand } from '../../cli/commands/connection.ts';
-import type { AgentDeviceClient } from '../../agent-device-client.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 
 /** Runs `connect` the way the CLI does, writing its generated profile under `stateDir`. */
 export async function connectWithGeneratedProviderProfile(options: {

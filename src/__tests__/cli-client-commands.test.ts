@@ -5,14 +5,13 @@ import assert from 'node:assert/strict';
 import { PNG } from '@agent-device/capture-kit/png';
 import { tryRunClientBackedCommand } from './test-utils/host-bound-commands.ts';
 import { runCliCapture } from './cli-capture.ts';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import type {
-  AgentDeviceClient,
   AppInstallFromSourceOptions,
   AppOpenOptions,
-  MetroPrepareOptions,
-  MetroReloadOptions,
-} from '../agent-device-client.ts';
-import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
+  SettingsUpdateOptions,
+} from '@agent-device/contracts/client';
+import type { MetroPrepareOptions, MetroReloadOptions } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 import {

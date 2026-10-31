@@ -12,7 +12,7 @@ delete process.env.AGENT_DEVICE_VALIDATION_REPORT;
 const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
   'packages/react-native/src/index-metro.test.ts',
-  'src/agent-device-client-metro.test.ts',
+  'packages/client/src/__tests__/index-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove

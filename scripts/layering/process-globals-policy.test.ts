@@ -53,7 +53,7 @@ test('entry declarations permit process reads but do not permit ambient command-
     'src/cli.ts',
     'src/cli/commands/example.ts',
     'src/daemon.ts',
-    'src/agent-device-client.ts',
+    'packages/client/src/index.ts',
     'src/host.ts',
     'packages/capture-kit/src/png-worker.ts',
     'packages/maestro/src/daemon-port/run-script-http-child.ts',

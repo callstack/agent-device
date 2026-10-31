@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionAction } from '@agent-device/contracts/session';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
 import {
   COMMAND_OUTPUT_SCHEMAS,
   findCommandMetadata,
   getCliCommandSchema,
   readInputFromCli,
   runCommand,
+  type AgentDeviceClient,
   type CommandName,
 } from '@agent-device/command-surface';
 import { listCliOutputFormatters } from '../commands/cli-output.ts';

@@ -1,4 +1,4 @@
-import { createAgentDeviceClient } from './agent-device-client.ts';
+import { createAgentDeviceClient } from '@agent-device/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
