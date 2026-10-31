@@ -1,4 +1,4 @@
-import type { CommandMetadata } from '@agent-device/command-surface';
+import type { CommandMetadata, CommandName } from '@agent-device/command-surface';
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
@@ -98,7 +98,7 @@ export type ResponseWarningRoute = 'text' | 'stderr';
 
 /** The route a command's descriptor metadata declares: a parseable-output command warns on stderr. */
 export function responseWarningRoute(
-  metadata: Pick<CommandMetadata, 'parseableOutput'>,
+  metadata: Pick<CommandMetadata<CommandName, unknown>, 'parseableOutput'>,
 ): ResponseWarningRoute {
   return metadata.parseableOutput === true ? 'stderr' : 'text';
 }
