@@ -12,7 +12,7 @@ import {
   limrunLocationAlertTree,
 } from './alert-detection.fixtures.ts';
 import { handleLimrunIosAlert, type LimrunIosAlertClient } from './alert.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 /**
  * The legs share the tree-alert driver, whose polls sleep between captures on the shared
@@ -30,7 +30,7 @@ async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-function clientWithTrees(trees: Array<IosTreeNode | IosTreeNode[]>): LimrunIosAlertClient {
+function clientWithTrees(trees: Array<AxeTreeNode | AxeTreeNode[]>): LimrunIosAlertClient {
   const elementTree = vi.fn(async () => {
     const next = trees.length > 1 ? trees.shift() : trees[0];
     // The real client answers an array for a multi-root capture and a single node otherwise.
@@ -467,7 +467,7 @@ describe('acting budgets', () => {
 });
 
 describe('button vocabulary', () => {
-  function alertWith(left: string, right: string): IosTreeNode {
+  function alertWith(left: string, right: string): AxeTreeNode {
     const root = limrunAttAlertTree();
     return {
       ...root,

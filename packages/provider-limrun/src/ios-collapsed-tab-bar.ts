@@ -1,11 +1,15 @@
 import type { IosCollapsedTabBarProbeFailure } from '@agent-device/contracts/ios-snapshot';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readAxeNodeChildren,
+  readAxeNodeRect,
+  type AxeTreeNode,
+} from '@agent-device/capture-kit/ios-axe-tree';
 
 type Point = { x: number; y: number };
 
 /** One Limrun hit-test: the element tree at `point`, as `client.elementTree(point)` returns it. */
-type LimrunIosHitTest = (point: Point) => Promise<IosTreeNode | IosTreeNode[]>;
+type LimrunIosHitTest = (point: Point) => Promise<AxeTreeNode | AxeTreeNode[]>;
 
 /** Preferred spacing of the hit-tests across a bar. */
 const TAB_PROBE_SPACING = 32;
@@ -37,10 +41,10 @@ const TAB_PROBE_TIMEOUT_MS = 1_500;
  * bar's height is checked (`budget-exhausted`). A partial tab set would look complete.
  */
 export async function expandLimrunCollapsedTabBar(
-  tree: IosTreeNode | IosTreeNode[],
+  tree: AxeTreeNode | AxeTreeNode[],
   viewport: Rect | null,
   hitTest: LimrunIosHitTest,
-): Promise<{ tree: IosTreeNode[]; probeFailure?: IosCollapsedTabBarProbeFailure }> {
+): Promise<{ tree: AxeTreeNode[]; probeFailure?: IosCollapsedTabBarProbeFailure }> {
   const roots = Array.isArray(tree) ? tree : [tree];
   if (!viewport) return { tree: roots };
   const bars = collapsedTabBars(roots, viewport).sort(byTabBarLikeness);
@@ -62,19 +66,19 @@ export async function expandLimrunCollapsedTabBar(
   return { tree: roots };
 }
 
-function withTabs(node: IosTreeNode, bar: IosTreeNode, tabs: IosTreeNode[]): IosTreeNode {
+function withTabs(node: AxeTreeNode, bar: AxeTreeNode, tabs: AxeTreeNode[]): AxeTreeNode {
   if (node === bar) return { ...node, children: tabs };
-  const children = readIosNodeChildren(node);
+  const children = readAxeNodeChildren(node);
   return children.length === 0
     ? node
     : { ...node, children: children.map((child) => withTabs(child, bar, tabs)) };
 }
 
-function collapsedTabBars(roots: IosTreeNode[], viewport: Rect) {
-  const bars: { node: IosTreeNode; frame: Rect }[] = [];
-  const visit = (node: IosTreeNode) => {
-    const children = readIosNodeChildren(node);
-    const frame = readIosNodeRect(node);
+function collapsedTabBars(roots: AxeTreeNode[], viewport: Rect) {
+  const bars: { node: AxeTreeNode; frame: Rect }[] = [];
+  const visit = (node: AxeTreeNode) => {
+    const children = readAxeNodeChildren(node);
+    const frame = readAxeNodeRect(node);
     if (children.length === 0 && frame && isCollapsedTabBar(node, frame, viewport)) {
       bars.push({ node, frame });
     }
@@ -94,7 +98,7 @@ function byTabBarLikeness(left: { frame: Rect }, right: { frame: Rect }): number
 }
 
 /** The runner's wide childless container, in the shape Limrun reports an iPhone tab bar. */
-function isCollapsedTabBar(node: IosTreeNode, frame: Rect, viewport: Rect): boolean {
+function isCollapsedTabBar(node: AxeTreeNode, frame: Rect, viewport: Rect): boolean {
   if ((node.elementType ?? node.type) !== 'Group') return false;
   if (frame.width <= 0 || frame.height <= 0) return false;
   if (frame.width < Math.max(160, frame.height * 1.75)) return false;
@@ -129,7 +133,7 @@ function tabProbePoints(
 async function probe(
   points: Point[],
   hitTest: LimrunIosHitTest,
-): Promise<{ hits: IosTreeNode[] } | { failure: IosCollapsedTabBarProbeFailure }> {
+): Promise<{ hits: AxeTreeNode[] } | { failure: IosCollapsedTabBarProbeFailure }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<{ failure: IosCollapsedTabBarProbeFailure }>((resolve) => {
     timer = setTimeout(() => resolve({ failure: 'timed-out' }), TAB_PROBE_TIMEOUT_MS);
@@ -145,22 +149,22 @@ async function probe(
   }
 }
 
-function flattenHit(hit: IosTreeNode | IosTreeNode[]): IosTreeNode[] {
-  const nodes: IosTreeNode[] = [];
-  const visit = (node: IosTreeNode) => {
+function flattenHit(hit: AxeTreeNode | AxeTreeNode[]): AxeTreeNode[] {
+  const nodes: AxeTreeNode[] = [];
+  const visit = (node: AxeTreeNode) => {
     nodes.push(node);
-    readIosNodeChildren(node).forEach(visit);
+    readAxeNodeChildren(node).forEach(visit);
   };
   (Array.isArray(hit) ? hit : [hit]).forEach(visit);
   return nodes;
 }
 
 /** `collapsedTabFallbackNodes`: at least two distinct tabs inside the bar, in one row. */
-function collapsedTabBarTabs(barFrame: Rect, hits: IosTreeNode[]): IosTreeNode[] {
+function collapsedTabBarTabs(barFrame: Rect, hits: AxeTreeNode[]): AxeTreeNode[] {
   const seen = new Set<string>();
-  const tabs: { node: IosTreeNode; frame: Rect }[] = [];
+  const tabs: { node: AxeTreeNode; frame: Rect }[] = [];
   for (const node of hits) {
-    const frame = readIosNodeRect(node);
+    const frame = readAxeNodeRect(node);
     if (!frame || !isTabButton(node) || !isTabInside(frame, barFrame)) continue;
     const key = JSON.stringify([
       node.elementType ?? node.type,
@@ -182,7 +186,7 @@ function collapsedTabBarTabs(barFrame: Rect, hits: IosTreeNode[]): IosTreeNode[]
     .map(({ node }) => node);
 }
 
-function isTabButton(node: IosTreeNode): boolean {
+function isTabButton(node: AxeTreeNode): boolean {
   if (node.traits?.includes('TabButton') !== true) return false;
   return [
     node.label,

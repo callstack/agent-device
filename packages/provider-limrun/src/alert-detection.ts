@@ -8,7 +8,11 @@ import {
 import { centerOfRect, type Rect } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { TreeAlertObservation } from '@agent-device/capture-kit/alert-tree-driver';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readAxeNodeChildren,
+  readAxeNodeRect,
+  type AxeTreeNode,
+} from '@agent-device/capture-kit/ios-axe-tree';
 
 /**
  * System-alert detection over a Limrun iOS element tree (issue #3349). A Limrun iOS direct
@@ -56,7 +60,7 @@ const PERMISSION_LABEL_PATTERN =
 /** SpringBoard marks its home-screen icons with this trait; an alert never carries it. */
 const LAUNCH_ICON_TRAIT = 'LaunchIcon';
 
-function nodeLabel(node: IosTreeNode): string {
+function nodeLabel(node: AxeTreeNode): string {
   const label = node.AXLabel ?? node.label;
   return typeof label === 'string' ? label.trim() : '';
 }
@@ -67,7 +71,7 @@ function nodeLabel(node: IosTreeNode): string {
  * in-app `UIAlertController` — and never a system host. SpringBoard also reports a blank label;
  * its screens are refused downstream because they carry no dialog-shaped content.
  */
-export function isLimrunAlertHostRoot(node: IosTreeNode): boolean {
+export function isLimrunAlertHostRoot(node: AxeTreeNode): boolean {
   if (node.role !== 'AXApplication' && node.type !== 'Application') return false;
   return nodeLabel(node).length === 0;
 }
@@ -97,7 +101,7 @@ export type LimrunAlertCapture = TreeAlertObservation<LimrunAlertCandidate>;
  * dialog under a blanked root no other process rides; the label-strict acting legs are the
  * backstop named above.
  */
-export function readLimrunAlertCapture(tree: IosTreeNode | IosTreeNode[]): LimrunAlertCapture {
+export function readLimrunAlertCapture(tree: AxeTreeNode | AxeTreeNode[]): LimrunAlertCapture {
   let candidate: LimrunAlertCandidate | null = null;
   let alertShapedRoots = 0;
   for (const root of Array.isArray(tree) ? tree : [tree]) {
@@ -116,7 +120,7 @@ export function readLimrunAlertCapture(tree: IosTreeNode | IosTreeNode[]): Limru
 
 type LimrunHostRootReading = LimrunAlertCandidate | 'undecided' | 'absent';
 
-function readAlertHostRoot(root: IosTreeNode): LimrunHostRootReading {
+function readAlertHostRoot(root: AxeTreeNode): LimrunHostRootReading {
   const descendants = collectDescendants(root);
   // A home screen is a home screen: SpringBoard marks its icons, and widgets can carry text,
   // so the trait answers absence before any dialog question is asked.
@@ -152,10 +156,10 @@ function readAlertHostRoot(root: IosTreeNode): LimrunHostRootReading {
   return { alert, buttons };
 }
 
-function collectDescendants(root: IosTreeNode): IosTreeNode[] {
-  const nodes: IosTreeNode[] = [];
-  const visit = (node: IosTreeNode) => {
-    for (const child of readIosNodeChildren(node)) {
+function collectDescendants(root: AxeTreeNode): AxeTreeNode[] {
+  const nodes: AxeTreeNode[] = [];
+  const visit = (node: AxeTreeNode) => {
+    for (const child of readAxeNodeChildren(node)) {
       nodes.push(child);
       visit(child);
     }
@@ -164,15 +168,15 @@ function collectDescendants(root: IosTreeNode): IosTreeNode[] {
   return nodes;
 }
 
-function isButtonNode(node: IosTreeNode): boolean {
+function isButtonNode(node: AxeTreeNode): boolean {
   return node.role === 'AXButton' || node.type === 'Button';
 }
 
-function isLaunchIcon(node: IosTreeNode): boolean {
+function isLaunchIcon(node: AxeTreeNode): boolean {
   return node.traits?.includes(LAUNCH_ICON_TRAIT) === true;
 }
 
-function isStaticTextNode(node: IosTreeNode): boolean {
+function isStaticTextNode(node: AxeTreeNode): boolean {
   return node.role === 'AXStaticText' || node.type === 'StaticText';
 }
 
@@ -184,13 +188,13 @@ function isStaticTextNode(node: IosTreeNode): boolean {
  * node stays in the list: two buttons sharing a label are two points a tap could land on, and
  * the chooser refuses rather than taking the first.
  */
-function findAlertButtons(nodes: IosTreeNode[]): LimrunAlertButton[] {
+function findAlertButtons(nodes: AxeTreeNode[]): LimrunAlertButton[] {
   const buttons: LimrunAlertButton[] = [];
   for (const node of nodes) {
     if (!isButtonNode(node) || node.enabled === false || node.hittable === false) continue;
     const label = nodeLabel(node);
     if (!label) continue;
-    const rect = readIosNodeRect(node);
+    const rect = readAxeNodeRect(node);
     if (!isPressableRect(rect)) continue;
     const point = centerOfRect(rect);
     buttons.push({ label, x: point.x, y: point.y, role: classifyAlertButtonRole(label) });

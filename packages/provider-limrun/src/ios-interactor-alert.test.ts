@@ -8,7 +8,7 @@ import {
   limrunAttAlertTree,
 } from './alert-detection.fixtures.ts';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 // The legs load `./alert.ts` per call (ADR-0019 laziness inside the provider), and that module
 // carries the shared tree-alert driver from `@agent-device/capture-kit/alert-tree-driver`. Warm
@@ -22,7 +22,7 @@ await import('./alert.ts');
  * These cases resolve on the first probe each; budget loops are pinned with driven clocks in
  * `alert.test.ts`, so nothing here waits production time.
  */
-function sessionWithTrees(trees: Array<IosTreeNode | IosTreeNode[]>) {
+function sessionWithTrees(trees: Array<AxeTreeNode | AxeTreeNode[]>) {
   const elementTree = vi.fn(async () => {
     const next = trees.length > 1 ? trees.shift() : trees[0];
     return [next];

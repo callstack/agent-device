@@ -5,7 +5,7 @@ import {
   readLimrunTextEntryFocus,
   readLimrunUnambiguousTapTargets,
 } from './text-entry-focus.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 type TreeRect = Readonly<{ x: number; y: number; width: number; height: number }>;
 
@@ -23,7 +23,7 @@ const EDITING_TRAITS = Object.freeze([
 function textField(
   label: string,
   options: { editing?: boolean; rect?: TreeRect | null; traits?: string[] } = {},
-): IosTreeNode {
+): AxeTreeNode {
   return {
     type: 'TextField',
     AXLabel: label,
@@ -37,11 +37,11 @@ function textField(
   };
 }
 
-function tree(...children: IosTreeNode[]): IosTreeNode {
+function tree(...children: AxeTreeNode[]): AxeTreeNode {
   return { type: 'Application', AXLabel: 'App', children };
 }
 
-function targetsAt(point: Readonly<{ x: number; y: number }>, ...before: IosTreeNode[]) {
+function targetsAt(point: Readonly<{ x: number; y: number }>, ...before: AxeTreeNode[]) {
   return readLimrunUnambiguousTapTargets(tree(...before), point.x, point.y);
 }
 
@@ -251,7 +251,7 @@ const traitClassification = JSON.parse(
     limrun?: {
       fact: string;
       seam: string;
-      input: IosTreeNode;
+      input: AxeTreeNode;
       expected: { focusWitness: boolean };
     };
   }>;

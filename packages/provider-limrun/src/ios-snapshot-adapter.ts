@@ -1,25 +1,26 @@
-import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import {
-  createIosSnapshotAcquisition,
-  resolveIosViewportEvidenceFromRoots,
-} from '@agent-device/capture-kit/ios-snapshot-acquisition';
+  flattenAxeTree,
+  readAxeTreeViewport,
+  type AxeTreeNode,
+} from '@agent-device/capture-kit/ios-axe-tree';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
+import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { LimrunIosSession } from './ios.ts';
 import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { expandLimrunCollapsedTabBar } from './ios-collapsed-tab-bar.ts';
-import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 export async function captureLimrunIosSnapshot(
   session: Pick<LimrunIosSession, 'client' | 'instanceId'>,
 ): Promise<SnapshotRuntimeAcquiredResult> {
-  const reported = (await session.client.elementTree()) as IosTreeNode | IosTreeNode[];
+  const reported = (await session.client.elementTree()) as AxeTreeNode | AxeTreeNode[];
   const viewport = readLimrunViewport(reported, session.client.deviceInfo);
   const { tree, probeFailure } = await expandLimrunCollapsedTabBar(
     reported,
     viewport.kind === 'missing' ? null : viewport.rect,
-    async (point) => (await session.client.elementTree(point)) as IosTreeNode | IosTreeNode[],
+    async (point) => (await session.client.elementTree(point)) as AxeTreeNode | AxeTreeNode[],
   );
-  const nodes = flattenIosTree(tree).map((node) => interpretIosNode(node));
+  const nodes = flattenAxeTree(tree).map((node) => interpretIosNode(node));
   return createIosSnapshotAcquisition({
     producer: 'limrun-ios-tree',
     ...acquireProviderKeyboard({
@@ -33,48 +34,13 @@ export async function captureLimrunIosSnapshot(
 }
 
 function readLimrunViewport(
-  tree: IosTreeNode | IosTreeNode[],
+  tree: AxeTreeNode | AxeTreeNode[],
   deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,
 ) {
-  const treeEvidence = resolveIosViewportEvidenceFromRoots(
-    (Array.isArray(tree) ? tree : [tree]).map(limrunViewportRoot),
-  );
-  if (treeEvidence?.kind === 'reported') {
-    return { kind: 'derived' as const, rect: treeEvidence.rect };
-  }
+  const treeEvidence = readAxeTreeViewport(tree);
+  if (treeEvidence?.kind === 'derived') return treeEvidence;
   return readLimrunDeviceInfoViewport(deviceInfo);
 }
-
-function limrunViewportRoot(node: IosTreeNode) {
-  const rawRect = node.rect ?? node.frame;
-  const rect = completeRect(rawRect);
-  return {
-    type: node.elementType ?? node.type ?? node.role,
-    ...(rect ? { rect } : {}),
-    rectStatus: viewportStatus(rawRect, rect),
-  };
-}
-
-function completeRect(rect: IosTreeNode['rect']) {
-  if (!isCompleteRect(rect)) return undefined;
-  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-}
-
-function isCompleteRect(
-  rect: IosTreeNode['rect'],
-): rect is { x: number; y: number; width: number; height: number } {
-  return [rect?.x, rect?.y, rect?.width, rect?.height].every(isFiniteNumber);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-const viewportStatus = (
-  rawRect: IosTreeNode['rect'],
-  rect: ReturnType<typeof completeRect>,
-): 'reported' | 'invalid' | 'not-provided' =>
-  !rawRect || !rect ? 'not-provided' : rect.width > 0 && rect.height > 0 ? 'reported' : 'invalid';
 
 function readLimrunDeviceInfoViewport(
   deviceInfo: { screenWidth?: number; screenHeight?: number } | undefined,

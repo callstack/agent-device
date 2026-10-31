@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 const FIELD_RECT = Object.freeze({ x: 24, y: 142, width: 354, height: 56 });
 
-function emailField(editing: boolean): IosTreeNode {
+function emailField(editing: boolean): AxeTreeNode {
   return {
     type: 'TextField',
     AXLabel: 'Email',
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function sessionWithTrees(trees: IosTreeNode[]) {
+function sessionWithTrees(trees: AxeTreeNode[]) {
   const calls: string[] = [];
   let reads = 0;
   const client = {

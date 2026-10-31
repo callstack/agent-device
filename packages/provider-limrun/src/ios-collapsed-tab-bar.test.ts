@@ -12,7 +12,7 @@ import {
   limrunScreenTree,
   limrunTabButton,
 } from './ios-snapshot-adapter.fixtures.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -224,7 +224,7 @@ test('Limrun stops waiting for a hung hit-test well before the SDK request timeo
   const { session } = createLimrunHitTestSession(limrunCollapsedTabBarTree(), LIMRUN_TAB_BUTTONS, {
     hitTest: (_point, hit) => {
       calls += 1;
-      return calls === 2 ? new Promise<IosTreeNode>(() => {}) : Promise.resolve(hit);
+      return calls === 2 ? new Promise<AxeTreeNode>(() => {}) : Promise.resolve(hit);
     },
   });
   let result: SnapshotRuntimeAcquiredResult | undefined;
@@ -260,7 +260,7 @@ function dockedScreen(container: GoldenRect) {
 
 function dockedSession(
   container: GoldenRect,
-  hit: (point: { x: number; y: number }) => IosTreeNode[],
+  hit: (point: { x: number; y: number }) => AxeTreeNode[],
 ) {
   const screen = dockedScreen(container);
   const tree = limrunScreenTree([limrunEmptyGroup(container, 'Tab Bar')], screen);
@@ -318,7 +318,7 @@ const traitClassification = JSON.parse(
     limrun?: {
       fact: string;
       seam: string;
-      input: IosTreeNode;
+      input: AxeTreeNode;
       expected: { tabCandidate: boolean };
     };
   }>;

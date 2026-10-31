@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 import { expect, test, vi } from 'vitest';
 import { captureLimrunIosSnapshot } from './ios-snapshot-adapter.ts';
 import {
@@ -107,7 +107,7 @@ const nativeStates = JSON.parse(
     'utf8',
   ),
 ) as {
-  cases: { name: string; input: IosTreeNode; expected: Record<string, boolean> }[];
+  cases: { name: string; input: AxeTreeNode; expected: Record<string, boolean> }[];
 };
 for (const row of nativeStates.cases.filter(
   ({ input }) => !['checked', 'password', 'editable'].some((key) => key in input),
@@ -221,7 +221,7 @@ const traitClassification = JSON.parse(
 ) as {
   cases: Array<{
     name: string;
-    limrun?: { fact: string; seam: string; input: IosTreeNode; expected: { selected?: boolean } };
+    limrun?: { fact: string; seam: string; input: AxeTreeNode; expected: { selected?: boolean } };
   }>;
 };
 for (const row of traitClassification.cases.filter((entry) => entry.limrun?.seam === 'selection')) {

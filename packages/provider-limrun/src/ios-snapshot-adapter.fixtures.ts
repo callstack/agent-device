@@ -1,12 +1,12 @@
 import type { LimrunIosSession } from './ios.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 export const LIMRUN_SNAPSHOT_SCREEN: Readonly<{ width: number; height: number }> = Object.freeze({
   width: 320,
   height: 240,
 });
 
-export function limrunSnapshotTree(): IosTreeNode {
+export function limrunSnapshotTree(): AxeTreeNode {
   return {
     elementType: 'Application',
     label: 'App',
@@ -53,7 +53,7 @@ export function limrunSnapshotTree(): IosTreeNode {
 }
 
 export function createLimrunSnapshotSession(
-  tree: IosTreeNode | IosTreeNode[] = limrunSnapshotTree(),
+  tree: AxeTreeNode | AxeTreeNode[] = limrunSnapshotTree(),
   screen = LIMRUN_SNAPSHOT_SCREEN,
 ): Pick<LimrunIosSession, 'client' | 'instanceId'> {
   return {
@@ -67,7 +67,7 @@ export function createLimrunSnapshotSession(
 
 type Point = { x: number; y: number };
 type Screen = { width: number; height: number };
-type Frame = NonNullable<IosTreeNode['frame']>;
+type Frame = NonNullable<AxeTreeNode['frame']>;
 
 export const IPHONE_SCREEN: Readonly<Screen> = Object.freeze({ width: 402, height: 874 });
 export const IPHONE_TAB_BAR_FRAME: Readonly<Frame> = Object.freeze({
@@ -79,9 +79,9 @@ export const IPHONE_TAB_BAR_FRAME: Readonly<Frame> = Object.freeze({
 
 /** An app screen whose root holds `children` above one line of text. */
 export function limrunScreenTree(
-  children: IosTreeNode[],
+  children: AxeTreeNode[],
   screen: Screen = IPHONE_SCREEN,
-): IosTreeNode[] {
+): AxeTreeNode[] {
   return [
     {
       type: 'Application',
@@ -100,7 +100,7 @@ export function limrunScreenTree(
 }
 
 /** A childless `Group`, the way a live Limrun iPhone reports the iOS 26 tab bar. */
-export function limrunEmptyGroup(frame: Frame, label?: string): IosTreeNode {
+export function limrunEmptyGroup(frame: Frame, label?: string): AxeTreeNode {
   return {
     type: 'Group',
     ...(label ? { AXLabel: label } : {}),
@@ -110,7 +110,7 @@ export function limrunEmptyGroup(frame: Frame, label?: string): IosTreeNode {
   };
 }
 
-export function limrunCollapsedTabBarTree(barFrame: Frame = IPHONE_TAB_BAR_FRAME): IosTreeNode[] {
+export function limrunCollapsedTabBarTree(barFrame: Frame = IPHONE_TAB_BAR_FRAME): AxeTreeNode[] {
   return limrunScreenTree([limrunEmptyGroup(barFrame, 'Tab Bar')]);
 }
 
@@ -118,7 +118,7 @@ export function limrunCollapsedTabBarTree(barFrame: Frame = IPHONE_TAB_BAR_FRAME
  * The five tab buttons a live Limrun iPhone 16 Pro (iOS 26.4) returned from `elementTree(point)`
  * inside the test app's tab bar, with Home selected.
  */
-export const LIMRUN_TAB_BUTTONS: readonly IosTreeNode[] = [
+export const LIMRUN_TAB_BUTTONS: readonly AxeTreeNode[] = [
   limrunTabButton('Home', { x: 25, y: 795, width: 74, height: 54 }, true),
   limrunTabButton('Catalog', {
     x: 93.41666666666666,
@@ -131,7 +131,7 @@ export const LIMRUN_TAB_BUTTONS: readonly IosTreeNode[] = [
   limrunTabButton('Settings', { x: 299, y: 795, width: 78, height: 54 }),
 ];
 
-export function limrunTabButton(label: string, frame: Frame, selected = false): IosTreeNode {
+export function limrunTabButton(label: string, frame: Frame, selected = false): AxeTreeNode {
   return {
     type: 'RadioButton',
     role: 'AXRadioButton',
@@ -152,16 +152,16 @@ export function limrunTabButton(label: string, frame: Frame, selected = false): 
  * `hitTest` replaces that answer for a point, for example with a rejection.
  */
 export function createLimrunHitTestSession(
-  tree: IosTreeNode[],
-  hits: readonly IosTreeNode[],
+  tree: AxeTreeNode[],
+  hits: readonly AxeTreeNode[],
   options: {
     screen?: Screen;
-    hitTest?: (point: Point, hit: IosTreeNode) => Promise<IosTreeNode | IosTreeNode[]>;
+    hitTest?: (point: Point, hit: AxeTreeNode) => Promise<AxeTreeNode | AxeTreeNode[]>;
   } = {},
 ) {
   const probes: Point[] = [];
-  const deepestHit = (nodes: readonly IosTreeNode[], point: Point) => {
-    let hit: IosTreeNode | undefined;
+  const deepestHit = (nodes: readonly AxeTreeNode[], point: Point) => {
+    let hit: AxeTreeNode | undefined;
     for (const node of nodes) {
       if (!frameHolds(node.frame, point)) continue;
       hit = deepestHit(node.children ?? [], point) ?? node;
@@ -179,7 +179,7 @@ export function createLimrunHitTestSession(
   return { session, probes };
 }
 
-function frameHolds(frame: IosTreeNode['frame'], point: Point): boolean {
+function frameHolds(frame: AxeTreeNode['frame'], point: Point): boolean {
   return (
     frame?.x !== undefined &&
     frame.y !== undefined &&

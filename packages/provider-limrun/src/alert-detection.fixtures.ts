@@ -1,4 +1,4 @@
-import type { IosTreeNode } from './snapshot.ts';
+import type { AxeTreeNode } from '@agent-device/capture-kit/ios-axe-tree';
 
 /**
  * Trees shaped from live Limrun iOS instances (issue #3349 evidence). The shapes are what the
@@ -22,7 +22,7 @@ export const LIMRUN_ALERT_SCREEN: Readonly<{ width: number; height: number }> = 
   height: 874,
 });
 
-function alertRoot(children: IosTreeNode[]): IosTreeNode {
+function alertRoot(children: AxeTreeNode[]): AxeTreeNode {
   return {
     type: 'Application',
     role: 'AXApplication',
@@ -35,7 +35,7 @@ function alertRoot(children: IosTreeNode[]): IosTreeNode {
 }
 
 /** Positive control: the live ATT prompt tree — its own root, host pid, two texts, two buttons. */
-export function limrunAttAlertTree(): IosTreeNode {
+export function limrunAttAlertTree(): AxeTreeNode {
   return alertRoot([
     {
       type: 'StaticText',
@@ -75,7 +75,7 @@ export function limrunAttAlertTree(): IosTreeNode {
 }
 
 /** The same alert with its buttons removed: a text sheet is not an actionable alert. */
-export function limrunAlertTreeWithoutButtons(): IosTreeNode {
+export function limrunAlertTreeWithoutButtons(): AxeTreeNode {
   const root = limrunAttAlertTree();
   return { ...root, children: (root.children ?? []).filter((n) => n.role !== 'AXButton') };
 }
@@ -85,7 +85,7 @@ export function limrunAlertTreeWithoutButtons(): IosTreeNode {
  * "Allow While Using App"). The capture itself never marks a preferred grant; the shared
  * preference table does, so `alert accept` presses the lasting grant rather than refusing.
  */
-export function limrunLocationAlertTree(): IosTreeNode {
+export function limrunLocationAlertTree(): AxeTreeNode {
   return alertRoot([
     {
       type: 'StaticText',
@@ -131,7 +131,7 @@ export function limrunLocationAlertTree(): IosTreeNode {
  * ignored or the sheet is mid-transition — the dialog is still visibly up, yet nothing on it
  * can be pressed.
  */
-export function limrunAlertTreeWithUnpressableButtons(): IosTreeNode {
+export function limrunAlertTreeWithUnpressableButtons(): AxeTreeNode {
   const root = limrunAttAlertTree();
   return {
     ...root,
@@ -169,7 +169,7 @@ export function limrunAlertTreeWithUnpressableButtons(): IosTreeNode {
 }
 
 /** An alert whose only choices are ambiguous: no label classifies as accept or dismiss. */
-export function limrunAlertAmbiguousButtonsTree(): IosTreeNode {
+export function limrunAlertAmbiguousButtonsTree(): AxeTreeNode {
   const root = limrunAttAlertTree();
   return {
     ...root,
@@ -198,7 +198,7 @@ export function limrunAlertAmbiguousButtonsTree(): IosTreeNode {
 }
 
 /** The live app home screen: app root with the app pid, plus SpringBoard status-bar nodes. */
-export function limrunAppScreenTree(): IosTreeNode {
+export function limrunAppScreenTree(): AxeTreeNode {
   return {
     type: 'Application',
     role: 'AXApplication',
@@ -262,7 +262,7 @@ export function limrunAppScreenTree(): IosTreeNode {
  * Discard). It shares the flat text+button shape of a system alert but rides the app's root
  * with the app's pid, so the alert legs must refuse to treat it as one.
  */
-export function limrunAppAlertDialogTree(): IosTreeNode {
+export function limrunAppAlertDialogTree(): AxeTreeNode {
   const home = limrunAppScreenTree();
   return {
     ...home,
@@ -306,7 +306,7 @@ export function limrunAppAlertDialogTree(): IosTreeNode {
 
 /** SpringBoard's home screen: a blank-label root, but full of launch icons rather than a dialog.
  * Root and icons share SpringBoard's pid, as the live home capture reports it. */
-export function limrunHomeScreenTree(): IosTreeNode {
+export function limrunHomeScreenTree(): AxeTreeNode {
   return {
     ...alertRoot([
       {
@@ -336,7 +336,7 @@ export function limrunHomeScreenTree(): IosTreeNode {
  * The app screen and the ATT alert as sibling roots — what a capture with a live system alert
  * over an app looks like. The alert is the actionable one here; the app screen is background.
  */
-export function limrunAlertOverlayOnAppScreenTree(): IosTreeNode[] {
+export function limrunAlertOverlayOnAppScreenTree(): AxeTreeNode[] {
   return [limrunAppScreenTree(), limrunAttAlertTree()];
 }
 
@@ -348,7 +348,7 @@ export function limrunAlertOverlayOnAppScreenTree(): IosTreeNode[] {
  * separate is an app dialog under a blanked root in a capture with no foreign-pid node at all;
  * that is what the label-strict acting legs backstop.
  */
-export function limrunBlankRootAppDialogLookalikeTree(): IosTreeNode {
+export function limrunBlankRootAppDialogLookalikeTree(): AxeTreeNode {
   const dialog = limrunAppAlertDialogTree();
   return { ...dialog, AXLabel: ' ' };
 }

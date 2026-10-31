@@ -2,7 +2,11 @@ import type { CloudTextEntryReadiness } from '@agent-device/contracts/interactor
 import { AppError } from '@agent-device/kernel/errors';
 import { type Rect } from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readAxeNodeChildren,
+  readAxeNodeRect,
+  type AxeTreeNode,
+} from '@agent-device/capture-kit/ios-axe-tree';
 
 /** The trait a Limrun iOS instance puts on the element that owns text entry. */
 const LIMRUN_IOS_TEXT_ENTRY_TRAIT = 'IsEditing';
@@ -44,12 +48,12 @@ function textEntryFocusNotObservedError(
 }
 
 /** A node with a rect a point can be tested against, which is what a witness needs. */
-type LimrunFramedNode = Readonly<{ node: IosTreeNode; identity: string; rect: Rect }>;
+type LimrunFramedNode = Readonly<{ node: AxeTreeNode; identity: string; rect: Rect }>;
 
-function readFramedNodes(tree: IosTreeNode | IosTreeNode[]): LimrunFramedNode[] {
+function readFramedNodes(tree: AxeTreeNode | AxeTreeNode[]): LimrunFramedNode[] {
   const framed: LimrunFramedNode[] = [];
   for (const node of flattenIosNodes(tree)) {
-    const rect = readIosNodeRect(node);
+    const rect = readAxeNodeRect(node);
     if (isPositiveFiniteRect(rect)) {
       framed.push({ node, identity: limrunTextEntryIdentity(node), rect });
     }
@@ -71,7 +75,7 @@ function countIdentitySightings(framed: readonly LimrunFramedNode[]): Map<string
  * trait, so the smallest rect wins.
  */
 export function readLimrunTextEntryFocus(
-  tree: IosTreeNode | IosTreeNode[],
+  tree: AxeTreeNode | AxeTreeNode[],
 ): LimrunTextEntryFocus | null {
   const framed = readFramedNodes(tree);
   const sightings = countIdentitySightings(framed);
@@ -98,7 +102,7 @@ export function readLimrunTextEntryFocus(
  * one that was under the finger.
  */
 export function readLimrunUnambiguousTapTargets(
-  tree: IosTreeNode | IosTreeNode[],
+  tree: AxeTreeNode | AxeTreeNode[],
   x: number,
   y: number,
 ): ReadonlySet<string> {
@@ -163,18 +167,18 @@ function witnessesThisTap(
   return focus.identity !== undefined && targetsAtPoint.has(focus.identity);
 }
 
-function flattenIosNodes(tree: IosTreeNode | IosTreeNode[]): IosTreeNode[] {
-  const nodes: IosTreeNode[] = [];
-  const visit = (node: IosTreeNode) => {
+function flattenIosNodes(tree: AxeTreeNode | AxeTreeNode[]): AxeTreeNode[] {
+  const nodes: AxeTreeNode[] = [];
+  const visit = (node: AxeTreeNode) => {
     nodes.push(node);
-    for (const child of readIosNodeChildren(node)) visit(child);
+    for (const child of readAxeNodeChildren(node)) visit(child);
   };
   for (const root of Array.isArray(tree) ? tree : [tree]) visit(root);
   return nodes;
 }
 
 /** What two reads of the same element agree on. The provider hands out no element handle. */
-function limrunTextEntryIdentity(node: IosTreeNode): string {
+function limrunTextEntryIdentity(node: AxeTreeNode): string {
   return [
     node.pid ?? '',
     node.type ?? node.elementType ?? '',
