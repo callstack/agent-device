@@ -153,12 +153,25 @@ export async function actOnAppleAlert(
       if (!isAlertRetriableError(error)) break;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
+    if (!canHoldRead(start, ALERT_ACTION_RETRY_MS)) break;
   }
   throw withAlertFallbackHint(lastError);
 }
 
+/**
+ * The least a runner read can be handed and still answer. A retry started with less is cut off by
+ * the runner's own main-thread timeout, which is a read failure, not a typed absence: the window
+ * ending on such a read would report "could not read" for a screen that simply had no alert.
+ */
+const MIN_ALERT_READ_BUDGET_MS = 500;
+
 function remainingBudgetMs(start: number, timeoutMs: number): number {
   return Math.max(1, timeoutMs - (Date.now() - start));
+}
+
+/** True when a retry after the last typed absence still has room for a whole read. */
+function canHoldRead(start: number, timeoutMs: number): boolean {
+  return remainingBudgetMs(start, timeoutMs) >= MIN_ALERT_READ_BUDGET_MS;
 }
 
 function withAlertFallbackHint(error: unknown): unknown {
