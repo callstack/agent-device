@@ -56,14 +56,15 @@ type SimulatorScreenshotFlowDeps = {
    * actually taken. `sourcePixelDensity` is that image's own measured scale — the panel the host
    * named for a `simctl` capture, or what the runner reported for a runner capture. Undefined means
    * nobody measured the source: a single-panel `simctl` capture, or a multi-panel device whose
-   * display inventory never resolved, and the scale probe is the answer either way.
+   * display inventory never resolved, and the scale probe is the answer either way. Resolves to
+   * the source's scale when the file keeps its pixels (`native`), so a caller can map them to points.
    */
   normalizeDensity: (
     device: DeviceInfo,
     outPath: string,
-    pixelDensity: number | undefined,
+    pixelDensity: number | 'native' | undefined,
     sourcePixelDensity: number | undefined,
-  ) => Promise<void>;
+  ) => Promise<number | undefined>;
   captureWithRunner: (
     device: DeviceInfo,
     outPath: string,
@@ -80,7 +81,7 @@ type SimulatorScreenshotFlowOptions = {
   env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
-  pixelDensity?: number;
+  pixelDensity?: number | 'native';
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
   skipIosSimulatorBootCheck?: boolean;
@@ -149,10 +150,16 @@ export async function captureSimulatorScreenshotWithFallback(
   // A foldable lights one panel at a time, so the capture must name the panel the
   // system is currently showing rather than accept simctl's implicit default.
   const { display, displayRotation } = await deps.resolveCaptureTarget(device);
-  const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
+  const captureFacts: { -readonly [K in keyof ScreenshotCaptureFacts]: ScreenshotCaptureFacts[K] } =
+    displayRotation ? { displayRotation } : {};
+  const noteDensity = (sourcePixelDensity: number | undefined) => {
+    if (sourcePixelDensity !== undefined) captureFacts.sourcePixelDensity = sourcePixelDensity;
+  };
   const captureAndNormalize = async () => {
     await deps.captureWithRetry(device, outPath, display);
-    await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
+    noteDensity(
+      await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale),
+    );
   };
   let restoreStatusBar = async () => {};
   if (options.normalizeStatusBar === true) {
@@ -197,7 +204,9 @@ export async function captureSimulatorScreenshotWithFallback(
     // that image at, so normalization reads the source instead of applying a panel the host guessed.
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
-    await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
+    noteDensity(
+      await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint),
+    );
     return captureFacts;
   } finally {
     await restoreStatusBar().catch((error) =>
@@ -468,21 +477,23 @@ function shouldEnsureBootedAfterSimulatorScreenshotFailure(error: unknown): bool
 async function normalizeIosSimulatorScreenshotDensity(
   device: DeviceInfo,
   outPath: string,
-  pixelDensity: number | undefined,
+  pixelDensity: number | 'native' | undefined,
   sourcePixelDensity?: number,
-): Promise<void> {
+): Promise<number | undefined> {
   // Both the captured panel's `pointScale` and the runner's reported scale describe the image that
   // was actually taken. `SIMULATOR_MAINSCREEN_SCALE` describes one fixed panel, so on a foldable it
   // can disagree with the panel that was captured, and it is only ever consulted when nothing
   // measured the source — which a multi-panel capture and every runner capture do.
   const measuredSourcePixelDensity =
     sourcePixelDensity ?? (await readIosSimulatorMainScreenScale(device));
+  if (pixelDensity === 'native') return measuredSourcePixelDensity;
   const targetSize = computeDensityScaledScreenshotSize(
     await readPngSize(outPath),
     measuredSourcePixelDensity,
     pixelDensity,
   );
   if (targetSize) await resizePngFile(outPath, targetSize.width, targetSize.height);
+  return undefined;
 }
 
 async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<number> {

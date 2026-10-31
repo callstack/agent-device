@@ -63,7 +63,11 @@ export async function resolveScreenshotGenericExecution(
   const { req, session } = params;
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
-  assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotPixelDensity(
+    session.device,
+    req.flags?.screenshotPixelDensity,
+    req.flags?.screenshotNativeDensity,
+  );
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -154,6 +158,7 @@ export async function captureScreenshotArtifact(
 type CapturedScreenshot = Readonly<{
   path: string;
   displayRotation?: DeviceRotation;
+  sourcePixelDensity?: number;
   message?: string;
   warnings?: string[];
 }>;
@@ -228,6 +233,8 @@ async function executeScreenshot(
       device: session.device,
       path: captured.path,
       requestedPixelDensity: flags?.screenshotPixelDensity,
+      nativeDensity: flags?.screenshotNativeDensity,
+      sourcePixelDensity: captured.sourcePixelDensity,
       scale: flags?.screenshotScale,
     })),
   };
@@ -355,13 +362,17 @@ function createBoundScreenshotBackend(
     captureScreenshot: async (_context, outPath, options) => {
       const resolved = screenshotOptionsFromFlags({
         ...dispatchContext,
-        ...screenshotFlagsFromOptions(options),
+        ...screenshotFlagsFromOptions({
+          ...options,
+          pixelDensity: options?.pixelDensity === 'native' ? undefined : options?.pixelDensity,
+          nativeDensity: options?.pixelDensity === 'native' ? true : undefined,
+        }),
       });
       const facts = await captureScreenshot({
         outPath,
         options: {
           appBundleId: dispatchContext.appBundleId,
-          pixelDensity: resolved.pixelDensity,
+          pixelDensity: resolved.nativeDensity ? 'native' : resolved.pixelDensity,
           fullscreen: resolved.fullscreen,
           normalizeStatusBar: resolved.normalizeStatusBar,
           stabilize: resolved.stabilize,
@@ -389,7 +400,14 @@ function createBoundScreenshotBackend(
         });
         crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
       }
-      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
+      return facts.displayRotation || facts.sourcePixelDensity !== undefined
+        ? {
+            ...(facts.displayRotation ? { displayRotation: facts.displayRotation } : {}),
+            ...(facts.sourcePixelDensity !== undefined
+              ? { pixelDensity: facts.sourcePixelDensity }
+              : {}),
+          }
+        : undefined;
     },
   };
 }

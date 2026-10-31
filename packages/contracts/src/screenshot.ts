@@ -85,6 +85,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'overlayRefs',
   'screenshotCropOn',
   'screenshotPixelDensity',
+  'screenshotNativeDensity',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -94,6 +95,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
   'screenshotCropOn',
   'screenshotPixelDensity',
+  'screenshotNativeDensity',
   'screenshotFullscreen',
   'screenshotScale',
   'screenshotNoStabilize',
@@ -133,6 +135,16 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--pixel-density <n>',
     usageDescription:
       'Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators)',
+    projectConfig: true,
+    recorded: true,
+  },
+  {
+    key: 'screenshotNativeDensity',
+    names: ['--native-density'],
+    type: 'boolean',
+    usageLabel: '--native-density',
+    usageDescription:
+      "Screenshot: keep the display's own pixels instead of 1x points (currently supported on iOS simulators)",
     projectConfig: true,
     recorded: true,
   },
@@ -184,6 +196,7 @@ const SCREENSHOT_SCRIPT_BOOLEAN_FLAGS = [
   { tokens: ['--fullscreen', '--full', '-f'], key: 'screenshotFullscreen' },
   { tokens: ['--no-stabilize'], key: 'screenshotNoStabilize' },
   { tokens: ['--normalize-status-bar'], key: 'screenshotNormalizeStatusBar' },
+  { tokens: ['--native-density'], key: 'screenshotNativeDensity' },
 ] as const;
 
 const SCREENSHOT_SCRIPT_INT_FLAGS = [
@@ -217,6 +230,7 @@ export type ScreenshotRequestFlags = {
   overlayRefs?: boolean;
   screenshotCropOn?: string;
   screenshotPixelDensity?: number;
+  screenshotNativeDensity?: boolean;
   screenshotFullscreen?: boolean;
   screenshotScale?: number;
   screenshotNoStabilize?: boolean;
@@ -226,6 +240,7 @@ export type ScreenshotRequestFlags = {
 export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
   | 'screenshotPixelDensity'
+  | 'screenshotNativeDensity'
   | 'screenshotFullscreen'
   | 'screenshotNoStabilize'
   | 'screenshotNormalizeStatusBar'
@@ -235,6 +250,7 @@ export type ScreenshotRuntimeFlags = Pick<
   ScreenshotRequestFlags,
   | 'screenshotCropOn'
   | 'screenshotPixelDensity'
+  | 'screenshotNativeDensity'
   | 'screenshotFullscreen'
   | 'screenshotScale'
   | 'screenshotNoStabilize'
@@ -245,6 +261,7 @@ export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  nativeDensity?: boolean;
   fullscreen?: boolean;
   scale?: number;
   stabilize?: boolean;
@@ -255,6 +272,7 @@ export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
   cropOn?: string;
   pixelDensity?: number;
+  nativeDensity?: boolean;
   fullscreen?: boolean;
   scale?: number;
   stabilize?: boolean;
@@ -268,6 +286,7 @@ export function screenshotOptionsFromFlags(
     overlayRefs: flags?.overlayRefs,
     cropOn: flags?.screenshotCropOn,
     pixelDensity: flags?.screenshotPixelDensity,
+    nativeDensity: flags?.screenshotNativeDensity,
     fullscreen: flags?.screenshotFullscreen,
     scale: flags?.screenshotScale,
     stabilize:
@@ -283,6 +302,7 @@ export function screenshotFlagsFromOptions(
     overlayRefs: options.overlayRefs,
     screenshotCropOn: options.screenshotCropOn ?? options.cropOn,
     screenshotPixelDensity: options.screenshotPixelDensity ?? options.pixelDensity,
+    screenshotNativeDensity: options.screenshotNativeDensity ?? options.nativeDensity,
     screenshotFullscreen: options.screenshotFullscreen ?? options.fullscreen,
     screenshotScale: options.screenshotScale,
     screenshotNoStabilize:
@@ -324,6 +344,7 @@ export function appendScreenshotScriptFlags(
   if (typeof flags?.screenshotPixelDensity === 'number') {
     parts.push('--pixel-density', String(flags.screenshotPixelDensity));
   }
+  if (flags?.screenshotNativeDensity) parts.push('--native-density');
   if (flags?.screenshotFullscreen) parts.push('--fullscreen');
   if (typeof flags?.screenshotScale === 'number') {
     parts.push('--scale', String(flags.screenshotScale));

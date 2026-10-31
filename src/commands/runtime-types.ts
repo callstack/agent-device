@@ -50,6 +50,7 @@ export type ScreenshotCommandOptions = CommandContext & {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   pixelDensity?: number;
+  nativeDensity?: boolean;
   scale?: number;
   stabilize?: boolean;
   normalizeStatusBar?: boolean;

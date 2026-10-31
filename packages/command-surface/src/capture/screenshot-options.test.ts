@@ -131,6 +131,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
@@ -145,6 +146,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'overlayRefs',
     'screenshotCropOn',
     'screenshotPixelDensity',
+    'screenshotNativeDensity',
     'screenshotFullscreen',
     'screenshotScale',
     'screenshotNoStabilize',
@@ -164,4 +166,15 @@ test('explicit screenshot stabilization survives SDK projection and script recor
     nextIndex: 0,
   });
   assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
+});
+
+test('native density survives the trip through flags and options', () => {
+  assert.equal(
+    screenshotOptionsFromFlags({ screenshotNativeDensity: true }).nativeDensity,
+    true,
+  );
+  assert.equal(
+    screenshotFlagsFromOptions({ nativeDensity: true }).screenshotNativeDensity,
+    true,
+  );
 });
