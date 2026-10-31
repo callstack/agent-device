@@ -10,15 +10,15 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 - [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
 - [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
 - [Revyl](/docs/revyl): iOS simulators and Android emulators rented from Revyl's execution API.
-- [NoMac](/docs/nomac): direct iOS simulators, iPhone and iPad.
+- [NoMac](/docs/nomac): direct iOS simulators, iPhones and an iPad.
 
 ## Compare providers
 
 | | BrowserStack | AWS Device Farm | TestMu AI | Limrun | Revyl | NoMac |
 | --- | --- | --- | --- | --- | --- | --- |
-| Devices | Android and iOS real devices | Android and iOS real devices | Android emulators and iOS simulators by default; real devices with `--provider-device-type real` | Android emulators and iOS simulators | Android emulators and iOS simulators | iOS 27 simulators: iPhone 17 Pro and iPad Pro 11-inch (M5) |
+| Devices | Android and iOS real devices | Android and iOS real devices | Android emulators and iOS simulators by default; real devices with `--provider-device-type real` | Android emulators and iOS simulators | Android emulators and iOS simulators | iOS 27 simulators: iPhone 17 Pro, iPhone 17 Pro Max and iPad Pro 11-inch (M5) |
 | Ships as | Built in | Built in; needs the AWS CLI | The `@agent-device/testmu` plugin | Built in | The `@agent-device/revyl` plugin | The `@agent-device/nomac` plugin |
-| Credentials | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY` | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY` | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance | `REVYL_API_KEY` (optional `REVYL_API_URL` for another Revyl backend) | `NOMAC_API_KEY` |
+| Credentials | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY` | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY` | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance | `REVYL_API_KEY` (optional `REVYL_API_URL` for another Revyl backend) | `NOMAC_API_KEY` (optional `NOMAC_API_URL`) |
 | Device allocated on | `open` | `open` | `open` | First device command, such as `install` or `open` | First device command, such as `open` | First device command, such as `install` or `open` |
 | App source | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset | `--provider-app`: a public HTTPS URL only, installed when the device starts | `install <id> <path>` with a Simulator `.app`, `.zip` or `.tar.gz` |
 | Artifacts after `close` | Video, Appium and device logs, dashboard and public links | Video and log files, once AWS finalizes them | Video, Appium, device, network, and command logs, screenshots, dashboard link | None | None | None through agent-device; NoMac keeps each session's replay on its own page |

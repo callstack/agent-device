@@ -7,7 +7,7 @@ export type NomacPluginOptions = {
   apiKey?: string;
   /** NoMac's address; https://nomac.app unless `NOMAC_API_URL` or this says otherwise. */
   baseUrl?: string;
-  /** The phone's limits; NoMac's defaults (2 hours, 10 idle minutes, $5 spend cap) when left out. */
+  /** The phone's limits: its longest run, its idle timeout and its spend cap; NoMac's defaults when left out. */
   maxDurationSeconds?: number;
   idleTimeoutSeconds?: number;
   spendCapMicrounits?: string;
@@ -17,18 +17,32 @@ const loadConnection = async () => await import('./connection.ts');
 
 /**
  * NoMac Simulator as an agent-device provider: an iPhone or iPad Simulator on a NoMac Mac per lease,
- * $0.80 an hour by the minute. The key comes from `options.apiKey`, else `NOMAC_API_KEY`; only a key
- * read from the environment is part of the credential fingerprint.
+ * billed per minute by NoMac. The key comes from `options.apiKey`, else `NOMAC_API_KEY`, and NoMac's
+ * address from `options.baseUrl`, else `NOMAC_API_URL`. The daemon fingerprints only the variables the
+ * plugin still reads from the environment: the key and the address, unless the options carry them.
  */
 function nomac(options: NomacPluginOptions = {}): AgentDevicePlugin {
+  // The options stand in for the environment in every callback: connect, verify and the runtime.
   const withKey = (host: ProviderPluginHost): ProviderPluginHost =>
-    options.apiKey
-      ? { ...host, env: { ...host.env, [NOMAC_CREDENTIAL_VARIABLE]: options.apiKey } }
+    options.apiKey || options.baseUrl
+      ? {
+          ...host,
+          env: {
+            ...host.env,
+            ...(options.apiKey ? { [NOMAC_CREDENTIAL_VARIABLE]: options.apiKey } : {}),
+            ...(options.baseUrl ? { [NOMAC_BASE_URL_VARIABLE]: options.baseUrl } : {}),
+          },
+        }
       : host;
   return {
     apiVersion: 2,
     provider: NOMAC_PROVIDER,
-    credentials: { variables: options.apiKey ? [] : [NOMAC_CREDENTIAL_VARIABLE] },
+    credentials: {
+      variables: [
+        ...(options.apiKey ? [] : [NOMAC_CREDENTIAL_VARIABLE]),
+        ...(options.baseUrl ? [] : [NOMAC_BASE_URL_VARIABLE]),
+      ],
+    },
     connection: {
       capabilities: {
         leaseKind: 'direct-device-provider',
@@ -59,7 +73,7 @@ function nomac(options: NomacPluginOptions = {}): AgentDevicePlugin {
       const { createNomacRuntime } = await import('./runtime.ts');
       const { runtime, platformModule } = createNomacRuntime({
         apiKey: env[NOMAC_CREDENTIAL_VARIABLE]?.trim() || undefined,
-        baseUrl: options.baseUrl ?? env[NOMAC_BASE_URL_VARIABLE],
+        baseUrl: env[NOMAC_BASE_URL_VARIABLE],
         clientVersion: host.clientVersion,
         maxDurationSeconds: options.maxDurationSeconds,
         idleTimeoutSeconds: options.idleTimeoutSeconds,

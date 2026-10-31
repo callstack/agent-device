@@ -3,15 +3,15 @@ import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/prov
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { NomacClient } from './client.ts';
-import { NOMAC_PROFILE_FIELDS, NOMAC_PROVIDER, nomacPhoneDevice } from './device.ts';
+import {
+  NOMAC_PROFILE_FIELDS,
+  NOMAC_PROVIDER,
+  nomacPhoneDevice,
+  nomacPhoneModel,
+} from './device.ts';
 
 export const NOMAC_CREDENTIAL_VARIABLE = 'NOMAC_API_KEY';
 export const NOMAC_BASE_URL_VARIABLE = 'NOMAC_API_URL';
-
-const MODELS: Record<ReturnType<typeof nomacPhoneDevice>, string> = {
-  iphone: 'iPhone 17 Pro (iOS 27)',
-  ipad: 'iPad Pro 11-inch (M5) (iOS 27)',
-};
 
 export function requireNomacApiKey(
   env: Readonly<Record<string, string | undefined>>,
@@ -52,12 +52,13 @@ export function resolveNomacConnection({
   rejectRefusedProviderProfileFields(flags, NOMAC_PROFILE_FIELDS);
   requireNomacApiKey(env, `connect ${NOMAC_PROVIDER}`);
   const platform = requireIosPlatform(flags);
-  nomacPhoneDevice(flags);
+  const phone = nomacPhoneDevice(flags);
   return {
     profile: {
       leaseProvider: NOMAC_PROVIDER,
       platform,
-      ...(flags.device ? { device: flags.device } : {}),
+      // The model's name: the name the lease's device carries, so later commands select it by it.
+      ...(flags.device ? { device: nomacPhoneModel(phone) } : {}),
       ...(flags.providerOsVersion ? { providerOsVersion: flags.providerOsVersion } : {}),
     } as const,
   };
@@ -88,7 +89,7 @@ export async function verifyNomacConnection({
     provider: NOMAC_PROVIDER,
     service: 'NoMac',
     verificationMessage: 'NoMac key and NoMac Simulator access verified.',
-    device: { status: 'deferred', name: MODELS[phone], platform: 'ios' },
+    device: { status: 'deferred', name: `${nomacPhoneModel(phone)} (iOS 27)`, platform: 'ios' },
     app: {
       status: 'missing',
       message:

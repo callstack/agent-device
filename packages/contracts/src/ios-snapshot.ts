@@ -89,8 +89,8 @@ export type IosSnapshotFact =
  * What a *provider* acquisition leaves unproven, declared so capture-kit can derive the residue
  * for a producer that hands over a bare tree and nothing else.
  *
- * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Limrun
- * element tree — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
+ * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Limrun, Revyl
+ * and NoMac element trees — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
  * `simulator-ax-bridge` build their own residue at the source, so a capability declared for
  * them here would be a claim nothing consults: exactly the shape that let the table say the
  * Simulator bridge had hittability evidence while the bridge adapter published none and emitted

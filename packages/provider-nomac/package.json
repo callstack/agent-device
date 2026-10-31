@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/nomac",
-  "version": "0.21.32-dev",
+  "version": "0.21.36-dev",
   "type": "module",
   "description": "NoMac Simulator iPhone and iPad Simulators as an agent-device provider plugin.",
   "files": [
@@ -35,9 +35,9 @@
       },
       "./agent-device": {
         "import": "./dist/agent-device.mjs"
-      },
-      "./package.json": "./package.json"
-    }
+      }
+    },
+    "access": "public"
   },
   "license": "MIT"
 }

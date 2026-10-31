@@ -100,7 +100,7 @@ test('a phone that is no longer live reports nothing available and refuses to bi
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
 });
 
-test("a live phone binds its operations, and they reach the phone's tools", async () => {
+test("a live phone binds its operations without a tool call, and a bound one reaches the phone's tools", async () => {
   const { runtime, owner, nomac } = await setup();
   await runtime.leaseLifecycle.allocate!(lease);
   const [device] = (await runtime.deviceInventoryProvider({
@@ -131,6 +131,28 @@ test("a live phone binds its operations, and they reach the phone's tools", asyn
   expect(await (ops.ensureReady as () => Promise<{ booted: boolean }>)()).toMatchObject({
     booted: true,
   });
-  await binding[Symbol.asyncDispose]();
   expect(nomac.seen.filter((r) => r.path.includes('/tools/')).length).toBe(0);
+  await (ops.tapPoint as (input: unknown) => Promise<unknown>)({
+    point: { x: 201, y: 350 },
+    options: {
+      button: 'primary',
+      count: 1,
+      intervalMs: 0,
+      holdMs: 0,
+      jitterPx: 0,
+      doubleTap: false,
+    },
+  });
+  await (ops.triggerAppEvent as (input: unknown) => Promise<unknown>)({
+    eventUrl: 'demo://items/3',
+  });
+  expect(
+    nomac.seen
+      .filter((r) => r.path.includes('/tools/'))
+      .map((r) => [r.path.split('/').pop(), r.body]),
+  ).toEqual([
+    ['ui_act', { steps: ['tap @201,350'] }],
+    ['app_control', { action: 'open_url', value: 'demo://items/3' }],
+  ]);
+  await binding[Symbol.asyncDispose]();
 });

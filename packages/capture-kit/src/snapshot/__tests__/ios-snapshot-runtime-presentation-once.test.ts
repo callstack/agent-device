@@ -25,6 +25,7 @@ const ACQUISITION_PRODUCERS: readonly IosAcquisitionProducer[] = [
   'appium-source',
   'limrun-ios-tree',
   'revyl-ios-tree',
+  'nomac-ios-tree',
 ];
 const PRODUCERS: readonly IosSnapshotProducer[] = ['apple-runner', ...ACQUISITION_PRODUCERS];
 

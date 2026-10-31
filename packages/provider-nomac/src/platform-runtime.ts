@@ -12,6 +12,7 @@ import {
   bindDirectApplicationLifecycle,
   bindProviderApplicationLifecycleInteractor,
 } from '@agent-device/contracts/application-lifecycle-interaction';
+import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import type { ProviderDeviceInstallResult } from '@agent-device/contracts/device';
 import {
@@ -97,9 +98,8 @@ const GAPS = {
   ),
   clipboard: unsupported('NoMac does not expose the pasteboard.'),
   systemButton: unsupported('NoMac phones press home only.'),
-  triggerAppEvent: unsupported('NoMac does not trigger app events.'),
   settings: unsupported(
-    "NoMac sets appearance, locale, time zone and location at the phone's start, not from agent-device.",
+    "agent-device's settings are not mapped to NoMac yet; NoMac's own app_control sets appearance, permissions, location and text size.",
   ),
   alert: unsupported(
     "NoMac answers the phone's prompts itself (permissions granted, first-launch prompts answered).",
@@ -183,7 +183,7 @@ function nomacRuntimeFacts(
     keyboard: gap(GAPS.keyboard),
     clipboard: gap(GAPS.clipboard),
     systemButton: gap(GAPS.systemButton),
-    triggerAppEvent: gap(GAPS.triggerAppEvent),
+    triggerAppEvent: liveSessionUnavailable,
     settings: gap(GAPS.settings),
     readAlert: gap(GAPS.alert),
     awaitAlert: gap(GAPS.alert),
@@ -216,6 +216,8 @@ function nomacRuntimeFacts(
       }),
       ...scrollRuntimeOperationFacts({ scroll: cell }),
       ...backRuntimeOperationFacts({ back: cell }),
+      // An app event is a deep link, which the phone opens as it opens `open <url>`.
+      ...appEventRuntimeOperationFacts({ triggerAppEvent: cell }),
       ...systemButtonRuntimeOperationFacts({ unsupported: gap(GAPS.systemButton), home: cell }),
       ensureReady: cell,
       bootTarget: cell,

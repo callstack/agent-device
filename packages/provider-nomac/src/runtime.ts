@@ -47,6 +47,10 @@ export type NomacRuntimeOptions = Readonly<{
   spendCapMicrounits?: string;
   runtimeInstance?: string;
   fetch?: typeof fetch;
+  /** How often a phone that is not ready yet is read again (1 s). */
+  readyPollMs?: number;
+  /** How long a lost start waits before its phone is looked up by label a second time (2 s). */
+  labelRetryMs?: number;
   /** The host's environment, for the tar that packs an app to install (its PATH and locale). */
   env?: Readonly<Record<string, string | undefined>>;
 }>;
@@ -66,6 +70,8 @@ export type NomacRuntimeRegistration = Readonly<{
 // A phone from the pool is ready in seconds; one that waits in line, up to 5 minutes.
 const READY_WAIT_MS = 6 * 60_000;
 const READY_POLL_MS = 1_000;
+const LABEL_RETRY_MS = 2_000;
+const LIVE_STATES = new Set(['queued', 'provisioning', 'ready']);
 
 export function createNomacRuntime(options: NomacRuntimeOptions): NomacRuntimeRegistration {
   const runtime = new NomacRuntimeImplementation(options);
@@ -102,6 +108,8 @@ class NomacRuntimeImplementation implements NomacRuntime {
   /** NoMac's client: a daemon without a key still starts, and only its requests (a lease's) refuse. */
   private readonly client: NomacClient;
   private readonly sessions = new Map<string, NomacSession>();
+  private readonly readyPollMs: number;
+  private readonly labelRetryMs: number;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease, context) => await this.allocate(lease, context),
@@ -130,6 +138,8 @@ class NomacRuntimeImplementation implements NomacRuntime {
   constructor(options: NomacRuntimeOptions) {
     this.options = options;
     this.client = new NomacClient(options);
+    this.readyPollMs = options.readyPollMs ?? READY_POLL_MS;
+    this.labelRetryMs = options.labelRetryMs ?? LABEL_RETRY_MS;
   }
 
   ownsDevice(device: DeviceInfo): boolean {
@@ -232,24 +242,85 @@ class NomacRuntimeImplementation implements NomacRuntime {
     const existing = this.sessions.get(lease.leaseId);
     if (existing) return { nomacPhoneId: existing.phoneId, device: existing.device };
     const phoneDevice = nomacPhoneDevice(context?.flags);
-    // The lease's own request key: an allocation retried after a lost answer reaches the same phone.
-    const started = await this.client.startPhone(
-      leaseRequestKey(lease.leaseId),
-      {
-        device: phoneDevice,
-        label: leaseLabel(lease.leaseId),
-        ...(this.phoneLimits() ? { limits: this.phoneLimits() } : {}),
-      },
-      context?.signal,
-    );
-    const phone = await this.untilReady(started, context);
-    const session: NomacSession = {
-      lease,
-      phoneId: phone.id,
-      device: buildNomacDevice(lease, phone.id, phoneDevice),
-    };
-    this.sessions.set(lease.leaseId, session);
-    return { nomacPhoneId: phone.id, device: session.device };
+    // An allocation cancelled before its start is sent starts nothing, so there is nothing to stop.
+    context?.signal?.throwIfAborted();
+    let phoneId: string | undefined;
+    try {
+      // The lease's own request key: an allocation retried after a lost answer reaches the same phone.
+      const started = await this.client.startPhone(
+        leaseRequestKey(lease.leaseId),
+        {
+          device: phoneDevice,
+          label: leaseLabel(lease.leaseId),
+          ...(this.phoneLimits() ? { limits: this.phoneLimits() } : {}),
+        },
+        context?.signal,
+      );
+      phoneId = started.id;
+      const phone = await this.untilReady(started, context);
+      context?.signal?.throwIfAborted();
+      const session: NomacSession = {
+        lease,
+        phoneId: phone.id,
+        device: buildNomacDevice(lease, phoneDevice),
+      };
+      this.sessions.set(lease.leaseId, session);
+      return { nomacPhoneId: phone.id, device: session.device };
+    } catch (error) {
+      // No exit but success keeps a phone: the daemon drops a lease that failed to allocate without
+      // asking the provider to release it, so whatever this allocation started stops here. A cancelled
+      // allocation ends with the cancellation itself, whichever await the abort reached.
+      const failure = context?.signal?.aborted ? context.signal.reason : error;
+      throw await this.stopUnallocated(lease, phoneId, failure);
+    }
+  }
+
+  /**
+   * Stops the phone a failed or abandoned allocation started, with no signal, so the abort that ended
+   * the allocation cannot stop the cleanup too. When the start's answer never came (aborted or lost in
+   * flight) or was a 5xx, the phone NoMac may have made carries the lease's label and is found by it;
+   * a start NoMac refused with a 4xx started nothing. A phone that cannot be stopped, or one the label
+   * lookup never found, is named in the error, so it is never left unmentioned.
+   */
+  private async stopUnallocated(
+    lease: DeviceLease,
+    phoneId: string | undefined,
+    error: unknown,
+  ): Promise<unknown> {
+    // A 4xx refused the start; after a 5xx the phone may still have been made, so it is looked up.
+    const refusedStart =
+      phoneId === undefined &&
+      error instanceof AppError &&
+      typeof error.details?.status === 'number' &&
+      error.details.status < 500;
+    if (refusedStart) return error;
+    const label = leaseLabel(lease.leaseId);
+    try {
+      if (phoneId) {
+        await this.client.stopPhone(phoneId);
+        return error;
+      }
+      const phones = await this.phonesLabelled(label);
+      for (const phone of phones) {
+        if (LIVE_STATES.has(phone.state)) await this.client.stopPhone(phone.id);
+      }
+      return phones.length > 0
+        ? error
+        : phoneNotStopped(error, `the phone labelled ${label}, if NoMac made one`);
+    } catch (stopError) {
+      return phoneNotStopped(error, phoneId ?? `the phone labelled ${label}`, stopError);
+    }
+  }
+
+  /**
+   * The phones a lost start may have made. NoMac may not have recorded a start that was still in
+   * flight when the allocation ended, so an empty answer is asked again once, after a short wait.
+   */
+  private async phonesLabelled(label: string): Promise<NomacPhone[]> {
+    const phones = await this.client.phonesWithLabel(label);
+    if (phones.length > 0) return phones;
+    await sleep(this.labelRetryMs);
+    return await this.client.phonesWithLabel(label);
   }
 
   private async untilReady(
@@ -278,14 +349,13 @@ class NomacRuntimeImplementation implements NomacRuntime {
         );
       }
       if (Date.now() >= by) {
-        await this.client.stopPhone(current.id).catch(() => {});
         throw new AppError(
           'COMMAND_FAILED',
           `NoMac's phone was not ready in time (${current.state}).`,
           { nomacPhoneId: current.id },
         );
       }
-      await sleep(READY_POLL_MS, undefined, { signal: context?.signal });
+      await sleep(this.readyPollMs, undefined, { signal: context?.signal });
       current = await this.client.readPhone(current.id, context?.signal);
     }
   }
@@ -301,7 +371,7 @@ class NomacRuntimeImplementation implements NomacRuntime {
     if (lease.leaseProvider !== this.provider || !isNomacLeaseBackend(lease.backend))
       return undefined;
     const phones = (await this.client.phonesWithLabel(leaseLabel(lease.leaseId))).filter((p) =>
-      ['queued', 'provisioning', 'ready'].includes(p.state),
+      LIVE_STATES.has(p.state),
     );
     for (const phone of phones) await this.client.stopPhone(phone.id);
     return phones.length
@@ -328,6 +398,26 @@ class NomacRuntimeImplementation implements NomacRuntime {
     const parsed = parseNomacDeviceId(device.id);
     return parsed ? this.sessions.get(parsed.leaseId) : undefined;
   }
+}
+
+/** The allocation's error, naming the phone it may have left running. */
+function phoneNotStopped(error: unknown, phone: string, stopError?: unknown): unknown {
+  const details = {
+    nomacPhoneNotStopped: phone,
+    ...(stopError === undefined
+      ? {}
+      : { stopError: stopError instanceof Error ? stopError.message : String(stopError) }),
+  };
+  if (error instanceof AppError) {
+    error.details = { ...error.details, ...details };
+    return error;
+  }
+  return new AppError(
+    'COMMAND_FAILED',
+    `The NoMac allocation failed and ${phone} could not be stopped; stop it on nomac.app.`,
+    details,
+    error,
+  );
 }
 
 /** NoMac's request keys take [A-Za-z0-9_.:-]{8,128}; a lease id that does not fit is hashed. */
@@ -387,14 +477,23 @@ async function packApp(
   if (!/\.app\/?$/.test(installablePath))
     throw new AppError('INVALID_ARGS', `${path.basename(installablePath)} is not a .app.`);
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-nomac-'));
+  const cleanup = async () => await fs.promises.rm(dir, { recursive: true, force: true });
   const file = path.join(dir, 'app.tar.gz');
   const resolved = path.resolve(installablePath.replace(/\/$/, ''));
-  await execFileAsync(
-    'tar',
-    ['-czf', file, '-C', path.dirname(resolved), path.basename(resolved)],
-    {
-      env: { ...env, COPYFILE_DISABLE: '1' },
-    },
-  );
-  return { file, cleanup: async () => await fs.promises.rm(dir, { recursive: true, force: true }) };
+  try {
+    await execFileAsync(
+      'tar',
+      ['-czf', file, '-C', path.dirname(resolved), path.basename(resolved)],
+      { env: { ...env, COPYFILE_DISABLE: '1' } },
+    );
+  } catch (error) {
+    await cleanup();
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not pack ${path.basename(resolved)} for NoMac.`,
+      undefined,
+      error,
+    );
+  }
+  return { file, cleanup };
 }

@@ -8,6 +8,18 @@ const SESSIONS = '/api/v1/simulator/sessions';
 // NoMac or the phone busy for a moment. A 429 was not taken, so any request may be sent again.
 const PASSING = new Set([429, 502, 503, 504]);
 const JOB = /Next: job_status \{job_id: "([^"]+)"\}/;
+// job_status's answer while the job still runs (simulator-use's tools/jobs.ts): read it again.
+const STILL_RUNNING = /\nNext: job_status again, or job_cancel\./;
+/**
+ * How long a call waits on NoMac at most: a tool call it answers as running (`callMs`), a long build's
+ * job (`jobMs`; each job_status waits up to 40 s), an uploaded archive being unpacked (`unpackMs`).
+ */
+export type NomacBudgets = Readonly<{ callMs: number; jobMs: number; unpackMs: number }>;
+const DEFAULT_BUDGETS: NomacBudgets = {
+  callMs: 10 * 60_000,
+  jobMs: 60 * 60_000,
+  unpackMs: 10 * 60_000,
+};
 
 export type NomacClientOptions = Readonly<{
   /** Without one, every request refuses with UNAUTHORIZED (the daemon still starts). */
@@ -15,6 +27,7 @@ export type NomacClientOptions = Readonly<{
   baseUrl?: string;
   clientVersion: string;
   fetch?: typeof fetch;
+  budgets?: Partial<NomacBudgets>;
 }>;
 
 export type NomacPhone = {
@@ -45,8 +58,10 @@ export class NomacClient {
   private readonly base: string;
   private readonly userAgent: string;
   private readonly send: typeof fetch;
+  private readonly budgets: NomacBudgets;
 
   constructor(options: NomacClientOptions) {
+    this.budgets = { ...DEFAULT_BUDGETS, ...options.budgets };
     this.auth = options.apiKey ? `Bearer ${options.apiKey}` : '';
     this.base = (options.baseUrl ?? NOMAC_DEFAULT_BASE_URL).replace(/\/+$/, '');
     // agent-device-cli/<version>, as every provider attributes agent-device's traffic.
@@ -174,7 +189,8 @@ export class NomacClient {
 
   /**
    * Runs one of simulator-use's tools on the phone and waits for its result. A long build that hands
-   * back a job is followed with job_status until it ends.
+   * back a job is followed with job_status until it ends; one still running past the budget fails
+   * instead of passing for a finished one.
    */
   async tool(
     id: string,
@@ -183,12 +199,23 @@ export class NomacClient {
     signal?: AbortSignal,
   ): Promise<NomacToolResult> {
     let result = await this.call(id, name, args, signal);
-    for (let rounds = 0; rounds < 120 && !result.isError; rounds++) {
-      const job = JOB.exec(result.text)?.[1];
-      if (!job) break;
+    const job = result.isError ? undefined : JOB.exec(result.text)?.[1];
+    if (!job) return result;
+    const by = Date.now() + this.budgets.jobMs;
+    for (let round = 1; ; round++) {
       result = await this.call(id, 'job_status', { job_id: job }, signal);
+      if (result.isError || (!STILL_RUNNING.test(result.text) && !JOB.test(result.text)))
+        return result;
+      if (Date.now() >= by) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `NoMac's phone was still running ${name} (job ${job}) after ${Math.round(this.budgets.jobMs / 1000)} s.`,
+          { tool: name, nomacJob: job, hint: 'job_cancel stops it on the phone.' },
+        );
+      }
+      // job_status itself waits up to 40 s; a quick answer still leaves a little room between reads.
+      await sleep(Math.min(round, 4) * 250, undefined, { signal });
     }
-    return result;
   }
 
   private async call(
@@ -207,7 +234,15 @@ export class NomacClient {
         signal,
       },
     );
+    const by = Date.now() + this.budgets.callMs;
     while (answer.state === 'running' && typeof answer.id === 'string') {
+      if (Date.now() >= by) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `NoMac's phone was still running ${name} after ${Math.round(this.budgets.callMs / 1000)} s.`,
+          { tool: name, nomacCall: answer.id },
+        );
+      }
       await sleep(400, undefined, { signal });
       answer = await this.request<Record<string, any>>('GET', `${path}/calls/${answer.id}`, {
         signal,
@@ -236,15 +271,40 @@ export class NomacClient {
   async download(url: string, signal?: AbortSignal): Promise<Buffer> {
     if (!url.startsWith(`${this.base}/`))
       throw new AppError('COMMAND_FAILED', 'NoMac named a file somewhere else.', { url });
-    const response = await this.send(url, {
-      signal: anySignal(signal, AbortSignal.timeout(60_000)),
-    });
+    const response = await this.transfer(
+      'fetch a file',
+      signal,
+      async (transferSignal) => await this.send(url, { signal: transferSignal }),
+    );
     if (!response.ok)
       throw new AppError(
         'COMMAND_FAILED',
         `NoMac could not hand over a file (${response.status}).`,
       );
     return Buffer.from(await response.arrayBuffer());
+  }
+
+  /**
+   * One transfer outside NoMac's API (a file link, a signed upload): a network failure is a typed
+   * COMMAND_FAILED like every other answer this client gives, and only the caller's abort stays raw.
+   */
+  private async transfer(
+    what: string,
+    signal: AbortSignal | undefined,
+    run: (signal: AbortSignal) => Promise<Response>,
+    timeoutMs = 60_000,
+  ): Promise<Response> {
+    try {
+      return await run(anySignal(signal, AbortSignal.timeout(timeoutMs)));
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw new AppError(
+        'COMMAND_FAILED',
+        `NoMac did not answer while trying to ${what}.`,
+        { hint: 'Check the network, then retry.' },
+        error,
+      );
+    }
   }
 
   /**
@@ -263,14 +323,21 @@ export class NomacClient {
       body: { size: archive.length, sha256 },
       signal,
     });
-    const put = await this.send(link.upload_url, {
-      method: 'PUT',
-      body: new Uint8Array(archive),
-      signal: anySignal(signal, AbortSignal.timeout(30 * 60_000)),
-    });
+    const put = await this.transfer(
+      'upload the app',
+      signal,
+      async (transferSignal) =>
+        await this.send(link.upload_url, {
+          method: 'PUT',
+          body: new Uint8Array(archive),
+          signal: transferSignal,
+        }),
+      30 * 60_000,
+    );
     if (!put.ok)
       throw new AppError('COMMAND_FAILED', `NoMac's storage refused the upload (${put.status}).`);
     const key = nomacRequestKey('fetch');
+    const by = Date.now() + this.budgets.unpackMs;
     for (;;) {
       const answer = await this.request<Record<string, any>>('POST', `${path}/sync/fetch`, {
         body: { sha256, name },
@@ -278,6 +345,12 @@ export class NomacClient {
         signal,
       });
       if (answer.state === 'running') {
+        if (Date.now() >= by) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            `NoMac's phone was still unpacking the app after ${Math.round(this.budgets.unpackMs / 1000)} s.`,
+          );
+        }
         await sleep(1000, undefined, { signal });
         continue;
       }

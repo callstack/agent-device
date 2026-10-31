@@ -24,7 +24,9 @@ export NOMAC_API_KEY=nmk_...
 agent-device connect nomac
 ```
 
-`connect` checks the key against NoMac without starting a phone. The phone starts on the first device command, such as `install` or `open`, and stops when the session closes.
+`connect` checks the key against NoMac without starting a phone. The phone starts on the first device command, such as `install` or `open`, and stops when the session closes or its lease ends. Phones are billed per minute by NoMac; see [nomac.app](https://nomac.app) for pricing.
+
+`NOMAC_API_URL` points the plugin at another NoMac address than `https://nomac.app`, for example a staging host. The daemon reads both variables when it starts, so after you change one, run `agent-device daemon stop`.
 
 Pick the phone with `--device`:
 
@@ -32,8 +34,9 @@ Pick the phone with `--device`:
 | --- | --- |
 | iPhone 17 Pro, iOS 27 (default) | none, or `--device iphone` |
 | iPad Pro 11-inch (M5), iOS 27 | `--device ipad` |
+| iPhone 17 Pro Max, iOS 27 | `--device iphone-pro-max` |
 
-Every NoMac phone runs iOS 27, so `--provider-os-version` takes only `27`; any other version is refused. Every other cloud profile field, including `--provider-device-type` and `--provider-app`, is refused with the flag's name.
+`--device` also takes the model's name. Every NoMac phone runs iOS 27, so `--provider-os-version` takes `27` or a `27.x` version; any other major version is refused. Every other cloud profile field, including `--provider-device-type` and `--provider-app`, is refused with the flag's name.
 
 ## Install and run an app
 
@@ -52,8 +55,9 @@ agent-device close
 
 ## What a NoMac phone supports
 
-- `snapshot` (the phone's accessibility tree), `screenshot`, `click`, `press` and long press, `fill`, `type`, `scroll`, `back`, `home`, `open` (an app or a deep link), `close`, and `install`.
-- `fill` taps the field, replaces its text, and reads the field back; a field that shows something else fails the command.
+- `snapshot` (the phone's accessibility tree), `screenshot` (1x, one pixel per point; `--normalize-status-bar` works), `click`, `press` and long press (up to 10 seconds), `fill`, `type`, `scroll`, `back`, `home`, `open` (an app with `--launch-args`, or a deep link), `trigger-app-event`, `close`, and `install`.
+- `fill` taps the field, replaces its text, and reads the field back; a field that shows something else fails the command. `fill --delay-ms` is refused; `type --delay-ms` types one character per call.
+- `scroll` moves about 0.8 of the screen per pass and takes no amount, `--pixels` or `--duration-ms`. `press --double` is refused: each tap waits for the screen to settle, so two taps never make a double tap.
 - NoMac answers the phone's permission prompts itself, so the alert commands are unavailable.
 - Orientation, the clipboard, settings, app logs, screen recording, gestures beyond scroll, and port reverse are unavailable and say why. NoMac records every session as a replay on its own page, and `simulator-use cloud tunnel <port>` lets the phone's apps reach a local backend.
 - Requests carry `agent-device-cli/<version>` as their `User-Agent`.

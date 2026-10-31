@@ -1,8 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import type { FillBackendResult, Interactor } from '@agent-device/contracts/interactor-types';
-import { AppError } from '@agent-device/kernel/errors';
+import type {
+  FillBackendResult,
+  Interactor,
+  ScreenshotOptions,
+} from '@agent-device/contracts/interactor-types';
+import type { ScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { NomacClient, NomacToolResult } from './client.ts';
 
 /**
@@ -30,14 +35,8 @@ class NomacIosInteractor implements Interactor {
   }
 
   async open(app: string, options?: { url?: string; launchArgs?: string[] }): Promise<void> {
-    if (options?.launchArgs?.length) {
-      throw unsupported(
-        'open',
-        "NoMac launches an app without arguments; pass values through app_run's env instead.",
-      );
-    }
     if (options?.url) {
-      await this.appControl({ action: 'launch', app });
+      await this.launch(app, options.launchArgs);
       await this.appControl({ action: 'open_url', value: options.url });
       return;
     }
@@ -45,22 +44,27 @@ class NomacIosInteractor implements Interactor {
       await this.appControl({ action: 'open_url', value: app });
       return;
     }
-    await this.appControl({ action: 'launch', app });
+    await this.launch(app, options?.launchArgs);
+  }
+
+  /** app_control launch takes the app's launch arguments as shell words in its value. */
+  private async launch(app: string, launchArgs: readonly string[] = []): Promise<void> {
+    await this.appControl({
+      action: 'launch',
+      app,
+      ...(launchArgs.length ? { value: launchArgs.map(shellWord).join(' ') } : {}),
+    });
   }
 
   async openDevice(): Promise<void> {}
 
+  /** A terminate of an app that is not running succeeds on the phone; anything else is a real failure. */
   async close(app: string): Promise<void> {
-    if (app) await this.appControl({ action: 'terminate', app }).catch(() => {});
+    if (app) await this.appControl({ action: 'terminate', app });
   }
 
   async tap(x: number, y: number): Promise<void> {
     await this.act([`tap ${point(x, y)}`]);
-  }
-
-  /** Both taps in one call, so the phone runs them back to back with no network round trip between. */
-  async doubleTap(x: number, y: number): Promise<void> {
-    await this.act([`tap ${point(x, y)}`, `tap ${point(x, y)}`]);
   }
 
   async longPress(x: number, y: number, durationMs = DEFAULT_LONG_PRESS_MS): Promise<void> {
@@ -75,9 +79,15 @@ class NomacIosInteractor implements Interactor {
   /** Types into whatever holds focus. A delay types one character at a time. */
   async type(text: string, delayMs?: number): Promise<void> {
     if (delayMs && delayMs > 0) {
-      for (const char of Array.from(text)) {
-        await this.act([`type ${JSON.stringify(char)}`]);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      let dispatchedChars = 0;
+      try {
+        for (const char of Array.from(text)) {
+          await this.act([`type ${JSON.stringify(char)}`]);
+          dispatchedChars += 1;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      } catch (error) {
+        throw discloseDispatchAfterSteps(error, dispatchedChars);
       }
       return;
     }
@@ -89,17 +99,59 @@ class NomacIosInteractor implements Interactor {
    * field that shows something else fails the call. So a fill that answers has seen its own field
    * take the text.
    */
-  async fill(x: number, y: number, text: string): Promise<FillBackendResult> {
+  async fill(x: number, y: number, text: string, delayMs?: number): Promise<FillBackendResult> {
+    if (delayMs && delayMs > 0) {
+      unsupported(
+        'fill',
+        'NoMac fills a field at once; drop --delay-ms, or focus it and type with a delay.',
+      );
+    }
     await this.act([`fill ${point(x, y)} ${JSON.stringify(text)}`]);
     return { textEntryReadiness: 'focused-element' };
   }
 
-  async scroll(direction: 'up' | 'down' | 'left' | 'right'): Promise<void> {
+  /** One pass: a slow drag over most of the screen, its distance NoMac's own. */
+  async scroll(
+    direction: 'up' | 'down' | 'left' | 'right',
+    options?: ScrollExecutionOptions,
+  ): Promise<void> {
+    if (
+      options?.amount !== undefined ||
+      options?.pixels !== undefined ||
+      options?.durationMs !== undefined
+    ) {
+      unsupported(
+        'scroll',
+        'NoMac scrolls about 0.8 of the screen per pass; drop the amount, --pixels and --duration-ms.',
+      );
+    }
     await this.act([`scroll ${direction}`]);
   }
 
-  /** NoMac serves the screen as JPEG; the PNG-only readers behind `outPath` get a PNG. */
-  async screenshot(outPath: string): Promise<void> {
+  /**
+   * NoMac serves the screen as a JPEG sized to points, the 1x agent-device's iOS screenshots default
+   * to; the PNG-only readers behind `outPath` get a PNG.
+   */
+  async screenshot(outPath: string, options?: ScreenshotOptions): Promise<void> {
+    if (options?.pixelDensity !== undefined && options.pixelDensity !== 1) {
+      unsupported(
+        'screenshot',
+        'NoMac screenshots are 1x, one pixel per point; drop --pixel-density.',
+      );
+    }
+    if (options?.normalizeStatusBar) {
+      await this.appControl({ action: 'status_bar', value: 'clean' });
+      try {
+        await this.capture(outPath);
+      } finally {
+        await this.appControl({ action: 'status_bar', value: 'clear' }).catch(() => {});
+      }
+      return;
+    }
+    await this.capture(outPath);
+  }
+
+  private async capture(outPath: string): Promise<void> {
     const look = await this.session.client.tool(this.session.phoneId, 'ui_look', {
       screenshot: true,
     });
@@ -135,7 +187,7 @@ class NomacIosInteractor implements Interactor {
   async setSetting(): Promise<void> {
     unsupported(
       'settings',
-      "NoMac sets appearance, locale, time zone and location at the phone's start, not from agent-device.",
+      "agent-device's settings are not mapped to NoMac yet; NoMac's own app_control sets appearance, permissions, location and text size.",
     );
   }
 
@@ -150,6 +202,13 @@ class NomacIosInteractor implements Interactor {
     if (result.isError) throw failure(String(args.action), result);
     return result;
   }
+}
+
+/** One launch argument as one shell word, the way app_control's value reads them. */
+function shellWord(word: string): string {
+  return /^[A-Za-z0-9_./:=@%+,-]+$/.test(word)
+    ? word
+    : `'${word.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 /** Points as ui_act takes them: whole points when they are, else two decimals. */

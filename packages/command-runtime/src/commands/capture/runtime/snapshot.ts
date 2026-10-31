@@ -248,8 +248,8 @@ function snapshotAppFields(capture: SnapshotCapture): {
 
 /**
  * A capture that reported nothing about truncation is only "not truncated" when its producer
- * actually observes truncation. Producers that do not (Appium page source, the Limrun element
- * tree) leave it unknown rather than having the absence upgraded to `false` (#2188 invariant 5).
+ * actually observes truncation. Producers that do not (Appium page source, the Limrun, Revyl and
+ * NoMac element trees) leave it unknown rather than having the absence upgraded to `false` (#2188 invariant 5).
  */
 function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
   if (snapshot.truncated !== undefined) return snapshot.truncated;
