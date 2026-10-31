@@ -2,8 +2,7 @@ import XCTest
 
 // The lit panel of the command in flight (ADR 0025). Commands run one at a time on
 // `commandExecutionQueue`, where the slot is written, and the surface resolvers read it on main.
-// Work that outlives its command, such as a recording pump or a settle loop, reads it once and
-// carries that panel instead.
+// A recording pump outlives its command, so `recordStart` reads the panel once and carries it.
 extension RunnerTests {
   func setRequestLitPanel(from command: Command) {
     var panel: RunnerLitPanel?

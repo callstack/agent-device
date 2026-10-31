@@ -98,10 +98,7 @@ test('a cancelled panel-table read leaves the next request free to ask', async (
 });
 
 test('a multi-panel device whose panel power decides nothing sends no panel', async () => {
-  // Both panels lit: the panel table settles no single panel. `activeDisplay` still names the
-  // primary panel for a capture, which has to name some display or refuse, but a surface fact is
-  // not forced to guess, and naming the wrong one would have the runner refuse the panel the user
-  // is looking at.
+  // Both panels lit: panel power settles no single panel, so the runner keeps its historic route.
   answering({
     result: {
       displays: IPHONE_DUO_CLOSED.result.displays.map((display) => ({
@@ -115,10 +112,7 @@ test('a multi-panel device whose panel power decides nothing sends no panel', as
 });
 
 test('a multi-panel device whose panel table is incomplete sends no panel', async () => {
-  // The table named two integrated panels and the parser could read only one of them, so the
-  // unread one may be the lit one. Its capture still names the parsed panel because a capture must
-  // name a display or refuse; a surface fact is not allowed to book every gesture on a display that
-  // can be dark.
+  // The parser read one of two integrated panels, so the unread one may be the lit one.
   const [outer, inner] = IPHONE_DUO_CLOSED.result.displays;
   answering({
     result: {
