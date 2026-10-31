@@ -14,6 +14,8 @@
     // One entry per line, so each pinned runner request changes as one reviewable diff line.
     "contracts/fixtures/runner-requests.json",
     // One captured node per line, so the real keyboard capture stays a compact reviewable table.
-    "packages/capture-kit/src/snapshot-chrome.fixtures.ts"
+    "packages/capture-kit/src/snapshot-chrome.fixtures.ts",
+    // One recorded node per line, so a recapture reads as a reviewable diff of changed nodes.
+    "apple/snapshot-presentation/Tests/AlertSurfaceCorpus/*.json"
   ]
 }

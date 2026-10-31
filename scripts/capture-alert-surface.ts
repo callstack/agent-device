@@ -45,27 +45,35 @@ const products = path.join(derived, 'Build', 'Products');
 const xctestrun = fs.readdirSync(products).find((file) => file.endsWith('.xctestrun'));
 if (!xctestrun) throw new Error(`No .xctestrun in ${products}`);
 
-const output = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'alert-surface-')), 'tree.json');
-execFileSync(
-  'xcodebuild',
-  [
-    'test-without-building',
-    '-xctestrun',
-    path.join(products, xctestrun),
-    '-destination',
-    `platform=iOS Simulator,id=${udid}`,
-    '-only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureAlertSurfaceTree',
-  ],
-  {
-    stdio: ['ignore', 'ignore', 'inherit'],
-    env: {
-      ...process.env,
-      TEST_RUNNER_AGENT_DEVICE_ALERT_SURFACE_BUNDLE_ID: bundle,
-      TEST_RUNNER_AGENT_DEVICE_ALERT_SURFACE_OUTPUT: output,
+const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alert-surface-'));
+const output = path.join(outputDir, 'tree.json');
+let nodes: unknown[];
+try {
+  execFileSync(
+    'xcodebuild',
+    [
+      'test-without-building',
+      '-xctestrun',
+      path.join(products, xctestrun),
+      '-destination',
+      `platform=iOS Simulator,id=${udid}`,
+      '-only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureAlertSurfaceTree',
+    ],
+    {
+      stdio: 'inherit',
+      // xcodebuild strips the TEST_RUNNER_ prefix before the test process reads these.
+      env: {
+        ...process.env,
+        TEST_RUNNER_AGENT_DEVICE_ALERT_SURFACE_BUNDLE_ID: bundle,
+        TEST_RUNNER_AGENT_DEVICE_ALERT_SURFACE_OUTPUT: output,
+      },
     },
-  },
-);
-if (!fs.existsSync(output)) throw new Error('The capture test wrote no tree');
+  );
+  if (!fs.existsSync(output)) throw new Error('The capture test wrote no tree');
+  nodes = JSON.parse(fs.readFileSync(output, 'utf8')) as unknown[];
+} finally {
+  fs.rmSync(outputDir, { recursive: true, force: true });
+}
 
 const devices = JSON.parse(
   execFileSync('xcrun', ['simctl', 'list', 'devices', '-j'], { encoding: 'utf8' }),
@@ -88,9 +96,11 @@ const recorded = {
     }).trim(),
   },
   ...(previous.expect === undefined ? {} : { expect: previous.expect }),
-  nodes: JSON.parse(fs.readFileSync(output, 'utf8')) as unknown,
 };
-fs.writeFileSync(fixture, `${JSON.stringify(recorded, null, 2)}\n`);
+// One node per line, so a recapture reads as a reviewable diff of changed nodes.
+const header = JSON.stringify(recorded, null, 2).replace(/\n}$/, '');
+const body = nodes.map((node) => `    ${JSON.stringify(node)}`).join(',\n');
+fs.writeFileSync(fixture, `${header},\n  "nodes": [\n${body}\n  ]\n}\n`);
 console.log(
   previous.expect === undefined
     ? `Wrote ${path.relative(root, fixture)}. Add "expect" from what the screen shows.`

@@ -8,19 +8,12 @@ import XCTest
 /// must find; a source it does not name must find nothing.
 private struct RecordedAlertSurface: Decodable {
   struct Node: Decodable {
-    struct Rect: Decodable {
-      let x: Double
-      let y: Double
-      let width: Double
-      let height: Double
-    }
-
     let index: Int
     let parentIndex: Int?
     let type: String
     let identifier: String
     let label: String
-    let rect: Rect
+    let rect: FixtureRect
   }
 
   struct Expectation: Decodable {
@@ -43,15 +36,19 @@ private struct RecordedAlertSurface: Decodable {
         type: node.type,
         identifier: node.identifier,
         label: node.label,
-        frame: CGRect(x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height),
+        frame: node.rect.cgRect,
         children: (children[index] ?? []).map(build)
       )
     }
-    let roots = nodes.filter { $0.parentIndex == nil }
-    guard roots.count == 1, let root = roots.first, nodes.indices.allSatisfy({ nodes[$0].index == $0 }) else {
-      throw CocoaError(.coderReadCorrupt)
+    // A preorder list: each node's index is its position, and its parent comes before it.
+    let wellFormed = nodes.indices.allSatisfy { position in
+      let node = nodes[position]
+      guard node.index == position else { return false }
+      guard let parent = node.parentIndex else { return position == 0 }
+      return parent >= 0 && parent < position
     }
-    return build(root.index)
+    guard wellFormed, !nodes.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+    return build(0)
   }
 }
 
@@ -62,11 +59,6 @@ final class AlertSurfaceTests: XCTestCase {
       .sorted { $0.lastPathComponent < $1.lastPathComponent }
     XCTAssertFalse(files.isEmpty)
     let decoder = JSONDecoder()
-    decoder.nonConformingFloatDecodingStrategy = .convertFromString(
-      positiveInfinity: "Infinity",
-      negativeInfinity: "-Infinity",
-      nan: "NaN"
-    )
     for file in files {
       let name = file.lastPathComponent
       let recorded = try decoder.decode(RecordedAlertSurface.self, from: Data(contentsOf: file))
@@ -92,6 +84,13 @@ final class AlertSurfaceTests: XCTestCase {
     XCTAssertFalse(AlertSurface.isPlaced(innerPanelAlert, in: outerPanel))
     XCTAssertFalse(AlertSurface.isPlaced(innerPanelAlert, in: CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 669)))
     XCTAssertFalse(AlertSurface.isPlaced(.zero, in: innerPanel))
+  }
+
+  func testAnInnerPanelAlertIsPlacedInItsWindowNotTheApplicationFrame() {
+    let alert = AlertSurfaceNode(type: "Alert", identifier: "", label: "", frame: CGRect(x: 341, y: 250, width: 270, height: 170), children: [])
+    let innerPanel = AlertSurfaceNode(type: "Window", identifier: "", label: "", frame: CGRect(x: 0, y: 0, width: 951, height: 669), children: [alert])
+    let root = AlertSurfaceNode(type: "Application", identifier: "", label: "", frame: CGRect(x: 0, y: 0, width: 466, height: 678), children: [innerPanel])
+    XCTAssertEqual(AlertSurface.candidates(in: root, source: .appAlert, viewport: root.frame), [alert])
   }
 
   func testADismissPopupWindowIsPlacedInTheBoxItSitsIn() {
