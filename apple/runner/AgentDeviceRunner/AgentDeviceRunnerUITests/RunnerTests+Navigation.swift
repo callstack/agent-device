@@ -257,7 +257,7 @@ extension RunnerTests {
     return Self.navigationVisualSample(
       from: context.resolvedWindow == nil
         ? captureSoleAppScreen(app: app)
-        : captureResolvedAppScreen(app: app),
+        : captureResolvedAppScreen(app: app, litPanel: requestSurfacePanel),
       encoding: { runnerPngData(for: $0.image) }
     )
 #else

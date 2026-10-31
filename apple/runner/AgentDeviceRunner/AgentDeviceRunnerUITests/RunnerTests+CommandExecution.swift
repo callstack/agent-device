@@ -487,7 +487,10 @@ extension RunnerTests {
       // session app, so on a fresh runner process `activeApp` is still the runner host app. The
       // requested bundle id is resolved here and never activated: an observation must not change
       // which app is foregrounded in order to see which display it is on (#2728).
-      switch captureObservedScreen(app: resolveAppWithoutActivation(command: command)) {
+      switch captureObservedScreen(
+        app: resolveAppWithoutActivation(command: command),
+        litPanel: requestSurfacePanel
+      ) {
       case .failure(let failure):
         return Response(
           ok: false,

@@ -15,6 +15,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
 import { createAppleInteractor } from '../interactor.ts';
+import { isAppleFoldableSimulator } from './orientation.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from '../__tests__/display-fixtures.ts';
 
@@ -198,6 +199,64 @@ test('a foldable rotation that CoreDevice never reports is refused as unverified
     },
   });
   expect(sim.helpers).toHaveLength(1);
+});
+
+/**
+ * A cancelled panel-table read is the caller going away, not a toolchain that will not answer, so it
+ * must not spend the retry window the `unresolved` answer opens: the next request asks again.
+ */
+test('a cancelled panel-table probe does not keep the device single-panel', async () => {
+  const device = simulator();
+  let reads = 0;
+  const provider = createLocalAppleToolProvider({
+    runCommand: async (_command, args, options) => {
+      expect(args.slice(0, 4)).toEqual(['devicectl', 'device', 'info', 'displays']);
+      if (options?.signal?.aborted) throw new Error('devicectl aborted by the caller');
+      reads += 1;
+      fs.writeFileSync(args.at(-1)!, JSON.stringify({ result: { displays: DUO_DISPLAYS } }));
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  });
+  const ask = (signal?: AbortSignal) =>
+    withAppleToolProvider(provider, () => isAppleFoldableSimulator(device, signal));
+
+  const cancelled = new AbortController();
+  cancelled.abort();
+  await expect(ask(cancelled.signal)).resolves.toBe(false);
+  // The request that follows is free to ask again, and the answer it gets is the device's own.
+  await expect(ask()).resolves.toBe(true);
+  // One read: the cancelled probe never took the retry window the `unresolved` answer opens.
+  expect(reads).toBe(1);
+});
+
+/**
+ * A rotation is decided by the panel table, never by the window a surface probe opened: the historic
+ * runner route has no effect on a foldable and its readback repeats the request, so answering from
+ * that window would report a rotation the device never performed.
+ */
+test('a rotation is not routed by a pending panel-table retry', async () => {
+  const device = simulator();
+  let tableFailures = 0;
+  const sim = fakeSimulator(device, DUO_DISPLAYS);
+  // A surface probe finds a panel table that will not answer, which opens the retry window.
+  const failing = createLocalAppleToolProvider({
+    runCommand: async (_command, args) => {
+      if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
+        tableFailures += 1;
+        throw new AppError('COMMAND_FAILED', 'devicectl does not report displays', {
+          timeoutMs: 2_000,
+        });
+      }
+      throw new Error(`unexpected tool call: ${args.join(' ')}`);
+    },
+  });
+  await withAppleToolProvider(failing, () => isAppleFoldableSimulator(device, undefined));
+  expect(tableFailures).toBe(1);
+
+  // The rotation that follows pays its own read, gets the device's real answer, and folds through HID.
+  await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
+  expect(sim.helpers).toEqual([['rotate', 'landscape-left']]);
+  expect(mockRunner).not.toHaveBeenCalled();
 });
 
 test('a stale CoreDevice sample cannot verify a rotation that did not happen', async () => {

@@ -51,8 +51,8 @@ extension RunnerTests {
   /// identical black frames would then read as a settled screen (#2728). An observation with no
   /// session window falls to the system surface's window, which is what the home screen is. macOS
   /// keeps the host display it always recorded.
-  func captureRunnerFrame(app: XCUIApplication) -> RunnerImage? {
-    switch captureRunnerFrameResult(app: app) {
+  func captureRunnerFrame(app: XCUIApplication, litPanel: RunnerLitPanel) -> RunnerImage? {
+    switch captureRunnerFrameResult(app: app, litPanel: litPanel) {
     case .success(let captured):
       return captured.image
     case .failure:
@@ -64,11 +64,15 @@ extension RunnerTests {
   /// frame — a recording's bootstrap, which sizes the whole writer from it — fails closed with a
   /// typed code rather than a message. The ongoing pump reads the same result and ignores a refusal
   /// the way it ignored the `nil` it used to get; only a frame that must exist owes a reason (#2728).
+  /// The panel is a parameter and not a read here for the same reason it is one for the capture: a
+  /// recording is one observation of one panel, and its pump runs long after the request that started
+  /// it was served. A caller that lives for one command may read `requestSurfacePanel` itself.
   func captureRunnerFrameResult(
-    app: XCUIApplication
+    app: XCUIApplication,
+    litPanel: RunnerLitPanel
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
 #if os(iOS)
-    return captureObservedScreen(app: app)
+    return captureObservedScreen(app: app, litPanel: litPanel)
 #else
     var outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> = .failure(
       .unrenderableImage

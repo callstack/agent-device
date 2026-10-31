@@ -392,6 +392,7 @@ extension RunnerTests {
     let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
     let startedAt = Date()
     let capture = try recursiveTreeSnapshotAcquisition(
+      app: app,
       context: context,
       hint: hint,
       processingDeadline: startedAt.addingTimeInterval(treeCaptureSliceBudget)
@@ -430,10 +431,11 @@ extension RunnerTests {
     let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
     let tabBar = try XCTUnwrap(Self.snapshotDescendants(of: context.rootSnapshot).first { $0.elementType == .tabBar })
     XCTAssertTrue(tabBar.children.isEmpty, "the fixture must exercise collapsed-tab recovery")
-    let unstarted = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: Date())
+    let unstarted = try recursiveTreeSnapshotAcquisition(app: app, context: context, hint: hint, processingDeadline: Date())
     XCTAssertEqual(unstarted.outcome, .deadlineExhausted)
     XCTAssertTrue(unstarted.acquisition.truncated)
     let capture = try recursiveTreeSnapshotAcquisition(
+      app: app,
       context: context,
       hint: hint,
       processingDeadline: Date().addingTimeInterval(treeCaptureSliceBudget)

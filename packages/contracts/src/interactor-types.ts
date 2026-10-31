@@ -108,6 +108,24 @@ export type PressPointOptions = Readonly<{
 }>;
 
 /**
+ * The panel the host reports as lit, in the units the panel table reports it: which display is
+ * powered, and that panel's own native box in points (`nativeSize` divided by `pointScale`).
+ *
+ * A runner on a multi-panel device cannot decide which panel is powered — it has no hinge to read,
+ * and geometry decides nothing because the dark panel's windows have perfectly good frames — so a
+ * request that resolves a screen names the panel here and the runner books its surface against it
+ * (ADR 0025). A request that carries no panel is a single-panel device's request.
+ *
+ * The size is the panel's native box, deliberately not the box an app is showing on it: the system
+ * presents the iPhone Duo inner panel turned, so its interaction space swaps the side lengths.
+ */
+export type AppleLitPanel = Readonly<{
+  displayId: number;
+  widthPt: number;
+  heightPt: number;
+}>;
+
+/**
  * Legacy success text retained for compatibility when the XCTest runner used
  * the Maestro non-hittable coordinate fallback. Usage itself is carried by
  * the structured `maestroNonHittableCoordinateFallbackUsed` runner field.

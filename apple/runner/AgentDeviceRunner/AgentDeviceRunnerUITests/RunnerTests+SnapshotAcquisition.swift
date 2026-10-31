@@ -76,7 +76,7 @@ extension RunnerTests {
   /// penalizes the tree backend for this bundle (unless the fresh-process warmup exemption
   /// applies), and the plan moves to the platform's independent recovery tier when one exists
   /// (#1105/#1122).
-  private func captureSnapshotRootBounded(
+  func captureSnapshotRootBounded(
     _ element: XCUIElement,
     sliceSeconds: TimeInterval
   ) throws -> XCUIElementSnapshot? {
@@ -259,6 +259,9 @@ extension RunnerTests {
 
   private func snapshotAppFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
+    // The same resolved surface a tap books against: on a foldable the first window is SpringBoard's
+    // status-bar window on a panel that may be dark, and a viewport that small makes the presenter
+    // refuse a tree whose nodes fall outside it.
     return onScreenWindowFrame(app: app)
 #else
     return app.frame
