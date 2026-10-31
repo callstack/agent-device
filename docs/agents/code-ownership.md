@@ -12,8 +12,6 @@ Before you edit a module with many callers, run `pnpm depgraph affected <path>`.
 | Interaction guarantees | `packages/contracts/src/interaction-guarantees.ts` |
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
 | Command facets, metadata, schemas, CLI grammar, request projection, and client port | `packages/command-surface/src/` |
-| Client factory and daemon-response normalizers | `packages/client/src/` |
-| Released SDK type facade | `src/client/client-types.ts` |
 | CLI output formatters, help, and progress | `src/commands/` |
 | Input fields and audiences | `packages/command-surface/src/common-input-fields.ts`, `packages/command-surface/src/input-audience.ts` |
 | Released SDK default hosts | `src/sdk/host.ts` |
