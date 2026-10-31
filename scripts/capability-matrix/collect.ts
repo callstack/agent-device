@@ -290,13 +290,12 @@ async function revylSupport(
       apiUrl: 'https://revyl.invalid.test',
     });
     if (!plugin.setup) throw new Error('The Revyl plugin exposes no setup().');
-    const created = (await plugin.setup({ env: {}, clientVersion: '0.0.0' } as never)) as {
-      runtime: ProviderDeviceRuntime;
-      platformModule: { loadRuntime(host: PlatformRuntimeHost): Promise<PlatformRuntimeOwner> };
-    };
-    const owner = await created.platformModule.loadRuntime(host);
+    const created = await plugin.setup({ env: {}, clientVersion: '0.0.0' } as never);
+    if (!('runtime' in created)) throw new Error('The Revyl plugin built no device runtime.');
+    const runtime = created.runtime as unknown as ProviderDeviceRuntime;
+    const owner = (await created.platformModule.loadRuntime(host as never)) as PlatformRuntimeOwner;
     const leaseId = `lease-${target.platform}`;
-    await created.runtime.leaseLifecycle?.allocate?.(
+    await runtime.leaseLifecycle?.allocate?.(
       {
         leaseId,
         leaseProvider: 'revyl',
@@ -306,14 +305,14 @@ async function revylSupport(
       } as never,
       { flags: {} } as never,
     );
-    const devices = await created.runtime.deviceInventoryProvider?.({
+    const devices = await runtime.deviceInventoryProvider?.({
       leaseProvider: 'revyl',
       leaseId,
     } as never);
     const device = devices?.[0];
     if (!device) throw new Error('Revyl invented no device for its lease.');
     const facts = targetFacts(await owner.inspectFacts(device), commands);
-    await created.runtime.shutdown?.();
+    await runtime.shutdown?.();
     return facts;
   } finally {
     globalThis.fetch = previousFetch;
