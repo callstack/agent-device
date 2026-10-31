@@ -149,12 +149,13 @@ The vitest twin and runner unit-test lane decode this golden table.
 Contract drift therefore fails CI on both sides.
 
 Capture first asks for the target app's window, then the system surface's window.
+On a multi-panel device, it asks the system surface only when the app has no window at all.
 SpringBoard owns the home-screen window.
 Thus, a session without an app, or with a stopped app, can still resolve a window's display.
 The result always names a display occupied by a window.
 It never defaults to `XCUIScreen.main`, which is dark on a Duo when the app uses the inner panel.
-A capture fails closed only in three cases. Neither window resolves. A resolved window names no display. A resolved display yields an unrenderable image.
-The typed reasons are `unresolvedWindow`, `unresolvedScreen`, and `unrenderableImage` (`RunnerAppScreenCapture.swift`).
+A capture fails closed only in four cases. Neither window resolves. A resolved window names no display. A resolved display yields an unrenderable image. On a multi-panel device, every window of the target app is on the dark panel.
+The typed reasons are `unresolvedWindow`, `unresolvedScreen`, `unrenderableImage`, and `offLitPanel` (`APP_SCREEN_OFF_LIT_PANEL`) (`RunnerAppScreenCapture.swift`).
 The query uses both `exists` and frame evidence to refuse an app without a window.
 Such an app returns `(0,0 0x0)` from `frame` without an exception.
 Geometry alone cannot prove that no window exists.
