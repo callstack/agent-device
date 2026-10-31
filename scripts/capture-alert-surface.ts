@@ -83,7 +83,11 @@ const [runtime, device] =
     .flatMap(([key, list]) => list.map((entry) => [key, entry] as const))
     .find(([, entry]) => entry.udid === udid) ?? [];
 const previous = fs.existsSync(fixture)
-  ? (JSON.parse(fs.readFileSync(fixture, 'utf8')) as { expect?: unknown })
+  ? (JSON.parse(fs.readFileSync(fixture, 'utf8')) as {
+      expect?: unknown;
+      nearMisses?: unknown;
+      nearMissesOmitting?: unknown;
+    })
   : {};
 const recorded = {
   capture: {
@@ -96,6 +100,12 @@ const recorded = {
     }).trim(),
   },
   ...(previous.expect === undefined ? {} : { expect: previous.expect }),
+  // A recapture re-records `nodes`, never what the rules were checked to report, so both keys
+  // survive a recapture the way `expect` does.
+  ...(previous.nearMisses === undefined ? {} : { nearMisses: previous.nearMisses }),
+  ...(previous.nearMissesOmitting === undefined
+    ? {}
+    : { nearMissesOmitting: previous.nearMissesOmitting }),
 };
 // One node per line, so a recapture reads as a reviewable diff of changed nodes.
 const header = JSON.stringify(recorded, null, 2).replace(/\n}$/, '');

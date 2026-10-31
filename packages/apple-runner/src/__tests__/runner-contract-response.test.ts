@@ -105,4 +105,66 @@ describe('buildRunnerResponseError', () => {
     assert.equal(error.message, 'Runner error');
     assert.equal(error.details?.hint, undefined);
   });
+
+  test('passes a runner diagnostic through without letting it stamp the dispatch verdict', () => {
+    const error = buildRunnerResponseError({
+      ok: false,
+      error: {
+        code: 'ALERT_NOT_FOUND',
+        message: 'alert not found',
+        hint: 'Inspect the surface',
+        details: {
+          nearMisses: [
+            {
+              type: 'Other',
+              identifier: 'SFDialogView',
+              label: 'Open this page?',
+              buttons: ['Cancel', 'Open'],
+            },
+          ],
+          dispatched: 'yes',
+        },
+      },
+    });
+
+    assert.deepEqual(error.details?.nearMisses, [
+      {
+        type: 'Other',
+        identifier: 'SFDialogView',
+        label: 'Open this page?',
+        buttons: ['Cancel', 'Open'],
+      },
+    ]);
+    assert.equal(error.details?.runnerErrorCode, 'ALERT_NOT_FOUND');
+    assert.equal(error.details?.dispatched, 'no');
+    // `runner` carries the same payload, so the two paths must not be one object: diagnostics print
+    // an object reachable twice as `[Circular]`.
+    const shared = (error.details as { runner: { error: { details: { nearMisses: unknown } } } })
+      .runner.error.details.nearMisses;
+    assert.notStrictEqual(error.details?.nearMisses, shared);
+  });
+
+  test('ignores a runner diagnostic that is not an object', () => {
+    const error = buildRunnerResponseError({
+      ok: false,
+      error: { code: 'ALERT_NOT_FOUND', message: 'alert not found', details: 'SFDialogView' },
+    });
+    assert.equal(error.details?.nearMisses, undefined);
+  });
+
+  test('withholds the classification keys a runner tries to stamp for a code that sets neither', () => {
+    // ALERT_NOT_FOUND classifies with no reason and no retriable, so both keys on the wire are the
+    // runner's invention and must not reach the caller.
+    const error = buildRunnerResponseError({
+      ok: false,
+      error: {
+        code: 'ALERT_NOT_FOUND',
+        message: 'alert not found',
+        details: { reason: 'runnerCrashed', retriable: true, nearMisses: [] },
+      },
+    });
+    assert.equal('reason' in (error.details ?? {}), false);
+    assert.equal('retriable' in (error.details ?? {}), false);
+    assert.deepEqual(error.details?.nearMisses, []);
+  });
 });

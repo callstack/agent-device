@@ -258,10 +258,20 @@ struct Command: Codable {
   let inlineScreenshot: Bool?
   let synthesized: Bool?
   let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
+  /// Tells this `alert` request that its not-found answer is the caller's final answer, so the
+  /// runner may spend one extra read naming a dialog-like surface its rules do not recognise.
+  let explainAbsence: Bool?
   let steps: [SequenceStep]?
 }
 
 extension Command {
+  /// Whether this request pays for the near-miss read. The flag says the caller's absence is final;
+  /// `get` is the only alert action whose absence is an answer rather than a re-ask, so the rule
+  /// lives here and an acting leg cannot buy the read by carrying the flag.
+  var explainsAlertAbsence: Bool {
+    command == .alert && (action ?? "get").lowercased() == "get" && explainAbsence == true
+  }
+
   /// How the runner classifies this request. Exhaustive by construction: a new CommandType cannot
   /// compile without choosing a group, and the facts that depend on the payload are settled here
   /// rather than re-read by each consumer.
@@ -590,10 +600,48 @@ enum RetryableResponseFailure: Equatable {
   case targetAppUnavailable
 }
 
+struct RunnerAlertNearMiss: Codable, Equatable {
+  let type: String
+  let identifier: String
+  let label: String
+  let buttons: [String]
+}
+
+/// What `alert` answers when it found no alert: the reason, and the dialog-like surfaces on screen
+/// that its rules do not recognise, when one extra read could name them.
+enum AlertAbsence: Equatable {
+  case unexplained
+  case nearMisses([RunnerAlertNearMiss])
+
+  var errorPayload: ErrorPayload {
+    switch self {
+    case .unexplained:
+      return ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
+    case .nearMisses(let nearMisses):
+      return ErrorPayload(
+        code: "ALERT_NOT_FOUND",
+        message: "alert not found",
+        hint: AlertAbsence.nearMissHint,
+        details: ErrorDetailsPayload(nearMisses: nearMisses)
+      )
+    }
+  }
+
+  static let nearMissHint =
+    "No alert surface was recognised, but the screen shows a dialog-like surface. Run snapshot -i and press the ref it returns for one of those button labels."
+}
+
+/// Details that travel with a runner failure. Encoded as a JSON object the host passes through to
+/// the caller, so a new field needs no host change to reach `--json`.
+struct ErrorDetailsPayload: Codable {
+  var nearMisses: [RunnerAlertNearMiss]?
+}
+
 struct ErrorPayload: Codable {
   var code: String?
   let message: String
   var hint: String?
+  var details: ErrorDetailsPayload?
   /// Runner-internal: read by `shouldRetryResponse` and never encoded, so the host's decoding of
   /// the error is unchanged.
   var retryableFailure: RetryableResponseFailure? = nil
@@ -602,6 +650,7 @@ struct ErrorPayload: Codable {
     case code
     case message
     case hint
+    case details
   }
 
   static func targetAppUnavailable(bundleId: String?) -> ErrorPayload {
