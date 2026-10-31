@@ -1,10 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import {
-  providerCredentialFingerprint as fingerprintFor,
-  readDaemonProviderCredentials as daemonCredentialsFor,
-} from './provider-credential-fingerprint.ts';
+import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/plugins/credential-fingerprint';
+import { readDaemonProviderCredentials as daemonCredentialsFor } from './provider-credential-fingerprint.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { pluginHome, selectPluginManifest } from '@agent-device/test-kit';
@@ -34,6 +32,13 @@ test.for([
   expect(fingerprint).toMatch(/^v1:[0-9a-f]{16}$/);
   expect(providerCredentialFingerprint(provider, { ...before })).toBe(fingerprint);
   expect(providerCredentialFingerprint(provider, after)).not.toBe(fingerprint);
+});
+
+test('provider whitespace does not bypass credential fingerprinting', () => {
+  const first = providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: 'first' });
+  expect(first).toBeDefined();
+  expect(providerCredentialFingerprint('  limrun  ', { LIMRUN_API_KEY: 'first' })).toBe(first);
+  expect(providerCredentialFingerprint('  limrun  ', { LIMRUN_API_KEY: 'second' })).not.toBe(first);
 });
 
 test('a fingerprint ignores variables the provider does not read and blank values', () => {

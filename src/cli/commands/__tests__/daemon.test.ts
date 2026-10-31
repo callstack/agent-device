@@ -340,7 +340,13 @@ test.each([
     /Nothing was signaled\. Check what owns that process, then repair the record: stop it by its own means and remove its daemon\.json/,
   ],
   ['unreadable', true, '{not json', 'daemon-clean-not-detached', /remove .*daemon\.json/],
-  ['unreadable', false, '{not json', 'daemon-record-unreadable', /Inspect or remove that record/],
+  [
+    'unreadable',
+    false,
+    '{not json',
+    'daemon-record-unreadable',
+    /Inspect the retained record and its ownership before retrying/,
+  ],
 ] as const)('daemon stop refuses %s with clean=%s', async (_label, clean, record, reason, hint) => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-command-refused-');
   fs.writeFileSync(`${stateDir}/daemon.json`, record, { mode: 0o600 });

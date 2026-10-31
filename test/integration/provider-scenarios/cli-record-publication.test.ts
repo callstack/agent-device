@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, onTestFinished, vi } from 'vitest';
 import * as codeSignature from '@agent-device/host-kit/code-signature';
-import { resolveLocalDaemonCodeIdentity } from '../../../src/daemon-client/daemon-launch-spec.ts';
+import { resolveLocalDaemonCodeIdentity } from '@agent-device/daemon-client';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { createProviderScenarioHarness } from './harness.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';

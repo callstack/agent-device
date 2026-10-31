@@ -56,9 +56,9 @@ const SESSION_TENANT_SCOPE = 'packages/daemon/src/core/session-tenant-scope.ts';
 const HTTP_REQUEST_TARGET = 'packages/daemon/src/server/http-request-target.ts';
 const REMOTE_REQUEST_DIAGNOSTICS = 'packages/remote/src/remote-request-diagnostics.ts';
 const PROGRESS_PROTOCOL = 'packages/daemon-contracts/src/request-progress-protocol.ts';
-const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
-const CLIENT_PROGRESS = 'src/daemon-client/daemon-client-progress.ts';
-const CLIENT_TRANSPORT = 'src/daemon-client/daemon-client-transport.ts';
+const CLIENT_RPC = 'packages/daemon-client/src/daemon-client-rpc.ts';
+const CLIENT_PROGRESS = 'packages/daemon-client/src/daemon-client-progress.ts';
+const CLIENT_TRANSPORT = 'packages/daemon-client/src/daemon-client-transport.ts';
 const DAEMON_PROXY = 'packages/proxy/src/daemon-proxy.ts';
 const UPLOAD_CLIENT = 'packages/remote/src/upload-client.ts';
 const REMOTE_ARTIFACTS = 'packages/remote/src/daemon-artifacts.ts';
@@ -245,9 +245,10 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ),
       // Consumer side: the payload the client actually puts on the wire. A
       // client-only change here breaks an older daemon just as surely.
+      ...from(CLIENT_RPC, 'buildHttpRpcPayload'),
       ...from(
-        CLIENT_RPC,
-        'buildHttpRpcPayload',
+        'packages/contracts/src/lease-scope.ts',
+        'buildDaemonRpcRequest',
         'isLeaseRpcCommand',
         'leaseRpcMethodForCommand',
         'buildLeaseRpcParams',

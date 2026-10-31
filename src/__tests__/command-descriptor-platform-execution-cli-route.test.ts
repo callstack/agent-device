@@ -221,7 +221,7 @@ describe('the CLI reaches the daemon transport only through client transport fac
 
   test('wiring the transport into a client transport factory stays allowed', () => {
     const wiring = `
-      import { sendToDaemon } from '../daemon-client/daemon-client.ts';
+      import { sendToDaemon } from '@agent-device/daemon-client';
       type CliDeps = { sendToDaemon: typeof sendToDaemon };
       function build(deps: CliDeps) {
         return createCliDaemonTransport({ transport: deps.sendToDaemon });

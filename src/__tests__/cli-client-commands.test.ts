@@ -15,9 +15,12 @@ import type {
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  withCapturedOutput,
+  withCapturedStdoutAsync,
+} from '@agent-device/test-kit';
 import { createStubClientLeases } from './test-utils/client-lease-fixtures.ts';
-import { withCapturedOutput, withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
 
 // #1802: the replay client reads the script it names, so CLI-level replay cases need a real file.
 const REPLAY_SCRIPT_ROOT = mkdtempForTestSync('agent-device-cli-replay-scripts-');
@@ -786,11 +789,7 @@ test('replay rejects extra plain replay paths before daemon dispatch', async () 
       await tryRunClientBackedCommand({
         command: 'replay',
         positionals: ['one.ad', 'two.ad'],
-        flags: {
-          json: false,
-          help: false,
-          version: false,
-        },
+        flags: { json: false, help: false, version: false },
         client,
       }),
     (error) => {

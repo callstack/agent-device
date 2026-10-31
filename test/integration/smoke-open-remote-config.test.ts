@@ -8,12 +8,10 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
-import { runCli } from '../../src/cli.ts';
-import {
   beginStderrCapture,
   beginStdoutCapture,
-} from '../../src/__tests__/test-utils/stream-capture.ts';
+} from '@agent-device/test-kit';
+import { runCli } from '../../src/cli.ts';
 
 // Smoke coverage for the repo-local remote host flow: connect to a remote profile,
 // prepare Metro through the host bridge, and reuse connection runtime hints on open.

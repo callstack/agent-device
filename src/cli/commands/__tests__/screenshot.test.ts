@@ -1,7 +1,10 @@
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+  withCapturedStdoutAsync,
+} from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';

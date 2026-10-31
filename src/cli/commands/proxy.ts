@@ -2,10 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
-import {
-  ensureManagedDaemon,
-  resolveClientSettings,
-} from '../../daemon-client/daemon-client-lifecycle.ts';
+import { ensureProxyUpstreamDaemon } from '@agent-device/daemon-client';
 import { AppError } from '@agent-device/kernel/errors';
 import { colorize, supportsColor } from '../../commands/output/color.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -35,27 +32,12 @@ export const proxyCommand: ClientCommandHandler = async ({
 };
 
 async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise<ProxyStartup> {
-  const settings = resolveClientSettings(
-    {
-      session: 'default',
-      command: 'proxy',
-      positionals: [],
-      flags: {
-        stateDir: flags.stateDir,
-        daemonBaseUrl: '',
-        daemonTransport: 'http',
-        daemonServerMode: 'http',
-      },
-    },
-    undefined,
-    clientHost,
-  );
-  const daemon = await ensureManagedDaemon(settings);
-  const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.info.httpPort);
+  const daemon = await ensureProxyUpstreamDaemon({ stateDir: flags.stateDir, host: clientHost });
+  const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.httpPort);
   const token = resolveProxyClientToken(flags);
   const server = createDaemonProxyServer({
     upstreamBaseUrl,
-    upstreamToken: daemon.info.token,
+    upstreamToken: daemon.token,
     clientToken: token,
   });
   const host = flags.proxyHost?.trim() || '127.0.0.1';
@@ -71,7 +53,7 @@ async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise
     agentDeviceBaseUrl: buildDaemonHttpBaseUrl(proxyBaseUrl),
     token,
     upstreamBaseUrl,
-    stateDir: settings.paths.baseDir,
+    stateDir: daemon.stateDir,
   };
 }
 

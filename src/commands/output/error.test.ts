@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { withCapturedStderrAsync } from '../../__tests__/test-utils/stream-capture.ts';
+import { withCapturedStderrAsync } from '@agent-device/test-kit';
 import { printHumanError } from './error.ts';
 
 test('printHumanError renders a structured cause unconditionally', async () => {

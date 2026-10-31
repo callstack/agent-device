@@ -1,4 +1,8 @@
-import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createTestHostEnvironment,
+  withCapturedStdoutAsync,
+} from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,7 +29,6 @@ import {
   readRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { connectCommand } from '../../../__tests__/test-utils/host-bound-commands.ts';
-import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
 
 bindTestCommandHost();
 

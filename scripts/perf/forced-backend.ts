@@ -2,12 +2,10 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
-import { readDaemonInfo } from '../../src/daemon-client/daemon-client-metadata.ts';
-import { sendRequest } from '../../src/daemon-client/daemon-client-transport.ts';
+import { sendToRecordedDaemon } from '../lib/recorded-daemon.ts';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { REPO_ROOT } from './config.ts';
 import type { CliResult } from './types.ts';
 
@@ -62,28 +60,24 @@ function forcedBackendTransport(
   backend: SnapshotPreferredBackend,
   requestId: string,
 ): AgentDeviceDaemonTransport {
-  const host = captureHostEnvironment(process);
   return async (request, context) => {
     const stateDir = request.flags?.stateDir;
     if (request.session === undefined || typeof stateDir !== 'string') {
       throw new Error('A forced-backend capture requires an explicit session and state dir.');
     }
-    const paths = resolveDaemonPaths(stateDir, { env: process.env });
-    const info = readDaemonInfo(paths.infoPath);
-    if (!info) throw new Error(`No daemon is running for state dir ${stateDir}.`);
-    return await sendRequest(
-      info,
+    return await sendToRecordedDaemon(
       {
         ...request,
         session: request.session,
-        token: info.token,
         flags: { ...request.flags, snapshotPreferredBackend: backend },
         meta: { ...request.meta, debug: true, requestId },
       },
-      'auto',
-      paths,
-      FORCED_CAPTURE_TIMEOUT_MS,
-      { host, signal: context?.signal, timeoutRecovery: 'none' },
+      {
+        host: captureHostEnvironment(process),
+        stateDir,
+        timeoutMs: FORCED_CAPTURE_TIMEOUT_MS,
+        signal: context?.signal,
+      },
     );
   };
 }

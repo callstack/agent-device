@@ -21,7 +21,7 @@ For SDK entries `android-adb`, `artifacts`, `limrun`, `metro`, and `remote-confi
 For command-host readers, use `withSdkHost`.
 Keep provider callbacks on their supplied host.
 Request cancellation and progress belong in `@agent-device/host-kit/request`.
-Per-call abort guards belong beside transports in `src/daemon-client/daemon-client-transport.ts`.
+Per-call abort guards belong beside transports in `packages/daemon-client/src/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
 Schema composition belongs in `packages/command-surface/src/schema`.
 A command facet declares no output formatter. Register the formatter in `src/commands/cli-output.ts`.

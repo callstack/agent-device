@@ -143,7 +143,7 @@ The `client-side` logical-module policy prohibits every edge into `packages/daem
 - CLI.
 - Typed client.
 - Remote transports.
-- `src/daemon-client/`.
+- `packages/daemon-client/src/`.
 
 R78 also prohibits access through any root module reachable by the CLI process.
 #3288's `daemon-contracts` zone declared ownership below both daemon and client.
@@ -163,7 +163,7 @@ They are not independent proof that the placement is optimal.
 | `src/platform-runtime-daemon-lifecycle.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. Relocation is possible only with coordinated changes to those declarations. |
 | `src/platform-runtime-device-boot.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
-| `src/provider-credential-fingerprint.ts` | keep (type extracted) | Like `daemon-policy-file.ts`, this shared daemon/client contract follows #2559. #3288 declares its zone beside the provider composition that reads the credentials this file fingerprints. Daemon extraction PR 6 moved only the `DaemonProviderCredentials` declaration to `packages/daemon-contracts` at `./provider-credentials`. This is the same shared-below-both landing as the policy file. The implementation remains here because it reads the installed-plugin manifest. |
+| `src/provider-credential-fingerprint.ts` | keep (type extracted) | Like `daemon-policy-file.ts`, this shared daemon/client contract follows #2559. #3288 declares its zone beside the provider composition that reads the credentials this file fingerprints. Daemon extraction PR 6 moved only the `DaemonProviderCredentials` declaration to `packages/daemon-contracts` at `./provider-credentials`. This is the same shared-below-both landing as the policy file. Credential fingerprinting resides beside the installed-plugin manifest lookup in `packages/plugins/src/credential-fingerprint.ts`. The root retains daemon credential composition. |
 | `src/provider-limrun-runtime.ts` | keep | The proposed provider-limrun destination has no seam. Its constructor builds the root dependency factory `src/sdk/limrun-runtime-dependencies.ts`, which is the ADR 0019 composition seam. This loads the root adb-host binder, core Android interactor, and platform-runtime app-state helpers, all prohibited package imports. Moving the class also moves that composition. That is a design change, not a move. |
 | `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | This follows #2559's shared-contract decision. The client reads it statically through `daemon-client-progress.ts`; the server reads it through `packages/daemon/src/server/`. Only shared placement and wire-compat ledgers constrain it. #3288 declared `daemon-contracts`; extraction made it physical and moved wire-ledger keys with it. Contracts was rejected because R18 excludes envelope validation mechanics. |
 | `src/runtime-command-surface.ts` | moved → `packages/command-runtime/src/index.ts` (after [#3299](https://github.com/callstack/agent-device/pull/3299) into `src/command-runtime/`) | The binding now owns the `@agent-device/command-runtime` entry. It retains the three-family daemon load shape. |

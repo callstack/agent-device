@@ -242,7 +242,7 @@ The daemon never computes it by a re-parse of the script for `close`.
 This field lets the real CLI/IPC client (not only the in-process handler) actually honor "the session stays active".
 Before this field, the response had no explicit signal.
 The one-shot `replay`/`test` teardown of the client had no way to distinguish a still-active handoff from a finished one.
-It tore the owning daemon down regardless (`src/daemon-client/daemon-client-lifecycle.ts`).
+It tore the owning daemon down regardless (`packages/daemon-client/src/daemon-client-lifecycle.ts`).
 `sessionActive` is `true` for every close-less run, including a `--from` resume.
 It is `false` once the terminal `close` of the script, or the deferred equivalent of a repair-armed run, has executed.
 

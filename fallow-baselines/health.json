@@ -78,7 +78,7 @@
   },
   "runtime_coverage_findings": [],
   "target_keys": [
-    "src/daemon-client/daemon-client.ts:high impact",
+    "packages/daemon-client/src/index.ts:high impact",
     "src/cli/parser/args.ts:high impact",
     "packages/daemon/src/core/lease-context.ts:high impact",
     "packages/replay-port/src/daemon-port/session-replay-heal.ts:high impact",
@@ -117,7 +117,7 @@
     "packages/platform-android/src/app-parsers.ts:high impact",
     "packages/platform-android/src/ui-hierarchy.ts:high impact",
     "packages/platform-android/src/sdk.ts:high impact",
-    "src/daemon-client/daemon-client-lifecycle.ts:complexity",
+    "packages/daemon-client/src/daemon-client-lifecycle.ts:complexity",
     "packages/react-native/src/companion/client-companion-tunnel-worker.ts:complexity"
   ]
 }

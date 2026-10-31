@@ -654,7 +654,7 @@ for (const file of [
   'src/cli/commands/daemon.ts',
   'src/client/client-normalizers.ts',
   'packages/remote/src/daemon-artifacts.ts',
-  'src/daemon-client/daemon-client.ts',
+  'packages/daemon-client/src/index.ts',
 ]) {
   for (const [kind, source] of [
     [

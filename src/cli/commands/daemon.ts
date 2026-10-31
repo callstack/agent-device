@@ -18,7 +18,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cleanup.ts';
-import { stopRecordedDaemon } from '../../daemon-client/daemon-client-stop.ts';
+import { stopRecordedDaemon } from '@agent-device/daemon-client';
 
 export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const daemonOwnerCleanup = createDaemonOwnerCleanup(host);

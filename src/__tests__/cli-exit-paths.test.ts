@@ -13,9 +13,8 @@ import { runCli } from '../cli.ts';
 import { runWebCommand } from '../cli/commands/web.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
+import type { DaemonResponse } from '@agent-device/daemon-client';
+import { mkdtempForTestSync, beginStderrCapture, beginStdoutCapture } from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.clearAllMocks();

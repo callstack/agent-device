@@ -19,7 +19,7 @@ import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
+import type { DaemonResponse } from '@agent-device/daemon-client';
 
 afterEach(() => {
   vi.clearAllMocks();

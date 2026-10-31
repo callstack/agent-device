@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
+import { sendToDaemon } from '@agent-device/daemon-client';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';

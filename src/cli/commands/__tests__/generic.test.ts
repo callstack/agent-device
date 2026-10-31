@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+  withCapturedStdoutAsync,
+} from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';

@@ -1,0 +1,449 @@
+import type { DaemonConnection, EnsureDaemonOptions } from '@agent-device/contracts/client';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { DaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
+import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
+import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import {
+  createRequestId,
+  emitDiagnostic,
+  withDiagnosticTimer,
+} from '@agent-device/host-kit/diagnostics';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
+import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
+import {
+  prepareRemoteRequestArtifacts,
+  type PreparedRemoteRequest,
+} from '@agent-device/remote/daemon-artifacts';
+import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
+import { createRequestGuard, sendRequest as sendDaemonRequest } from './daemon-client-transport.ts';
+import { isRemoteDaemon, readRegisteredDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import type { LocalDaemonCodeIdentity } from './daemon-launch-spec.ts';
+import type {
+  ProxyUpstreamDaemon,
+  ProxyUpstreamDaemonOptions,
+} from './daemon-client-proxy-upstream.ts';
+import type {
+  DaemonRequest,
+  DaemonResponse,
+  DaemonTransportOptions,
+} from './daemon-client-request.ts';
+import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
+
+export type { DaemonRequest, DaemonResponse };
+export { readRegisteredDaemon };
+
+/** The released default: a process-level client, which reads the process's own host. */
+export async function sendToDaemon(
+  req: Omit<DaemonRequest, 'token'>,
+  options: DaemonTransportOptions = {},
+): Promise<DaemonResponse> {
+  return await sendToDaemonOnHost(req, options, captureHostEnvironment(process));
+}
+
+/**
+ * A transport whose daemon resolution, spawn, policy check and request preparation read `host`.
+ * Remote artifact upload still reads the process (`packages/remote`, tracked by #3751).
+ */
+export function createDaemonTransport(host: HostEnvironment) {
+  return async (
+    req: Omit<DaemonRequest, 'token'>,
+    options: DaemonTransportOptions = {},
+  ): Promise<DaemonResponse> => await sendToDaemonOnHost(req, options, host);
+}
+
+/** The transport one run uses: host-bound when its deps can build one, else the injected one. */
+export function resolveRunTransport(
+  deps: {
+    sendToDaemon: typeof sendToDaemon;
+    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+  },
+  host: HostEnvironment,
+): typeof sendToDaemon {
+  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+}
+
+async function sendToDaemonOnHost(
+  req: Omit<DaemonRequest, 'token'>,
+  options: DaemonTransportOptions,
+  host: HostEnvironment,
+): Promise<DaemonResponse> {
+  const { resolveClientSettings, resolveTimeoutRecovery, attachSessionAddressHints } =
+    await import('./daemon-client-lifecycle.ts');
+  const { connectToDaemon } = await import('./daemon-client-attach.ts');
+  const requestId = req.meta?.requestId ?? createRequestId();
+  const debug = Boolean(req.meta?.debug || req.flags?.verbose);
+  // A few internal callers build DaemonRequest directly instead of using the
+  // public client flag builder. Defend this transport boundary too: credentials
+  // belong in the auth channel, never in serializable request flags.
+  const rawFlags = req.flags as
+    | (NonNullable<typeof req.flags> & { daemonAuthToken?: string })
+    | undefined;
+  const { daemonAuthToken: flagAuthToken, ...flags } = rawFlags ?? {};
+  const requestWithoutAuthFlag = rawFlags ? { ...req, flags } : req;
+  const settings = resolveClientSettings(
+    requestWithoutAuthFlag,
+    options.authToken ?? flagAuthToken,
+    host,
+    options.daemonLifecycle,
+    options.daemonBinding,
+  );
+  const requestTimeoutMs = resolveCommandRequestTimeoutMs(
+    resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
+    requestWithoutAuthFlag,
+  );
+  // The caller's signal covers every phase of this one request, and the guard turns any phase's
+  // cancellation into the typed canceled-request error — so an abort never borrows a timeout's shape.
+  const cancellation = createRequestGuard({ signal: options.signal, requestId });
+  cancellation.refuseIfAborted();
+  const daemon = await cancellation.guard(async () => {
+    return await withDiagnosticTimer(
+      'daemon_startup',
+      async () => await connectToDaemon(settings),
+      {
+        requestId,
+        session: req.session,
+      },
+    );
+  });
+  const info = daemon.info;
+  const preparedRemoteRequest = await cancellation.guard(
+    async () =>
+      await protectArtifactUploadWithLeaseBeats(
+        info,
+        settings,
+        requestWithoutAuthFlag,
+        options.signal,
+      ),
+  );
+  writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
+
+  const request = buildTransportRequest(
+    requestWithoutAuthFlag,
+    preparedRemoteRequest,
+    info,
+    requestId,
+    debug,
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info, host.env),
+    host.env,
+  );
+  emitDiagnostic({
+    level: 'info',
+    phase: 'daemon_request_prepare',
+    data: {
+      requestId,
+      command: requestWithoutAuthFlag.command,
+      session: requestWithoutAuthFlag.session,
+    },
+  });
+  return await performDaemonRequestWithCleanup(
+    requestWithoutAuthFlag,
+    daemon,
+    settings,
+    async () => {
+      const response = await withDiagnosticTimer(
+        'daemon_request',
+        async () =>
+          await sendDaemonRequest(
+            info,
+            request,
+            settings.transportPreference,
+            settings.paths,
+            requestTimeoutMs,
+            {
+              host,
+              onProgress: options.onProgress,
+              signal: options.signal,
+              timeoutRecovery: resolveTimeoutRecovery(settings),
+            },
+          ),
+        { requestId, command: req.command },
+      );
+      return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
+    },
+  );
+}
+
+/**
+ * The transport the CLI and MCP use: `sendToDaemon` behind an explicit `ensureDaemon`. The wrapper
+ * loads on the first request, so a CLI start that never reaches the daemon does not pay for it.
+ * With a `host`, ensuring and every request read it; without one, each reads the process.
+ */
+export function createEnsuredDaemonTransport(
+  options: EnsuringTransportOptions = {},
+): typeof sendToDaemon {
+  // The load is memoized as a promise, so concurrent first requests share one wrapper and its
+  // ensure-once state.
+  let ensured: Promise<typeof sendToDaemon> | undefined;
+  return async (req, context) => {
+    ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
+      withEnsuredDaemon(options.host ? createDaemonTransport(options.host) : sendToDaemon, options),
+    );
+    return await (
+      await ensured
+    )(req, context);
+  };
+}
+
+function buildTransportRequest(
+  request: Omit<DaemonRequest, 'token'>,
+  preparedRemoteRequest: Awaited<ReturnType<typeof prepareRemoteRequestArtifacts>>,
+  info: DaemonInfo,
+  requestId: string,
+  debug: boolean,
+  providerCredentialFingerprint: string | undefined,
+  env: Readonly<EnvMap>,
+): DaemonRequest {
+  return {
+    ...request,
+    positionals: preparedRemoteRequest.positionals,
+    flags: preparedRemoteRequest.flags,
+    token: info.token,
+    meta: {
+      ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
+      ...buildLocalHostEnvMeta(info, env),
+      providerCredentialFingerprint,
+    },
+  };
+}
+
+// A remote daemon reads provider credentials from its own host, so only a local daemon is asked
+// to compare them, and only when a lease is allocated.
+async function readLocalProviderCredentialFingerprint(
+  request: Omit<DaemonRequest, 'token'>,
+  info: DaemonInfo,
+  env: Readonly<EnvMap>,
+): Promise<string | undefined> {
+  if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
+  const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
+  if (!provider) return undefined;
+  const [{ providerCredentialFingerprint }, { readPluginInventory }] = await Promise.all([
+    import('@agent-device/plugins/credential-fingerprint'),
+    import('@agent-device/contracts/plugin-inventory'),
+  ]);
+  return providerCredentialFingerprint(
+    provider,
+    env,
+    leaseBackend,
+    readPluginInventory(info.plugins),
+  );
+}
+
+// A developer dir is a path on the client's host, so only a local daemon can use it.
+function buildLocalHostEnvMeta(
+  info: DaemonInfo,
+  env: Readonly<EnvMap>,
+): Pick<NonNullable<DaemonRequest['meta']>, 'developerDir'> {
+  const developerDir = env.DEVELOPER_DIR;
+  if (isRemoteDaemon(info)) return { developerDir: undefined };
+  return developerDir !== undefined ? { developerDir } : {};
+}
+
+function buildTransportRequestMeta(
+  request: Omit<DaemonRequest, 'token'>,
+  preparedRemoteRequest: Awaited<ReturnType<typeof prepareRemoteRequestArtifacts>>,
+  requestId: string,
+  debug: boolean,
+): NonNullable<DaemonRequest['meta']> {
+  const meta = request.meta ?? {};
+  return {
+    ...meta,
+    requestId,
+    debug,
+    ...buildRequestScopeMeta(meta, request.flags),
+    ...buildRemoteArtifactMeta(preparedRemoteRequest),
+  };
+}
+
+function buildRequestScopeMeta(
+  meta: NonNullable<DaemonRequest['meta']>,
+  flags: DaemonRequest['flags'],
+): Pick<
+  NonNullable<DaemonRequest['meta']>,
+  | 'includeCost'
+  | 'cwd'
+  | 'sessionExplicit'
+  | 'tenantId'
+  | 'runId'
+  | 'leaseId'
+  | 'sessionIsolation'
+  | 'lockPolicy'
+  | 'lockPlatform'
+> {
+  return {
+    includeCost: meta.includeCost,
+    cwd: meta.cwd,
+    sessionExplicit: meta.sessionExplicit,
+    tenantId: meta.tenantId ?? flags?.tenant,
+    runId: meta.runId ?? flags?.runId,
+    leaseId: meta.leaseId ?? flags?.leaseId,
+    sessionIsolation: meta.sessionIsolation ?? flags?.sessionIsolation,
+    lockPolicy: meta.lockPolicy,
+    lockPlatform: meta.lockPlatform,
+  };
+}
+
+function buildRemoteArtifactMeta(
+  preparedRemoteRequest: Awaited<ReturnType<typeof prepareRemoteRequestArtifacts>>,
+): Pick<
+  NonNullable<DaemonRequest['meta']>,
+  'uploadedArtifactId' | 'clientArtifactPaths' | 'installSource'
+> {
+  return {
+    ...(preparedRemoteRequest.uploadedArtifactId
+      ? { uploadedArtifactId: preparedRemoteRequest.uploadedArtifactId }
+      : {}),
+    ...(preparedRemoteRequest.clientArtifactPaths
+      ? { clientArtifactPaths: preparedRemoteRequest.clientArtifactPaths }
+      : {}),
+    ...(preparedRemoteRequest.installSource
+      ? { installSource: preparedRemoteRequest.installSource }
+      : {}),
+  };
+}
+
+/**
+ * ADR 0012 decision 6 (BLOCKER 2, third follow-up): runs `send` and ALWAYS
+ * runs cleanup afterward, using cleanup's result (not `send`'s raw result) as
+ * the response the caller actually receives — cleanup can discover a
+ * shutdown-time repair-commit failure the request itself never knew about (a
+ * one-shot repair that completed with no divergence returns SUCCESS
+ * immediately; the actual commit is deferred to daemon teardown, which
+ * `cleanupDaemonAfterRequest` triggers and inspects). A caught-and-rethrown
+ * error (rather than a `return` inside `finally`, which oxlint's
+ * `no-unsafe-finally` rejects and which would also make a thrown `send`
+ * failure silently swallowed by a later `return`) keeps cleanup running
+ * unconditionally while a thrown failure still propagates normally afterward.
+ */
+async function performDaemonRequestWithCleanup(
+  req: Omit<DaemonRequest, 'token'>,
+  daemon: EnsuredDaemon,
+  settings: DaemonClientSettings,
+  send: () => Promise<DaemonResponse>,
+): Promise<DaemonResponse> {
+  let response: DaemonResponse | undefined;
+  let requestFailed = false;
+  let requestError: unknown;
+  try {
+    response = await send();
+  } catch (error) {
+    requestFailed = true;
+    requestError = error;
+  }
+  const { cleanupDaemonAfterRequest } = await import('./daemon-client-lifecycle.ts');
+  const finalResponse = await cleanupDaemonAfterRequest(req, daemon, settings, response);
+  if (requestFailed) throw requestError;
+  if (!finalResponse) {
+    // Unreachable in practice: `requestFailed` is false here, so `response`
+    // was successfully set above, and `cleanupDaemonAfterRequest` always
+    // returns a response (unchanged or overridden) when given one.
+    throw new AppError('COMMAND_FAILED', 'Daemon request produced no response after cleanup');
+  }
+  return finalResponse;
+}
+
+function writeInstallInProgressNotice(command: string | undefined, env: Readonly<EnvMap>): void {
+  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || env.CI) return;
+  process.stderr.write(
+    command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
+  );
+}
+
+function isInstallLikeCommand(command: string | undefined): boolean {
+  return (
+    command === PUBLIC_COMMANDS.install ||
+    command === PUBLIC_COMMANDS.reinstall ||
+    command === INTERNAL_COMMANDS.installSource
+  );
+}
+
+/**
+ * Uploads a remote request's artifact under a lease beat, so a large artifact cannot outlive the
+ * lease paying for the device it is going to (#2946).
+ *
+ * Only a remote daemon uploads, and a request that names no lease has nothing to renew, so those two
+ * guards answer for the overwhelming majority of requests — and they are what let the beat module
+ * stay out of `cli.ts`'s eager closure, which every command pays for. Both are cheap and local: the
+ * lease scope is read from the request the caller already built.
+ */
+async function protectArtifactUploadWithLeaseBeats(
+  info: DaemonInfo,
+  settings: DaemonClientSettings,
+  request: Omit<DaemonRequest, 'token'>,
+  callerSignal: AbortSignal | undefined,
+): Promise<PreparedRemoteRequest> {
+  const leaseScope = leaseScopeFromRequest(request);
+  if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
+    return await prepareRemoteRequestArtifacts(
+      request,
+      info,
+      callerSignal ?? new AbortController().signal,
+      settings.host,
+    );
+  }
+  const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
+    await import('./daemon-client-lease-beat.ts');
+  return await runProtectedLeaseWork({
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
+    // The upload stops for either owner of its signal: the lease beat finding the lease gone, or
+    // the caller aborting this one call.
+    task: (leaseSignal) =>
+      prepareRemoteRequestArtifacts(
+        request,
+        info,
+        callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
+        settings.host,
+      ),
+    callerSignal,
+  });
+}
+
+/** Guards a client call against cancellation before dispatch and during connection-free phases. */
+export { createRequestGuard };
+
+/**
+ * The one transport primitive every request goes through: it sends a request to the daemon `info`
+ * names, with the caller's cancellation, timeout budget and recovery policy. `sendToDaemon` resolves
+ * a daemon first; a caller that already holds the registration of a daemon it must not start,
+ * replace or retire (tooling that drives a daemon another build started) sends through it directly,
+ * with `timeoutRecovery: 'none'`.
+ */
+export { sendDaemonRequest };
+
+/**
+ * Starts the local daemon on a state directory if none is usable. Loaded on first call: a client
+ * that only attaches never pays for the startup and replacement machinery.
+ */
+export async function ensureDaemon(options?: EnsureDaemonOptions): Promise<DaemonConnection> {
+  const { ensureDaemon: ensure } = await import('./daemon-client-ensure.ts');
+  return await ensure(options);
+}
+
+/** Stops the daemon a record names, loaded on first call like the rest of the lifecycle. */
+export async function stopRecordedDaemon(
+  record: DaemonStopIdentity,
+  target: { paths: DaemonPaths; host: HostEnvironment },
+): Promise<DaemonStopResult> {
+  const { stopRecordedDaemon: stop } = await import('./daemon-client-stop.ts');
+  return await stop(record, target);
+}
+
+/**
+ * What this tree would launch a daemon from. The package entry loads the transport closure;
+ * this helper loads the launch identity implementation on first call.
+ */
+export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeIdentity> {
+  const { resolveLocalDaemonCodeIdentity: resolve } = await import('./daemon-launch-spec.ts');
+  return await resolve();
+}
+
+/** The managed local HTTP daemon `agent-device proxy` forwards to, started if none is usable. */
+export async function ensureProxyUpstreamDaemon(
+  options: ProxyUpstreamDaemonOptions,
+): Promise<ProxyUpstreamDaemon> {
+  const { ensureProxyUpstreamDaemon: ensure } = await import('./daemon-client-proxy-upstream.ts');
+  return await ensure(options);
+}

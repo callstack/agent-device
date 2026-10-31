@@ -17,7 +17,7 @@ import {
   type CellAdmissionOptions,
 } from './cell-admission.ts';
 import { sampleMinimumForState } from './definitions.ts';
-import { stopDaemon } from './lifecycle.ts';
+import { BenchmarkCellAdmissionError, stopDaemon } from './lifecycle.ts';
 import { buildMeasurement } from './statistics.ts';
 import type { LocalState, Measurement, RawSample, ScreenFixture } from './types.ts';
 
@@ -44,12 +44,13 @@ export async function runLocalMeasurements(options: LocalRunnerOptions): Promise
 async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
   const context = contextFor(options);
   let appPid: number | undefined;
+  let admissionFailure: BenchmarkCellAdmissionError | undefined;
   try {
     prepareCellState(options);
     appPid = await admitReadyCell(context, options);
     const samples: RawSample[] = [];
     for (let index = 0; index < options.samples; index += 1) {
-      if (index > 0) prepareSampleState(options);
+      if (index > 0) await prepareSampleState(options);
       const result = runMeasuredCommand(context, options);
       if (result.ok) {
         appPid = await admitSuccessfulSample(context, options, result, appPid);
@@ -66,9 +67,33 @@ async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
       operation: measuredOperation(options.state),
       samples,
     });
+  } catch (error) {
+    if (error instanceof BenchmarkCellAdmissionError) admissionFailure = error;
+    throw error;
   } finally {
     closeSession(context);
+    stopCellDaemon(options, admissionFailure);
+  }
+}
+
+function stopCellDaemon(
+  options: CellAdmissionOptions,
+  admissionFailure: BenchmarkCellAdmissionError | undefined,
+): void {
+  try {
     stopDaemon(options.repoRoot, options.stateDir);
+  } catch (error) {
+    if (!admissionFailure) throw error;
+    const failure = new BenchmarkCellAdmissionError(
+      admissionFailure.reason,
+      `${admissionFailure.message} Cleanup also failed: ${error instanceof Error ? error.message : String(error)}`,
+      admissionFailure.command,
+    );
+    failure.cause = new AggregateError(
+      [admissionFailure, error],
+      'Cell admission and daemon cleanup failed.',
+    );
+    throw failure;
   }
 }
 

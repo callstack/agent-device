@@ -5,10 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { run } from './run.ts';
-import {
-  beginStderrCapture,
-  beginStdoutCapture,
-} from '../../src/__tests__/test-utils/stream-capture.ts';
+import { beginStderrCapture, beginStdoutCapture } from '@agent-device/test-kit';
 
 let repo: string;
 

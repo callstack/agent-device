@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import {
@@ -8,7 +10,6 @@ import {
 } from '@agent-device/command-registry/owner-files';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-const distPath = path.join(repoRoot, 'dist/src');
 
 function collectJsFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { recursive: true, encoding: 'utf8' });
@@ -17,7 +18,9 @@ function collectJsFiles(dir: string): string[] {
 
 describe('owner-file metadata', () => {
   test('does not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
-    fs.rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true });
+    const sharedDistPath = path.join(repoRoot, 'dist');
+    const sharedDistContents = readBuildOutputs(sharedDistPath);
+    const distPath = path.join(mkdtempForTestSync('owner-files-no-leak-'), 'dist');
 
     const build = runCmdSync(
       'node',
@@ -26,10 +29,16 @@ describe('owner-file metadata', () => {
         'node_modules/tsdown/dist/run.mjs',
         '--config-loader',
         'native',
+        '--out-dir',
+        distPath,
       ],
       { cwd: repoRoot },
     );
     expect(build.exitCode, build.stderr).toBe(0);
+    expect(
+      readBuildOutputs(sharedDistPath),
+      'the metadata build must preserve the shared dist contents used by other tests',
+    ).toEqual(sharedDistContents);
 
     expect(
       fs.existsSync(path.join(distPath, 'sdk-selectors.js')),
@@ -57,3 +66,22 @@ describe('owner-file metadata', () => {
     }
   });
 });
+
+function readBuildOutputs(dir: string): Record<string, string> | null {
+  if (!fs.existsSync(dir)) return null;
+  return Object.fromEntries(
+    fs
+      .readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .sort()
+      .map((name) => {
+        const file = path.join(dir, name);
+        const stat = fs.lstatSync(file);
+        const contents = stat.isDirectory()
+          ? 'directory'
+          : stat.isSymbolicLink()
+            ? `symlink:${fs.readlinkSync(file)}`
+            : createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+        return [name, contents];
+      }),
+  );
+}

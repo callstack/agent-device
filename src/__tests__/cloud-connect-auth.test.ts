@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
-import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
@@ -11,6 +10,7 @@ import {
   mkdtempForTestSync,
   bindTestCommandHost,
   createTestHostEnvironment,
+  beginStdoutCapture,
 } from '@agent-device/test-kit';
 
 bindTestCommandHost();

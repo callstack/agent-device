@@ -56,22 +56,24 @@ export const BOUNDARY_FAULT_MATRIX = {
   timeout: {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/daemon-client-timeout-route.test.ts:http timeout'],
+      evidence: [
+        'packages/daemon-client/src/__tests__/daemon-client-timeout-route.test.ts:http timeout',
+      ],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
   },
@@ -100,44 +102,52 @@ export const BOUNDARY_FAULT_MATRIX = {
   'response-framing': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: [
+        'packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:response framing',
+      ],
       invariants: ['typed-error-identity', 'no-mutation-replay'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: [
+        'packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:response framing',
+      ],
       invariants: ['typed-error-identity'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: [
+        'packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:response framing',
+      ],
       invariants: ['typed-error-identity'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: [
+        'packages/daemon-client/src/__tests__/boundary-fault-transport.test.ts:response framing',
+      ],
       invariants: ['typed-error-identity'],
     },
   },
   'process-death': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline', 'no-mutation-replay'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['packages/daemon-client/src/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
   },

@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import { buildDaemonRpcRequest } from '@agent-device/contracts/lease-scope';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { ProviderScenarioRpcResult } from './harness.ts';
 
@@ -70,4 +72,15 @@ export function envelopeToRpcResult(
       error: envelope.error ?? { code: statusCode, message: '' },
     },
   };
+}
+
+/** The `/rpc` envelope for an ordinary scenario request: the shared builder, with the scenario's own id. */
+export function buildScenarioRpcRequest(
+  req: DaemonWireRequest,
+  options: { includeTokenParam: boolean },
+): ReturnType<typeof buildDaemonRpcRequest> {
+  return buildDaemonRpcRequest(req, {
+    id: req.meta?.requestId ?? randomUUID(),
+    includeTokenParam: options.includeTokenParam,
+  });
 }

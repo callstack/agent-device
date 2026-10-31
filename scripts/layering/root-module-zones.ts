@@ -15,7 +15,7 @@
  *
  * Zone membership is a layering fact only. Rules keyed on physical paths — R2's `topFolder`
  * zones, R13's composition files, R76's daemon-to-root inventory, the `daemon-client` logical-module policy's
- * `src/daemon-client/` root — keep reading the path, not this declaration.
+ * `packages/daemon-client/src/` root — keep reading the path, not this declaration.
  */
 export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts', 'src/host.ts'],

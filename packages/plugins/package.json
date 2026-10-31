@@ -41,6 +41,10 @@
     "./store": {
       "types": "./src/store.ts",
       "default": "./src/store.ts"
+    },
+    "./credential-fingerprint": {
+      "types": "./src/credential-fingerprint.ts",
+      "default": "./src/credential-fingerprint.ts"
     }
   },
   "devDependencies": {

@@ -11,7 +11,7 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
+import { sendToDaemon } from '@agent-device/daemon-client';
 import { listenOnLoopback, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 

@@ -20,9 +20,9 @@ const PROCESS_ENTRIES = new Set([
   'packages/host-kit/src/local-artifact-adapter.ts',
   'src/sdk/host.ts',
   'src/mcp/command-tools.ts',
-  'src/daemon-client/daemon-client.ts',
-  'src/daemon-client/daemon-client-ensure.ts',
-  'src/daemon-client/daemon-client-ensuring.ts',
+  'packages/daemon-client/src/index.ts',
+  'packages/daemon-client/src/daemon-client-ensure.ts',
+  'packages/daemon-client/src/daemon-client-ensuring.ts',
 ]);
 // src/cli/** and scripts/** are entry trees. Apple native helper executables live outside the
 // TypeScript source trees.

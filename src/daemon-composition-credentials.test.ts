@@ -4,7 +4,7 @@ import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
-import { providerCredentialFingerprint } from './provider-credential-fingerprint.ts';
+import { providerCredentialFingerprint } from '@agent-device/plugins/credential-fingerprint';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 
 vi.mock('./platform-runtime.ts', () => ({

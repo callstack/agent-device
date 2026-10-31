@@ -23,9 +23,8 @@ import {
   readRegisteredDaemonOwnership,
 } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
-  devicesClientSettings,
   launchDaemonProcess,
   spawnLegacyDaemonFixture,
 } from './daemon-registration-owner.fixtures.ts';
@@ -34,7 +33,7 @@ import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import { ensureManagedDaemon } from '../daemon-client/daemon-client-lifecycle.ts';
+import { createDaemonTransport } from '@agent-device/daemon-client';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -821,7 +820,12 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     assert.ok(disposition, 'a new daemon must refuse an occupied legacy file');
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
     await assert.rejects(
-      ensureManagedDaemon(devicesClientSettings(paths.baseDir)),
+      createDaemonTransport(createTestHostEnvironment())({
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { stateDir: paths.baseDir },
+      }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'daemon_registration_unproven');

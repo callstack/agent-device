@@ -1,5 +1,6 @@
-// The shape of test-kit (R83): a single entry that names its exports, plus the shared isolation
-// walk (package-isolation.test.ts) composed under its policy.
+// The shape of the pinned package entries (R83): test-kit, daemon, daemon-client and apple-runner publish a
+// single entry that names its exports, and test-kit also runs the shared isolation walk
+// (package-isolation.test.ts) under its policy.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -41,6 +42,10 @@ function workspace(overrides: Record<string, Manifest> = {}): Map<string, string
       name: '@agent-device/command-surface',
       exports: { '.': entry('./src/index.ts') },
     },
+    'daemon-client': {
+      name: '@agent-device/daemon-client',
+      exports: { '.': entry('./src/index.ts') },
+    },
     proxy: { name: '@agent-device/proxy' },
     contracts: { name: '@agent-device/contracts' },
   };
@@ -69,6 +74,7 @@ const SOURCE = new Map([
   ],
   ['packages/apple-runner/src/index.ts', "export { bindAppleRunnerHost } from './host.ts';"],
   ['packages/command-surface/src/index.ts', "export { runCommand } from './command-surface.ts';"],
+  ['packages/daemon-client/src/index.ts', "export { sendToDaemon } from './transport.ts';"],
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
@@ -88,20 +94,36 @@ test('test-kit exports exactly "." and nothing else', () => {
   assert.equal(check({ 'test-kit': { exports: { './tmp-dir': entry('./x.ts') } } }).length, 1);
 });
 
-test('daemon exports exactly "." and nothing else', () => {
-  const extra = check({
-    daemon: {
-      exports: {
-        '.': entry('./src/index.ts'),
-        './testing/context': entry('./src/core/context.ts'),
+for (const dir of ['daemon', 'daemon-client']) {
+  test(`${dir} exports exactly "." and nothing else`, () => {
+    const extra = check({
+      [dir]: {
+        exports: {
+          '.': entry('./src/index.ts'),
+          './testing/context': entry('./src/core/context.ts'),
+        },
       },
-    },
+    });
+    assert.equal(extra.length, 1);
+    assert.match(extra[0]!.file, new RegExp(`packages/${dir}/package\\.json`));
+    assert.match(extra[0]!.message, /exports exactly "\."/);
+    assert.deepEqual(check(), []);
   });
-  assert.equal(extra.length, 1);
-  assert.match(extra[0]!.file, /packages\/daemon\/package\.json/);
-  assert.match(extra[0]!.message, /exports exactly "\."/);
-  assert.deepEqual(check(), []);
-});
+
+  test(`every ${dir} condition of "." points at src/index.ts`, () => {
+    for (const exports of [
+      { '.': entry('./src/other.ts') },
+      { '.': { types: './src/index.ts', default: './src/other.ts' } },
+      { '.': './src/other.ts' },
+    ]) {
+      const found = check({ [dir]: { exports } });
+      assert.equal(found.length, 1, JSON.stringify(exports));
+      assert.match(found[0]!.file, new RegExp(`packages/${dir}/package\\.json`));
+      assert.match(found[0]!.message, /every condition of it is \.\/src\/index\.ts/);
+    }
+    assert.deepEqual(check({ [dir]: { exports: { '.': './src/index.ts' } } }), []);
+  });
+}
 
 test('apple-runner exports exactly "." and nothing else', () => {
   for (const exports of [
@@ -135,20 +157,6 @@ test('the apple-runner entry names its exports: export * is refused', () => {
     assert.match(found[0]!.file, /packages\/apple-runner\/src\/index\.ts/);
     assert.match(found[0]!.message, /names every export explicitly/);
   }
-});
-
-test('every daemon condition of "." points at src/index.ts', () => {
-  for (const exports of [
-    { '.': entry('./src/other.ts') },
-    { '.': { types: './src/index.ts', default: './src/other.ts' } },
-    { '.': './src/other.ts' },
-  ]) {
-    const found = check({ daemon: { exports } });
-    assert.equal(found.length, 1, JSON.stringify(exports));
-    assert.match(found[0]!.file, /packages\/daemon\/package\.json/);
-    assert.match(found[0]!.message, /every condition of it is \.\/src\/index\.ts/);
-  }
-  assert.deepEqual(check({ daemon: { exports: { '.': './src/index.ts' } } }), []);
 });
 
 test('command-surface exports exactly "." and nothing else', () => {
@@ -208,15 +216,17 @@ test('text that only mentions a star is not an export', () => {
   assert.deepEqual(check({}, new Map([...SOURCE, ['packages/test-kit/src/index.ts', body]])), []);
 });
 
-test('the daemon entry names its exports: export * is refused', () => {
-  const sources = new Map(SOURCE);
-  sources.set('packages/daemon/src/index.ts', "export * from './server/http/daemon-runtime.ts';");
-  const found = check({}, sources);
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.file, 'packages/daemon/src/index.ts');
-  assert.match(found[0]!.message, /names every export explicitly/);
-  assert.deepEqual(check(), []);
-});
+for (const dir of ['daemon', 'daemon-client']) {
+  test(`the ${dir} entry names its exports: export * is refused`, () => {
+    const sources = new Map(SOURCE);
+    sources.set(`packages/${dir}/src/index.ts`, "export * from './transport.ts';");
+    const found = check({}, sources);
+    assert.equal(found.length, 1);
+    assert.equal(found[0]!.file, `packages/${dir}/src/index.ts`);
+    assert.match(found[0]!.message, /names every export explicitly/);
+    assert.deepEqual(check(), []);
+  });
+}
 
 test('every condition of the "." entry must point at src/index.ts', () => {
   for (const exports of [
@@ -240,7 +250,7 @@ test('the shared isolation walk runs under the test-kit policy', () => {
   assert.match(found[0]!.message, /test-kit -> @agent-device\/daemon/);
 });
 
-for (const dir of ['daemon', 'test-kit', 'command-surface']) {
+for (const dir of ['daemon', 'daemon-client', 'apple-runner', 'test-kit', 'command-surface']) {
   test(`${dir} refuses a missing or renamed entry source`, () => {
     for (const renamed of [false, true]) {
       const sources = new Map(SOURCE);
