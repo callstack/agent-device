@@ -4,6 +4,7 @@ extension RunnerTests {
   enum RunnerAlertSource {
     case blockingSystemModal
     case appAlert
+    case safariDialog
     case dismissPopup
   }
 
@@ -12,6 +13,8 @@ extension RunnerTests {
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
     let source: RunnerAlertSource
+    /// The window hosting a SpringBoard modal; nil routes through `ownerApp`.
+    let window: XCUIElement?
   }
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
@@ -53,6 +56,11 @@ extension RunnerTests {
     // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
     if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
       return runnerAlert(root: alert, ownerApp: activeApp, source: .appAlert)
+    }
+    if let dialog = firstExistingElement(in: safeElementsQuery {
+      activeApp.otherElements.matching(identifier: Self.safariDialogIdentifier).allElementsBoundByIndex
+    }) {
+      return runnerAlert(root: dialog, ownerApp: activeApp, source: .safariDialog)
     }
     if let popup = firstDismissPopupWindow(in: activeApp) {
       return runnerAlert(root: popup, ownerApp: activeApp, source: .dismissPopup)
@@ -162,7 +170,29 @@ extension RunnerTests {
           )
           return
         }
-        switch synthesizedTapAt(app: alert.ownerApp, x: frame.midX, y: frame.midY, deadline: deadline) {
+        var hostContext: SynthesizedCoordinateContext?
+        if let window = alert.window {
+          // Never fall back to the owner app's first window: on a foldable it can be another panel.
+          guard let context = SynthesizedCoordinateContext(
+            validating: safely("ALERT_WINDOW", CGRect.null) { window.frame },
+            resolvedWindow: window,
+            accessibilityHealth: mainOwned.accessibilityHealth
+          ) else {
+            outcome = .unsupported(
+              message: "alert activation could not read the window hosting the alert",
+              hint: "Inspect the current alert before deciding whether to act again."
+            )
+            return
+          }
+          hostContext = context
+        }
+        switch synthesizedTapAt(
+          app: alert.ownerApp,
+          x: frame.midX,
+          y: frame.midY,
+          context: hostContext,
+          deadline: deadline
+        ) {
         case .performed?:
           typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
           let waitForQuiescence = unsafeBitCast(
@@ -217,7 +247,8 @@ extension RunnerTests {
       root: modal.root,
       ownerApp: modal.ownerApp,
       buttons: buttons,
-      source: .blockingSystemModal
+      source: .blockingSystemModal,
+      window: modal.window
     )
   }
 
@@ -230,12 +261,16 @@ extension RunnerTests {
     guard !buttons.isEmpty else {
       return nil
     }
-    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source)
+    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: nil)
   }
 
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {
     elements.first { isVisibleElement($0) }
   }
+
+  /// Safari draws its page prompts, such as "Open this page in …?" and JavaScript dialogs, as a
+  /// view rather than an alert, so they are found by the view's identifier.
+  static let safariDialogIdentifier = "SFDialogView"
 
   /// The marker is matched inside XCTest's query, so the screen is read once per query. Reading each
   /// descendant instead costs one round trip per element, and on a screen whose tree changes while

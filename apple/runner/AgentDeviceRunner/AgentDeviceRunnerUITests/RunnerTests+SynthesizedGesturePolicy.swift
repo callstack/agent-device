@@ -190,3 +190,19 @@ extension RunnerTests {
       + " fallbackAttempted=\(fallbackAttempted)"
   }
 }
+
+extension SynthesizedCoordinateContext {
+  /// Nil when `referenceFrame` is not a finite, non-empty box a point can be placed in.
+  init?(
+    validating referenceFrame: CGRect,
+    resolvedWindow: XCUIElement?,
+    accessibilityHealth: RunnerAccessibilityHealth
+  ) {
+    guard SnapshotGeometry.isPositiveFinite(referenceFrame) else { return nil }
+    self.init(
+      referenceFrame: referenceFrame,
+      resolvedWindow: resolvedWindow,
+      accessibilityHealth: accessibilityHealth
+    )
+  }
+}

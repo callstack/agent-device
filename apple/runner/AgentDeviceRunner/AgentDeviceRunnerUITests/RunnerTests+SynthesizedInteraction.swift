@@ -465,13 +465,8 @@ extension RunnerTests {
     } else {
       return nil
     }
-    guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
-      referenceFrame.width > 0, referenceFrame.height > 0
-    else {
-      return nil
-    }
     return SynthesizedCoordinateContext(
-      referenceFrame: referenceFrame,
+      validating: referenceFrame,
       resolvedWindow: window,
       accessibilityHealth: health
     )
