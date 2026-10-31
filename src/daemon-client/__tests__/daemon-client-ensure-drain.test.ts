@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { isProcessAlive } from '@agent-device/host-kit/process';
+import {
+  isProcessAlive,
+  readHostProcessIdentityObservations,
+} from '@agent-device/host-kit/process';
 import { finishRegisteredDaemonFixtures } from '../../__tests__/test-utils/registered-daemon-fixture.ts';
 import {
   draining,
@@ -23,6 +26,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
     ...actual,
+    readHostProcessIdentityObservations: vi.fn(actual.readHostProcessIdentityObservations),
     readProcessCommand: (pid: number) =>
       hostedByAnotherProcess ? 'node /opt/app/server.js' : actual.readProcessCommand(pid),
   };
@@ -43,6 +47,9 @@ const spawn = vi.mocked(runCmdDetachedMonitored);
 const actualRetry = await vi.importActual<typeof import('@agent-device/host-kit/retry')>(
   '@agent-device/host-kit/retry',
 );
+const actualProcess = await vi.importActual<typeof import('@agent-device/host-kit/process')>(
+  '@agent-device/host-kit/process',
+);
 const realNow = Date.now.bind(Date);
 const actualKill = process.kill.bind(process);
 
@@ -56,6 +63,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
   spawn.mockReset();
   vi.mocked(sleep).mockReset();
+  vi.mocked(readHostProcessIdentityObservations).mockImplementation(
+    actualProcess.readHostProcessIdentityObservations,
+  );
   await finishRegisteredDaemonFixtures();
 });
 
@@ -75,6 +85,14 @@ type VirtualDrain = {
  */
 function installVirtualDrain(pid: () => number): VirtualDrain {
   let virtual = false;
+  // The fixture holds this child lifetime until it exits or is signaled; later probes use the host.
+  let drainIdentity: ReturnType<typeof readHostProcessIdentityObservations> | undefined;
+  vi.mocked(readHostProcessIdentityObservations).mockImplementation((pids) => {
+    const selected = [...pids];
+    if (virtual && drainIdentity && selected.length === 1 && selected[0] === pid())
+      return drainIdentity;
+    return actualProcess.readHostProcessIdentityObservations(selected);
+  });
   let now = 0;
   let startedAt = 0;
   let leavesAt: number | undefined;
@@ -103,6 +121,7 @@ function installVirtualDrain(pid: () => number): VirtualDrain {
   return {
     elapsedMs: () => now - startedAt,
     begin: (leavesAfterMs) => {
+      drainIdentity = actualProcess.readHostProcessIdentityObservations([pid()]);
       now = realNow();
       startedAt = now;
       leavesAt = leavesAfterMs === undefined ? undefined : now + leavesAfterMs;
