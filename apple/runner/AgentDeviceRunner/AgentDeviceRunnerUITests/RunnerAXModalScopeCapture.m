@@ -113,24 +113,14 @@ typedef unsigned long long (*RunnerAXUnsignedLongLongMsgSend)(id, SEL);
         return [RunnerAXModalScopeCapture captureWithStatus:RunnerAXModalScopeCaptureStatusRequestFailed
                                                     failure:error.localizedDescription];
       }
-      NSMutableArray<RunnerAXModalScopeNode *> *nodes = [NSMutableArray array];
-      BOOL truncated = NO;
-      BOOL identified = [self appendModalScopeSnapshot:root
-                                                parent:nil
-                                           parentIndex:-1
-                                                 depth:0
-                                              maxDepth:maxDepth
-                                              maxNodes:maxNodes
-                                     includeClassNames:includeClassNames
-                                                    to:nodes
-                                             truncated:&truncated];
-      if (!identified) {
+      RunnerAXModalScopeTree *tree = [self modalScopeTreeFromSnapshot:root
+                                                             maxDepth:maxDepth
+                                                             maxNodes:maxNodes
+                                                    includeClassNames:includeClassNames];
+      if (nil == tree) {
         return [RunnerAXModalScopeCapture captureWithStatus:RunnerAXModalScopeCaptureStatusUnsupported
                                                     failure:nil];
       }
-      RunnerAXModalScopeTree *tree = [[RunnerAXModalScopeTree alloc] init];
-      tree.nodes = nodes;
-      tree.truncated = truncated;
       tree.duration = -start.timeIntervalSinceNow;
       [trees addObject:tree];
     }
@@ -148,6 +138,30 @@ typedef unsigned long long (*RunnerAXUnsignedLongLongMsgSend)(id, SEL);
     return [RunnerAXModalScopeCapture captureWithStatus:RunnerAXModalScopeCaptureStatusRequestFailed
                                                 failure:exception.reason ?: exception.name];
   }
+}
+
++ (nullable RunnerAXModalScopeTree *)modalScopeTreeFromSnapshot:(id)root
+                                                       maxDepth:(NSInteger)maxDepth
+                                                       maxNodes:(NSInteger)maxNodes
+                                              includeClassNames:(BOOL)includeClassNames
+{
+  NSMutableArray<RunnerAXModalScopeNode *> *nodes = [NSMutableArray array];
+  BOOL truncated = NO;
+  if (![self appendModalScopeSnapshot:root
+                               parent:nil
+                          parentIndex:-1
+                                depth:0
+                             maxDepth:maxDepth
+                             maxNodes:maxNodes
+                    includeClassNames:includeClassNames
+                                   to:nodes
+                            truncated:&truncated]) {
+    return nil;
+  }
+  RunnerAXModalScopeTree *tree = [[RunnerAXModalScopeTree alloc] init];
+  tree.nodes = nodes;
+  tree.truncated = truncated;
+  return tree;
 }
 
 // Returns NO when a node's element has no AX identity.
@@ -193,9 +207,9 @@ typedef unsigned long long (*RunnerAXUnsignedLongLongMsgSend)(id, SEL);
   }
   NSInteger index = (NSInteger)nodes.count;
   [nodes addObject:node];
-  // The server returns at most maxDepth levels, so a node on the last level may have lost its
-  // children.
-  if (depth >= maxDepth - 1) {
+  // The request caps the server at maxNodes nodes and maxDepth levels, so a tree that reaches
+  // either cap may have lost nodes past it.
+  if ((NSInteger)nodes.count >= maxNodes || depth >= maxDepth - 1) {
     *truncated = YES;
     return YES;
   }

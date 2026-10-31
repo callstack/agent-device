@@ -23,7 +23,8 @@ public enum ModalScopeInstability: String, Equatable {
   case screenChanged
   /// The honor-modal read has an element the plain read does not.
   case unmatchedElement
-  /// The honor-modal read has an element under a parent the plain read does not put it under.
+  /// The honor-modal read lists an element under a parent more often than the plain read does:
+  /// under a parent the plain read does not put it under, or once more under the same parent.
   case reparentedElement
   /// An element has a different frame in the two reads, so the screen changed between them.
   case movedElement

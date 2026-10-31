@@ -29,11 +29,15 @@ const fixture = path.join(
   `${name}.json`,
 );
 
+// The shell's runner bundle ids take precedence over the app id below, so the capture drops them.
+const captureEnv = { ...process.env };
+delete captureEnv.AGENT_DEVICE_IOS_BUNDLE_ID;
+delete captureEnv.AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID;
 execFileSync('sh', ['./scripts/build-xcuitest-apple.sh'], {
   cwd: root,
   stdio: 'inherit',
   env: {
-    ...process.env,
+    ...captureEnv,
     AGENT_DEVICE_XCUITEST_PLATFORM: 'ios',
     AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1',
     AGENT_DEVICE_XCUITEST_ARCHS: 'arm64',

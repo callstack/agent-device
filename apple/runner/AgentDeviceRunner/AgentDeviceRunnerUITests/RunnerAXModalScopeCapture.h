@@ -63,6 +63,14 @@ typedef NS_CLOSED_ENUM(NSInteger, RunnerAXModalScopeCaptureStatus) {
                                               includeClassNames:(BOOL)includeClassNames
                                                        deadline:(NSDate *)deadline;
 
+/// One read's tree from its root element snapshot, or nil when a node's element has no AX
+/// identity. Exposed for the runner unit bundle: the cap rules are only executable with fabricated
+/// snapshots.
++ (nullable RunnerAXModalScopeTree *)modalScopeTreeFromSnapshot:(id)root
+                                                       maxDepth:(NSInteger)maxDepth
+                                                       maxNodes:(NSInteger)maxNodes
+                                              includeClassNames:(BOOL)includeClassNames;
+
 @end
 
 NS_ASSUME_NONNULL_END
