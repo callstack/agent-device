@@ -6,6 +6,7 @@
     "commit": "f3b09b4748"
   },
   "expect": {},
+  "nearMisses": [],
   "nodes": [
     {"identifier":"","index":0,"label":" ","rect":{"height":678,"width":466,"x":0,"y":0},"type":"Application"},
     {"identifier":"","index":1,"label":"","parentIndex":0,"rect":{"height":951,"width":669,"x":0,"y":0},"type":"Window"},

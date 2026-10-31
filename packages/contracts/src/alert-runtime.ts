@@ -17,6 +17,12 @@ export type AlertRuntimeInput = Readonly<{
   timeoutMs?: number;
   appBundleId?: string;
   surface?: SessionSurface;
+  /**
+   * Set by the leg whose absence is the caller's answer: the owner may spend one more read naming
+   * a dialog-like surface it does not recognise. Unset means an absence a later attempt may still
+   * settle, where naming costs and answers nothing.
+   */
+  explainAbsence?: boolean;
   /** Same runner metadata a capture needs; reuses that type rather than restating it. */
   execution?: SnapshotRuntimeExecution;
 }>;
@@ -94,7 +100,8 @@ async function resolveAlertInteractor(
   });
 }
 
-function alertInteractorOptions(
+/** The interactor options one alert leg carries. Owners and fixtures read the input through this. */
+export function alertInteractorOptions(
   input: AlertRuntimeInput,
   signal: AbortSignal | undefined,
 ): AlertInteractorOptions {
@@ -102,6 +109,7 @@ function alertInteractorOptions(
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.appBundleId === undefined ? {} : { appBundleId: input.appBundleId }),
     ...(input.surface === undefined ? {} : { surface: input.surface }),
+    ...(input.explainAbsence === undefined ? {} : { explainAbsence: input.explainAbsence }),
     ...(signal ? { signal } : {}),
   };
 }

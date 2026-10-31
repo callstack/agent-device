@@ -54,7 +54,13 @@ function runAppleAlert(
   return async (action, timeoutMs) =>
     (await runAppleRunnerCommand(
       device,
-      { command: 'alert', action, appBundleId: options?.appBundleId, timeoutMs },
+      {
+        command: 'alert',
+        action,
+        appBundleId: options?.appBundleId,
+        timeoutMs,
+        ...(options?.explainAbsence === true ? { explainAbsence: true } : {}),
+      },
       runnerOptions,
     )) as Record<string, unknown>;
 }

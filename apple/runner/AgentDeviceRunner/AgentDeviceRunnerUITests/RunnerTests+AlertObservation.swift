@@ -2,6 +2,53 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  /// The answer to an `alert` request that resolved nothing. With a whole read's budget left before
+  /// `deadline` it reads one snapshot and names the dialog-like containers none of the alert rules
+  /// recognise; a read that fails, or a deadline too close to spend on one, leaves the plain
+  /// not-found answer.
+  func alertAbsence(in ownerApp: XCUIApplication, deadline: Date) -> AlertAbsence {
+    alertAbsence(in: ownerApp, deadline: deadline) { [self] in nearMisses(in: ownerApp) }
+  }
+
+  /// The same answer with the read supplied, so a test can see whether the deadline let it run.
+  func alertAbsence(
+    in ownerApp: XCUIApplication,
+    deadline: Date,
+    reading nearMissRead: () -> [RunnerAlertNearMiss]
+  ) -> AlertAbsence {
+    guard deadline.timeIntervalSinceNow >= Self.nearMissReadAllowance else { return .unexplained }
+    let nearMisses = nearMissRead()
+    return nearMisses.isEmpty ? .unexplained : .nearMisses(nearMisses)
+  }
+
+  /// What one tree read costs at worst on a contended host, the figure `alertActivationDeadline`
+  /// already budgets reads at. The read is a single `snapshot()` and XCTest cannot cancel one once
+  /// it started, so this budget is what bounds it: the command's main-thread block is given the
+  /// same deadline as its slice, and starting a read that cannot finish inside it would leave the
+  /// block to be abandoned by the execution watchdog, which turns a refusal the caller can act on
+  /// into `MAIN_THREAD_TIMEOUT` and a busy main thread for the commands behind it.
+  static let nearMissReadAllowance: TimeInterval = 2.5
+
+  /// One snapshot of the owner, read for dialog-like containers. A snapshot that fails, is empty,
+  /// or has no frame explains nothing.
+  private func nearMisses(in ownerApp: XCUIApplication) -> [RunnerAlertNearMiss] {
+    var found: [RunnerAlertNearMiss] = []
+    _ = RunnerObjCExceptionCatcher.catchException {
+      guard let snapshot = try? ownerApp.snapshot(), !snapshot.children.isEmpty,
+            !snapshot.frame.isNull, !snapshot.frame.isEmpty else { return }
+      found = AlertSurface.nearMisses(in: alertSurfaceNode(snapshot), viewport: snapshot.frame)
+        .map {
+          RunnerAlertNearMiss(
+            type: $0.type,
+            identifier: $0.identifier,
+            label: $0.label,
+            buttons: $0.buttons
+          )
+        }
+    }
+    return found
+  }
+
   func captureAlertPresentation(_ element: XCUIElement) -> AlertSurfacePresentation? {
     var presentation: AlertSurfacePresentation?
     _ = RunnerObjCExceptionCatcher.catchException {

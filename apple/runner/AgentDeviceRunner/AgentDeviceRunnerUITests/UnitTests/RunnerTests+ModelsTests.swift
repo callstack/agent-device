@@ -8,12 +8,67 @@ extension RunnerTests {
       code: "CODE",
       message: "message",
       hint: "hint",
+      details: ErrorDetailsPayload(nearMisses: [
+        RunnerAlertNearMiss(
+          type: "Other", identifier: "Panel", label: "Open?", buttons: ["Cancel", "Open"]
+        ),
+      ]),
       retryableFailure: .targetAppUnavailable
     )
     let encoded = try JSONEncoder().encode(payload)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
     let storedFields = Set(Mirror(reflecting: payload).children.compactMap(\.label))
     XCTAssertEqual(Set(object.keys), storedFields.subtracting(["retryableFailure"]))
+    let nearMisses = try XCTUnwrap(
+      (object["details"] as? [String: Any])?["nearMisses"] as? [[String: Any]]
+    )
+    XCTAssertEqual(nearMisses.count, 1)
+    let first = try XCTUnwrap(nearMisses.first)
+    XCTAssertEqual(Set(first.keys), ["type", "identifier", "label", "buttons"])
+    XCTAssertEqual(first["identifier"] as? String, "Panel")
+    XCTAssertEqual(first["buttons"] as? [String], ["Cancel", "Open"])
+  }
+
+  func testAnAbsentAlertIsExplainedOnlyWhenTheCallerAnswersWithIt() {
+    XCTAssertEqual(AlertAbsence.unexplained.errorPayload.code, "ALERT_NOT_FOUND")
+    XCTAssertNil(AlertAbsence.unexplained.errorPayload.details)
+    XCTAssertNil(AlertAbsence.unexplained.errorPayload.hint)
+
+    let explained = AlertAbsence.nearMisses([
+      RunnerAlertNearMiss(
+        type: "Other", identifier: "SFDialogView", label: "Open this page in App?",
+        buttons: ["Cancel", "Open"]
+      ),
+    ])
+    XCTAssertEqual(explained.errorPayload.code, "ALERT_NOT_FOUND")
+    XCTAssertEqual(explained.errorPayload.hint, AlertAbsence.nearMissHint)
+    XCTAssertEqual(explained.errorPayload.details?.nearMisses?.map(\.identifier), ["SFDialogView"])
+  }
+
+  func testAnExplainAbsenceRequestIsTheOnlyOneThatReadsForANearMiss() throws {
+    func command(_ json: String) throws -> Command {
+      try JSONDecoder().decode(Command.self, from: Data(json.utf8))
+    }
+    XCTAssertEqual(
+      try command(#"{"command":"alert","action":"get","explainAbsence":true}"#).explainsAlertAbsence,
+      true
+    )
+    XCTAssertFalse(try command(#"{"command":"alert","action":"get"}"#).explainsAlertAbsence)
+    XCTAssertFalse(
+      try command(#"{"command":"alert","action":"accept","explainAbsence":true}"#).explainsAlertAbsence
+    )
+    XCTAssertFalse(
+      try command(#"{"command":"alert","action":"dismiss","explainAbsence":true}"#).explainsAlertAbsence
+    )
+    XCTAssertFalse(
+      try command(#"{"command":"alert","action":"wait","explainAbsence":true}"#).explainsAlertAbsence
+    )
+    // An acting leg cannot buy the read even when the flag arrives; `get` is the rule.
+    XCTAssertEqual(
+      try command(#"{"command":"alert","explainAbsence":true}"#).explainsAlertAbsence,
+      true,
+      "an omitted action is get"
+    )
   }
 
   func testTargetAppUnavailableErrorKeepsItsWireShape() throws {

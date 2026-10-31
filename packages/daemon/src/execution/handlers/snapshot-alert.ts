@@ -155,6 +155,10 @@ export async function handleAlertCommand(
   const data = await bound.execute({
     timeoutMs: alertWaitTimeoutMs(action, req.positionals?.[1]),
     ...alertTarget(session),
+    // `alert get` answers for itself: its absence is the caller's answer, so only that leg asks the
+    // owner to name a dialog-like surface it does not recognise. The legs that re-ask an absence
+    // would pay for a read that settles nothing.
+    ...(action === 'get' ? { explainAbsence: true } : {}),
     execution: runtimeExecutionFromContext(context),
   });
   recordSessionAction(sessionStore, ref, req, req.command, data);

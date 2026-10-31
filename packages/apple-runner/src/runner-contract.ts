@@ -154,6 +154,12 @@ export type RunnerCommand = {
   fullscreen?: boolean;
   inlineScreenshot?: boolean;
   synthesized?: boolean;
+  /**
+   * Tells an `alert` request that its not-found answer is the caller's final answer, so the runner
+   * may spend one extra read naming a dialog-like container it does not recognise. Absent means the
+   * absence is a poll a later attempt may still settle, where naming costs and answers nothing.
+   */
+  explainAbsence?: boolean;
   steps?: RunnerSequenceStep[];
 };
 
@@ -358,6 +364,17 @@ export type RunnerReportedErrorClass = Readonly<{
 }>;
 
 /**
+ * The detail keys that state how a runner failure is classified. Only `classifyRunnerReportedError`
+ * writes them, so a runner's own payload must not carry them onto the wire.
+ */
+const RUNNER_CLASSIFICATION_DETAIL_KEYS: readonly string[] = [
+  'dispatched',
+  'reason',
+  'retriable',
+  'runnerErrorCode',
+];
+
+/**
  * The one reading of a runner-reported error code (#2484 follow-up). A runner failure reaches the
  * host by two routes — the command's own response, and the lifecycle journal a status probe reads
  * back after the transport response was lost — and both must classify it identically, or the same
@@ -388,7 +405,7 @@ export function classifyRunnerReportedError(
 
 export type RunnerResponsePayload = {
   ok?: unknown;
-  error?: { code?: unknown; message?: unknown; hint?: unknown };
+  error?: { code?: unknown; message?: unknown; hint?: unknown; details?: unknown };
   data?: unknown;
 };
 
@@ -441,6 +458,7 @@ export function buildRunnerResponseError(
   const classification = classifyRunnerReportedError(runnerErrorCode);
   return new AppError(classification.code, errorMessage ?? 'Runner error', {
     runner: payload,
+    ...readRunnerErrorDetails(payload.error?.details),
     ...classification.details,
     xcodebuild: {
       exitCode: 1,
@@ -454,6 +472,20 @@ export function buildRunnerResponseError(
 
 function readRunnerErrorCode(rawCode: unknown): string | undefined {
   return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
+}
+
+/**
+ * The diagnostic object a runner sent with its failure, copied into the caller's details. The copy
+ * is a deep one: `runner` carries the same payload, and one object reachable on two paths reads as
+ * a cycle once the diagnostics are sanitized. The keys that classify a failure are ours to decide,
+ * so a runner cannot stamp them: they are dropped here, and `classifyRunnerReportedError` answers
+ * for every code, whether or not that code's entry sets one.
+ */
+function readRunnerErrorDetails(rawDetails: unknown): Record<string, unknown> {
+  if (typeof rawDetails !== 'object' || rawDetails === null || Array.isArray(rawDetails)) return {};
+  const diagnostics = structuredClone(rawDetails) as Record<string, unknown>;
+  for (const key of RUNNER_CLASSIFICATION_DETAIL_KEYS) delete diagnostics[key];
+  return diagnostics;
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {

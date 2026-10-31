@@ -128,6 +128,7 @@ Alerts:
   If alert says no alert but a sheet is visibly on screen, treat it as app-owned UI:
     agent-device snapshot -i
     agent-device press 'label="Allow"'
+  On the Apple XCUITest runner, an alert get refusal also names a dialog-like surface its rules do not recognise, in error details nearMisses (type, identifier, label, buttons). An absent or empty nearMisses only means none was recognised: a deadline with no room left for that read, a failed read, a dialog with one or five-plus buttons, or unlabelled buttons also give none. When a dialog is visible, run snapshot -i and press the button ref that snapshot returns.
   Do not use settings permission to answer a dialog already on screen. Reserve settings permission for setup/resetting permission state before a flow.
 
 Diagnostics and traces:

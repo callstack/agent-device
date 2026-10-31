@@ -539,4 +539,10 @@ export type AlertInteractorOptions = {
   signal?: AbortSignal;
   appBundleId?: string;
   surface?: SessionSurface;
+  /**
+   * Tells the owner that its not-found answer is the caller's final answer, so it may spend one
+   * extra read naming a dialog-like surface it does not recognise. Absent means the absence is a
+   * poll a later attempt may still settle.
+   */
+  explainAbsence?: boolean;
 };

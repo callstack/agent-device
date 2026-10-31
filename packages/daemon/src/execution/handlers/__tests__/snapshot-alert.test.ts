@@ -141,6 +141,31 @@ for (const action of ['accept', 'dismiss']) {
   });
 }
 
+test('alert get asks the owner to explain its absence; the legs that re-ask an absence do not', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  await handleSnapshotCommands(sessionName, sessionStore, ['get']);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'get',
+    explainAbsence: true,
+  });
+
+  mockRunnerCommand.mockClear();
+  await handleSnapshotCommands(sessionName, sessionStore, ['wait', '1500']);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).not.toHaveProperty('explainAbsence');
+
+  mockRunnerCommand.mockClear();
+  await handleSnapshotCommands(sessionName, sessionStore, ['accept']);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).not.toHaveProperty('explainAbsence');
+
+  mockRunnerCommand.mockClear();
+  await handleSnapshotCommands(sessionName, sessionStore, ['dismiss']);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).not.toHaveProperty('explainAbsence');
+});
+
 test('alert wait forwards its timeout budget to the runtime leg', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';

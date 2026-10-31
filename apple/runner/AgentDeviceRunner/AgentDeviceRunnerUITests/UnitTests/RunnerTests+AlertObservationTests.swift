@@ -24,6 +24,41 @@ private final class AlertTapDeadlineStub: NSObject {
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  /// A deadline with less than one read's budget left forfeits the extra read: the answer stays the
+  /// plain not-found refusal, and the read is never attempted.
+  @MainActor
+  func testAnExplainedAbsenceIsDroppedOnceTheCommandDeadlineIsSpent() {
+    var reads = 0
+    let read: () -> [RunnerAlertNearMiss] = {
+      reads += 1
+      return [
+        RunnerAlertNearMiss(
+          type: "Other", identifier: "SFDialogView", label: "Open this page?",
+          buttons: ["Cancel", "Open"]
+        )
+      ]
+    }
+    XCTAssertEqual(alertAbsence(in: app, deadline: .distantPast, reading: read), .unexplained)
+    // A deadline that is live but too close to fit a read answers the same way. The read is one
+    // XCTest snapshot the runner cannot cancel, so starting it past the deadline would leave the
+    // command's main-thread block for the execution watchdog to abandon.
+    XCTAssertEqual(
+      alertAbsence(
+        in: app, deadline: Date().addingTimeInterval(RunnerTests.nearMissReadAllowance / 2),
+        reading: read),
+      .unexplained)
+    XCTAssertEqual(reads, 0)
+
+    // The same read with a whole budget left is the explanation, so the assertions above can only
+    // fail by the guard being removed or tightened.
+    XCTAssertEqual(
+      alertAbsence(in: app, deadline: .distantFuture, reading: read).errorPayload.details?
+        .nearMisses?.map(\.identifier),
+      ["SFDialogView"]
+    )
+    XCTAssertEqual(reads, 1)
+  }
+
   @MainActor
   func testAlertAcceptDoesNotActivateAReplacementWithASharedButton() throws {
     try assertReplacementAlertUntouched(action: "accept", arguments: [], confirmed: true)

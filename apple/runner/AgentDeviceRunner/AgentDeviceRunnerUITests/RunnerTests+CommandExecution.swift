@@ -620,9 +620,13 @@ extension RunnerTests {
       guard let alert = resolveAlert(app: activeApp, deadline: deadline) else {
         // Typed so the host retries on absence alone: a transport or runner failure carries no
         // code and must not be mistaken for "no alert yet" (ALERT_NOT_FOUND_RUNNER_CODE).
+        // The near-miss read belongs to this answer and no other: an absence the caller re-asks
+        // gains nothing from naming a surface, so only one it answers with pays for it.
         return Response(
           ok: false,
-          error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
+          error: command.explainsAlertAbsence
+            ? alertAbsence(in: activeApp, deadline: deadline).errorPayload
+            : AlertAbsence.unexplained.errorPayload
         )
       }
       return handleAlert(alert, action: action, deadline: deadline)

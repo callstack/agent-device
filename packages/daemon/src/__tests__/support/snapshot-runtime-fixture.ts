@@ -10,6 +10,7 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import {
   type AlertRuntimeInput,
+  alertInteractorOptions,
   alertRuntimeOperationFacts,
 } from '@agent-device/contracts/alert-runtime';
 import {
@@ -118,11 +119,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           cwd: process.cwd(),
         })
       : undefined;
-    const alertOptions = (input: AlertRuntimeInput) => ({
-      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
-      ...(input.appBundleId === undefined ? {} : { appBundleId: input.appBundleId }),
-      ...(input.surface === undefined ? {} : { surface: input.surface }),
-    });
+    const alertOptions = (input: AlertRuntimeInput) => alertInteractorOptions(input, requestSignal);
     return narrowDeviceBinding(
       {
         device,
