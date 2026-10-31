@@ -45,6 +45,7 @@ const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
   'appium-source': { producer: 'appium-source', ...TREE_SOURCE_CAPABILITIES },
   'limrun-ios-tree': { producer: 'limrun-ios-tree', ...TREE_SOURCE_CAPABILITIES },
   'revyl-ios-tree': { producer: 'revyl-ios-tree', ...TREE_SOURCE_CAPABILITIES },
+  'nomac-ios-tree': { producer: 'nomac-ios-tree', ...TREE_SOURCE_CAPABILITIES },
 } as const satisfies Record<IosProviderAcquisitionProducer, IosProviderAcquisitionCapabilities>;
 
 /**
@@ -65,6 +66,7 @@ const IOS_SNAPSHOT_TRUNCATION_EVIDENCE = {
   'appium-source': 'unavailable',
   'limrun-ios-tree': 'unavailable',
   'revyl-ios-tree': 'unavailable',
+  'nomac-ios-tree': 'unavailable',
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
 export function iosSnapshotTruncationEvidence(

@@ -66,6 +66,9 @@ importers:
       '@agent-device/maestro':
         specifier: workspace:*
         version: link:packages/maestro
+      '@agent-device/nomac':
+        specifier: workspace:*
+        version: link:packages/provider-nomac
       '@agent-device/platform-android':
         specifier: workspace:*
         version: link:packages/platform-android
@@ -792,6 +795,24 @@ importers:
       '@limrun/api':
         specifier: ^0.64.1
         version: 0.64.1(supports-color@7.2.0)
+
+  packages/provider-nomac:
+    devDependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/provider-revyl:
     devDependencies:

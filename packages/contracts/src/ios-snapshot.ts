@@ -12,12 +12,13 @@ export type IosSnapshotProducer =
   | 'simulator-ax-bridge'
   | 'appium-source'
   | 'limrun-ios-tree'
-  | 'revyl-ios-tree';
+  | 'revyl-ios-tree'
+  | 'nomac-ios-tree';
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 export type IosProviderAcquisitionProducer = Extract<
   IosAcquisitionProducer,
-  'appium-source' | 'limrun-ios-tree' | 'revyl-ios-tree'
+  'appium-source' | 'limrun-ios-tree' | 'revyl-ios-tree' | 'nomac-ios-tree'
 >;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';

@@ -51,7 +51,17 @@ export type RevylTarget = Readonly<{
   platform: 'ios' | 'android';
 }>;
 
-export type Target = LocalTarget | CloudWebDriverTarget | LimrunTarget | RevylTarget;
+/** A NoMac column: the phone comes from the plugin's own inventory once the lease is allocated. */
+export type NomacTarget = Readonly<{
+  kind: 'nomac';
+  id: string;
+  label: string;
+  group: TargetGroup;
+  backend: 'ios-instance';
+  platform: 'ios';
+}>;
+
+export type Target = LocalTarget | CloudWebDriverTarget | LimrunTarget | RevylTarget | NomacTarget;
 
 const booted = { booted: true } as const;
 
@@ -420,6 +430,14 @@ export const TARGETS: readonly Target[] = [
     group: 'provider',
     backend: 'android-instance',
     platform: 'android',
+  },
+  {
+    kind: 'nomac',
+    id: 'nomac-ios',
+    label: 'NoMac iOS',
+    group: 'provider',
+    backend: 'ios-instance',
+    platform: 'ios',
   },
 ];
 
