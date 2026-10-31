@@ -5,7 +5,7 @@ import {
   readLimrunTextEntryFocus,
   readLimrunUnambiguousTapTargets,
 } from './text-entry-focus.ts';
-import type { IosTreeNode } from './snapshot.ts';
+import type { IosTreeNode } from '@agent-device/capture-kit/ios-ax-tree';
 
 type TreeRect = Readonly<{ x: number; y: number; width: number; height: number }>;
 

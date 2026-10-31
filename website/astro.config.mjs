@@ -113,6 +113,7 @@ export default defineConfig({
           'aws-device-farm',
           'testmu',
           'limrun',
+          'revyl',
         ]),
         {
           label: 'Reference',

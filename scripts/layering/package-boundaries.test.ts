@@ -489,6 +489,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/durable-capture-runtime-recovery',
     '@agent-device/capture-kit/durable-capture/session-binding',
     '@agent-device/capture-kit/durable-json',
+    '@agent-device/capture-kit/ios-ax-tree',
     '@agent-device/capture-kit/ios-node-interpretation',
     '@agent-device/capture-kit/ios-snapshot-acquisition',
     '@agent-device/capture-kit/ios-snapshot-engine',
@@ -844,6 +845,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
   assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
     '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/android-snapshot',
     '@agent-device/provider-webdriver/connection-verification',
     '@agent-device/provider-webdriver/plugin',
     '@agent-device/provider-webdriver/providers',

@@ -18,6 +18,18 @@ import type {
 } from '@agent-device/kernel/snapshot';
 
 /**
+ * What every provider tree source leaves unproven today: it reports neither traversal depth nor
+ * hittability. A producer that can prove more overrides this rather than restating it.
+ */
+const TREE_SOURCE_CAPABILITIES = Object.freeze({
+  acquisitionDepth: Object.freeze({
+    rawTraversal: Object.freeze({ kind: 'incomplete' }),
+    regularPresented: Object.freeze({ kind: 'incomplete' }),
+  }),
+  hittabilityEvidence: 'unavailable',
+} as const);
+
+/**
  * The facts a *provider* acquisition leaves unproven, keyed only by the producers whose residue
  * this module derives.
  *
@@ -30,22 +42,9 @@ import type {
  * {@link IosProviderAcquisitionProducer} makes that claim not compile.
  */
 const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
-  'appium-source': {
-    producer: 'appium-source',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-    hittabilityEvidence: 'unavailable',
-  },
-  'limrun-ios-tree': {
-    producer: 'limrun-ios-tree',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-    hittabilityEvidence: 'unavailable',
-  },
+  'appium-source': { producer: 'appium-source', ...TREE_SOURCE_CAPABILITIES },
+  'limrun-ios-tree': { producer: 'limrun-ios-tree', ...TREE_SOURCE_CAPABILITIES },
+  'revyl-ios-tree': { producer: 'revyl-ios-tree', ...TREE_SOURCE_CAPABILITIES },
 } as const satisfies Record<IosProviderAcquisitionProducer, IosProviderAcquisitionCapabilities>;
 
 /**
@@ -53,7 +52,7 @@ const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
  *
  * This is the one capability the runner and the bridge genuinely need declared: a capture that
  * reported nothing about truncation is only "not truncated" when its producer would have noticed
- * (#2188 invariant 5), and `snapshotTruncationForResult` has to answer that for all four. It is a
+ * (#2188 invariant 5), and `snapshotTruncationForResult` has to answer that for every producer. It is a
  * table of its own rather than a column of the provider capabilities so that each producer states
  * this fact exactly once, in the only place that asks.
  *
@@ -65,6 +64,7 @@ const IOS_SNAPSHOT_TRUNCATION_EVIDENCE = {
   'simulator-ax-bridge': 'available',
   'appium-source': 'unavailable',
   'limrun-ios-tree': 'unavailable',
+  'revyl-ios-tree': 'unavailable',
 } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
 export function iosSnapshotTruncationEvidence(

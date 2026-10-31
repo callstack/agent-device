@@ -11,12 +11,13 @@ export type IosSnapshotProducer =
   | 'apple-runner'
   | 'simulator-ax-bridge'
   | 'appium-source'
-  | 'limrun-ios-tree';
+  | 'limrun-ios-tree'
+  | 'revyl-ios-tree';
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 export type IosProviderAcquisitionProducer = Extract<
   IosAcquisitionProducer,
-  'appium-source' | 'limrun-ios-tree'
+  'appium-source' | 'limrun-ios-tree' | 'revyl-ios-tree'
 >;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
@@ -98,7 +99,7 @@ export type IosSnapshotFact =
  * rather than merely wrong.
  *
  * Truncation is not a field here: it is the one fact the runner and the bridge also need
- * answered, so it has a single owner over all four producers instead
+ * answered, so it has a single owner over every producer instead
  * (`iosSnapshotTruncationEvidence`).
  */
 export type IosProviderAcquisitionCapabilities = Readonly<{

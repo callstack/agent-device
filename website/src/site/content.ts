@@ -485,6 +485,7 @@ export const cloud = {
     { name: 'AWS Device Farm', href: '/docs/aws-device-farm' },
     { name: 'TestMu AI', href: '/docs/testmu' },
     { name: 'Limrun', href: '/docs/limrun' },
+    { name: 'Revyl', href: '/docs/revyl' },
     { name: 'Expo Simulators', href: '/docs/device-clouds#expo-simulators' },
   ],
   team: {

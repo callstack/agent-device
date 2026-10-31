@@ -55,6 +55,7 @@ const IOS_PROVENANCE_LITERALS: ReadonlySet<string> = new Set([
   'simulator-ax-bridge',
   'appium-source',
   'limrun-ios-tree',
+  'revyl-ios-tree',
 ]);
 
 export function snapshotAssemblyPresentationViolations(

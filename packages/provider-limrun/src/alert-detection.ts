@@ -8,7 +8,11 @@ import {
 import { centerOfRect, type Rect } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { TreeAlertObservation } from '@agent-device/capture-kit/alert-tree-driver';
-import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
+import {
+  readIosNodeChildren,
+  readIosNodeRect,
+  type IosTreeNode,
+} from '@agent-device/capture-kit/ios-ax-tree';
 
 /**
  * System-alert detection over a Limrun iOS element tree (issue #3349). A Limrun iOS direct

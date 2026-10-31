@@ -369,6 +369,7 @@
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0",
-    "@agent-device/testmu": "workspace:*"
+    "@agent-device/testmu": "workspace:*",
+    "@agent-device/revyl": "workspace:*"
   }
 }

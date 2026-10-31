@@ -27,6 +27,10 @@
     "./connection-verification": {
       "types": "./src/connection-verification.ts",
       "default": "./src/connection-verification.ts"
+    },
+    "./android-snapshot": {
+      "types": "./src/webdriver-android-source.ts",
+      "default": "./src/webdriver-android-source.ts"
     }
   },
   "devDependencies": {

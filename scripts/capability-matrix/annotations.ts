@@ -113,11 +113,18 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
     title: 'Interact with the app',
     rows: [
       {
-        id: 'tap-type',
-        label: 'Tap, press, fill, and type',
-        commands: ['click', 'press', 'fill', 'type'],
+        id: 'tap-fill',
+        label: 'Tap, press, and fill',
+        commands: ['click', 'press', 'fill'],
         link: docs('commands', 'interactions'),
         note: 'Android types non-ASCII text through the test input method: automatically on emulators, and on physical devices only with `open --test-ime`.',
+      },
+      {
+        id: 'type',
+        label: 'Type into the focused field',
+        commands: ['type'],
+        link: docs('commands', 'interactions'),
+        note: 'Revyl enters text only at a point, so it refuses `type`; use `fill` on the field instead.',
       },
       {
         id: 'long-press',
@@ -659,7 +666,7 @@ export const SCOPE_ROWS: readonly ScopeRow[] = [
     label: 'Hosted device providers',
     commands: ['connect', 'artifacts'],
     scope:
-      'BrowserStack, AWS Device Farm, TestMu AI, and Limrun appear as their own columns above. Provider artifact lookup after `close` works for the three WebDriver providers; Limrun keeps no artifacts.',
+      'BrowserStack, AWS Device Farm, TestMu AI, Limrun, and Revyl appear as their own columns above. Provider artifact lookup after `close` works for the three WebDriver providers; Limrun and Revyl keep no artifacts.',
     link: docs('device-clouds', 'compare-providers'),
   },
   {
