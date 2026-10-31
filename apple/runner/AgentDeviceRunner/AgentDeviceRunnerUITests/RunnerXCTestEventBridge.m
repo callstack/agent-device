@@ -109,6 +109,8 @@ static NSString *RunnerApplicationScreenFailureDescription(
       return @"no resolved application window";
     case RunnerApplicationScreenFailureUnresolvedScreen:
       return @"no resolved window display ID";
+    case RunnerApplicationScreenFailureOffLitPanel:
+      return @"every application window is off the lit panel";
     case RunnerApplicationScreenFailureNone:
       return @"application screen resolved";
   }
@@ -240,9 +242,11 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
   if (exception != nil || windows == nil) {
     return RunnerApplicationScreenFailureUnresolvedWindow;
   }
-  // A window the walk did not place could be the panel's surface, so only a fully placed list may
-  // book its largest window or claim the lit panel holds none.
-  BOOL incomplete = windows.count > AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS;
+  // A window the walk could not place may be the panel's surface, so it refuses every booking. A
+  // list past the cap refuses only when no full-panel window was found before it.
+  BOOL unplaced = NO;
+  BOOL truncated = windows.count > AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS;
+  BOOL placedAny = NO;
   id chosen = nil;
   id chosenScreen = nil;
   CGRect chosenFrame = CGRectNull;
@@ -259,9 +263,10 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
       continue;
     }
     if (read != RunnerApplicationScreenFailureNone) {
-      incomplete = YES;
+      unplaced = YES;
       continue;
     }
+    placedAny = YES;
     if (displayID != litPanel.displayID) {
       continue;
     }
@@ -269,7 +274,7 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
       chosen = candidate;
       chosenScreen = candidateScreen;
       chosenFrame = frame;
-      incomplete = NO;
+      truncated = NO;
       break;
     }
     if (chosen == nil ||
@@ -279,13 +284,15 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
       chosenFrame = frame;
     }
   }
-  if (incomplete) {
+  if (unplaced || truncated) {
     outcome = RunnerApplicationScreenFailureUnresolvedScreen;
   } else if (chosen != nil) {
     outcome = RunnerApplicationScreenFailureNone;
     *window = chosen;
     *windowFrame = chosenFrame;
     *screen = chosenScreen;
+  } else if (placedAny) {
+    outcome = RunnerApplicationScreenFailureOffLitPanel;
   }
   NSLog(
     @"AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=%lu(%gx%g) windows=%lu outcome=%@ frame=(%g,%g %gx%g)",

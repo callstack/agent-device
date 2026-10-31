@@ -275,12 +275,17 @@ export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCC
 const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
 const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
 const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
+const RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE = 'APP_SCREEN_OFF_LIT_PANEL';
 
-/** Every runner code meaning "this capture did not happen", covering the display and the image. */
+/**
+ * Every runner code meaning "this capture did not happen", covering the display, the image, and the
+ * panel: on a foldable, a target app whose windows are all on the dark panel is refused.
+ */
 export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
   RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
+  RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE,
 ]);
 
 /**

@@ -269,8 +269,11 @@ extension RunnerTests {
   /// back to `app.frame`: when the windows query fails because XCTest cannot serialize the app's
   /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
-    if let litPanel = requestSurfacePanel {
-      return resolveLitPanelWindow(app: app, litPanel: litPanel)
+    if requestSurfacePanel != nil {
+      if bookedLitPanelSurface == nil {
+        _ = bookRequestLitPanelSurface(app: app)
+      }
+      return bookedLitPanelSurface.map { ($0.window, $0.frame) }
     }
     for window in app.windows.allElementsBoundByIndex where window.exists {
       let frame = window.frame
@@ -279,21 +282,6 @@ extension RunnerTests {
       }
     }
     return nil
-  }
-
-  /// A foldable's surface: the window on the panel the request named as lit, never the first window.
-  func resolveLitPanelWindow(
-    app: XCUIApplication,
-    litPanel: RunnerLitPanel
-  ) -> (window: XCUIElement, frame: CGRect)? {
-    var window: AnyObject?
-    var frame = CGRect.null
-    guard RunnerResolveLitPanelWindow(app, litPanel, &window, &frame) == .none,
-      let element = window as? XCUIElement
-    else {
-      return nil
-    }
-    return (element, frame)
   }
 
   func onScreenWindowFrame(app: XCUIApplication) -> CGRect {

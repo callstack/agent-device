@@ -29,6 +29,15 @@ const ORIENTATION_UNVERIFIED_HINT =
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
 
+// Every surface command reads the panel table, so one that would not answer is not asked again
+// for a few seconds: a failing probe can cost its whole timeout.
+const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
+
+function recordPanelTable(device: DeviceInfo, inventory: AppleDisplayInventory): void {
+  multiPanelByDevice.set(device.id, inventory.multiScreen);
+  unansweredPanelTables.delete(device.id);
+}
+
 /**
  * Whether a rotation must go through guest HID: a simulator the `fold` fact admits that has more
  * than one integrated panel. XCUIDevice rotation has no effect there, and its readback repeats
@@ -43,13 +52,9 @@ export async function isAppleFoldableSimulator(
   if (known !== undefined) return known;
   const inventory = await queryAppleDisplayInventory(device, { signal });
   if (inventory.unresolved) return false;
-  multiPanelByDevice.set(device.id, inventory.multiScreen);
+  recordPanelTable(device, inventory);
   return inventory.multiScreen;
 }
-
-// Every surface command reads the panel table, so one that would not answer is not asked again
-// for a few seconds: a failing probe can cost its whole timeout.
-const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
 
 /**
  * One panel-table read of a multi-panel simulator, or undefined for a device the `fold` fact refuses,
@@ -58,17 +63,17 @@ const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
  */
 export async function readFoldablePanelTable(
   device: DeviceInfo,
-  signal: AbortSignal | undefined,
+  options: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<AppleDisplayInventory | undefined> {
   if (!appleFoldableFacts(device).setFoldPose.available) return undefined;
   if (multiPanelByDevice.get(device.id) === false) return undefined;
   if (unansweredPanelTables.get(device.id)) return undefined;
-  const inventory = await queryAppleDisplayInventory(device, { signal });
+  const inventory = await queryAppleDisplayInventory(device, options);
   if (inventory.unresolved) {
-    if (!signal?.aborted) unansweredPanelTables.set(device.id, true);
+    if (!options.signal?.aborted) unansweredPanelTables.set(device.id, true);
     return undefined;
   }
-  multiPanelByDevice.set(device.id, inventory.multiScreen);
+  recordPanelTable(device, inventory);
   return inventory.multiScreen ? inventory : undefined;
 }
 

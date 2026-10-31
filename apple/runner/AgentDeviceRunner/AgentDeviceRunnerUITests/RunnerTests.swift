@@ -95,6 +95,7 @@ final class RunnerTests: XCTestCase {
   // Written on the command queue and read on main; see RunnerRequestPanel.swift.
   let requestPanelLock = NSLock()
   var requestLitPanel: RunnerLitPanel?
+  var requestLitSurface: LitPanelSurface?
   // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
   // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
   // input is a scoped witness for the immediately-following bare type; lifecycle and non-text

@@ -99,6 +99,14 @@ extension RunnerTests {
   ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
+      let litPanelRefusal = try runMainThreadWork(
+        "snapshot_lit_panel",
+        timeout: Self.mainThreadExecutionTimeout,
+        timeoutError: Self.mainThreadExecutionTimeoutError
+      ) {
+        self.bookRequestLitPanelSurface(app: target.app)
+      }
+      if let litPanelRefusal { throw litPanelRefusal }
       var payload: DataPayload
       if options.raw {
         payload = try snapshotRaw(target: target, options: options)
@@ -128,6 +136,11 @@ extension RunnerTests {
       }
       setNeedsPostSnapshotInteractionDelay()
       return Response(ok: true, data: payload)
+    } catch let refusal as RunnerAppScreenCaptureFailure {
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: refusal.rawValue, message: refusal.message, hint: refusal.hint)
+      )
     } catch let failure as SnapshotCaptureFailure {
       invalidateCachedTargetAfterSnapshotFailure()
       return Response(

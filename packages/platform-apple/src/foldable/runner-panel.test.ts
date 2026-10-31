@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { bindTestCommandHost } from '@agent-device/test-kit';
+import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('../foldable/fold-helper-cache.ts', () => ({
   ensureFoldHelperBinary: vi.fn(async () => ({ path: '/cache/fold-helper' })),
 }));
-vi.mock('../core/devicectl.ts', () => ({
+vi.mock('../core/devicectl.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/devicectl.ts')>()),
   runIosDevicectlJsonRequest: vi.fn(async () => ({
     ok: true as const,
     payload: { result: { displays: [] } },
@@ -14,6 +16,12 @@ vi.mock('../core/devicectl.ts', () => ({
 }));
 
 import { runIosDevicectlJsonRequest } from '../core/devicectl.ts';
+import { runAppleRunnerCommand } from '../core/runner-client.ts';
+import {
+  recordingRunnerProvider,
+  type RecordedRunnerCall,
+} from '../__tests__/recording-runner-provider.ts';
+import { isAppleFoldableSimulator } from './orientation.ts';
 import { resolveRunnerRequestLitPanel } from './runner-panel.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import {
@@ -49,7 +57,7 @@ test('a multi-panel request names the lit panel in the units the runner compares
   answering(IPHONE_DUO_CLOSED);
   // A closed Duo lights its outer panel: 1398x2034 px at pointScale 3, which is the 466x678 the
   // runner finds as that panel's SpringBoard window.
-  assert.deepEqual(await resolveRunnerRequestLitPanel(simulator(), undefined), {
+  assert.deepEqual(await resolveRunnerRequestLitPanel(simulator(), {}), {
     displayId: 1,
     widthPt: 466,
     heightPt: 678,
@@ -59,11 +67,11 @@ test('a multi-panel request names the lit panel in the units the runner compares
 test('each request reads the panel table once, so a fold moves the surface', async () => {
   const device = simulator();
   answering(IPHONE_DUO_CLOSED);
-  assert.equal((await resolveRunnerRequestLitPanel(device, undefined))?.displayId, 1);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 1);
   assert.equal(mockPanelTable.mock.calls.length, 1, 'the panel count comes from the same read');
   answering(IPHONE_DUO_OPEN);
   assert.equal(
-    (await resolveRunnerRequestLitPanel(device, undefined))?.displayId,
+    (await resolveRunnerRequestLitPanel(device, {}))?.displayId,
     3,
     'an opened device must be asked again, not answered from the panel that just went dark',
   );
@@ -73,17 +81,17 @@ test('each request reads the panel table once, so a fold moves the surface', asy
 test('a device with one panel sends no panel and is never asked again', async () => {
   const device = simulator();
   answering(IPHONE_17_SINGLE_PANEL);
-  assert.equal(await resolveRunnerRequestLitPanel(device, undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   const reads = mockPanelTable.mock.calls.length;
-  assert.equal(await resolveRunnerRequestLitPanel(device, undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   assert.equal(mockPanelTable.mock.calls.length, reads, 'one panel is hardware, probed once');
 });
 
 test('a panel table that would not answer is not asked again by the next request', async () => {
   const device = simulator();
   mockPanelTable.mockRejectedValue(new Error('devicectl does not report displays'));
-  assert.equal(await resolveRunnerRequestLitPanel(device, undefined), undefined);
-  assert.equal(await resolveRunnerRequestLitPanel(device, undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
   assert.equal(mockPanelTable.mock.calls.length, 1);
 });
 
@@ -92,9 +100,9 @@ test('a cancelled panel-table read leaves the next request free to ask', async (
   mockPanelTable.mockRejectedValueOnce(new Error('devicectl aborted by the caller'));
   const cancelled = new AbortController();
   cancelled.abort();
-  assert.equal(await resolveRunnerRequestLitPanel(device, cancelled.signal), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, { signal: cancelled.signal }), undefined);
   answering(IPHONE_DUO_CLOSED);
-  assert.equal((await resolveRunnerRequestLitPanel(device, undefined))?.displayId, 1);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 1);
 });
 
 test('a multi-panel device whose panel power decides nothing sends no panel', async () => {
@@ -108,7 +116,7 @@ test('a multi-panel device whose panel power decides nothing sends no panel', as
       })),
     },
   });
-  assert.equal(await resolveRunnerRequestLitPanel(simulator(), undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(simulator(), {}), undefined);
 });
 
 test('a multi-panel device whose panel table is incomplete sends no panel', async () => {
@@ -119,12 +127,41 @@ test('a multi-panel device whose panel table is incomplete sends no panel', asyn
       displays: [outer, { ...inner, nativeSize: undefined }],
     },
   });
-  assert.equal(await resolveRunnerRequestLitPanel(simulator(), undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(simulator(), {}), undefined);
 });
 
 test('a device the fold fact refuses never costs a panel table read', async () => {
   // A physical iPhone is folded by hand (ADR 0025) and no physical foldable leaf is in the
   // supported matrix, so its runner keeps the surface route the request always sent.
-  assert.equal(await resolveRunnerRequestLitPanel(IOS_DEVICE, undefined), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(IOS_DEVICE, {}), undefined);
   assert.equal(mockPanelTable.mock.calls.length, 0);
+});
+
+test('a resolved read lifts the back-off a failed one opened', async () => {
+  const device = simulator();
+  mockPanelTable.mockRejectedValueOnce(new Error('devicectl does not report displays'));
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+  answering(IPHONE_DUO_CLOSED);
+  // A rotation reads the table on its own route; its answer clears the back-off for surface reads.
+  assert.equal(await isAppleFoldableSimulator(device, undefined), true);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 1);
+});
+
+test('the probe takes the request timeout when it is the shorter one', async () => {
+  answering(IPHONE_DUO_CLOSED);
+  await resolveRunnerRequestLitPanel(simulator(), { requestTimeoutMs: 1_200 });
+  assert.equal(mockPanelTable.mock.lastCall?.[0].timeoutMs, 1_200);
+  await resolveRunnerRequestLitPanel(simulator(), { requestTimeoutMs: 60_000 });
+  assert.equal(mockPanelTable.mock.lastCall?.[0].timeoutMs, 5_000);
+});
+
+test('a surface command probes the panel table within its own timeout', async () => {
+  answering(IPHONE_DUO_CLOSED);
+  const device = simulator({ name: 'iPhone Duo' });
+  const calls: RecordedRunnerCall[] = [];
+  await withAppleRunnerProvider(recordingRunnerProvider(calls), { deviceId: device.id }, () =>
+    runAppleRunnerCommand(device, { command: 'tap', x: 10, y: 20, timeoutMs: 1_200 }),
+  );
+  assert.equal(mockPanelTable.mock.lastCall?.[0].timeoutMs, 1_200);
+  assert.equal(calls[0]?.command.litPanel?.displayId, 1);
 });

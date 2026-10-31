@@ -298,7 +298,17 @@ extension RunnerTests {
       DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1),
       DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 466, height: 678), displayID: 1),
     ])
-    XCTAssertEqual(walk.failure, .unresolvedWindow)
+    XCTAssertEqual(walk.failure, .offLitPanel)
+    XCTAssertNil(walk.window)
+    XCTAssertEqual(resolveLitPanelWindow([]).failure, .unresolvedWindow, "no window at all")
+  }
+
+  /// A window the walk could not place may itself be the panel's surface, so a full-panel window
+  /// read after it is not booked.
+  func testLitPanelWindowRefusesAFullPanelWindowReadAfterAnUnplacedOne() {
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let walk = resolveLitPanelWindow([ScreenlessWindowFixture(), home])
+    XCTAssertEqual(walk.failure, .unresolvedScreen)
     XCTAssertNil(walk.window)
   }
 

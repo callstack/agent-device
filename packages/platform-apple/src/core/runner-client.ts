@@ -33,7 +33,10 @@ export async function runAppleRunnerCommand(
     return await runHostBoundAppleRunnerCommand(device, command, options);
   }
   const { resolveRunnerRequestLitPanel } = await import('../foldable/runner-panel.ts');
-  const litPanel = await resolveRunnerRequestLitPanel(device, resolveRunnerRequestSignal(options));
+  const litPanel = await resolveRunnerRequestLitPanel(device, {
+    signal: resolveRunnerRequestSignal(options),
+    requestTimeoutMs: command.timeoutMs,
+  });
   return await runHostBoundAppleRunnerCommand(
     device,
     litPanel ? { ...command, litPanel } : command,

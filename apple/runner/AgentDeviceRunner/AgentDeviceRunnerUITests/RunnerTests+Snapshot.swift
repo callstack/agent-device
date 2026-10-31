@@ -212,13 +212,18 @@ extension RunnerTests {
       parentIndex: nil
     )
     // A multi-panel device lists windows on both panels under one application, and the application's
-    // frame names one panel. The screen is the lit panel's native box and the windows that name its
-    // display (ADR 0025).
+    // frame names one panel. The screen is the lit panel's native box and only the windows proven on
+    // its display (ADR 0025).
     let litPanel = requestSurfacePanel
     var rootChildren = context.rootSnapshot.children
     if let litPanel {
       root.rect = SnapshotRect(CGRect(x: 0, y: 0, width: litPanel.widthPt, height: litPanel.heightPt))
-      rootChildren = rootChildren.filter { Self.snapshotDisplayID($0).map { $0 == litPanel.displayID } ?? true }
+      rootChildren = Self.windowsOnLitDisplay(rootChildren, litDisplayID: litPanel.displayID) {
+        Self.snapshotDisplayID($0)
+      }
+      if rootChildren.isEmpty {
+        throw RunnerAppScreenCaptureFailure.unresolvedScreen
+      }
     }
     var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
@@ -299,6 +304,16 @@ extension RunnerTests {
       ),
       outcome
     )
+  }
+
+  /// The windows a lit-panel snapshot keeps: only those whose reported display is the lit one. A
+  /// window that reports no display is dropped, because it may be on the dark panel.
+  static func windowsOnLitDisplay<Window>(
+    _ windows: [Window],
+    litDisplayID: UInt,
+    displayID: (Window) -> UInt?
+  ) -> [Window] {
+    windows.filter { displayID($0) == litDisplayID }
   }
 
   /// The display a window snapshot reports, or nil when the runtime names none.

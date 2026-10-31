@@ -162,6 +162,8 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
 #endif
+    // Only the tree tier can prove which panel a window is on, so a multi-panel request runs it alone.
+    let plan = plan == Self.regularVisiblePlan && requestSurfacePanel != nil ? [.recursiveTree] : plan
     let effective = Self.effectiveSnapshotCapturePlan(
       plan,
       xCTestChannelPenalized: xCTestChannelPenalized,

@@ -217,7 +217,7 @@ test('a rotation is not routed by a pending panel-table retry', async () => {
       throw new Error(`unexpected tool call: ${args.join(' ')}`);
     },
   });
-  await withAppleToolProvider(failing, () => readFoldablePanelTable(device, undefined));
+  await withAppleToolProvider(failing, () => readFoldablePanelTable(device, {}));
   expect(tableFailures).toBe(1);
 
   await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });

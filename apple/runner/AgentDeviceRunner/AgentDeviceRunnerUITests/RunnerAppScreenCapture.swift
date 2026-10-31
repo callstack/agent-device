@@ -21,11 +21,14 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   case unresolvedWindow = "APP_SCREEN_WINDOW_UNRESOLVED"
   case unresolvedScreen = "APP_SCREEN_UNRESOLVED"
   case unrenderableImage = "APP_SCREEN_CAPTURE_UNRENDERABLE"
+  case offLitPanel = "APP_SCREEN_OFF_LIT_PANEL"
 
   init(_ failure: RunnerApplicationScreenFailure) {
     switch failure {
     case .unresolvedWindow:
       self = .unresolvedWindow
+    case .offLitPanel:
+      self = .offLitPanel
     default:
       self = .unresolvedScreen
     }
@@ -34,11 +37,13 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   var message: String {
     switch self {
     case .unresolvedWindow:
-      return "Neither the target app nor the system surface resolved a window on the lit display, so no display could be named."
+      return "Neither the target app nor the system surface resolved a window, so no display could be named."
     case .unresolvedScreen:
       return "The resolved app window did not report the display it is shown on."
     case .unrenderableImage:
       return "The resolved display handed back an image that could not be drawn upright."
+    case .offLitPanel:
+      return "Every window of the target app is on the panel the host reports as dark."
     }
   }
 
@@ -50,6 +55,8 @@ enum RunnerAppScreenCaptureFailure: String, Error {
       return "Retry the capture. If it persists, the XCTest runtime is not reporting the window's display; runner.log names the window frame it resolved."
     case .unrenderableImage:
       return "Retry the capture. The display was resolved, so this is the capture itself failing, not a panel question."
+    case .offLitPanel:
+      return "Unfold or fold the device so the target app is on the lit panel, or bring it forward there; runner.log names the panel in AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW."
     }
   }
 }

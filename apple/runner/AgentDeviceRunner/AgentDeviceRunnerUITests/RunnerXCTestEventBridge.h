@@ -29,6 +29,8 @@ typedef NS_ENUM(NSUInteger, RunnerApplicationScreenFailure) {
   RunnerApplicationScreenFailureUnresolvedWindow,
   // A resolved window whose screen or display identity the XCTest runtime would not answer.
   RunnerApplicationScreenFailureUnresolvedScreen,
+  // The application has windows, and every one of them is on a display other than the lit panel.
+  RunnerApplicationScreenFailureOffLitPanel,
 };
 
 // The panel the host reports as lit (ADR 0025): its display and its native box in points. The
@@ -44,8 +46,9 @@ typedef struct {
 #define AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS 8
 
 // Resolves the window on `litPanel`: the first window on that display whose frame is the panel's
-// box either way up, else the largest window on that display. No window on that display is
-// `UnresolvedWindow`; a list the walk could not fully place is `UnresolvedScreen`.
+// box either way up, else the largest window on that display. An unplaced window, or a list past
+// the cap with no full-panel window in it, is `UnresolvedScreen`. Windows that are all on another
+// display are `OffLitPanel`; no window at all is `UnresolvedWindow`.
 FOUNDATION_EXPORT RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
   id application,
   RunnerLitPanel litPanel,

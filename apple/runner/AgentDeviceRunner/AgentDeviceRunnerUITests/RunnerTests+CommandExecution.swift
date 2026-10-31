@@ -14,6 +14,13 @@ extension RunnerTests {
     if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
+    // A screenshot resolves its own surface, the target app and then the system surface.
+    if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: refusal.rawValue, message: refusal.message, hint: refusal.hint)
+      )
+    }
     switch command.command {
     case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
       .appState, .pasteboardWrite, .snapshot:
