@@ -16,12 +16,14 @@ import { providerCredentialFingerprint as fingerprintFor } from '@agent-device/p
 import { builtinPluginInventory } from './test-utils/builtin-plugin-inventory.ts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { LIMRUN_CREDENTIAL_VARIABLES } from '../provider-limrun-credentials.ts';
+import { readDaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
 const inventory = await builtinPluginInventory();
 const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
   fingerprintFor(provider, env, leaseBackend, inventory);
 
 const API_KEY = 'lim-secret-key';
+const API_KEY_FINGERPRINT = 'v1:0772697674314a49';
 const ANDROID_ATTACH = {
   LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
   LIM_ANDROID_INSTANCE_TOKEN: 'android-token',
@@ -47,7 +49,11 @@ test.for(['socket', 'http'] as const)(
     vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', undefined);
     const stateDir = mkdtempForTestSync('agent-device-provider-credentials-daemon-');
     const daemon = await startLocalDaemon(stateDir, transport);
-    const send = (command: string, leaseBackend?: 'ios-instance' | 'android-instance') =>
+    const send = (
+      command: string,
+      leaseBackend?: 'ios-instance' | 'android-instance',
+      provider = 'limrun',
+    ) =>
       sendToDaemon({
         session: 'default',
         command,
@@ -55,7 +61,7 @@ test.for(['socket', 'http'] as const)(
         flags: { stateDir, daemonTransport: transport },
         meta: {
           requestId: `req-${command}`,
-          leaseProvider: 'limrun',
+          leaseProvider: provider,
           tenantId: 'tenant-a',
           ...(leaseBackend ? { leaseBackend } : {}),
         },
@@ -65,6 +71,7 @@ test.for(['socket', 'http'] as const)(
     try {
       vi.stubEnv('LIMRUN_API_KEY', API_KEY);
       await send('lease_allocate');
+      await send('lease_allocate', undefined, '  limrun  ');
       await send('devices');
       vi.stubEnv('LIMRUN_API_KEY', undefined);
       await send('lease_allocate');
@@ -78,12 +85,20 @@ test.for(['socket', 'http'] as const)(
 
     const iosFingerprint = providerCredentialFingerprint('limrun', attachedEnv, 'ios-instance');
     expect(daemon.bodies.map(readFingerprint)).toEqual([
-      providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: API_KEY }),
+      API_KEY_FINGERPRINT,
+      API_KEY_FINGERPRINT,
       undefined,
       undefined,
       iosFingerprint,
       providerCredentialFingerprint('limrun', attachedEnv, 'android-instance'),
     ]);
+    const daemonFingerprint = readDaemonProviderCredentials(
+      { LIMRUN_API_KEY: API_KEY },
+      stateDir,
+      inventory,
+    ).fingerprint('  limrun  ');
+    expect(daemonFingerprint).toBe(API_KEY_FINGERPRINT);
+    expect(readFingerprint(daemon.bodies[1]!)).toBe(daemonFingerprint);
     expect(iosFingerprint).not.toBe(providerCredentialFingerprint('limrun', attachedEnv));
     for (const body of daemon.bodies) expect(body).not.toContain(API_KEY);
   },

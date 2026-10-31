@@ -11,7 +11,8 @@ type CredentialValues = Readonly<Record<string, string | undefined>>;
 /**
  * A versioned, non-reversible digest of the credentials a lease on `leaseBackend` reads from `env`,
  * or undefined when `env` holds none of them or the provider's credentials do not come from the
- * environment. Variable names come from the daemon's plugin inventory, then from v1 manifests.
+ * environment. Provider names are trimmed before lookup. Variable names come from the daemon's
+ * plugin inventory, then from v1 manifests.
  */
 export function providerCredentialFingerprint(
   provider: string,
