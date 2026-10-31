@@ -949,10 +949,11 @@ test.for(entries.filter((entry) => entry.denyPlatformImplementations))(
   },
 );
 
-// The command surface declares and projects commands; the CLI presentation (formatters, help,
-// progress) sits above it in the root. Package isolation keeps a package from importing the root,
-// so the first assertion reads the loaded graph for the direction, and the second proves the
-// published SDK entry gains no presentation module through the command port.
+// The command surface declares and projects commands; the shared presentation (formatters, warning
+// routing, color) sits above it in @agent-device/command-output, and CLI help and progress sit above
+// that in the root. Package isolation keeps a package from importing the root, so the first
+// assertion reads the loaded graph for the direction, and the second proves the published SDK entry
+// gains no presentation module through the command port.
 function rootModulesEvaluatedBy(entryFile: string, rootFolders: readonly string[]): string[] {
   return [...eagerClosureGraphOf(absolute(entryFile)).keys()]
     .map((file) => path.relative(repoRoot, file).split(path.sep).join('/'))
@@ -960,11 +961,40 @@ function rootModulesEvaluatedBy(entryFile: string, rootFolders: readonly string[
 }
 
 test('the command-surface entry evaluates no root module, so request projection loads no CLI presentation', () => {
-  expect(rootModulesEvaluatedBy('packages/command-surface/src/index.ts', ['src/'])).toEqual([]);
+  expect(
+    rootModulesEvaluatedBy('packages/command-surface/src/index.ts', [
+      'src/',
+      'packages/command-output/',
+    ]),
+  ).toEqual([]);
 });
 
 test('the SDK entry evaluates no CLI, MCP or command-presentation module', () => {
   expect(
-    rootModulesEvaluatedBy('src/sdk/index.ts', ['src/commands/', 'src/cli/', 'src/mcp/']),
+    rootModulesEvaluatedBy('src/sdk/index.ts', [
+      'src/commands/',
+      'src/cli/',
+      'src/mcp/',
+      'packages/command-output/',
+    ]),
+  ).toEqual([]);
+});
+
+// A caller that needs only color, warning routing or serialization imports the entry. It must not
+// evaluate the formatter tables or the snapshot and diff renderers until a call needs them.
+test('the command-output entry evaluates no formatter table, snapshot or diff renderer', () => {
+  const evaluated = rootModulesEvaluatedBy('packages/command-output/src/index.ts', [
+    'src/',
+    'packages/command-output/',
+    'packages/capture-kit/',
+  ]);
+  expect(evaluated.filter((file) => file.startsWith('src/'))).toEqual([]);
+  expect(evaluated.filter((file) => file.startsWith('packages/capture-kit/'))).toEqual([]);
+  expect(
+    evaluated.filter((file) =>
+      /\/(cli-output|settle-output)\.ts$|\/output\/(diff|snapshot)\.ts$|\/[a-z]+\/output\.ts$/.test(
+        file,
+      ),
+    ),
   ).toEqual([]);
 });
