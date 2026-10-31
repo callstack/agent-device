@@ -1,0 +1,552 @@
+{
+  "capture": {
+    "bundle": "com.apple.springboard",
+    "device": "iPhone Duo (fixtures)",
+    "runtime": "iOS-27-1",
+    "commit": "f3b09b4748"
+  },
+  "expect": {
+    "blockingSystemModal": {
+      "title": "Open in “Agent Device Tester”?",
+      "buttons": ["Cancel", "Open"]
+    },
+    "appAlert": {
+      "title": "Open in “Agent Device Tester”?",
+      "buttons": ["Cancel", "Open"]
+    }
+  },
+  "nodes": [
+    {
+      "identifier": "",
+      "index": 0,
+      "label": " ",
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Application"
+    },
+    {
+      "identifier": "",
+      "index": 1,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 2,
+      "label": "",
+      "parentIndex": 1,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 3,
+      "label": "Open in “Agent Device Tester”?",
+      "parentIndex": 2,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Alert"
+    },
+    {
+      "identifier": "",
+      "index": 4,
+      "label": "",
+      "parentIndex": 3,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 5,
+      "label": "",
+      "parentIndex": 4,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 6,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 7,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 8,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 46,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "",
+      "index": 9,
+      "label": "",
+      "parentIndex": 8,
+      "rect": {
+        "height": 46,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 10,
+      "label": "Open in “Agent Device Tester”?",
+      "parentIndex": 9,
+      "rect": {
+        "height": 20.333333333333314,
+        "width": 260,
+        "x": 91,
+        "y": 293.6666666666667
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 11,
+      "label": "",
+      "parentIndex": 8,
+      "rect": {
+        "height": 2,
+        "width": 320,
+        "x": 61,
+        "y": 316
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 12,
+      "label": "Vertical scroll bar, 2 pages",
+      "parentIndex": 8,
+      "rect": {
+        "height": 46,
+        "width": 30,
+        "x": 348,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 13,
+      "label": "",
+      "parentIndex": 12,
+      "rect": {
+        "height": 36,
+        "width": 3,
+        "x": 375,
+        "y": 233
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 14,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 8,
+      "rect": {
+        "height": 23,
+        "width": 320,
+        "x": 61,
+        "y": 292
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 15,
+      "label": "",
+      "parentIndex": 14,
+      "rect": {
+        "height": 3,
+        "width": 36,
+        "x": 22,
+        "y": 312
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 16,
+      "label": "Vertical scroll bar, 2 pages",
+      "parentIndex": 8,
+      "rect": {
+        "height": 46,
+        "width": 30,
+        "x": 348,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 17,
+      "label": "",
+      "parentIndex": 16,
+      "rect": {
+        "height": 36,
+        "width": 3,
+        "x": 375,
+        "y": 233
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 18,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 8,
+      "rect": {
+        "height": 23,
+        "width": 320,
+        "x": 61,
+        "y": 292
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 19,
+      "label": "",
+      "parentIndex": 18,
+      "rect": {
+        "height": 3,
+        "width": 36,
+        "x": 22,
+        "y": 312
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 20,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 80,
+        "width": 320,
+        "x": 61,
+        "y": 318
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "",
+      "index": 21,
+      "label": "",
+      "parentIndex": 20,
+      "rect": {
+        "height": 80,
+        "width": 320,
+        "x": 61,
+        "y": 318
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 22,
+      "label": "",
+      "parentIndex": 21,
+      "rect": {
+        "height": 48,
+        "width": 288,
+        "x": 77,
+        "y": 334
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 23,
+      "label": "Cancel",
+      "parentIndex": 22,
+      "rect": {
+        "height": 48,
+        "width": 140,
+        "x": 77,
+        "y": 334
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 24,
+      "label": "Open",
+      "parentIndex": 22,
+      "rect": {
+        "height": 48,
+        "width": 140,
+        "x": 225,
+        "y": 334
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 25,
+      "label": "Vertical scroll bar, 1 page",
+      "parentIndex": 20,
+      "rect": {
+        "height": 80,
+        "width": 30,
+        "x": 348,
+        "y": 318
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 26,
+      "label": "",
+      "parentIndex": 25,
+      "rect": {
+        "height": 7,
+        "width": 3,
+        "x": 375,
+        "y": 408
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 27,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 20,
+      "rect": {
+        "height": 30,
+        "width": 320,
+        "x": 61,
+        "y": 365
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 28,
+      "label": "",
+      "parentIndex": 27,
+      "rect": {
+        "height": 3,
+        "width": 7,
+        "x": 151,
+        "y": 392
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 29,
+      "label": "Vertical scroll bar, 1 page",
+      "parentIndex": 20,
+      "rect": {
+        "height": 80,
+        "width": 30,
+        "x": 348,
+        "y": 318
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 30,
+      "label": "",
+      "parentIndex": 29,
+      "rect": {
+        "height": 7,
+        "width": 3,
+        "x": 375,
+        "y": 408
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 31,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 20,
+      "rect": {
+        "height": 30,
+        "width": 320,
+        "x": 61,
+        "y": 365
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 32,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 3,
+        "width": 7,
+        "x": 151,
+        "y": 392
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 33,
+      "label": "",
+      "parentIndex": 3,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 34,
+      "label": "",
+      "parentIndex": 33,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 35,
+      "label": "",
+      "parentIndex": 34,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 36,
+      "label": "",
+      "parentIndex": 35,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 37,
+      "label": "",
+      "parentIndex": 36,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 38,
+      "label": "",
+      "parentIndex": 37,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 39,
+      "label": "",
+      "parentIndex": 35,
+      "rect": {
+        "height": 126,
+        "width": 320,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 40,
+      "label": "",
+      "parentIndex": 39,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 61,
+        "y": 272
+      },
+      "type": "Other"
+    }
+  ]
+}

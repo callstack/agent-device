@@ -1,0 +1,1627 @@
+{
+  "capture": {
+    "bundle": "com.apple.mobilesafari",
+    "device": "iPhone Duo",
+    "runtime": "iOS-27-1",
+    "commit": "f3b09b4748"
+  },
+  "expect": {
+    "safariDialog": {
+      "title": "",
+      "buttons": ["Cancel", "Open"]
+    }
+  },
+  "nodes": [
+    {
+      "identifier": "",
+      "index": 0,
+      "label": "Safari",
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Application"
+    },
+    {
+      "identifier": "",
+      "index": 1,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 2,
+      "label": "",
+      "parentIndex": 1,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 3,
+      "label": "",
+      "parentIndex": 2,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SafariWindow?View=Narrow&BarsKeptMinimized=false&UUID=FE93DE75-8A2C-42A5-A6C4-438F93942A9A&UsingLoweredBar=true&IsSecure=true&IsTabBarAvailable=true",
+      "index": 4,
+      "label": "",
+      "parentIndex": 3,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 5,
+      "label": "",
+      "parentIndex": 4,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 6,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 7,
+      "label": "",
+      "parentIndex": 6,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "TabDocument?IsLoadedUsingDesktopUserAgent=false&InReaderMode=false&UUID=A0E72B5C-A901-499B-8650-6061BBB358C5&IsPrivate=false&IsPageLoaded=true&WebViewProcessID=79910",
+      "index": 8,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "WebView",
+      "index": 9,
+      "label": "",
+      "parentIndex": 8,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "WebView"
+    },
+    {
+      "identifier": "",
+      "index": 10,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 11,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 358,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SFDialogView",
+      "index": 12,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 119,
+        "width": 342,
+        "x": 20,
+        "y": 119.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SFDialogViewMessageText",
+      "index": 13,
+      "label": "",
+      "parentIndex": 12,
+      "rect": {
+        "height": 76,
+        "width": 342,
+        "x": 20,
+        "y": 119.66666666666669
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 14,
+      "label": "",
+      "parentIndex": 13,
+      "rect": {
+        "height": 76,
+        "width": 342,
+        "x": 20,
+        "y": 119.66666666666669
+      },
+      "type": "TextView"
+    },
+    {
+      "identifier": "",
+      "index": 15,
+      "label": "Open this page in “Agent Device Tester”?",
+      "parentIndex": 14,
+      "rect": {
+        "height": 44,
+        "width": 249.0234375,
+        "x": 40,
+        "y": 135.66666666666669
+      },
+      "type": "TextView"
+    },
+    {
+      "identifier": "",
+      "index": 16,
+      "label": "Vertical scroll bar, 1 page",
+      "parentIndex": 14,
+      "rect": {
+        "height": 76,
+        "width": 30,
+        "x": 329,
+        "y": 119.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 17,
+      "label": "",
+      "parentIndex": 16,
+      "rect": {
+        "height": 70,
+        "width": 3,
+        "x": 356,
+        "y": 122.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 18,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 14,
+      "rect": {
+        "height": 30,
+        "width": 342,
+        "x": 20,
+        "y": 162.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 19,
+      "label": "",
+      "parentIndex": 18,
+      "rect": {
+        "height": 3,
+        "width": 336,
+        "x": 23,
+        "y": 189.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 20,
+      "label": "Cancel",
+      "parentIndex": 12,
+      "rect": {
+        "height": 33,
+        "width": 53,
+        "x": 226,
+        "y": 195.66666666666669
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 21,
+      "label": "Cancel",
+      "parentIndex": 20,
+      "rect": {
+        "height": 21,
+        "width": 53,
+        "x": 226,
+        "y": 201.66666666666669
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 22,
+      "label": "Open",
+      "parentIndex": 12,
+      "rect": {
+        "height": 33,
+        "width": 43,
+        "x": 299,
+        "y": 195.66666666666669
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 23,
+      "label": "Open",
+      "parentIndex": 22,
+      "rect": {
+        "height": 21,
+        "width": 43,
+        "x": 299,
+        "y": 201.66666666666669
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 24,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 320,
+        "width": 466,
+        "x": 0,
+        "y": 358
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 25,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 7,
+      "rect": {
+        "height": 30,
+        "width": 399,
+        "x": 8,
+        "y": 645
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 26,
+      "label": "",
+      "parentIndex": 25,
+      "rect": {
+        "height": 3,
+        "width": 393,
+        "x": 11,
+        "y": 672
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 27,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 7,
+      "rect": {
+        "height": 30,
+        "width": 399,
+        "x": 8,
+        "y": 645
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 28,
+      "label": "",
+      "parentIndex": 27,
+      "rect": {
+        "height": 3,
+        "width": 393,
+        "x": 11,
+        "y": 672
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "CapsuleViewController",
+      "index": 29,
+      "label": "",
+      "parentIndex": 4,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 30,
+      "label": "",
+      "parentIndex": 29,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 31,
+      "label": "",
+      "parentIndex": 30,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 32,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 33,
+      "label": "",
+      "parentIndex": 32,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 34,
+      "label": "",
+      "parentIndex": 33,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 35,
+      "label": "",
+      "parentIndex": 34,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 36,
+      "label": "",
+      "parentIndex": 35,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 37,
+      "label": "",
+      "parentIndex": 33,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 38,
+      "label": "",
+      "parentIndex": 37,
+      "rect": {
+        "height": 678,
+        "width": 84,
+        "x": 382,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 39,
+      "label": "",
+      "parentIndex": 30,
+      "rect": {
+        "height": 474,
+        "width": 48,
+        "x": 394,
+        "y": 170
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 40,
+      "label": "",
+      "parentIndex": 39,
+      "rect": {
+        "height": 450,
+        "width": 48,
+        "x": 394,
+        "y": 194
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 41,
+      "label": "",
+      "parentIndex": 40,
+      "rect": {
+        "height": 108,
+        "width": 48,
+        "x": 394,
+        "y": 194
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 42,
+      "label": "",
+      "parentIndex": 41,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 194
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "BackButton",
+      "index": 43,
+      "label": "Back",
+      "parentIndex": 42,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 194
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 44,
+      "label": "",
+      "parentIndex": 41,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 254
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SidebarButton",
+      "index": 45,
+      "label": "Show Bookmarks",
+      "parentIndex": 44,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 254
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 46,
+      "label": "",
+      "parentIndex": 40,
+      "rect": {
+        "height": 102,
+        "width": 48,
+        "x": 394,
+        "y": 542
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 47,
+      "label": "",
+      "parentIndex": 46,
+      "rect": {
+        "height": 102,
+        "width": 48,
+        "x": 394,
+        "y": 542
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "NewTabButton",
+      "index": 48,
+      "label": "New tab",
+      "parentIndex": 47,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 542
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "TabOverviewButton",
+      "index": 49,
+      "label": "Tabs",
+      "parentIndex": 47,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 394,
+        "y": 596
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 50,
+      "label": "",
+      "parentIndex": 29,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 51,
+      "label": "",
+      "parentIndex": 50,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 52,
+      "label": "",
+      "parentIndex": 51,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 53,
+      "label": "",
+      "parentIndex": 52,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 54,
+      "label": "",
+      "parentIndex": 53,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 55,
+      "label": "",
+      "parentIndex": 54,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 56,
+      "label": "",
+      "parentIndex": 55,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 57,
+      "label": "",
+      "parentIndex": 53,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 58,
+      "label": "",
+      "parentIndex": 57,
+      "rect": {
+        "height": 98,
+        "width": 466,
+        "x": 0,
+        "y": 580
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 59,
+      "label": "",
+      "parentIndex": 50,
+      "rect": {
+        "height": 48,
+        "width": 334,
+        "x": 24,
+        "y": 596
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 60,
+      "label": "",
+      "parentIndex": 59,
+      "rect": {
+        "height": 48,
+        "width": 334,
+        "x": 24,
+        "y": 596
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 61,
+      "label": "",
+      "parentIndex": 60,
+      "rect": {
+        "height": 48,
+        "width": 334,
+        "x": 24,
+        "y": 596
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "CapsuleNavigationBar?isSelected=true&isDistractionControlOverlayUp=false",
+      "index": 62,
+      "label": "",
+      "parentIndex": 61,
+      "rect": {
+        "height": 48,
+        "width": 334,
+        "x": 24,
+        "y": 596
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 63,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 64,
+      "label": "",
+      "parentIndex": 63,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 65,
+      "label": "",
+      "parentIndex": 64,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 66,
+      "label": "",
+      "parentIndex": 64,
+      "rect": {
+        "height": 320,
+        "width": 466,
+        "x": 0,
+        "y": 358
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 67,
+      "label": "",
+      "parentIndex": 66,
+      "rect": {
+        "height": 68,
+        "width": 466,
+        "x": 0,
+        "y": 358
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "inputView",
+      "index": 68,
+      "label": "",
+      "parentIndex": 66,
+      "rect": {
+        "height": 252,
+        "width": 346,
+        "x": 60,
+        "y": 426
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 69,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 70,
+      "label": "",
+      "parentIndex": 69,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 71,
+      "label": "",
+      "parentIndex": 70,
+      "rect": {
+        "height": 320,
+        "width": 466,
+        "x": 0,
+        "y": 358
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 72,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 68,
+        "width": 466,
+        "x": 0,
+        "y": 358
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 73,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 253,
+        "width": 466,
+        "x": 0,
+        "y": 426
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 74,
+      "label": "",
+      "parentIndex": 73,
+      "rect": {
+        "height": 253,
+        "width": 466,
+        "x": 0,
+        "y": 426
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 75,
+      "label": "",
+      "parentIndex": 74,
+      "rect": {
+        "height": 253,
+        "width": 466,
+        "x": 0,
+        "y": 426
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 76,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 245,
+        "width": 466,
+        "x": 0,
+        "y": 433
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 77,
+      "label": "Next keyboard",
+      "parentIndex": 76,
+      "rect": {
+        "height": 68.73516393505099,
+        "width": 68.0852958475086,
+        "x": 3.957352076245698,
+        "y": 587.6324180324746
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 78,
+      "label": "",
+      "parentIndex": 77,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 3.957352076245698,
+        "y": 587.6324180324746
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "dictation",
+      "index": 79,
+      "label": "Dictate",
+      "parentIndex": 76,
+      "rect": {
+        "height": 68.73516393505099,
+        "width": 68.08529584750863,
+        "x": 393.9573520762457,
+        "y": 587.6324180324746
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 80,
+      "label": "",
+      "parentIndex": 79,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 393.9573520762457,
+        "y": 587.6324180324746
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 81,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 230,
+        "width": 438.66666666666674,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 82,
+      "label": "",
+      "parentIndex": 81,
+      "rect": {
+        "height": 230,
+        "width": 438.66666666666674,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Keyboard"
+    },
+    {
+      "identifier": "",
+      "index": 83,
+      "label": "",
+      "parentIndex": 82,
+      "rect": {
+        "height": 230,
+        "width": 438.66666666666674,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "UIKeyboardLayoutStar Preview",
+      "index": 84,
+      "label": "",
+      "parentIndex": 83,
+      "rect": {
+        "height": 230,
+        "width": 438.66666666666674,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 85,
+      "label": "Padding-Left",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 86,
+      "label": "q",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.666666666666664,
+        "x": 15.666666666666657,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 87,
+      "label": "w",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666667,
+        "x": 59.33333333333333,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 88,
+      "label": "e",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666667,
+        "x": 102.99999999999999,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 89,
+      "label": "r",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666666,
+        "x": 146.66666666666666,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 90,
+      "label": "t",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666666,
+        "x": 190.33333333333334,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 91,
+      "label": "y",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666663,
+        "x": 234,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 92,
+      "label": "u",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666674,
+        "x": 277.66666666666663,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 93,
+      "label": "i",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666674,
+        "x": 321.33333333333326,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 94,
+      "label": "o",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666663,
+        "x": 365,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 95,
+      "label": "p",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.666666666666686,
+        "width": 43.66666666666674,
+        "x": 408.66666666666663,
+        "y": 438
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 96,
+      "label": "Padding-Right",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 97,
+      "label": "Padding-Left",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 98,
+      "label": "a",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666666,
+        "x": 37.33333333333333,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 99,
+      "label": "s",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666667,
+        "x": 80.99999999999999,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 100,
+      "label": "d",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666667,
+        "x": 124.66666666666667,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 101,
+      "label": "f",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666666,
+        "x": 168.33333333333334,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 102,
+      "label": "g",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 44,
+        "x": 212,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 103,
+      "label": "h",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666663,
+        "x": 256,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 104,
+      "label": "j",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666674,
+        "x": 299.66666666666663,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 105,
+      "label": "k",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666674,
+        "x": 343.33333333333326,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 106,
+      "label": "l",
+      "parentIndex": 84,
+      "rect": {
+        "height": 53,
+        "width": 43.66666666666663,
+        "x": 387,
+        "y": 490.66666666666663
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 107,
+      "label": "Padding-Right",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "shift",
+      "index": 108,
+      "label": "shift",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 56.66666666666666,
+        "x": 15.666666666666657,
+        "y": 543.6666666666666
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 109,
+      "label": "Padding-Left",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 110,
+      "label": "z",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666667,
+        "x": 80.99999999999999,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 111,
+      "label": "x",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666667,
+        "x": 124.66666666666667,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 112,
+      "label": "c",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666666,
+        "x": 168.33333333333334,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 113,
+      "label": "v",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 44,
+        "x": 212,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 114,
+      "label": "b",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666663,
+        "x": 256,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 115,
+      "label": "n",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666674,
+        "x": 299.66666666666663,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 116,
+      "label": "m",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666674,
+        "x": 343.33333333333326,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 117,
+      "label": "Padding-Right",
+      "parentIndex": 84,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 13.666666666666657,
+        "y": 433
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "delete",
+      "index": 118,
+      "label": "delete",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 56.66666666666674,
+        "x": 395.66666666666663,
+        "y": 543.6666666666666
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "more",
+      "index": 119,
+      "label": "numbers",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666666,
+        "x": 63.66666666666666,
+        "y": 596.3333333333334
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "emoji",
+      "index": 120,
+      "label": "Emoji",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 43.66666666666666,
+        "x": 107.33333333333331,
+        "y": 596.3333333333334
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "space",
+      "index": 121,
+      "label": "space",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 157.3333333333333,
+        "x": 150.99999999999997,
+        "y": 596.3333333333334
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "",
+      "index": 122,
+      "label": ".",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 35,
+        "x": 308.33333333333326,
+        "y": 596.3333333333334
+      },
+      "type": "Key"
+    },
+    {
+      "identifier": "Go",
+      "index": 123,
+      "label": "go",
+      "parentIndex": 84,
+      "rect": {
+        "height": 52.66666666666663,
+        "width": 61,
+        "x": 343.33333333333326,
+        "y": 596.3333333333334
+      },
+      "type": "Button"
+    }
+  ]
+}

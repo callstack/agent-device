@@ -1,0 +1,977 @@
+{
+  "capture": {
+    "bundle": "com.apple.mobilesafari",
+    "device": "iPhone Duo",
+    "runtime": "iOS-27-1",
+    "commit": "f3b09b4748"
+  },
+  "expect": {
+    "safariDialog": {
+      "title": "",
+      "buttons": ["Cancel", "Open"]
+    }
+  },
+  "nodes": [
+    {
+      "identifier": "",
+      "index": 0,
+      "label": "Safari",
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Application"
+    },
+    {
+      "identifier": "",
+      "index": 1,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 2,
+      "label": "",
+      "parentIndex": 1,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 3,
+      "label": "",
+      "parentIndex": 2,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SafariWindow?View=Regular&BarsKeptMinimized=false&UUID=FE93DE75-8A2C-42A5-A6C4-438F93942A9A&UsingLoweredBar=false&IsSecure=true&IsTabBarAvailable=true",
+      "index": 4,
+      "label": "",
+      "parentIndex": 3,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 5,
+      "label": "",
+      "parentIndex": 4,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 6,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Toolbar",
+      "index": 7,
+      "label": "",
+      "parentIndex": 6,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 8,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 80,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 9,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 10,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 11,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 12,
+      "label": "",
+      "parentIndex": 11,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 13,
+      "label": "",
+      "parentIndex": 12,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 14,
+      "label": "",
+      "parentIndex": 13,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 15,
+      "label": "",
+      "parentIndex": 12,
+      "rect": {
+        "height": 54,
+        "width": 951,
+        "x": 0,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 16,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 44,
+        "width": 100,
+        "x": 16,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 17,
+      "label": "",
+      "parentIndex": 16,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 16,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 18,
+      "label": "",
+      "parentIndex": 17,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 16,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "BackButton",
+      "index": 19,
+      "label": "Back",
+      "parentIndex": 18,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 16,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 20,
+      "label": "",
+      "parentIndex": 19,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 16,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "chevron.backward",
+      "index": 21,
+      "label": "Back",
+      "parentIndex": 20,
+      "rect": {
+        "height": 46.33333333333333,
+        "width": 44,
+        "x": 16,
+        "y": 24.999999999999996
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 22,
+      "label": "",
+      "parentIndex": 19,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 16,
+        "y": 26
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "SidebarButton",
+      "index": 23,
+      "label": "Bookmarks",
+      "parentIndex": 16,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 72,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 24,
+      "label": "",
+      "parentIndex": 23,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 72,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 25,
+      "label": "",
+      "parentIndex": 24,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 72,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "book",
+      "index": 26,
+      "label": "bookmark",
+      "parentIndex": 25,
+      "rect": {
+        "height": 47.66666666666667,
+        "width": 44,
+        "x": 72,
+        "y": 24.333333333333332
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 27,
+      "label": "",
+      "parentIndex": 23,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 72,
+        "y": 26
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 28,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 44,
+        "width": 589,
+        "x": 128,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 29,
+      "label": "",
+      "parentIndex": 28,
+      "rect": {
+        "height": 44,
+        "width": 589,
+        "x": 128,
+        "y": 26
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "",
+      "index": 30,
+      "label": "",
+      "parentIndex": 29,
+      "rect": {
+        "height": 44,
+        "width": 589,
+        "x": 128,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SearchFieldItemView?isActive=true&UUID=A0E72B5C-A901-499B-8650-6061BBB358C5&isPinned=false&isDistractionControlOverlayUp=false",
+      "index": 31,
+      "label": "Address",
+      "parentIndex": 29,
+      "rect": {
+        "height": 44,
+        "width": 360,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 32,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 475.33333333333337,
+        "y": 48
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 33,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 34,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 44,
+        "width": 360,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 35,
+      "label": "",
+      "parentIndex": 34,
+      "rect": {
+        "height": 44,
+        "width": 360,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "TabBarItemTitleContainer",
+      "index": 36,
+      "label": "Address",
+      "parentIndex": 35,
+      "rect": {
+        "height": 44,
+        "width": 360,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "TextField"
+    },
+    {
+      "identifier": "MoreMenuButton",
+      "index": 37,
+      "label": "Page Menu",
+      "parentIndex": 35,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 295.33333333333337,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "ReloadButton",
+      "index": 38,
+      "label": "Reload Page",
+      "parentIndex": 35,
+      "rect": {
+        "height": 44,
+        "width": 29.66666666666663,
+        "x": 616.6666666666667,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 39,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 44,
+        "width": 88,
+        "x": 729,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 40,
+      "label": "",
+      "parentIndex": 39,
+      "rect": {
+        "height": 44,
+        "width": 88,
+        "x": 729,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 41,
+      "label": "",
+      "parentIndex": 40,
+      "rect": {
+        "height": 44,
+        "width": 88,
+        "x": 729,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "NewTabButton",
+      "index": 42,
+      "label": "New tab",
+      "parentIndex": 41,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 729,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 43,
+      "label": "",
+      "parentIndex": 42,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 729,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "plus",
+      "index": 44,
+      "label": "add",
+      "parentIndex": 43,
+      "rect": {
+        "height": 45.66666666666667,
+        "width": 44,
+        "x": 729,
+        "y": 25.333333333333332
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 45,
+      "label": "",
+      "parentIndex": 42,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 729,
+        "y": 26
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "TabOverviewButton",
+      "index": 46,
+      "label": "Tabs",
+      "parentIndex": 41,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 773,
+        "y": 26
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 47,
+      "label": "",
+      "parentIndex": 46,
+      "rect": {
+        "height": 44,
+        "width": 44,
+        "x": 773,
+        "y": 26
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "square.on.square",
+      "index": 48,
+      "label": "Tabs",
+      "parentIndex": 47,
+      "rect": {
+        "height": 50.33333333333333,
+        "width": 44,
+        "x": 773,
+        "y": 22.999999999999996
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 49,
+      "label": "",
+      "parentIndex": 46,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 773,
+        "y": 26
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 50,
+      "label": "",
+      "parentIndex": 6,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "TabDocument?IsLoadedUsingDesktopUserAgent=false&InReaderMode=false&UUID=A0E72B5C-A901-499B-8650-6061BBB358C5&IsPrivate=false&IsPageLoaded=true&WebViewProcessID=79910",
+      "index": 51,
+      "label": "",
+      "parentIndex": 50,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "WebView",
+      "index": 52,
+      "label": "",
+      "parentIndex": 51,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "WebView"
+    },
+    {
+      "identifier": "",
+      "index": 53,
+      "label": "",
+      "parentIndex": 52,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 54,
+      "label": "",
+      "parentIndex": 53,
+      "rect": {
+        "height": 589,
+        "width": 951,
+        "x": 0,
+        "y": 80
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SFDialogView",
+      "index": 55,
+      "label": "",
+      "parentIndex": 53,
+      "rect": {
+        "height": 97,
+        "width": 440,
+        "x": 255.66666666666663,
+        "y": 326
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SFDialogViewMessageText",
+      "index": 56,
+      "label": "",
+      "parentIndex": 55,
+      "rect": {
+        "height": 54,
+        "width": 440,
+        "x": 255.66666666666663,
+        "y": 326
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 57,
+      "label": "",
+      "parentIndex": 56,
+      "rect": {
+        "height": 54,
+        "width": 440,
+        "x": 255.66666666666663,
+        "y": 326
+      },
+      "type": "TextView"
+    },
+    {
+      "identifier": "",
+      "index": 58,
+      "label": "Open this page in “Agent Device Tester”?",
+      "parentIndex": 57,
+      "rect": {
+        "height": 22,
+        "width": 313.04736328125,
+        "x": 275.66666666666663,
+        "y": 342
+      },
+      "type": "TextView"
+    },
+    {
+      "identifier": "",
+      "index": 59,
+      "label": "Vertical scroll bar, 1 page",
+      "parentIndex": 57,
+      "rect": {
+        "height": 54,
+        "width": 30,
+        "x": 662.6666666666666,
+        "y": 326
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 60,
+      "label": "",
+      "parentIndex": 59,
+      "rect": {
+        "height": 48,
+        "width": 3,
+        "x": 689.6666666666666,
+        "y": 329
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 61,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 57,
+      "rect": {
+        "height": 27,
+        "width": 440,
+        "x": 255.66666666666663,
+        "y": 350
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 62,
+      "label": "",
+      "parentIndex": 61,
+      "rect": {
+        "height": 3,
+        "width": 434,
+        "x": 258.66666666666663,
+        "y": 374
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 63,
+      "label": "Cancel",
+      "parentIndex": 55,
+      "rect": {
+        "height": 33,
+        "width": 53,
+        "x": 559.6666666666666,
+        "y": 380
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 64,
+      "label": "Cancel",
+      "parentIndex": 63,
+      "rect": {
+        "height": 21,
+        "width": 53,
+        "x": 559.6666666666666,
+        "y": 386
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 65,
+      "label": "Open",
+      "parentIndex": 55,
+      "rect": {
+        "height": 33,
+        "width": 43,
+        "x": 632.6666666666666,
+        "y": 380
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 66,
+      "label": "Open",
+      "parentIndex": 65,
+      "rect": {
+        "height": 21,
+        "width": 43,
+        "x": 632.6666666666666,
+        "y": 386
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 67,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 50,
+      "rect": {
+        "height": 30,
+        "width": 841,
+        "x": 55,
+        "y": 636
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 68,
+      "label": "",
+      "parentIndex": 67,
+      "rect": {
+        "height": 3,
+        "width": 835,
+        "x": 58,
+        "y": 663
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 69,
+      "label": "Horizontal scroll bar, 1 page",
+      "parentIndex": 50,
+      "rect": {
+        "height": 30,
+        "width": 841,
+        "x": 55,
+        "y": 636
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 70,
+      "label": "",
+      "parentIndex": 69,
+      "rect": {
+        "height": 3,
+        "width": 835,
+        "x": 58,
+        "y": 663
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 71,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 72,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 73,
+      "label": "",
+      "parentIndex": 72,
+      "rect": {
+        "height": 669,
+        "width": 951,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    }
+  ]
+}

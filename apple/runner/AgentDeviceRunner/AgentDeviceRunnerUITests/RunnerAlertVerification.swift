@@ -1,11 +1,7 @@
-struct RunnerAlertPresentation: Equatable {
-  let title: String
-  let content: [String]
-  let buttons: [String]
-}
+import AgentDeviceSnapshotPresentation
 
 enum RunnerAlertObservation {
-  case visible(RunnerAlertPresentation)
+  case visible(AlertSurfacePresentation)
   case absent
   case unavailable
   case deadlineExceeded
@@ -19,7 +15,7 @@ enum RunnerAlertVerification: Equatable {
   case timedOut
 
   static func verify(
-    original: RunnerAlertPresentation,
+    original: AlertSurfacePresentation,
     observation: RunnerAlertObservation
   ) -> RunnerAlertVerification {
     switch observation {

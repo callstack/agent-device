@@ -1,0 +1,3325 @@
+{
+  "capture": {
+    "bundle": "com.apple.springboard",
+    "device": "iPhone Duo (fixtures)",
+    "runtime": "iOS-27-1",
+    "commit": "f3b09b4748"
+  },
+  "expect": {},
+  "nodes": [
+    {
+      "identifier": "",
+      "index": 0,
+      "label": " ",
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Application"
+    },
+    {
+      "identifier": "",
+      "index": 1,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 2,
+      "label": "",
+      "parentIndex": 1,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 3,
+      "label": "",
+      "parentIndex": 2,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 4,
+      "label": "",
+      "parentIndex": 3,
+      "rect": {
+        "height": 951,
+        "width": 100,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Home screen icons",
+      "index": 5,
+      "label": "",
+      "parentIndex": 2,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 6,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 7,
+      "label": "",
+      "parentIndex": 6,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 8,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "Settings",
+      "index": 9,
+      "label": "Settings",
+      "parentIndex": 8,
+      "rect": {
+        "height": 68,
+        "width": 86.66666666666666,
+        "x": 52,
+        "y": 814.3333333333335
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "",
+      "index": 10,
+      "label": "",
+      "parentIndex": 9,
+      "rect": {
+        "height": 60,
+        "width": 74,
+        "x": 54,
+        "y": 818
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 11,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 818
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 12,
+      "label": "",
+      "parentIndex": 11,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 818
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 13,
+      "label": "",
+      "parentIndex": 12,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 818
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "label-view",
+      "index": 14,
+      "label": "",
+      "parentIndex": 10,
+      "rect": {
+        "height": 64,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 816.3333333333335
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 15,
+      "label": "",
+      "parentIndex": 14,
+      "rect": {
+        "height": 64,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 816.3333333333335
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 16,
+      "label": "",
+      "parentIndex": 15,
+      "rect": {
+        "height": 64,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 816.3333333333335
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 17,
+      "label": "",
+      "parentIndex": 16,
+      "rect": {
+        "height": 130,
+        "width": 87.66666666666669,
+        "x": 82.39062799999999,
+        "y": 782.8411293333334
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 18,
+      "label": "",
+      "parentIndex": 16,
+      "rect": {
+        "height": 64,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 816.3333333333335
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 19,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "Agent Device Tester",
+      "index": 20,
+      "label": "Agent Device Tester",
+      "parentIndex": 19,
+      "rect": {
+        "height": 79.67999999999998,
+        "width": 89.36000000000001,
+        "x": 33.00000000000001,
+        "y": 86.20000000000002
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "",
+      "index": 21,
+      "label": "",
+      "parentIndex": 20,
+      "rect": {
+        "height": 65.12,
+        "width": 52.8,
+        "x": 51.72000000000001,
+        "y": 88.20000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 22,
+      "label": "",
+      "parentIndex": 21,
+      "rect": {
+        "height": 52.80000000000001,
+        "width": 52.8,
+        "x": 51.72000000000001,
+        "y": 88.20000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 23,
+      "label": "",
+      "parentIndex": 22,
+      "rect": {
+        "height": 52.80000000000001,
+        "width": 52.8,
+        "x": 51.72000000000001,
+        "y": 88.20000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 24,
+      "label": "",
+      "parentIndex": 23,
+      "rect": {
+        "height": 52.80000000000001,
+        "width": 52.8,
+        "x": 51.72000000000001,
+        "y": 88.20000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "label-view",
+      "index": 25,
+      "label": "",
+      "parentIndex": 21,
+      "rect": {
+        "height": 22.879999999999995,
+        "width": 85.36000000000001,
+        "x": 35.00000000000001,
+        "y": 141
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 26,
+      "label": "",
+      "parentIndex": 25,
+      "rect": {
+        "height": 22.879999999999995,
+        "width": 85.36000000000001,
+        "x": 35.00000000000001,
+        "y": 141
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 27,
+      "label": "",
+      "parentIndex": 26,
+      "rect": {
+        "height": 22.879999999999995,
+        "width": 85.36000000000001,
+        "x": 35.00000000000001,
+        "y": 141
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 28,
+      "label": "",
+      "parentIndex": 27,
+      "rect": {
+        "height": 82.72000000000001,
+        "width": 143.44,
+        "x": 6.686472853333388,
+        "y": 110.39708597333335
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 29,
+      "label": "",
+      "parentIndex": 27,
+      "rect": {
+        "height": 22.879999999999995,
+        "width": 85.36000000000001,
+        "x": 35.00000000000001,
+        "y": 141
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "AgentDeviceRunnerUITests-Runner",
+      "index": 30,
+      "label": "AgentDeviceRunnerUITests-Runner",
+      "parentIndex": 19,
+      "rect": {
+        "height": 98.66666666666663,
+        "width": 86.66666666666666,
+        "x": 52,
+        "y": 314.0000000000001
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "",
+      "index": 31,
+      "label": "",
+      "parentIndex": 30,
+      "rect": {
+        "height": 60,
+        "width": 74,
+        "x": 54,
+        "y": 333.0000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "label-view",
+      "index": 32,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 94.66666666666663,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 316.0000000000001
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 33,
+      "label": "",
+      "parentIndex": 32,
+      "rect": {
+        "height": 94.66666666666663,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 316.0000000000001
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 34,
+      "label": "",
+      "parentIndex": 33,
+      "rect": {
+        "height": 94.66666666666663,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 316.0000000000001
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 35,
+      "label": "",
+      "parentIndex": 34,
+      "rect": {
+        "height": 160.66666666666669,
+        "width": 87.66666666666669,
+        "x": 82.39062799999999,
+        "y": 282.5077960000001
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 36,
+      "label": "",
+      "parentIndex": 34,
+      "rect": {
+        "height": 94.66666666666663,
+        "width": 19.666666666666657,
+        "x": 117,
+        "y": 316.0000000000001
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 37,
+      "label": "",
+      "parentIndex": 31,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 333.0000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 38,
+      "label": "",
+      "parentIndex": 37,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 333.0000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 39,
+      "label": "",
+      "parentIndex": 38,
+      "rect": {
+        "height": 60,
+        "width": 60,
+        "x": 54,
+        "y": 333.0000000000002
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 40,
+      "label": "",
+      "parentIndex": 7,
+      "rect": {
+        "height": 55.333333333333314,
+        "width": 35.33333333333337,
+        "x": 618.6666666666666,
+        "y": 489.6666666666667
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Page control",
+      "index": 41,
+      "label": "",
+      "parentIndex": 40,
+      "rect": {
+        "height": 55.333333333333314,
+        "width": 35.33333333333337,
+        "x": 618.6666666666666,
+        "y": 489.6666666666667
+      },
+      "type": "Element(34)"
+    },
+    {
+      "identifier": "",
+      "index": 42,
+      "label": "",
+      "parentIndex": 5,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 43,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 44,
+      "label": "",
+      "parentIndex": 43,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 45,
+      "label": "",
+      "parentIndex": 44,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 46,
+      "label": "",
+      "parentIndex": 45,
+      "rect": {
+        "height": 100,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 47,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 48,
+      "label": "",
+      "parentIndex": 47,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 49,
+      "label": "",
+      "parentIndex": 48,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 50,
+      "label": "",
+      "parentIndex": 49,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 51,
+      "label": "",
+      "parentIndex": 49,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Multitasking Dock",
+      "index": 52,
+      "label": "",
+      "parentIndex": 49,
+      "rect": {
+        "height": 84,
+        "width": 669,
+        "x": 45,
+        "y": 5.833333333333371
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "user icon list view",
+      "index": 53,
+      "label": "Dock",
+      "parentIndex": 52,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 355.6666666666667,
+        "y": 23.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Safari",
+      "index": 54,
+      "label": "Safari",
+      "parentIndex": 53,
+      "rect": {
+        "height": 64,
+        "width": 64,
+        "x": 347.6666666666667,
+        "y": 15.833333333333371
+      },
+      "type": "Element(44)"
+    },
+    {
+      "identifier": "",
+      "index": 55,
+      "label": "",
+      "parentIndex": 54,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 355.6666666666667,
+        "y": 23.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 56,
+      "label": "",
+      "parentIndex": 55,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 355.6666666666667,
+        "y": 23.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 57,
+      "label": "",
+      "parentIndex": 56,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 355.6666666666667,
+        "y": 23.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 58,
+      "label": "",
+      "parentIndex": 57,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 355.6666666666667,
+        "y": 23.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Recent icon list view",
+      "index": 59,
+      "label": "Suggestions",
+      "parentIndex": 52,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 343.6666666666667,
+        "y": 83.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "utilities icon list view",
+      "index": 60,
+      "label": "Utilities",
+      "parentIndex": 52,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 343.6666666666667,
+        "y": 83.83333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 61,
+      "label": "",
+      "parentIndex": 48,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 62,
+      "label": "",
+      "parentIndex": 48,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 63,
+      "label": "",
+      "parentIndex": 62,
+      "rect": {
+        "height": 951,
+        "width": 48,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 64,
+      "label": "",
+      "parentIndex": 63,
+      "rect": {
+        "height": 951,
+        "width": 48,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "spotlight-search-button",
+      "index": 65,
+      "label": "Options",
+      "parentIndex": 62,
+      "rect": {
+        "height": 48,
+        "width": 48,
+        "x": 597,
+        "y": 23.66666666666663
+      },
+      "type": "Button"
+    },
+    {
+      "identifier": "",
+      "index": 66,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 67,
+      "label": "",
+      "parentIndex": 66,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 68,
+      "label": "",
+      "parentIndex": 67,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 69,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 70,
+      "label": "",
+      "parentIndex": 69,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 71,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 72,
+      "label": "",
+      "parentIndex": 71,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 73,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 74,
+      "label": "",
+      "parentIndex": 73,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 75,
+      "label": "",
+      "parentIndex": 74,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 76,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 77,
+      "label": "",
+      "parentIndex": 76,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 78,
+      "label": "",
+      "parentIndex": 77,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 79,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 80,
+      "label": "",
+      "parentIndex": 79,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 81,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 82,
+      "label": "",
+      "parentIndex": 81,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 83,
+      "label": "",
+      "parentIndex": 82,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 84,
+      "label": "",
+      "parentIndex": 83,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 85,
+      "label": "",
+      "parentIndex": 83,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 86,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 87,
+      "label": "",
+      "parentIndex": 86,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 88,
+      "label": "",
+      "parentIndex": 87,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 89,
+      "label": "",
+      "parentIndex": 88,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 90,
+      "label": "",
+      "parentIndex": 88,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 91,
+      "label": "",
+      "parentIndex": 88,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 92,
+      "label": "",
+      "parentIndex": 88,
+      "rect": {
+        "height": 4.666666666666657,
+        "width": 5,
+        "x": 37,
+        "y": 229.33333333333334
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 93,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2853,
+        "width": 2007,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 94,
+      "label": "",
+      "parentIndex": 93,
+      "rect": {
+        "height": 2853,
+        "width": 2007,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 95,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 96,
+      "label": "",
+      "parentIndex": 95,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 97,
+      "label": "",
+      "parentIndex": 96,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 98,
+      "label": "",
+      "parentIndex": 97,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 99,
+      "label": "",
+      "parentIndex": 97,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 100,
+      "label": "",
+      "parentIndex": 97,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 101,
+      "label": "",
+      "parentIndex": 100,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 102,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 103,
+      "label": "",
+      "parentIndex": 102,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 104,
+      "label": "",
+      "parentIndex": 103,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 105,
+      "label": "",
+      "parentIndex": 104,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 106,
+      "label": "",
+      "parentIndex": 105,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 107,
+      "label": "",
+      "parentIndex": 106,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 108,
+      "label": "",
+      "parentIndex": 106,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 109,
+      "label": "",
+      "parentIndex": 108,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 110,
+      "label": "",
+      "parentIndex": 106,
+      "rect": {
+        "height": 35,
+        "width": 35,
+        "x": 400.6666666666667,
+        "y": 30.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 111,
+      "label": "",
+      "parentIndex": 104,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 112,
+      "label": "",
+      "parentIndex": 111,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 113,
+      "label": "",
+      "parentIndex": 112,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 114,
+      "label": "",
+      "parentIndex": 111,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 115,
+      "label": "",
+      "parentIndex": 114,
+      "rect": {
+        "height": 35.66666666666666,
+        "width": 35.666666666666686,
+        "x": 400.33333333333337,
+        "y": 29.999999999999996
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 116,
+      "label": "",
+      "parentIndex": 104,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 117,
+      "label": "",
+      "parentIndex": 116,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 118,
+      "label": "",
+      "parentIndex": 117,
+      "rect": {
+        "height": 53,
+        "width": 53,
+        "x": 391.6666666666667,
+        "y": 21.333333333333332
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 119,
+      "label": "",
+      "parentIndex": 117,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 120,
+      "label": "",
+      "parentIndex": 119,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 121,
+      "label": "",
+      "parentIndex": 120,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 122,
+      "label": "",
+      "parentIndex": 119,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399.6666666666667,
+        "y": 29.33333333333333
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 123,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 124,
+      "label": "",
+      "parentIndex": 123,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 125,
+      "label": "",
+      "parentIndex": 124,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 126,
+      "label": "",
+      "parentIndex": 124,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 127,
+      "label": "",
+      "parentIndex": 124,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 128,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 129,
+      "label": "",
+      "parentIndex": 128,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "SBSwitcherWindow:Main",
+      "index": 130,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 131,
+      "label": "",
+      "parentIndex": 130,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 132,
+      "label": "",
+      "parentIndex": 131,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 133,
+      "label": "",
+      "parentIndex": 132,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 134,
+      "label": "",
+      "parentIndex": 133,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 135,
+      "label": "",
+      "parentIndex": 134,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "AppSwitcherContentView",
+      "index": 136,
+      "label": "",
+      "parentIndex": 134,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 137,
+      "label": "",
+      "parentIndex": 136,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 138,
+      "label": "",
+      "parentIndex": 137,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 139,
+      "label": "",
+      "parentIndex": 138,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "card:com.callstack.agentdevicelab:sceneID:com.callstack.agentdevicelab-default",
+      "index": 140,
+      "label": "Agent Device Tester",
+      "parentIndex": 136,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 141,
+      "label": "",
+      "parentIndex": 140,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 142,
+      "label": "",
+      "parentIndex": 141,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 143,
+      "label": "",
+      "parentIndex": 142,
+      "rect": {
+        "height": 1266,
+        "width": 858,
+        "x": -196,
+        "y": -294
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 144,
+      "label": "",
+      "parentIndex": 143,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 145,
+      "label": "",
+      "parentIndex": 144,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 146,
+      "label": "",
+      "parentIndex": 145,
+      "rect": {
+        "height": 1017,
+        "width": 466,
+        "x": 0,
+        "y": -339
+      },
+      "type": "ScrollView"
+    },
+    {
+      "identifier": "",
+      "index": 147,
+      "label": "",
+      "parentIndex": 146,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 148,
+      "label": "",
+      "parentIndex": 147,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 149,
+      "label": "",
+      "parentIndex": 148,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 150,
+      "label": "",
+      "parentIndex": 149,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 151,
+      "label": "",
+      "parentIndex": 150,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 152,
+      "label": "",
+      "parentIndex": 151,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 153,
+      "label": "",
+      "parentIndex": 152,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 154,
+      "label": "",
+      "parentIndex": 153,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 155,
+      "label": "",
+      "parentIndex": 154,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Scroll To Top Region",
+      "index": 156,
+      "label": "",
+      "parentIndex": 155,
+      "rect": {
+        "height": 20,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 157,
+      "label": "",
+      "parentIndex": 152,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 158,
+      "label": "",
+      "parentIndex": 157,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 159,
+      "label": "",
+      "parentIndex": 158,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 160,
+      "label": "",
+      "parentIndex": 159,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Element(25)"
+    },
+    {
+      "identifier": "",
+      "index": 161,
+      "label": "",
+      "parentIndex": 160,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 162,
+      "label": "",
+      "parentIndex": 161,
+      "rect": {
+        "height": 176.33333333333334,
+        "width": 88,
+        "x": 378,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 163,
+      "label": "",
+      "parentIndex": 162,
+      "rect": {
+        "height": 137.33333333333334,
+        "width": 55,
+        "x": 390.66666666666674,
+        "y": 20.333333333333314
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 164,
+      "label": "",
+      "parentIndex": 163,
+      "rect": {
+        "height": 137.33333333333331,
+        "width": 55,
+        "x": 390.66666666666674,
+        "y": 20.333333333333314
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 165,
+      "label": "",
+      "parentIndex": 164,
+      "rect": {
+        "height": 137.33333333333331,
+        "width": 55,
+        "x": 390.66666666666674,
+        "y": 20.333333333333314
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 166,
+      "label": "",
+      "parentIndex": 165,
+      "rect": {
+        "height": 137.33333333333331,
+        "width": 55,
+        "x": 390.66666666666674,
+        "y": 20.333333333333314
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 167,
+      "label": "",
+      "parentIndex": 162,
+      "rect": {
+        "height": 37,
+        "width": 37,
+        "x": 399,
+        "y": 30
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 168,
+      "label": "9:14 AM",
+      "parentIndex": 162,
+      "rect": {
+        "height": 19.33333333333333,
+        "width": 34.666666666666686,
+        "x": 400.66666666666674,
+        "y": 83
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 169,
+      "label": "",
+      "parentIndex": 162,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 394.66666666666674,
+        "y": 106.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 170,
+      "label": "",
+      "parentIndex": 169,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 394.66666666666674,
+        "y": 106.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 171,
+      "label": "",
+      "parentIndex": 162,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 394.66666666666674,
+        "y": 106.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 172,
+      "label": "",
+      "parentIndex": 171,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 394.66666666666674,
+        "y": 106.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 173,
+      "label": "",
+      "parentIndex": 172,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 394.66666666666674,
+        "y": 106.66666666666669
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 174,
+      "label": "wifi_68_status_bar_C2",
+      "parentIndex": 173,
+      "rect": {
+        "height": 13.333333969116211,
+        "width": 18.33333396911621,
+        "x": 409,
+        "y": 123.33333333333334
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 175,
+      "label": "",
+      "parentIndex": 152,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 176,
+      "label": "",
+      "parentIndex": 175,
+      "rect": {
+        "height": 678,
+        "width": 386,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 177,
+      "label": "",
+      "parentIndex": 175,
+      "rect": {
+        "height": 678,
+        "width": 386,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 178,
+      "label": "",
+      "parentIndex": 177,
+      "rect": {
+        "height": 678,
+        "width": 386,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 179,
+      "label": "",
+      "parentIndex": 178,
+      "rect": {
+        "height": 678,
+        "width": 386,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 180,
+      "label": "",
+      "parentIndex": 148,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 181,
+      "label": "",
+      "parentIndex": 148,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 182,
+      "label": "",
+      "parentIndex": 136,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 183,
+      "label": "",
+      "parentIndex": 182,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 184,
+      "label": "",
+      "parentIndex": 183,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 185,
+      "label": "",
+      "parentIndex": 184,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "Home Grabber",
+      "index": 186,
+      "label": "",
+      "parentIndex": 185,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 187,
+      "label": "",
+      "parentIndex": 186,
+      "rect": {
+        "height": 5,
+        "width": 166.99999999999997,
+        "x": 149.66666666666666,
+        "y": 665
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 188,
+      "label": "",
+      "parentIndex": 187,
+      "rect": {
+        "height": 5,
+        "width": 166.99999999999997,
+        "x": 149.66666666666666,
+        "y": 665
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 189,
+      "label": "",
+      "parentIndex": 188,
+      "rect": {
+        "height": 5,
+        "width": 166.99999999999997,
+        "x": 149.66666666666666,
+        "y": 665
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 190,
+      "label": "",
+      "parentIndex": 189,
+      "rect": {
+        "height": 5,
+        "width": 166.99999999999997,
+        "x": 149.66666666666666,
+        "y": 665
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 191,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 192,
+      "label": "",
+      "parentIndex": 191,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 193,
+      "label": "",
+      "parentIndex": 192,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 194,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 195,
+      "label": "",
+      "parentIndex": 194,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 196,
+      "label": "",
+      "parentIndex": 195,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 197,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 198,
+      "label": "",
+      "parentIndex": 197,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 199,
+      "label": "",
+      "parentIndex": 198,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 200,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 201,
+      "label": "",
+      "parentIndex": 200,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 202,
+      "label": "",
+      "parentIndex": 201,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 203,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 204,
+      "label": "",
+      "parentIndex": 203,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 205,
+      "label": "",
+      "parentIndex": 204,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 206,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 207,
+      "label": "",
+      "parentIndex": 206,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 208,
+      "label": "",
+      "parentIndex": 207,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 209,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 210,
+      "label": "",
+      "parentIndex": 209,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 211,
+      "label": "",
+      "parentIndex": 210,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 212,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 213,
+      "label": "",
+      "parentIndex": 212,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 214,
+      "label": "",
+      "parentIndex": 213,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 215,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2853,
+        "width": 2007,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 216,
+      "label": "",
+      "parentIndex": 215,
+      "rect": {
+        "height": 15,
+        "width": 15,
+        "x": 2292,
+        "y": -300
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 217,
+      "label": "",
+      "parentIndex": 215,
+      "rect": {
+        "height": 15,
+        "width": 15,
+        "x": 2292,
+        "y": -300
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 218,
+      "label": "",
+      "parentIndex": 215,
+      "rect": {
+        "height": 5,
+        "width": 5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 219,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 220,
+      "label": "",
+      "parentIndex": 219,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Element(25)"
+    },
+    {
+      "identifier": "",
+      "index": 221,
+      "label": "",
+      "parentIndex": 220,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 222,
+      "label": "",
+      "parentIndex": 221,
+      "rect": {
+        "height": 88,
+        "width": 123.66666666666667,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 223,
+      "label": "9:14 AM",
+      "parentIndex": 222,
+      "rect": {
+        "height": 34.66666666666663,
+        "width": 19.333333333333336,
+        "x": 30.333333333333336,
+        "y": 30.666666666666742
+      },
+      "type": "StaticText"
+    },
+    {
+      "identifier": "",
+      "index": 224,
+      "label": "",
+      "parentIndex": 222,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 54,
+        "y": 24.33333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 225,
+      "label": "",
+      "parentIndex": 224,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 54,
+        "y": 24.33333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 226,
+      "label": "",
+      "parentIndex": 222,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 54,
+        "y": 24.33333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 227,
+      "label": "",
+      "parentIndex": 226,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 54,
+        "y": 24.33333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 228,
+      "label": "",
+      "parentIndex": 227,
+      "rect": {
+        "height": 47,
+        "width": 47,
+        "x": 54,
+        "y": 24.33333333333337
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 229,
+      "label": "wifi_68_status_bar_C2",
+      "parentIndex": 228,
+      "rect": {
+        "height": 18.33333396911621,
+        "width": 13.333333969116211,
+        "x": 70.66666666666666,
+        "y": 38.66666603088379
+      },
+      "type": "Image"
+    },
+    {
+      "identifier": "",
+      "index": 230,
+      "label": "",
+      "parentIndex": 219,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 231,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 232,
+      "label": "",
+      "parentIndex": 231,
+      "rect": {
+        "height": 15,
+        "width": 15,
+        "x": 1683,
+        "y": -300
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 233,
+      "label": "",
+      "parentIndex": 231,
+      "rect": {
+        "height": 15,
+        "width": 15,
+        "x": 1683,
+        "y": -300
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 234,
+      "label": "",
+      "parentIndex": 231,
+      "rect": {
+        "height": 5,
+        "width": 5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 235,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 236,
+      "label": "",
+      "parentIndex": 235,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Element(25)"
+    },
+    {
+      "identifier": "",
+      "index": 237,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 238,
+      "label": "",
+      "parentIndex": 237,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 239,
+      "label": "",
+      "parentIndex": 238,
+      "rect": {
+        "height": 2.333333333333334,
+        "width": 52,
+        "x": 12,
+        "y": 12
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 240,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 241,
+      "label": "",
+      "parentIndex": 240,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 242,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 243,
+      "label": "",
+      "parentIndex": 242,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 244,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 245,
+      "label": "",
+      "parentIndex": 244,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 246,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 247,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 248,
+      "label": "",
+      "parentIndex": 247,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Other"
+    },
+    {
+      "identifier": "",
+      "index": 249,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 250,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 251,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 951,
+        "width": 669,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 252,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 678,
+        "width": 466,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 253,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2853,
+        "width": 2007,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    },
+    {
+      "identifier": "",
+      "index": 254,
+      "label": "",
+      "parentIndex": 0,
+      "rect": {
+        "height": 2034,
+        "width": 1398,
+        "x": 0,
+        "y": 0
+      },
+      "type": "Window"
+    }
+  ]
+}
