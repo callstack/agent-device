@@ -4,6 +4,7 @@ import { systemCliOutputFormatters } from './output.ts';
 test('back CLI output renders the settled observation', () => {
   const output = systemCliOutputFormatters.back({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       action: 'back',
@@ -36,6 +37,7 @@ test('back CLI output renders the settled observation', () => {
 test('appstate CLI output renders the Apple session app from the runner read', () => {
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       platform: 'ios',
@@ -59,6 +61,7 @@ test('appstate CLI output renders the Apple session app from the runner read', (
 test('appstate CLI output falls back to the bundle id and omits absent lines', () => {
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       platform: 'ios',
@@ -75,6 +78,7 @@ test('appstate CLI output falls back to the bundle id and omits absent lines', (
 test('appstate CLI output renders unknown when the Apple session carries no app identity', () => {
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: { platform: 'ios', surface: 'app' },
   });
@@ -84,6 +88,7 @@ test('appstate CLI output renders unknown when the Apple session carries no app 
 test('appstate CLI output renders the Android foreground app and activity', () => {
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       platform: 'android',
@@ -99,6 +104,7 @@ test('appstate CLI output renders the macOS session app', () => {
   // daemon always answers from the session record: no State line.
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       platform: 'macos',
@@ -118,6 +124,7 @@ test('appstate CLI output renders the macOS session app', () => {
 test('appstate CLI output renders the HarmonyOS foreground app and activity', () => {
   const output = systemCliOutputFormatters.appstate({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: {
       platform: 'harmonyos',

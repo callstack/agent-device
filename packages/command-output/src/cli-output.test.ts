@@ -1,11 +1,9 @@
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
-import { listCommandMetadata } from '@agent-device/command-surface';
-import {
-  formatCliOutput,
-  isParseableOutputCommand,
-  listCliOutputFormatters,
-} from './cli-output.ts';
+import { findCommandMetadata, listCommandMetadata } from '@agent-device/command-surface';
+import { listCliOutputFormatters } from './cli-output.ts';
+import { formatCliOutput } from './index.ts';
+import { responseWarningRoute } from './output-common.ts';
 import type { CommandName } from '@agent-device/command-surface';
 
 bindTestCommandHost();
@@ -81,7 +79,13 @@ const FORMATTER_COMMANDS = [
 ] as const satisfies readonly CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
-  const output = await formatCliOutput({ env: process.env, name, input, result });
+  const output = await formatCliOutput({
+    env: process.env,
+    stderrIsTTY: false,
+    name,
+    input,
+    result,
+  });
   expect(output, `${name} renders no CLI output`).toBeDefined();
   return output!;
 }
@@ -120,9 +124,11 @@ const RENDER_CASES: RenderCase[] = FORMATTER_COMMANDS.map((name) => {
 });
 
 test('the parseable-output set is exactly the declared exceptions', () => {
-  expect(FORMATTER_COMMANDS.filter(isParseableOutputCommand)).toEqual(
-    [...PARSEABLE_OUTPUT_COMMANDS].sort(),
-  );
+  expect(
+    FORMATTER_COMMANDS.filter(
+      (name) => responseWarningRoute(findCommandMetadata(name)) === 'stderr',
+    ),
+  ).toEqual([...PARSEABLE_OUTPUT_COMMANDS].sort());
 });
 
 test('every command with a dedicated text response retains its dispatcher binding', () => {
@@ -140,7 +146,9 @@ test('a command with no formatter never opts out of stdout', () => {
     (name) => !(FORMATTER_COMMANDS as readonly CommandName[]).includes(name),
   );
   expect(withoutFormatter.length).toBeGreaterThan(0);
-  expect(withoutFormatter.filter(isParseableOutputCommand)).toEqual([]);
+  expect(
+    withoutFormatter.filter((name) => responseWarningRoute(findCommandMetadata(name)) === 'stderr'),
+  ).toEqual([]);
 });
 
 describe('the dispatcher appends the response warnings for every formatter', () => {

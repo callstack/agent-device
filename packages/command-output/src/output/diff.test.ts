@@ -23,7 +23,7 @@ test('formatSnapshotDiffText renders plain text when color is disabled', () => {
   process.env.FORCE_COLOR = '0';
   delete process.env.NO_COLOR;
   try {
-    const text = formatSnapshotDiffText({ ...DIFF_DATA }, process.env);
+    const text = formatSnapshotDiffText({ ...DIFF_DATA }, process.env, { isTTY: false });
     assert.match(text, /^@e2 \[window\]/m);
     assert.match(text, /^- {2}@e3 \[text\] "67"$/m);
     assert.match(text, /^\+ {2}@e3 \[text\] "134"$/m);
@@ -38,7 +38,9 @@ test('formatSnapshotDiffText renders plain text when color is disabled', () => {
 });
 
 test('formatSnapshotDiffText renders ANSI colors when forced', () => {
-  const text = withColor(() => formatSnapshotDiffText({ ...DIFF_DATA }, process.env));
+  const text = withColor(() =>
+    formatSnapshotDiffText({ ...DIFF_DATA }, process.env, { isTTY: false }),
+  );
   const plainText = stripVTControlCharacters(text);
   assert.notEqual(text, plainText);
   assert.match(plainText, /^@e2 \[window\]/m);
@@ -55,6 +57,7 @@ test('formatSnapshotDiffText prints warnings before the diff body', () => {
         warnings: ['Recent press was followed by a nearly identical snapshot.'],
       },
       process.env,
+      { isTTY: false },
     ),
   );
   assert.match(text, /^Recent press was followed by a nearly identical snapshot\.$/m);
@@ -72,6 +75,7 @@ test('formatScreenshotDiffText renders match success without color', () => {
         mismatchPercentage: 0,
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.match(text, /✓ Screenshots match\./);
@@ -117,6 +121,7 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
         ],
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.match(text, /✗ 5% pixels differ/);
@@ -149,6 +154,7 @@ test('formatScreenshotDiffText explains normalized comparison geometry', () => {
         },
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.match(text, /current 1080x2340 → 375x813/);
@@ -168,6 +174,7 @@ test('formatScreenshotDiffText renders diff path relative to cwd', () => {
         diffPath: `${cwd}/diff.png`,
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.match(text, /\.\/diff\.png/);
@@ -189,6 +196,7 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
         diffPath,
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.match(text, new RegExp(diffPath.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)));
@@ -206,6 +214,7 @@ test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
         diffPath: '/tmp/diff.png',
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.equal(text.includes('\u001b[31m'), true);
@@ -224,6 +233,7 @@ test('formatScreenshotDiffText does not show diff path when images match', () =>
         diffPath: '/tmp/diff.png',
       },
       { env: process.env, cwd: process.cwd() },
+      { isTTY: false },
     ),
   );
   assert.equal(text.includes('Diff image'), false);

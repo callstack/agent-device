@@ -2,9 +2,8 @@
 // is { command, output }: the command line the prompt claims was run, and the
 // exact text the CLI would print for it. Every `output` is pinned to the real
 // renderer by scripts/__tests__/help-conformance-sample-outputs.test.ts, which
-// rebuilds it through src/commands/interaction/output.ts or
-// src/commands/output/error.ts printHumanError — a rendering change fails that test
-// instead of silently leaving the benchmark grading against stale output.
+// rebuilds it through its registered production renderer. A rendering change
+// fails that test instead of silently leaving the benchmark grading against stale output.
 
 export function sampleText(sample) {
   return `${sample.command}\n${sample.output}`;
@@ -54,12 +53,12 @@ export const OFFSCREEN_TARGET_SNAPSHOT_SAMPLE = {
 @e1 [application] "Preferences"
 @e2 [window]
 @e3 [collection]
+  [content below collection hidden]
 @e4 [cell] "General"
 @e5 [cell] "Display"
 @e6 [cell] "Sounds"
 @e7 [cell] "Focus"
-@e8 [cell] "Screen Time"
-  [content below collection hidden]`,
+@e8 [cell] "Screen Time"`,
 };
 
 // Never-settled press: success response, no diff, NEVER_SETTLED_HINT attached.
@@ -73,7 +72,7 @@ hint: The UI kept changing for the whole settle budget (animation, carousel, or 
 // Recovered snapshot: the private-ax fallback fired but still exposed
 // actionable refs. Warning wording is renderSnapshotQualityWarnings
 // (packages/capture-kit/src/snapshot/snapshot-presentation/quality-warnings.ts); lines are the structured snapshot
-// renderer (src/commands/output/snapshot.ts formatSnapshotText).
+// renderer (packages/command-output/src/output/snapshot.ts formatSnapshotText).
 export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 2 nodes

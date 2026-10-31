@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
-import { interactionCliOutputFormatters } from '../../../src/commands/interaction/output.ts';
+import { formatCliOutput } from '@agent-device/command-output';
 import { assertFlatToolCall, assertPngFile } from './assertions.ts';
 import { PROVIDER_SCENARIO_WEB } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
@@ -103,12 +103,14 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
               | undefined;
             assert.equal(matches?.length, 1, JSON.stringify(response.json?.result?.data));
             assert.equal('ref' in (matches?.[0] ?? {}), false, JSON.stringify(matches?.[0]));
-            const cli = await interactionCliOutputFormatters.find({
+            const cli = await formatCliOutput({
+              name: 'find',
               env: process.env,
+              stderrIsTTY: false,
               input: {},
               result: response.json?.result?.data,
             });
-            assert.equal(cli.text, ['1 match:', '= (no ref) [text] "Order saved"'].join('\n'));
+            assert.equal(cli?.text, ['1 match:', '= (no ref) [text] "Order saved"'].join('\n'));
           },
         },
         {

@@ -9,50 +9,55 @@ import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { collapseWarningText } from '../output-common.ts';
 
-export function printHumanError(
+/**
+ * The lines a human error prints to stderr, in order. A segment may itself span several lines
+ * (candidate views, the divergence report, the details dump); the writer ends each with a newline.
+ */
+export function formatHumanErrorLines(
   err: AppError | NormalizedError,
   options: { showDetails?: boolean } = {},
-): void {
+): string[] {
   const normalized = err instanceof AppError ? normalizeError(err) : err;
-  process.stderr.write(`Error (${normalized.code}): ${normalized.message}\n`);
+  const lines = [`Error (${normalized.code}): ${normalized.message}`];
   if (normalized.cause) {
     const code = normalized.cause.code ? `${normalized.cause.code} ` : '';
-    process.stderr.write(`Cause: ${code}${normalized.cause.message}\n`);
+    lines.push(`Cause: ${code}${normalized.cause.message}`);
   }
   if (normalized.hint) {
-    process.stderr.write(`Hint: ${normalized.hint}\n`);
+    lines.push(`Hint: ${normalized.hint}`);
   }
   // Composable warnings (skipped `optional` steps, capture degradations) describe the run,
   // not this step's cause, so they ride at error level and must reach the reader of a
   // failed run too — a warning-only trace is otherwise invisible outside --json (#2560).
   for (const warning of readResponseWarnings(normalized.details)) {
-    process.stderr.write(`Warning: ${collapseWarningText(warning)}\n`);
+    lines.push(`Warning: ${collapseWarningText(warning)}`);
   }
   const candidateLines = formatErrorCandidateViews(readErrorCandidateViews(normalized.details));
   if (candidateLines.length > 0) {
-    process.stderr.write(`${candidateLines.join('\n')}\n`);
+    lines.push(candidateLines.join('\n'));
   }
   if (normalized.diagnosticId) {
-    process.stderr.write(`Diagnostic ID: ${normalized.diagnosticId}\n`);
+    lines.push(`Diagnostic ID: ${normalized.diagnosticId}`);
   }
   // #1801: `logPath` is always a path on THIS machine. A record that stayed on
   // a remote daemon is reported as unavailable, with the reason, on its own
   // line — never as a path the reader cannot open.
   if (normalized.logPath) {
-    process.stderr.write(`Diagnostics Log: ${normalized.logPath}\n`);
+    lines.push(`Diagnostics Log: ${normalized.logPath}`);
   }
   if (normalized.logPathUnavailable) {
-    process.stderr.write(`Remote Diagnostics: unavailable (${normalized.logPathUnavailable})\n`);
+    lines.push(`Remote Diagnostics: unavailable (${normalized.logPathUnavailable})`);
   }
   // ADR 0012: the divergence compact report always renders; --debug's raw
   // details dump below remains the full-object view.
   const divergenceText = formatReplayDivergenceReport(normalized.details);
   if (divergenceText) {
-    process.stderr.write(`${divergenceText}\n`);
+    lines.push(divergenceText);
   }
   if (options.showDetails && normalized.details) {
-    process.stderr.write(`${JSON.stringify(normalized.details, null, 2)}\n`);
+    lines.push(JSON.stringify(normalized.details, null, 2));
   }
+  return lines;
 }
 
 export function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {

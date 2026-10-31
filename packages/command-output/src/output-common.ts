@@ -1,6 +1,21 @@
+import type { CommandMetadata, CommandName } from '@agent-device/command-surface';
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import type { CommandProgressState } from './command-progress.ts';
+
+/**
+ * Whether streamed `command` progress has already been rendered for the human
+ * reader of this CLI run.
+ *
+ * A command whose final output would repeat what progress already said reads it
+ * and prints the shorter form instead (`doctorCliOutput`). The state is handed
+ * to the formatter with the result, so a caller that renders progress somewhere
+ * else — an SDK or MCP consumer passing its own `RequestProgressSink`, which
+ * writes nothing to this process's stderr — is never told progress was rendered
+ * here, and gets the full output.
+ */
+export type CommandProgressState = {
+  renderedToStderr: boolean;
+};
 
 export type CliOutput = {
   data: unknown;
@@ -21,6 +36,8 @@ export type CliOutputFormatterParams = {
   progress?: CommandProgressState;
   /** The caller's host environment; a formatter that styles output reads color from it. */
   env: EnvMap;
+  /** Whether the caller's stderr is a terminal; a formatter that colors status markers reads it. */
+  stderrIsTTY: boolean;
 };
 
 export type CliOutputFormatter = (
@@ -74,10 +91,17 @@ export function appendWarningLinesText(
  * Where the single CLI dispatcher sends a response's warnings (#2682). `text` puts them after the
  * command's own line; `stderr` is for a command whose stdout IS the value a caller parses
  * (`CommandMetadata.parseableOutput`), where an appended line would corrupt it. No formatter chooses
- * a route: `formatCliOutput` derives it from the command's descriptor once, which is why a new
+ * a route: `dispatchCliOutput` derives it from the command's descriptor once, which is why a new
  * formatter cannot drop the disclosure and no wrapper can repeat it.
  */
 export type ResponseWarningRoute = 'text' | 'stderr';
+
+/** The route a command's descriptor metadata declares: a parseable-output command warns on stderr. */
+export function responseWarningRoute(
+  metadata: Pick<CommandMetadata<CommandName, unknown>, 'parseableOutput'>,
+): ResponseWarningRoute {
+  return metadata.parseableOutput === true ? 'stderr' : 'text';
+}
 
 export function routeResponseWarnings(
   output: CliOutput,
@@ -102,7 +126,7 @@ export function routeResponseWarnings(
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
 export function collapseWarningText(warning: string): string {
-  return warning.replaceAll(/\s*\n\s*/g, ' ');
+  return warning.replaceAll(/\s+/g, (whitespace) => (whitespace.includes('\n') ? ' ' : whitespace));
 }
 
 /**

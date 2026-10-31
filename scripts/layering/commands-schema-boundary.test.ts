@@ -23,7 +23,7 @@ function importEdge(
 }
 
 test('commands outside schema/ must not import commands/schema/', () => {
-  const edge = importEdge('src/commands/cli-output.ts', 'src/commands/schema/cli-help.ts');
+  const edge = importEdge('src/commands/cli-runner.ts', 'src/commands/schema/cli-help.ts');
   const violations = checkCommandsSchemaBoundary([edge]);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.rule, 'R2 commands-floor');

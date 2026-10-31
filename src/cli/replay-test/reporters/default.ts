@@ -5,7 +5,7 @@ import {
   REPLAY_TEST_PROGRESS_SPINNER_INTERVAL_MS,
 } from '../progress.ts';
 import { formatDurationSeconds } from '../duration-format.ts';
-import { colorize, supportsColor } from '../../../commands/output/color.ts';
+import { colorize, supportsColor } from '@agent-device/command-output';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import type {
   ReplayTestReporter,
@@ -143,7 +143,7 @@ function renderWarningsSection(
 
 function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {
   const durationMs = typeof data.durationMs === 'number' ? data.durationMs : undefined;
-  const useColor = supportsColor(process.env);
+  const useColor = supportsColor(process.env, process.stdout);
   const passed = formatReplaySummaryPassed(data.passed, { useColor });
   const total = formatReplaySummaryTotal(data.total, { useColor });
   const failedSuffix = data.failed > 0 ? `, ${data.failed} failed` : '';
@@ -169,7 +169,7 @@ function formatReplayDuration(durationMs: number, options: { useColor?: boolean 
 }
 
 function replayFlakyStatusIcon(): string {
-  const useColor = supportsColor(process.env);
+  const useColor = supportsColor(process.env, process.stdout);
   return useColor ? colorize('✓', 'yellow') : '✓';
 }
 

@@ -74,7 +74,7 @@ describe('openCliOutput', () => {
   // the CLI resolves, not a helper mock), printing the same interactive tree
   // lines `snapshot -i` prints after the open confirmation.
   test('production formatter route renders the composed --foreground snapshot tree on default output', async () => {
-    const { formatCliOutput } = await import('../cli-output.ts');
+    const { formatCliOutput } = await import('../index.ts');
     const { attachRefs } = await import('@agent-device/kernel/snapshot');
     const nodes = attachRefs([
       { index: 0, type: 'Button', label: 'Sign In', depth: 0, hittable: true },
@@ -89,11 +89,18 @@ describe('openCliOutput', () => {
     };
 
     const openOutput = await withNoColorAsync(() =>
-      formatCliOutput({ env: process.env, name: 'open', input: {}, result: openResult }),
+      formatCliOutput({
+        env: process.env,
+        stderrIsTTY: false,
+        name: 'open',
+        input: {},
+        result: openResult,
+      }),
     );
     const snapshotOutput = await withNoColorAsync(() =>
       formatCliOutput({
         env: process.env,
+        stderrIsTTY: false,
         name: 'snapshot',
         input: { interactiveOnly: true },
         result: { nodes, truncated: false, backend: 'xctest', refsGeneration: 1 },
@@ -155,6 +162,7 @@ describe('artifactsCliOutput', () => {
   test('prints ready artifact URLs and preserves JSON data', () => {
     const output = managementCliOutputFormatters.artifacts({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: {
         provider: 'browserstack',
@@ -182,6 +190,7 @@ describe('artifactsCliOutput', () => {
   test('prints the provider message after ready artifacts', () => {
     const output = managementCliOutputFormatters.artifacts({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: {
         provider: 'limrun',
@@ -210,6 +219,7 @@ describe('artifactsCliOutput', () => {
   test('prints exact retry command for pending provider sessions', () => {
     const output = managementCliOutputFormatters.artifacts({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: {
         provider: 'aws-device-farm',
@@ -231,6 +241,7 @@ describe('artifactsCliOutput', () => {
   test('prints daemon artifact inventory and preserves JSON data', () => {
     const output = managementCliOutputFormatters.artifacts({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: {
         source: 'daemon',
@@ -285,6 +296,8 @@ describe('doctorCliOutput', () => {
           ],
         },
         process.env,
+        undefined,
+        false,
       ),
     );
 
@@ -319,6 +332,8 @@ describe('doctorCliOutput', () => {
           ],
         },
         process.env,
+        undefined,
+        false,
       ),
     );
 
@@ -346,7 +361,7 @@ describe('doctorCliOutput', () => {
           },
         ],
       };
-      return await doctorCliOutput(result, process.env, { renderedToStderr: true });
+      return await doctorCliOutput(result, process.env, { renderedToStderr: true }, false);
     });
 
     expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
@@ -368,7 +383,7 @@ describe('doctorCliOutput', () => {
           },
         ],
       };
-      return await doctorCliOutput(result, process.env, { renderedToStderr: false });
+      return await doctorCliOutput(result, process.env, { renderedToStderr: false }, false);
     });
 
     expect(output.text).toBe(['Doctor: pass', '✓ device: Selected Pixel (android)'].join('\n'));
@@ -379,6 +394,7 @@ describe('devices output', () => {
   test('carries the projected claim owner through JSON data and the text line', async () => {
     const output = await managementCliOutputFormatters.devices({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: [
         {
@@ -420,6 +436,7 @@ describe('devices output', () => {
   test('carries the discovered model and OS version through JSON data and the text line', async () => {
     const output = await managementCliOutputFormatters.devices({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: [
         {
@@ -449,6 +466,7 @@ describe('boot CLI output', () => {
   const boot = (selection: Record<string, unknown>) =>
     managementCliOutputFormatters.boot({
       env: process.env,
+      stderrIsTTY: false,
       input: {},
       result: { platform: 'ios', device: 'iPhone 17', id: 'sim-17', booted: true, selection },
     });

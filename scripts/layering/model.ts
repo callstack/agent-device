@@ -68,6 +68,7 @@ const TARGET_DAG_RANK = new Map([
   ['command-surface', 2],
   ['core', 2],
   ['daemon-contracts', 2],
+  ['command-output', 3],
   ['command-runtime', 3],
   ['commands', 3],
   ['mcp', 3],

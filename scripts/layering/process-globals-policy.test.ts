@@ -152,6 +152,26 @@ test('non-configuration process members and unrelated property names remain perm
   }
 });
 
+test('a pure presentation package reaches no process member, stream or terminal fact', () => {
+  const file = 'packages/command-output/src/example.ts';
+  for (const expression of [
+    'process.stdout.write(text)',
+    'process.stderr.isTTY',
+    'process.platform',
+  ]) {
+    assert.equal(check(`${expression};`, file).length, 1, expression);
+    assert.deepEqual(check(`${expression};`, 'src/commands/example.ts'), [], expression);
+  }
+  for (const module of ['node:process', 'process']) {
+    for (const member of ['stdout', 'stderr', 'platform']) {
+      const source = `import { ${member} as local } from '${module}';`;
+      assert.equal(check(source, file).length, 1, source);
+      assert.deepEqual(check(source, 'src/commands/example.ts'), [], source);
+    }
+  }
+  assert.deepEqual(check('export const tty = stream.isTTY;', file), []);
+});
+
 test('local process bindings do not hide captures in other lexical scopes', () => {
   assert.deepEqual(
     check("import * as p from 'node:process'; function read(p) { return p.default; }"),

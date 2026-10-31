@@ -1,0 +1,26 @@
+{
+  "name": "@agent-device/command-output",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Shared CLI and MCP command presentation: per-family output formatters, warning routing, color, human error lines, and result serialization. Takes terminal facts as explicit input and performs no process I/O.",
+  "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/command-surface": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}

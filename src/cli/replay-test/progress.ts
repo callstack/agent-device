@@ -11,7 +11,7 @@ import {
   shouldColorStatusMarkers,
 } from '@agent-device/host-kit/status-markers';
 import { formatDurationSeconds } from './duration-format.ts';
-import { colorize, supportsColor } from '../../commands/output/color.ts';
+import { colorize, supportsColor } from '@agent-device/command-output';
 
 export type ReplayTestProgressFormatOptions = {
   verbose?: boolean;
