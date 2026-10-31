@@ -24,6 +24,7 @@ extension RunnerTests {
     )
     XCTAssertEqual(tree?.nodes.map(\.element), ["7:0.1", "7:10.2", "7:10.3"])
     XCTAssertEqual(tree?.nodes.map(\.parentElement), [nil, "7:0.1", "7:0.1"])
+    XCTAssertEqual(tree?.nodes.first?.frame, CGRect(x: 0, y: 0, width: 402, height: 874))
     XCTAssertEqual(tree?.truncated, false)
   }
 }
@@ -44,7 +45,11 @@ private final class ModalScopeSnapshotForTesting: NSObject {
   @objc let elementType = XCUIElement.ElementType.other.rawValue
   @objc let identifier = ""
   @objc let label = ""
+#if os(macOS)
+  @objc let frame = NSValue(rect: CGRect(x: 0, y: 0, width: 402, height: 874))
+#else
   @objc let frame = NSValue(cgRect: CGRect(x: 0, y: 0, width: 402, height: 874))
+#endif
   @objc let children: [ModalScopeSnapshotForTesting]
 
   init(element: ModalScopeElementForTesting, children: [ModalScopeSnapshotForTesting]) {
