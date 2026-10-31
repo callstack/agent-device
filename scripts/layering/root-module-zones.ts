@@ -97,8 +97,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-screen-recording-web-host.ts',
     'src/platform-runtime-toolchain-host.ts',
   ],
-  // The typed client over the daemon transport.
-  'daemon-client': ['src/agent-device-client.ts'],
   sdk: ['src/finders.ts', 'src/provider-limrun-runtime.ts'],
 };
 

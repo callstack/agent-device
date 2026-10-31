@@ -46,7 +46,7 @@ const LEGACY_FILE_LINE_CAPS = {
   'packages/platform-android/src/__tests__/snapshot.test.ts': 1416,
   'packages/apple-runner/src/__tests__/index-command-retry.test.ts': 1064,
   'packages/apple-runner/src/__tests__/runner-session.test.ts': 1456,
-  'src/__tests__/agent-device-client.test.ts': 1271,
+  'packages/client/src/__tests__/index.test.ts': 1271,
   'src/__tests__/cli-client-commands.test.ts': 1234,
   'src/__tests__/cli-config.test.ts': 1282,
   'src/__tests__/cli-network.test.ts': 1092,

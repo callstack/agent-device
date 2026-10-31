@@ -34,40 +34,26 @@ test('(root) ranks above every other zone', () => {
   }
 });
 
-test('R5 ranks a root module by its declared zone, so no lower zone reaches the daemon client through it', () => {
+test('R5 ranks a root module by its declared zone, so no lower zone reaches the command runtime through it', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/sdk/index.ts', "export { createAgentDeviceClient } from '../agent-device-client.ts';"],
-      [
-        'src/ai-sdk/index.ts',
-        "import { createAgentDeviceClient } from '../agent-device-client.ts';",
-      ],
-      [
-        'src/client/lease.ts',
-        "import { createAgentDeviceClient } from '../agent-device-client.ts';",
-      ],
-      [
-        'src/agent-device-client.ts',
-        "import { createRequestGuard } from '../packages/daemon-client/src/daemon-client-transport.ts';",
-      ],
-      [
-        'packages/daemon-client/src/daemon-client-transport.ts',
-        'export const createRequestGuard = 1;',
-      ],
+      ['src/cli/example.ts', "import { io } from '../io.ts';"],
+      ['src/commands/example.ts', "import { io } from '../io.ts';"],
+      ['packages/contracts/src/example.ts', "import { io } from '../../../src/io.ts';"],
+      ['src/io.ts', 'export const io = 1;'],
     ]),
   );
 
   assert.ok(
     edges.some(
-      (edge) =>
-        edge.file === 'src/agent-device-client.ts' &&
-        edge.target === 'packages/daemon-client/src/daemon-client-transport.ts',
+      (edge) => edge.file === 'packages/contracts/src/example.ts' && edge.target === 'src/io.ts',
     ),
   );
 
-  // The published SDK entries rank above the typed client they publish; the client zone does not.
+  // A root module ranks at its declared zone, not at `(root)`: the equal-rank and higher-rank
+  // importers pass and only the contracts importer is a back-edge.
   assert.deepEqual(collectBackEdges(edges), {
-    'client -> daemon-client': ['src/client/lease.ts -> src/agent-device-client.ts'],
+    'contracts -> command-runtime': ['packages/contracts/src/example.ts -> src/io.ts'],
   });
 });
 

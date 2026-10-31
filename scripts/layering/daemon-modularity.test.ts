@@ -652,7 +652,7 @@ test('R9 banks a shrink with no edit anywhere', () => {
 for (const file of [
   'src/cli.ts',
   'src/cli/commands/daemon.ts',
-  'src/client/client-normalizers.ts',
+  'packages/client/src/client-normalizers.ts',
   'packages/remote/src/daemon-artifacts.ts',
   'packages/daemon-client/src/index.ts',
 ]) {

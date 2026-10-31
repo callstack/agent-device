@@ -71,12 +71,13 @@ const TARGET_DAG_RANK = new Map([
   ['command-runtime', 3],
   ['commands', 3],
   ['mcp', 3],
-  ['client', 4],
   ['daemon-server', 4],
   ['platform-runtime', 4],
   ['remote', 4],
   ['plugins', 4],
   ['daemon-client', 5],
+  // The client factory builds the typed client over the daemon-client transport.
+  ['client', 5],
   // The SDK entries publish the typed client, which reaches the daemon through daemon-client.
   ['ai-sdk', 6],
   ['sdk', 6],
