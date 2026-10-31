@@ -72,7 +72,10 @@ export function processGlobalsViolations(
           if (binding?.type === 'ImportNamespaceSpecifier') processNamespaces.add(local);
           if (binding?.type !== 'ImportSpecifier' || propertyName(binding.imported) === 'default') {
             processNames.add(local);
-          } else if (PROCESS_MEMBERS.has(propertyName(binding.imported) ?? '')) {
+          } else if (
+            purePresentation ||
+            PROCESS_MEMBERS.has(propertyName(binding.imported) ?? '')
+          ) {
             processExports.add(local);
           }
         }

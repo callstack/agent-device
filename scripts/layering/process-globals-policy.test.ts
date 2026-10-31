@@ -162,6 +162,13 @@ test('a pure presentation package reaches no process member, stream or terminal 
     assert.equal(check(`${expression};`, file).length, 1, expression);
     assert.deepEqual(check(`${expression};`, 'src/commands/example.ts'), [], expression);
   }
+  for (const module of ['node:process', 'process']) {
+    for (const member of ['stdout', 'stderr', 'platform']) {
+      const source = `import { ${member} as local } from '${module}';`;
+      assert.equal(check(source, file).length, 1, source);
+      assert.deepEqual(check(source, 'src/commands/example.ts'), [], source);
+    }
+  }
   assert.deepEqual(check('export const tty = stream.isTTY;', file), []);
 });
 

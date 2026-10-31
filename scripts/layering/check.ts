@@ -3,7 +3,7 @@
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   { contracts, selectors, ... } ◄ { core, daemon-contracts } ◄ { commands, command-runtime }
+//   { contracts, selectors, ... } ◄ { core, daemon-contracts } ◄ { commands, command-runtime, command-output }
 //         ◄ { client, daemon-server, platform-runtime, ... } ◄ daemon-client ◄ { sdk, ai-sdk }
 //         ◄ cli ◄ platform-runtime-host ◄ (root)
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts; root modules declare their zone in
