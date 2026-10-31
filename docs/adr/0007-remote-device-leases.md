@@ -85,6 +85,18 @@ In-flight work and human-control holds still keep a lease from expiring.
 After daemon shutdown begins, no new lease-end teardown starts.
 Shutdown waits for any lease-end teardown that already started before it tears sessions down itself.
 
+A daemon that dies while it holds a provider lease leaves the rented device running on the provider side, and that device stays billed.
+Thus, the daemon journals the live leases of each provider that can recover an expired lease, in `live-provider-leases.json` in its state directory.
+A daemon that starts and finds this journal hands each lease in it to the expired-lease recovery of its provider, which ends the rented device.
+It reads both lease records only after it holds the daemon registration for the state directory, because until then they can belong to a daemon that is still running.
+The lease itself is not restored, and its controller connects again.
+Restoring the live lease was rejected: the sessions and device claims of the dead daemon are gone, so a restored lease would name a device that no session can reach.
+A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried.
+Two routes still let the registry forget a provider lease while its device may be rented. The journal and expiry recovery both follow the registry, so neither covers it, and only the provider runtime still holding the device can end it:
+
+- A failed first allocation releases the registry entry without a provider release, while its provider start may still run.
+- An allocation that finishes after its requester left releases the registry entry even when the provider release throws.
+
 When a request closes a session, the daemon ends the lease of that session, unless the lease was allocated with `retainOnClose`.
 The reply to that request reports each lease that it ended once, at response level, as `endedLeases: [{ leaseId, outcome: 'released' }]`.
 On success, the report is in `data`.

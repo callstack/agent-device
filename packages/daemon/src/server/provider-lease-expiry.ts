@@ -7,12 +7,18 @@ import type {
 } from '@agent-device/contracts/device';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { releaseExpiredProviderLease } from '../sessions/lease-lifecycle.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
 const PENDING_RELEASES_FILE = 'expired-provider-leases.json';
-const PENDING_RELEASES_VERSION = 1;
+/**
+ * The recoverable provider leases this daemon holds right now. A daemon that starts and finds this
+ * file inherited it from one that died without releasing them, so every lease in it is recovered.
+ */
+const LIVE_LEASES_FILE = 'live-provider-leases.json';
+/** The format version of both lease records: the expired record and the live journal. */
+const LEASE_RECORD_VERSION = 1;
 const PERSISTED_LEASE_STRING_FIELDS = [
   'leaseId',
   'tenantId',
@@ -24,7 +30,7 @@ const PERSISTED_LEASE_NUMBER_FIELDS = ['createdAt', 'heartbeatAt', 'expiresAt'] 
 
 type Timer = ReturnType<typeof setTimeout>;
 
-type PersistedExpiredProviderLeases = {
+type PersistedProviderLeaseRecord = {
   version: number;
   leases: DeviceLease[];
 };
@@ -32,6 +38,16 @@ type PersistedExpiredProviderLeases = {
 export type ExpiredProviderLeaseReleaser = {
   beginShutdown: () => void;
   release: (lease: DeviceLease) => Promise<void>;
+  /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
+  recordLiveLeases: (leases: readonly DeviceLease[]) => void;
+  /**
+   * Reads the lease records an earlier daemon left in the state directory (the expired record and the
+   * live journal), moves the journal's leases into recovery, and starts recovering. Call it only once
+   * this process holds the daemon registration: before that, both records may belong to a daemon that is
+   * still running, and acting on them would end devices it is using. Until then the releaser touches no
+   * file in the state directory.
+   */
+  recoverInherited: (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void) => Promise<void>;
   retryPending: () => Promise<void>;
   /**
    * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
@@ -54,8 +70,9 @@ export function createExpiredProviderLeaseReleaser(options: {
   retryDelayMs?: number;
 }): ExpiredProviderLeaseReleaser {
   const pendingLiveLeases = new Map<string, DeviceLease>();
-  const pendingRecoveryLeases = loadPendingLeases(options.stateDir);
-  const persistedRecoveryLeaseIds = new Set(pendingRecoveryLeases.keys());
+  const pendingRecoveryLeases = new Map<string, DeviceLease>();
+  const persistedRecoveryLeaseIds = new Set<string>();
+  let inherited = false;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   const activeReleaseAttempts = new Map<string, Promise<void>>();
@@ -74,32 +91,100 @@ export function createExpiredProviderLeaseReleaser(options: {
       );
       return false;
     }
-    const filePath = pendingReleasesPath(options.stateDir);
     try {
-      if (pendingRecoveryLeases.size === 0) {
-        fs.rmSync(filePath, { force: true });
-      } else {
-        fs.mkdirSync(options.stateDir, { recursive: true, mode: 0o700 });
-        const record: PersistedExpiredProviderLeases = {
-          version: PENDING_RELEASES_VERSION,
-          leases: [...pendingRecoveryLeases.values()],
-        };
-        publishFileSync({
-          destination: filePath,
-          contents: `${JSON.stringify(record)}\n`,
-          mode: 0o600,
-        });
-        fs.chmodSync(filePath, 0o600);
-      }
+      writeLeaseRecord(options.stateDir, PENDING_RELEASES_FILE, [
+        ...pendingRecoveryLeases.values(),
+      ]);
       persistedRecoveryLeaseIds.clear();
       for (const leaseId of pendingRecoveryLeases.keys()) {
         persistedRecoveryLeaseIds.add(leaseId);
       }
+      // Leases now durable in the expired record no longer need the journal to hold them.
+      writeJournal();
       return true;
     } catch (error) {
       emitPersistenceFailure(pendingRecoveryLeases.size, error);
       return false;
     }
+  };
+
+  const adoptOrphanedLeases = (onDiagnostic?: (diagnostic: ResourceDiagnostic) => void): void => {
+    if (!options.stateDir) return;
+    const orphaned = loadLeaseRecord(options.stateDir, LIVE_LEASES_FILE, onDiagnostic);
+    if (orphaned.size === 0) return;
+    for (const [leaseId, lease] of orphaned) {
+      if (!pendingRecoveryLeases.has(leaseId)) pendingRecoveryLeases.set(leaseId, lease);
+    }
+    // The journal is dropped only once its leases are in the pending record, so a crash in between
+    // leaves them in one file or the other.
+    if (!persistPendingLeases()) return;
+    try {
+      fs.rmSync(leaseRecordPath(options.stateDir, LIVE_LEASES_FILE), { force: true });
+    } catch (error) {
+      // The leases are durable in the pending record; a journal left behind is adopted again, and the
+      // pending record already holds each of its leases once.
+      emitJournalFailure('provider_lease_journal_remove_failed', orphaned.size, error);
+    }
+    // Startup runs outside any request, so the report goes to the daemon log through the startup
+    // diagnostics rather than a request scope that does not exist yet.
+    onDiagnostic?.({
+      phase: 'provider_lease_orphans_adopted',
+      resourcePath: leaseRecordPath(options.stateDir, LIVE_LEASES_FILE),
+      data: { leaseIds: [...orphaned.keys()] },
+    });
+  };
+  let liveLeases: readonly DeviceLease[] = [];
+  let journalRetryTimer: Timer | undefined;
+  /**
+   * Writes the journal: the registry's live leases, plus every lease that left the registry for recovery
+   * but whose expired record is not durable yet, so a crash never finds a lease in neither file. A write
+   * that fails is retried with the latest leases until one lands.
+   */
+  const writeJournal = (): void => {
+    if (!options.stateDir) return;
+    const unpersisted = [...pendingRecoveryLeases.values()].filter(
+      (lease) => !persistedRecoveryLeaseIds.has(lease.leaseId),
+    );
+    // `release` admits only recoverable leases to `pendingRecoveryLeases`, so both sources are already
+    // recoverable. The recovery copy is spread last: for a lease in both, the expired one is current.
+    const journal = new Map(
+      [...liveLeases, ...unpersisted].map((lease) => [lease.leaseId, lease] as const),
+    );
+    try {
+      writeLeaseRecord(options.stateDir, LIVE_LEASES_FILE, [...journal.values()]);
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
+    } catch (error) {
+      emitJournalFailure('provider_lease_journal_write_failed', journal.size, error);
+      journalRetryTimer ??= setTimeout(() => {
+        journalRetryTimer = undefined;
+        writeJournal();
+      }, retryDelayMs);
+      journalRetryTimer.unref?.();
+    }
+  };
+  const recoverInherited = async (
+    onDiagnostic?: (diagnostic: ResourceDiagnostic) => void,
+  ): Promise<void> => {
+    if (inherited) return;
+    inherited = true;
+    // Everything in the expired record is durable by definition, which is what the persisted ids track.
+    for (const [leaseId, lease] of loadLeaseRecord(
+      options.stateDir,
+      PENDING_RELEASES_FILE,
+      onDiagnostic,
+    )) {
+      pendingRecoveryLeases.set(leaseId, lease);
+    }
+    for (const leaseId of pendingRecoveryLeases.keys()) persistedRecoveryLeaseIds.add(leaseId);
+    adoptOrphanedLeases(onDiagnostic);
+    await retryPending();
+  };
+  const recordLiveLeases = (leases: readonly DeviceLease[]): void => {
+    liveLeases = leases.filter((lease) =>
+      isRecoverableProviderAvailable(lease, options.recoverableProviderIds),
+    );
+    writeJournal();
   };
 
   const scheduleRetry = (): void => {
@@ -191,6 +276,8 @@ export function createExpiredProviderLeaseReleaser(options: {
     release: async (lease) => {
       if (!lease.leaseProvider) return;
       if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
+        // Set before the first await: the registry journals right after `onLeaseExpired` returns, and the
+        // journal keeps this lease only while it is pending here and not yet durable.
         pendingRecoveryLeases.set(lease.leaseId, lease);
         if (persistPendingLeases()) {
           await ensureRecoveryReleaseAttempt(lease);
@@ -207,6 +294,8 @@ export function createExpiredProviderLeaseReleaser(options: {
         scheduleRetry();
       }
     },
+    recordLiveLeases,
+    recoverInherited,
     retryPending,
     drain: async (timeoutMs) => {
       // Shutdown gets one final, bounded attempt at every pending release. A
@@ -231,6 +320,15 @@ export function createExpiredProviderLeaseReleaser(options: {
     shutdown: () => {
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
+      if (journalRetryTimer) {
+        // One last attempt, so a journal that a retry was still owed does not outlive this daemon stale.
+        clearTimeout(journalRetryTimer);
+        journalRetryTimer = undefined;
+        writeJournal();
+      }
+      // A last attempt that failed re-armed the timer; nothing runs it after shutdown.
+      if (journalRetryTimer) clearTimeout(journalRetryTimer);
+      journalRetryTimer = undefined;
     },
   };
 }
@@ -286,6 +384,14 @@ function isRecoverableProviderAvailable(
   );
 }
 
+function emitJournalFailure(phase: string, leaseCount: number, error: unknown): void {
+  emitDiagnostic({
+    level: 'error',
+    phase,
+    data: { leaseCount, error: error instanceof Error ? error.message : String(error) },
+  });
+}
+
 function emitPersistenceFailure(pendingLeaseCount: number, error: unknown): void {
   emitDiagnostic({
     level: 'error',
@@ -297,22 +403,45 @@ function emitPersistenceFailure(pendingLeaseCount: number, error: unknown): void
   });
 }
 
-function loadPendingLeases(stateDir: string | undefined): Map<string, DeviceLease> {
+function writeLeaseRecord(stateDir: string, file: string, leases: readonly DeviceLease[]): void {
+  const filePath = leaseRecordPath(stateDir, file);
+  if (leases.length === 0) {
+    fs.rmSync(filePath, { force: true });
+    return;
+  }
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  const record: PersistedProviderLeaseRecord = {
+    version: LEASE_RECORD_VERSION,
+    leases: [...leases],
+  };
+  publishFileSync({ destination: filePath, contents: `${JSON.stringify(record)}\n`, mode: 0o600 });
+  fs.chmodSync(filePath, 0o600);
+}
+
+/**
+ * Reads one lease record. A record that exists but cannot be read is left on disk and reported with its
+ * path, so an operator can tell which record it is and end its leases by hand.
+ */
+function loadLeaseRecord(
+  stateDir: string | undefined,
+  file: string,
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void,
+): Map<string, DeviceLease> {
   if (!stateDir) return new Map();
-  const filePath = pendingReleasesPath(stateDir);
+  const filePath = leaseRecordPath(stateDir, file);
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedExpiredProviderLeases;
-    if (parsed.version !== PENDING_RELEASES_VERSION || !Array.isArray(parsed.leases)) {
-      throw new Error('unsupported expiry release record');
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as PersistedProviderLeaseRecord;
+    if (parsed.version !== LEASE_RECORD_VERSION || !Array.isArray(parsed.leases)) {
+      throw new Error(`unsupported lease record (version ${String(parsed.version)})`);
     }
     return new Map(
       parsed.leases.filter(isPersistedDeviceLease).map((lease) => [lease.leaseId, lease]),
     );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'provider_lease_expiry_record_read_failed',
+    onDiagnostic?.({
+      phase: 'provider_lease_record_read_failed',
+      resourcePath: filePath,
       data: { error: error instanceof Error ? error.message : String(error) },
     });
     return new Map();
@@ -328,6 +457,6 @@ function isPersistedDeviceLease(value: unknown): value is DeviceLease {
   );
 }
 
-function pendingReleasesPath(stateDir: string): string {
-  return path.join(stateDir, PENDING_RELEASES_FILE);
+function leaseRecordPath(stateDir: string, file: string): string {
+  return path.join(stateDir, file);
 }

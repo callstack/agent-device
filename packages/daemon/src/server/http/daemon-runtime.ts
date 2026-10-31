@@ -373,7 +373,6 @@ async function startDaemonRuntimeOnHost(
     recoverableProviderIds: deps.recoverableProviderIds,
   });
   rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
-  void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
     defaultLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_TTL_MS),
@@ -383,6 +382,7 @@ async function startDaemonRuntimeOnHost(
       void expiredProviderLeaseReleaser.release(lease);
       void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
+    onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
   });
   // The registry only notices an expired lease when something calls it; this sweep ends an
   // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.
@@ -671,6 +671,16 @@ async function startDaemonRuntimeOnHost(
     scope: createRecoveryPlatformScope(),
     onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
   });
+  // Only the registered daemon may read the state directory's lease records and act on them. Loading and
+  // adoption run before the first await, so their report reaches this startup's diagnostics.
+  void expiredProviderLeaseReleaser
+    .recoverInherited((diagnostic) => startupDiagnostics.push(diagnostic))
+    .catch((error) => {
+      // Startup has no request scope, so the failure goes to the daemon log directly.
+      void emitDaemonDiagnostic(logPath, 'provider_lease_startup_recovery_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
+    });
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
     purposes: ['simctl-screen-recording'],
