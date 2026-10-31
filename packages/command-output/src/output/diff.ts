@@ -1,6 +1,6 @@
 import type { HostEnvironment, EnvMap } from '@agent-device/kernel/source-value';
 import path from 'node:path';
-import { colorize, supportsColor } from './color.ts';
+import { colorize, supportsColor, type ColorStream } from './color.ts';
 import { readSnapshotWarnings } from './snapshot.ts';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import type { ScreenshotDiffRegion } from '@agent-device/capture-kit/screenshot-diff-regions';
@@ -9,13 +9,17 @@ type SnapshotDiffLine = {
   text?: string;
 };
 
-export function formatSnapshotDiffText(data: Record<string, unknown>, env: EnvMap): string {
+export function formatSnapshotDiffText(
+  data: Record<string, unknown>,
+  env: EnvMap,
+  stdout: ColorStream,
+): string {
   const baselineInitialized = data.baselineInitialized === true;
   const summaryRaw = (data.summary ?? {}) as Record<string, unknown>;
   const additions = toNumber(summaryRaw.additions);
   const removals = toNumber(summaryRaw.removals);
   const unchanged = toNumber(summaryRaw.unchanged);
-  const useColor = supportsColor(env);
+  const useColor = supportsColor(env, stdout);
   const notices = readSnapshotWarnings(data);
   const noticesBlock = notices.length > 0 ? `${notices.join('\n')}\n` : '';
   if (baselineInitialized) {
@@ -50,8 +54,9 @@ export function formatSnapshotDiffText(data: Record<string, unknown>, env: EnvMa
 export function formatScreenshotDiffText(
   data: ScreenshotDiffResult,
   host: HostEnvironment,
+  stdout: ColorStream,
 ): string {
-  const useColor = supportsColor(host.env);
+  const useColor = supportsColor(host.env, stdout);
   const match = data.match === true;
 
   const lines: string[] = [];

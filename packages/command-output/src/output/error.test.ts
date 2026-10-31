@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { withCapturedStderrAsync } from '@agent-device/test-kit';
-import { printHumanError } from './error.ts';
+import { formatHumanErrorLines } from './error.ts';
 
-test('printHumanError renders a structured cause unconditionally', async () => {
+test('formatHumanErrorLines renders a structured cause unconditionally', () => {
   const err = new AppError(
     'COMMAND_FAILED',
     'The daemon failed to fetch the app source',
@@ -14,20 +13,18 @@ test('printHumanError renders a structured cause unconditionally', async () => {
     }),
   );
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(output, /Cause: ECONNREFUSED connect ECONNREFUSED 10\.0\.0\.1:443/);
 });
 
-async function captureStderr(run: () => void | Promise<void>): Promise<string> {
-  return await withCapturedStderrAsync(async () => {
-    await run();
-  });
+function renderLines(err: AppError): string {
+  return formatHumanErrorLines(err).join('\n');
 }
 
 // --- ADR 0012 migration step 2: replay divergence compact text report ---
 
-test('printHumanError renders a compact divergence report unconditionally (not gated behind --debug)', async () => {
+test('formatHumanErrorLines renders a compact divergence report unconditionally (not gated behind --debug)', () => {
   const err = new AppError(
     'REPLAY_DIVERGENCE',
     'Replay failed at step 2 (click "Save"): not hittable',
@@ -55,7 +52,7 @@ test('printHumanError renders a compact divergence report unconditionally (not g
     },
   );
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(output, /Divergence at step 2 \(\/tmp\/flow\.ad:5\)/);
   assert.match(output, /Screen: 1 actionable ref\(s\) captured \(refsGeneration 3\)/);
@@ -68,13 +65,13 @@ test('printHumanError renders a compact divergence report unconditionally (not g
 
 // --- #2560: run-level warnings ride the failed response to the human surface ---
 
-test('printHumanError renders run-level warnings carried in error details', async () => {
+test('formatHumanErrorLines renders run-level warnings carried in error details', () => {
   const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2 (tapOn "Save")', {
     step: 2,
     warnings: ['Optional Maestro assertVisible skipped at line 1: no match', 7],
   });
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(
     output,
@@ -83,17 +80,17 @@ test('printHumanError renders run-level warnings carried in error details', asyn
   assert.equal(output.includes('Warning: 7'), false);
 });
 
-test('printHumanError prints no Warning lines without a warnings channel', async () => {
+test('formatHumanErrorLines prints no Warning lines without a warnings channel', () => {
   const err = new AppError('COMMAND_FAILED', 'tap failed');
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.equal(output.includes('Warning:'), false);
 });
 
 // --- #1597: AMBIGUOUS_MATCH candidates print unconditionally, capped at 5 ---
 
-test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gated behind --debug', async () => {
+test('formatHumanErrorLines lists AMBIGUOUS_MATCH candidates unconditionally, not gated behind --debug', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',
     'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
@@ -109,8 +106,8 @@ test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gate
   // used to stop at "Error (...): ...\nHint: ...", so an agent reading it had
   // no @ref to act on. Asserting the candidate lines appear proves this red
   // against that shape (it would fail before candidate views were wired into
-  // printHumanError).
-  const output = await captureStderr(() => printHumanError(err));
+  // formatHumanErrorLines).
+  const output = renderLines(err);
 
   assert.match(output, /^Error \(AMBIGUOUS_MATCH\): find matched 3 elements/);
   assert.match(
@@ -122,7 +119,7 @@ test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gate
   // Not gated behind --debug: showDetails defaults to false/undefined here.
 });
 
-test('printHumanError appends a "+N more" marker when candidates were capped', async () => {
+test('formatHumanErrorLines appends a "+N more" marker when candidates were capped', () => {
   const err = new AppError('AMBIGUOUS_MATCH', 'find matched 7 elements for text "Row". ...', {
     matches: 7,
     candidates: [
@@ -134,7 +131,7 @@ test('printHumanError appends a "+N more" marker when candidates were capped', a
     ],
   });
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(output, /@e6 \[button\] "Row"\n {2}\+2 more/);
 });
@@ -143,7 +140,7 @@ test('printHumanError appends a "+N more" marker when candidates were capped', a
 // -device/device-selection/dispatch-resolve) key their candidate list `devices`, so the CLI
 // renders the udids the "pass --udid" hint asks for. The structured candidate
 // view comes from @agent-device/kernel/errors and formatting stays local here.
-test('printHumanError lists device candidates for the device-domain resolvers', async () => {
+test('formatHumanErrorLines lists device candidates for the device-domain resolvers', () => {
   const err = new AppError(
     'AMBIGUOUS_MATCH',
     'Multiple booted iOS simulators have com.example.app installed',
@@ -157,13 +154,13 @@ test('printHumanError lists device candidates for the device-domain resolvers', 
     },
   );
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(output, /Devices:\n {2}SIM-001 {2}iPhone 17 Pro\n {2}SIM-002 {2}iPhone 17/);
   assert.equal(output.includes('[object Object]'), false);
 });
 
-test('printHumanError shows an unavailable screen reason and omitted suggestions hint', async () => {
+test('formatHumanErrorLines shows an unavailable screen reason and omitted suggestions hint', () => {
   const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {
     divergence: {
       version: 1,
@@ -182,7 +179,7 @@ test('printHumanError shows an unavailable screen reason and omitted suggestions
     },
   });
 
-  const output = await captureStderr(() => printHumanError(err));
+  const output = renderLines(err);
 
   assert.match(output, /Screen: unavailable \(capture-failed\)\. take a snapshot/);
   assert.match(output, /Suggestions: 2 available \(omitted at this response level/);

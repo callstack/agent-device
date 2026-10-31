@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { collapseWarningText } from '../../../commands/output-common.ts';
+import { collapseWarningText } from '@agent-device/command-output';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 export type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;

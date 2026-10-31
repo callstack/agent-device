@@ -12,7 +12,6 @@ import {
   runCommand,
   type CommandName,
 } from '@agent-device/command-surface';
-import { listCliOutputFormatters } from '../commands/cli-output.ts';
 import type { SettleCapableClientOptionCommands } from '../commands/post-action-observation-client-options.ts';
 import { buildActionDetails } from '@agent-device/session-journal/session-event-action';
 import {
@@ -37,7 +36,7 @@ import {
  * | Contracts option types     | compile error (`post-action-observation-client-options`)|
  * | Session safe-flag specs    | below                                                  |
  * | MCP output schemas         | below — grafted in `command-output-schemas.ts`         |
- * | CLI output formatters      | below — wrapped in `settle-output.ts`                  |
+ * | CLI output formatters      | `packages/command-output/src/settle-output.test.ts`     |
  * | MCP ref-pinning            | derived in `mcp/tool-ref-pins.ts`                      |
  */
 
@@ -253,37 +252,6 @@ test('post-action observation MCP output schemas follow descriptor traits', () =
     if (expected) {
       assert.ok(groups > 0, `${command}: settle-capable schema must have object groups`);
     }
-  }
-});
-
-test('post-action observation CLI output formatters follow descriptor traits', async () => {
-  const formatters = listCliOutputFormatters();
-  for (const command of SETTLE_OBSERVATION_COMMANDS) {
-    assert.ok(formatters[command], `${command}: missing CLI output formatter`);
-  }
-  const settledResult = { message: 'ok', settle: { settled: true, waitedMs: 12 } };
-  for (const [command, format] of Object.entries(formatters)) {
-    let text: string;
-    try {
-      text = String(
-        (await format({ env: process.env, input: {}, result: settledResult })).text ?? '',
-      );
-    } catch {
-      // Formatters expecting a differently-shaped result (device lists) are
-      // orthogonal to settle rendering — but a settle-capable formatter must
-      // cope with a settled response.
-      assert.equal(
-        commandSupportsSettleObservation(command),
-        false,
-        `${command}: settle-capable formatter must render the settled result`,
-      );
-      continue;
-    }
-    assert.equal(
-      text.includes('settled after'),
-      commandSupportsSettleObservation(command),
-      `${command}: settle rendering must match descriptor trait`,
-    );
   }
 });
 

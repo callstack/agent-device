@@ -1,8 +1,11 @@
 import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
-import { isParseableOutputCommand } from '../../commands/cli-output.ts';
-import { routeResponseWarnings, type CliOutput } from '../../commands/output-common.ts';
-import type { CommandName } from '@agent-device/command-surface';
+import {
+  responseWarningRoute,
+  routeResponseWarnings,
+  type CliOutput,
+} from '@agent-device/command-output';
+import { findCommandMetadata, type CommandName } from '@agent-device/command-surface';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
@@ -89,7 +92,7 @@ async function writeGenericCliOutput(
     routeResponseWarnings(
       { data, text: readCommandMessage(data as Record<string, unknown> | undefined) },
       data,
-      isParseableOutputCommand(command as CommandName) ? 'stderr' : 'text',
+      responseWarningRoute(findCommandMetadata(command as CommandName)),
     ),
   );
   return 0;

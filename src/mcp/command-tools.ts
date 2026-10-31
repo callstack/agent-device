@@ -14,10 +14,13 @@ import {
   type InputAudienceMap,
   type JsonSchema,
 } from '@agent-device/command-surface';
-import type { CliOutput } from '../commands/output-common.ts';
+import {
+  formatCliOutput,
+  responseWarningRoute,
+  type CliOutput,
+} from '@agent-device/command-output';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
-import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import { mcpBody } from '@agent-device/command-registry/command-text';
 import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
@@ -527,6 +530,7 @@ async function renderToolText(params: {
     input: params.input,
     result: params.result,
     env: params.env,
+    stderrIsTTY: Boolean(process.stderr.isTTY),
   });
   if (typeof cliOutput?.text !== 'string') return renderJsonText(cliOutput?.data ?? params.result);
   return toolTextWithWarnings(params.name, cliOutput);
@@ -539,7 +543,7 @@ async function renderToolText(params: {
  */
 function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
   const text = cliOutput.text ?? '';
-  if (!isParseableOutputCommand(name)) return text;
+  if (responseWarningRoute(findCommandMetadata(name)) !== 'stderr') return text;
   const stderr = cliOutput.stderr?.trimEnd() ?? '';
   return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
 }

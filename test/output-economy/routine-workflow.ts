@@ -1,8 +1,8 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
-import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
+import { formatCliOutput } from '@agent-device/command-output';
+import type { CommandName } from '@agent-device/command-surface';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import { REF_TOKEN_PATTERN, type EconomySample } from './economy-metrics.ts';
 import { SETTLE_ADDED_REF_RESULT, SNAPSHOT_DAEMON_RESULT, SNAPSHOT_RESULT } from './fixtures.ts';
@@ -153,12 +153,23 @@ export type RoutineWorkflowMeasurement = {
   steps: WorkflowStepMetric[];
 };
 
-function readCliText(output: { text?: string | null }): string {
-  return output.text ?? '';
+async function renderCliText(
+  name: CommandName,
+  result: unknown,
+  input: Record<string, unknown> = {},
+): Promise<string> {
+  const output = await formatCliOutput({
+    name,
+    env: process.env,
+    stderrIsTTY: false,
+    input,
+    result,
+  });
+  return output?.text ?? '';
 }
 
-function interactionText(result: CommandRequestResult): string {
-  return readCliText(interactionCliOutputFormatters.press({ env: process.env, input: {}, result }));
+function interactionText(result: CommandRequestResult): Promise<string> {
+  return renderCliText('press', result);
 }
 
 async function renderMcpSnapshot(): Promise<unknown> {
@@ -176,12 +187,8 @@ export async function renderRoutineWorkflow(): Promise<{
   samples: Record<string, EconomySample>;
 }> {
   const error = normalizeError(FAILURE_ERROR);
-  const orientText = readCliText(
-    await snapshotCliOutput({ result: SNAPSHOT_RESULT, interactiveOnly: true }),
-  );
-  const recheckText = readCliText(
-    await snapshotCliOutput({ result: RECHECK_RESULT, interactiveOnly: true }),
-  );
+  const orientText = await renderCliText('snapshot', SNAPSHOT_RESULT, { interactiveOnly: true });
+  const recheckText = await renderCliText('snapshot', RECHECK_RESULT, { interactiveOnly: true });
   const mcpSnapshot = await renderMcpSnapshot();
 
   const steps: WorkflowStep[] = [
@@ -206,14 +213,14 @@ export async function renderRoutineWorkflow(): Promise<{
       // emitting added refs, `mutation-tail` loses its target and the
       // fallback-observation count rises — so this step is a genuine formatter
       // guard, not a scan of the raw fixture object.
-      samples: { cli: { text: interactionText(SETTLE_ADDED_REF_RESULT) } },
+      samples: { cli: { text: await interactionText(SETTLE_ADDED_REF_RESULT) } },
     },
     {
       id: 'mutation-tail',
       command: 'press @e5 --settle',
       kind: 'mutation',
       targetRef: '@e5',
-      samples: { cli: { text: interactionText(WORKFLOW_TAIL_RESULT) } },
+      samples: { cli: { text: await interactionText(WORKFLOW_TAIL_RESULT) } },
     },
     {
       id: 'read',
@@ -222,13 +229,7 @@ export async function renderRoutineWorkflow(): Promise<{
       targetRef: '@e4',
       samples: {
         cli: {
-          text: readCliText(
-            interactionCliOutputFormatters.get({
-              env: process.env,
-              input: { format: 'text' },
-              result: READ_RESULT,
-            }),
-          ),
+          text: await renderCliText('get', READ_RESULT, { format: 'text' }),
         },
       },
     },
@@ -244,7 +245,7 @@ export async function renderRoutineWorkflow(): Promise<{
       command: 'press @e7 --settle --timeout 15000',
       kind: 'retry',
       targetRef: '@e7',
-      samples: { cli: { text: interactionText(RETRY_RESULT) } },
+      samples: { cli: { text: await interactionText(RETRY_RESULT) } },
     },
   ];
 

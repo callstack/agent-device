@@ -1,4 +1,4 @@
-import { serializeDevice } from '../commands/output/result-serialization.ts';
+import { serializeDevice } from '@agent-device/command-output';
 import type { CommandExecutionResult, CommandName } from '@agent-device/command-surface';
 
 type CollectionCommandName = {

@@ -1,5 +1,4 @@
-import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
-import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
+import { formatCliOutput } from '@agent-device/command-output';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
@@ -23,15 +22,27 @@ import {
   RECORDING_SELECTION_RESULT,
 } from './selection-fixtures.ts';
 
-function interactionText(result: Record<string, unknown>): string {
-  return interactionCliOutputFormatters.press({ env: process.env, input: {}, result }).text ?? '';
+async function interactionText(result: Record<string, unknown>): Promise<string> {
+  const output = await formatCliOutput({
+    name: 'press',
+    env: process.env,
+    stderrIsTTY: false,
+    input: {},
+    result,
+  });
+  return output?.text ?? '';
 }
 
 export async function renderOutputFixtures() {
   const daemon = await captureOutputEconomyDaemonResponses();
-  const snapshot = await snapshotCliOutput({
+  const snapshot = await formatCliOutput({
+    name: 'snapshot',
+    env: process.env,
+    stderrIsTTY: false,
+    input: {},
     result: SNAPSHOT_RESULT,
   });
+  if (!snapshot) throw new Error('snapshot renders no CLI output');
   const error = normalizeError(ACTIONABLE_ERROR);
   const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
   const mcpSnapshot = await createCommandToolExecutor({
@@ -63,12 +74,12 @@ export async function renderOutputFixtures() {
       'snapshot.default.text': { text: snapshot.text ?? '' },
       'snapshot.default.json': { data: snapshot.jsonData },
       'snapshot.digest.json': { data: daemon.snapshotDigest },
-      'settle.default.text': { text: interactionText(SETTLE_ADDED_REF_RESULT) },
+      'settle.default.text': { text: await interactionText(SETTLE_ADDED_REF_RESULT) },
       'settle.default.json': { data: SETTLE_ADDED_REF_RESULT },
       'settle.digest.json': { data: daemon.settleDigest },
-      'settle-tail.default.text': { text: interactionText(SETTLE_TAIL_RESULT) },
+      'settle-tail.default.text': { text: await interactionText(SETTLE_TAIL_RESULT) },
       'settle-tail.digest.json': { data: daemon.settleTailDigest },
-      'not-settled.default.text': { text: interactionText(NOT_SETTLED_RESULT) },
+      'not-settled.default.text': { text: await interactionText(NOT_SETTLED_RESULT) },
       'selector-read.default.json': { data: SELECTOR_READ_RESULT },
       'selector-read.digest.json': { data: daemon.selectorDigest },
       'screenshot.default.json': { data: daemon.screenshotDefault },
