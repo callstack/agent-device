@@ -163,6 +163,26 @@ Advertise that service from the test accessory, build with the normal physical-d
 then open **Settings → Open accessory setup lab**. The picker requires physical iOS 18+ hardware; use
 the normal session hygiene above when validating its snapshot, wait, and selector paths.
 
+#### "Open in app" prompts
+
+The app declares the URL scheme `agent-device-test-app` in `app.config.js`, so it can raise two iOS
+prompts that `alert` must answer. Before you change `alert`, test with the reported prompt itself,
+not with a different alert.
+
+- **SpringBoard "Open in “Agent Device Tester”?" alert.** Open the app in a session, then run
+  `xcrun simctl openurl <udid> "agent-device-test-app://x"`. After you accept this alert once, the
+  simulator stops showing it for this app. Rebooting or reinstalling doesn't reset this, so test
+  `dismiss` first. To see the alert again, use a new simulator:
+  `xcrun simctl create tester-fresh <device-type-id> <runtime-id>` prints its UDID. For example,
+  `xcrun simctl create tester-fresh com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro com.apple.CoreSimulator.SimRuntime.iOS-27-1`.
+  `xcrun simctl list devicetypes` and `xcrun simctl list runtimes` list the ids.
+- **Safari "Open this page in “Agent Device Tester”?" prompt.** Open `com.apple.mobilesafari` in a
+  session, fill the address field with `agent-device-test-app://x`, then tap Go on the keyboard. This
+  prompt can be raised any number of times.
+
+`snapshot --raw --json` includes the Safari prompt in the page tree. For the SpringBoard alert, it
+returns only the alert, without the windows around it.
+
 ### Android emulator or device
 
 Install dependencies and run the development build on the target Android
