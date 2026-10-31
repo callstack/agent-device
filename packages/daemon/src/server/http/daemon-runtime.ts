@@ -6,7 +6,7 @@ import {
   type ClaimRecoveryGatewayFactory,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import { asAppError, AppError } from '@agent-device/kernel/errors';
+import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -786,8 +786,8 @@ async function startDaemonRuntimeOnHost(
   });
 
   let abandonedRequests = 0;
-  let platformOwnersPending = true;
-  const hasUnfinishedWork = () => abandonedRequests > 0 || platformOwnersPending;
+  let platformOwners: ShutdownReport['platformOwners'] = 'pending';
+  const hasUnfinishedWork = () => abandonedRequests > 0 || platformOwners !== 'closed';
   let shutdownOutcome: Parameters<DaemonRegistrationOwner['finish']>[0];
   const drainInFlightRequests = async (): Promise<ShutdownReport['requests']> => {
     const total = inFlightRequests.size;
@@ -871,11 +871,20 @@ async function startDaemonRuntimeOnHost(
     });
     expiredProviderLeaseReleaser.shutdown();
     const ownerClose = await settleWithinBudget(
-      () => deviceRuntimeGateway.shutdown(),
+      () => withDaemonDiagnosticsScope({ logPath }, () => deviceRuntimeGateway.shutdown()),
       options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
     );
-    if (ownerClose.kind === 'rejected') throw ownerClose.error;
-    platformOwnersPending = ownerClose.kind === 'deadline';
+    platformOwners =
+      ownerClose.kind === 'rejected'
+        ? 'failed'
+        : ownerClose.kind === 'deadline'
+          ? 'pending'
+          : 'closed';
+    if (ownerClose.kind === 'rejected') {
+      await emitDaemonDiagnostic(logPath, 'daemon_shutdown_platform_owner_failed', {
+        error: normalizeError(ownerClose.error),
+      });
+    }
     const plugins = await pluginClose.close();
     for (const failure of plugins.failed) {
       await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {
@@ -895,7 +904,7 @@ async function startDaemonRuntimeOnHost(
         unknown: [...unknownLeaseIds],
       },
       requests,
-      platformOwners: platformOwnersPending ? 'pending' : 'closed',
+      platformOwners,
       runners: { stopped: [...stoppedRunners], handedOff: [...handedOffRunners] },
       sessions,
       plugins,

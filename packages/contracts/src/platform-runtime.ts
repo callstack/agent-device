@@ -204,6 +204,12 @@ export type DeviceBindingRequest = Readonly<{
 export type DeviceRuntimeGateway<Operations extends object> = Readonly<{
   inspectFacts(device: DeviceInfo): Promise<RuntimeFacts<Operations>>;
   bind(request: DeviceBindingRequest): Promise<DeviceBinding<Operations>>;
+  /**
+   * Attempts each owner once; repeated calls share the attempt and the same rejection.
+   * Owner failures reject with COMMAND_FAILED and details.reason platform-owner-shutdown-failed;
+   * details.failures preserves each owner and error. After shutdown starts, bind and inspectFacts
+   * reject with COMMAND_FAILED and details.reason runtime-gateway-shut-down.
+   */
   shutdown(): Promise<void>;
   /** Package-coordinated durable lifecycle phases used for startup recovery and daemon shutdown. */
   applicationLifecycle?: ApplicationLifecycleResourceLifecycle;

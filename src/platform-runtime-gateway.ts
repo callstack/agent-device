@@ -29,7 +29,7 @@ import {
   type DeviceInfo,
   type Platform,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -62,6 +62,14 @@ export function createComposedPlatformRuntimeGateway(options: {
   const localLoads = new Map<Platform, Promise<PlatformRuntimeOwner>>();
   const providerLoads = new Map<PlatformRuntimeProviderModule, Promise<PlatformRuntimeOwner>>();
   const loadedOwners = new Map<string, PlatformRuntimeOwner>();
+  let closing: Promise<void> | undefined;
+  const ensureOpen = () => {
+    if (closing) {
+      throw new AppError('COMMAND_FAILED', 'Platform runtime gateway is shut down', {
+        reason: 'runtime-gateway-shut-down',
+      });
+    }
+  };
   let hostLoad: Promise<PlatformRuntimeHost> | undefined;
   const loadHost = async () => {
     hostLoad ??= options.loadHost();
@@ -105,6 +113,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     return owner;
   };
   const loadLocal = async (family: Platform) => {
+    ensureOpen();
     const existing = localLoads.get(family);
     if (existing) return await existing;
     const module = options.modules.get(family);
@@ -132,6 +141,7 @@ export function createComposedPlatformRuntimeGateway(options: {
     }
   };
   const loadProvider = async (module: PlatformRuntimeProviderModule) => {
+    ensureOpen();
     const existing = providerLoads.get(module);
     if (existing) return await existing;
     const pending = loadHost().then(async (host) => {
@@ -155,43 +165,80 @@ export function createComposedPlatformRuntimeGateway(options: {
   return Object.freeze({
     applicationLifecycle,
     inspectFacts: async (device) => {
+      ensureOpen();
       const provider = selectOrdinaryProvider(options.providerRuntimes, device);
+      let owner: PlatformRuntimeOwner;
       if (provider) {
         const module = modulesByRuntime.get(provider);
         if (!module) return unavailableProviderFacts(provider, device);
-        const owner = await loadProvider(module);
-        return await inspectAndValidate(owner, device);
+        owner = await loadProvider(module);
+      } else {
+        owner = await loadLocal(device.platform);
       }
-      return await inspectAndValidate(await loadLocal(device.platform), device);
+      ensureOpen();
+      return await inspectAndValidate(owner, device);
     },
     bind: async (request) => {
+      ensureOpen();
+      let owner: PlatformRuntimeOwner;
       if (request.intent.kind === 'exact-owner') {
-        const selected = await selectExactOwner(
+        owner = await selectExactOwner(
           request.intent.owner,
           providersByOwner,
           loadProvider,
           loadLocal,
         );
-        return await bindAndValidate(selected, request);
-      }
-      const provider = selectOrdinaryProvider(options.providerRuntimes, request.device);
-      if (provider) {
-        const module = modulesByRuntime.get(provider);
-        if (!module) {
-          return unavailableProviderBinding(provider, request.device);
+      } else {
+        const provider = selectOrdinaryProvider(options.providerRuntimes, request.device);
+        if (provider) {
+          const module = modulesByRuntime.get(provider);
+          if (!module) return unavailableProviderBinding(provider, request.device);
+          owner = await loadProvider(module);
+        } else {
+          owner = await loadLocal(request.device.platform);
         }
-        return await bindAndValidate(await loadProvider(module), request);
       }
-      return await bindAndValidate(await loadLocal(request.device.platform), request);
+      ensureOpen();
+      return await bindAndValidate(owner, request);
     },
-    shutdown: async () => {
-      await Promise.allSettled(
-        [...loadedOwners.values()].map(async (owner) => await owner.shutdown()),
-      );
-      loadedOwners.clear();
-      localLoads.clear();
-      providerLoads.clear();
-    },
+    shutdown: () =>
+      (closing ??= Promise.resolve().then(async () => {
+        const outcomes = await Promise.all(
+          [...localLoads.values(), ...providerLoads.values()].map((load) =>
+            load.then(
+              async (owner) => {
+                try {
+                  await owner.shutdown();
+                } catch (error) {
+                  try {
+                    const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+                    emitDiagnostic({
+                      level: 'error',
+                      phase: 'platform_runtime_owner_shutdown_failed',
+                      data: { owner: owner.owner, error: normalizeError(error) },
+                    });
+                  } catch {
+                    // ADR 0010: diagnostics must not replace the owner shutdown failure.
+                  }
+                  return { owner: owner.owner, error };
+                }
+              },
+              // Load errors belong to the load caller; this phase reports owner shutdown failures.
+              () => undefined,
+            ),
+          ),
+        );
+        loadedOwners.clear();
+        localLoads.clear();
+        providerLoads.clear();
+        const [first, ...rest] = outcomes.filter((outcome) => outcome !== undefined);
+        if (first) {
+          // ADR 0027 keeps the successful gateway's eager closure flat.
+          const { createPlatformRuntimeShutdownError } =
+            await import('@agent-device/contracts/platform-runtime-shutdown');
+          throw createPlatformRuntimeShutdownError([first, ...rest]);
+        }
+      })),
   });
 }
 

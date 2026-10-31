@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import type { JsonValue } from '@agent-device/contracts/client';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
@@ -141,24 +142,56 @@ export type DiagnosticEventInput = {
   data?: Record<string, unknown>;
 };
 
+/**
+ * Encodes diagnostic data for JSON-only ports, preserving bigints as decimal strings.
+ * Performs no redaction; the receiving diagnostics port owns redaction.
+ * Throws when serialization fails or the input does not encode as a JSON value.
+ */
+export function toDiagnosticJson(value: unknown): JsonValue {
+  return JSON.parse(stringifyDiagnosticValue(value));
+}
+
+function stringifyDiagnosticValue(value: unknown, sensitiveValues: readonly string[] = []): string {
+  return JSON.stringify(value, (_key, entry) =>
+    typeof entry === 'bigint' || typeof entry === 'string'
+      ? replaceSensitiveValues(entry, sensitiveValues)
+      : entry,
+  );
+}
+
+function stringifyDiagnosticEvent(
+  event: DiagnosticEvent,
+  sensitiveValues: readonly string[] = [],
+): string {
+  try {
+    return stringifyDiagnosticValue(event, sensitiveValues);
+  } catch {
+    const { data: _data, ...metadata } = event;
+    return stringifyDiagnosticValue(
+      { ...metadata, data: { reason: 'diagnostic-data-unserializable' } },
+      sensitiveValues,
+    );
+  }
+}
+
 export function emitDiagnostic(event: DiagnosticEventInput): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
-  const payload: DiagnosticEvent = {
-    ts: new Date().toISOString(),
-    level: event.level ?? 'info',
-    phase: event.phase,
-    session: scope.session,
-    requestId: scope.requestId,
-    command: scope.command,
-    durationMs: event.durationMs,
-    data: event.data ? redactScopeData(scope, event.data) : undefined,
-  };
-  scope.events.push(payload);
-  scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
-  if (!scope.debug && !scope.traceLogPath) return;
-  const fileLine = `${JSON.stringify(payload)}\n`;
   try {
+    const payload: DiagnosticEvent = {
+      ts: new Date().toISOString(),
+      level: event.level ?? 'info',
+      phase: event.phase,
+      session: scope.session,
+      requestId: scope.requestId,
+      command: scope.command,
+      durationMs: event.durationMs,
+      data: event.data ? redactScopeData(scope, event.data) : undefined,
+    };
+    scope.events.push(payload);
+    scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
+    if (!scope.debug && !scope.traceLogPath) return;
+    const fileLine = `${stringifyDiagnosticEvent(payload, sortedScopeSensitiveValues(scope))}\n`;
     if (scope.debug && scope.logPath) {
       appendDiagnosticLine(scope, scope.logPath, fileLine);
       scope.liveWrittenEventCount = scope.events.length;
@@ -240,9 +273,7 @@ export function flushDiagnosticsToSessionFile(
         // generated identifiers and internal phase names, deliberately no
         // longer re-normalized here. Replacement output is not length-bounded:
         // a short literal can grow past `[REDACTED]`.
-        const lines = pendingEvents.map((entry) =>
-          JSON.stringify(replaceSensitiveValues(entry, values)),
-        );
+        const lines = pendingEvents.map((entry) => stringifyDiagnosticEvent(entry, values));
         appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`);
       }
       const logRecord = scope.logRecord;
@@ -258,9 +289,7 @@ export function flushDiagnosticsToSessionFile(
     const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     const filePath = path.join(baseDir, `${timestamp}-${scope.diagnosticId}.ndjson`);
     // Same single-value-replacement re-pass as the logPath branch above.
-    const lines = scope.events.map((entry) =>
-      JSON.stringify(replaceSensitiveValues(entry, values)),
-    );
+    const lines = scope.events.map((entry) => stringifyDiagnosticEvent(entry, values));
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
     scope.flushedLogPath = filePath;
     scope.events = [];
@@ -278,12 +307,23 @@ function sortedScopeSensitiveValues(scope: DiagnosticsScope): readonly string[] 
   return scope.sortedSensitiveValues;
 }
 
-function redactScopeData<T>(scope: DiagnosticsScope, input: T): T {
-  const redacted = redactDiagnosticData(input);
-  return replaceSensitiveValues(redacted, sortedScopeSensitiveValues(scope)) as T;
+function redactScopeData(
+  scope: DiagnosticsScope,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const values = sortedScopeSensitiveValues(scope);
+  try {
+    return replaceSensitiveValues(redactDiagnosticData(input), values) as Record<string, unknown>;
+  } catch {
+    return replaceSensitiveValues({ reason: 'diagnostic-data-unserializable' }, values) as Record<
+      string,
+      unknown
+    >;
+  }
 }
 
 function replaceSensitiveValues(value: unknown, sensitiveValues: readonly string[]): unknown {
+  if (typeof value === 'bigint') value = value.toString();
   if (typeof value === 'string') {
     return sensitiveValues.reduce(
       (output, sensitive) => output.replaceAll(sensitive, '[REDACTED]'),

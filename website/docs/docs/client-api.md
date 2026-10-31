@@ -144,7 +144,7 @@ const devices = await host.client.devices.list();
 await host.close();
 ```
 
-`stateDir` is required. If another daemon owns it, startup refuses with `daemon_registration_refused`; choose a separate directory or close its owner first. Pass imported plugin objects in `plugins`. They register after the built-ins without reading the plugin store, so `plugin add` does not change a running host. Plugin failures appear in `agent-device daemon status --state-dir <path>`. `close()` reports unfinished teardown. Repeated calls share one close and never exit your process.
+`stateDir` is required. If another daemon owns it, startup refuses with `daemon_registration_refused`; choose a separate directory or close its owner first. Pass imported plugin objects in `plugins`. They register after the built-ins without reading the plugin store, so `plugin add` does not change a running host. Plugin failures appear in `agent-device daemon status --state-dir <path>`. `close()` reports unfinished teardown. Its `platformOwners` field is `closed` after successful shutdown, `pending` when the shutdown budget expires, or `failed` when an owner rejects. Repeated calls share one close and never exit your process.
 
 The runtime stays alive until you call `close()` in its host process; idle reaping is disabled. `daemon stop` refuses live embedded runtimes with `daemon-owner-embedded`. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
 

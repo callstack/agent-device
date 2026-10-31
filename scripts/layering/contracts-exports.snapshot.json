@@ -90,6 +90,7 @@
   "@agent-device/contracts/platform-runtime",
   "@agent-device/contracts/platform-runtime-host",
   "@agent-device/contracts/platform-runtime-operations",
+  "@agent-device/contracts/platform-runtime-shutdown",
   "@agent-device/contracts/platform-runtime-unavailable",
   "@agent-device/contracts/plugin-inventory",
   "@agent-device/contracts/progress",
