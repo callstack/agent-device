@@ -36,7 +36,7 @@ Keep CLI grammar, input decoding, executable surface metadata, request projectio
 
 The package declares the client port, `AgentDeviceClient` and `AgentDeviceCommandClient`, once, in contracts and command-registry vocabulary. The command definitions invoke that port. `src/client/client-types.ts` re-exports exactly those two port names from the package. Its other published vocabulary is unchanged, so the published SDK types do not change and the package has no edge into the client layer. Add a type projection only when it removes real duplication across consumers.
 
-Keep CLI presentation in `src/commands/`: output formatters, the warning dispatcher, help, and progress. A formatter is keyed by `CommandName` in `src/commands/cli-output.ts`, and a duplicate key throws when the table builds. The package reaches no root module, so request projection and the SDK load no presentation.
+Keep shared CLI and MCP presentation in `@agent-device/command-output`: output formatters, the warning dispatcher, color, and human error lines. A formatter is keyed by `CommandName` in `packages/command-output/src/cli-output.ts`, and a duplicate key throws when the table builds. Keep help, progress, and terminal writers in `src/commands/`. The command surface reaches neither, so request projection and the SDK load no presentation.
 
 The client `invoke` seam is cross-process; the daemon `execute` seam runs the platform handler inside the daemon process. The process boundary is never collapsed.
 
@@ -78,5 +78,6 @@ About ten hand-maintained tables once repeated command identity, route membershi
 
 ## Decision history
 
-- 2026-10-30 — the command declaration surface moved to `@agent-device/command-surface`. Formatters left the facets for a `CommandName`-keyed table in `src/commands/cli-output.ts`, so the SDK no longer evaluates CLI presentation. The client port is declared in the package and re-exported by the client layer.
+- 2026-10-31 — shared presentation moved to `@agent-device/command-output`; `printHumanError`, `printJson`, and the stderr progress sink stay in `src/commands/`.
+- 2026-10-30 — the command declaration surface moved to `@agent-device/command-surface`. Formatters left the facets for a `CommandName`-keyed table (now `packages/command-output/src/cli-output.ts`), so the SDK no longer evaluates CLI presentation. The client port is declared in the package and re-exported by the client layer.
 - 2026-09-05 — [#2294](https://github.com/callstack/agent-device/pull/2294) removed the navigation-only phantom-type projection: direct signatures were simpler and preserved the published contract.

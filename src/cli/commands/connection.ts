@@ -37,7 +37,7 @@ import {
   stopMetroCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
-import { formatDeliveredArtifactLines } from '../../commands/output/result-serialization.ts';
+import { formatDeliveredArtifactLines } from '@agent-device/command-output';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';

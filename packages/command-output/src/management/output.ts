@@ -20,13 +20,13 @@ import type {
 } from '@agent-device/contracts/observability';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
-import type { CommandProgressState } from '../command-progress.ts';
 import {
   type CliOutputFormatter,
   messageCliOutput,
   messageOutput,
   resultOutput,
   type CliOutput,
+  type CommandProgressState,
 } from '../output-common.ts';
 
 async function devicesCliOutput(result: AgentDeviceDevice[]): Promise<CliOutput> {
@@ -200,12 +200,13 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
 export async function doctorCliOutput(
   result: CommandRequestResult,
   env: EnvMap,
-  progress?: CommandProgressState,
+  progress: CommandProgressState | undefined,
+  stderrIsTTY: boolean,
 ): Promise<CliOutput> {
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
     await import('@agent-device/host-kit/doctor-lines');
   const { shouldColorStatusMarkers } = await import('@agent-device/host-kit/status-markers');
-  const useColor = shouldColorStatusMarkers(env, Boolean(process.stderr.isTTY));
+  const useColor = shouldColorStatusMarkers(env, stderrIsTTY);
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
@@ -233,8 +234,8 @@ export const managementCliOutputFormatters = {
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
   capabilities: resultOutput(capabilitiesCliOutput),
-  doctor: ({ result, env, progress }) =>
-    doctorCliOutput(result as CommandRequestResult, env, progress),
+  doctor: ({ result, env, progress, stderrIsTTY }) =>
+    doctorCliOutput(result as CommandRequestResult, env, progress, stderrIsTTY),
   apps: ({ input, result }) =>
     appsCliOutput({
       result: result as Parameters<typeof appsCliOutput>[0]['result'],

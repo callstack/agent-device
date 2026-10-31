@@ -36,6 +36,9 @@ importers:
       '@agent-device/client':
         specifier: workspace:*
         version: link:packages/client
+      '@agent-device/command-output':
+        specifier: workspace:*
+        version: link:packages/command-output
       '@agent-device/command-registry':
         specifier: workspace:*
         version: link:packages/command-registry
@@ -354,6 +357,34 @@ importers:
       vitest:
         specifier: 5.0.4
         version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.3.5(@types/node@22.20.1)(yaml@2.9.1))
+
+  packages/command-output:
+    dependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/command-surface':
+        specifier: workspace:*
+        version: link:../command-surface
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/command-registry:
     dependencies:

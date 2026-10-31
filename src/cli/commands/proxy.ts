@@ -4,7 +4,7 @@ import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
 import { ensureProxyUpstreamDaemon } from '@agent-device/daemon-client';
 import { AppError } from '@agent-device/kernel/errors';
-import { colorize, supportsColor } from '../../commands/output/color.ts';
+import { colorize, supportsColor } from '@agent-device/command-output';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -88,7 +88,7 @@ export function renderProxyStartup(
   startup: ProxyStartup,
   options: { useColor?: boolean } = {},
 ): string {
-  const useColor = options.useColor ?? supportsColor(process.env);
+  const useColor = options.useColor ?? supportsColor(process.env, process.stdout);
   const checkmark = formatProxyOutputValue('✓', 'green', useColor);
   const proxyBaseUrl = formatProxyOutputValue(startup.proxyBaseUrl, 'cyan', useColor);
   const daemonBaseUrl = formatProxyOutputValue('<tunnel URL>', 'cyan', useColor);

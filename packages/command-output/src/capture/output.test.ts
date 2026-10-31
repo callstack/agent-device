@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { formatCliOutput } from '../cli-output.ts';
+import { dispatchCliOutput } from '../cli-output.ts';
 import { captureCliOutputFormatters, snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {
@@ -179,7 +179,7 @@ test('routes snapshot diagnostics warning to stderr output', async () => {
 });
 
 // #1796: the Android revoke warning rides `warnings`; the human CLI line must show it. The line is
-// appended by `formatCliOutput` (#2682), so that is where the guarantee is asserted; the formatter
+// appended by `dispatchCliOutput` (#2682), so that is where the guarantee is asserted; the formatter
 // itself only renders the response's own message.
 test('settings renders response warnings after the message', async () => {
   const warning = 'android.permission.CAMERA was granted before this revoke, and Android …';
@@ -190,8 +190,9 @@ test('settings renders response warnings after the message', async () => {
     warnings: [warning],
   };
 
-  const output = await formatCliOutput({
+  const output = await dispatchCliOutput({
     env: process.env,
+    stderrIsTTY: false,
     name: 'settings',
     input: {},
     result: response,
@@ -201,6 +202,7 @@ test('settings renders response warnings after the message', async () => {
 
   const rendered = await captureCliOutputFormatters.settings!({
     env: process.env,
+    stderrIsTTY: false,
     input: {},
     result: response,
   });

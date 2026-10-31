@@ -5,7 +5,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { snapshotCliOutput } from '../../../src/commands/capture/output.ts';
+import { formatCliOutput } from '@agent-device/command-output';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -125,7 +125,14 @@ test('Limrun iOS acquisition reaches one host presenter and the public snapshot 
       'iOS snapshot acquisition does not expose truncation metadata; tree completeness is not independently verified.',
     ]);
 
-    const cliOutput = await snapshotCliOutput({ result });
+    const cliOutput = await formatCliOutput({
+      name: 'snapshot',
+      env: process.env,
+      stderrIsTTY: false,
+      input: {},
+      result,
+    });
+    assert.ok(cliOutput, 'snapshot renders CLI output');
     assert.equal(JSON.stringify(cliOutput.jsonData).includes('"truncated"'), false);
   } finally {
     await daemon.close();

@@ -21,10 +21,10 @@ import {
 } from '@agent-device/daemon-client';
 import fs from 'node:fs';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
+import type { CommandProgressState } from '@agent-device/command-output';
 import {
   createCommandProgressState,
   createStderrCommandProgressSink,
-  type CommandProgressState,
 } from './commands/command-progress.ts';
 import { createAgentDeviceClient } from '@agent-device/client';
 import type {
@@ -72,7 +72,9 @@ const printHumanError = (
   err: AppError | NormalizedError,
   options: { showDetails?: boolean } = {},
 ): Promise<void> =>
-  import('./commands/output/error.ts').then(({ printHumanError: write }) => write(err, options));
+  import('./commands/output/human-error.ts').then(({ printHumanError: write }) =>
+    write(err, options),
+  );
 
 const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },

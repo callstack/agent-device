@@ -1,9 +1,12 @@
-import type { CliOutput } from './output-common.ts';
+import {
+  formatCliOutput,
+  type CliOutput,
+  type CommandProgressState,
+} from '@agent-device/command-output';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import { readFillTextFromStdin } from './interaction/fill-text-stdin.ts';
-import { formatCliOutput } from './cli-output.ts';
 import {
   readInputFromCli,
   runCommand,
@@ -11,7 +14,6 @@ import {
   type CommandName,
 } from '@agent-device/command-surface';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { CommandProgressState } from './command-progress.ts';
 
 type CliRunOptions = {
   client: AgentDeviceClient;
@@ -46,6 +48,7 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
       result,
       progress: options.commandProgress,
       env: options.env,
+      stderrIsTTY: Boolean(process.stderr.isTTY),
     }),
   };
 }

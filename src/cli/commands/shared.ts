@@ -1,17 +1,17 @@
-import type { CliOutput } from '../../commands/output-common.ts';
+import type { CliOutput } from '@agent-device/command-output';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 export async function writeCommandOutput(
   flags: Partial<Pick<CliFlags, 'json'>>,
   data: unknown,
-  renderHuman?: () => string | null | undefined,
+  renderHuman?: () => string | null | undefined | Promise<string | null | undefined>,
 ): Promise<void> {
   if (flags.json) {
     const { printJson } = await import('../../commands/output/json.ts');
     printJson({ success: true, data });
     return;
   }
-  const text = renderHuman?.();
+  const text = await renderHuman?.();
   if (text) writeLine(text);
 }
 
