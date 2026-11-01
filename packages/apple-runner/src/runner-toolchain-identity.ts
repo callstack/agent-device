@@ -113,10 +113,10 @@ export function readRunnerXcodeVersion(): string | undefined {
 
 /**
  * The developer dir `xcrun` uses, resolved to its real path: the client's `DEVELOPER_DIR`, else the
- * host's selection link, else the default Xcode when no link exists. A tool like xcodes swaps the
- * Xcode.app bundle behind a stable path, so the real path is the one that names the toolchain. Like
- * `xcrun`, it accepts an `Xcode.app` bundle for its `Contents/Developer`, and a link whose target is
- * gone is a broken selection rather than a reason to read another Xcode.
+ * host's selection link, else the default Xcode. This order must match `xcode-select -p` on the
+ * host, because the cache key must name the Xcode that builds the runner. A tool like xcodes swaps
+ * the Xcode.app bundle behind a stable path, so the real path is the one that names the toolchain.
+ * Like `xcrun`, it accepts an `Xcode.app` bundle for its `Contents/Developer`.
  */
 function resolveSelectedDeveloperDir(chosenDir: string | undefined): string {
   const candidate = chosenDir?.trim() || selectionLinkTarget() || DEFAULT_DEVELOPER_DIR;
@@ -135,11 +135,15 @@ function selectionLinkTarget(): string | undefined {
     if (code === 'ENOENT') return undefined;
     throw new ToolchainFileError(XCODE_SELECT_LINK_PATH, code ?? String(error));
   }
-  const target = realPath(XCODE_SELECT_LINK_PATH);
-  if (target === undefined) {
-    throw new ToolchainFileError(XCODE_SELECT_LINK_PATH, 'dangling selection link');
+  try {
+    return fs.realpathSync(XCODE_SELECT_LINK_PATH);
+  } catch (error) {
+    // A link whose target was deleted (an uninstalled Xcode) is not a selection: `xcode-select -p`
+    // and `xcrun` skip it and use the default Xcode (#4145).
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return undefined;
+    throw new ToolchainFileError(XCODE_SELECT_LINK_PATH, code ?? String(error));
   }
-  return target;
 }
 
 /** What `xcodebuild -version` prints for the Xcode that owns `developerDir`. */

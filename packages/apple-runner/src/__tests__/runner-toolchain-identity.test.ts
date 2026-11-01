@@ -65,17 +65,39 @@ test('without DEVELOPER_DIR the host selection link names the Xcode, and a moved
   assert.deepEqual(readFingerprint(), FINGERPRINT_B);
 });
 
-test('a selection link whose Xcode is gone fails instead of reading another Xcode', () => {
+test('a selection link whose Xcode is gone falls back to the default Xcode, as xcode-select -p does', () => {
+  // #4145: an uninstalled Xcode leaves the link dangling; Apple's tools then use the default Xcode.
   appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
   appleSelectionLink.target = path.join(mkdtempForTestSync('deleted-xcode-'), 'Xcode.app');
-  assert.throws(
-    readFingerprint,
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.details?.reason === 'apple_toolchain_unreadable' &&
-      error.details?.file === XCODE_SELECT_LINK_PATH &&
-      error.details?.detail === 'dangling selection link',
-  );
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
+  assert.deepEqual(readFingerprint(), FINGERPRINT_B);
+  assert.equal(readRunnerXcodeVersion(), '27.0');
+});
+
+test('without DEVELOPER_DIR or a selection link the default Xcode names the fingerprint', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
+  assert.deepEqual(readFingerprint(), FINGERPRINT_B);
+});
+
+test('a selection link whose Xcode this process cannot read fails instead of reading the default Xcode', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  const locked = mkdtempForTestSync('locked-xcode-');
+  appleSelectionLink.target = path.join(locked, 'Xcode.app');
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
+  fs.chmodSync(locked, 0o000);
+  try {
+    assert.throws(
+      readFingerprint,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'apple_toolchain_unreadable' &&
+        error.details?.file === XCODE_SELECT_LINK_PATH &&
+        error.details?.detail === 'EACCES',
+    );
+  } finally {
+    fs.chmodSync(locked, 0o700);
+  }
 });
 
 test('a selection link this process cannot read fails instead of reading the default Xcode', () => {
