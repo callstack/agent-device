@@ -15,9 +15,11 @@ const NO_KEYBOARD = Object.freeze({
 });
 
 /**
- * The host and platform adapters the runtime tests hand `createLimrunRuntime`: every one of them answers
- * a fixed value, so a case that reaches one of them has left the path it means to drive. A case with a
- * reading of its own spreads this object and replaces the member it drives.
+ * The host and platform adapters the runtime tests hand `createLimrunRuntime`: every one of them answers a
+ * fixed or a pass-through value, so a case that reaches one of them has left the path it means to drive. The
+ * pass-throughs are the ones that shape what they were handed into an invocation or an error, and they shape
+ * it the same way every time. A case with a reading of its own spreads this object and replaces the member it
+ * drives.
  */
 export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
   return {

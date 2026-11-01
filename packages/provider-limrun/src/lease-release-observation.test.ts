@@ -82,6 +82,7 @@ vi.mock('@limrun/api/instance-client', () => ({
 test('a local teardown that refuses beside a pending delete is reported, not loosed on the process', async () => {
   const rejections = watchUnhandledRejections();
   state.deletes.length = 0;
+  const disconnectsBefore = state.disconnects;
   state.disconnectThrows = true;
   const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
   const lease = androidLease('lease-throwing-disconnect');
@@ -91,7 +92,7 @@ test('a local teardown that refuses beside a pending delete is reported, not loo
     // The release holds at its delete while the session disconnect it started beside refuses.
     const released = runtime.leaseLifecycle.release?.(lease);
     await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
-    expect(state.disconnects).toBe(1);
+    expect(state.disconnects - disconnectsBefore).toBe(1);
     reportDelete = state.deletes[0]?.report;
     reportDelete?.();
 
@@ -102,7 +103,7 @@ test('a local teardown that refuses beside a pending delete is reported, not loo
     const warnings = warningsOf(record);
     expect(warnings.map((warning) => warning.code)).toEqual(['LIMRUN_TEARDOWN_INCOMPLETE']);
     expect(String(warnings[0]?.message)).toContain('Local teardown refused to finish');
-    rejections.assertIsSilent();
+    await rejections.assertIsSilent();
   } finally {
     rejections.stop();
     reportDelete?.();
@@ -117,6 +118,7 @@ test('a capture close that refuses still leaves the delete it ran beside answere
   const rejections = watchUnhandledRejections();
   const harDir = mkdtempForTestSync('limrun-har-observe-');
   state.deletes.length = 0;
+  const captureClosesBefore = state.captureCloses;
   state.captureCloseThrows = true;
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', networkHarDir: harDir },
@@ -137,11 +139,11 @@ test('a capture close that refuses still leaves the delete it ran beside answere
       // join window: the instance the delete confirmed is gone, and the release answers for it.
       const record = (await released) as Record<string, unknown>;
       expect(record.limrunInstanceId).toBe('android-instance-1');
-      expect(state.captureCloses).toBe(1);
+      expect(state.captureCloses - captureClosesBefore).toBe(1);
       expect(warningsOf(record).map((warning) => warning.message)).toEqual([
         'Capture record refused to be written',
       ]);
-      rejections.assertIsSilent();
+      await rejections.assertIsSilent();
     } finally {
       reportDelete?.();
     }
@@ -161,9 +163,12 @@ function warningsOf(record: Record<string, unknown>): Array<Record<string, unkno
 /**
  * Collects the rejections the process would die on: the daemon's failure mode for one is to take every
  * other session down with it, so a case whose disposal looses one fails here rather than in production.
+ * The check yields to a macrotask first: Node reports a rejection only after the current microtask drain,
+ * so asserting before that yield, or removing the listener without one, could pass a leaked rejection
+ * unseen.
  */
 function watchUnhandledRejections(): {
-  assertIsSilent: () => void;
+  assertIsSilent: () => Promise<void>;
   stop: () => void;
 } {
   const seen: unknown[] = [];
@@ -172,7 +177,10 @@ function watchUnhandledRejections(): {
   };
   process.on('unhandledRejection', watch);
   return {
-    assertIsSilent: () => {
+    assertIsSilent: async () => {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
       if (seen.length === 0) return;
       assert.fail(`expected no unhandled rejection, got ${String(seen[0])}`);
     },

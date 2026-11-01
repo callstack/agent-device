@@ -63,6 +63,13 @@ export type LimrunDisposalHost = Readonly<{
   deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<LimrunDeleteResult>;
   /** Ends one lease's capture and answers with its record, for a runtime that has captured something. */
   endCapture(owner: LimrunLeaseOwner): Promise<SettledNetworkCapture | undefined>;
+  /**
+   * Tells the runtime this owner stands for nothing any more, so its lease may be allocated again. Only a
+   * route that finished ending the instance and put down the host resources may say this, and only the
+   * runtime's own take answers for a lease that is over; this is for the route whose disposal had already
+   * refused its caller, and whose caller will never come back to be told the instance is gone.
+   */
+  ownerHoldsNothing(owner: LimrunLeaseOwner): void;
 }>;
 
 /**
@@ -97,7 +104,7 @@ export async function disposeLimrunLeaseOwner(
   // so no refusal of a resource this route already owns can reach the process as an unhandled rejection.
   const capture = keepLimrunObserved(host.endCapture(owner));
   const local = keepLimrunObserved(releaseOwnerResources(owner));
-  const instance = await endInstance(host, owner, session, instanceId);
+  const instance = await endInstance(host, owner, instanceId);
   const stuck = await awaitLocalTeardown(local);
   // The record is optional reporting joined last: a capture that refuses to be written cannot keep a release
   // from answering for the instance it ended, and is still listable once it does come to.
@@ -167,7 +174,7 @@ async function disposeUnansweredCreate(
   }
   // An instance is already named, so this disposal ends the billing it can see and leaves the create's silence
   // as what keeps the lease held.
-  const instance = await endInstance(host, owner, owner.session, instanceId);
+  const instance = await endInstance(host, owner, instanceId);
   // Reported, not thrown: a local step that refuses is one this disposal can no longer fix, and the delete
   // it ran beside has already been answered for.
   const stuck = await awaitLocalTeardown(releaseOwnerResources(owner));
@@ -190,10 +197,18 @@ async function endWhatTheCreateNamed(
   owner: LimrunLeaseOwner,
 ): Promise<void> {
   const instanceId = owner.rentedInstanceId;
+  let owed = false;
   if (instanceId !== undefined && owner.deletedInstanceId !== instanceId) {
-    await endInstance(host, owner, owner.session, instanceId);
+    const ended = await endInstance(host, owner, instanceId);
+    // Limrun has not given this instance back: the lease stays held for the next route, which is the one
+    // that will retry the delete and tell its caller what came of it.
+    owed = ended.cleanup === 'uncertain';
   }
-  await releaseOwnerResources(owner);
+  const stuck = await awaitLocalTeardown(releaseOwnerResources(owner));
+  // The instance is gone, or was never this runtime's to delete, and nothing local refuses: this owner
+  // stands for nothing, so the lease may be allocated again. No take will give it back the usual way — the
+  // disposal that took it had already refused its caller, and that caller is not coming back.
+  if (!owed && stuck === undefined) host.ownerHoldsNothing(owner);
 }
 
 /**
@@ -236,18 +251,19 @@ type LimrunInstanceEnd = Readonly<{
 /**
  * Ends one owner's instance within a deadline of its own. An attached instance is the caller's own and is never
  * deleted here; a delete Limrun already confirmed answers for itself; and a delete that never answers keeps the
- * lease held and stays observed, because what it confirms late is what frees the lease.
+ * lease held and stays observed, because what it confirms late is what frees the lease. Ownership is read from
+ * the owner and not from an argument, so no route that reaches an instance can default an attached one to
+ * being ours to delete.
  */
 async function endInstance(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
-  session: LimrunRuntimeSession | undefined,
   instanceId: string,
 ): Promise<LimrunInstanceEnd> {
   const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
   if (owner.deletedInstanceId === instanceId)
     return { cleanup: 'confirmed', failure: undefined, cause: undefined };
-  if ((session?.ownership ?? 'created') === 'attached') {
+  if ((owner.session?.ownership ?? 'created') === 'attached') {
     return { cleanup: 'attached', failure: undefined, cause: undefined };
   }
   const requested =
@@ -413,15 +429,28 @@ async function releaseLabeledInstances(
       ? await limrun.iosInstances.list({ labelSelector })
       : await limrun.androidInstances.list({ labelSelector });
   const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
+  const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
   const confirmed: string[] = [];
   for (const instanceId of instanceIds) {
-    const deleted = await deleteLimrunInstance(limrun, platform, instanceId);
+    const answer = await awaitLimrunWithinBudget(
+      deleteLimrunInstance(limrun, platform, instanceId),
+      DELETE_ANSWER_BUDGET_MS,
+    );
+    const deleted = answer.ok
+      ? answer.value
+      : {
+          failure: workOutstandingFailure(
+            `Delete of instance '${instanceId}'`,
+            DELETE_ANSWER_BUDGET_MS,
+          ),
+          cause: undefined,
+        };
     if (deleted.failure !== undefined) {
       throwUnconfirmedDelete(
         `Recovery could not confirm instance '${instanceId}' of lease '${lease.leaseId}' deleted`,
         { limrunInstanceId: instanceId, limrunInstanceIds: instanceIds },
         deleted.failure,
-        recoveryHint(instanceId, instanceIds, confirmed),
+        recoveryHint(instanceIds, confirmed),
         deleted.cause,
       );
     }
@@ -436,14 +465,12 @@ async function releaseLabeledInstances(
 }
 
 /** What the recovery refusal tells the operator to name to Limrun: the instance left, and those gone. */
-function recoveryHint(
-  instanceId: string,
-  instanceIds: readonly string[],
-  confirmed: string[],
-): string {
-  if (confirmed.length === 0) return `Ask Limrun to delete: ${instanceIds.join(', ')}.`;
+function recoveryHint(instanceIds: readonly string[], confirmed: readonly string[]): string {
+  const outstanding = instanceIds.filter((id) => !confirmed.includes(id));
+  const request = `Ask Limrun to delete: ${outstanding.join(', ')}.`;
+  if (confirmed.length === 0) return request;
   const gone = `${confirmed.length > 1 ? 'Instances' : 'Instance'} ${confirmed.join(', ')} ${confirmed.length > 1 ? 'were' : 'was'} confirmed deleted.`;
-  return `Ask Limrun to delete instance '${instanceId}'. ${gone}`;
+  return `${request} ${gone}`;
 }
 
 /**

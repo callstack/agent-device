@@ -355,15 +355,22 @@ test('two allocations that ask for traffic logs open one destination tunnel', as
   try {
     await runtime.leaseLifecycle.allocate?.(lease);
     // Both repeat allocations ask for the capture while the first one's tunnel is still being opened.
-    const first = runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true },
-    });
-    const second = runtime.leaseLifecycle.allocate?.(lease, {
-      flags: { providerNetworkLogs: true },
-    });
+    const first = refusalOf(
+      runtime.leaseLifecycle.allocate?.(lease, {
+        flags: { providerNetworkLogs: true },
+      }),
+    );
+    const second = refusalOf(
+      runtime.leaseLifecycle.allocate?.(lease, {
+        flags: { providerNetworkLogs: true },
+      }),
+    );
     await waitForNewOpen(captures, () => state.captureStarts);
+    const pending = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
+    assert.equal(pending?.status, 'pending');
+    assert.equal(pending?.provider, 'limrun');
     reportTunnel();
-    await Promise.all([first, second]);
+    assert.deepEqual(await Promise.all([first, second]), [undefined, undefined]);
 
     // The second allocation joined the start in flight rather than opening a tunnel whose `already_active`
     // refusal would be reported over the capture that is working.
@@ -798,14 +805,20 @@ test('a create that answers after its disposal gave up ends the instance it rent
     assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
     assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
     assert.ok((await refusedAllocation) instanceof AppError);
+    assert.equal(state.connectCount - connects, 1);
+    // The instance is gone and the session is down, so the lease is allocatable again: what the disposal
+    // that had already refused its caller owed is paid, and nothing is left owed to the next allocation.
+    state.createGate = undefined;
+    await runtime.leaseLifecycle.allocate?.(lease);
+    assert.equal(state.androidCreate.mock.calls.length - creates, 2);
   } finally {
     vi.useRealTimers();
     reportCreate();
     state.createGate = undefined;
     await runtime.shutdown();
   }
-  assert.equal(state.androidCreate.mock.calls.length - creates, 1);
-  assert.equal(state.connectCount - connects, 1);
+  assert.equal(state.androidCreate.mock.calls.length - creates, 2);
+  assert.deepEqual(deletedInstances(deletes), ['android-instance-1', 'android-instance-1']);
 });
 
 test('a create that fails after its session was built disconnects that session', async () => {

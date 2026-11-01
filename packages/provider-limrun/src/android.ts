@@ -247,6 +247,11 @@ async function runLimrunAndroidAdb(
  * started. A provider that hands a caller command to the reverse route — a reverse command queued inside an
  * operation of its own — carries no marker, so the manager cannot have a caller's mapping bound at a serial
  * that is on its way out. A marker set by one session never authorises another session's route.
+ *
+ * Requirement this rests on: the reverse manager must dispatch its caller's commands within the caller's
+ * async context. A manager that answered from work it scheduled outside this call (an internal queue drained
+ * by a timer, or a driver loop made at construction) would run the teardown's removals without this marker,
+ * and the mappings would survive the session they were made for.
  */
 const limrunAdbTeardownScope = new AsyncLocalStorage<boolean>();
 
@@ -346,9 +351,9 @@ function alreadyCleanedUp(session: LimrunAndroidAdbSession): AppError {
     `Limrun ADB tunnel for instance '${session.instanceId}' was already cleaned up`,
     {
       reason: 'limrun_adb_tunnel_cleaned_up',
-      // An unconfirmed delete holds this lease while its release is retried, so the hint cannot promise the
-      // lease is finished; it says what this route is closed to, and what the caller can still do.
-      hint: `This interactor's ADB tunnel is closed for lease '${session.lease.leaseId}'. Release the lease again, or open a new lease once its instance is confirmed deleted.`,
+      // The tunnel is gone whether the instance's delete confirmed or is still held for retry, so the hint
+      // sends the caller to a new lease, and to Limrun only for the state where a release would refuse again.
+      hint: `This interactor's ADB tunnel is closed for lease '${session.lease.leaseId}'. Open a new lease. If this lease's release was refused as an unconfirmed delete, ask Limrun to delete the instance first.`,
     },
   );
 }

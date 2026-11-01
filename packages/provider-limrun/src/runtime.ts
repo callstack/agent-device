@@ -604,6 +604,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     deleteInstance: async (platform, instanceId) =>
       await this.deleteCreatedInstance(platform, instanceId),
     endCapture: async (owner) => await this.capturesInstance?.end(owner),
+    // The one route that may free a lease without a take is the disposal that had already refused its
+    // caller: what it ends leaves nothing for a later allocation of that lease to be owed.
+    ownerHoldsNothing: (owner) => {
+      this.closeOwner(owner);
+    },
   };
 
   /** One instance delete. `undefined` is Limrun's confirmation that the instance is gone. */
@@ -647,6 +652,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (leaseId === undefined) return undefined;
     const captures = this.capturesInstance;
     if (captures === undefined) return undefined;
+    if (this.leases.get(leaseId)?.capture?.phase === 'starting') {
+      return { provider: LIMRUN_PROVIDER, status: 'pending', cloudArtifacts: [] };
+    }
     const { networkArtifacts } = await import('./network-har.ts');
     const capture = await captures.list(leaseId, this.leases.get(leaseId)?.capture);
     return capture && networkArtifacts(capture);

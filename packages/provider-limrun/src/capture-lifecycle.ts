@@ -9,9 +9,9 @@ import { errorMessage } from '@agent-device/kernel/errors';
 
 /**
  * How long a read or a teardown waits for a destination tunnel that is still being opened. The SDK gives this
- * handshake fifteen seconds of its own. Exported because the disposal that joins a capture end must give it
- * more than this: `end` waits the handshake inside its own call, and a join shorter than it would report a
- * stalled-but-in-budget handshake as a refused record.
+ * handshake fifteen seconds of its own; the extra five seconds is this runtime's margin over it. Exported
+ * because the disposal that joins a capture end must give it more than this: `end` waits the handshake inside
+ * its own call, and a join shorter than it would report a stalled-but-in-budget handshake as a refused record.
  */
 export const CAPTURE_OPEN_BUDGET_MS = 20_000;
 
@@ -112,14 +112,14 @@ export class LimrunCaptureLifecycle {
     // written and ended by the continuation below all the same, so it is never left without an owner.
     const opened = await awaitLimrunWithinBudget(state.opening, CAPTURE_OPEN_BUDGET_MS);
     if (opened.ok) return await endCapture(leaseId, opened.value, this.record);
-    void state.opening.then(
-      async (late) => {
+    // Observed end to end: this continuation outlives its budget, so neither a late tunnel that refuses to be
+    // written nor one whose close refuses may reach the process as an unhandled rejection. The tunnel it could
+    // not end stays the host's, reported by nothing else.
+    void state.opening
+      .then(async (late) => {
         await endCapture(leaseId, late, this.record);
-      },
-      // Observed: this continuation outlives its budget, so a late failure of it must not reach the process
-      // as an unhandled rejection. The tunnel it could not end stays the host's, reported by nothing else.
-      () => undefined,
-    );
+      })
+      .catch(() => undefined);
     return this.settled.get(leaseId);
   }
 
@@ -157,22 +157,25 @@ export class LimrunCaptureLifecycle {
 
   /**
    * Forgets the oldest released capture once every record this lifecycle can answer for passes the limit. A
-   * lease that is still held keeps its own record: what is still being captured is not the oldest thing to
-   * throw away.
+   * lease whose owner still holds a capture keeps its own record: the limit counts those captures, so the very
+   * same test spares them, and a record of any other lease is the oldest thing here to throw away.
    */
   private forgetRecordsOverLimit(): void {
-    while (this.settled.size + this.heldCaptureCount() > SETTLED_NETWORK_CAPTURE_LIMIT) {
-      const held = new Set([...this.host.heldOwners()].map((owner) => owner.lease.leaseId));
+    const held = this.heldCaptures();
+    while (this.settled.size + held.size > SETTLED_NETWORK_CAPTURE_LIMIT) {
       const released = [...this.settled.keys()].find((leaseId) => !held.has(leaseId));
       if (released === undefined) return;
       this.settled.delete(released);
     }
   }
 
-  private heldCaptureCount(): number {
-    let count = 0;
-    for (const owner of this.host.heldOwners()) count += owner.capture === undefined ? 0 : 1;
-    return count;
+  /** The leases whose owners still hold a capture: counted by the record limit and spared by it, one test both. */
+  private heldCaptures(): Set<string> {
+    const leaseIds = new Set<string>();
+    for (const owner of this.host.heldOwners()) {
+      if (owner.capture !== undefined) leaseIds.add(owner.lease.leaseId);
+    }
+    return leaseIds;
   }
 }
 
