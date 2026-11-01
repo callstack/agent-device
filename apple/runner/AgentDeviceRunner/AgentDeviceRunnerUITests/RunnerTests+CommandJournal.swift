@@ -46,21 +46,24 @@ enum RunnerCommandAdmission {
 
 /// The runner's one command-lifecycle record: what it holds for a `commandId`, whether that id may run,
 /// and what `status` answers for it. The transport asks this type before enqueuing anything, so one
-/// `commandId` is executed at most once, and a command that already finished cannot be replayed onto the
-/// device by a repeat that arrives after its answer was delivered.
+/// `commandId` is executed at most once in a runner process, and a command that already finished cannot be
+/// replayed onto the device by a repeat that arrives after its answer was delivered. The one release is
+/// `closedCommandIdSafetyValve`, and `pruneIfNeeded` states the bound it leaves.
 final class RunnerCommandJournal {
   private let lock = NSLock()
   private let maxEntries = 64
-  /// How many closed `commandId`s are remembered as bare ids once their entry is pruned. The window is
-  /// 64x the entry window because a marker holds no outcome body, only the id.
-  private let maxClosedCommandIds = 4096
+  /// Memory safety valve on closed-id retention, not an admission boundary: the journal keeps a closed
+  /// id as long as it runs, and this only stops a runner from growing without limit. It is 64x the entry
+  /// window because a marker holds no outcome body, only the id. Tests read it rather than repeat it.
+  static let closedCommandIdSafetyValve = 4096
   private let maxResponseJsonBytes = 16 * 1024
   private var entries: [String: RunnerCommandJournalEntry] = [:]
   private var order: [String] = []
   /// Ids whose dispatched execution closed and whose entry has since been pruned: the admission half of
   /// what the entry recorded, kept without a body so bounded memory cannot make a spent id executable
   /// again. It settles admission only. `status` still answers `notAccepted` for such an id, because the
-  /// outcome the entry held is gone and only the entry can report one.
+  /// outcome the entry held is gone and only the entry can report one. Retention ends only at the safety
+  /// valve above: an id older than that can be admitted again, and `pruneIfNeeded` states that bound.
   private var closedCommandIds: Set<String> = []
   private var closedOrder: [String] = []
 
@@ -229,7 +232,10 @@ final class RunnerCommandJournal {
       if entries[removable]?.dispatched == true {
         closedCommandIds.insert(removable)
         closedOrder.append(removable)
-        while closedOrder.count > maxClosedCommandIds {
+        while closedOrder.count > Self.closedCommandIdSafetyValve {
+          // The safety valve is the one place a spent id returns to circulation: a resend more than 4096
+          // completed commands later can re-execute, and the daemon resends only after a lost response
+          // within one request deadline.
           closedCommandIds.remove(closedOrder.removeFirst())
         }
       }

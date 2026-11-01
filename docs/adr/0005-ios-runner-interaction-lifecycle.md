@@ -15,7 +15,7 @@ Accepted
 - After `RUNNER_BUSY`, resend only read-only commands, under their busy-specific budget.
 - After `RUNNER_BUSY` on a mutating command, return the refusal to the caller without a resend.
 - Let the runner's command journal decide once per `commandId` whether a send executes, joins the running execution, or is answered from the recorded outcome, and register a joining send for that answer inside the same decision.
-- Never execute a `commandId` twice, never evict a journal entry whose execution has not finished, and keep the fact that a spent `commandId` was spent after its entry is pruned.
+- Never execute a `commandId` twice within one runner process, never evict a journal entry whose execution has not finished, and keep the fact that a spent `commandId` was spent after its entry is pruned. The kept fact is released only by a memory safety valve; see the admission rule below for its bound.
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 
@@ -129,12 +129,14 @@ Answering a closed `commandId` uses the retained response, then the retained err
 That refusal is a structured failure the daemon does not retry. Its dispatch disclosure stays `unknown`: the runner will not re-run the command, and only the runner knows whether an earlier send of that id reached the device.
 
 Pruning drops only closed entries, so a queued or executing command always stays queryable.
-When a closed entry that dispatched is pruned, the journal keeps its id in a separate closed-id window of 4096 ids, 64x the entry window, because a bare id carries no outcome body.
+When a closed entry that dispatched is pruned, the journal keeps its id in a separate closed-id window, because a bare id carries no outcome body.
 A resend inside that window is answered with the typed refusal; `status` still answers `notAccepted` for it, because only the entry can report an outcome.
 An id the runner refused before dispatch is left free, which is what the read-only busy resend depends on.
 `status` answers `notAccepted` only for an id the journal does not hold.
 The daemon cannot read `notAccepted` as a safe terminal state, so evicting a running command would push it to invalidate a session whose runner is still executing that command.
+The closed-id window holds 4096 ids, 64x the entry window, and it is a memory safety valve, not an admission boundary. Its residual bound, accepted here: within one runner process, a spent id is refused for the whole window, and the valve releases only the oldest id, so a resend arriving more than 4096 completed dispatches after a command can re-execute it. The daemon resends one `commandId` only after a lost response, within one request deadline, never that far behind. A journal that survives a runner restart is a new journal, and a fresh runner answers `notAccepted` for every id; a replay across a runner replacement is governed by charge settlement, not by this window.
 A watermark over issued ids was rejected: the daemon mints `commandId` as a random UUID per request, reuses one id across retries and across runner generations, and persists nothing, so no ordering exists to compare.
+Eviction on a daemon resend deadline was rejected: the daemon holds no per-id "never resend after this instant" value — its resend budgets are attempt counts and per-exchange timeouts redrawn per attempt, and a restart-and-replay can legitimately post the same id minutes later — so a deadline-based rule would need a wire-contract change this change does not make.
 
 Rejected: gating re-admission on the runner's read-only classification. That would replay a finished `snapshot` after its caller already received the answer, which is not the same command's first execution.
 

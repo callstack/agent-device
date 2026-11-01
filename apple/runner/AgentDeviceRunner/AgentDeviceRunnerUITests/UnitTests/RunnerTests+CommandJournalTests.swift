@@ -202,10 +202,19 @@ extension RunnerTests {
 
   /// Fills the 64-entry retention window the way a busy session does: closed commands, oldest first. The
   /// transport's own retention tests need the same pressure, so this is the one implementation.
-  func runnerJournalFinishOtherCommands(_ journal: RunnerCommandJournal, _ count: Int) {
+  /// `dispatched` decides whether that work reached the device, which is what spends an id.
+  func runnerJournalFinishOtherCommands(
+    _ journal: RunnerCommandJournal,
+    _ count: Int,
+    idPrefix: String = "settled",
+    dispatched: Bool = false
+  ) {
     for index in 0..<count {
-      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
+      let settled = runnerJournalCommand("readText", id: "\(idPrefix)-\(index)")
       journal.accept(command: settled)
+      if dispatched {
+        journal.markDispatched(command: settled)
+      }
       journal.finish(
         command: settled,
         response: Response(ok: true, data: DataPayload(text: "x"))
@@ -260,6 +269,18 @@ extension RunnerTests {
     )
   }
 
+  /// Closes one command whose work reached the device, which is what spends its id. Both closed-id tests
+  /// need the same opening, so this is the one implementation.
+  private func runnerJournalCloseDispatchedCommand(
+    _ journal: RunnerCommandJournal,
+    _ command: Command,
+    message: String
+  ) {
+    journal.accept(command: command)
+    journal.markDispatched(command: command)
+    journal.finish(command: command, response: Response(ok: true, data: DataPayload(message: message)))
+  }
+
   /// Bounded memory has to drop something, and what it may drop is the outcome body, never the fact that
   /// the id was spent. Otherwise the retention window itself becomes the bug the journal exists to
   /// prevent: finish a dispatched tap, let 64 later commands push its entry out, and a delayed resend of
@@ -267,12 +288,7 @@ extension RunnerTests {
   func testJournalNeverReAdmitsAPrunedCommandsId() throws {
     let journal = RunnerCommandJournal()
     let tap = runnerJournalCommand("tap", id: "spent-tap")
-    journal.accept(command: tap)
-    journal.markDispatched(command: tap)
-    journal.finish(
-      command: tap,
-      response: Response(ok: true, data: DataPayload(message: "tapped"))
-    )
+    runnerJournalCloseDispatchedCommand(journal, tap, message: "tapped")
     runnerJournalFinishOtherCommands(journal, 64)
 
     guard case .terminal(let outcome) = journal.accept(command: tap) else {
@@ -284,6 +300,43 @@ extension RunnerTests {
       RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
       "the pruned id's outcome body is gone, so the answer is the typed refusal, got \(String(describing: outcome.error?.code))"
     )
+  }
+
+  /// The closed-id window is a memory safety valve, not an admission boundary: a running journal keeps a
+  /// spent id, and the valve exists only so a runner cannot grow without limit. The rule it enforces is
+  /// therefore exact, and these are both halves of it: a spent id is refused for the whole window, and the
+  /// only id the valve releases is the oldest one, when a close fills the window past it. An id released
+  /// there is one whose command completed more than `closedCommandIdSafetyValve` dispatched commands
+  /// earlier, which is the residual bound ADR 0005 states: the daemon resends only after a lost response,
+  /// within one request deadline, never that far behind.
+  func testJournalRefusesASpentIdAcrossTheClosedIdWindowAndReleasesOnlyTheOldest() throws {
+    let journal = RunnerCommandJournal()
+    let tap = runnerJournalCommand("tap", id: "spent-tap")
+    runnerJournalCloseDispatchedCommand(journal, tap, message: "tapped")
+
+    // The first 63 closes only fill the 64-entry window and leave no marker; every close after them adds
+    // exactly one. This leaves the safety valve exactly full, with `spent-tap` at its front.
+    runnerJournalFinishOtherCommands(
+      journal,
+      RunnerCommandJournal.closedCommandIdSafetyValve + 63,
+      idPrefix: "window",
+      dispatched: true
+    )
+    guard case .terminal(let refusal) = journal.accept(command: tap) else {
+      return XCTFail("a spent id must stay refused for the whole closed-id window")
+    }
+    XCTAssertEqual(
+      refusal.error?.code,
+      RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
+      "the last close inside the window must still refuse the spent id"
+    )
+
+    // One more dispatched close fills the window, and the valve moves on by exactly one id.
+    runnerJournalFinishOtherCommands(journal, 1, idPrefix: "valve", dispatched: true)
+
+    guard case .execute = journal.accept(command: tap) else {
+      return XCTFail("the valve must release exactly the oldest closed id")
+    }
   }
 
   /// The one id pruning must leave free: a command the runner refused before dispatch left nothing on the
