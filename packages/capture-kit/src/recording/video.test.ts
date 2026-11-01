@@ -8,7 +8,7 @@ import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { compileSwiftSourceText } from './swift-cache.ts';
-import { isPlayableVideo, waitForPlayableVideo } from './video.ts';
+import { hasVideoContainer, isPlayableVideo, waitForPlayableVideo } from './video.ts';
 
 vi.mock('@agent-device/host-kit/command', () => ({
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -69,27 +69,51 @@ test('each Swift cache root compiles its own validator, and a root reuses the on
   ).toEqual(['/cache/one', '/cache/two']);
 });
 
-test('a deadline, not the fixed compile bound, limits a cold validator compile', async () => {
-  // A cold compile on a loaded CI runner outlasted the fixed 30 s bound while record stop had
-  // most of its 70 s finalization budget left, so the stop failed on a playable recording.
-  const mp4 = writeFixture('deadline.mp4', Buffer.concat([ftyp, moov]));
-  vi.mocked(compileSwiftSourceText).mockClear();
+test('callers share one validator compile, and each waits for it within its own budget', async () => {
+  // A cold compile on a loaded CI runner outlasted a fixed 30 s wait while record stop had most of
+  // its 70 s finalization budget left. A caller without a deadline that starts the compile first must
+  // not impose its 30 s wait on a concurrent caller that has a deadline.
+  const mp4 = writeFixture('shared-compile.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/shared' }, cwd: directory };
+  await hasVideoContainer(mp4);
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    vi.mocked(compileSwiftSourceText)
+      .mockClear()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(() => resolve('/bin/true'), 45_000)),
+      );
 
-  await waitForPlayableVideo(mp4, {
-    host: { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/deadline' }, cwd: directory },
-    deadline: Deadline.fromTimeoutMs(70_000),
-  });
-  await isPlayableVideo(mp4, {
-    env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/no-deadline' },
-    cwd: directory,
-  });
+    const withoutDeadline = isPlayableVideo(mp4, host);
+    const withDeadline = isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(70_000));
+    const withoutDeadlineRejected = expect(withoutDeadline).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'video_validator_compile_timeout', timeoutMs: 30_000 },
+    });
+    await vi.advanceTimersByTimeAsync(45_000);
+
+    await withoutDeadlineRejected;
+    await expect(withDeadline).resolves.toBe(true);
+    expect(compileSwiftSourceText).toHaveBeenCalledOnce();
+    expect(vi.mocked(compileSwiftSourceText).mock.calls[0]![0].timeoutMs).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('the validator run after a compile stays inside the caller deadline', async () => {
+  const mp4 = writeFixture('run-clamp.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/run-clamp' }, cwd: directory };
+
+  await isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(5_000));
+  await isPlayableVideo(mp4, host);
 
   const [withDeadline, withoutDeadline] = vi
-    .mocked(compileSwiftSourceText)
-    .mock.calls.map(([params]) => params.timeoutMs);
-  expect(withDeadline).toBeGreaterThan(69_000);
-  expect(withDeadline).toBeLessThanOrEqual(70_000);
-  expect(withoutDeadline).toBe(30_000);
+    .mocked(runCmd)
+    .mock.calls.map(([, , options]) => options?.timeoutMs);
+  expect(withDeadline).toBeGreaterThan(0);
+  expect(withDeadline).toBeLessThanOrEqual(5_000);
+  expect(withoutDeadline).toBe(10_000);
 });
 
 test('reaches the semantic validator with an MP4 container whose last box runs past the file', async () => {

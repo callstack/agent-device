@@ -35,11 +35,14 @@ semaphore.wait()
 exit(exitCode)
 `.trim();
 
-// A cold Swift module cache makes this compile take over 30 s on a loaded CI runner, so a caller
-// with a deadline, such as `record stop`, bounds the compile by that deadline instead.
-const VALIDATOR_COMPILE_TIMEOUT_MS = 30_000;
+// A cold Swift module cache makes the validator compile take over 30 s on a loaded CI runner, so a
+// caller with a deadline, such as `record stop`, waits for the compile until that deadline instead.
+const VALIDATOR_COMPILE_WAIT_MS = 30_000;
+const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
 // A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
+// Callers share one compile, bounded by the Swift cache's own compile timeout; each caller waits for
+// it only within its own budget.
 const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
 
 export async function waitForStableFile(
@@ -74,8 +77,8 @@ export async function waitForStableFile(
 }
 
 /**
- * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
- * deadline instead of its own fixed bound.
+ * Whether the file is a playable video. With a `deadline`, the validator, including a cold compile,
+ * runs until the deadline instead of its own fixed bounds.
  */
 export async function isPlayableVideo(
   filePath: string,
@@ -88,10 +91,17 @@ export async function isPlayableVideo(
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
   try {
-    const validatorPath = await getVideoValidatorExecutablePath(host, deadline);
+    const validatorPath = await waitForValidatorCompile(
+      getVideoValidatorExecutablePath(host),
+      deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
+    );
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
-      timeoutMs: 10_000,
+      // `runCmd` reads a timeout of 0 as none.
+      timeoutMs: Math.max(
+        1,
+        Math.min(VALIDATOR_RUN_TIMEOUT_MS, deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS),
+      ),
       env: buildSwiftToolEnv(host.env),
     });
     if (result.exitCode === 0) {
@@ -106,10 +116,7 @@ export async function isPlayableVideo(
   }
 }
 
-async function getVideoValidatorExecutablePath(
-  host: HostEnvironment,
-  deadline: Deadline | undefined,
-): Promise<string> {
+function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
   const cacheRoot = getSwiftCacheRoot(host.env);
   let compiled = videoValidatorExecutablePaths.get(cacheRoot);
   if (!compiled) {
@@ -117,16 +124,38 @@ async function getVideoValidatorExecutablePath(
       host,
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
-      // `runCmd` reads a timeout of 0 as none.
-      timeoutMs: deadline ? Math.max(1, deadline.remainingMs()) : VALIDATOR_COMPILE_TIMEOUT_MS,
     });
     videoValidatorExecutablePaths.set(cacheRoot, compiled);
+    // A failed compile is evicted even when every caller stopped waiting for it.
+    const failed = compiled;
+    failed.catch(() => {
+      if (videoValidatorExecutablePaths.get(cacheRoot) === failed) {
+        videoValidatorExecutablePaths.delete(cacheRoot);
+      }
+    });
   }
+  return compiled;
+}
+
+async function waitForValidatorCompile(compiled: Promise<string>, waitMs: number): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new AppError(
+            'COMMAND_FAILED',
+            `The video validator did not compile within ${Math.round(waitMs)}ms`,
+            { reason: 'video_validator_compile_timeout', timeoutMs: waitMs, retriable: true },
+          ),
+        ),
+      waitMs,
+    );
+  });
   try {
-    return await compiled;
-  } catch (error) {
-    videoValidatorExecutablePaths.delete(cacheRoot);
-    throw error;
+    return await Promise.race([compiled, expired]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
