@@ -5,6 +5,7 @@ import { test } from 'vitest';
 import Limrun from '@limrun/api';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { deleteLimrunInstance } from './client-options.ts';
 import { allocateLimrunAndroidSession, allocateLimrunIosSession } from './session-allocation.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
@@ -93,9 +94,53 @@ test('an Android instance that answers without its endpoints is reported as rent
   assert.deepEqual(routes, ['POST /v1/android_instances']);
 });
 
+/**
+ * The instance delete carries the same single-attempt contract as the create, and answers for the one refusal
+ * that names the outcome it was after: an instance Limrun already removed is gone, which is what the delete
+ * was asked to achieve.
+ */
+
+test('the instance delete asks the SDK for one attempt, so a lost answer is not repeated behind this runtime’s back', async () => {
+  const routes: string[] = [];
+  const server = await startInstanceServer(async (request) => {
+    routes.push(`${String(request.method)} ${String(request.path)}`);
+    // The instance may well be gone; this answer never arrives, and only the daemon's budgets retry it.
+    request.drop();
+  });
+  try {
+    const deleted = await deleteLimrunInstance(clientFor(server), 'android', 'android-instance-1');
+    assert.deepEqual(routes, ['DELETE /v1/android_instances/android-instance-1']);
+    assert.match(String(deleted.failure), /connection|socket|abort|fetch|closed/i);
+    assert.ok(deleted.cause !== undefined, 'the refusal is reported, not swallowed');
+  } finally {
+    await server.close();
+  }
+});
+
+test('an instance delete that finds the instance already gone confirms it deleted', async () => {
+  const routes: string[] = [];
+  const server = await startInstanceServer(async (request) => {
+    routes.push(`${String(request.method)} ${String(request.path)}`);
+    await request.respond(404, JSON.stringify({ error: { message: 'instance not found' } }));
+  });
+  try {
+    const deleted = await deleteLimrunInstance(clientFor(server), 'ios', 'ios-instance-1');
+    // Gone is gone: the delete was not refused, so no later route re-issues it and no lease is held for it.
+    assert.equal(deleted.failure, undefined);
+    assert.equal(deleted.cause, undefined);
+    assert.deepEqual(routes, ['DELETE /v1/ios_instances/ios-instance-1']);
+  } finally {
+    await server.close();
+  }
+});
+
+function clientFor(server: InstanceServer): Limrun {
+  return new Limrun({ apiKey: server.key, baseURL: server.baseUrl });
+}
+
 function allocationParams(server: InstanceServer) {
   return {
-    limrun: new Limrun({ apiKey: server.key, baseURL: server.baseUrl }),
+    limrun: clientFor(server),
     lease: {
       leaseId: 'lease-single-attempt',
       tenantId: 'team-a',

@@ -243,21 +243,20 @@ async function runLimrunAndroidAdb(
 }
 
 /**
- * The reverse manager's own route to the device. It is the session's route while the session is live, and
- * cleanup's route of its own once the session is retired: clearing reverse mappings means reaching the device
- * that is about to be disconnected, and that has to stay possible after every caller of this session was
- * refused. Only the cleanup's own dispatches carry its teardown scope, so no caller command is ever
- * dispatched at the serial the teardown is ending.
- */
-/**
  * Whether one dispatch belongs to a session's teardown: true only for the dispatches that teardown itself
- * started. The reverse manager is given this predicate as its route, and a provider that hands a caller
- * command to it — a reverse command queued inside an operation of its own — carries no marker, so the
- * manager cannot have a caller's mapping bound at a serial that is on its way out. A marker set by one
- * session never authorises another session's route.
+ * started. A provider that hands a caller command to the reverse route — a reverse command queued inside an
+ * operation of its own — carries no marker, so the manager cannot have a caller's mapping bound at a serial
+ * that is on its way out. A marker set by one session never authorises another session's route.
  */
 const limrunAdbTeardownScope = new AsyncLocalStorage<boolean>();
 
+/**
+ * The reverse manager's own route to the device. It is the session's route while the session is live, and
+ * cleanup's route of its own once the session is retired: clearing reverse mappings means reaching the device
+ * that is about to be disconnected, and that has to stay possible after every caller of this session was
+ * refused. Only a dispatch that carries its session's teardown scope may use the teardown's executor, so no
+ * caller command is ever dispatched at the serial the teardown is ending.
+ */
 async function runLimrunAndroidReverseAdb(
   session: LimrunAndroidAdbSession,
   args: readonly string[],

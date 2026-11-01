@@ -8,13 +8,6 @@ import { awaitLimrunWithinBudget } from './lifecycle-budget.ts';
 import { errorMessage } from '@agent-device/kernel/errors';
 
 /**
- * What one lease's network capture goes through: starting it, ending it, and answering what `artifacts` can
- * say about it. The owner is where a capture lives, including a start whose destination tunnel is still being
- * opened, so the allocation that started one, a release that took the lease over, and an artifacts read all
- * look at the same thing and none of them can end up owning a tunnel nobody can close.
- */
-
-/**
  * How long a read or a teardown waits for a destination tunnel that is still being opened. The SDK gives this
  * handshake fifteen seconds of its own.
  */
@@ -32,6 +25,12 @@ export type LimrunCaptureHost = Readonly<{
   heldOwners(): Iterable<LimrunLeaseOwner>;
 }>;
 
+/**
+ * What one lease's network capture goes through: starting it, ending it, and answering what `artifacts` can
+ * say about it. The owner is where a capture lives, including a start whose destination tunnel is still being
+ * opened, so the allocation that started one, a release that took the lease over, and an artifacts read all
+ * look at the same thing and none of them can end up owning a tunnel nobody can close.
+ */
 export class LimrunCaptureLifecycle {
   /** The capture records this lifecycle settled, which outlive their lease so `artifacts` can still name them. */
   private readonly settled = new Map<string, SettledNetworkCapture>();

@@ -1,7 +1,17 @@
 import { test, vi, expect } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { disposeLimrunLeaseOwner, type LimrunDisposalHost } from './lease-release.ts';
-import type { LimrunCreateOutcome, LimrunLeaseOwner } from './lease-ownership.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  cleanupLeftInstancesRunning,
+  createLeftInstanceRunning,
+  disposeLimrunLeaseOwner,
+  type LimrunDisposalHost,
+} from './lease-release.ts';
+import type {
+  LimrunCreateOutcome,
+  LimrunDisposalOutcome,
+  LimrunLeaseOwner,
+} from './lease-ownership.ts';
 
 /*
  * Each wait is longer than the budgets it steps past: a disposal's create wait, and everything a disposal
@@ -22,7 +32,7 @@ test('a create that answers late joins the delete its disposal already started',
     await new Promise<void>((resolve) => {
       reportDelete = resolve;
     });
-    return undefined;
+    return { failure: undefined, cause: undefined };
   });
   const host: LimrunDisposalHost = {
     deleteInstance: deleteHost,
@@ -59,6 +69,76 @@ test('a create that answers late joins the delete its disposal already started',
   }
   expect(owner.deletedInstanceId).toBe('android-instance-1');
 });
+
+/**
+ * A delete Limrun refused keeps its own error on the disposal outcome, and the refusals every route raises
+ * carry it as their cause — where a cause renders — beside the text that says the delete was unconfirmed.
+ */
+test("a refused delete reports its own error as the refusal's cause", async () => {
+  await import('./lifecycle-budget.ts');
+  const refusal = new Error('Limrun refused to delete the instance');
+  const host: LimrunDisposalHost = {
+    deleteInstance: async () => ({
+      failure: 'Limrun refused to delete the instance',
+      cause: refusal,
+    }),
+    endCapture: async () => undefined,
+  };
+  const owner = ownerWithRentedInstance(
+    Promise.resolve<LimrunCreateOutcome>({ status: 'failed', error: new Error('boot failed') }),
+  );
+  const outcome = await disposeLimrunLeaseOwner(host, owner);
+  expect(outcome.cleanup).toBe('uncertain');
+  expect(outcome.cause).toBe(refusal);
+
+  // The allocation's refusal names both what it could not settle and why its create failed at all.
+  const lease = (owner as unknown as { lease: DeviceLease }).lease;
+  const thrown = captureThrow(() =>
+    createLeftInstanceRunning(lease, outcome, new Error('boot failed')),
+  );
+  expect(thrown.details?.reason).toBe('limrun_instance_delete_unconfirmed');
+  expect(String(thrown.details?.cause)).toContain('boot failed');
+  expect(thrown.cause).toBe(refusal);
+});
+
+/**
+ * A daemon close that could not end two leases names both of them and why each is still held, not only the
+ * first — every one of them may need to be named to Limrun by hand.
+ */
+test('a close that could not end two leases reports both reasons', async () => {
+  const refusal = new Error('Limrun refused to delete the instance');
+  const outcomes: LimrunDisposalOutcome[] = [
+    {
+      cleanup: 'uncertain',
+      instanceId: 'android-instance-1',
+      failure: 'delete one refused',
+      cause: refusal,
+      capture: undefined,
+    },
+    {
+      cleanup: 'uncertain',
+      instanceId: undefined,
+      failure: undefined,
+      cause: undefined,
+      capture: undefined,
+    },
+  ];
+  const thrown = captureThrow(() => cleanupLeftInstancesRunning(outcomes));
+  expect(thrown.details?.reason).toBe('limrun_instance_delete_unconfirmed');
+  expect(thrown.details?.limrunInstanceIds).toEqual(['android-instance-1']);
+  expect(String(thrown.details?.cause)).toContain('delete one refused');
+  expect(String(thrown.details?.cause)).toContain('an unconfirmed delete');
+  expect(thrown.cause).toBe(refusal);
+});
+
+function captureThrow(raise: () => never): AppError {
+  try {
+    raise();
+  } catch (error) {
+    return error as AppError;
+  }
+  throw new Error('expected the refusal to throw');
+}
 
 /** An owner whose create has rented an instance but has not answered, taken by a disposal. */
 function ownerWithRentedInstance(creation: Promise<LimrunCreateOutcome>): LimrunLeaseOwner {

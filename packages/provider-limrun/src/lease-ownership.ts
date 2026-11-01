@@ -63,7 +63,7 @@ export type LimrunLeaseOwner = {
    * a delete whose answer this disposal stopped waiting for is still the delete that instance is getting.
    */
   pendingDelete:
-    | Readonly<{ instanceId: string; requested: Promise<string | undefined> }>
+    | Readonly<{ instanceId: string; requested: Promise<LimrunDeleteResult> }>
     | undefined;
 };
 
@@ -99,8 +99,22 @@ export type LimrunDisposalOutcome = Readonly<{
   instanceId: string | undefined;
   /** Why a disposal could not be confirmed; absent once the instance is gone. */
   failure: string | undefined;
+  /**
+   * The refusal behind that failure, when one exists: the delete's own error. Reported as an error's cause,
+   * where it renders, rather than only as a string in details.
+   */
+  cause: unknown;
   /** The released capture's record, so a refusal can still carry the HAR that was written. */
   capture: SettledNetworkCapture | undefined;
+}>;
+
+/**
+ * What one instance delete came to: whether Limrun has the instance gone, and what refused it otherwise.
+ */
+export type LimrunDeleteResult = Readonly<{
+  failure: string | undefined;
+  /** The refusal behind that failure, for whoever has to report it. */
+  cause: unknown;
 }>;
 
 /**

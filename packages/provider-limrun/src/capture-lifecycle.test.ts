@@ -21,6 +21,10 @@ test('a repeat allocation stops waiting on a destination tunnel that never answe
     joined = true;
   });
   try {
+    // Below the budget the join is still waiting: only its expiry ends it, not an early return.
+    await vi.advanceTimersByTimeAsync(19_000);
+    await Promise.resolve();
+    assert.ok(!joined, 'expected the join to keep waiting inside its budget');
     await vi.advanceTimersByTimeAsync(CAPTURE_OPEN_WAIT_MS);
     await joining;
   } finally {

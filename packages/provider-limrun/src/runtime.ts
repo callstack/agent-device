@@ -40,7 +40,12 @@ import type {
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
-import { LIMRUN_CLIENT_ID, limrunUserAgent, requireLimrunOrgClient } from './client-options.ts';
+import {
+  deleteLimrunInstance,
+  LIMRUN_CLIENT_ID,
+  limrunUserAgent,
+  requireLimrunOrgClient,
+} from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
@@ -52,6 +57,7 @@ import type {
 import type {
   LimrunAppAlias,
   LimrunCreateOutcome,
+  LimrunDeleteResult,
   LimrunDisposalOutcome,
   LimrunLeaseOwner,
   LimrunRuntimeSession,
@@ -282,11 +288,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
    */
   async shutdown(): Promise<void> {
     this.shutDown = true;
-    // Snapshot before anything is awaited: `allocate` refuses once this flag is set and publishes an
-    // owner only where none exists, and nothing between the flag and this loop awaits. So no create can
-    // start here, and every create already running has an owner for this loop to take.
+    // Snapshot into a binding before anything is awaited: `allocate` refuses once this flag is set and
+    // publishes an owner only where none exists, and nothing between the flag and this snapshot awaits. So
+    // no create can start here, and every create already running has an owner in this snapshot to take.
+    const held = [...this.leases.values()];
     const outcomes = await Promise.all(
-      [...this.leases.values()].map(async (owner) => await this.take(owner, 'shutdown')),
+      held.map(async (owner) => await this.take(owner, 'shutdown')),
     );
     // An instance Limrun would not give back is still billed, and this process will not stop it. The
     // plugin's close is where an operator learns what a daemon close left running, so the instance and
@@ -365,7 +372,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const outcome = await this.settleFailedCreate(owner);
     if (outcome?.cleanup === 'uncertain') {
       const { createLeftInstanceRunning } = await import('./lease-release.ts');
-      throw createLeftInstanceRunning(owner.lease, outcome);
+      throw createLeftInstanceRunning(owner.lease, outcome, create.error);
     }
     throw create.error;
   }
@@ -392,6 +399,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       if (owner.state.phase !== 'allocating') return undefined;
       const retried = this.createForLease(owner, context);
       owner.creation = retried;
+      // Observed from the moment it is published, like the original creation: the owner's type promises a
+      // creation that cannot reach the process unobserved, and this keeps that promise by construction, not
+      // only by the fact that `createForLease` reports its failures as outcomes.
+      void retried.catch(() => undefined);
       return await retried;
     }
   }
@@ -574,6 +585,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         cleanup: 'uncertain',
         instanceId: owner.rentedInstanceId,
         failure: errorMessage(error),
+        cause: error,
         capture: undefined,
       });
     });
@@ -600,18 +612,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async deleteCreatedInstance(
     platform: LimrunPlatform,
     instanceId: string,
-  ): Promise<string | undefined> {
-    try {
-      const limrun = this.orgClient('Deleting an instance');
-      if (platform === 'ios') {
-        await limrun.iosInstances.delete(instanceId);
-      } else {
-        await limrun.androidInstances.delete(instanceId);
-      }
-      return undefined;
-    } catch (error) {
-      return errorMessage(error);
-    }
+  ): Promise<LimrunDeleteResult> {
+    const limrun = this.orgClient('Deleting an instance');
+    return await deleteLimrunInstance(limrun, platform, instanceId);
   }
 
   /** Removes an owner once it holds nothing, and only while it is still the map's owner for that lease. */

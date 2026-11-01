@@ -1,9 +1,11 @@
 import type Limrun from '@limrun/api';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
+import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
 import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
 import type {
+  LimrunDeleteResult,
   LimrunDisposalOutcome,
   LimrunLeaseOwner,
   LimrunRuntimeSession,
@@ -50,8 +52,8 @@ const CAPTURE_RECORD_BUDGET_MS = 15_000;
  * reaching back into the routes that allocate and read one, and without deciding when a lease is free again.
  */
 export type LimrunDisposalHost = Readonly<{
-  /** One instance delete. `undefined` answers that Limrun confirmed the instance is gone. */
-  deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<string | undefined>;
+  /** One instance delete: whether Limrun has the instance gone, and what refused it otherwise. */
+  deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<LimrunDeleteResult>;
   /** Ends one lease's capture and answers with its record, for a runtime that has captured something. */
   endCapture(owner: LimrunLeaseOwner): Promise<SettledNetworkCapture | undefined>;
 }>;
@@ -97,6 +99,7 @@ export async function disposeLimrunLeaseOwner(
         joined.ok ? undefined : workOutstandingFailure('Capture record', CAPTURE_RECORD_BUDGET_MS),
       ),
     ),
+    cause: instance.cause,
     capture: joined.ok ? joined.value : undefined,
   };
 }
@@ -130,6 +133,7 @@ async function disposeUnansweredCreate(
       cleanup: 'uncertain',
       instanceId: undefined,
       failure: outstanding,
+      cause: undefined,
       capture: await capture,
     };
   }
@@ -143,6 +147,7 @@ async function disposeUnansweredCreate(
     cleanup: instance.cleanup,
     instanceId,
     failure: joinOutcomeFailures(instance.failure, stuck ?? outstanding),
+    cause: instance.cause,
     capture: await capture,
   };
 }
@@ -175,6 +180,7 @@ async function disposeUnrented(
     cleanup: 'none',
     instanceId: undefined,
     failure: undefined,
+    cause: undefined,
     capture: await awaitEndedCapture(host, owner),
   };
 }
@@ -192,6 +198,13 @@ async function awaitEndedCapture(
   return ended.ok ? ended.value : undefined;
 }
 
+/** What ending one instance came to: whether Limrun confirmed it gone, and what it said otherwise. */
+type LimrunInstanceEnd = Readonly<{
+  cleanup: LimrunDisposalOutcome['cleanup'];
+  failure: string | undefined;
+  cause: unknown;
+}>;
+
 /**
  * Ends one owner's instance within a deadline of its own. An attached instance is the caller's own and is never
  * deleted here; a delete Limrun already confirmed answers for itself; and a delete that never answers keeps the
@@ -202,11 +215,12 @@ async function endInstance(
   owner: LimrunLeaseOwner,
   session: LimrunRuntimeSession | undefined,
   instanceId: string,
-): Promise<Readonly<{ cleanup: LimrunDisposalOutcome['cleanup']; failure: string | undefined }>> {
+): Promise<LimrunInstanceEnd> {
   const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
-  if (owner.deletedInstanceId === instanceId) return { cleanup: 'confirmed', failure: undefined };
+  if (owner.deletedInstanceId === instanceId)
+    return { cleanup: 'confirmed', failure: undefined, cause: undefined };
   if ((session?.ownership ?? 'created') === 'attached') {
-    return { cleanup: 'attached', failure: undefined };
+    return { cleanup: 'attached', failure: undefined, cause: undefined };
   }
   const requested =
     owner.pendingDelete?.instanceId === instanceId
@@ -226,8 +240,8 @@ async function endInstance(
   }
   const deleted = await awaitLimrunWithinBudget(requested, DELETE_ANSWER_BUDGET_MS);
   if (!deleted.ok) {
-    void requested.then((failure) => {
-      if (failure === undefined) confirmLateDelete(owner, instanceId);
+    void requested.then((answer) => {
+      if (answer.failure === undefined) confirmLateDelete(owner, instanceId);
     });
     return {
       cleanup: 'uncertain',
@@ -235,12 +249,14 @@ async function endInstance(
         `Delete of instance '${instanceId}'`,
         DELETE_ANSWER_BUDGET_MS,
       ),
+      cause: undefined,
     };
   }
-  if (deleted.value === undefined) owner.deletedInstanceId = instanceId;
+  if (deleted.value.failure === undefined) owner.deletedInstanceId = instanceId;
   return {
-    cleanup: deleted.value === undefined ? 'confirmed' : 'uncertain',
-    failure: deleted.value,
+    cleanup: deleted.value.failure === undefined ? 'confirmed' : 'uncertain',
+    failure: deleted.value.failure,
+    cause: deleted.value.cause,
   };
 }
 
@@ -362,10 +378,12 @@ async function releaseLabeledInstances(
       : await limrun.androidInstances.list({ labelSelector });
   const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
   for (const instanceId of instanceIds) {
+    // One attempt each, the same contract every other instance delete keeps: this route's own retries are
+    // the daemon's expiry sweeps, not the SDK's.
     if (platform === 'ios') {
-      await limrun.iosInstances.delete(instanceId);
+      await limrun.iosInstances.delete(instanceId, LIMRUN_SINGLE_ATTEMPT);
     } else {
-      await limrun.androidInstances.delete(instanceId);
+      await limrun.androidInstances.delete(instanceId, LIMRUN_SINGLE_ATTEMPT);
     }
   }
   if (instanceIds.length === 0) return undefined;
@@ -379,19 +397,14 @@ async function releaseLabeledInstances(
  */
 function releaseLeftInstanceRunning(leaseId: string, outcome: LimrunDisposalOutcome): never {
   const { instanceId } = outcome;
-  throw new AppError(
-    'COMMAND_FAILED',
+  return throwUnconfirmedDelete(
     `Limrun instance for lease '${leaseId}' was not confirmed deleted`,
-    {
-      reason: 'limrun_instance_delete_unconfirmed',
-      retriable: true,
-      ...(instanceId === undefined ? {} : { limrunInstanceId: instanceId }),
-      ...(outcome.failure === undefined ? {} : { cause: outcome.failure }),
-      hint:
-        instanceId === undefined
-          ? `Release lease '${leaseId}' again once its instance create names the instance it rented.`
-          : `Release lease '${leaseId}' again, or ask Limrun to delete instance '${instanceId}'.`,
-    },
+    instanceId === undefined ? {} : { limrunInstanceId: instanceId },
+    outcome.failure,
+    instanceId === undefined
+      ? `Release lease '${leaseId}' again once its instance create names the instance it rented.`
+      : `Release lease '${leaseId}' again, or ask Limrun to delete instance '${instanceId}'.`,
+    outcome.cause,
   );
 }
 
@@ -421,6 +434,7 @@ export function allocationRefusedForTake(
         ? { retriable: true, ...(outcome.failure === undefined ? {} : { cause: outcome.failure }) }
         : {}),
     },
+    outcome.cause,
   );
 }
 
@@ -431,21 +445,58 @@ export function allocationRefusedForTake(
 export function createLeftInstanceRunning(
   lease: DeviceLease,
   outcome: LimrunDisposalOutcome,
+  createError: unknown,
 ): never {
   const { instanceId } = outcome;
+  return throwUnconfirmedDelete(
+    `Limrun lease '${lease.leaseId}' could not be allocated, and its instance could not be deleted`,
+    instanceId === undefined ? {} : { limrunInstanceId: instanceId },
+    // Both refusals belong to this one answer: why the allocation failed, and why its instance is still
+    // billed. The delete's text leads the report because it is what the operator still has to settle.
+    joinFailureText(
+      outcome.failure,
+      createError === undefined ? undefined : `create failed: ${errorMessage(createError)}`,
+    ),
+    instanceId === undefined
+      ? `Ask Limrun what lease '${lease.leaseId}' rented — this runtime could not name the instance.`
+      : `Ask Limrun to delete instance '${instanceId}' — this runtime could not confirm the delete.`,
+    outcome.cause ?? createError,
+  );
+}
+
+/** Two reasons one report carries, delete first, when both exist. */
+function joinFailureText(
+  first: string | undefined,
+  second: string | undefined,
+): string | undefined {
+  if (first === undefined) return second;
+  return second === undefined ? first : `${first}; ${second}`;
+}
+
+/**
+ * The refusal every route that could not confirm an instance delete raises. The instance ids go into details,
+ * why the delete failed goes into `details.cause` as text, and the delete's own error goes where a cause
+ * renders — the error's own cause. Each caller names its instances the way its own report reads: a single
+ * lease its one id, a close the list of what it left.
+ */
+function throwUnconfirmedDelete(
+  message: string,
+  instanceDetails: Readonly<Record<string, unknown>>,
+  failure: string | undefined,
+  hint: string,
+  cause: unknown,
+): never {
   throw new AppError(
     'COMMAND_FAILED',
-    `Limrun lease '${lease.leaseId}' could not be allocated, and its instance could not be deleted`,
+    message,
     {
       reason: 'limrun_instance_delete_unconfirmed',
       retriable: true,
-      ...(instanceId === undefined ? {} : { limrunInstanceId: instanceId }),
-      ...(outcome.failure === undefined ? {} : { cause: outcome.failure }),
-      hint:
-        instanceId === undefined
-          ? `Ask Limrun what lease '${lease.leaseId}' rented — this runtime could not name the instance.`
-          : `Ask Limrun to delete instance '${instanceId}' — this runtime could not confirm the delete.`,
+      ...instanceDetails,
+      ...(failure === undefined ? {} : { cause: failure }),
+      hint,
     },
+    cause,
   );
 }
 
@@ -455,27 +506,23 @@ export function createLeftInstanceRunning(
  * the operator needs both the count and the reason.
  */
 export function cleanupLeftInstancesRunning(outcomes: readonly LimrunDisposalOutcome[]): never {
-  const leftRunning = outcomes.map((outcome) => outcome.instanceId);
-  const known = leftRunning.filter((id) => id !== undefined);
+  const known = outcomes.map((outcome) => outcome.instanceId).filter((id) => id !== undefined);
   const plural = outcomes.length === 1 ? '' : 's';
-  throw new AppError(
-    'COMMAND_FAILED',
+  // Why every lease this close could not end, not only the first: each failure is a separate thing the
+  // operator may have to name to Limrun.
+  return throwUnconfirmedDelete(
     `Limrun cleanup left ${String(outcomes.length)} lease${plural} unended, ${String(known.length)} with a known instance`,
-    {
-      reason: 'limrun_instance_delete_unconfirmed',
-      ...(known.length === 0 ? {} : { limrunInstanceIds: known }),
-      // Why every lease this close could not end, not only the first: each failure is a separate thing the
-      // operator may have to name to Limrun.
-      ...(outcomes.every((outcome) => outcome.failure === undefined)
-        ? {}
-        : {
-            cause: outcomes.map((outcome) => outcome.failure ?? 'an unconfirmed delete').join('; '),
-          }),
-      ...(known.length === 0
-        ? { hint: unendedLeaseHint(outcomes) }
-        : { hint: `Ask Limrun to delete: ${known.join(', ')}.` }),
-    },
+    { limrunInstanceIds: known },
+    joinFailureReasons(outcomes),
+    known.length === 0 ? unendedLeaseHint(outcomes) : `Ask Limrun to delete: ${known.join(', ')}.`,
+    outcomes.find((outcome) => outcome.cause !== undefined)?.cause,
   );
+}
+
+/** Every lease this close could not end, with why, joined for one report. */
+function joinFailureReasons(outcomes: readonly LimrunDisposalOutcome[]): string | undefined {
+  if (outcomes.every((outcome) => outcome.failure === undefined)) return undefined;
+  return outcomes.map((outcome) => outcome.failure ?? 'an unconfirmed delete').join('; ');
 }
 
 /** What a close says when the work it could not finish has no instance to name yet: the lease and the work. */

@@ -93,7 +93,7 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
     assert.deepEqual(limrun.iosList.mock.calls.at(-1), [
       { labelSelector: `provider=limrun,leaseId=${lease.leaseId}` },
     ]);
-    assert.deepEqual(limrun.iosDelete.mock.calls.at(-1), ['ios-instance-recovered']);
+    assert.equal(limrun.iosDelete.mock.calls.at(-1)?.[0], 'ios-instance-recovered');
     assert.equal(fs.existsSync(pendingPath), false);
   } finally {
     dateNow.mockRestore();
