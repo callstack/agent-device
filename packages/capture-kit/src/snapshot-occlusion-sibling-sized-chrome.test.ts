@@ -748,6 +748,57 @@ test('a barless undimmed sheet still covers the tab bar listed right after the p
   assert.ok(!covered.includes('Continue'), 'Continue is on the sheet');
 });
 
+test('the captured iOS 27 undimmed sheet with no bar or scroll view keeps its controls pressable', () => {
+  // `snapshot --json` of the `UNDIMMED_SHEET_ROWS` sheet with its header hidden and a plain view for
+  // content. Its host encloses only the screen beneath, so nothing of the sheet's own marks it.
+  const covered = coveredLabels(
+    capturedTree([
+      [0, undefined, 'Application', 'UIApplication', 'Agent Device Tester', [0, 0, 402, 874]],
+      [1, 0, 'ScrollView', 'RCTEnhancedScrollView', undefined, [18, 62, 366, 729]],
+      [
+        27,
+        1,
+        'Button',
+        'RCTViewComponentView',
+        'Open undimmed sheet',
+        [34.33, 655.33, 333.33, 44.67],
+      ],
+      [34, 0, 'TabBar', 'UITabBar', 'Tab Bar', [0, 791, 402, 83]],
+      [43, 34, 'Button', '_UITabButton', 'Settings', [286.81, 795, 90.19, 54]],
+      [45, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 874]],
+      [46, 0, 'Other', 'RCTViewComponentView', undefined, [0, 62, 402, 211.67]],
+      [47, 0, 'StaticText', 'RCTParagraphComponentView', 'Sheet name', [20, 82, 362, 17]],
+      [49, 0, 'TextField', 'RCTUITextField', 'Sheet name', [20.33, 107.33, 361.33, 51.33]],
+      [50, 0, 'StaticText', 'RCTParagraphComponentView', 'Not continued', [20, 175, 362, 18]],
+      [52, 0, 'Button', 'RCTViewComponentView', 'Close undimmed sheet', [20, 209, 362, 44.67]],
+      [53, 0, 'Button', 'RCTViewComponentView', 'Continue', [20, 285.67, 362, 44.67]],
+      [54, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+    ]),
+  );
+
+  for (const label of ['Sheet name', 'Not continued', 'Close undimmed sheet', 'Continue']) {
+    assert.ok(!covered.includes(label), `${label} is on the sheet`);
+  }
+  for (const label of ['Open undimmed sheet', 'Tab Bar', 'Settings']) {
+    assert.ok(covered.includes(label), `${label} sits beneath the sheet`);
+  }
+});
+
+test('a bar-height toolbar after a host that encloses nothing keeps covering the field under it', () => {
+  // A toolbar enclosing no bar or scroll view gives no evidence that it is a host, so it is read as an
+  // opaque bar even with a previous host before it.
+  const nodes = capturedTree([
+    [0, undefined, 'Application', 'UIApplication', 'App', [0, 0, 402, 874]],
+    [1, 0, 'ScrollView', 'UIScrollView', undefined, [0, 62, 402, 812]],
+    [2, 1, 'Button', 'UIButton', 'Row', [16, 132, 370, 52]],
+    [3, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 874]],
+    [4, 0, 'TextField', 'UITextField', 'Field under accessory', [16, 505, 370, 34]],
+    [5, 0, 'Toolbar', 'UIToolbar', 'Accessory', [0, 500, 402, 44]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), ['Field under accessory']);
+});
+
 test('an undimmed sheet host stops exempting its own controls once a presentation is stacked over it', () => {
   // Non-vacuity for the stacked direction: a bar listed after the host, inside its frame, belongs to a
   // presentation drawn over the sheet, so the host keeps covering the sheet as before.

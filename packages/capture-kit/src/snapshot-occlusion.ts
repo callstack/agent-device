@@ -377,12 +377,13 @@ function isSiblingSizedChromeContainer(
 }
 
 /**
- * Toolbar hosts draw their descendants, not their enclosing frame, so a host covers nothing of its
- * own presentation: the bars and scroll containers after the previous toolbar and before this host.
- * A host that also encloses the presentation beneath it, which an undimmed sheet keeps in the
- * capture, covers that presentation; after a previous toolbar, enclosed tab bars listed first belong
- * to it unless they are all the host encloses. Enclosing a presentation stacked over the host keeps
- * it covering.
+ * Toolbar hosts draw their descendants, not their enclosing frame. A host that encloses bars or
+ * scroll containers of its own presentation, the siblings after the previous toolbar and before
+ * this host, covers nothing of it. A host that encloses the presentation beneath it, which an
+ * undimmed sheet keeps in the capture, covers only that presentation; after a previous toolbar,
+ * enclosed tab bars listed first belong to it unless they are all the host encloses. A host that
+ * encloses nothing, or a presentation stacked over it, keeps covering. Like the sibling-sized
+ * exemption, this cannot tell an opaque toolbar from a host.
  */
 type ToolbarHostReach =
   | { kind: 'own-presentation' }
@@ -412,6 +413,7 @@ function classifyToolbarHostReach(
   const enclosedPositions = siblings.flatMap((sibling, siblingPosition) =>
     siblingPosition !== position && isEnclosedHostedRegion(rect, sibling) ? [siblingPosition] : [],
   );
+  if (enclosedPositions.length === 0) return null;
   if (enclosedPositions.some((siblingPosition) => siblingPosition > position)) return null;
 
   const previousHostEnd = ownPresentationStart(siblings, position);
@@ -431,7 +433,6 @@ function classifyToolbarHostReach(
   ) {
     beneathTabBars.clear();
   }
-  if (ownEnclosed.length === 0) return null;
   if (enclosedPositions.length === ownEnclosed.length && beneathTabBars.size === 0) {
     return { kind: 'own-presentation' };
   }
