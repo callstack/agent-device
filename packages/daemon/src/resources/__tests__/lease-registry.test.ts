@@ -855,6 +855,38 @@ test('abandoned work renews nothing while work still wanted holds the lease', as
   assert.equal(registry.listActiveLeases()[0]?.expiresAt, 14_000);
 });
 
+// The same accounting error one level up, where it costs a device. Read-only inspection prunes a
+// cancelled request's work without consuming the lease, so the next admitted request on that same
+// lease starts a fresh claim set. When the cancelled handler finally unwinds it must not take that
+// set with it, or the next sweep sees no deferral at all and drops the lease under the command
+// still running (#2509).
+test('a cancelled request finishing late keeps a later request deferring its lease', () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  let canceledWanted = true;
+  const canceled = registry.retainLeaseWork(lease, () => canceledWanted);
+
+  canceledWanted = false;
+  now = 6_000;
+  assert.equal(
+    registry.inspectLeaseBackend(lease.leaseId),
+    undefined,
+    'work nobody waited for defers nothing',
+  );
+
+  const running = registry.retainLeaseWork(lease, () => true);
+  assert.equal(registry.inspectLeaseBackend(lease.leaseId), lease.backend);
+
+  canceled.release();
+  assert.deepEqual(
+    registry.consumeExpiredLeases().map((entry) => entry.leaseId),
+    [],
+    'a request still working on the lease must keep it alive past its own window',
+  );
+  running.release();
+});
+
 // The ordinary release path, not expiry: a released lease is never read by the
 // expiry sweep again, so a work claim left against it would never be cleaned.
 test('releasing a lease drops the work claims recorded against it', () => {

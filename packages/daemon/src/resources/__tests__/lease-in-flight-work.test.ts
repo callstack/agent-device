@@ -37,6 +37,24 @@ test('one wanted pass keeps deferral while an abandoned sibling releases', () =>
   expect(work.isDeferred('lease-a')).toBe(false);
 });
 
+// Pruning a cancelled pass empties its lease's claim set, and the next request on that lease id
+// gets a new one. The cancelled work still holds the set it was issued, so releasing it has to
+// leave whatever set the registry now holds alone: dropping it there stops the live request's pass
+// from deferring its lease at all, which is the lease expiring under a command (#2509).
+test('releasing a cancelled pass keeps a later pass deferring its lease', () => {
+  const work = new LeaseInFlightWorkRegistry();
+  let canceledWanted = true;
+  const canceled = work.retain('lease-a', () => canceledWanted);
+  canceledWanted = false;
+
+  expect(work.isDeferred('lease-a')).toBe(false);
+  const running = work.retain('lease-a', () => true);
+
+  expect(canceled.release()).toBe(false);
+  expect(work.isDeferred('lease-a')).toBe(true);
+  expect(running.release()).toBe(true);
+});
+
 test('releasing a pass twice renews nothing twice', () => {
   const work = new LeaseInFlightWorkRegistry();
   const pass = work.retain('lease-a', () => true);
