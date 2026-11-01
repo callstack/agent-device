@@ -514,7 +514,8 @@ async function runAppleScreenshot(
   }
   if (options.captureBackend === 'runner') {
     // Runner capture returns the XCTest surface as-is; density normalization belongs only to the
-    // simctl capture pipeline. The capture still waits for the simulator's status bar window.
+    // simctl capture pipeline. Of this branch's targets, only an iOS simulator capture waits for a
+    // status bar window: physical-device and macOS captures take none.
     await captureScreenshotViaRunner(
       device,
       outPath,

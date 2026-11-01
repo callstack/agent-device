@@ -174,27 +174,22 @@ async function restoreSimulatorStatusBarOverrides(
   device: DeviceInfo,
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
-  try {
-    await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
-  } catch (error) {
-    // The simulator now holds whatever the timed-out command left, so no later capture may trust a
-    // cached answer about it: it has to read the bar again.
-    invalidateSimulatorStatusBarOverrideCache(device);
-    throw error;
-  }
+  // Only a restore that ran to the end may change the known-cleared answer. A `clear` that fails
+  // leaves the normalization on the bar, and the answer that says "this bar is cleared" is the one
+  // that fixes it: the next capture skips the read, so it cannot adopt the leftover as the caller's
+  // state, and its own restore clears the bar. Reading the bar after a failed clear would do the
+  // opposite — adopt the leftover and hand it back on every later capture.
+  await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
   if (!overrides) {
     rememberClearedStatusBarOverrides(device);
     return;
   }
-  try {
-    await applySimulatorStatusBarOverrideArgs(
-      device,
-      buildRestorableStatusBarOverrideArgs(overrides),
-      STATUS_BAR_RESTORE_TIMEOUT_MS,
-    );
-  } finally {
-    invalidateSimulatorStatusBarOverrideCache(device);
-  }
+  await applySimulatorStatusBarOverrideArgs(
+    device,
+    buildRestorableStatusBarOverrideArgs(overrides),
+    STATUS_BAR_RESTORE_TIMEOUT_MS,
+  );
+  invalidateSimulatorStatusBarOverrideCache(device);
 }
 
 export function invalidateSimulatorStatusBarOverrideCache(device: DeviceInfo): void {

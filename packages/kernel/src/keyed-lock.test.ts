@@ -334,13 +334,13 @@ test('heldKeyedLockKeys reports exactly the keys withKeyedLock would re-enter fo
   const holderReEntered: string[] = [];
   await withKeyedLockHolder(async (holder) => {
     const taking = holder.hold(locks, 'device:app');
-    // A hold the holder is still taking reads as held, so a nested step may not queue behind it.
+    // While the hold is still being taken it already reads as held, and a nested step must not queue
+    // behind it, so the report and the re-entry are both checked before anything is awaited.
+    assert.deepEqual(heldKeyedLockKeys(locks), ['device:app']);
+    await withKeyedLock(locks, 'device:app', async () => {
+      holderReEntered.push('device:app');
+    });
     await taking;
-    for (const key of heldKeyedLockKeys(locks)) {
-      await withKeyedLock(locks, key, async () => {
-        holderReEntered.push(key);
-      });
-    }
   });
   assert.deepEqual(holderReEntered, ['device:app']);
   assert.equal(locks.size, 0);

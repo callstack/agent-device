@@ -224,10 +224,11 @@ test('a failed status bar restore logs restore_failed and keeps the capture resu
   ]);
 });
 
-test('a failed status bar restore leaves no known-cleared answer for the next capture', async () => {
-  // "This simulator holds no overrides" is only true once a restore's `clear` actually completed.
-  // When it fails, the simulator holds whatever the failed command left, so the next capture must
-  // read the bar again instead of trusting that answer and normalizing without a clear.
+test('a failed status bar restore keeps the known-cleared answer so the next capture re-clears', async () => {
+  // A restore whose `clear` fails leaves the deterministic bar on the simulator. Reading the bar
+  // then would make the next capture adopt that normalization as the caller's state and hand it back
+  // forever, so the answer that says "this bar is cleared" survives: the next capture skips the read
+  // and its own restore clears the leftover.
   const CLEARED_LISTING = 'Current Status Bar Overrides:\n=============================';
   let clearAttempts = 0;
   await withFakeAppleTool(
@@ -247,12 +248,23 @@ test('a failed status bar restore leaves no known-cleared answer for the next ca
       // First capture: a clean restore earns the known-cleared answer.
       await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
       calls.length = 0;
-      // Second capture: its restore fails, and that answer has to go with it.
+      // Second capture: its restore fails and leaves the deterministic bar on the simulator.
       await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      assert.match(calls[0]?.join(' ') ?? '', /^simctl status_bar sim-1 override/);
+      assert.equal(
+        calls.some((args) => args[3] === 'list'),
+        false,
+        'a failed restore must not send the next capture to read the leftover back',
+      );
       calls.length = 0;
+
       await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
 
-      assert.equal(calls[0]?.join(' '), 'simctl status_bar sim-1 list');
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [`simctl status_bar sim-1 override ${NORMALIZE_ARGS}`, 'simctl status_bar sim-1 clear'],
+        'the next capture must trust the cleared answer and clear the leftover, never read it back',
+      );
     },
   );
 });
