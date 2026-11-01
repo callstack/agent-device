@@ -37,6 +37,24 @@ test('a repeat allocation stops waiting on a destination tunnel that never answe
   assert.equal(owner.capture?.phase, 'starting');
 });
 
+/**
+ * An `artifacts` read for a capture whose destination tunnel is still being opened answers on the spot:
+ * the read has nothing to wait for — the tunnel belongs to the lease's release, and a stalled handshake
+ * would otherwise hold the request for the whole open budget to say nothing new.
+ */
+test('an artifacts read answers at once for a capture whose tunnel is still opening', async () => {
+  const lifecycle = new LimrunCaptureLifecycle(captureHost());
+  const owner = ownerWithCapture();
+  const listed = await Promise.race([
+    lifecycle.list(owner.lease.leaseId, owner.capture),
+    new Promise<'stalled'>((resolve) => {
+      const timer = setTimeout(() => resolve('stalled'), 250);
+      timer.unref?.();
+    }),
+  ] as const);
+  assert.equal(listed, undefined);
+});
+
 function captureHost(held: readonly LimrunLeaseOwner[] = []): LimrunCaptureHost {
   return {
     harDir: undefined,

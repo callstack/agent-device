@@ -9,9 +9,11 @@ import { errorMessage } from '@agent-device/kernel/errors';
 
 /**
  * How long a read or a teardown waits for a destination tunnel that is still being opened. The SDK gives this
- * handshake fifteen seconds of its own.
+ * handshake fifteen seconds of its own. Exported because the disposal that joins a capture end must give it
+ * more than this: `end` waits the handshake inside its own call, and a join shorter than it would report a
+ * stalled-but-in-budget handshake as a refused record.
  */
-const CAPTURE_OPEN_BUDGET_MS = 20_000;
+export const CAPTURE_OPEN_BUDGET_MS = 20_000;
 
 /** Released captures stay listable; the oldest settled records are forgotten past this count. */
 const SETTLED_NETWORK_CAPTURE_LIMIT = 32;
@@ -134,12 +136,11 @@ export class LimrunCaptureLifecycle {
       const { writeCaptureRecord } = await import('./network-har.ts');
       return await writeCaptureRecord(held);
     }
-    // A capture whose tunnel is still being opened has no traffic to report yet; that tunnel stays this
-    // lease's own to end, which is its release's route, not this read.
-    const opened = await awaitLimrunWithinBudget(held.opening, CAPTURE_OPEN_BUDGET_MS);
-    if (!opened.ok) return undefined;
-    const { writeCaptureRecord } = await import('./network-har.ts');
-    return await writeCaptureRecord(opened.value);
+    // A capture whose tunnel is still being opened has no traffic to report yet, and this read is not the
+    // route that owns that tunnel: its release is. Waiting the open budget here would hold an `artifacts`
+    // request for a handshake whose outcome this read cannot act on, so the read answers now with whatever
+    // record this lease already has and lets the release write the rest.
+    return this.settled.get(leaseId);
   }
 
   /** Keeps one released capture's record, forgetting the oldest once the record limit is passed. */

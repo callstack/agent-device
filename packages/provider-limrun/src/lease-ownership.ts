@@ -100,8 +100,9 @@ export type LimrunDisposalOutcome = Readonly<{
   /** Why a disposal could not be confirmed; absent once the instance is gone. */
   failure: string | undefined;
   /**
-   * The refusal behind that failure, when one exists: the delete's own error. Reported as an error's cause,
-   * where it renders, rather than only as a string in details.
+   * The refusal behind that failure, when one exists: the delete's own error, or the crash of the disposal
+   * itself when it could not report anything. Reported as an error's cause, where it renders, rather than
+   * only as a string in details.
    */
   cause: unknown;
   /** The released capture's record, so a refusal can still carry the HAR that was written. */

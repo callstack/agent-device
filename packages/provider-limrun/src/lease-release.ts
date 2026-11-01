@@ -2,7 +2,8 @@ import type Limrun from '@limrun/api';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
-import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
+import { CAPTURE_OPEN_BUDGET_MS } from './capture-lifecycle.ts';
+import { deleteLimrunInstance } from './client-options.ts';
 import type { LimrunBudgetOutcome } from './lifecycle-budget.ts';
 import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
 import type {
@@ -44,8 +45,13 @@ const DELETE_ANSWER_BUDGET_MS = 30_000;
  */
 const LOCAL_TEARDOWN_BUDGET_MS = 45_000;
 
-/** How long a disposal waits for a capture's HAR record, which is reporting and never a reason to hold a lease. */
-const CAPTURE_RECORD_BUDGET_MS = 15_000;
+/**
+ * How long a disposal waits for a capture's HAR record, which is reporting and never a reason to hold a lease.
+ * The disposal joins a capture end that contains the destination tunnel's own open budget, so this is that
+ * handshake plus a window of its own for writing the HAR: a join shorter than the work inside it would report
+ * a handshake that is still inside its own stated budget as a record that refused.
+ */
+const CAPTURE_RECORD_BUDGET_MS = CAPTURE_OPEN_BUDGET_MS + 10_000;
 
 /**
  * What a disposal may ask of the runtime that owns the lease, and nothing else: the delete of one instance, and
@@ -388,7 +394,13 @@ export async function releaseLimrunLease(
   };
 }
 
-/** Ends every instance a lease's own labels name, for a lease this runtime no longer holds an owner for. */
+/**
+ * Ends every instance a lease's own labels name, for a lease this runtime no longer holds an owner for.
+ * Every delete goes through the same helper every other route deletes with, so a 404 confirms here exactly
+ * as it does there; a delete the helper could not confirm refuses with the typed unconfirmed-delete error,
+ * naming every instance the labels carried and which of them are already confirmed gone. The refusal keeps
+ * the lease held: the daemon's expiry sweep is the retry, and nothing else knows these ids.
+ */
 async function releaseLabeledInstances(
   limrun: Limrun | undefined,
   lease: DeviceLease,
@@ -401,17 +413,37 @@ async function releaseLabeledInstances(
       ? await limrun.iosInstances.list({ labelSelector })
       : await limrun.androidInstances.list({ labelSelector });
   const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
+  const confirmed: string[] = [];
   for (const instanceId of instanceIds) {
-    // One attempt each, the same contract every other instance delete keeps: this route's own retries are
-    // the daemon's expiry sweeps, not the SDK's.
-    if (platform === 'ios') {
-      await limrun.iosInstances.delete(instanceId, LIMRUN_SINGLE_ATTEMPT);
-    } else {
-      await limrun.androidInstances.delete(instanceId, LIMRUN_SINGLE_ATTEMPT);
+    const deleted = await deleteLimrunInstance(limrun, platform, instanceId);
+    if (deleted.failure !== undefined) {
+      throwUnconfirmedDelete(
+        `Recovery could not confirm instance '${instanceId}' of lease '${lease.leaseId}' deleted`,
+        { limrunInstanceId: instanceId, limrunInstanceIds: instanceIds },
+        deleted.failure,
+        recoveryHint(instanceId, instanceIds, confirmed),
+        deleted.cause,
+      );
     }
+    confirmed.push(instanceId);
   }
   if (instanceIds.length === 0) return undefined;
-  return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
+  return {
+    limrunInstanceId: instanceIds[0],
+    limrunInstanceIds: instanceIds,
+    limrunInstanceCount: instanceIds.length,
+  };
+}
+
+/** What the recovery refusal tells the operator to name to Limrun: the instance left, and those gone. */
+function recoveryHint(
+  instanceId: string,
+  instanceIds: readonly string[],
+  confirmed: string[],
+): string {
+  if (confirmed.length === 0) return `Ask Limrun to delete: ${instanceIds.join(', ')}.`;
+  const gone = `${confirmed.length > 1 ? 'Instances' : 'Instance'} ${confirmed.join(', ')} ${confirmed.length > 1 ? 'were' : 'was'} confirmed deleted.`;
+  return `Ask Limrun to delete instance '${instanceId}'. ${gone}`;
 }
 
 /**
@@ -443,6 +475,16 @@ export function allocationRefusedForTake(
   outcome: LimrunDisposalOutcome,
 ): never {
   const { instanceId } = outcome;
+  // The hint says what the disposal actually confirmed: an unconfirmed delete leaves the instance possibly
+  // still billing, and that caller is the last route left that will hear about it.
+  const ended =
+    instanceId === undefined
+      ? undefined
+      : outcome.cleanup === 'uncertain'
+        ? `The ${by} of this lease could not confirm instance '${instanceId}' deleted. Release the lease again, or ask Limrun to delete it.`
+        : outcome.cleanup === 'attached'
+          ? `Instance '${instanceId}' is the caller's own attached instance and was left running. Open a new lease.`
+          : `Instance '${instanceId}' was ended by the ${by} of this lease. Open a new lease.`;
   throw new AppError(
     'DEVICE_IN_USE',
     `Limrun lease '${lease.leaseId}' was released while its instance was being prepared`,
@@ -450,10 +492,7 @@ export function allocationRefusedForTake(
       reason: 'limrun_lease_released_mid_allocation',
       ...(instanceId === undefined
         ? { hint: `Instance create for lease '${lease.leaseId}' may still rent one. Check Limrun.` }
-        : {
-            limrunInstanceId: instanceId,
-            hint: `Instance '${instanceId}' was ended by the ${by} of this lease. Open a new lease.`,
-          }),
+        : { limrunInstanceId: instanceId, ...(ended === undefined ? {} : { hint: ended }) }),
       ...(outcome.cleanup === 'uncertain'
         ? { retriable: true, ...(outcome.failure === undefined ? {} : { cause: outcome.failure }) }
         : {}),
