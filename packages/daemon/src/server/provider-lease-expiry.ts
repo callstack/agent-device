@@ -41,6 +41,24 @@ type ReleaserPhase = 'running' | 'draining' | 'closed';
 
 const PHASE_RANK: Record<ReleaserPhase, number> = { running: 0, draining: 1, closed: 2 };
 
+/** Why a release was refused. `closed` names the shutdown boundary; `provider-runtime-unavailable` names a daemon that never had the runtime to end the lease. */
+type ReleaseRefusalReason = 'closed' | 'provider-runtime-unavailable';
+
+/**
+ * What one `release` call did with the lease it was given.
+ *
+ * `released` means this daemon ended the lease with its provider. `retrying` means this daemon still
+ * owns the lease and will attempt it again. `not-required` means no provider ever held it. `refused`
+ * means this daemon will not end this lease: `reason` says why, and `durable` says whether a lease
+ * record now names it for the next daemon. A refused lease whose `durable` is false is a device no
+ * daemon will end, so every caller reports it.
+ */
+export type ProviderLeaseReleaseOutcome =
+  | { status: 'released' }
+  | { status: 'retrying' }
+  | { status: 'not-required' }
+  | { status: 'refused'; reason: ReleaseRefusalReason; durable: boolean };
+
 type PersistedProviderLeaseRecord = {
   version: number;
   leases: DeviceLease[];
@@ -50,10 +68,12 @@ export type ExpiredProviderLeaseReleaser = {
   /** Opens the bounded shutdown window: the final release attempts, and the accounting that feeds the drain report. */
   beginShutdown: () => void;
   /**
-   * Ends one lease. Admits it while this releaser runs or is draining. Once closed it starts no
-   * provider attempt: a recoverable lease is made durable for the next daemon instead.
+   * Ends one lease. Admits it while this releaser runs or is draining, and answers with what it did.
+   * Once closed it refuses: no provider attempt starts and no pending work is admitted, because the
+   * providers may already be disposed. A recoverable lease is still made durable for the next daemon,
+   * which is what the outcome's `durable` answers.
    */
-  release: (lease: DeviceLease) => Promise<void>;
+  release: (lease: DeviceLease) => Promise<ProviderLeaseReleaseOutcome>;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
   /**
@@ -300,13 +320,45 @@ export function createExpiredProviderLeaseReleaser(options: {
     await Promise.all(attempts);
   };
 
+  /**
+   * Refuses a lease that arrives once this releaser is closed. Nothing is awaited and no attempt is
+   * tracked, because that work belongs to the daemon that now owns the state directory. A recoverable
+   * lease is still written out: `pendingRecoveryLeases` is the content of its lease record, so writing
+   * through the map is what makes the handoff durable, and the outcome says so.
+   */
+  const refuseClosedRelease = (lease: DeviceLease): ProviderLeaseReleaseOutcome => {
+    if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
+      return { status: 'refused', reason: 'closed', durable: false };
+    }
+    pendingRecoveryLeases.set(lease.leaseId, lease);
+    return { status: 'refused', reason: 'closed', durable: persistPendingLeases() };
+  };
+
+  /** What the attempt this release started came to. The pending entry is the provider's answer: it is removed only when the provider confirmed the end. */
+  const releaseOutcomeFor = (
+    lease: DeviceLease,
+    pendingLeases: ReadonlyMap<string, DeviceLease>,
+  ): ProviderLeaseReleaseOutcome => {
+    if (!pendingLeases.has(lease.leaseId)) return { status: 'released' };
+    // The releaser closed while the provider call was in flight, so nothing here will attempt it again.
+    if (phase === 'closed') {
+      return {
+        status: 'refused',
+        reason: 'closed',
+        durable: persistedRecoveryLeaseIds.has(lease.leaseId),
+      };
+    }
+    return { status: 'retrying' };
+  };
+
   return {
     beginShutdown: () => {
       advancePhase('draining');
       drainReleasedLeases = new Map();
     },
     release: async (lease) => {
-      if (!lease.leaseProvider) return;
+      if (!lease.leaseProvider) return { status: 'not-required' };
+      if (phase === 'closed') return refuseClosedRelease(lease);
       if (isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) {
         // Set before the first await: the registry journals right after `onLeaseExpired` returns, and the
         // journal keeps this lease only while it is pending here and not yet durable.
@@ -316,15 +368,19 @@ export function createExpiredProviderLeaseReleaser(options: {
         } else {
           scheduleRetry();
         }
-        return;
+        return releaseOutcomeFor(lease, pendingRecoveryLeases);
       }
-      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return;
-      if (!options.leaseLifecycleProvider?.release) return;
+      if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) {
+        return { status: 'refused', reason: 'provider-runtime-unavailable', durable: false };
+      }
+      if (!options.leaseLifecycleProvider?.release) {
+        return { status: 'refused', reason: 'provider-runtime-unavailable', durable: false };
+      }
       pendingLiveLeases.set(lease.leaseId, lease);
       await ensureLiveReleaseAttempt(lease);
-      if (pendingLiveLeases.has(lease.leaseId)) {
-        scheduleRetry();
-      }
+      const outcome = releaseOutcomeFor(lease, pendingLiveLeases);
+      if (outcome.status === 'retrying') scheduleRetry();
+      return outcome;
     },
     recordLiveLeases,
     recoverInherited,
@@ -359,6 +415,37 @@ export function createExpiredProviderLeaseReleaser(options: {
         journalRetryTimer = undefined;
         writeJournal();
       }
+    },
+  };
+}
+
+/** One diagnostic event a caller reports, as `emitDiagnostic` takes it. */
+export type LeaseReleaseDiagnosticEvent = {
+  level: 'warn' | 'error';
+  phase: string;
+  data: Record<string, unknown>;
+};
+
+/**
+ * The diagnostic a refusal needs, or `undefined` for any other outcome. Every caller of `release`
+ * reports through this mapping, so a refusal cannot look different depending on which path noticed it.
+ * A refusal whose lease is not durable names a device no daemon will end, so it is an error and carries
+ * the lease provider: that is where an operator ends the device by hand. A release the releaser still
+ * owns is already reported by the retry that owns it, and a completed one by its provider.
+ */
+export function leaseReleaseDiagnosticEvent(
+  lease: DeviceLease,
+  outcome: ProviderLeaseReleaseOutcome,
+): LeaseReleaseDiagnosticEvent | undefined {
+  if (outcome.status !== 'refused') return undefined;
+  return {
+    level: outcome.durable ? 'warn' : 'error',
+    phase: 'provider_lease_release_refused',
+    data: {
+      leaseId: lease.leaseId,
+      reason: outcome.reason,
+      durable: outcome.durable,
+      ...(lease.leaseProvider ? { leaseProvider: lease.leaseProvider } : {}),
     },
   };
 }

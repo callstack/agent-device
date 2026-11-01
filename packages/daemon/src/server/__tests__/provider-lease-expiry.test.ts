@@ -150,10 +150,11 @@ test('shutdown drain reports releases completed before and during its final retr
   });
 
   try {
-    await releaser.release(releasedBeforeShutdown);
+    await expect(releaser.release(releasedBeforeShutdown)).resolves.toEqual({ status: 'released' });
     releaser.beginShutdown();
-    await releaser.release(releasedDuringShutdown);
-    await releaser.release(lease);
+    // This one's first attempt fails, so the releaser keeps it and the drain retries it.
+    await expect(releaser.release(releasedDuringShutdown)).resolves.toEqual({ status: 'retrying' });
+    await expect(releaser.release(lease)).resolves.toEqual({ status: 'released' });
     const drained = await releaser.drain(10);
 
     expect(release).toHaveBeenCalledTimes(4);
@@ -432,7 +433,9 @@ test('a release that fails after shutdown is not retried and stays durable', asy
       fs.readFileSync(`${stateDir}/expired-provider-leases.json`, 'utf8'),
     ) as { leases: DeviceLease[] };
     expect(record.leases.map((entry) => entry.leaseId)).toEqual([lease.leaseId]);
-    await expect(admitted).resolves.toBeUndefined();
+    // The provider call this daemon was waiting on failed once the releaser had closed, so the lease
+    // stayed pending, and nothing here will attempt it again. The record is what carries it forward.
+    await expect(admitted).resolves.toEqual({ status: 'refused', reason: 'closed', durable: true });
   } finally {
     releaser.shutdown();
     vi.useRealTimers();
@@ -466,8 +469,16 @@ test('release after shutdown starts no provider call and retries nothing', async
 
   try {
     releaser.shutdown();
-    await releaser.release(liveOnlyLease);
-    await releaser.release(recoverableLease);
+    await expect(releaser.release(liveOnlyLease)).resolves.toEqual({
+      status: 'refused',
+      reason: 'closed',
+      durable: false,
+    });
+    await expect(releaser.release(recoverableLease)).resolves.toEqual({
+      status: 'refused',
+      reason: 'closed',
+      durable: true,
+    });
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(release).not.toHaveBeenCalled();

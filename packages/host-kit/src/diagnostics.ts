@@ -3,6 +3,7 @@ export {
   createRequestId,
   DIAGNOSTIC_STDERR_PREFIX,
   type DiagnosticEventInput,
+  type DiagnosticLevel,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,

@@ -6,7 +6,8 @@ import path from 'node:path';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
 
-type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
+/** The severity an event is recorded with. */
+export type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
 
 type DiagnosticEvent = {
   ts: string;

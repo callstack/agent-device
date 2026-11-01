@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -48,6 +49,62 @@ test('journals and bounds a hung recoverable lease release before the final drai
   } finally {
     expiredProviderLeaseReleaser.shutdown();
     vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a release the closed releaser refused is reported and not counted as completed', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-lease-finalizer-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const release = vi.fn(async (_lease: DeviceLease) => ({}));
+  const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+  });
+  // The drain budget ran out and the releaser closed before this lease was offered to it.
+  expiredProviderLeaseReleaser.beginShutdown();
+  expiredProviderLeaseReleaser.shutdown();
+
+  const logPath = path.join(stateDir, 'daemon.log');
+  try {
+    const outcomes = await withDaemonDiagnosticsScope({ logPath }, () =>
+      finalizeDaemonLeases({
+        leaseRegistry,
+        expiredProviderLeaseReleaser,
+        timeoutMs: 1_000,
+      }),
+    );
+
+    expect(release).not.toHaveBeenCalled();
+    // The daemon stops either way, so the registry entry goes; the summary and the log say this daemon
+    // never handed the device to its provider.
+    expect(outcomes.refused).toEqual([lease.leaseId]);
+    expect(leaseRegistry.listActiveLeases()).toEqual([]);
+    const rows = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> });
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: 'error',
+          phase: 'provider_lease_release_refused',
+          data: {
+            leaseId: lease.leaseId,
+            reason: 'closed',
+            durable: false,
+            leaseProvider: 'browserstack',
+          },
+        }),
+      ]),
+    );
+  } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
