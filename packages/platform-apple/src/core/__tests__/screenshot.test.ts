@@ -53,7 +53,10 @@ import {
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
-import { withNormalizedSimulatorStatusBar } from '../screenshot-status-bar.ts';
+import {
+  withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
+} from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner-client.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
@@ -614,6 +617,78 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
     assert.deepEqual(metadata, MEASURED_CAPTURE.metadata);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
   } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// A runner capture renders the same screen a simctl capture does, so it must not be taken while a
+// simctl capture holds the simulator's status bar normalized. The holder here is the real status bar
+// owner's reservation (this file's mock keeps every other export real).
+test('captureScreenshotViaRunner waits for a held simulator status bar', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-runner-bar-window-');
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'held.png');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-held' };
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-image', 'utf8');
+
+  let releaseHolder!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseHolder = resolve;
+  });
+  let releaseRunnerCommand!: () => void;
+  const runnerCommandReleased = new Promise<void>((resolve) => {
+    releaseRunnerCommand = resolve;
+  });
+  let releaseHolderGate!: () => void;
+  const holderEntered = new Promise<void>((resolve) => {
+    releaseHolderGate = resolve;
+  });
+
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    await runnerCommandReleased;
+    return { message: 'tmp/held.png' };
+  });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  const holder = withSimulatorStatusBarHeld(device, async () => {
+    releaseHolderGate();
+    await held;
+  });
+
+  try {
+    await holderEntered;
+    const outPath = path.join(tmpDir, 'out.png');
+    const runnerCapture = captureScreenshotViaRunner(
+      device,
+      outPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      mockRunAppleRunnerCommand.mock.calls.length,
+      0,
+      'a runner capture must wait while another capture holds the status bar',
+    );
+
+    releaseHolder();
+    await holder;
+    await new Promise((resolve) => setImmediate(resolve));
+    releaseRunnerCommand();
+    await runnerCapture;
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+    assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
+  } finally {
+    releaseHolder();
+    releaseRunnerCommand();
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });

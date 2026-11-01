@@ -181,9 +181,9 @@ function hasKnownClearedStatusBarOverrides(device: DeviceInfo): boolean {
 }
 
 /**
- * Key for both the known-cleared cache and the transaction lock. It names the simulator without its
- * device set, so two simulators that could ever share a udid are serialized rather than normalized
- * at once.
+ * Key for both the known-cleared cache and the transaction lock. It names a simulator by platform,
+ * kind and id, and leaves out the device set, so two records of one simulator share a key and one
+ * transaction instead of normalizing the same status bar at once.
  */
 function statusBarSimulatorKey(device: DeviceInfo): string {
   return `${device.platform}:${device.kind}:${device.id}`;

@@ -249,7 +249,39 @@ export async function captureSimulatorScreenshotWithRetry(
   );
 }
 
+/**
+ * Captures through the runner backend. An iOS simulator's runner capture renders the same screen a
+ * simctl capture does, so it takes the same status bar reservation: while another capture
+ * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. The
+ * reservation re-enters when the caller already holds it, as the simctl fallback does.
+ */
 export async function captureScreenshotViaRunner(
+  device: DeviceInfo,
+  outPath: string,
+  appBundleId: string | undefined,
+  fullscreen: boolean | undefined,
+  runnerOptions: AppleRunnerCommandOptions | undefined,
+  env: Readonly<EnvMap>,
+): Promise<RunnerScreenCaptureMetadata | undefined> {
+  if (device.kind !== 'simulator' || isMacOs(device)) {
+    return await captureRunnerScreenshot(
+      device,
+      outPath,
+      appBundleId,
+      fullscreen,
+      runnerOptions,
+      env,
+    );
+  }
+  return await withSimulatorStatusBarHeld(
+    device,
+    async () =>
+      await captureRunnerScreenshot(device, outPath, appBundleId, fullscreen, runnerOptions, env),
+    runnerOptions?.signal,
+  );
+}
+
+async function captureRunnerScreenshot(
   device: DeviceInfo,
   outPath: string,
   appBundleId: string | undefined,

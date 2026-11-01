@@ -60,10 +60,10 @@ function createCaptureGate() {
   };
 }
 
-/**
- * Everything a simulator capture needs except the status bar, which stays the real owner so these
- * cases exercise the same status bar commands the route sends on a device.
- */
+type CaptureGate = ReturnType<typeof createCaptureGate>;
+
+/** Everything a simulator capture needs except the status bar, which stays the real owner so these
+ * cases exercise the same status bar commands the route sends on a device. */
 function captureDeps(captureWithRetry: (device: DeviceInfo) => Promise<void>) {
   return {
     resolveCaptureTarget: async () => ({}) as const,
@@ -86,6 +86,66 @@ async function yieldToQueuedWork(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
+function screenshotOptions(
+  gate: CaptureGate,
+  normalizeStatusBar: boolean,
+  options: { readDuringCapture?: () => void; failsAfterGate?: boolean } = {},
+) {
+  return {
+    env: process.env,
+    normalizeStatusBar,
+    skipIosSimulatorBootCheck: true,
+    deps: captureDeps(async () => {
+      // The read happens at the top of the capture step: that is the state this capture's image
+      // is taken with, and it is the only moment the status bar owner has it.
+      options.readDuringCapture?.();
+      await gate.capture();
+      if (options.failsAfterGate === true) {
+        throw screenshotFailure();
+      }
+    }),
+  } as const;
+}
+
+/**
+ * Runs a body that starts two captures on one simulator and hands back both settled. Gates are
+ * released and both captures are observed whatever the body threw: a capture left holding the
+ * simulator's lock would hang the later cases in this file, and a rejection nobody awaited would
+ * fail one of them instead of the case that caused it.
+ */
+async function withOverlappingCaptures(
+  start: () => Promise<{ captures: Array<Promise<unknown>>; gates: CaptureGate[] }>,
+  run: (settled: PromiseSettledResult<unknown>[]) => void,
+): Promise<void> {
+  let captures: Array<Promise<unknown>> = [];
+  let gates: CaptureGate[] = [];
+  let settled: PromiseSettledResult<unknown>[] = [];
+  try {
+    const started = await start();
+    captures = started.captures;
+    gates = started.gates;
+    await yieldToQueuedWork();
+    for (const gate of gates) gate.release();
+    settled = await Promise.allSettled(captures);
+  } finally {
+    for (const gate of gates) gate.release();
+    settled = await Promise.allSettled(captures);
+  }
+  run(settled);
+}
+
+function fulfilledCount(settled: PromiseSettledResult<unknown>[]): number {
+  return settled.filter((result) => result.status === 'fulfilled').length;
+}
+
+function rejectionReason(settled: PromiseSettledResult<unknown>[], index: number): unknown {
+  const result = settled[index];
+  if (result?.status !== 'rejected') {
+    throw new assert.AssertionError({ message: `expected capture ${index} to reject` });
+  }
+  return result.reason;
+}
+
 beforeEach(() => {
   invalidateSimulatorStatusBarOverrideCache(IOS_TEST_SIMULATOR);
 });
@@ -95,102 +155,77 @@ test('overlapping simulator captures both restore the caller status bar override
     IOS_TEST_SIMULATOR.id,
     CALLER_OVERRIDES,
   );
-  const firstGate = createCaptureGate();
-  const secondGate = createCaptureGate();
 
   await withFakeAppleTool(statusBar.script, async () => {
-    const first = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/first.png', {
-      env: process.env,
-      normalizeStatusBar: true,
-      skipIosSimulatorBootCheck: true,
-      deps: captureDeps(() => firstGate.capture()),
-    });
-    await firstGate.entered;
-
-    const second = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/second.png', {
-      env: process.env,
-      normalizeStatusBar: true,
-      skipIosSimulatorBootCheck: true,
-      deps: captureDeps(() => secondGate.capture()),
-    });
-    try {
-      await yieldToQueuedWork();
-
-      firstGate.release();
-      await first;
-      secondGate.release();
-      await second;
-    } finally {
-      // A capture that never reached its gate would keep the simulator's lock and hang every
-      // later case in this file, hiding the failure the test is here to report.
-      firstGate.release();
-      secondGate.release();
-    }
-
-    assert.deepEqual(
-      statusBar.overrides(),
-      CALLER_OVERRIDES,
-      'the second capture must restore the caller overrides, not the normalization it snapshotted',
-    );
-    assert.deepEqual(
-      statusBar.servedSnapshots(),
-      [CALLER_OVERRIDES, CALLER_OVERRIDES],
-      "the second capture must snapshot the caller overrides, not the first capture's normalization",
+    await withOverlappingCaptures(
+      async () => {
+        const firstGate = createCaptureGate();
+        const secondGate = createCaptureGate();
+        const first = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/first.png',
+          screenshotOptions(firstGate, true),
+        );
+        await firstGate.entered;
+        const second = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/second.png',
+          screenshotOptions(secondGate, true),
+        );
+        return { captures: [first, second], gates: [firstGate, secondGate] };
+      },
+      (settled) => {
+        assert.equal(fulfilledCount(settled), 2, 'both captures must finish');
+        assert.deepEqual(
+          statusBar.overrides(),
+          CALLER_OVERRIDES,
+          'the second capture must restore the caller overrides, not the normalization it snapshotted',
+        );
+        assert.deepEqual(
+          statusBar.servedSnapshots(),
+          [CALLER_OVERRIDES, CALLER_OVERRIDES],
+          "the second capture must snapshot the caller overrides, not the first capture's normalization",
+        );
+      },
     );
   });
 });
 
 test('a failed simulator capture restores the caller overrides and lets the queued capture finish', async () => {
   const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
-  const firstGate = createCaptureGate();
-  const secondGate = createCaptureGate();
 
   await withFakeAppleTool(statusBar.script, async () => {
-    const first = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/first.png', {
-      env: process.env,
-      normalizeStatusBar: true,
-      skipIosSimulatorBootCheck: true,
-      deps: captureDeps(async () => {
-        await firstGate.capture();
-        throw screenshotFailure();
-      }),
-    });
-    await firstGate.entered;
+    await withOverlappingCaptures(
+      async () => {
+        const firstGate = createCaptureGate();
+        const secondGate = createCaptureGate();
+        const first = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/first.png',
+          screenshotOptions(firstGate, true, { failsAfterGate: true }),
+        );
+        await firstGate.entered;
+        const second = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/second.png',
+          screenshotOptions(secondGate, true),
+        );
+        return { captures: [first, second], gates: [firstGate, secondGate] };
+      },
+      (settled) => {
+        const error = rejectionReason(settled, 0);
+        assert.ok(error instanceof AppError, `expected an AppError, received: ${String(error)}`);
+        assert.equal((error as AppError).code, 'COMMAND_FAILED');
+        assert.equal((error as AppError).message, 'simctl screenshot failed');
+        assert.equal(settled[1]?.status, 'fulfilled', 'the queued capture must still finish');
 
-    const second = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/second.png', {
-      env: process.env,
-      normalizeStatusBar: true,
-      skipIosSimulatorBootCheck: true,
-      deps: captureDeps(() => secondGate.capture()),
-    });
-    let firstError: unknown;
-    try {
-      await yieldToQueuedWork();
-
-      firstGate.release();
-      firstError = await first.then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      secondGate.release();
-      await second;
-    } finally {
-      firstGate.release();
-      secondGate.release();
-    }
-
-    assert.ok(
-      firstError instanceof AppError,
-      `expected an AppError, received: ${String(firstError)}`,
-    );
-    assert.equal((firstError as AppError).code, 'COMMAND_FAILED');
-    assert.equal((firstError as AppError).message, 'simctl screenshot failed');
-
-    assert.deepEqual(statusBar.overrides(), CALLER_OVERRIDES);
-    assert.deepEqual(
-      statusBar.servedSnapshots(),
-      [CALLER_OVERRIDES, CALLER_OVERRIDES],
-      'the capture queued behind a failing capture snapshots the caller overrides as well',
+        assert.deepEqual(statusBar.overrides(), CALLER_OVERRIDES);
+        assert.deepEqual(
+          statusBar.servedSnapshots(),
+          [CALLER_OVERRIDES, CALLER_OVERRIDES],
+          'the capture queued behind a failing capture snapshots the caller overrides as well',
+        );
+      },
     );
   });
 });
@@ -216,43 +251,38 @@ test('a single simulator capture normalizes while it captures and restores after
 
 test('a plain simulator capture waits for the normalization window instead of capturing it', async () => {
   const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
-  const normalizingGate = createCaptureGate();
   const seenDuringPlainCapture: StatusBarOverrideState[] = [];
 
   await withFakeAppleTool(statusBar.script, async () => {
-    const normalizing = captureSimulatorScreenshotWithFallback(
-      IOS_TEST_SIMULATOR,
-      '/tmp/normalized.png',
-      {
-        env: process.env,
-        normalizeStatusBar: true,
-        skipIosSimulatorBootCheck: true,
-        deps: captureDeps(() => normalizingGate.capture()),
+    await withOverlappingCaptures(
+      async () => {
+        const normalizingGate = createCaptureGate();
+        const plainGate = createCaptureGate();
+        const normalizing = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/normalized.png',
+          screenshotOptions(normalizingGate, true),
+        );
+        await normalizingGate.entered;
+        const plain = captureSimulatorScreenshotWithFallback(
+          IOS_TEST_SIMULATOR,
+          '/tmp/plain.png',
+          screenshotOptions(plainGate, false, {
+            readDuringCapture: () => {
+              seenDuringPlainCapture.push(statusBar.overrides());
+            },
+          }),
+        );
+        return { captures: [normalizing, plain], gates: [normalizingGate, plainGate] };
       },
-    );
-    await normalizingGate.entered;
-
-    const plain = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/plain.png', {
-      env: process.env,
-      skipIosSimulatorBootCheck: true,
-      deps: captureDeps(async () => {
-        seenDuringPlainCapture.push(statusBar.overrides());
-      }),
-    });
-    try {
-      await yieldToQueuedWork();
-
-      normalizingGate.release();
-      await normalizing;
-      await plain;
-    } finally {
-      normalizingGate.release();
-    }
-
-    assert.deepEqual(
-      seenDuringPlainCapture,
-      [CALLER_OVERRIDES],
-      'a capture without --normalize-status-bar must not take its screenshot of the temporary normalized bar',
+      (settled) => {
+        assert.equal(fulfilledCount(settled), 2, 'both captures must finish');
+        assert.deepEqual(
+          seenDuringPlainCapture,
+          [CALLER_OVERRIDES],
+          'a capture without --normalize-status-bar must not take its screenshot of the temporary normalized bar',
+        );
+      },
     );
   });
 });
