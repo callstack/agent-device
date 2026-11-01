@@ -235,7 +235,7 @@ export function createComposedPlatformRuntimeGateway(options: {
         if (first) {
           // ADR 0027 keeps the successful gateway's eager closure flat.
           const { createPlatformRuntimeShutdownError } =
-            await import('@agent-device/contracts/platform-runtime-shutdown');
+            await import('./platform-runtime-shutdown-error.ts');
           throw createPlatformRuntimeShutdownError([first, ...rest]);
         }
       })),

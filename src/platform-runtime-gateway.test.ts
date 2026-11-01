@@ -320,9 +320,12 @@ describe('composed platform runtime gateway', () => {
     expect(await runtime.close()).toBe(report);
     expect(shutdown).toHaveBeenCalledOnce();
   });
-  test.each([1, 2] as const)(
+  test.each([
+    [1, 'owner refused'],
+    [2, 'owner tool missing'],
+  ] as const)(
     'settles all owners and preserves %i failure(s) across concurrent and repeated shutdown',
-    async (failureCount) => {
+    async (failureCount, expectedFailureMessage) => {
       const failedRef = providerRuntimeOwner('limrun', 'failed');
       const secondFailedRef = providerRuntimeOwner('limrun', 'second-failed');
       const healthyRef = providerRuntimeOwner('limrun', 'healthy');
@@ -396,6 +399,10 @@ describe('composed platform runtime gateway', () => {
               ],
             },
           });
+          expect(result.reason.message).toContain('owner refused');
+          expect(result.reason.message).toContain(expectedFailureMessage);
+          expect(normalizeError(result.reason).hint).toContain('Cleanup is unconfirmed');
+          expect(normalizeError(result.reason).hint).toContain('verify claim ownership');
           if (failureCount === 1) expect(result.reason.cause).toBe(failure);
           else expect(result.reason.cause.errors).toEqual([failure, secondFailure]);
         }

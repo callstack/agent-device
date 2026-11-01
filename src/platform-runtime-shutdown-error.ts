@@ -1,12 +1,12 @@
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import type { RuntimeOwnerRef } from './platform-runtime.ts';
+import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 
-export type PlatformRuntimeShutdownFailure = Readonly<{
+type PlatformRuntimeShutdownFailure = Readonly<{
   owner: RuntimeOwnerRef;
   error: NormalizedError;
 }>;
 
-export type PlatformRuntimeShutdownErrorDetails = Readonly<{
+type PlatformRuntimeShutdownErrorDetails = Readonly<{
   reason: 'platform-owner-shutdown-failed';
   failures: readonly PlatformRuntimeShutdownFailure[];
 }>;

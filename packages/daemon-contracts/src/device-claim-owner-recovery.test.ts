@@ -4,7 +4,6 @@ import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createPlatformRuntimeShutdownError } from '@agent-device/contracts/platform-runtime-shutdown';
 import {
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecovery,
@@ -55,9 +54,14 @@ function fixture(
       logPath: '/tmp/apple-owner.log',
     }),
   };
-  const cleanupError = createPlatformRuntimeShutdownError(
-    failureCount === 1 ? [first] : [first, second],
-  );
+  const cleanupError = new AppError('COMMAND_FAILED', 'Owner cleanup refused', {
+    reason: 'platform-owner-shutdown-failed',
+    failures: (failureCount === 1 ? [first] : [first, second]).map(({ owner, error }) => ({
+      owner,
+      error: normalizeError(error),
+    })),
+    retriable: false,
+  });
   const reconcileOnce = vi.fn(reconcile);
   const emit = vi.fn();
   const dispose = vi.fn(async () => {
@@ -138,19 +142,6 @@ test.each([1, 2] as const)(
         }),
       }),
     );
-    const normalized = normalizeError(f.cleanupError);
-    expect(JSON.parse(JSON.stringify(normalized))).toMatchObject({
-      code: 'COMMAND_FAILED',
-      retriable: false,
-      details: {
-        reason: 'platform-owner-shutdown-failed',
-        failures: expectedFailures.slice(0, failureCount),
-      },
-    });
-    expect(normalized.message).toContain('android: Android owner refused');
-    if (failureCount === 2) expect(normalized.message).toContain('apple: Apple owner refused');
-    expect(normalized.hint).toContain('Cleanup is unconfirmed');
-    expect(normalized.hint).toContain('verify claim ownership');
     expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(f.claimBytes);
     expect(f.reconcileOnce).toHaveBeenCalledOnce();
     expect(f.dispose).toHaveBeenCalledOnce();

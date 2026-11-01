@@ -47,6 +47,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-managed-web-backend.ts',
     'src/platform-runtime-open-target.ts',
     'src/platform-runtime-resource-cleanup.ts',
+    'src/platform-runtime-shutdown-error.ts',
     'src/platform-runtime.ts',
     'src/provider-credential-fingerprint.ts',
     'src/provider-device-runtimes.ts',
