@@ -13,10 +13,10 @@ import {
   type DurableCaptureRecoveryAuthority,
   type DurableCaptureRecoveryControl,
 } from './recovery-authority.ts';
-import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
+import { withDurableCaptureResourceFence } from './fence.ts';
 import type { DurableCaptureRecordDefinition } from './definition.ts';
 import { durableCaptureDiagnosticPrefix } from './labels.ts';
-import { transitionCleanupOutcome } from './transitions.ts';
+import { markCompletingDurableCapture, transitionCleanupOutcome } from './transitions.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
 
@@ -162,8 +162,11 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           store: params.definition.store,
           resourcePath,
           expected: envelope.fence,
+          // The record committed between selection and this fence, so its cleanup is already the
+          // finish's own: settled, with nothing left for recovery to signal or delete.
+          onCompleted: () => ({ status: 'already-missing' as const }),
           run: async (lease) => {
-            markCompleting(lease);
+            markCompletingDurableCapture(lease);
             const outcome = await handle.forceCleanup();
             transitionCleanupOutcome(lease, outcome);
             return outcome;
@@ -194,6 +197,9 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           store: params.definition.store,
           resourcePath,
           expected: envelope.fence,
+          // A committed record keeps its facts: this descriptor cleanup cannot make it anything the
+          // finish did not already record, and the caller still reports what cleanup returned.
+          onCompleted: () => undefined,
           run: async (lease) => transitionCleanupOutcome(lease, cleanup),
         });
         return isConfirmedCleanup(cleanup);
@@ -214,17 +220,14 @@ async function transitionTerminal<K extends string, H extends LiveResourceHandle
     store: params.definition.store,
     resourcePath,
     expected: envelope.fence,
+    // Whoever committed this record terminalized it first, and its facts are the ones a caller is
+    // served. Recovery does not overwrite a committed manifest with its own observation.
+    onCompleted: () => undefined,
     run: async (lease) => {
       lease.transition('completed', {
         metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completed', ...metadata },
       });
     },
-  });
-}
-
-function markCompleting<K extends string>(lease: DurableCaptureResourceFenceLease<K>): void {
-  lease.transition('open', {
-    metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completing' },
   });
 }
 

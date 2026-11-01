@@ -78,6 +78,9 @@ export async function finishRecoveredDurableCapture<
           store: definition.store,
           resourcePath: params.resourcePath,
           expected: envelope.fence,
+          // The record committed while this recovery was acquiring authority. Its committed export
+          // is what the caller is served, and this attempt adds nothing to it.
+          onCompleted: () => undefined,
           run: async (lease) => {
             transitionFinishOutcome(definition, lease, {
               status: 'completed',
@@ -104,6 +107,9 @@ export async function finishRecoveredDurableCapture<
             store: definition.store,
             resourcePath: params.resourcePath,
             expected: envelope.fence,
+            // A committed record keeps its facts: this descriptor cleanup cannot make it anything the
+            // finish did not already record, and the caller still reports what cleanup returned.
+            onCompleted: () => undefined,
             run: async (lease) => transitionCleanupOutcome(lease, cleanup),
           });
           requireConfirmedDurableCaptureCleanup(definition, cleanup);
