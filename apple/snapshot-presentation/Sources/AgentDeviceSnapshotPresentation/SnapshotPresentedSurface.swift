@@ -1,11 +1,9 @@
 import Foundation
 
 /// Reads a modal presentation out of a runner acquisition (#3565). A runner node carries no UIKit class
-/// name, so its evidence is an element type that names a presentation, or a modal-scope pair whose
-/// honor-modal read found a modal surface. Its answer is `presented` or `unknown`, never `absent`: a pair
-/// that removed nothing is not evidence of absence. This is the class-blind column of the golden table
-/// `contracts/fixtures/ios-presented-surface.json`, with `modalScopeExpected` for the pair; the
-/// class-aware rule is `collectPresentedSurface` in
+/// name, so its only evidence is an element type that names a presentation. Its answer is `presented` or
+/// `unknown`, never `absent`. This is the class-blind column of the golden table
+/// `contracts/fixtures/ios-presented-surface.json`; the class-aware rule is `collectPresentedSurface` in
 /// `packages/capture-kit/src/ios-snapshot-engine/geometry-policy.ts`.
 public enum SnapshotPresentedSurface {
   /// Element types that name a presentation, keyed by the element-type numbering every iOS producer
@@ -17,10 +15,8 @@ public enum SnapshotPresentedSurface {
     "Dialog": 8,
   ]
 
-  /// `modalScope` is nil when the capture read no modal-scope pair.
-  public static func classify(_ acquisition: SnapshotAcquisition, modalScope: ModalSurfaceReading?) -> PresentedSurface {
-    if case .modal = modalScope { return .presented }
-    return acquisition.nodes.contains { isPresentingElementType($0.type) } ? .presented : .unknown
+  public static func classify(_ acquisition: SnapshotAcquisition) -> PresentedSurface {
+    acquisition.nodes.contains { isPresentingElementType($0.type) } ? .presented : .unknown
   }
 
   private static func isPresentingElementType(_ elementType: String) -> Bool {

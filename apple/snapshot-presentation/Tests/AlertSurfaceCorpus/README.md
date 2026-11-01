@@ -1,27 +1,120 @@
 # Alert surface corpus
 
 Each file records two accessibility trees of one screen from a real simulator, and what the alert
-rules in `AlertSurface` must find on that screen. `AlertSurfaceTests` replays every file on the host
-with `swift test --package-path apple/snapshot-presentation`, so a rule change that loses a real
-prompt fails without a device.
+rules in `AlertSurface` and `ModalSurface` must find on that screen. `AlertSurfaceTests` and
+`ModalSurfaceTests` replay every file on the host, so a rule change that loses a real prompt fails
+without a device.
 
-## Add a fixture
+## Before you start
 
-1. Put the screen in the state you want, using an agent-device session: open the app, `fold`, and
-   raise the prompt. For prompt recipes, see `examples/test-app/README.md`.
-2. Capture the app that hosts the prompt (`com.apple.springboard` for a system alert):
-   `pnpm capture:alert-surface --udid <udid> --bundle <bundle id> --name <device>-<pose>-<app>-<prompt>`.
-   The capture builds its runner with its own bundle id, so it runs beside the session's runner.
-3. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
-   buttons. A source you leave out must find nothing, and `{}` marks a screen with no prompt.
-4. Add `expectModalScope`, which `ModalSurfaceTests` replays through `ModalSurface`. For a screen
-   whose honor-modal tree removes nothing, write `{"reading": "noExclusion"}`. Otherwise write
-   `"reading": "modal"` and give each surface's `host` and `roots` as `honorModal` indexes, with the
-   labels of the `actions` it offers. Then give the `excludedActions`: the labels of the
-   `honorModal` actions that no surface offers.
+You need:
 
-Don't edit the trees by hand. Capture again instead. The script keeps the existing `expect` and
-`expectModalScope`, but a new capture can move the indexes in `expectModalScope`.
+- Xcode with an iOS simulator runtime. The capture builds its runner with the Xcode that
+  `xcode-select -p` prints.
+- A booted simulator. `xcrun simctl list devices booted` prints its UDID.
+- An agent-device session on that simulator that shows the screen you want to record. For the
+  "Open in app" prompts, see `examples/test-app/README.md`.
+
+## Add a recording
+
+1. Put the screen in the state you want with the session: open the app, `fold` for a folded pose,
+   and raise the prompt.
+2. Record the app that hosts the prompt. For a system alert, that is `com.apple.springboard`:
+
+   ```bash
+   pnpm capture:alert-surface --udid <udid> --bundle com.apple.springboard --name iphone-duo-folded-springboard-open-in-app
+   ```
+
+   Name the recording `<device>-<pose>-<app>-<prompt>`. The capture builds a runner with its own
+   bundle id, so it runs beside the session's runner. If the screen changes between its reads, the
+   capture fails. Wait until the prompt stops animating, then run it again.
+
+3. Print the honor-modal tree:
+
+   ```bash
+   pnpm print:alert-surface apple/snapshot-presentation/Tests/AlertSurfaceCorpus/iphone-duo-folded-springboard-open-in-app.json
+   ```
+
+   Each line shows a node's index, type, and label. `[kept 1 of 3 children]` marks a node where
+   the honor-modal tree removed children. To print the whole tree, add `plain` after the path.
+
+4. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
+   buttons. The sources are `blockingSystemModal`, `appAlert`, `safariDialog`, and `dismissPopup`.
+   A source you leave out must find nothing. Write `{}` for a screen with no prompt.
+5. Add `expectModalScope` from the printed tree:
+   - If no node is marked, write `{"reading": "noExclusion"}`.
+   - Otherwise, write `"reading": "modal"` and one surface for each branch. The surface's `host` is
+     the innermost marked node of the branch, and its `roots` are the children that node kept.
+     `actions` are the labels of the controls under the roots, in the printed order. Empty labels
+     count.
+   - Add `excludedActions`: the labels of the honor-modal tree's controls that no surface offers.
+6. Run the replay:
+
+   ```bash
+   swift test --package-path apple/snapshot-presentation
+   ```
+
+Don't edit the trees by hand. Capture again instead. A recapture keeps `expect` and
+`expectModalScope`, but it can move the indexes in `expectModalScope`. After a recapture, print the
+tree again and review each index. Don't copy indexes from what `ModalSurface` reads: the replay
+proves nothing if the expectation comes from the rule it tests.
+
+## Example: the SpringBoard "Open in app" alert
+
+`iphone-duo-folded-springboard-open-in-app.json` records the alert that
+`xcrun simctl openurl <udid> "agent-device-test-app://x"` raises on a folded iPhone Duo. The start
+of its honor-modal tree:
+
+```text
+   0 Application ""  [kept 1 of 40 children]
+   1   Window ""  [kept 1 of 3 children]
+   2     Other ""  [kept 1 of 3 children]
+   3       Alert "Open in “Agent Device Tester”?"
+   4         Other ""
+   5           Other ""
+   6             Other ""
+   7             Other ""
+   8               ScrollView ""
+   9                 Other ""
+  10                   StaticText "Open in “Agent Device Tester”?"
+  11                 Other ""
+  12                 Other "Vertical scroll bar, 2 pages"
+  13                   Other ""
+  14                 Other "Horizontal scroll bar, 1 page"
+  15                   Other ""
+  16                 Other "Vertical scroll bar, 2 pages"
+  17                   Other ""
+  18                 Other "Horizontal scroll bar, 1 page"
+  19                   Other ""
+  20               ScrollView ""
+  21                 Other ""
+  22                   Other ""
+  23                     Button "Cancel"
+  24                     Button "Open"
+...
+```
+
+The screenshot shows the alert `Open in “Agent Device Tester”?` with Cancel and Open. Both the
+system-modal source and the app-alert source find it, so `expect` names both:
+
+```json
+"expect": {
+  "blockingSystemModal": { "title": "Open in “Agent Device Tester”?", "buttons": ["Cancel", "Open"] },
+  "appAlert": { "title": "Open in “Agent Device Tester”?", "buttons": ["Cancel", "Open"] }
+}
+```
+
+Nodes 0, 1, and 2 are marked, and they form one branch. Node 2 is the innermost, and it kept node
+3, the alert. The alert's controls are Cancel and Open. The tree has no other controls, so
+`excludedActions` is empty:
+
+```json
+"expectModalScope": {
+  "reading": "modal",
+  "surfaces": [{ "host": 2, "roots": [3], "actions": ["Cancel", "Open"] }],
+  "excludedActions": []
+}
+```
 
 ## Format
 
