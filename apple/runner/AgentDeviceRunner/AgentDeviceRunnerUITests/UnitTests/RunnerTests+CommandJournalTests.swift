@@ -291,7 +291,7 @@ extension RunnerTests {
     runnerJournalCloseDispatchedCommand(journal, tap, message: "tapped")
     runnerJournalFinishOtherCommands(journal, 64)
 
-    guard case .terminal(let outcome) = journal.accept(command: tap) else {
+    guard case .terminal(let outcome, _) = journal.accept(command: tap) else {
       return XCTFail("a pruned id whose work reached the device must never be admitted again")
     }
     XCTAssertFalse(outcome.ok)
@@ -321,7 +321,7 @@ extension RunnerTests {
       idPrefix: "window",
       dispatched: true
     )
-    guard case .terminal(let refusal) = journal.accept(command: tap) else {
+    guard case .terminal(let refusal, _) = journal.accept(command: tap) else {
       return XCTFail("a spent id must stay refused for the whole closed-id window")
     }
     XCTAssertEqual(
@@ -336,7 +336,7 @@ extension RunnerTests {
     runnerJournalFinishOtherCommands(journal, 1, idPrefix: "valve", dispatched: true)
 
     let nextOldest = runnerJournalCommand("readText", id: "window-0")
-    guard case .terminal(let stillRefused) = journal.accept(command: nextOldest) else {
+    guard case .terminal(let stillRefused, _) = journal.accept(command: nextOldest) else {
       return XCTFail("the valve must release the oldest closed id only, not the next-oldest")
     }
     XCTAssertEqual(
@@ -406,6 +406,56 @@ extension RunnerTests {
     XCTAssertEqual(served.data?.message, "recording already stopped")
   }
 
+  /// Whether `accept` reports that the answer it hands over is the runner's own `shutdown` answer.
+  private func journalAnswersShutdown(
+    _ journal: RunnerCommandJournal,
+    command: Command
+  ) -> Bool {
+    switch journal.accept(command: command) {
+    case .terminal(_, let answersShutdown):
+      return answersShutdown
+    case .execute:
+      XCTFail("a finished, dispatched commandId must be answered from the journal")
+      return false
+    case .join:
+      XCTFail("this test leaves no execution in flight")
+      return false
+    }
+  }
+
+  /// Which answer ends the runner is the journal's fact about the record, not the repeat's: a caller may
+  /// reuse a spent `commandId` under another command name, and the outcome it receives stays the recorded
+  /// command's. Naming `shutdown` in the repeat must not end the runner on some other command's answer,
+  /// and naming another command must not withhold the end that a recorded `shutdown` answer owes.
+  func testJournalDecidesFromTheRecordWhetherAReplayEndsTheRunner() throws {
+    let journal = RunnerCommandJournal()
+    let tap = runnerJournalCommand("tap", id: "spent-then-named-shutdown")
+    journal.accept(command: tap)
+    journal.markDispatched(command: tap)
+    journal.finish(command: tap, response: Response(ok: true, data: DataPayload(message: "tapped")))
+
+    let shutdown = runnerJournalCommand("shutdown", id: "spent-then-named-shutdown")
+    XCTAssertEqual(
+      journalAnswersShutdown(journal, command: shutdown),
+      false,
+      "a recorded tap answer must not end the runner because the repeat named shutdown"
+    )
+
+    let shutdownId = "shutdown-then-named-tap"
+    let realShutdown = runnerJournalCommand("shutdown", id: shutdownId)
+    journal.accept(command: realShutdown)
+    journal.markDispatched(command: realShutdown)
+    journal.finish(
+      command: realShutdown,
+      response: Response(ok: true, data: DataPayload(message: "shutdown"))
+    )
+    XCTAssertEqual(
+      journalAnswersShutdown(journal, command: runnerJournalCommand("tap", id: shutdownId)),
+      true,
+      "a recorded shutdown answer must still end the runner when the repeat names another command"
+    )
+  }
+
   /// The recorded failure has to carry the same code the live answer carried, because the daemon reads
   /// that code to decide whether the runner's main thread is still draining. A repeat of a command that
   /// timed out on the execution watchdog is answered from this record, and a failure stored without its
@@ -424,7 +474,7 @@ extension RunnerTests {
       nil
     )
 
-    guard case .terminal(let replay) = journal.accept(command: command) else {
+    guard case .terminal(let replay, _) = journal.accept(command: command) else {
       return XCTFail("a repeat of a finished, dispatched commandId is answered from the journal")
     }
 

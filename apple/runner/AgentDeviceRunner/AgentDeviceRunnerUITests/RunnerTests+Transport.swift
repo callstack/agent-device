@@ -212,11 +212,6 @@ extension RunnerTests {
       let admission = commandJournal.accept(command: command) { [weak self] commandId in
         self?.registerJoiner(for: commandId, completion: completion)
       }
-      // A `shutdown` answer is what ends the runner's own XCTest run, whoever it is delivered to: a
-      // send that joined the execution receives this same flag through `deliverCommandResult`, and a
-      // send the journal answers receives it here. `finish()` guards its own expectation against being
-      // fulfilled twice, so more than one send asking to finish is harmless.
-      let finishesRunner = command.command == .shutdown
       switch admission {
       case .join:
         // Re-sends of a still-executing commandId (the daemon's transport retry loop) were registered
@@ -227,13 +222,17 @@ extension RunnerTests {
           command.command.rawValue,
           command.commandId ?? ""
         )
-      case .terminal(let outcome):
+      case .terminal(let outcome, let answersShutdown):
+        // Which answer ends the runner is the journal's fact, not this request's: a caller may reuse a
+        // spent `commandId` under another command name, and what it receives is still the recorded
+        // command's outcome. `finish()` guards its own expectation against being fulfilled twice, so a
+        // shutdown that several sends receive is harmless.
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
           command.command.rawValue,
           command.commandId ?? ""
         )
-        completion((jsonResponse(status: 200, response: outcome), finishesRunner))
+        completion((jsonResponse(status: 200, response: outcome), answersShutdown))
       case .execute:
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
@@ -251,7 +250,7 @@ extension RunnerTests {
             )
             self.deliverCommandResult(
               command: command,
-              result: (self.jsonResponse(status: 200, response: response), finishesRunner),
+              result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
               completion: completion
             )
           case .failure(let error):

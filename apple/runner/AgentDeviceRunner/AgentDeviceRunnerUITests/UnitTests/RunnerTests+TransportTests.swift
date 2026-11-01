@@ -532,7 +532,7 @@ extension RunnerTests {
     let lateVerdict = commandJournal.accept(command: command) { _ in
       registeredLateSend = true
     }
-    guard case .terminal(let outcome) = lateVerdict else {
+    guard case .terminal(let outcome, _) = lateVerdict else {
       return XCTFail("a send of a finished commandId must be answered from the journal")
     }
     XCTAssertFalse(registeredLateSend, "a send answered from the journal must not be registered")
@@ -772,6 +772,46 @@ extension RunnerTests {
     wait(for: [finished], timeout: 2)
   }
 
+  /// The mirror of the case above, and the reason the finish flag is the journal's fact: a caller that
+  /// reuses a spent `commandId` under the name `shutdown` receives the recorded answer of whatever that
+  /// id really ran. Ending the runner there would stop it on some other command's answer, so the resend
+  /// is answered and the runner keeps serving.
+  func testTransportDoesNotFinishOnAReplayOfAnotherCommandsRecordedAnswer() throws {
+    let spent = try transportCommand("readText", id: "spent-then-named-shutdown")
+    commandJournal.accept(command: spent)
+    commandJournal.markDispatched(command: spent)
+    commandJournal.finish(
+      command: spent,
+      response: Response(ok: true, data: DataPayload(message: "read"))
+    )
+
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let client = URLSession(configuration: .ephemeral)
+    defer { client.invalidateAndCancel() }
+    // Fulfilled only by a delivery that wrongly asks the runner to finish, which is what this test
+    // rules out. `wait` with no expectation would not catch a finish that happens late.
+    let wronglyFinished = expectation(description: "a replay must not finish the runner")
+    wronglyFinished.isInverted = true
+    doneExpectation = wronglyFinished
+    defer { doneExpectation = nil }
+
+    let reply = try transportHttpResponse(
+      client: client,
+      port: port,
+      payload: #"{"command":"shutdown","commandId":"spent-then-named-shutdown"}"#
+    )
+
+    XCTAssertEqual(reply.ok, true)
+    XCTAssertEqual(
+      reply.data?.message,
+      "read",
+      "the id's recorded answer is served, not a shutdown answer"
+    )
+    wait(for: [wronglyFinished], timeout: 1)
+  }
+
   /// Routes `command` the way the transport routes it: an inline read, then the journal's verdict on its
   /// `commandId`. A finished id comes back as the answer the runner recorded for it; the execute path
   /// rethrows what the dispatch threw, which the wire path turns into its own response. Sends that need
@@ -783,7 +823,7 @@ extension RunnerTests {
       return response
     }
     switch commandJournal.accept(command: command) {
-    case .terminal(let outcome):
+    case .terminal(let outcome, _):
       return outcome
     case .join:
       throw NSError(

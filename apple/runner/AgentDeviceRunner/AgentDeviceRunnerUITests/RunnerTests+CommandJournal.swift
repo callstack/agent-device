@@ -40,8 +40,11 @@ enum RunnerCommandAdmission {
   /// execution. `accept(command:registeringJoin:)` has already registered the send it gave this verdict.
   case join
   /// Execution finished, and the work reached the device: the caller answers from the journal and
-  /// never executes this command again.
-  case terminal(outcome: Response)
+  /// never executes this command again. `answersShutdown` says whether the answer being handed over is
+  /// the runner's own `shutdown` answer, which the caller owes the runner's end. The repeat's request
+  /// cannot answer that: a caller may reuse a spent `commandId` under another command name, and the
+  /// answer it receives stays the recorded command's.
+  case terminal(outcome: Response, answersShutdown: Bool)
 }
 
 /// The runner's one command-lifecycle record: what it holds for a `commandId`, whether that id may run,
@@ -84,9 +87,15 @@ final class RunnerCommandJournal {
     defer { lock.unlock() }
     guard let entry = entries[commandId] else {
       // The entry can be pruned; the fact it recorded is not, so an id that spent itself on the device
-      // never executes again.
+      // never executes again. Only the entry named the command, so this refusal can name only what the
+      // repeat asked for.
       if closedCommandIds.contains(commandId) {
-        return .terminal(outcome: alreadyFinishedRefusal(command: command, commandId: commandId, outcomeDropped: true))
+        // The record that named this id is gone, so all this refusal can promise is that the id is
+        // spent — it is no command's answer, and so never the runner's own.
+        return .terminal(
+          outcome: alreadyFinishedRefusal(command: command, commandId: commandId, outcomeDropped: true),
+          answersShutdown: false
+        )
       }
       return claim(command: command, commandId: commandId)
     }
@@ -99,7 +108,10 @@ final class RunnerCommandJournal {
     guard entry.dispatched else {
       return claim(command: command, commandId: commandId)
     }
-    return .terminal(outcome: recordedOutcome(for: entry))
+    return .terminal(
+      outcome: recordedOutcome(for: entry),
+      answersShutdown: entry.command == CommandType.shutdown.rawValue
+    )
   }
 
   func start(command: Command) {
@@ -238,6 +250,11 @@ final class RunnerCommandJournal {
       // Only work that reached the device spends its id. A pruned refusal leaves the id free, which is
       // what the busy resend of the same `commandId` depends on (ADR 0005).
       if entries[removable]?.dispatched == true {
+        // The two closed-id structures stay one-to-one, and nothing here needs a duplicate check to keep
+        // them that way: an id enters `closedCommandIds` only in this branch, and an id whose entry this
+        // journal no longer holds can be claimed again only once the marker is gone — which the valve
+        // below does by removing the id from both structures together. So a second close of a released id
+        // finds an id in neither structure, and one still marked can never have an entry to prune.
         closedCommandIds.insert(removable)
         closedOrder.append(removable)
         while closedOrder.count > Self.closedCommandIdSafetyValve {
