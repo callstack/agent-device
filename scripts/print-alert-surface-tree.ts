@@ -8,6 +8,7 @@ type RecordedNode = {
   element: string;
   type: string;
   label: string;
+  rect: unknown;
 };
 
 function fail(message: string): never {
@@ -55,47 +56,95 @@ function countElements(tree: RecordedNode[], positions: number[]): Map<string, n
   return counts;
 }
 
-// Pairs each honor-modal node with one plain occurrence, the way ModalSurface walks the pair. An
-// element listed more than once under one parent pairs in order when every occurrence is kept.
-// When only some are kept, ModalSurface reads `unknown(duplicatedChild)`, so this stops there.
-const markers = new Map<number, string>();
-if (treeName === 'honorModal') {
-  const plainChildren = childrenOf(plain);
-  const keptChildren = childrenOf(nodes);
-  const pairedPlain = new Map<number, number>();
-  if (nodes[0].element === plain[0].element) pairedPlain.set(0, 0);
-  for (const node of nodes) {
-    const plainNode = pairedPlain.get(node.index);
-    if (plainNode === undefined) continue;
-    const listed = countElements(plain, plainChildren[plainNode]);
-    const kept = countElements(nodes, keptChildren[node.index]);
-    const ambiguous = [...kept].find(([element, count]) => {
-      const listedCount = listed.get(element) ?? 0;
-      return listedCount > 1 && count < listedCount;
-    });
-    if (ambiguous) {
-      const [element, count] = ambiguous;
-      markers.set(
-        node.index,
-        `[duplicatedChild: kept ${count} of ${listed.get(element)} occurrences of ${element}]`,
-      );
-      continue;
-    }
-    const removed = [...plainChildren[plainNode]];
-    for (const child of keptChildren[node.index]) {
-      const match = removed.findIndex(
-        (position) => plain[position].element === nodes[child].element,
-      );
-      if (match >= 0) pairedPlain.set(child, removed.splice(match, 1)[0]);
-    }
-    if (removed.length > 0 && keptChildren[node.index].length > 0) {
-      markers.set(
-        node.index,
-        `[kept ${keptChildren[node.index].length} of ${plainChildren[plainNode].length} children]`,
-      );
-    }
+// The reading ModalSurface.read gives the pair, ported step for step from ModalScopePair.pair and
+// ModalSurface.read so the printer never marks a surface the rule would not read. A capture records
+// no confirming tree, so `screenChanged` is not checked here.
+type Reading =
+  | { kind: 'noExclusion' }
+  | { kind: 'modal'; markers: Map<number, string> }
+  | { kind: 'unknown'; reason: string };
+
+function pairInstability(honorModal: RecordedNode[]): string | undefined {
+  const keyOf = (tree: RecordedNode[], node: RecordedNode) =>
+    JSON.stringify([
+      node.element,
+      node.parentIndex === undefined ? null : tree[node.parentIndex].element,
+    ]);
+  const frameOf = (node: RecordedNode) => JSON.stringify(node.rect);
+  const unmatched = new Map<string, { frame: string; count: number }>();
+  for (const node of plain) {
+    const key = keyOf(plain, node);
+    unmatched.set(key, { frame: frameOf(node), count: (unmatched.get(key)?.count ?? 0) + 1 });
   }
+  const plainElements = new Set(plain.map((node) => node.element));
+  for (const node of honorModal) {
+    const match = unmatched.get(keyOf(honorModal, node));
+    if (!match || match.count === 0) {
+      const reason = plainElements.has(node.element) ? 'reparentedElement' : 'unmatchedElement';
+      return `unstable(${reason}) at node ${node.index}`;
+    }
+    if (match.frame !== frameOf(node)) return `unstable(movedElement) at node ${node.index}`;
+    match.count -= 1;
+  }
+  return undefined;
 }
+
+function readModalSurface(honorModal: RecordedNode[]): Reading {
+  const instability = pairInstability(honorModal);
+  if (instability) return { kind: 'unknown', reason: instability };
+  if (plain.length === honorModal.length) return { kind: 'noExclusion' };
+  if (plain[0].element !== honorModal[0].element)
+    return { kind: 'unknown', reason: 'rootMismatch' };
+  const plainChildren = childrenOf(plain);
+  const keptChildren = childrenOf(honorModal);
+  const markers = new Map<number, string>();
+  let failure = '';
+
+  // Returns the number of surfaces under the node, or undefined when the walk fails.
+  function surfaces(honorModalNode: number, plainNode: number): number | undefined {
+    const removed = [...plainChildren[plainNode]];
+    const kept: Array<[number, number]> = [];
+    const listed = countElements(plain, plainChildren[plainNode]);
+    const keptListed = countElements(honorModal, keptChildren[honorModalNode]);
+    for (const child of keptChildren[honorModalNode]) {
+      const element = honorModal[child].element;
+      const listedCount = listed.get(element) ?? 0;
+      const keptCount = keptListed.get(element) ?? 0;
+      if (listedCount >= 2 && keptCount < listedCount) {
+        failure = `duplicatedChild at node ${honorModalNode} (kept ${keptCount} of ${listedCount} occurrences of ${element})`;
+        return undefined;
+      }
+      const match = removed.findIndex((position) => plain[position].element === element);
+      if (match < 0) {
+        failure = `unstable(reparentedElement) at node ${child}`;
+        return undefined;
+      }
+      kept.push([child, removed.splice(match, 1)[0]]);
+    }
+    let nested = 0;
+    for (const [keptChild, plainChild] of kept) {
+      const found = surfaces(keptChild, plainChild);
+      if (found === undefined) return undefined;
+      nested += found;
+    }
+    if (removed.length === 0 || kept.length === 0) return nested;
+    markers.set(
+      honorModalNode,
+      `[kept ${kept.length} of ${plainChildren[plainNode].length} children]`,
+    );
+    return nested === 0 ? 1 : nested;
+  }
+
+  const found = surfaces(0, 0);
+  if (found === undefined) return { kind: 'unknown', reason: failure };
+  return found === 0
+    ? { kind: 'unknown', reason: 'noSurvivingSurface' }
+    : { kind: 'modal', markers };
+}
+
+const reading = treeName === 'honorModal' ? readModalSurface(nodes) : undefined;
+if (reading?.kind === 'unknown') console.log(`unknown: ${reading.reason}`);
+const markers = reading?.kind === 'modal' ? reading.markers : new Map<number, string>();
 
 const depths: number[] = [];
 for (const node of nodes) {

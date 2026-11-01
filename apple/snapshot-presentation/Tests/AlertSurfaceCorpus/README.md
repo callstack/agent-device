@@ -36,8 +36,9 @@ You need:
    ```
 
    Each line shows a node's index, type, and label. `[kept 1 of 3 children]` marks a node where
-   the honor-modal tree removed children. `[duplicatedChild: kept 1 of 2 occurrences of …]` marks a
-   node that lists one element more than once, where the honor-modal tree kept only some of them.
+   the honor-modal tree removed children. When `ModalSurface` reads no surface from the recording,
+   the first line says why instead, for example
+   `unknown: duplicatedChild at node 1 (kept 1 of 2 occurrences of row)`, and no node is marked.
    To print the whole tree, add `plain` after the path. A recording that is out of preorder stops
    the command; capture it again.
 
@@ -45,9 +46,12 @@ You need:
    buttons. The sources are `blockingSystemModal`, `appAlert`, `safariDialog`, and `dismissPopup`.
    A source you leave out must find nothing. Write `{}` for a screen with no prompt.
 5. Add `expectModalScope` from the printed tree:
+   - If the first line reads `unknown: duplicatedChild`, the tree lists one element more than once
+     under a node and keeps only some of them, so `ModalSurface` can't tell which occurrence lost
+     children. Write `{"reading": "unknown", "reason": "duplicatedChild"}`.
+   - If the first line reads `unknown` with any other reason, the replay rejects the recording.
+     Capture the screen again. If the line stays, report it in an issue.
    - If no node is marked, write `{"reading": "noExclusion"}`.
-   - If a node is marked `duplicatedChild`, `ModalSurface` can't tell which occurrence lost
-     children, so it reads no surface. Write `{"reading": "unknown", "reason": "duplicatedChild"}`.
    - Otherwise, write `"reading": "modal"` and one surface for each branch. The surface's `host` is
      the innermost marked node of the branch, and its `roots` are the children that node kept.
      `actions` are the labels of the controls under the roots, in the printed order. Empty labels
