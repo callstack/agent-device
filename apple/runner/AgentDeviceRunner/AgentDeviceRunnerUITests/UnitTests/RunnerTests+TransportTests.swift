@@ -736,24 +736,21 @@ extension RunnerTests {
     func testTransportReplaysPasteboardWriteWithoutWritingAgain() throws {
       let originalItems = UIPasteboard.general.items
       defer { UIPasteboard.general.items = originalItems }
-      let listener = try startTransportListener()
-      defer { listener.cancel() }
-      let port = try XCTUnwrap(listener.port)
-      let client = URLSession(configuration: .ephemeral)
-      defer { client.invalidateAndCancel() }
-      let first = try transportHttpResponse(
-        client: client, port: port,
-        payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"journal-first-write"}"#
-      )
-      XCTAssertTrue(first.ok, String(describing: first.error))
-      XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
-      let repeated = try transportHttpResponse(
-        client: client, port: port,
-        payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"would-overwrite-on-reexecution"}"#
-      )
-      XCTAssertTrue(repeated.ok, String(describing: repeated.error))
-      XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
-      XCTAssertEqual(repeated.data?.runnerMainThreadBusy, false)
+      try withTransportClient { client, port in
+        let first = try transportHttpResponse(
+          client: client, port: port,
+          payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"journal-first-write"}"#
+        )
+        XCTAssertTrue(first.ok, String(describing: first.error))
+        XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
+        let repeated = try transportHttpResponse(
+          client: client, port: port,
+          payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"would-overwrite-on-reexecution"}"#
+        )
+        XCTAssertTrue(repeated.ok, String(describing: repeated.error))
+        XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
+        XCTAssertEqual(repeated.data?.runnerMainThreadBusy, false)
+      }
     }
   #endif
 
@@ -761,18 +758,15 @@ extension RunnerTests {
   func testTransportReexecutesAFinishedSnapshotWithTheSameId() throws {
     app.launch()
     defer { app.terminate() }
-    let listener = try startTransportListener()
-    defer { listener.cancel() }
-    let port = try XCTUnwrap(listener.port)
-    let client = URLSession(configuration: .ephemeral)
-    defer { client.invalidateAndCancel() }
-    let payload = #"{"command":"snapshot","commandId":"snapshot-twice","interactiveOnly":true}"#
+    try withTransportClient { client, port in
+      let payload = #"{"command":"snapshot","commandId":"snapshot-twice","interactiveOnly":true}"#
 
-    for _ in 0..<2 {
-      let reply = try transportHttpResponse(client: client, port: port, payload: payload)
-      XCTAssertTrue(reply.ok, String(describing: reply.error))
-      let nodes = try XCTUnwrap(reply.data?.nodes)
-      XCTAssertFalse(nodes.isEmpty)
+      for _ in 0..<2 {
+        let reply = try transportHttpResponse(client: client, port: port, payload: payload)
+        XCTAssertTrue(reply.ok, String(describing: reply.error))
+        let nodes = try XCTUnwrap(reply.data?.nodes)
+        XCTAssertFalse(nodes.isEmpty)
+      }
     }
   }
 
@@ -780,23 +774,30 @@ extension RunnerTests {
   func testTransportReexecutesASelectorReadWithTheSameId() throws {
     app.launch()
     defer { app.terminate() }
+    try withTransportClient { client, port in
+      let first = try transportHttpResponse(
+        client: client, port: port,
+        payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"Agent Device Runner"}"#
+      )
+      XCTAssertTrue(first.ok, String(describing: first.error))
+      XCTAssertEqual(first.data?.found, true)
+      let repeated = try transportHttpResponse(
+        client: client, port: port,
+        payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"missing-journal-selector"}"#
+      )
+      XCTAssertTrue(repeated.ok, String(describing: repeated.error))
+      XCTAssertEqual(repeated.data?.found, false, "a finished selector read must execute instead of replaying its retained answer")
+    }
+  }
+
+  @MainActor
+  private func withTransportClient(_ body: (URLSession, NWEndpoint.Port) throws -> Void) throws {
     let listener = try startTransportListener()
     defer { listener.cancel() }
     let port = try XCTUnwrap(listener.port)
     let client = URLSession(configuration: .ephemeral)
     defer { client.invalidateAndCancel() }
-    let first = try transportHttpResponse(
-      client: client, port: port,
-      payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"Agent Device Runner"}"#
-    )
-    XCTAssertTrue(first.ok, String(describing: first.error))
-    XCTAssertEqual(first.data?.found, true)
-    let repeated = try transportHttpResponse(
-      client: client, port: port,
-      payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"missing-journal-selector"}"#
-    )
-    XCTAssertTrue(repeated.ok, String(describing: repeated.error))
-    XCTAssertEqual(repeated.data?.found, false, "a finished selector read must execute instead of replaying its retained answer")
+    try body(client, port)
   }
 
   private func transportCommand(_ command: String, id: String) throws -> Command {
