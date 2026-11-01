@@ -216,3 +216,134 @@ for (const startEvent of [undefined, 'start']) {
     });
   }
 }
+
+test.each([false, true])('diagnostics preserve bigint precision with debug=%s', async (debug) => {
+  const logPath = path.join(mkdtempForTestSync('agent-device-diag-bigint-'), 'events.ndjson');
+  await withDiagnosticsScope({ debug, logPath }, async () => {
+    emitDiagnostic({
+      phase: 'owner_shutdown_failed',
+      data: {
+        observedAtNs: 9_007_199_254_740_993n,
+        samples: [1n, 42n],
+        authorization: 'Bearer secret',
+      },
+    });
+    assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+  });
+  const rows = fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].data, {
+    observedAtNs: '9007199254740993',
+    samples: ['1', '42'],
+    authorization: '[REDACTED]',
+  });
+});
+
+test.each(['toJSON', 'getter'] as const)(
+  'diagnostic %s failure cannot escape emission',
+  async (fault) => {
+    const evidence =
+      fault === 'toJSON'
+        ? {
+            toJSON: () => {
+              throw new Error('serialization hook failed');
+            },
+          }
+        : Object.defineProperty({}, 'value', {
+            enumerable: true,
+            get() {
+              throw new Error('diagnostic getter failed');
+            },
+          });
+    const logPath = path.join(mkdtempForTestSync('agent-device-diag-invalid-'), 'events.ndjson');
+    await withDiagnosticsScope({ debug: true, logPath }, async () => {
+      assert.doesNotThrow(() =>
+        emitDiagnostic({ phase: 'owner_shutdown_failed', data: { evidence } }),
+      );
+      assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+    });
+    const rows = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      rows.map(({ phase, data }) => ({ phase, data })),
+      [{ phase: 'owner_shutdown_failed', data: { reason: 'diagnostic-data-unserializable' } }],
+    );
+  },
+);
+
+test.each([false, true])(
+  'invalid data preserves following diagnostic events with debug=%s',
+  async (debug) => {
+    const logPath = path.join(mkdtempForTestSync('agent-device-diag-following-'), 'events.ndjson');
+    await withDiagnosticsScope({ debug, logPath }, async () => {
+      emitDiagnostic({
+        phase: 'bad_metadata',
+        data: {
+          toJSON: () => {
+            throw new Error('serialization hook failed');
+          },
+        },
+      });
+      emitDiagnostic({ phase: 'request_failed', data: { reason: 'original-refusal' } });
+      assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+    });
+    const rows = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      rows.map(({ phase, data }) => ({ phase, data })),
+      [
+        { phase: 'bad_metadata', data: { reason: 'diagnostic-data-unserializable' } },
+        { phase: 'request_failed', data: { reason: 'original-refusal' } },
+      ],
+    );
+  },
+);
+
+test.each([
+  [false, false],
+  [false, true],
+  [true, false],
+] as const)(
+  'bigint sensitive literals are redacted (debug=%s, late registration=%s)',
+  async (debug, late) => {
+    const secret = '9007199254740993';
+    const logPath = path.join(
+      mkdtempForTestSync('agent-device-diag-bigint-secret-'),
+      'events.ndjson',
+    );
+    await withDiagnosticsScope({ debug, logPath }, async () => {
+      if (!late) registerDiagnosticSensitiveValue(secret);
+      emitDiagnostic({
+        phase: 'owner_shutdown_failed',
+        data: {
+          direct: 9_007_199_254_740_993n,
+          nested: [4_290_071_992_547_409_937n],
+          generated: { toJSON: () => 9_007_199_254_740_993n },
+        },
+      });
+      if (late) registerDiagnosticSensitiveValue(secret);
+      assert.equal(flushDiagnosticsToSessionFile({ force: true })?.path, logPath);
+    });
+    const raw = fs.readFileSync(logPath, 'utf8');
+    assert.equal(raw.includes(secret), false);
+    const rows = raw
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(rows[0].data, {
+      direct: '[REDACTED]',
+      nested: ['42[REDACTED]7'],
+      generated: '[REDACTED]',
+    });
+  },
+);

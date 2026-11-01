@@ -121,6 +121,7 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
     ...cleanReport,
     providerReleases: { completed: [], pending: ['lease-a'], unknown: ['lease-b'] },
     requests: { drained: 1, abandoned: 2 },
+    platformOwners: 'failed',
     sessions: { closed: 0, failed: 1 },
     plugins: {
       disposed: [],
@@ -133,6 +134,7 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
 
   expect(lines).toEqual([
     expect.stringContaining('2 request(s) ignored cancellation'),
+    expect.stringContaining('platform owner shutdown failed'),
     expect.stringContaining('plugin stuck was still shutting down'),
     expect.stringContaining('plugin broken failed to dispose: refused'),
     expect.stringContaining('lease release still pending for lease-a'),
@@ -164,6 +166,20 @@ test('the executable writes unfinished work to stderr after a close, and a clean
       stderr: { write: (chunk) => failed.push(chunk) },
     }),
   ).toEqual({ failed: true });
+
+  for (const [platformOwners, expectedFailed, message] of [
+    ['pending', false, 'platform owners were still shutting down'],
+    ['failed', true, 'platform owner shutdown failed'],
+  ] as const) {
+    const lines: string[] = [];
+    expect(
+      await reportDaemonClose({
+        closed: Promise.resolve({ ...cleanReport, platformOwners }),
+        stderr: { write: (chunk) => lines.push(chunk) },
+      }),
+    ).toEqual({ failed: expectedFailed });
+    expect(lines).toEqual([expect.stringContaining(message)]);
+  }
 
   expect(clean).toEqual([]);
   expect(unfinished).toEqual([expect.stringMatching(/1 request\(s\) ignored cancellation/)]);

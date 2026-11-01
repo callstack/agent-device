@@ -4,7 +4,10 @@ import {
   resolveSessionAppLogPidPath,
 } from './session-artifact-paths.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { JsonObject } from '@agent-device/contracts/client';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { normalizeError } from '@agent-device/kernel/errors';
+import { toDiagnosticJson } from '@agent-device/host-kit/diagnostics';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import {
   createDeviceClaimReconciler,
@@ -57,11 +60,43 @@ export function createOwnerScopedDeviceClaimReconciler(
     const inspection = await params.beforeGateway?.(claim);
     if (inspection?.status === 'retained') return inspection;
     const recovery = compose(claim.stateDir);
+    let outcome:
+      | { status: 'fulfilled'; result: Awaited<ReturnType<DeviceClaimReconciler>> }
+      | { status: 'rejected'; error: unknown };
     try {
-      return await recovery.reconcile(claim, inspection);
-    } finally {
-      await recovery.dispose();
+      outcome = { status: 'fulfilled', result: await recovery.reconcile(claim, inspection) };
+    } catch (error) {
+      outcome = { status: 'rejected', error };
     }
+    try {
+      await recovery.dispose();
+    } catch (error) {
+      let failureDetails: JsonObject;
+      try {
+        failureDetails = { error: toDiagnosticJson(normalizeError(error)) };
+      } catch {
+        failureDetails = { reason: 'diagnostic-data-unserializable' };
+      }
+      try {
+        params.scope.diagnostics.emit({
+          level: 'error',
+          phase: 'device_claim_recovery_dispose_failed',
+          data: {
+            deviceKey: claim.deviceKey,
+            ownerSession: claim.session,
+            ...(outcome.status === 'fulfilled' && outcome.result.status === 'retained'
+              ? { retainedReason: outcome.result.reason }
+              : {}),
+            ...failureDetails,
+          },
+        });
+      } catch {
+        // ADR 0010: secondary diagnostic failures must preserve the reconciliation outcome.
+      }
+      if (outcome.status === 'fulfilled' && outcome.result.status === 'reconciled') throw error;
+    }
+    if (outcome.status === 'rejected') throw outcome.error;
+    return outcome.result;
   };
 }
 

@@ -7,7 +7,7 @@ import type {
   ComposeDaemonRuntimeDeps,
   DaemonRuntimeDeps,
   DaemonRuntimeDepsInput,
-} from '../../server/http/daemon-runtime.ts';
+} from '../../server/http/daemon-runtime-deps.ts';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
