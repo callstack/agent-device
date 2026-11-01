@@ -191,8 +191,8 @@ test('serializes a failed rotation so finish cannot publish completion', async (
 });
 
 /**
- * Pauses the rotation once, at the manifest write that would commit the chunk it has already
- * launched, so a stop can be driven while that rotation is still in flight.
+ * Holds the manifest write that would commit the second chunk, before its contents reach the
+ * device, so a stop can be claimed while that publication is still in flight.
  */
 function pauseChunkCommit() {
   let paused = false;
@@ -213,19 +213,83 @@ function pauseChunkCommit() {
   };
 }
 
+/**
+ * Holds the manifest write that names the next chunk as pending, before any recorder for it is
+ * launched, so a stop can be claimed between the marker reaching the device and the launch.
+ */
+function pausePendingEvidence() {
+  let paused = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    intercept: async (contents: string) => {
+      if (paused) return;
+      const written = JSON.parse(contents) as { chunks?: unknown[]; pendingRemotePath?: string };
+      if (written.chunks?.length !== 1 || written.pendingRemotePath === undefined) return;
+      paused = true;
+      await released;
+    },
+    isPaused: () => paused,
+    release: () => release(),
+  };
+}
+
+/**
+ * Holds the manifest write that would commit the second chunk, standing in for the transport's
+ * `printf %s … > tmp && mv -f tmp manifest`, which publishes nothing until its command finishes.
+ */
+function pauseChunkCommitPublication() {
+  let paused = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    intercept: async (contents: string) => {
+      if (paused) return;
+      const written = JSON.parse(contents) as { chunks?: unknown[] };
+      if (written.chunks?.length !== 2) return;
+      paused = true;
+      await released;
+    },
+    isPaused: () => paused,
+    release: () => release(),
+  };
+}
+
+/** Holds the graceful stop of the recorder a sequential rotation is retiring. */
+function pauseChunkRetirement(pid: string) {
+  let paused = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    intercept: async (stoppedPid: string) => {
+      if (stoppedPid !== pid || paused) return;
+      paused = true;
+      await released;
+    },
+    isPaused: () => paused,
+    release: () => release(),
+  };
+}
+
 /** Pauses the launch of the next chunk, so a stop can be claimed before that child is reported. */
 function pauseNextLaunch() {
-  let waiting = false;
+  let paused = false;
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
   return {
     intercept: async () => {
-      waiting = true;
+      paused = true;
       await released;
     },
-    isWaiting: () => waiting,
+    isWaiting: () => paused,
     release: () => release(),
   };
 }
@@ -270,6 +334,7 @@ test('does not start a chunk after force cleanup when a successful rotation is s
     let starts = 0;
     let manifest = '';
     const commit = pauseChunkCommit();
+    const stopped = new Set<string>();
     const runtime = await start({
       start: async () => {
         starts += 1;
@@ -279,6 +344,13 @@ test('does not start a chunk after force cleanup when a successful rotation is s
         manifest = contents;
         await commit.intercept(contents);
       },
+      stop: async ({ pid }: { pid: string }) => {
+        if (stopped.has(pid)) return 'already-missing' as const;
+        stopped.add(pid);
+        return 'stopped' as const;
+      },
+      inspect: async ({ pid }: { pid: string }) =>
+        stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
       readManifest: async () =>
         manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
       removeManifest: async () => {
@@ -296,6 +368,9 @@ test('does not start a chunk after force cleanup when a successful rotation is s
     await expect(cleaning).resolves.toEqual({ status: 'cleaned' });
     await vi.advanceTimersByTimeAsync(170_000);
     expect(starts).toBe(2);
+    // The rotation's recorder was signaled whichever way its commit settled: adopted then cleaned, or
+    // refused then rolled back. Either way no recorder outlives the cleanup.
+    expect(stopped).toEqual(new Set(['42', '43']));
     expect(manifest).toBe('');
   } finally {
     vi.useRealTimers();
@@ -310,6 +385,7 @@ test('rolls back the chunk a rotation launched after the stop was claimed', asyn
     const launch = pauseNextLaunch();
     const startedPaths: string[] = [];
     const removed: string[] = [];
+    const stopped = new Set<string>();
     const runtime = await start({
       start: async ({ remotePath }: { remotePath: string }) => {
         starts += 1;
@@ -320,6 +396,13 @@ test('rolls back the chunk a rotation launched after the stop was claimed', asyn
       writeManifest: async ({ contents }: { contents: string }) => {
         manifest = contents;
       },
+      stop: async ({ pid }: { pid: string }) => {
+        if (stopped.has(pid)) return 'already-missing' as const;
+        stopped.add(pid);
+        return 'stopped' as const;
+      },
+      inspect: async ({ pid }: { pid: string }) =>
+        stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
       remove: async (remotePath: string) => {
         removed.push(remotePath);
         return true;
@@ -333,8 +416,142 @@ test('rolls back the chunk a rotation launched after the stop was claimed', asyn
     await vi.advanceTimersByTimeAsync(5_000);
     await expect(finishing).resolves.toMatchObject({ status: 'completed' });
     expect(starts).toBe(2);
+    expect(stopped).toEqual(new Set(['42', '43']));
     expect(removed).toContain(startedPaths[1]);
     expect(JSON.parse(manifest).chunks).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('does not launch the sequential fallback after the stop was claimed', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const retirement = pauseChunkRetirement('42');
+    const stopped = new Set<string>();
+    const runtime = await start({
+      start: async () => {
+        starts += 1;
+        if (starts > 1) throw new Error('concurrent start unavailable');
+        return recordingProcess('42');
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        await retirement.intercept(pid);
+        if (stopped.has(pid)) return 'already-missing' as const;
+        stopped.add(pid);
+        return 'stopped' as const;
+      },
+      inspect: async ({ pid }: { pid: string }) =>
+        stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(3);
+    expect(retirement.isPaused()).toBe(true);
+    const finishing = handle.finish();
+    retirement.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    expect(starts).toBe(3);
+    expect(JSON.parse(manifest).chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('does not dispatch a chunk launch whose pending evidence was written after the stop was claimed', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const pending = pausePendingEvidence();
+    const runtime = await start({
+      start: async () => {
+        starts += 1;
+        return recordingProcess(String(41 + starts));
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+        await pending.intercept(contents);
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(pending.isPaused()).toBe(true);
+    const finishing = handle.finish();
+    pending.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    expect(starts).toBe(1);
+    // The refusal clears the pending marker through the normal rollback, so the device is never left
+    // naming a recorder nothing launched.
+    expect(JSON.parse(manifest)).toEqual(
+      expect.objectContaining({ chunks: [expect.objectContaining({ remotePid: '42' })] }),
+    );
+    expect(JSON.parse(manifest)).not.toHaveProperty('pendingRemotePath');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('does not adopt a chunk whose commit publication was refused by the stop', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    // What the device's marker actually holds: a write publishes only once it resolves unaborted, the
+    // way the transport publishes through `printf %s … > tmp && mv -f tmp manifest`.
+    const deviceWrites: string[] = [];
+    const commit = pauseChunkCommitPublication();
+    const startedPaths: string[] = [];
+    const stopped = new Set<string>();
+    const removed: string[] = [];
+    const runtime = await start({
+      start: async ({ remotePath }: { remotePath: string }) => {
+        starts += 1;
+        startedPaths.push(remotePath);
+        return recordingProcess(String(41 + starts));
+      },
+      writeManifest: async ({ contents }: { contents: string }, signal?: AbortSignal) => {
+        await commit.intercept(contents);
+        if (signal?.aborted) throw new Error('manifest publication canceled');
+        deviceWrites.push(contents);
+      },
+      stop: async ({ pid }: { pid: string }) => {
+        if (stopped.has(pid)) return 'already-missing' as const;
+        stopped.add(pid);
+        return 'stopped' as const;
+      },
+      inspect: async ({ pid }: { pid: string }) =>
+        stopped.has(pid) ? ('missing' as const) : ('owned-alive' as const),
+      remove: async (remotePath: string) => {
+        removed.push(remotePath);
+        return true;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(2);
+    expect(commit.isPaused()).toBe(true);
+    const finishing = handle.finish();
+    commit.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    // The refused publication never reached the device, and the marker the rollback re-published is
+    // the chunk set the recording held before this rotation.
+    expect(deviceWrites.map((contents) => JSON.parse(contents).chunks.length)).not.toContain(2);
+    const finalMarker = JSON.parse(deviceWrites.at(-1)!);
+    expect(finalMarker.chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
+    expect(finalMarker).not.toHaveProperty('pendingRemotePath');
+    expect(finalMarker).toHaveProperty('completion');
+    expect(stopped).toEqual(new Set(['42', '43']));
+    // The refused chunk's artifact is removed by the rollback, and the recording's own chunk by the
+    // finish's disposal.
+    expect(removed).toEqual([startedPaths[1], startedPaths[0]]);
   } finally {
     vi.useRealTimers();
   }

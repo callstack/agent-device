@@ -18,6 +18,17 @@ export class AndroidScreenRecordingStartRollbackUnconfirmed extends Error {
   }
 }
 
+/**
+ * Refusal raised when the recording's stop was claimed before a launch was dispatched, or before a
+ * rotation's commit reached the device. It is how the launch and commit owners report that the stop
+ * outran them, so the rotation can withdraw without starting or publishing anything.
+ */
+export class AndroidScreenRecordingStopClaimed extends Error {
+  constructor() {
+    super('Android screenrecord rotation refused: the recording stop was already claimed');
+  }
+}
+
 export function candidateRemotePaths(
   preferredDir: string | undefined,
   now = Date.now(),

@@ -19,7 +19,7 @@ import {
   recordingRequestFields,
   type NativeChunk,
 } from './manifest.ts';
-import { rollbackChunks, stopChunk } from './chunks.ts';
+import { AndroidScreenRecordingStopClaimed, rollbackChunks, stopChunk } from './chunks.ts';
 import { startInitialTransaction, startPendingChunk } from './launch.ts';
 import { persistNativeManifest } from './manifest-store.ts';
 import { snapshot } from './live-snapshot.ts';
@@ -81,11 +81,18 @@ async function startAndroidRecording(params: {
   let rotationFailure: unknown;
   let phase: RecordingPhase = 'recording';
   /**
+   * The recording's stop admission. It is aborted the moment either stop operation begins, so the
+   * launch owner and the commit boundary can each refuse at the device call they are about to make,
+   * rather than only being checked where the rotation happens to look.
+   */
+  const stopAdmission = new AbortController();
+  /**
    * Stops accepting rotations and arms nothing that could start one. The claim is synchronous, so the
-   * rotation already in flight cannot publish a chunk behind the stop that interrupted it.
+   * rotation already in flight cannot start or publish a chunk behind the stop that interrupted it.
    */
   const claimStop = () => {
     if (timer) clearTimeout(timer);
+    stopAdmission.abort();
     if (phase === 'recording') phase = 'stopping';
   };
   const acceptsRotations = () => phase === 'recording';
@@ -118,6 +125,7 @@ async function startAndroidRecording(params: {
       chunks,
       manifestPath,
       preferredDir: path.posix.dirname(previous.remotePath),
+      launchAdmission: stopAdmission.signal,
     });
   /**
    * Launches the next chunk, falling back to a sequential launch when the device refuses a second
@@ -129,6 +137,10 @@ async function startAndroidRecording(params: {
     try {
       return { chunk: await launchChunk(previous), previousStopped: false };
     } catch (concurrentStartError) {
+      // The stop refused this rotation before it dispatched anything. It must not retire the chunk
+      // being replaced either: the stop owns that recorder now.
+      if (concurrentStartError instanceof AndroidScreenRecordingStopClaimed)
+        throw concurrentStartError;
       await stopChunk(transport, previous);
       try {
         return { chunk: await launchChunk(previous), previousStopped: true };
@@ -177,20 +189,39 @@ async function startAndroidRecording(params: {
   const rotate = async () => {
     const previous = chunks.at(-1);
     if (!previous) throw new Error('Android recording has no active chunk');
-    const { chunk: next, previousStopped } = await launchRotationChunk(previous);
+    let next: NativeChunk;
+    let previousStopped: boolean;
+    try {
+      ({ chunk: next, previousStopped } = await launchRotationChunk(previous));
+    } catch (error) {
+      // The stop outran this rotation before it dispatched a device start. It launched nothing, so
+      // the stop owns the recording's evidence and this is not a rotation failure.
+      if (error instanceof AndroidScreenRecordingStopClaimed) return;
+      throw error;
+    }
     if (!acceptsRotations()) {
       await abandonUncommittedChunk(next);
       return;
     }
     const nextChunks = [...chunks, { ...next, index: chunks.length + 1 }];
     try {
-      await persistNativeManifest(transport, manifestPath, activeEvidence(nextChunks));
+      // The stop admission is carried to the device write itself: the publication is refused once a
+      // stop is claimed, so this cannot adopt a chunk the stop has already given up on.
+      await persistNativeManifest(
+        transport,
+        manifestPath,
+        activeEvidence(nextChunks),
+        stopAdmission.signal,
+      );
     } catch (error) {
       await undoRotationCommit(next, previous, previousStopped);
+      // The stop refused this publication, and the rollback gave the chunk back. The recording's own
+      // chunks are intact, so the stop may finalize them rather than report a rotation it caused.
+      if (stopAdmission.signal.aborted) return;
       throw error;
     }
-    // Committing is the last point a rotation can still be refused: the device holds this chunk from
-    // here, so it belongs to the recording even when a stop was claimed during the write.
+    // The publication reached the device before any stop refused it, so the recording owns this
+    // chunk from here even when a stop was claimed while the write was in flight.
     chunks = nextChunks;
     if (!previousStopped) await stopChunk(transport, previous);
     schedule();
