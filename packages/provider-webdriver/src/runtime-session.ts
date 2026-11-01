@@ -499,7 +499,13 @@ export class WebDriverSessionManager {
       const failure = isWebDriverRequestTimeout(error)
         ? sessionCreateTimeoutError(error, this.options.provider, lease, prepared)
         : error;
-      await releaseOnFailure(failure, () => prepared.cleanup?.());
+      // The hand-back is the plugin's own code, and no session exists yet for a release or a shutdown to
+      // end, so this is the one cleanup the allocation itself must not wait on forever.
+      await releaseOnFailure(failure, () =>
+        this.providerCallback(`${this.options.provider} cleanup for lease ${lease.leaseId}`, () =>
+          prepared.cleanup?.(),
+        ),
+      );
       throw failure;
     }
   }
@@ -773,7 +779,16 @@ function shutdownLeftSessionsRunning(
       provider,
       providerSessionIds,
       cleanup: 'uncertain',
-      cleanupWarnings: warningMessagesByCode(outcomes.flatMap((outcome) => outcome.warnings)),
+      // One entry per warning, each naming the session it is about: several sessions the provider would
+      // not give back carry several refusals, and keying them by code alone would report one reason for
+      // all of them.
+      cleanupWarnings: outcomes.flatMap((outcome) =>
+        outcome.warnings.map((warning) => ({
+          providerSessionId: outcome.session?.providerSessionId,
+          code: warning.code,
+          message: warning.message,
+        })),
+      ),
       hint: `${provider} did not stop these sessions and they keep billing. Stop the session ids above on ${provider}.`,
     },
   );

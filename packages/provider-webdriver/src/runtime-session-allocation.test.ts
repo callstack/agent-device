@@ -361,11 +361,11 @@ test('an artifact callback that never answers holds neither the lease nor shutdo
   const hub = startWebDriverHub();
   globalThis.fetch = hub.fetch;
   let answerArtifacts: (() => void) | undefined;
-  let lookupStarted = false;
+  const lookupStarted = startSignal();
   const runtime = makeRuntime({
     providerCallbackTimeoutMs: 40,
     listArtifacts: async () => {
-      lookupStarted = true;
+      lookupStarted.report();
       await new Promise<void>((ready) => {
         answerArtifacts = ready;
       });
@@ -379,7 +379,7 @@ test('an artifact callback that never answers holds neither the lease nor shutdo
     const releasing = settle(() => runtime.leaseLifecycle.release!(lease));
     // The lookup starts only once the hub has ended the session and the provider's cleanup has answered,
     // so its having started is the moment the billed work is finished.
-    await untilSettled(() => lookupStarted);
+    await awaitSignal(lookupStarted.arrived, 'the artifact lookup to start');
     assert.deepEqual(hub.deleted, ['session-1']);
     await schedulerYield();
 
@@ -439,7 +439,7 @@ test('a provider cleanup that outlives its budget ends the disposal as uncertain
   try {
     await runtime.leaseLifecycle.allocate!(lease);
     const releasing = settle(() => runtime.leaseLifecycle.release!(lease));
-    await untilSettled(() => hub.deleted.includes('session-1'));
+    await hub.deletedArrived('session-1');
 
     const result = await releasing;
     assert.equal(result.status, 'resolved', describe(result));
@@ -494,6 +494,118 @@ test('a release the provider refused reports the session left running', async ()
 });
 
 /**
+ * A create the hub refused still hands back what the provider prepared, and that hand-back is the
+ * plugin's own code too. A `cleanup` that never answers there would keep the allocation from answering,
+ * with the lease held behind it and nothing on the lease left to end, so it gets the same budget the
+ * disposal's cleanup gets.
+ */
+test('a create the hub refused still answers when its provider cleanup hangs', async () => {
+  const hub = startWebDriverHub({ createFailure: 'hub refused the create' });
+  globalThis.fetch = hub.fetch;
+  let answerCleanup: (() => void) | undefined;
+  const runtime = makeRuntime({
+    providerCallbackTimeoutMs: 40,
+    prepareSession: async ({ base }) => ({
+      ...base,
+      cleanup: async () => {
+        await new Promise<void>((ready) => {
+          answerCleanup = ready;
+        });
+        return undefined;
+      },
+    }),
+  });
+  const lease = makeLease();
+
+  try {
+    const allocating = settle(() => runtime.leaseLifecycle.allocate!(lease));
+    // The create failed and its cleanup is the step that will not answer, so the allocation cannot be
+    // left waiting on it.
+    const outcome = await allocating;
+    assert.equal(
+      outcome.status,
+      'rejected',
+      `the refused create still reports the hub's own refusal, got ${describe(outcome)}`,
+    );
+    const error = (outcome as Readonly<{ error: AppError }>).error;
+    const details = (error.details ?? {}) as Record<string, unknown>;
+    assert.equal(details.status, 500, 'the hub refusal is what the caller is told');
+    assert.match(String(details.cleanupError), /did not answer within 40ms/);
+
+    // The lease is the next caller's again: an allocation issued after the hung cleanup reaches the hub
+    // and is refused for the hub's own refusal, not for a teardown that never finishes. And a close does
+    // not wait on a callback it gave up on.
+    const nextAllocation = await settle(() => runtime.leaseLifecycle.allocate!(lease));
+    assert.equal(nextAllocation.status, 'rejected', describe(nextAllocation));
+    const nextDetails = ((nextAllocation as Readonly<{ error: AppError }>).error.details ??
+      {}) as Record<string, unknown>;
+    assert.equal(
+      nextDetails.status,
+      500,
+      'the lease is free, so this caller hears the hub again rather than a contention refusal',
+    );
+    assert.deepEqual(
+      await settle(() => runtime.shutdown()),
+      { status: 'resolved', value: undefined },
+      'a create cleanup this manager gave up on may not hold a close',
+    );
+    assert.deepEqual(hub.created, []);
+  } finally {
+    answerCleanup?.();
+    await runtime.shutdown();
+  }
+});
+
+/**
+ * A close reports every session it left billing, and each session keeps its own reason in that report:
+ * two sessions the provider refused to end carry two refusals, and collapsing them by warning code would
+ * hand the operator one message for both.
+ */
+test('a shutdown that could not stop two sessions names both refusals', async () => {
+  const hub = startWebDriverHub({ deleteFailure: 'provider rejected the delete' });
+  globalThis.fetch = hub.fetch;
+  const runtime = makeRuntime();
+  const first = { ...makeLease(), leaseId: 'lease-a' };
+  const second = { ...makeLease(), leaseId: 'lease-b' };
+
+  try {
+    await runtime.leaseLifecycle.allocate!(first);
+    await runtime.leaseLifecycle.allocate!(second);
+    assert.deepEqual(hub.created, ['session-1', 'session-2']);
+
+    const shuttingDown = await settle(() => runtime.shutdown());
+    assert.equal(
+      shuttingDown.status,
+      'rejected',
+      'a close that left two sessions billing is not a clean close',
+    );
+    const details = ((shuttingDown as Readonly<{ error: AppError }>).error.details ?? {}) as Record<
+      string,
+      unknown
+    >;
+    assert.equal(details.reason, 'provider_session_cleanup_incomplete');
+    assert.deepEqual(details.providerSessionIds, ['session-1', 'session-2']);
+    // Each named session carries the reason this provider gave for it, so an operator can tell the two
+    // refusals apart instead of being handed one message for both sessions.
+    const warnings = details.cleanupWarnings as Array<Record<string, unknown>>;
+    assert.deepEqual(
+      warnings.map((warning) => [warning.providerSessionId, warning.code]),
+      [
+        ['session-1', 'WEBDRIVER_SESSION_DELETE_FAILED'],
+        ['session-2', 'WEBDRIVER_SESSION_DELETE_FAILED'],
+      ],
+    );
+    assert.deepEqual(
+      warnings.map((warning) => /session-\d/.exec(String(warning.message))?.[0]),
+      ['session-1', 'session-2'],
+    );
+  } finally {
+    hub.allowDeletes();
+    await runtime.shutdown();
+  }
+});
+
+/**
  * A shutdown that could not stop a session may not report a clean close, and the allocation whose
  * session it was is told the outcome is uncertain rather than that nothing needs cleaning up.
  */
@@ -540,16 +652,31 @@ test('a session shutdown could not stop fails the shutdown and the refused alloc
  * {@link startProviderPreparation} and the `heldDeletes` option.
  */
 function startWebDriverHub(
-  options: Readonly<{ deleteFailure?: string; heldDeletes?: number }> = {},
+  options: Readonly<{
+    deleteFailure?: string;
+    heldDeletes?: number;
+    createFailure?: string;
+  }> = {},
 ) {
   const created: string[] = [];
   const deleted: string[] = [];
   let deletesToHold = options.heldDeletes ?? 0;
   let deleteFailure = options.deleteFailure;
   const held: (() => void)[] = [];
+  /** Per-session arrival so a test can await the hub ending one rather than watching the clock. */
+  const deleteSignals = new Map<string, ReturnType<typeof startSignal>>();
+  const signalForDelete = (sessionId: string) => {
+    const existing = deleteSignals.get(sessionId) ?? startSignal();
+    deleteSignals.set(sessionId, existing);
+    return existing;
+  };
   return {
     created,
     deleted,
+    /** Resolves once the hub has answered a `DELETE` for `sessionId`. */
+    deletedArrived: async (sessionId: string) => {
+      await awaitSignal(signalForDelete(sessionId).arrived, `the hub to end session ${sessionId}`);
+    },
     allowDeletes: () => {
       deleteFailure = undefined;
     },
@@ -561,6 +688,12 @@ function startWebDriverHub(
       const request = new Request(input as RequestInfo, init);
       const path = new URL(request.url).pathname;
       if (request.method === 'POST' && path.endsWith('/session')) {
+        if (options.createFailure) {
+          return jsonResponse(
+            { value: { error: 'unknown error', message: `${options.createFailure}` } },
+            500,
+          );
+        }
         const sessionId = `session-${String(created.length + 1)}`;
         created.push(sessionId);
         return jsonResponse({ sessionId, capabilities: {} });
@@ -580,6 +713,7 @@ function startWebDriverHub(
           );
         }
         deleted.push(sessionId);
+        signalForDelete(sessionId).report();
       }
       return jsonResponse({ value: null });
     }) as typeof fetch,
@@ -587,6 +721,53 @@ function startWebDriverHub(
 }
 
 type PrepareSession = NonNullable<CloudWebDriverRuntimeOptions['prepareSession']>;
+
+/**
+ * How long an arrival wait gives a step that has not happened at all. It is a watchdog, not a poll
+ * budget: the step that arrives resolves its own signal in that same step, however slow the worker is,
+ * so this only ever elapses on a manager or a seam that never reached the step.
+ */
+const ARRIVAL_BUDGET_MS = 2_000;
+
+/**
+ * Waits for a step to be reported — a create that reached the provider, the hub asked to delete a
+ * session, a plugin callback that was entered — rather than polling the clock for it. The timer only
+ * names a step that never came, so a slow worker cannot fail a test whose allocation is progressing.
+ */
+async function awaitSignal(signal: Promise<void>, step: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const arrived = await Promise.race([
+      signal.then(() => true),
+      new Promise<boolean>((giveUp) => {
+        timer = setTimeout(() => giveUp(false), ARRIVAL_BUDGET_MS);
+        timer.unref?.();
+      }),
+    ]);
+    assert.ok(arrived, `the manager never reached ${step}`);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * A step a test waits to be reported, reported once by the seam that reaches it.
+ */
+function startSignal() {
+  let reportArrival!: () => void;
+  const arrived = new Promise<void>((ready) => {
+    reportArrival = ready;
+  });
+  let reported = false;
+  return {
+    arrived,
+    report: () => {
+      if (reported) return;
+      reported = true;
+      reportArrival();
+    },
+  };
+}
 
 /**
  * `prepareSession` is the step that runs before this manager sends `POST /session`, so holding it per
@@ -598,6 +779,8 @@ type PrepareSession = NonNullable<CloudWebDriverRuntimeOptions['prepareSession']
 function startProviderPreparation() {
   const state = { started: 0, cleanups: 0 };
   const calls: { readonly released: boolean; readonly release: () => void }[] = [];
+  /** Who is waiting to hear that a create has reached the provider. */
+  const waiting: (() => void)[] = [];
   const prepareSession: PrepareSession = async ({ base }) => {
     state.started += 1;
     const call = { released: false, release: () => {} };
@@ -609,6 +792,9 @@ function startProviderPreparation() {
       };
     });
     calls.push(call);
+    // This create has arrived, so anyone waiting for one hears it in this same step rather than on the
+    // next round of a poll.
+    for (const announce of waiting.splice(0)) announce();
     await held;
     return {
       ...base,
@@ -620,15 +806,20 @@ function startProviderPreparation() {
   };
   return Object.assign(state, {
     prepareSession,
-    /** Resolves once `expected` allocations have reached the provider and are held there. */
+    /**
+     * Resolves once `expected` allocations have reached the provider and are held there. Each wait is
+     * ended by the arrival itself, so a test neither polls the scheduler nor races the create; the one
+     * timer only reports a create that never arrived, and never elapses while the seam works.
+     */
     waitFor: async (expected: number) => {
-      for (let attempt = 0; calls.length < expected && attempt < 200; attempt += 1) {
-        await schedulerYield();
+      while (calls.length < expected) {
+        await awaitSignal(
+          new Promise<void>((announce) => {
+            waiting.push(announce);
+          }),
+          `${String(expected)} allocation(s) to reach the provider (got ${String(calls.length)})`,
+        );
       }
-      assert.ok(
-        calls.length >= expected,
-        `expected ${String(expected)} allocations to reach the provider, got ${String(calls.length)}`,
-      );
     },
     /** Lets every create that is held reach the hub. */
     answerHeld: async () => {
@@ -667,19 +858,6 @@ async function schedulerYield(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
   });
-}
-
-/**
- * Waits for the manager to reach `condition` — the hub having been asked to delete a session, say — so a
- * test can name the moment after the billed work is done and before an optional callback has answered.
- */
-async function untilSettled(condition: () => boolean, withinMs = 2_000): Promise<void> {
-  for (let waited = 0; !condition() && waited < withinMs; waited += 5) {
-    await new Promise<void>((ready) => {
-      setTimeout(ready, 5);
-    });
-  }
-  assert.ok(condition(), 'the manager never reached the step the test was waiting for');
 }
 
 /** The allocation envelope names the hub session the lease now holds. */
@@ -729,9 +907,14 @@ function assertRejectedWith(
   }
   if (expected.cleanup !== undefined) assert.equal(details.cleanup, expected.cleanup);
   if (expected.cleanupWarning !== undefined) {
-    const warnings = details.cleanupWarnings as Record<string, unknown>;
-    assert.deepEqual(Object.keys(warnings ?? {}), [expected.cleanupWarning]);
-    assert.equal(typeof warnings[expected.cleanupWarning], 'string');
+    // A refusal for one session reports its warnings keyed by code, which loses nothing because one
+    // session's warnings carry distinct codes; a shutdown reports every session it left billing as one
+    // entry per warning. Either way the caller is told which refusal it got.
+    const warnings = details.cleanupWarnings;
+    const codes = Array.isArray(warnings)
+      ? (warnings as Array<Record<string, unknown>>).map((warning) => warning.code)
+      : Object.keys((warnings ?? {}) as Record<string, unknown>);
+    assert.deepEqual(codes, [expected.cleanupWarning]);
   }
   if (expected.flags !== undefined) assert.deepEqual(details.flags, expected.flags);
 }
