@@ -69,7 +69,9 @@ type WebDriverLeaseEntry = {
 /**
  * Whichever route took a lease away from its allocation, and the single disposal of what that entry
  * stood for. `settled` is what that disposal reported and stays missing while it is still running, so a
- * caller can tell a session that is gone from one whose outcome it cannot see yet.
+ * caller can tell a session that is gone from one whose outcome it cannot see yet. `artifacts` is the
+ * release envelope's report and is deliberately separate: it is optional, so it is never what a lease or
+ * a daemon close waits through.
  */
 type WebDriverLeaseTake = {
   by: 'release' | 'shutdown';
@@ -77,6 +79,8 @@ type WebDriverLeaseTake = {
   providerSessionId: string | undefined;
   disposal: Promise<WebDriverDisposalOutcome>;
   settled: WebDriverDisposalOutcome | undefined;
+  /** The artifact report, started once the billed resources are settled, and joined by the release. */
+  artifacts: Promise<CloudArtifactsResult | undefined> | undefined;
 };
 
 /**
@@ -90,13 +94,19 @@ type WebDriverDisposalOutcome = Readonly<{
   warnings: CloudWebDriverReleaseWarning[];
   /** What the provider's own cleanup reported, for the release envelope. */
   cleanupPayload?: Record<string, unknown>;
-  artifacts?: CloudArtifactsResult;
 }>;
 
 /** The fields of one warning, keyed as `details.cleanupWarnings` carries them on a refusal. */
 function warningMessagesByCode(warnings: CloudWebDriverReleaseWarning[]): Record<string, string> {
   return Object.fromEntries(warnings.map((warning) => [warning.code, warning.message]));
 }
+
+/**
+ * Budget for one provider callback this manager waits on. A plugin may supply its own `prepareSession`
+ * cleanup and artifact lookup, and those callbacks are the plugin's code, so this manager cannot assume
+ * they answer: they get the budget this package already gives one WebDriver round trip.
+ */
+const DEFAULT_PROVIDER_CALLBACK_TIMEOUT_MS = 30_000;
 
 /**
  * Owns WebDriver session lifecycle and stale-owner retention. Deployment decisions stay in the
@@ -133,21 +143,25 @@ export class WebDriverSessionManager {
   heartbeat(lease: DeviceLease): Record<string, unknown> | undefined {
     if (lease.leaseProvider !== this.options.provider) return undefined;
     if (!this.liveSession(this.entriesByLeaseId.get(lease.leaseId))) return undefined;
-    return { provider: this.options.provider };
+    return this.liveLeaseEnvelope();
   }
 
   async allocate(lease: DeviceLease, req?: LeaseLifecycleContext): Promise<LeaseResult> {
     if (lease.leaseProvider !== this.options.provider) return undefined;
-    // Every allocation is refused for the flags this provider reads no profile field for, before it
-    // joins or publishes anything: a call answers for its own flags and never inherits another call's,
-    // and one that cannot be honoured bills nothing.
-    await this.rejectRefusedProfileFields(req);
-    // The lease's entry is published here, in the same synchronous step as the lookup above: a second
-    // allocation of this lease joins the create rather than renting a second billed session, and a
-    // release or shutdown that arrives while the create runs finds the session it is renting.
+    const held = this.entriesByLeaseId.get(lease.leaseId);
+    // Joining someone else's entry, so this call answers for its own flags, and it settles them before it
+    // reads any state. Nothing else can await on this route: the lookup below is the last one, and the
+    // answer is read from it with no await after, so a release or a shutdown that lands while the flags
+    // are being checked is the outcome this call reports rather than a session already ended.
+    if (held !== undefined) await this.rejectRefusedProfileFields(req);
+    // Re-read after that await, and nothing awaits after this lookup except joining the create below, so
+    // a release or a shutdown that landed in the meantime is what this call reports.
     let entry = this.entriesByLeaseId.get(lease.leaseId);
     if (entry === undefined) {
       if (this.shutDown) throw allocationRefusedAfterShutdown(this.options.provider, lease);
+      // Published before this call awaits anything, so a lease is never unowned while its allocation is at
+      // its first await: a release or a shutdown that arrives there finds this entry and takes it, and the
+      // create the entry stands on checks this call's own profile flags before it bills anything.
       entry = this.beginAllocation(lease, req);
     }
     // A lease whose disposal is running belongs to the route that is ending it, so this call rented
@@ -155,7 +169,7 @@ export class WebDriverSessionManager {
     if (entry.taken) throw refusalForTeardownInProgress(this.options.provider, lease, entry.taken);
     // Reported without awaiting anything after the lookup, so the session is live at the moment the
     // caller is told about it: a release or a shutdown cannot end it inside this call.
-    if (entry.session) return { provider: this.options.provider };
+    if (entry.session) return this.liveLeaseEnvelope();
     const session = await entry.creation;
     // The session this call rented is its own only while nobody took the lease. Otherwise a release or
     // shutdown ended what the create rented, and this caller is refused rather than handed a session id
@@ -170,15 +184,20 @@ export class WebDriverSessionManager {
     // Nothing holds the lease: it was never allocated here, or its release finished and gave the lease
     // back. A release that arrives while another one disposes joins that disposal.
     if (entry === undefined) return undefined;
-    const outcome = await this.takeForRelease(entry);
+    const take = this.take(entry, 'release');
+    const outcome = await take.disposal;
     // A create that failed billed nothing, and gave back what its preparation had already rented.
     if (outcome.session === undefined) return undefined;
+    // The artifact report is joined here, after the lease has been given back and the billed session is
+    // known to be ended: a slow plugin lookup may delay this answer, and nothing that runs against the
+    // lease.
+    const artifacts = await take.artifacts;
     return {
       provider: this.options.provider,
       providerSessionId: outcome.session.providerSessionId,
       ...outcome.cleanupPayload,
       ...(outcome.warnings.length > 0 ? { warnings: outcome.warnings } : {}),
-      ...(outcome.artifacts ? { cloudArtifacts: outcome.artifacts } : {}),
+      ...(artifacts ? { cloudArtifacts: artifacts } : {}),
     };
   }
 
@@ -219,10 +238,8 @@ export class WebDriverSessionManager {
     this.shutDown = true;
     // Snapshot before anything is awaited: `allocate` publishes an entry only when none exists and
     // refuses once this manager is shut down, and nothing between that flag and this loop awaits.
-    const disposals = [...this.entriesByLeaseId.values()].map(
-      async (entry) => await this.takeForShutdown(entry),
-    );
-    const outcomes = await Promise.all(disposals);
+    const takes = [...this.entriesByLeaseId.values()].map((entry) => this.take(entry, 'shutdown'));
+    const outcomes = await Promise.all(takes.map((take) => take.disposal));
     this.ownedDeviceIds.clear();
     // A session the provider would not give back is still billing, and this process will not stop it.
     // The plugin's close is where an operator learns what a daemon close left running, so the session
@@ -268,13 +285,15 @@ export class WebDriverSessionManager {
 
   /**
    * Prepares the lease and rents the hub session, and hands back the session this manager can dispose.
-   * The allocation's own flags were refused before it got here, so nothing that cannot be honoured ever
-   * asks the hub to bill a device.
+   * The caller's own profile flags are refused here, first, so an allocation that published its entry
+   * before it could await anything still bills nothing for flags this provider reads no field for, and a
+   * release that took the entry meanwhile has nothing to end.
    */
   private async createSessionForLease(
     lease: DeviceLease,
     req: LeaseLifecycleContext | undefined,
   ): Promise<WebDriverProviderSession> {
+    await this.rejectRefusedProfileFields(req);
     const prepared = await this.prepareSession(lease, req);
     const client = new WebDriverClient({
       clientVersion: this.options.clientVersion,
@@ -307,52 +326,63 @@ export class WebDriverSessionManager {
     });
   }
 
-  /** Takes the lease for `release`, or joins the disposal already ending it. */
-  private async takeForRelease(entry: WebDriverLeaseEntry): Promise<WebDriverDisposalOutcome> {
-    return await this.take(entry, 'release');
-  }
-
-  /** Takes the lease for `shutdown`, or joins the disposal already ending it. */
-  private async takeForShutdown(entry: WebDriverLeaseEntry): Promise<WebDriverDisposalOutcome> {
-    return await this.take(entry, 'shutdown');
-  }
-
   /**
    * Hands one lease's session to the one route that may end it. The take and the disposal it starts are
    * recorded before this step returns, so no route can reach the lease in between and find it free, and
-   * the entry leaves the map only once that disposal has settled.
+   * the entry leaves the map once that disposal has settled — which is once the billed resources have
+   * been ended, not once every optional report about them has been collected.
    */
-  private take(entry: WebDriverLeaseEntry, by: 'release' | 'shutdown') {
+  private take(entry: WebDriverLeaseEntry, by: 'release' | 'shutdown'): WebDriverLeaseTake {
     const taken = entry.taken;
-    if (taken) return taken.disposal;
+    if (taken) return taken;
     let reportDisposal!: (outcome: WebDriverDisposalOutcome) => void;
     const disposal = new Promise<WebDriverDisposalOutcome>((report) => {
       reportDisposal = report;
     });
-    entry.taken = {
+    const take: WebDriverLeaseTake = {
       by,
       providerSessionId: entry.session?.providerSessionId,
       disposal,
       settled: undefined,
+      artifacts: undefined,
     };
-    void this.disposeTakenEntry(entry).then((outcome) => {
-      const take = entry.taken!;
+    entry.taken = take;
+    const settle = (outcome: WebDriverDisposalOutcome): void => {
       take.settled = outcome;
       take.providerSessionId = outcome.session?.providerSessionId;
+      // The artifact report belongs to the release envelope and to nothing else: it starts here and the
+      // release joins it, while the lease and a daemon close are answered by `disposal` alone. A plugin's
+      // artifact lookup therefore cannot keep a lease from being allocated again, nor a close from
+      // finishing.
+      take.artifacts =
+        outcome.session === undefined
+          ? undefined
+          : this.safeListArtifacts(outcome.session, true).catch(() => undefined);
       // Whatever the create rented is now ended, or was never rented, so this entry owns nothing and the
       // lease is free again.
       if (this.entriesByLeaseId.get(entry.lease.leaseId) === entry) {
         this.entriesByLeaseId.delete(entry.lease.leaseId);
       }
       reportDisposal(outcome);
+    };
+    // `disposeTakenEntry` reports its own failures, so the rejection branch is only for what it could not
+    // report at all. It still gives the lease back, because a disposal this manager lost sight of is
+    // reported, not waited on forever.
+    void this.disposeTakenEntry(entry).then(settle, (error: unknown) => {
+      settle({
+        cleanup: 'uncertain',
+        session: entry.session,
+        warnings: [{ code: 'PROVIDER_CLEANUP_FAILED', message: errorMessage(error) }],
+      });
     });
-    return disposal;
+    return take;
   }
 
   /**
    * Ends what one taken entry stands for: the session its create rented, once that create answers, or
    * nothing when the create billed nothing. This is the only place a session is ended, and one entry is
-   * taken by exactly one route, so a session is ended once.
+   * taken by exactly one route, so a session is ended once. Everything here is bounded: the provider's own
+   * cleanup belongs to the plugin that supplied it, and this manager must still answer when it does not.
    */
   private async disposeTakenEntry(entry: WebDriverLeaseEntry): Promise<WebDriverDisposalOutcome> {
     const session = entry.session ?? (await entry.creation.catch(() => undefined));
@@ -370,15 +400,53 @@ export class WebDriverSessionManager {
       });
     }
     try {
-      cleanupPayload = await session.prepared.cleanup?.();
+      cleanupPayload = await this.providerCallback(
+        `${this.options.provider} cleanup for lease ${entry.lease.leaseId}`,
+        () => session.prepared.cleanup?.(),
+      );
     } catch (error) {
       warnings.push({ code: 'PROVIDER_CLEANUP_FAILED', message: errorMessage(error) });
     }
-    const artifacts = await this.safeListArtifacts(session);
     // Only a hub that answered can say the session is gone. A delete the provider refused leaves the
     // session billing, and this manager has no way left to learn otherwise.
     const cleanup = warnings.length > 0 ? 'uncertain' : 'confirmed';
-    return { cleanup, session, warnings, cleanupPayload, artifacts };
+    return { cleanup, session, warnings, cleanupPayload };
+  }
+
+  /**
+   * Awaits one provider callback the manager was handed, within the budget this package gives a provider
+   * round trip. Past it, the outcome is a refusal: the callback keeps running and this manager reports
+   * what it could not learn rather than holding the lease open for it.
+   */
+  private async providerCallback<T>(
+    label: string,
+    run: () => Promise<T> | undefined,
+  ): Promise<T | undefined> {
+    const timeoutMs =
+      this.options.providerCallbackTimeoutMs ?? DEFAULT_PROVIDER_CALLBACK_TIMEOUT_MS;
+    const pending = Promise.resolve(run());
+    // A callback that was too slow is no longer awaited, so its late outcome must not surface as an
+    // unhandled rejection.
+    void pending.catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        pending,
+        new Promise<never>((_resolve, refuse) => {
+          timer = setTimeout(() => {
+            refuse(
+              new AppError(
+                'COMMAND_FAILED',
+                `${label} did not answer within ${String(timeoutMs)}ms.`,
+              ),
+            );
+          }, timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   /**
@@ -396,6 +464,14 @@ export class WebDriverSessionManager {
       cleanup: outcome.cleanup,
       warnings: outcome.warnings,
     });
+  }
+
+  /**
+   * What this manager says about a lease it holds a live session for. `heartbeat` and the reuse answer of
+   * `allocate` share it, so the daemon's `recordProviderSession` sees one envelope from both routes.
+   */
+  private liveLeaseEnvelope(): Record<string, unknown> {
+    return { provider: this.options.provider };
   }
 
   private allocationResult(session: WebDriverProviderSession): Record<string, unknown> {
@@ -430,8 +506,9 @@ export class WebDriverSessionManager {
 
   /**
    * Refuses the flags this provider reads no profile field for, so a field that would be ignored is
-   * reported instead of dropped. The module is loaded on first use to keep the package entry's own
-   * closure unchanged.
+   * reported instead of dropped. Each allocation answers for its own flags: the one that published the
+   * entry is refused by its own create, before it can bill anything, and one that joined an entry is
+   * refused here. The module is loaded on first use to keep the package entry's own closure unchanged.
    */
   private async rejectRefusedProfileFields(req: LeaseLifecycleContext | undefined): Promise<void> {
     const { rejectRefusedProviderProfileFields } =
@@ -496,19 +573,31 @@ export class WebDriverSessionManager {
     });
   }
 
+  /**
+   * Collects one session's artifacts, reporting anything the provider could not answer for. The
+   * disposal path asks for the callback budget, because it must answer for a lease; `listCloudArtifacts`
+   * is a caller's own request and is left to the provider's own bound.
+   */
   private async safeListArtifacts(
     session: WebDriverProviderSession,
+    withinCallbackBudget = false,
   ): Promise<CloudArtifactsResult | undefined> {
     const listArtifacts = session.prepared.listArtifacts ?? this.options.listArtifacts;
     if (!listArtifacts) return undefined;
+    const params = {
+      provider: this.options.provider,
+      lease: session.lease,
+      device: session.device,
+      webDriverSessionId: session.webDriverSessionId,
+      providerSessionId: session.providerSessionId,
+    };
     try {
-      return await listArtifacts({
-        provider: this.options.provider,
-        lease: session.lease,
-        device: session.device,
-        webDriverSessionId: session.webDriverSessionId,
-        providerSessionId: session.providerSessionId,
-      });
+      return withinCallbackBudget
+        ? await this.providerCallback(
+            `${this.options.provider} artifact lookup for session ${session.providerSessionId}`,
+            () => listArtifacts(params),
+          )
+        : await listArtifacts(params);
     } catch (error) {
       return unavailableCloudArtifactsResult({
         provider: this.options.provider,
@@ -581,7 +670,7 @@ function refusalForTeardown(
       ...(report.warnings.length > 0
         ? { cleanupWarnings: warningMessagesByCode(report.warnings) }
         : {}),
-      hint: teardownHint(provider, report.cleanup),
+      hint: teardownHint(provider, by, report.cleanup),
     },
   );
 }
@@ -596,14 +685,17 @@ function refusalForTeardownInProgress(
   lease: DeviceLease,
   take: WebDriverLeaseTake,
 ): AppError {
+  // Both answers describe the same disposal, so both read the same two facts from it. The hint stays
+  // separate: this caller created nothing, so it is told about the lease, not about a session of its own.
+  const cleanup = take.settled?.cleanup ?? 'pending';
+  const providerSessionId = take.providerSessionId ?? take.settled?.session?.providerSessionId;
   if (take.by === 'shutdown') {
     return refusalForTeardown(provider, lease, 'shutdown', {
-      providerSessionId: take.providerSessionId ?? take.settled?.session?.providerSessionId,
-      cleanup: take.settled?.cleanup ?? 'pending',
+      providerSessionId,
+      cleanup,
       warnings: take.settled?.warnings ?? [],
     });
   }
-  const cleanup = take.settled?.cleanup ?? 'pending';
   return new AppError(
     // ADR 0010: the lease slot is held by the release in flight, so this is contention, and the caller
     // can expect the same allocate to succeed once that release finishes.
@@ -614,7 +706,7 @@ function refusalForTeardownInProgress(
       provider,
       leaseId: lease.leaseId,
       runId: lease.runId,
-      ...(take.providerSessionId ? { providerSessionId: take.providerSessionId } : {}),
+      ...(providerSessionId ? { providerSessionId } : {}),
       cleanup,
       hint:
         cleanup === 'uncertain'
@@ -648,13 +740,14 @@ function allocationRefusedAfterShutdown(provider: string, lease: DeviceLease): A
  */
 function teardownHint(
   provider: string,
+  by: 'release' | 'shutdown',
   cleanup: WebDriverDisposalOutcome['cleanup'] | 'pending',
 ): string {
   if (cleanup === 'uncertain') {
     return `${provider} did not confirm it stopped the session this allocation created, and that session may keep billing. Check ${provider} for it before allocating the lease again.`;
   }
   if (cleanup === 'pending') {
-    return `agent-device is still stopping the session this allocation created. Wait for that release to finish before allocating the lease again.`;
+    return `agent-device is still stopping the session this allocation created. Wait for that ${by === 'release' ? 'release' : 'shutdown'} to finish before allocating the lease again.`;
   }
   if (cleanup === 'none') {
     return 'Nothing was billed for this allocation. Allocate the lease again.';

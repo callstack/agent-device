@@ -86,6 +86,35 @@ test('an allocation refused for its own flags leaves the create it joined alone'
 });
 
 /**
+ * A new allocation publishes its entry before it can await, and its own flags are the create's first
+ * step, so a call this provider cannot honour still bills nothing and never reaches preparation.
+ */
+test('an allocation refused for its own flags bills nothing before it reaches the provider', async () => {
+  const hub = startWebDriverHub();
+  const preparation = startProviderPreparation();
+  const runtime = makeRuntime({
+    prepareSession: preparation.prepareSession,
+    profileFields: refuseAllProfileFields('webdriver-test'),
+  });
+  const lease = makeLease();
+
+  try {
+    globalThis.fetch = hub.fetch;
+    assertRejectedWith(
+      await settle(() =>
+        runtime.leaseLifecycle.allocate!(lease, { flags: { providerApp: 'b' } } as never),
+      ),
+      'INVALID_ARGS',
+      { flags: ['--provider-app'] },
+    );
+    assert.deepEqual(hub.created, [], 'a refused allocation never asks the hub to bill a device');
+    assert.equal(preparation.started, 0, 'a refused allocation never reaches the provider');
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+/**
  * A release that landed mid-creation found no published session and answered that the lease held
  * nothing, so the hub session that creation went on to make had no route left to stop it. The caller
  * whose session was disposed is refused, rather than handed a session id nothing will release.
@@ -277,6 +306,162 @@ test('a repeated allocation cannot answer that a shut down lease is alive', asyn
     assert.deepEqual(hub.deleted, ['session-1']);
   } finally {
     hub.answerHeldDeletes();
+    await runtime.shutdown();
+  }
+});
+
+/**
+ * An allocation reaches its first await before provider preparation begins, and a release issued in
+ * that moment used to find nothing holding the lease and answer that it had released it. The create that
+ * went on to run then billed a session no route was left to stop. The lease has to belong to the
+ * allocation from the moment it is asked for, so the release ends up taking it and disposing what the
+ * create rents.
+ */
+test('a release issued before provider preparation begins disposes the session the allocation rents', async () => {
+  const hub = startWebDriverHub();
+  const preparation = startProviderPreparation();
+  const runtime = makeRuntime({ prepareSession: preparation.prepareSession });
+  const lease = makeLease();
+
+  try {
+    globalThis.fetch = hub.fetch;
+    // Both calls are issued in one synchronous step, so the release reaches the manager while the
+    // allocation is at its first await and provider preparation has not answered.
+    const allocating = settle(() => runtime.leaseLifecycle.allocate!(lease));
+    const releasing = settle(() => runtime.leaseLifecycle.release!(lease));
+    assert.deepEqual(hub.created, [], 'nothing may be billed before preparation answers');
+    // The allocation has reached provider preparation, which is still held.
+    await preparation.waitFor(1);
+    await preparation.answerHeld();
+
+    assert.deepEqual(await releasing, {
+      status: 'resolved',
+      value: { provider: 'webdriver-test', providerSessionId: 'session-1' },
+    });
+    assertRejectedWith(await allocating, 'provider_session_released_during_allocation', {
+      leaseId: lease.leaseId,
+      providerSessionId: 'session-1',
+      cleanup: 'confirmed',
+    });
+    // The session the create rented is gone: a release that reported success leaves no billed session.
+    assert.deepEqual(hub.deleted, ['session-1']);
+  } finally {
+    await preparation.answerHeld();
+    await runtime.shutdown();
+  }
+});
+
+/**
+ * Ending a session ends the billed resource and hands back what the provider prepared; the artifact
+ * lookup that follows is only what the release envelope reports. A plugin's own artifact callback has
+ * no bound of its own, so it may not be what keeps a lease from being allocated again, what keeps a
+ * second release from answering, or what a daemon close waits through.
+ */
+test('an artifact callback that never answers holds neither the lease nor shutdown', async () => {
+  const hub = startWebDriverHub();
+  globalThis.fetch = hub.fetch;
+  let answerArtifacts: (() => void) | undefined;
+  let lookupStarted = false;
+  const runtime = makeRuntime({
+    providerCallbackTimeoutMs: 40,
+    listArtifacts: async () => {
+      lookupStarted = true;
+      await new Promise<void>((ready) => {
+        answerArtifacts = ready;
+      });
+      return { provider: 'webdriver-test', status: 'ready', cloudArtifacts: [] };
+    },
+  });
+  const lease = makeLease();
+
+  try {
+    await runtime.leaseLifecycle.allocate!(lease);
+    const releasing = settle(() => runtime.leaseLifecycle.release!(lease));
+    // The lookup starts only once the hub has ended the session and the provider's cleanup has answered,
+    // so its having started is the moment the billed work is finished.
+    await untilSettled(() => lookupStarted);
+    assert.deepEqual(hub.deleted, ['session-1']);
+    await schedulerYield();
+
+    // A re-allocation during the hanging lookup is the lease's own business, not the lookup's.
+    const reallocated = settle(() => runtime.leaseLifecycle.allocate!(lease));
+    assertResolvedWith(await reallocated, 'session-2', describe(await reallocated));
+    const shuttingDown = settle(() => runtime.shutdown());
+    assert.deepEqual(
+      await shuttingDown,
+      { status: 'resolved', value: undefined },
+      'shutdown may not wait on an optional artifact lookup',
+    );
+
+    const result = await releasing;
+    assert.equal(result.status, 'resolved', describe(result));
+    const value = (result as Readonly<{ value: Record<string, unknown> | undefined }>).value;
+    assert.equal(value?.providerSessionId, 'session-1');
+    // What the lookup could not answer for becomes an unavailable report, the way its failures do.
+    assert.equal(
+      (value?.cloudArtifacts as Record<string, unknown> | undefined)?.status,
+      'unavailable',
+    );
+    assert.deepEqual(hub.created, ['session-1', 'session-2']);
+    assert.deepEqual(hub.deleted, ['session-1', 'session-2']);
+  } finally {
+    answerArtifacts?.();
+    await runtime.shutdown();
+  }
+});
+
+/**
+ * A provider's own cleanup is the half of disposal the hub's `DELETE` does not cover, and a custom one
+ * has no bound either. Once its budget runs out this manager cannot learn whether the resource was
+ * handed back, so it says so and lets the lease be used again rather than holding it forever.
+ */
+test('a provider cleanup that outlives its budget ends the disposal as uncertain', async () => {
+  const hub = startWebDriverHub();
+  globalThis.fetch = hub.fetch;
+  let answerCleanup: (() => void) | undefined;
+  let cleanupCalls = 0;
+  const runtime = makeRuntime({
+    providerCallbackTimeoutMs: 40,
+    prepareSession: async ({ base }) => ({
+      ...base,
+      cleanup: async () => {
+        cleanupCalls += 1;
+        if (cleanupCalls > 1) return undefined;
+        await new Promise<void>((ready) => {
+          answerCleanup = ready;
+        });
+        return undefined;
+      },
+    }),
+  });
+  const lease = makeLease();
+
+  try {
+    await runtime.leaseLifecycle.allocate!(lease);
+    const releasing = settle(() => runtime.leaseLifecycle.release!(lease));
+    await untilSettled(() => hub.deleted.includes('session-1'));
+
+    const result = await releasing;
+    assert.equal(result.status, 'resolved', describe(result));
+    const value = (result as Readonly<{ value: Record<string, unknown> | undefined }>).value;
+    assert.deepEqual(warningCodes(value?.warnings), ['PROVIDER_CLEANUP_FAILED']);
+    assert.match(String(warningMessages(value?.warnings)[0]), /40ms/);
+
+    // The lease is the next caller's again, and a later session this manager can end still ends cleanly.
+    assertResolvedWith(
+      await settle(() => runtime.leaseLifecycle.allocate!(lease)),
+      'session-2',
+      'a cleanup whose outcome is unknown may not keep the lease',
+    );
+    assert.deepEqual(
+      await settle(() => runtime.shutdown()),
+      { status: 'resolved', value: undefined },
+      'only a session the provider would not end may fail a close',
+    );
+    assert.deepEqual(hub.created, ['session-1', 'session-2']);
+    assert.deepEqual(hub.deleted, ['session-1', 'session-2']);
+  } finally {
+    answerCleanup?.();
     await runtime.shutdown();
   }
 });
@@ -484,12 +669,30 @@ async function schedulerYield(): Promise<void> {
   });
 }
 
+/**
+ * Waits for the manager to reach `condition` — the hub having been asked to delete a session, say — so a
+ * test can name the moment after the billed work is done and before an optional callback has answered.
+ */
+async function untilSettled(condition: () => boolean, withinMs = 2_000): Promise<void> {
+  for (let waited = 0; !condition() && waited < withinMs; waited += 5) {
+    await new Promise<void>((ready) => {
+      setTimeout(ready, 5);
+    });
+  }
+  assert.ok(condition(), 'the manager never reached the step the test was waiting for');
+}
+
 /** The allocation envelope names the hub session the lease now holds. */
 function assertResolvedWith(
   outcome: Settled<Record<string, unknown> | undefined>,
   sessionId: string,
+  expectation?: string,
 ): void {
-  assert.equal(outcome.status, 'resolved', `expected ${sessionId}, got ${describe(outcome)}`);
+  assert.equal(
+    outcome.status,
+    'resolved',
+    `${expectation ?? `expected ${sessionId}`}, got ${describe(outcome)}`,
+  );
   assert.equal(
     (outcome as Readonly<{ value: Record<string, unknown> | undefined }>).value?.sessionId,
     sessionId,

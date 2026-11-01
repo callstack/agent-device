@@ -103,6 +103,12 @@ export type CloudWebDriverRuntimeOptions = {
   capabilityOverrides?: CloudWebDriverCapabilityOverrides;
   /** Profile fields this provider reads; any field it refuses fails lease allocation. */
   profileFields: ProviderProfileFieldDeclaration;
+  /**
+   * Budget for one provider callback the session manager waits on — a prepared session's `cleanup` and
+   * the artifact lookup — so a plugin callback that never answers cannot hold a lease open. Defaults to
+   * the budget one WebDriver round trip gets.
+   */
+  providerCallbackTimeoutMs?: number;
 };
 
 export function createCloudWebDriverRuntime(
