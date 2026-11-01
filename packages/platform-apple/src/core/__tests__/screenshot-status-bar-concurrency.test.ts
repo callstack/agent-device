@@ -446,6 +446,9 @@ test('a settings write bounds its status bar command like a capture does', async
     },
   );
 
+  for (const budget of budgets) {
+    assert.equal(typeof budget, 'number', 'a status bar write must bound its own command');
+  }
   assert.deepEqual(budgets, [
     STATUS_BAR_COMMAND_TIMEOUT_MS,
     STATUS_BAR_COMMAND_TIMEOUT_MS,
