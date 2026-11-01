@@ -344,6 +344,40 @@ extension RunnerTests {
     XCTAssertEqual(commandJournal.status(normalizedCommandId: "after-shutdown").lifecycleState, RunnerCommandLifecycleState.notAccepted.rawValue)
   }
 
+  func testCoalescedShutdownDeliversEveryResponseBeforeClosingTransport() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let sockets = (0..<32).map { _ in TransportSocket(port: port) }
+    defer { sockets.forEach { $0.connection.cancel() } }
+
+    let releaseCommand = DispatchSemaphore(value: 0)
+    commandExecutionQueue.async { releaseCommand.wait() }
+    defer { releaseCommand.signal() }
+    for socket in sockets {
+      try socket.send(rawCommand(#"{"command":"shutdown","commandId":"shared-shutdown"}"#))
+    }
+    let deadline = Date().addingTimeInterval(3)
+    var waiterCount = 0
+    repeat {
+      inFlightCommandLock.lock()
+      waiterCount = inFlightCommandWaiters["shared-shutdown"]?.count ?? 0
+      inFlightCommandLock.unlock()
+      if waiterCount == sockets.count - 1 { break }
+      Thread.sleep(forTimeInterval: 0.01)
+    } while Date() < deadline
+    XCTAssertEqual(waiterCount, sockets.count - 1)
+    releaseCommand.signal()
+
+    for socket in sockets {
+      let reply = try socket.response()
+      XCTAssertEqual(reply.status, 200)
+      XCTAssertTrue(try reply.envelope().ok)
+      XCTAssertTrue(reply.head.contains("Connection: close"))
+      try socket.expectEOF()
+    }
+  }
+
   func testHttpIdleExpiryPreservesUnusedLoopbackListenerWatch() throws {
     let listener = try startTransportListener()
     defer { listener.cancel() }

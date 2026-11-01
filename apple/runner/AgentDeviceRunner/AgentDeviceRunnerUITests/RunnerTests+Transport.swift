@@ -133,10 +133,11 @@ extension RunnerTests {
     remainder: Data
   ) {
     let closeConnection = !request.keepsConnectionAlive || result.shouldFinish
+    if result.shouldFinish { shutdownResponseWrites.enter() }
     sendResponse(result.response, over: connection, closeConnection: closeConnection) { [weak self] sent in
       guard let self else { return }
       if result.shouldFinish {
-        self.finish()
+        self.shutdownResponseWrites.leave()
       } else if sent && !closeConnection {
         self.readNextRequest(over: connection, token: token, buffered: remainder)
       }
@@ -327,6 +328,10 @@ extension RunnerTests {
     for waiter in waiters {
       waiter(result)
     }
+    // Register after every waiter starts its write, so a fast response cannot close slower peers.
+    if result.shouldFinish {
+      shutdownResponseWrites.notify(queue: transportQueue) { self.finish() }
+    }
   }
 
   // MARK: - Response Encoding
@@ -390,8 +395,6 @@ extension RunnerTests {
 
   private func finish() {
     closeTransport()
-    // Guard against double-fulfill: coalesced shutdown sends deliver one result to
-    // multiple waiters, each of which may ask to finish.
     doneExpectation?.fulfill()
     doneExpectation = nil
   }

@@ -61,6 +61,7 @@ final class RunnerTests: XCTestCase {
   var listenerToken: RunnerListenerToken?
   var doneExpectation: XCTestExpectation?
   var transportConnections: [ObjectIdentifier: NWConnection] = [:]
+  let shutdownResponseWrites = DispatchGroup()
   let transportQueue = DispatchQueue(label: "agent-device.runner.transport")
   let commandExecutionQueue = DispatchQueue(label: "agent-device.runner.commands")
   let app = XCUIApplication()

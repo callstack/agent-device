@@ -11,9 +11,12 @@ The Apple runner speaks a small internal HTTP+JSON protocol between the TypeScri
 - HTTP/1.1 connections persist by default. `Connection: close` ends them after the response.
 - HTTP/1.0 connections persist only when the request includes `Connection: keep-alive`.
 - Pipelined requests run in order. Each request repeats token, route, and length validation.
-- Shutdown and framing or authentication refusals close the connection. Shutdown also closes other open connections.
+- Shutdown and framing or authentication refusals close the connection. Shutdown closes other open connections after all coalesced shutdown responses finish sending.
 
 The daemon sends to `http://127.0.0.1:<port>/command` for simulator and macOS runners. A physical device is reached over usbmux when cabled, otherwise at its CoreDevice tunnel address; it is never dialed at this Mac's loopback.
+
+Loopback and CoreDevice tunnel requests use the global `fetch` connection pool to reuse TCP
+connections. The usbmux transport sends `Connection: close` and opens a connection per request.
 
 ### Listener binding
 
