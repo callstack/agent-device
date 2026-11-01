@@ -44,12 +44,20 @@ const SDK_DIRECTORY_NAMES: Record<AppleSdkName, string> = {
 export const XCODE_SELECT_LINK_PATH = '/var/db/xcode_select_link';
 
 /** Where `xcrun` looks when neither `DEVELOPER_DIR` nor the selection link names a developer dir. */
-const DEFAULT_DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
+export const DEFAULT_DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
 
 const TOOLCHAIN_FILE_HINT =
   'The Apple runner cache is keyed on the toolchain version, so a cache decision cannot be made without it. Check that `xcode-select -p` or DEVELOPER_DIR names a full Xcode install.';
 
+const DANGLING_SELECTION_LINK_HINT =
+  'The `xcode-select` selection names an Xcode that no longer exists, and no Xcode is installed at the default path. Run `sudo xcode-select -s <Xcode.app>` or set DEVELOPER_DIR.';
+
 type BundleVersion = Readonly<{ version: string; buildVersion: string }>;
+
+/** The host's selection link when it exists: the Xcode it resolves to, or dangling. */
+type SelectionLink = { target: string; dangling?: never } | { target?: never; dangling: true };
+
+type SelectedDeveloperDir = Readonly<{ developerDir: string; danglingSelectionLink: boolean }>;
 
 /** A toolchain file that is missing or does not carry the value the identity needs. */
 class ToolchainFileError extends Error {
@@ -74,10 +82,12 @@ export function requireRunnerToolchainFingerprint(
 ): RunnerToolchainFingerprint {
   if (signal?.aborted) throw createRequestCanceledError({ phase: 'apple_toolchain_identity' });
   const chosenDir = commandDeveloperDir();
+  let danglingSelectionLink = false;
   try {
-    const developerDir = resolveSelectedDeveloperDir(chosenDir);
-    const xcode = readXcodeVersion(developerDir);
-    const sdk = readSdkVersion(developerDir, sdkName);
+    const selected = resolveSelectedDeveloperDir(chosenDir);
+    danglingSelectionLink = selected.danglingSelectionLink;
+    const xcode = readXcodeVersion(selected.developerDir);
+    const sdk = readSdkVersion(selected.developerDir, sdkName);
     return {
       xcodeVersion: xcode.version,
       xcodeBuildVersion: xcode.buildVersion,
@@ -95,7 +105,8 @@ export function requireRunnerToolchainFingerprint(
         ...(chosenDir === undefined ? {} : { developerDir: chosenDir }),
         file: error.file,
         detail: error.detail,
-        hint: TOOLCHAIN_FILE_HINT,
+        ...(danglingSelectionLink ? { danglingSelectionLink: XCODE_SELECT_LINK_PATH } : {}),
+        hint: danglingSelectionLink ? DANGLING_SELECTION_LINK_HINT : TOOLCHAIN_FILE_HINT,
       },
     );
   }
@@ -104,7 +115,8 @@ export function requireRunnerToolchainFingerprint(
 /** The selected Xcode's version, for a failure report that names it; undefined when unreadable. */
 export function readRunnerXcodeVersion(): string | undefined {
   try {
-    return readXcodeVersion(resolveSelectedDeveloperDir(commandDeveloperDir())).version;
+    return readXcodeVersion(resolveSelectedDeveloperDir(commandDeveloperDir()).developerDir)
+      .version;
   } catch (error) {
     if (error instanceof ToolchainFileError) return undefined;
     throw error;
@@ -118,28 +130,37 @@ export function readRunnerXcodeVersion(): string | undefined {
  * the Xcode.app bundle behind a stable path, so the real path is the one that names the toolchain.
  * Like `xcrun`, it accepts an `Xcode.app` bundle for its `Contents/Developer`.
  */
-function resolveSelectedDeveloperDir(chosenDir: string | undefined): string {
-  const candidate = chosenDir?.trim() || selectionLinkTarget() || DEFAULT_DEVELOPER_DIR;
+function resolveSelectedDeveloperDir(chosenDir: string | undefined): SelectedDeveloperDir {
+  const chosen = chosenDir?.trim();
+  const link = chosen ? undefined : readSelectionLink();
+  const candidate = chosen || link?.target || DEFAULT_DEVELOPER_DIR;
   const resolved = realPath(candidate) ?? candidate;
   const bundleDeveloperDir = path.join(resolved, 'Contents', 'Developer');
-  return fs.existsSync(bundleDeveloperDir) ? bundleDeveloperDir : resolved;
+  return {
+    developerDir: fs.existsSync(bundleDeveloperDir) ? bundleDeveloperDir : resolved,
+    danglingSelectionLink: link?.dangling === true,
+  };
 }
 
-function selectionLinkTarget(): string | undefined {
-  try {
-    fs.readlinkSync(XCODE_SELECT_LINK_PATH);
-  } catch (error) {
-    // No selection link: `xcrun` falls back to the default Xcode as well. Any other failure is a
-    // selection this process cannot read, which must not stand in for the default Xcode.
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return undefined;
-    throw new ToolchainFileError(XCODE_SELECT_LINK_PATH, code ?? String(error));
+function readSelectionLink(): SelectionLink | undefined {
+  // No selection link: `xcrun` falls back to the default Xcode as well.
+  if (readSelectionLinkStep(() => fs.readlinkSync(XCODE_SELECT_LINK_PATH)) === undefined) {
+    return undefined;
   }
+  // A link whose target was deleted (an uninstalled Xcode) is not a selection: `xcode-select -p`
+  // and `xcrun` skip it and use the default Xcode (#4145).
+  const target = readSelectionLinkStep(() => fs.realpathSync(XCODE_SELECT_LINK_PATH));
+  return target === undefined ? { dangling: true } : { target };
+}
+
+/**
+ * One read of the selection link. A missing path is undefined; any other failure is a selection
+ * this process cannot read, which must not stand in for the default Xcode.
+ */
+function readSelectionLinkStep(read: () => string): string | undefined {
   try {
-    return fs.realpathSync(XCODE_SELECT_LINK_PATH);
+    return read();
   } catch (error) {
-    // A link whose target was deleted (an uninstalled Xcode) is not a selection: `xcode-select -p`
-    // and `xcrun` skip it and use the default Xcode (#4145).
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return undefined;
     throw new ToolchainFileError(XCODE_SELECT_LINK_PATH, code ?? String(error));

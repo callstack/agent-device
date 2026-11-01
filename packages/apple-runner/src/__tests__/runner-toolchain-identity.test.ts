@@ -80,24 +80,44 @@ test('without DEVELOPER_DIR or a selection link the default Xcode names the fing
   assert.deepEqual(readFingerprint(), FINGERPRINT_B);
 });
 
+test('a dangling selection link without a default Xcode fails naming the dangling link', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  appleSelectionLink.target = path.join(mkdtempForTestSync('deleted-xcode-'), 'Xcode.app');
+  assert.throws(
+    readFingerprint,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'apple_toolchain_unreadable' &&
+      String(error.details?.file).endsWith(path.join('Xcode.app', 'Contents', 'version.plist')) &&
+      error.details?.danglingSelectionLink === XCODE_SELECT_LINK_PATH,
+  );
+  assert.equal(readRunnerXcodeVersion(), undefined);
+});
+
+test('no selection link and no default Xcode fails without blaming a selection link', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  assert.throws(
+    readFingerprint,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'apple_toolchain_unreadable' &&
+      error.details?.danglingSelectionLink === undefined,
+  );
+});
+
 test('a selection link whose Xcode this process cannot read fails instead of reading the default Xcode', () => {
   appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
-  const locked = mkdtempForTestSync('locked-xcode-');
-  appleSelectionLink.target = path.join(locked, 'Xcode.app');
+  appleSelectionLink.target = xcodeA;
+  appleSelectionLink.targetErrorCode = 'EACCES';
   appleSelectionLink.defaultDeveloperDir = xcodeB;
-  fs.chmodSync(locked, 0o000);
-  try {
-    assert.throws(
-      readFingerprint,
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.details?.reason === 'apple_toolchain_unreadable' &&
-        error.details?.file === XCODE_SELECT_LINK_PATH &&
-        error.details?.detail === 'EACCES',
-    );
-  } finally {
-    fs.chmodSync(locked, 0o700);
-  }
+  assert.throws(
+    readFingerprint,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'apple_toolchain_unreadable' &&
+      error.details?.file === XCODE_SELECT_LINK_PATH &&
+      error.details?.detail === 'EACCES',
+  );
 });
 
 test('a selection link this process cannot read fails instead of reading the default Xcode', () => {
