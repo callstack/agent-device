@@ -63,7 +63,6 @@ const LEGACY_FILE_LINE_CAPS = {
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
   'packages/host-kit/src/internal/exec.ts': 1032,
   'packages/react-native/src/metro/client-metro.ts': 1123,
-  'src/cli/commands/connection-runtime.ts': 1019,
 };
 
 export default defineConfig({
