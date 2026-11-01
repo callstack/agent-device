@@ -21,9 +21,9 @@ import type { RequestRouterDeps } from '../request-router.ts';
  * runtimes, host diagnostics, credential fingerprinting, resource cleanup, the platform lifecycle
  * owners, and the request-router inputs that name them. The server owns the paths, the policy, and
  * the session store, and asks the root for the rest through a `composeDeps` factory — the process
- * root's implementation is `src/daemon-composition.ts` (ADR 0019). All members are required: a
- * daemon process either receives the root's composition or cannot start, and a test passes the
- * same factory, so the production assembly is the one every runtime test boots.
+ * root's implementation is `src/daemon-composition.ts` (ADR 0019). The factory is required for
+ * daemon startup and runtime tests. `leaseLifecycleProvider` and `recoverExpiredLease` are
+ * optional hooks, supplied only when a provider supports them.
  */
 export type DaemonRuntimeDeps = Readonly<{
   ownedProcessRecords: OwnedProcessRecordStore;
