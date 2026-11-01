@@ -12,7 +12,7 @@ vi.mock('@agent-device/host-kit/command', async () => {
     }),
   };
 });
-vi.mock('../video.ts', () => ({ waitForPlayableVideo: vi.fn(async () => {}) }));
+vi.mock('../video.ts', () => ({ waitForPlayableVideo: vi.fn(async () => true) }));
 vi.mock('../swift-cache.ts', () => ({
   buildSwiftToolEnv: () => ({}),
   compileSwiftSourceFile: vi.fn(async () => '/bin/true'),

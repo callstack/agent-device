@@ -35,8 +35,7 @@ async function finalizeScreenRecording(
 ) {
   const finalizeDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
-  await waitForPlayableVideo(input.outputPath, { host, deadline: finalizeDeadline });
-  if (!(await isPlayableVideo(input.outputPath, host, finalizeDeadline))) {
+  if (!(await waitForPlayableVideo(input.outputPath, { host, deadline: finalizeDeadline }))) {
     throw unplayableRecording(input.outputPath);
   }
   const telemetryPath = persistRecordingTelemetry({

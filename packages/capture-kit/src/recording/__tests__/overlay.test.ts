@@ -25,7 +25,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 vi.mock('../video.ts', () => ({
-  waitForPlayableVideo: vi.fn(async () => {}),
+  waitForPlayableVideo: vi.fn(async () => true),
 }));
 
 import {
@@ -331,6 +331,7 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   const deadline = startRecordingOverlayBudget();
   vi.mocked(waitForPlayableVideo).mockImplementationOnce(async () => {
     vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+    return false;
   });
 
   await expect(

@@ -86,7 +86,8 @@ export async function waitForStableFile(
 
 /**
  * Whether the file is a playable video. With a `deadline`, the validator, including a cold compile,
- * runs until the deadline instead of its own fixed bounds.
+ * runs until the deadline instead of its own fixed bounds, and a deadline that passes before the
+ * validator runs reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time.
  */
 export async function isPlayableVideo(
   filePath: string,
@@ -99,10 +100,12 @@ export async function isPlayableVideo(
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
   try {
+    if (deadline?.isExpired()) return false;
     const validatorPath = await waitForValidatorCompile(
       host,
       deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
     );
+    if (deadline?.isExpired()) return false;
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
       // `runCmd` reads a timeout of 0 as none.
@@ -166,7 +169,15 @@ async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): P
           new AppError(
             'COMMAND_FAILED',
             `The video validator did not compile within ${Math.round(waitMs)}ms`,
-            { reason: 'video_validator_compile_timeout', timeoutMs: waitMs, retriable: true },
+            {
+              reason: 'video_validator_compile_timeout',
+              timeoutMs: waitMs,
+              retriable: true,
+              hint:
+                'Run record stop again: the Swift modules this compile already built stay ' +
+                'cached, so the next compile finishes sooner, and the recording keeps its ' +
+                'evidence either way.',
+            },
           ),
         ),
       waitMs,
@@ -198,23 +209,27 @@ function isSwiftVideoValidatorError(error: unknown): boolean {
   );
 }
 
-/** Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first. */
+/**
+ * Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first,
+ * and resolves whether it played.
+ */
 export async function waitForPlayableVideo(
   filePath: string,
   options: { host: HostEnvironment; pollMs?: number; attempts?: number; deadline?: Deadline },
-): Promise<void> {
+): Promise<boolean> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await isPlayableVideo(filePath, options.host, options.deadline)) {
-      return;
+      return true;
     }
     if (options.deadline?.isExpired()) {
-      return;
+      return false;
     }
     await sleep(pollMs);
   }
+  return await isPlayableVideo(filePath, options.host, options.deadline);
 }
 
 function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boolean {

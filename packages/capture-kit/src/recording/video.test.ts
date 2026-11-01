@@ -89,7 +89,12 @@ test('callers share one validator compile, and each waits for it within its own 
     const withDeadline = isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(70_000));
     const withoutDeadlineRejected = expect(withoutDeadline).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: 'video_validator_compile_timeout', timeoutMs: 30_000 },
+      details: {
+        reason: 'video_validator_compile_timeout',
+        timeoutMs: 30_000,
+        retriable: true,
+        hint: expect.stringContaining('Run record stop again'),
+      },
     });
     await vi.advanceTimersByTimeAsync(45_000);
 
@@ -146,6 +151,19 @@ test('a failed compile is dropped, and the next caller compiles again', async ()
   await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
   await expect(isPlayableVideo(mp4, host)).resolves.toBe(true);
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+});
+
+test('a budget spent before the validator runs reads as not playable instead of a 1 ms run', async () => {
+  const mp4 = writeFixture('spent-budget.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/spent' }, cwd: directory };
+  await isPlayableVideo(mp4, host);
+  vi.mocked(runCmd).mockClear();
+
+  await expect(isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(0))).resolves.toBe(false);
+  await expect(
+    waitForPlayableVideo(mp4, { host, pollMs: 0, deadline: Deadline.fromTimeoutMs(0) }),
+  ).resolves.toBe(false);
+  expect(runCmd).not.toHaveBeenCalled();
 });
 
 test('the validator run after a compile stays inside the caller deadline', async () => {
