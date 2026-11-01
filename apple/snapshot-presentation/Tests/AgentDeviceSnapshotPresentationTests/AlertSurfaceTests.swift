@@ -21,6 +21,26 @@ final class AlertSurfaceTests: XCTestCase {
     }
   }
 
+  /// The positive control for the honor-modal read: a recorded prompt hides content from it, and a
+  /// screen without a prompt hides nothing.
+  func testEveryRecordedPromptHidesContentFromTheHonorModalTree() throws {
+    let recordings = try recordedAlertSurfaces()
+    XCTAssertFalse(recordings.isEmpty)
+    for (name, recorded) in recordings {
+      let honorModal = RecordedAlertSurface.modalScopeNodes(recorded.honorModal)
+      let pairing = ModalScopePair.pair(
+        plain: RecordedAlertSurface.modalScopeNodes(recorded.plain),
+        honorModal: honorModal,
+        confirmingHonorModal: honorModal
+      )
+      guard case let .paired(removedNodeCount) = pairing else {
+        XCTFail("\(name): \(pairing)")
+        continue
+      }
+      XCTAssertEqual(removedNodeCount > 0, !recorded.expect.isEmpty, "\(name): \(removedNodeCount) removed")
+    }
+  }
+
   func testAModalIsPlacedInItsOwnPanelWindow() {
     let outerPanel = CGRect(x: 0, y: 0, width: 466, height: 678)
     let innerPanel = CGRect(x: 0, y: 0, width: 951, height: 669)

@@ -109,6 +109,36 @@ final class ModalSurfaceTests: XCTestCase {
     XCTAssertEqual(read(plain, honorModal), .modal([ModalSurface(host: 1, roots: [2])]))
   }
 
+  // A window lists one panel twice. The honor-modal read keeps one occurrence, which could be
+  // either, so it cannot say whether the window or the panel lost children.
+  func testAnElementListedTwiceUnderOneParentIsUnknown() {
+    let plain = [
+      node("app", nil),
+      node("window", "app"),
+      node("panel", "window"),
+      node("kept", "panel"),
+      node("removed", "panel"),
+      node("panel", "window"),
+      node("kept", "panel"),
+    ]
+    let honorModal = [plain[0], plain[1], plain[5], plain[6]]
+    XCTAssertEqual(read(plain, honorModal), .unknown(.duplicatedChild))
+  }
+
+  // A scroll view lists its scroll bar twice in both reads, so every occurrence is kept.
+  func testAnElementKeptAsOftenAsItIsListedPairsInOrder() {
+    let plain = [
+      node("app", nil),
+      node("window", "app"),
+      node("content", "window"),
+      node("sheet", "window"),
+      node("bar", "sheet"),
+      node("bar", "sheet"),
+    ]
+    let honorModal = plain.filter { $0.element != "content" }
+    XCTAssertEqual(read(plain, honorModal), .modal([ModalSurface(host: 1, roots: [2])]))
+  }
+
   func testAnIdenticalPairHasNoExclusion() {
     XCTAssertEqual(read(sheetUnderAlert, sheetUnderAlert), .noExclusion)
   }
@@ -138,6 +168,11 @@ final class ModalSurfaceTests: XCTestCase {
     let honorModal = [node("app", nil), node("sheet", "window"), node("window", "app")]
     let reading = ModalSurface.read(plain: plain, honorModal: honorModal, confirmingHonorModal: honorModal, truncated: false)
     XCTAssertEqual(reading, .unknown(.unorderedRead))
+  }
+
+  func testAnHonorModalReadFromAnotherRootIsUnknown() {
+    let plain = [node("app", nil), node("window", "app"), node("content", "window"), node("sheet", "window")]
+    XCTAssertEqual(read(plain, [plain[1], plain[3]]), .unknown(.rootMismatch))
   }
 
   // The app's inputAssistantItem bar buttons ride the input assistant, which can sit inside the
