@@ -29,34 +29,35 @@ You need:
    bundle id, so it runs beside the session's runner. If the screen changes between its reads, the
    capture fails. Wait until the prompt stops animating, then run it again.
 
-3. Print the honor-modal tree:
+3. Print what `ModalSurface` reads from the recording, and its honor-modal tree:
 
    ```bash
    pnpm print:alert-surface apple/snapshot-presentation/Tests/AlertSurfaceCorpus/iphone-duo-folded-springboard-open-in-app.json
    ```
 
-   Each line shows a node's index, type, and label. `[kept 1 of 3 children]` marks a node where
-   the honor-modal tree removed children. When `ModalSurface` reads no surface from the recording,
-   the first line says why instead, for example
-   `unknown: duplicatedChild at node 1 (kept 1 of 2 occurrences of row)`, and no node is marked.
-   To print the whole tree, add `plain` after the path. A recording that is out of preorder stops
-   the command; capture it again.
+   The first line is the reading that the replay checks: `reading: modal`, `reading: noExclusion`,
+   or `reading: unknown(<reason>)` with the node where the read failed. Each next line shows a
+   node's index, type, and label. For a `modal` reading only, `[kept 1 of 3 children]` marks a
+   node where the honor-modal tree removed children. To print the whole tree, add `plain` after
+   the path. If the recording does not load in the replay, the command stops with one line that
+   names the node.
 
 4. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
    buttons. The sources are `blockingSystemModal`, `appAlert`, `safariDialog`, and `dismissPopup`.
    A source you leave out must find nothing. Write `{}` for a screen with no prompt.
-5. Add `expectModalScope` from the printed tree:
-   - If the first line reads `unknown: duplicatedChild`, the tree lists one element more than once
-     under a node and keeps only some of them, so `ModalSurface` can't tell which occurrence lost
-     children. Write `{"reading": "unknown", "reason": "duplicatedChild"}`.
-   - If the first line reads `unknown` with any other reason, the replay rejects the recording.
-     Capture the screen again. If the line stays, report it in an issue.
-   - If no node is marked, write `{"reading": "noExclusion"}`.
-   - Otherwise, write `"reading": "modal"` and one surface for each branch. The surface's `host` is
-     the innermost marked node of the branch, and its `roots` are the children that node kept.
-     `actions` are the labels of the controls under the roots, in the printed order. Empty labels
-     count.
-   - Add `excludedActions`: the labels of the honor-modal tree's controls that no surface offers.
+5. Add `expectModalScope` from the first line:
+   - `reading: noExclusion`: write `{"reading": "noExclusion"}`.
+   - `reading: unknown(duplicatedChild)`: write `{"reading": "unknown", "reason": "duplicatedChild"}`.
+     The line names the node that lists one element more than once and keeps only some of the
+     copies. It shows the element as its raw AX `element` id, such as `99943:4829729792.1219`,
+     so search the recording for that id to find the copies.
+   - `reading: unknown` with any other reason: the replay rejects the recording. Capture the
+     screen again. If the line stays, report it in an issue.
+   - `reading: modal`: write `"reading": "modal"` and one surface for each branch of marked
+     nodes. The surface's `host` is the innermost marked node of the branch, and its `roots` are
+     the children that node kept. `actions` are the labels of the controls under the roots, in
+     the printed order. Empty labels count. Add `excludedActions`: the labels of the honor-modal
+     tree's controls that no surface offers.
 6. Run the replay:
 
    ```bash
@@ -65,16 +66,21 @@ You need:
 
 Don't edit the trees by hand. Capture again instead. A recapture keeps `expect` and
 `expectModalScope`, but it can move the indexes in `expectModalScope`. After a recapture, print the
-tree again and review each index. Don't copy indexes from what `ModalSurface` reads: the replay
-proves nothing if the expectation comes from the rule it tests.
+recording again and review each index.
+
+The printed reading is the rule's own answer, so it can't prove the rule right. Check it against
+the screenshot before you record it. A prompt on the screen must read `modal`, and its surface's
+actions must be the prompt's buttons. A screen without a prompt must not read `modal`. If the
+reading and the screenshot disagree, don't record the reading. Report the screen in an issue.
 
 ## Example: the SpringBoard "Open in app" alert
 
 `iphone-duo-folded-springboard-open-in-app.json` records the alert that
 `xcrun simctl openurl <udid> "agent-device-test-app://x"` raises on a folded iPhone Duo. The start
-of its honor-modal tree:
+of its printout:
 
 ```text
+reading: modal
    0 Application ""  [kept 1 of 40 children]
    1   Window ""  [kept 1 of 3 children]
    2     Other ""  [kept 1 of 3 children]
