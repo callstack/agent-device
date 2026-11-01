@@ -456,6 +456,28 @@ extension RunnerTests {
     )
   }
 
+  /// The live path withholds the finish from a `shutdown` that threw, so a replay of that refusal has to
+  /// withhold it too. A refused shutdown means the runner is still serving for its caller — ending it here
+  /// would tear down the runner the resend is still talking to, on an answer that said it stayed up.
+  func testJournalWithholdsTheFinishFromAReplayedFailedShutdown() throws {
+    let journal = RunnerCommandJournal()
+    let command = runnerJournalCommand("shutdown", id: "refused-shutdown")
+    journal.accept(command: command)
+    journal.markDispatched(command: command)
+    journal.fail(command: command, error: Self.mainThreadExecutionTimeoutError())
+
+    let replayed = journal.accept(command: command)
+    guard case .terminal(let outcome, let answersShutdown) = replayed else {
+      return XCTFail("a refused, dispatched shutdown must be answered from the journal")
+    }
+    XCTAssertEqual(outcome.ok, false, "the recorded refusal is what the repeat is answered with")
+    XCTAssertEqual(
+      answersShutdown,
+      false,
+      "a recorded shutdown refusal must not end the runner the caller still holds"
+    )
+  }
+
   /// The recorded failure has to carry the same code the live answer carried, because the daemon reads
   /// that code to decide whether the runner's main thread is still draining. A repeat of a command that
   /// timed out on the execution watchdog is answered from this record, and a failure stored without its

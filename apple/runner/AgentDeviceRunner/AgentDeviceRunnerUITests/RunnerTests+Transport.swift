@@ -94,6 +94,9 @@ extension RunnerTests {
       receiveRequest(inbound, over: connection)
       return
     }
+    // Closing here ends the request's deadline bookkeeping: the armed work item refuses a closed inbound,
+    // so from this point the completion below is the only writer for this connection, whichever admission
+    // verdict the journal gives.
     inbound.close()
     let body = inbound.buffer.subdata(in: head.bodyOffset..<bodyEnd)
     let remainder = Data(inbound.buffer.suffix(from: bodyEnd))

@@ -41,9 +41,9 @@ enum RunnerCommandAdmission {
   case join
   /// Execution finished, and the work reached the device: the caller answers from the journal and
   /// never executes this command again. `answersShutdown` says whether the answer being handed over is
-  /// the runner's own `shutdown` answer, which the caller owes the runner's end. The repeat's request
-  /// cannot answer that: a caller may reuse a spent `commandId` under another command name, and the
-  /// answer it receives stays the recorded command's.
+  /// the runner's own successful `shutdown` answer, which the caller owes the runner's end. Neither the
+  /// repeat's request nor the command name alone can answer that: a caller may reuse a spent `commandId`
+  /// under another command name, and the live path withholds the finish from a `shutdown` that threw.
   case terminal(outcome: Response, answersShutdown: Bool)
 }
 
@@ -108,9 +108,13 @@ final class RunnerCommandJournal {
     guard entry.dispatched else {
       return claim(command: command, commandId: commandId)
     }
+    let outcome = recordedOutcome(for: entry)
+    // Only a recorded `shutdown` that succeeded ends the runner. The live path withholds that finish from
+    // a `shutdown` that threw, so replaying its refusal must not stop a runner whose caller is still
+    // holding it for another command.
     return .terminal(
-      outcome: recordedOutcome(for: entry),
-      answersShutdown: entry.command == CommandType.shutdown.rawValue
+      outcome: outcome,
+      answersShutdown: entry.command == CommandType.shutdown.rawValue && outcome.ok
     )
   }
 

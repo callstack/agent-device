@@ -132,6 +132,7 @@ That refusal also reports nothing about the runner's main thread. The journal wr
 Pruning drops only closed entries, so a queued or executing command always stays queryable.
 When a closed entry that dispatched is pruned, the journal keeps its id in a separate closed-id window, because a bare id carries no outcome body.
 A resend inside that window is answered with the typed refusal; `status` still answers `notAccepted` for it, because only the entry can report an outcome.
+For a command whose answer the daemon lost, that reading keeps the charge: recovery cannot settle a charge on a state it cannot read as terminal, so it stops the runner instead of handing it on, which is the safe half of the trade the window makes.
 An id the runner refused before dispatch is left free, which is what the read-only busy resend depends on.
 `status` answers `notAccepted` only for an id the journal does not hold.
 The daemon cannot read `notAccepted` as a safe terminal state, so evicting a running command would push it to invalidate a session whose runner is still executing that command.
