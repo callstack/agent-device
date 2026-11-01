@@ -35,6 +35,7 @@ import { buildSimctlArgsForDevice, readSimctlContainerPath, runSimctlForDevice }
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
+  STATUS_BAR_COMMAND_TIMEOUT_MS,
   withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
@@ -111,13 +112,11 @@ export async function setIosSetting(
       await withSimulatorStatusBarHeld(
         device,
         async () => {
-          await runSimctlForDevice(device, [
-            'status_bar',
-            device.id,
-            'override',
-            '--wifiMode',
-            mode,
-          ]);
+          await runSimctlForDevice(
+            device,
+            ['status_bar', device.id, 'override', '--wifiMode', mode],
+            { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
+          );
           invalidateSimulatorStatusBarOverrideCache(device);
         },
         signal,
@@ -126,30 +125,38 @@ export async function setIosSetting(
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
+      // Same reason as `wifi`: the write waits for the capture window so a restore cannot undo it,
+      // and the command is bounded so a wedged `simctl` cannot hold the simulator's captures.
       await withSimulatorStatusBarHeld(
         device,
         async () => {
           if (enabled) {
-            await runSimctlForDevice(device, [
-              'status_bar',
-              device.id,
-              'override',
-              '--dataNetwork',
-              'hide',
-              '--wifiMode',
-              'failed',
-              '--wifiBars',
-              '0',
-              '--cellularMode',
-              'failed',
-              '--cellularBars',
-              '0',
-              '--operatorName',
-              '',
-            ]);
+            await runSimctlForDevice(
+              device,
+              [
+                'status_bar',
+                device.id,
+                'override',
+                '--dataNetwork',
+                'hide',
+                '--wifiMode',
+                'failed',
+                '--wifiBars',
+                '0',
+                '--cellularMode',
+                'failed',
+                '--cellularBars',
+                '0',
+                '--operatorName',
+                '',
+              ],
+              { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
+            );
             invalidateSimulatorStatusBarOverrideCache(device);
           } else {
-            await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
+            await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
+              timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
+            });
             rememberClearedStatusBarOverrides(device);
           }
         },

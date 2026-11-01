@@ -62,7 +62,7 @@ const devicesKnownWithoutStatusBarOverrides = new Set<string>();
 const simulatorStatusBarTransactions = new Map<string, Promise<unknown>>();
 
 /** Bounds one `simctl status_bar` step so a wedged tool cannot hold a simulator's captures. */
-const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
+export const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
 
 /**
  * Budget for the restore specifically. Leaving the normalization on the simulator is the failure

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 
 // `setIosSetting` boots through this owner; the capture route under test skips it, so the settings
 // case below needs it quiet without touching the status bar owner.
@@ -13,7 +14,10 @@ vi.mock('../simulator.ts', async (importOriginal) => {
 
 import { setIosSetting } from '../app-settings.ts';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
-import { invalidateSimulatorStatusBarOverrideCache } from '../screenshot-status-bar.ts';
+import {
+  invalidateSimulatorStatusBarOverrideCache,
+  STATUS_BAR_COMMAND_TIMEOUT_MS,
+} from '../screenshot-status-bar.ts';
 import {
   createFakeStatusBarSimctl,
   type FakeStatusBarSimctl,
@@ -392,31 +396,61 @@ test('a settings write queued behind a capture window can still be cancelled', a
       screenshotOptions(gate, true),
     );
     let outcome: unknown = 'still running';
-    try {
-      await gate.entered;
-      const setting = setIosSetting(
-        device,
-        'wifi',
-        'on',
-        undefined,
-        undefined,
-        process.env,
-        abortController.signal,
-      ).catch((error: unknown) => error);
-      await yieldToQueuedWork();
-      abortController.abort(new Error('request canceled'));
-      outcome = await setting;
-      assert.ok(
-        outcome instanceof Error && outcome.message === 'request canceled',
-        `expected the queued write to reject, received: ${String(outcome)}`,
-      );
-    } finally {
-      gate.release();
-      await Promise.allSettled([capturing]);
-    }
+    await gate.entered;
+    const setting = setIosSetting(
+      device,
+      'wifi',
+      'on',
+      undefined,
+      undefined,
+      process.env,
+      abortController.signal,
+    ).catch((error: unknown) => error);
+    await yieldToQueuedWork();
+    abortController.abort(new Error('request canceled'));
+    // Released before the wait: if the cancellation were ignored, the write finishes and the
+    // assertion below reports that, instead of the case hanging on the gate until its timeout.
+    gate.release();
+    outcome = await setting;
+    await capturing;
 
+    assert.ok(
+      outcome instanceof Error && outcome.message === 'request canceled',
+      `expected the queued write to reject, received: ${String(outcome)}`,
+    );
     assert.deepEqual(statusBar.overrides(), { wifiMode: 'failed', wifiBars: '0' });
   });
+});
+
+test('a settings write bounds its status bar command like a capture does', async () => {
+  // The write holds the simulator's window, so a wedged `simctl status_bar` inside it would hold
+  // every later capture of that simulator. It keeps the same per-command budget the capture's own
+  // status bar commands use.
+  const budgets: Array<number | undefined> = [];
+  const device: DeviceInfo = { ...IOS_TEST_SIMULATOR, id: 'sim-bar-budget' };
+  invalidateSimulatorStatusBarOverrideCache(device);
+
+  await withAppleToolProvider(
+    createLocalAppleToolProvider({
+      simctl: {
+        run: async (args, options) => {
+          if (args.includes('status_bar')) budgets.push(options?.timeoutMs);
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+      },
+    }),
+    async () => {
+      await setIosSetting(device, 'wifi', 'on', undefined, undefined, process.env);
+      await setIosSetting(device, 'airplane', 'on', undefined, undefined, process.env);
+      await setIosSetting(device, 'airplane', 'off', undefined, undefined, process.env);
+    },
+  );
+
+  assert.deepEqual(budgets, [
+    STATUS_BAR_COMMAND_TIMEOUT_MS,
+    STATUS_BAR_COMMAND_TIMEOUT_MS,
+    STATUS_BAR_COMMAND_TIMEOUT_MS,
+  ]);
 });
 
 test('simulators of different device sets keep their own status bar windows', async () => {
