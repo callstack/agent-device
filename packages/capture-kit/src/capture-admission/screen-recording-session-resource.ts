@@ -40,7 +40,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   // record has to be read before anyone can be refused or served, so the reader is reached on demand
   // rather than added to what importing this kind evaluates.
   completionFromMetadata: async (metadata) =>
-    (await import('./screen-recording-stop-recovery.ts')).readStoredCompletion(metadata),
+    (await import('./screen-recording-stop-recovery.ts')).readReplayableStoredCompletion(metadata),
   // ADR 0024 rule 6: the next stop re-collects the native artifact a failed export left behind, and
   // forced cleanup would delete exactly that. Disposal belongs to teardown and start rollback.
   failedFinishPolicy: 'preserve-retry-material',

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { adoptStartedDurableCapture } from './adoption.ts';
 import {
   createTestCaptureDefinition,
@@ -7,7 +7,83 @@ import {
   testCaptureDefinition,
   testCaptureStore,
 } from './durable-capture.fixtures.ts';
-import { forceCleanupLiveDurableCapture, finishLiveDurableCapture } from './transitions.ts';
+import {
+  forceCleanupLiveDurableCapture,
+  finishLiveDurableCapture,
+  finishDurableCaptureHandle,
+} from './transitions.ts';
+
+test.each(['replay', 'refusal'] as const)(
+  'a terminal %s disposes the captured handle another handle did not release',
+  async (outcome) => {
+    const definition = {
+      ...testCaptureDefinition,
+      completionFromMetadata:
+        outcome === 'replay' ? testCaptureDefinition.completionFromMetadata : undefined,
+    };
+    const { context, captured, completion, record } =
+      await captureWhoseRecordAnotherHandleCommitted(definition);
+    const dispose = vi.spyOn(captured.handle, Symbol.asyncDispose);
+
+    const finish = finishLiveDurableCapture(
+      definition,
+      { binding: context.binding, intent: 'disposal' },
+      context.resourcePath,
+    );
+    if (outcome === 'replay') await expect(finish).resolves.toEqual(completion);
+    else
+      await expect(finish).rejects.toMatchObject({
+        details: { reason: 'resource-already-completed' },
+      });
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(captured.forceCleanup).toHaveBeenCalledOnce();
+    expect(captured.finish).not.toHaveBeenCalled();
+    expect(context.binding.read()).toBeUndefined();
+    expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+  },
+);
+
+test('a terminal finish reports captured-handle disposal failure instead of a settled refusal', async () => {
+  const definition = { ...testCaptureDefinition, completionFromMetadata: undefined };
+  const cleanupError = new Error('Captured handle disposal failed');
+  const { context, captured, record } = await captureWhoseRecordAnotherHandleCommitted(
+    definition,
+    cleanupError,
+  );
+
+  await expect(
+    finishLiveDurableCapture(
+      definition,
+      { binding: context.binding, intent: 'disposal' },
+      context.resourcePath,
+    ),
+  ).rejects.toBe(cleanupError);
+  expect(captured.forceCleanup).toHaveBeenCalledOnce();
+  expect(captured.finish).not.toHaveBeenCalled();
+  expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+});
+
+async function captureWhoseRecordAnotherHandleCommitted(
+  definition: typeof testCaptureDefinition,
+  cleanupError?: Error,
+) {
+  const context = makeDurableCaptureContext();
+  const captured = makeDurableCaptureStartResult(context, { cleanupError });
+  await adoptStartedDurableCapture(
+    definition,
+    { ...context, ...captured, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const committing = makeDurableCaptureStartResult(context);
+  const completion = await finishDurableCaptureHandle(definition, {
+    handle: committing.handle,
+    fence: context.fence,
+    resourcePath: context.resourcePath,
+    intent: 'capture',
+  });
+  return { context, captured, completion, record: testCaptureStore.read(context.resourcePath) };
+}
 
 /**
  * A cleanup that reaches the fence only after a finish committed the same record. The cleanup had

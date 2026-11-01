@@ -76,6 +76,7 @@ export async function finishDurableCaptureHandle<
     // is the only place it can come from. A queued teardown finish that had to be refused this way
     // reported the session's export as an unreleased resource.
     onCompleted: async ({ envelope }) => {
+      await params.handle[Symbol.asyncDispose]();
       const replayed = await definition.completionFromMetadata?.(envelope.metadata);
       if (replayed !== undefined) return replayed;
       throw completedDurableCaptureError(definition.store);
