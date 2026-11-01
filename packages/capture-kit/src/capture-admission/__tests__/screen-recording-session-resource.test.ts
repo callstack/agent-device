@@ -1,10 +1,13 @@
 import { makeCaptureSessionBinding } from '../../durable-capture/session-binding.fixtures.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
 import { createScreenRecordingLiveHandle } from '../../screen-recording-live-handle.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import { stopAndExportScreenRecording } from '../../recording/stop-sequence.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import {
@@ -281,9 +284,44 @@ test('a record stop that fails after collecting resumes through the fence withou
  * session cleanup, and a second `record stop` looked like a failure to callers.
  */
 test('a disposal queued behind a committed recording stop replays that export', async () => {
-  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(
-    'screen-recording-replayed-stop-',
-  );
+  const recording = await adoptCommittedRecording('screen-recording-replayed-stop-');
+  const stopped = await finishLiveScreenRecording({
+    intent: 'capture',
+    binding: recording.binding,
+  });
+  recording.requeue();
+
+  await expect(
+    finishLiveScreenRecording({ intent: 'disposal', binding: recording.binding }),
+  ).resolves.toEqual(stopped);
+  expect(recording.signals).toHaveBeenCalledOnce();
+  expect(recording.binding.read()).toBeUndefined();
+});
+
+/**
+ * A committed record whose export file no longer exists has nothing serveable, and this kind never
+ * hands a caller a path it cannot download. The surviving-file check belongs to the reader both
+ * consumers share, so a disposal queued behind a stop whose clip was removed keeps the typed
+ * refusal teardown settles, rather than reporting a successful stop for a deleted file.
+ */
+test('a disposal queued behind a deleted export refuses instead of serving the missing path', async () => {
+  const recording = await adoptCommittedRecording('screen-recording-deleted-stop-');
+  await finishLiveScreenRecording({ intent: 'capture', binding: recording.binding });
+  fs.rmSync(recording.outPath);
+  recording.requeue();
+
+  await expect(
+    finishLiveScreenRecording({ intent: 'disposal', binding: recording.binding }),
+  ).rejects.toMatchObject({ details: { reason: 'resource-already-completed' } });
+  expect(recording.signals).toHaveBeenCalledOnce();
+});
+
+/**
+ * A recording adopted into a session, with the recorder's stop driven through the real export
+ * sequence, so the committed record holds the stop response the kind journals on commit.
+ */
+async function adoptCommittedRecording(prefix: string) {
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(prefix);
   const sessionName = 'recording';
   const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
@@ -293,11 +331,13 @@ test('a disposal queued behind a committed recording stop replays that export', 
   });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
+  const outPath = path.join(mkdtempForTestSync(`${prefix}export-`), 'recording.mp4');
+  fs.writeFileSync(outPath, 'mp4');
   const signals = vi.fn(async () => ({ observation: { recorder: 'confirmed' as const } }));
   const handle = createScreenRecordingLiveHandle(
     {
       backend: 'android',
-      outPath: '/tmp/recording.mp4',
+      outPath,
       startedAt: 1,
       scope: 'app',
       showTouches: false,
@@ -340,16 +380,16 @@ test('a disposal queued behind a committed recording stop replays that export', 
   // The queued teardown's own view of the slot, captured while the record was still open.
   const queued = binding.read();
   if (!queued) throw new Error('Expected adopted screen recording');
-
-  const stopped = await finishLiveScreenRecording({ intent: 'capture', binding });
-  binding.adopt(queued);
-
-  await expect(finishLiveScreenRecording({ intent: 'disposal', binding })).resolves.toEqual(
-    stopped,
-  );
-  expect(signals).toHaveBeenCalledOnce();
-  expect(binding.read()).toBeUndefined();
-});
+  return {
+    binding,
+    signals,
+    outPath,
+    /** Puts the slot back the way the queued teardown left it holding it. */
+    requeue: () => {
+      binding.adopt(queued);
+    },
+  };
+}
 
 function resourcePath(
   sessionStore: CaptureAdmissionSessionStore<TestRecordingSession>,

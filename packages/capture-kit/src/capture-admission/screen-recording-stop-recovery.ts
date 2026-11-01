@@ -65,7 +65,6 @@ export function resolveScreenRecordingStopRecovery(
     });
     return { kind: 'none' };
   }
-  if (!fs.existsSync(completion.outPath)) return { kind: 'none' };
   return { kind: 'completed', completion };
 }
 
@@ -121,13 +120,15 @@ function assertManifestBelongsToRequest(
 }
 
 /**
- * The stop response the manifest stored, or nothing when it is not a whole one. The envelope store
- * has already bounded this metadata to frozen plain JSON, so what a reader still has to establish is
- * that the stored response answers correctly: the path it serves, the caller-side paths a remote
+ * The stop response the manifest stored, or nothing when it cannot be served. The envelope store
+ * has already bounded this metadata to frozen plain JSON, so what this reader still has to establish
+ * is that the stored response answers correctly: the path it serves, the caller-side paths a remote
  * download is named after, and the duration the response subtracts.
  *
- * Two callers need exactly that verdict: a stop whose response never reached its caller, and a finish
- * that reached the record after another caller committed it. Both are answered from here.
+ * It owns the surviving-file check on top of that, because every caller is answered with the path the
+ * record names: two reach this reader — a stop whose response never reached its caller, and a finish
+ * that reached the record after another caller committed it — and neither may hand over a file that is
+ * gone. A caller never receives a path it cannot download.
  */
 export function readStoredCompletion(
   metadata: JsonObject | undefined,
@@ -141,7 +142,8 @@ export function readStoredCompletion(
   ) {
     return undefined;
   }
-  return stored as unknown as ScreenRecordingCompletion;
+  const completion = stored as unknown as ScreenRecordingCompletion;
+  return fs.existsSync(completion.outPath) ? completion : undefined;
 }
 
 /** The values a stop response computes on rather than repeats. */
