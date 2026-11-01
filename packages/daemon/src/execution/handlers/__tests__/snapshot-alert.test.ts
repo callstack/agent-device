@@ -118,6 +118,7 @@ test('alert get reports a visible prompt the runner could not read, never as abs
     code: 'ALERT_UNRESOLVED',
     details: { dispatched: 'no', hint: expect.stringMatching(/screenshot/) },
   });
+  expect(mockRunnerCommand).toHaveBeenCalledOnce();
 });
 
 test('alert dismiss retries a typed absence whatever the message says', async () => {

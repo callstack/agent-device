@@ -125,7 +125,7 @@ Alerts:
     agent-device alert accept
     agent-device alert dismiss
   Android support is snapshot-derived for runtime permission prompts and native app dialogs. iOS support is runner-derived for XCTest alerts, app-owned modal popups with native blocking markers, Safari page prompts such as "Open this page in …?", and blocking system dialogs. Use cheap alert get for an immediate check; use alert wait <short-ms> only when a prompt may appear after async work.
-  If alert reports no alert but a sheet is visible, alert did not recognize it. Press its button from snapshot -i:
+  If alert reports no alert but a sheet is visible, alert did not recognize it. Press the button by the ref snapshot -i prints (@e3 is an example):
     agent-device snapshot -i
     agent-device press @e3
   ALERT_UNRESOLVED means a system prompt is visible but unreadable. Inspect it with screenshot, then snapshot -i.
