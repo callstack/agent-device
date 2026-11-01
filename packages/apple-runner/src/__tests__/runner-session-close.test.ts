@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { beforeEach, test, vi } from 'vitest';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import {
@@ -285,6 +286,40 @@ test('a served non-busy error clears a stale busy report so close keeps a draine
   );
 
   assert.equal(session.runnerMainThreadBusy, false);
+});
+
+test('a journal refusal of a finished commandId leaves a busy main-thread report intact', async () => {
+  // The repeat this PR exists to refuse: the runner answers `COMMAND_ALREADY_FINISHED` from its
+  // journal without executing, so it observed nothing about its main thread. Clearing the report
+  // here would let retention and handoff proceed on a runner still draining abandoned work.
+  const session = makeRunnerSession({ state: 'ready', runnerMainThreadBusy: true });
+  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
+  mockSendRunnerCommandOnce.mockResolvedValueOnce(
+    runnerError({
+      code: 'COMMAND_ALREADY_FINISHED',
+      message: 'The runner already finished tap with id runner-x and kept no response to replay.',
+    }),
+  );
+
+  // The validator pins that THIS refusal answered: a preflight or transport rejection would leave
+  // the report intact for the wrong reason and pass the assertion anyway.
+  await assert.rejects(
+    () =>
+      executeRunnerCommandWithSession(
+        IOS_SIMULATOR,
+        session,
+        { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
+        '/tmp/runner.log',
+        30_000,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerErrorCode, 'COMMAND_ALREADY_FINISHED');
+      return true;
+    },
+  );
+
+  assert.equal(session.runnerMainThreadBusy, true);
 });
 
 test('close stops an unready generation and the next use starts fresh', async () => {

@@ -11,6 +11,7 @@ import type {
   IosDeveloperModeState,
 } from './runner-physical-device.ts';
 import {
+  COMMAND_ALREADY_FINISHED_RUNNER_CODE,
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   RUNNER_BUSY_RUNNER_CODE,
   RUNNER_WEDGED_RUNNER_CODE,
@@ -657,13 +658,33 @@ export function isRetryableRunnerError(err: unknown): boolean {
 }
 
 /**
- * True when the runner reported its main thread occupied by watchdog-abandoned XCTest work, either
- * as a fast refusal of this command (`RUNNER_BUSY`) or as the timeout the stalling command itself
- * returns (`MAIN_THREAD_TIMEOUT`) (#2552). Both are diagnostic-only on the wire (`COMMAND_FAILED` +
- * `details.runnerErrorCode`), so family policy reads the typed detail rather than the message.
+ * What one runner failure proves about the runner's main thread: it is still draining the
+ * watchdog-abandoned XCTest work, it has drained, or the failure says nothing either way. The third
+ * reading is not a fallback — it is what an unanswered transport failure reports, and what the
+ * journal's refusal of a finished `commandId` reports, because that answer was written without the
+ * main thread being involved at all.
  */
-export function isRunnerMainThreadOccupiedError(error: unknown): boolean {
-  return isRunnerBusyError(error) || isRunnerMainThreadTimeoutError(error);
+export type RunnerMainThreadOccupancy = 'occupied' | 'drained' | 'silent';
+
+/**
+ * The one verdict for what a runner failure reports about main-thread occupancy.
+ *
+ * `RUNNER_BUSY` is a fast refusal of this command while abandoned work drains, and
+ * `MAIN_THREAD_TIMEOUT` is the timeout the stalling command itself returns, so both report the
+ * thread occupied (#2552). Any other structured reply was served by a runner that reached the
+ * request, which is evidence the abandoned work drained. Two answers report nothing: a
+ * transport-shaped failure never reached the runner, and `COMMAND_ALREADY_FINISHED` is the journal
+ * answering from its record, with no execution and therefore no observation of the thread — a
+ * repeat refused mid-drain is exactly that case, and reading it as drained would hand off a runner
+ * that is still grinding.
+ */
+export function runnerMainThreadOccupancyReport(error: unknown): RunnerMainThreadOccupancy {
+  if (isRunnerBusyError(error) || isRunnerMainThreadTimeoutError(error)) return 'occupied';
+  // A transport-shaped failure never reached the runner, so it reports nothing.
+  if (!isStructuredRunnerFailure(error)) return 'silent';
+  // The journal answered from its own record, so no execution observed the main thread.
+  if (error.details?.runnerErrorCode === COMMAND_ALREADY_FINISHED_RUNNER_CODE) return 'silent';
+  return 'drained';
 }
 
 /**
@@ -691,7 +712,7 @@ export function isRunnerBusyError(error: unknown): boolean {
  * payload, so the command's outcome is known and no lifecycle status probe is needed to recover it.
  * A transport-shaped failure (aborted body, malformed payload, refused connection) answered nothing.
  */
-export function isStructuredRunnerFailure(error: unknown): boolean {
+export function isStructuredRunnerFailure(error: unknown): error is AppError {
   return error instanceof AppError && error.details?.runner !== undefined;
 }
 

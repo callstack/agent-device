@@ -19,8 +19,8 @@ import {
 import {
   resolveRunnerFatalErrorReason,
   isRunnerCommandProvablyUnwritten,
-  isRunnerMainThreadOccupiedError,
   isStructuredRunnerFailure,
+  runnerMainThreadOccupancyReport,
 } from './runner-error-classification.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
@@ -230,14 +230,11 @@ function recordUnansweredRunnerExchange(
   } else {
     session.commandCharges.markAbandoned(runnerCommand.commandId);
   }
-  // A main-thread occupancy report (`RUNNER_BUSY`, or the `MAIN_THREAD_TIMEOUT` the stalling
-  // command itself returns) marks the runner still draining. Any OTHER structured runner reply was
-  // served off that abandoned work, so it has drained; a transport-shaped error answered nothing
-  // and leaves the report intact (#2552).
-  if (isRunnerMainThreadOccupiedError(error)) {
-    session.runnerMainThreadBusy = true;
-  } else if (answered) {
-    session.runnerMainThreadBusy = false;
+  // Whether the runner's main thread is still draining is one verdict from the classifier, and
+  // `silent` is the reading that changes nothing: whatever the last real answer reported stands.
+  const occupancy = runnerMainThreadOccupancyReport(error);
+  if (occupancy !== 'silent') {
+    session.runnerMainThreadBusy = occupancy === 'occupied';
   }
   return answered;
 }

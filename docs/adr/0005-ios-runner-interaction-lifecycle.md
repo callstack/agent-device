@@ -127,6 +127,7 @@ The journal closes a `commandId` at the last fast `RUNNER_BUSY` or `RUNNER_WEDGE
 A refusal before that point dispatched nothing, so the entry stays open and the read-only busy resend above can still run under its own `commandId`.
 Answering a closed `commandId` uses the retained response, then the retained error, then the typed `COMMAND_ALREADY_FINISHED` refusal for a command whose own classification retains no body.
 That refusal is a structured failure the daemon does not retry. Its dispatch disclosure stays `unknown`: the runner will not re-run the command, and only the runner knows whether an earlier send of that id reached the device.
+That refusal also reports nothing about the runner's main thread. The journal wrote it without executing, so the runner may be idle or mid-drain and the refusal cannot say which. The daemon's occupancy rule has three readings, occupied, drained, and this one, silent, and only the first two write `runnerMainThreadBusy`; a repeat refused while abandoned work drains must leave that report standing, because retention and handoff act on it.
 
 Pruning drops only closed entries, so a queued or executing command always stays queryable.
 When a closed entry that dispatched is pruned, the journal keeps its id in a separate closed-id window, because a bare id carries no outcome body.

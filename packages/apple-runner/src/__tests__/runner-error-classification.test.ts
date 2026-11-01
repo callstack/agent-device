@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  COMMAND_ALREADY_FINISHED_RUNNER_CODE,
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
   TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
@@ -13,6 +14,7 @@ import {
   isRetryableRunnerError,
   isRunnerBusyError,
   resolveRunnerFatalErrorReason,
+  runnerMainThreadOccupancyReport,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
   shouldRestartRunnerBeforeCommandSend,
@@ -455,6 +457,39 @@ test('only the typed RUNNER_BUSY refusal reads as busy', () => {
   );
   assert.equal(isRunnerBusyError(commandFailed('RUNNER_BUSY')), false);
   assert.equal(isRunnerBusyError(new Error('RUNNER_BUSY')), false);
+});
+
+// --- main-thread occupancy (runnerMainThreadOccupancyReport) ---
+
+/** The AppError `buildRunnerResponseError` publishes for one runner wire code: its own details plus
+ * the structured payload that makes the reply an answer. */
+function runnerReplyFailure(runnerCode: string): AppError {
+  const classified = classifyRunnerReportedError(runnerCode);
+  return new AppError(classified.code, 'runner error', {
+    ...classified.details,
+    runner: { ok: false, error: { code: runnerCode, message: 'runner error' } },
+  });
+}
+
+// The literal is what the Swift runner encodes, so it is the contract and not the constant name:
+// a rename on one side has to fail here rather than silently split the pair.
+test('the journal refusal of a finished commandId reports nothing about main-thread occupancy', () => {
+  assert.equal(COMMAND_ALREADY_FINISHED_RUNNER_CODE, 'COMMAND_ALREADY_FINISHED');
+  assert.equal(
+    runnerMainThreadOccupancyReport(runnerReplyFailure('COMMAND_ALREADY_FINISHED')),
+    'silent',
+  );
+  // Without the structured runner payload there is no answer at all, which is also silent.
+  assert.equal(runnerMainThreadOccupancyReport(commandFailed('boom')), 'silent');
+});
+
+test('occupancy reads the busy refusal and the stalling timeout as occupied, and a served failure as drained', () => {
+  assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('RUNNER_BUSY')), 'occupied');
+  assert.equal(
+    runnerMainThreadOccupancyReport(runnerReplyFailure('MAIN_THREAD_TIMEOUT')),
+    'occupied',
+  );
+  assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('ELEMENT_NOT_FOUND')), 'drained');
 });
 
 // --- runner that predates the listener token ---
