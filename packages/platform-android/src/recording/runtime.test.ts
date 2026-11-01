@@ -434,7 +434,12 @@ test('does not launch the sequential fallback after the stop was claimed', async
     const finishing = handle.finish();
     retirement.release();
     await vi.advanceTimersByTimeAsync(5_000);
-    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    const outcome = await finishing;
+    expect(outcome).toMatchObject({ status: 'completed' });
+    // The rotation retired this recorder itself, so its absence is not the 180 s platform limit.
+    expect((outcome as { result?: { warning?: string } }).result?.warning ?? '').not.toMatch(
+      /platform limit/,
+    );
     expect(starts).toBe(3);
     expect(JSON.parse(manifest).chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
   } finally {

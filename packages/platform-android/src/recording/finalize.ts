@@ -53,6 +53,12 @@ export async function finalizeAndroidRecording(
     startedAtMs: number;
     progress?: DurableCaptureProgress;
     reachedLimit?: boolean;
+    /**
+     * Whether a rotation retired the active chunk's recorder itself and withdrew before replacing
+     * it. That retirement explains an already-gone active recorder, so its absence is not the
+     * platform's 180 s limit truncating a recording that was still running.
+     */
+    activeRecorderRetired?: boolean;
   }>,
 ): Promise<FinishOutcome<ScreenRecordingCompletion>> {
   const { host, transport, evidence, recording, startedAtMs, progress } = params;
@@ -66,7 +72,9 @@ export async function finalizeAndroidRecording(
         // growing is the evidence the recorder stopped writing (ADR 0024 2.2). The platform limit is
         // disclosed here rather than at the export because it is a fact about the recorder, and the
         // journal is what keeps it attached to a stop that has to be driven again.
-        reachedLimit = (await stopOwnedChunks(transport, evidence.chunks)) || reachedLimit;
+        const activeRecorderAlreadyGone = await stopOwnedChunks(transport, evidence.chunks);
+        reachedLimit =
+          (activeRecorderAlreadyGone && params.activeRecorderRetired !== true) || reachedLimit;
         await waitForStableArtifacts(transport, evidence.chunks);
         return {
           observation: { recorder: 'confirmed' },

@@ -81,6 +81,12 @@ async function startAndroidRecording(params: {
   let rotationFailure: unknown;
   let phase: RecordingPhase = 'recording';
   /**
+   * Whether a rotation retired the active chunk's recorder itself and then withdrew without
+   * replacing it. Finalization must read that recorder's absence as this recording's own retirement,
+   * not as the platform's 180 s limit cutting a recorder short.
+   */
+  let retiredActiveRecorder = false;
+  /**
    * The recording's launch admission. It is aborted the moment either stop operation begins, so the
    * launch owner refuses at the device call it is about to make and a claimed stop never starts
    * another recorder. The commit boundary deliberately does not use it: aborting the host command
@@ -144,6 +150,13 @@ async function startAndroidRecording(params: {
       // being replaced either: the stop owns that recorder now.
       if (concurrentStartError instanceof AndroidScreenRecordingStopClaimed)
         throw concurrentStartError;
+      // The stop owns the current recorder now, so do not begin retiring it for a replacement this
+      // recording has already given up on. Finalization will stop it like any active chunk.
+      if (stopAdmission.signal.aborted) throw new AndroidScreenRecordingStopClaimed();
+      // From here the retirement is this recording's own doing, so a later finalization must not
+      // read this recorder's absence as the platform's 180 s limit, whether or not the replacement
+      // this retirement was made for ever launches.
+      retiredActiveRecorder = true;
       await stopChunk(transport, previous);
       try {
         return { chunk: await launchChunk(previous), previousStopped: true };
@@ -229,6 +242,9 @@ async function startAndroidRecording(params: {
     // The write committed this chunk on the device, so the recording keeps it and the stop collects
     // it like every other committed chunk. A committed chunk is never discarded.
     chunks = nextChunks;
+    // The active chunk is this freshly launched one now, so a retirement recorded earlier can no
+    // longer explain its absence.
+    retiredActiveRecorder = false;
     if (!previousStopped) await stopChunk(transport, previous);
     schedule();
   };
@@ -246,6 +262,7 @@ async function startAndroidRecording(params: {
         recording: current,
         startedAtMs: initial.startedAtMs,
         progress,
+        activeRecorderRetired: retiredActiveRecorder,
       });
       confirmNativeCleanup();
       return outcome;
