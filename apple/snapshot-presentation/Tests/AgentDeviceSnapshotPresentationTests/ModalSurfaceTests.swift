@@ -125,7 +125,8 @@ final class ModalSurfaceTests: XCTestCase {
     XCTAssertEqual(read(plain, honorModal), .unknown(.duplicatedChild))
   }
 
-  // A scroll view lists its scroll bar twice in both reads, so every occurrence is kept.
+  // A sheet lists its scroll bar twice in both reads, with a different child under each
+  // occurrence. Every occurrence is kept, so each pairs with the one at its place in order.
   func testAnElementKeptAsOftenAsItIsListedPairsInOrder() {
     let plain = [
       node("app", nil),
@@ -133,7 +134,9 @@ final class ModalSurfaceTests: XCTestCase {
       node("content", "window"),
       node("sheet", "window"),
       node("bar", "sheet"),
+      node("first", "bar"),
       node("bar", "sheet"),
+      node("second", "bar"),
     ]
     let honorModal = plain.filter { $0.element != "content" }
     XCTAssertEqual(read(plain, honorModal), .modal([ModalSurface(host: 1, roots: [2])]))
