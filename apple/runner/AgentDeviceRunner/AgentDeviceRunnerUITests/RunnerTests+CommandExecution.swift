@@ -617,15 +617,26 @@ extension RunnerTests {
       let deadline = alertDeadline ?? Date().addingTimeInterval(
         Self.alertCommandTimeout(timeoutMs: command.timeoutMs)
       )
-      guard let alert = resolveAlert(app: activeApp, deadline: deadline) else {
+      switch resolveAlert(app: activeApp, deadline: deadline) {
+      case .resolved(let alert):
+        return handleAlert(alert, action: action, deadline: deadline)
+      case .absent:
         // Typed so the host retries on absence alone: a transport or runner failure carries no
         // code and must not be mistaken for "no alert yet" (ALERT_NOT_FOUND_RUNNER_CODE).
         return Response(
           ok: false,
           error: ErrorPayload(code: "ALERT_NOT_FOUND", message: "alert not found")
         )
+      case .unresolved:
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: RunnerWireErrorCode.alertUnresolved,
+            message: "a system prompt is visible but its buttons could not be read",
+            hint: RunnerTests.alertUnresolvedHint
+          )
+        )
       }
-      return handleAlert(alert, action: action, deadline: deadline)
     case .gesture:
       guard let plan = command.gesturePlan else {
         return Response(

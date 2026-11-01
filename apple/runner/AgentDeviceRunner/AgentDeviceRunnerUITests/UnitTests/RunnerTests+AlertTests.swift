@@ -7,7 +7,23 @@ extension RunnerTests {
   func testAlertResolutionDoesNotQueryATerminatedApp() {
     app.terminate()
     XCTAssertEqual(app.state, .notRunning)
-    XCTAssertNil(resolveAlert(app: app, deadline: Date().addingTimeInterval(1)))
+    guard case .absent = resolveAlert(app: app, deadline: Date().addingTimeInterval(1)) else {
+      return XCTFail("a terminated app must resolve to no alert")
+    }
+  }
+
+  @MainActor
+  func requireResolvedAlert(within timeout: TimeInterval) throws -> RunnerAlert {
+    try requireResolvedAlert(deadline: Date().addingTimeInterval(timeout))
+  }
+
+  @MainActor
+  func requireResolvedAlert(deadline: Date) throws -> RunnerAlert {
+    let resolution = resolveAlert(app: app, deadline: deadline)
+    guard case .resolved(let alert) = resolution else {
+      return try XCTUnwrap(nil as RunnerAlert?, "expected a resolved alert, got \(resolution)")
+    }
+    return alert
   }
 }
 #endif
@@ -19,7 +35,12 @@ extension RunnerTests {
     defer { terminateCrowdedScreen() }
 
     let startedAt = Date()
-    XCTAssertNil(resolveAlert(app: app, deadline: startedAt.addingTimeInterval(RunnerTests.defaultAlertCommandTimeout)))
+    guard case .absent = resolveAlert(
+      app: app,
+      deadline: startedAt.addingTimeInterval(RunnerTests.defaultAlertCommandTimeout)
+    ) else {
+      return XCTFail("a screen without an alert must resolve to no alert")
+    }
     // Half the command's own budget: an absent alert answers ALERT_NOT_FOUND well inside it on a
     // contended host, while a read per element spends it many times over on this screen.
     XCTAssertLessThan(Date().timeIntervalSince(startedAt), RunnerTests.defaultAlertCommandTimeout / 2)
@@ -30,9 +51,7 @@ extension RunnerTests {
     launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup"])
     defer { terminateCrowdedScreen() }
 
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     XCTAssertEqual(alert.source, .dismissPopup)
     XCTAssertEqual(alert.root.elementType, .window)
     XCTAssertTrue(alert.buttons.contains { $0.identifier == " Dismiss Popup " })
@@ -43,9 +62,7 @@ extension RunnerTests {
     launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup-window"])
     defer { terminateCrowdedScreen() }
 
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     XCTAssertEqual(alert.source, .dismissPopup)
     XCTAssertEqual(alert.root.identifier, "Dismiss popup")
     XCTAssertTrue(alert.buttons.contains { $0.identifier == "agent-device-close-popover" })
@@ -59,9 +76,7 @@ extension RunnerTests {
     launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup-window"])
     defer { terminateCrowdedScreen() }
 
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     let button = try XCTUnwrap(chooseAlertButton(alert, action: "dismiss"))
     XCTAssertEqual(button.identifier, "agent-device-close-popover")
   }
@@ -77,9 +92,7 @@ extension RunnerTests {
     app.launch()
     defer { terminateCrowdedScreen() }
 
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
     let inspection = handleAlert(alert, action: "get", deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "Relaunch to continue")

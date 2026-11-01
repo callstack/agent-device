@@ -11,6 +11,13 @@ extension RunnerTests {
     let window: XCUIElement?
   }
 
+  enum AlertResolution {
+    case absent
+    /// A blocking system modal is on screen but its remote host could not be read.
+    case unresolved
+    case resolved(RunnerAlert)
+  }
+
   static let defaultAlertCommandTimeout: TimeInterval = 10
 
   /// One recovery sentence for every alert failure that activated nothing, so the refusal in
@@ -18,13 +25,16 @@ extension RunnerTests {
   static let alertNoButtonActivatedHint =
     "No alert button was activated. Inspect the current alert before deciding on an action."
 
+  static let alertUnresolvedHint =
+    "A system prompt is visible but alert could not read it. Inspect it with screenshot, then snapshot -i, and press @ref on the visible button."
+
   static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
     guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
     return max(0.001, timeoutMs / 1000)
   }
 
   @MainActor
-  func resolveAlert(app activeApp: XCUIApplication, deadline: Date) -> RunnerAlert? {
+  func resolveAlert(app activeApp: XCUIApplication, deadline: Date) -> AlertResolution {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
     if let override = alertResolutionOverrideForTesting {
       return override(deadline)
@@ -41,14 +51,14 @@ extension RunnerTests {
         window: modal.window
       )
     case .unresolved:
-      return nil
+      return .unresolved
     case .absent:
       break
     }
 #endif
     let state = activeApp.state
     guard state != .notRunning && state != .unknown else {
-      return nil
+      return .absent
     }
     // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
     // picker) was just dismissed, the dismissal re-check re-enters here with the
@@ -65,7 +75,7 @@ extension RunnerTests {
     if let popup = firstDismissPopupWindow(in: activeApp) {
       return runnerAlert(root: popup, ownerApp: activeApp, actions: actionableElements(in: popup), source: .dismissPopup)
     }
-    return nil
+    return .absent
   }
 
   @MainActor
@@ -244,12 +254,12 @@ extension RunnerTests {
     actions: [XCUIElement],
     source: AlertSurfaceSource,
     window: XCUIElement? = nil
-  ) -> RunnerAlert? {
+  ) -> AlertResolution {
     let buttons = actions.filter { isEnabledElement($0) }
     guard !buttons.isEmpty else {
-      return nil
+      return .absent
     }
-    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: window)
+    return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: window))
   }
 
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {
