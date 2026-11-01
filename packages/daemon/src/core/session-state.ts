@@ -305,3 +305,28 @@ export type SessionState = {
   };
   appLogFailure?: AppLogFailure;
 };
+
+/**
+ * Whether anything other than this session's own recording owns it: an app that an `open` or a
+ * `trigger-app-event` published into the record, a capture it is still collecting, a host-global
+ * claim it holds on a device, or a remote lease that governs its ownership instead.
+ *
+ * `SessionStore.retire` drops the record and runs no teardown, so retirement is a release only
+ * while this is false. `record stop` asks it — the one command that may retire a session because
+ * that session was its recording's owner — and derives the answer from the record rather than from
+ * any caller having declared itself, so a resource-attaching path cannot forget to report itself.
+ *
+ * `screenRecording` is deliberately absent: the question is asked once the recording has settled.
+ * `appLogFailure` is absent too: it records a start that attached nothing.
+ */
+export function sessionHasOwnersBeyondRecording(session: SessionState): boolean {
+  return (
+    session.appBundleId !== undefined ||
+    session.deviceClaim !== undefined ||
+    session.lease !== undefined ||
+    session.appLog !== undefined ||
+    session.audioProbe !== undefined ||
+    session.perfCapture !== undefined ||
+    session.trace !== undefined
+  );
+}

@@ -52,6 +52,7 @@ import type {
 } from '../../core/request-runtime-binding.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
+import { sessionHasOwnersBeyondRecording } from '../../core/session-state.ts';
 import { withCaptureOutputOwnership } from '../../core/capture-output-ownership.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import {
@@ -413,7 +414,7 @@ async function stopRecording(
           }
         : await finishRecovered(params, session, needsReadiness);
   } catch (error) {
-    deleteTerminalRecordOnlySession(params, session, ref);
+    deleteTerminalRecordOnlySession(params, ref);
     throw error;
   }
   const completion = stopped.completion;
@@ -442,7 +443,10 @@ async function stopRecording(
       showTouches: completion.showTouches,
     });
   }
-  if (session.recordOnlySession && ref) params.sessionStore.retire(ref);
+  // Retirement runs no teardown, so it releases a session only while nothing else owns it; the
+  // session has to be re-read here, because the record this stop started with may have gained an
+  // app, a capture, a claim, or a lease while the recording was being finished.
+  if (ref) retireRecordOnlySession(params.sessionStore, ref);
   return response.ok && response.data
     ? {
         ...response,
@@ -457,11 +461,27 @@ async function stopRecording(
 
 function deleteTerminalRecordOnlySession(
   params: Pick<RecordRuntimeHandlerParams, 'sessionName' | 'sessionStore'>,
-  session: SessionState,
   ref: SessionRef | undefined,
 ): void {
-  if (!session.recordOnlySession || !ref) return;
-  if (screenRecordingManifestIsTerminal(params)) params.sessionStore.retire(ref);
+  if (!ref) return;
+  if (screenRecordingManifestIsTerminal(params)) retireRecordOnlySession(params.sessionStore, ref);
+}
+
+/**
+ * Ends a session that its own recording created — but only while the recording is still the only
+ * thing that owns it. `SessionStore.retire` runs no teardown, so a session that has since gained an
+ * app, a capture, a device claim, or a remote lease keeps its record and stays releasable by
+ * `close`, which does own that teardown. Whether anything else took over is read from the session
+ * itself rather than from any attaching path having reported itself, so no new attaching path can
+ * be forgotten here. Callers hold the session's execution lock.
+ *
+ * A session that was never record-only, which is every session an `open` created, is left alone.
+ */
+function retireRecordOnlySession(store: SessionStore, ref: SessionRef): void {
+  const session = store.resolveCurrent(ref);
+  if (!session?.recordOnlySession) return;
+  if (sessionHasOwnersBeyondRecording(session)) return;
+  store.retire(ref);
 }
 
 async function finishRecovered(
