@@ -90,6 +90,23 @@ export const androidScreenRecordingDescriptorCodec = Object.freeze({
       : ({ status: 'invalid', message: 'Invalid Android screen-recording descriptor' } as const),
 });
 
+/**
+ * The requested recording options, carried unchanged by every durable record of the recording: an
+ * option recorded in one place and not another would make that record disagree about what was asked.
+ */
+export function recordingRequestFields(input: ScreenRecordingStartInput) {
+  return {
+    outputPath: input.outputPath,
+    ...(input.clientOutputPath === undefined ? {} : { clientOutputPath: input.clientOutputPath }),
+    scope: input.scope,
+    showTouches: input.showTouches,
+    recordOnlySession: input.recordOnlySession,
+    ...(input.activeSessionApp === undefined ? {} : { activeSessionApp: input.activeSessionApp }),
+    ...(input.exportQuality === undefined ? {} : { exportQuality: input.exportQuality }),
+    ...(input.fps === undefined ? {} : { fps: input.fps }),
+  };
+}
+
 export function createNativeManifest(
   device: DeviceInfo,
   input: ScreenRecordingStartInput,
@@ -106,14 +123,7 @@ export function createNativeManifest(
     sessionId: input.sessionId,
     deviceId: device.id,
     startedAt,
-    outputPath: input.outputPath,
-    ...(input.clientOutputPath === undefined ? {} : { clientOutputPath: input.clientOutputPath }),
-    scope: input.scope,
-    showTouches: input.showTouches,
-    recordOnlySession: input.recordOnlySession,
-    ...(input.activeSessionApp === undefined ? {} : { activeSessionApp: input.activeSessionApp }),
-    ...(input.exportQuality === undefined ? {} : { exportQuality: input.exportQuality }),
-    ...(input.fps === undefined ? {} : { fps: input.fps }),
+    ...recordingRequestFields(input),
     chunks,
     ...(pendingRemotePath === undefined ? {} : { pendingRemotePath }),
     transportMode,
