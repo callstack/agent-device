@@ -136,7 +136,13 @@ console.log(
   `plain ${trees.plain.length} nodes, honorModal ${trees.honorModal.length} nodes, ms ${JSON.stringify(trees.milliseconds)}`,
 );
 console.log(
-  previous.expect === undefined
-    ? `Wrote ${path.relative(root, fixture)}. Add "expect" and "expectModalScope" from what the screen shows.`
-    : `Wrote ${path.relative(root, fixture)}. Kept its "expect" and "expectModalScope"; check that the node positions still hold.`,
+  [
+    `Wrote ${path.relative(root, fixture)}.`,
+    previous.expect === undefined
+      ? 'Add "expect" from what the screen shows.'
+      : 'Kept its "expect".',
+    previous.expectModalScope === undefined
+      ? 'Add "expectModalScope" from what the screen shows.'
+      : 'Kept its "expectModalScope"; check that its node positions still hold.',
+  ].join(' '),
 );

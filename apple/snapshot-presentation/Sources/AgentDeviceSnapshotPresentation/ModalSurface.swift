@@ -15,6 +15,12 @@ public struct ModalSurface: Equatable {
 /// Why a modal-scope pair cannot name the modal surface.
 public enum ModalSurfaceUnknownReason: Equatable {
   case unstable(ModalScopeInstability)
+  /// The honor-modal read does not start at the plain read's root.
+  case rootMismatch
+  /// A node lists one element as two or more of its children, and the honor-modal read keeps some
+  /// of them but not all. A kept occurrence can be any of them, so the walk cannot tell which
+  /// subtree lost children. When it keeps them all, they pair in order.
+  case duplicatedChild
   /// A read lists a node before the parent it names, so its tree cannot be rebuilt.
   case unorderedRead
   /// The honor-modal read removed content, but no node kept a child beside the children it lost.
@@ -52,19 +58,25 @@ extension ModalSurface {
     case .paired:
       break
     }
-    guard let plainChildren = children(of: plain), let honorModalChildren = children(of: honorModal),
-          plain.first?.element == honorModal.first?.element
+    guard plain.first?.element == honorModal.first?.element else { return .unknown(.rootMismatch) }
+    guard let plainChildren = children(of: plain), let honorModalChildren = children(of: honorModal)
     else { return .unknown(.unorderedRead) }
 
     // Pairing matched elements under parent elements. This walk matches them under the parent node,
     // which also tells apart the occurrences of an element that one read lists under two parents.
+    var failure = ModalSurfaceUnknownReason.unstable(.reparentedElement)
     func surfaces(honorModalNode: Int, plainNode: Int) -> [ModalSurface]? {
       var removed = plainChildren[plainNode]
       var kept: [(honorModal: Int, plain: Int)] = []
       for child in honorModalChildren[honorModalNode] {
-        guard let match = removed.firstIndex(where: { plain[$0].element == honorModal[child].element }) else {
+        let element = honorModal[child].element
+        let listed = plainChildren[plainNode].filter { plain[$0].element == element }.count
+        let keptListed = honorModalChildren[honorModalNode].filter { honorModal[$0].element == element }.count
+        guard listed < 2 || keptListed >= listed else {
+          failure = .duplicatedChild
           return nil
         }
+        guard let match = removed.firstIndex(where: { plain[$0].element == element }) else { return nil }
         kept.append((child, removed.remove(at: match)))
       }
       var nested: [ModalSurface] = []
@@ -76,9 +88,7 @@ extension ModalSurface {
       return [ModalSurface(host: honorModalNode, roots: kept.map(\.honorModal))]
     }
 
-    guard let found = surfaces(honorModalNode: 0, plainNode: 0) else {
-      return .unknown(.unstable(.reparentedElement))
-    }
+    guard let found = surfaces(honorModalNode: 0, plainNode: 0) else { return .unknown(failure) }
     return found.isEmpty ? .unknown(.noSurvivingSurface) : .modal(found)
   }
 
