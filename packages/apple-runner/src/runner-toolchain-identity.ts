@@ -46,8 +46,7 @@ export const XCODE_SELECT_LINK_PATH = '/var/db/xcode_select_link';
 /** Where `xcrun` looks when neither `DEVELOPER_DIR` nor the selection link names a developer dir. */
 export const DEFAULT_DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
 
-const TOOLCHAIN_FILE_HINT =
-  'The Apple runner cache is keyed on the toolchain version, so a cache decision cannot be made without it. Check that `xcode-select -p` or DEVELOPER_DIR names a full Xcode install. If /var/db/xcode_select_link names a deleted Xcode, run `sudo xcode-select -s <Xcode.app>`.';
+const TOOLCHAIN_FILE_HINT = `The Apple runner cache is keyed on the toolchain version, so a cache decision cannot be made without it. Check that \`xcode-select -p\` or DEVELOPER_DIR names a full Xcode install. If ${XCODE_SELECT_LINK_PATH} names a deleted Xcode, run \`sudo xcode-select -s <Xcode.app>\`.`;
 
 type BundleVersion = Readonly<{ version: string; buildVersion: string }>;
 
