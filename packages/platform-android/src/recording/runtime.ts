@@ -81,14 +81,17 @@ async function startAndroidRecording(params: {
   let rotationFailure: unknown;
   let phase: RecordingPhase = 'recording';
   /**
-   * The recording's stop admission. It is aborted the moment either stop operation begins, so the
-   * launch owner and the commit boundary can each refuse at the device call they are about to make,
-   * rather than only being checked where the rotation happens to look.
+   * The recording's launch admission. It is aborted the moment either stop operation begins, so the
+   * launch owner refuses at the device call it is about to make and a claimed stop never starts
+   * another recorder. The commit boundary deliberately does not use it: aborting the host command
+   * cannot prove the on-device rename did not happen, so only that write's real outcome decides what
+   * the marker holds.
    */
   const stopAdmission = new AbortController();
   /**
    * Stops accepting rotations and arms nothing that could start one. The claim is synchronous, so the
-   * rotation already in flight cannot start or publish a chunk behind the stop that interrupted it.
+   * rotation already in flight cannot launch a chunk behind the stop that interrupted it. A commit
+   * already in flight may still commit, and the stop collects that chunk like any other.
    */
   const claimStop = () => {
     if (timer) clearTimeout(timer);
@@ -158,14 +161,24 @@ async function startAndroidRecording(params: {
     await rollbackChunks(transport, [chunk]);
     await persistNativeManifest(transport, manifestPath, activeEvidence(chunks)).catch(() => {});
   };
-  /** Rewinds the marker to what the recording was before this rotation, once its commit failed. */
+  /**
+   * Rewinds the marker to what the recording was before this rotation, once its commit failed. The
+   * child may never be dropped from the evidence: when its rollback cannot be confirmed, the marker
+   * names its path as pending, which is what keeps an unaccounted recorder recoverable and makes the
+   * rotation failure the stop reports rather than a clean finish.
+   */
   const undoRotationCommit = async (
     next: NativeChunk,
     previous: NativeChunk,
     previousStopped: boolean,
-  ) => {
-    await rollbackChunks(transport, [next]).catch(() => {});
-    if (previousStopped) {
+  ): Promise<void> => {
+    const rollbackUncertain = await rollbackChunks(transport, [next]).then(
+      () => false,
+      () => true,
+    );
+    // An uncertain rollback leaves the child's recorder, its artifact, or both on the device, so the
+    // marker must keep naming them as pending.
+    if (rollbackUncertain || previousStopped) {
       await persistNativeManifest(
         transport,
         manifestPath,
@@ -205,23 +218,16 @@ async function startAndroidRecording(params: {
     }
     const nextChunks = [...chunks, { ...next, index: chunks.length + 1 }];
     try {
-      // The stop admission is carried to the device write itself: the publication is refused once a
-      // stop is claimed, so this cannot adopt a chunk the stop has already given up on.
-      await persistNativeManifest(
-        transport,
-        manifestPath,
-        activeEvidence(nextChunks),
-        stopAdmission.signal,
-      );
+      // No stop signal reaches this write. Aborting the host command cannot undo the on-device rename
+      // or prove it never ran, so the write runs to its real outcome: success means the device
+      // committed the chunk, whatever the stop did while the write was in flight.
+      await persistNativeManifest(transport, manifestPath, activeEvidence(nextChunks));
     } catch (error) {
       await undoRotationCommit(next, previous, previousStopped);
-      // The stop refused this publication, and the rollback gave the chunk back. The recording's own
-      // chunks are intact, so the stop may finalize them rather than report a rotation it caused.
-      if (stopAdmission.signal.aborted) return;
       throw error;
     }
-    // The publication reached the device before any stop refused it, so the recording owns this
-    // chunk from here even when a stop was claimed while the write was in flight.
+    // The write committed this chunk on the device, so the recording keeps it and the stop collects
+    // it like every other committed chunk. A committed chunk is never discarded.
     chunks = nextChunks;
     if (!previousStopped) await stopChunk(transport, previous);
     schedule();
