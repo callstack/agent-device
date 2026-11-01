@@ -21,6 +21,43 @@ import type {
 
 const ok = { exitCode: 0, stdout: '', stderr: '' };
 
+/**
+ * The serial a reverse cleanup is ending is not a route a retained caller may take: an ordinary command
+ * arriving inside that window has to be refused, or the taken session keeps taking commands on the device.
+ */
+test('a command that arrives while cleanup holds its serial is refused', async () => {
+  const runs: string[][] = [];
+  const session = await createLimrunAndroidSession(
+    ANDROID_SESSION_OPTIONS,
+    androidDependencies(runs),
+  );
+  // The first command raises the tunnel this session owns, so a later one has a serial to reach for.
+  await session.adbProvider.exec(['shell', 'echo', 'ready']);
+  const dispatched = runs.length;
+  let reportList!: () => void;
+  reverse.listGate = new Promise<void>((resolve) => {
+    reportList = resolve;
+  });
+  try {
+    // Cleanup has retired this session and is inside the device with the serial it is ending.
+    const cleanup = cleanupLimrunAndroidAdbTunnel(session);
+    await vi.waitFor(() => expect(reverse.list).toHaveBeenCalledOnce());
+
+    await expect(session.adbProvider.exec(['shell', 'echo', 'again'])).rejects.toMatchObject({
+      code: 'SESSION_NOT_FOUND',
+      details: { reason: 'limrun_adb_tunnel_cleaned_up' },
+    });
+
+    reportList();
+    await cleanup;
+  } finally {
+    reverse.listGate = undefined;
+  }
+  // The only commands this session dispatched are its own cleanup's: the listing and the disconnect.
+  expect(runs.slice(dispatched).filter((argv) => argv.includes('shell'))).toEqual([]);
+  expect(tunnels.start).toHaveBeenCalledOnce();
+});
+
 const tunnels = vi.hoisted(() => ({
   /**
    * Held by a case that has to keep a tunnel in flight, which is the window a session's cleanup has to
@@ -34,6 +71,19 @@ const tunnels = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 
+/** The reverse manager every session of a case gets, with its listing held by the case that needs a window. */
+const reverse = vi.hoisted(() => ({
+  /** Held by a case that has to keep a cleanup inside the window in which it holds its serial. */
+  listGate: undefined as Promise<void> | undefined,
+  list: vi.fn(async () => {
+    await reverse.listGate;
+    return [];
+  }),
+  ensure: vi.fn(async () => {}),
+  remove: vi.fn(async () => {}),
+  removeAllOwned: vi.fn(async () => {}),
+}));
+
 vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({ startAdbTunnel: tunnels.start })),
 }));
@@ -42,6 +92,8 @@ beforeEach(() => {
   tunnels.gate = undefined;
   tunnels.start.mockClear();
   tunnels.close.mockClear();
+  reverse.listGate = undefined;
+  reverse.list.mockClear();
 });
 
 test('cleanup asks the platform to address the disconnect as a server-level command and hands it over unchanged', async () => {
@@ -182,7 +234,9 @@ const ANDROID_SESSION_OPTIONS = {
   token: 'instance-token',
 };
 
-function androidDependencies(): Pick<LimrunRuntimeDependencies, 'android' | 'host'> {
+function androidDependencies(
+  runs?: string[][],
+): Pick<LimrunRuntimeDependencies, 'android' | 'host'> {
   return {
     android: {
       deviceAdbInvocation: (serial: string, command: readonly string[]) =>
@@ -190,13 +244,13 @@ function androidDependencies(): Pick<LimrunRuntimeDependencies, 'android' | 'hos
       hostAdbInvocation: (command: readonly string[]) =>
         androidAdbInvocation(androidAdbHostTarget(), command),
       adbError: async (message: string) => new Error(message),
-      createPortReverse: async () => ({
-        ensure: async () => {},
-        remove: async () => {},
-        removeAllOwned: async () => {},
-        list: async () => [],
-      }),
+      createPortReverse: async () => reverse,
     } as unknown as LimrunRuntimeDependencies['android'],
-    host: { runAdb: async () => ok } as unknown as LimrunRuntimeDependencies['host'],
+    host: {
+      runAdb: async (invocation: AndroidAdbInvocation) => {
+        runs?.push([...serializeAndroidAdbInvocation(invocation)]);
+        return ok;
+      },
+    } as unknown as LimrunRuntimeDependencies['host'],
   };
 }

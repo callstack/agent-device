@@ -45,10 +45,16 @@ const state = vi.hoisted(() => ({
     },
   })),
   androidDelete: vi.fn(async (_instanceId: string) => {
+    await state.deleteGate;
     if (state.deleteFails) throw new Error('Limrun refused to delete the instance');
   }),
   /** Made to reject by a case whose instance delete is refused, the one failure a lease may not swallow. */
   deleteFails: false,
+  /**
+   * Held by a case whose instance delete must answer later than the deadline its own route gives it, which is
+   * the shape a DELETE whose response body never arrives has.
+   */
+  deleteGate: undefined as Promise<void> | undefined,
   keepAlive: vi.fn(),
   /** Instance-client connections the provider made, so one lease can be shown to make one. */
   connectCount: 0,
@@ -64,6 +70,10 @@ const state = vi.hoisted(() => ({
   tunnelGate: undefined as Promise<void> | undefined,
   /** Made to throw by a case whose session connection fails after its instance was rented. */
   connectFails: false,
+  /** Uploaded apps the catalog answers for a case that asks for an app to preinstall. */
+  uploadedApps: [] as unknown[],
+  /** What the device reports installed, for a case whose app identifier cannot be resolved. */
+  installedApps: [] as Array<{ id: string; name?: string }>,
   /** Destination tunnels and ADB tunnels this runtime asked the SDK to open. */
   captureStarts: 0,
   adbTunnelStarts: 0,
@@ -88,7 +98,10 @@ vi.mock('@limrun/api', () => ({
       list: vi.fn(async () => ({ getPaginatedItems: () => [] })),
       delete: state.androidDelete,
     };
-    readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
+    readonly assets = {
+      getOrUpload: vi.fn(),
+      list: vi.fn(async () => state.uploadedApps),
+    };
   },
 }));
 
@@ -153,6 +166,9 @@ test('two allocations of one lease rent one instance and start one keep-alive ti
     assert.equal(started.mock.calls.length, 1);
   } finally {
     started?.mockRestore();
+    // Whatever this case asserted, the create is answered before it is torn down, so a failed assertion
+    // surfaces as a failure rather than as a shutdown that waits out its create budget.
+    reportCreate();
     await runtime.shutdown();
     state.createGate = undefined;
   }
@@ -206,6 +222,7 @@ test('a release that arrives before the create answered ends the instance that c
     assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
   } finally {
     started?.mockRestore();
+    reportCreate();
     await runtime.shutdown();
     state.createGate = undefined;
   }
@@ -251,6 +268,7 @@ test('a shutdown while the create runs ends the instance that create made', asyn
     );
   } finally {
     started?.mockRestore();
+    reportCreate();
     state.createGate = undefined;
   }
 });
@@ -364,6 +382,8 @@ test('two allocations that ask for traffic logs open one destination tunnel', as
     // refusal would be reported over the capture that is working.
     assert.equal(state.captureStarts - captures, 1);
   } finally {
+    // Opened before teardown for the same reason as the create gate above.
+    reportTunnel();
     state.tunnelGate = undefined;
     await runtime.shutdown();
   }
@@ -407,6 +427,7 @@ test('a release that arrives while a tunnel is opening ends the tunnel that answ
       `expected the capture allocation to be refused for the release, got ${String(error)}`,
     );
   } finally {
+    reportTunnel();
     state.tunnelGate = undefined;
     await runtime.shutdown();
   }
@@ -491,6 +512,12 @@ type WarningRecord = Readonly<{
  * the case waits out. The delete is asked for independently of it.
  */
 const LOCAL_TEARDOWN_WAIT_MS = 60_000;
+
+/** Longer than one delete's deadline, which is what the silent-delete case waits out. */
+const DELETE_ANSWER_WAIT_MS = 40_000;
+
+/** Longer than a disposal's budget for its create, which is what the late-create case waits out. */
+const CREATE_ANSWER_WAIT_MS = 130_000;
 
 /**
  * Why one racing call refused, captured from the moment it starts. Two routes can answer in either order,
@@ -742,6 +769,134 @@ test('a network capture that cannot start is an unavailable artifact with its ty
   }
 });
 
+/**
+ * A DELETE whose response body never arrives answers later than any route may wait: the SDK clears its fetch
+ * timer before it reads the body, so the request itself is what has to be bounded.
+ */
+test('a release refuses a delete that never answers, within that delete’s own deadline', async () => {
+  const { deletes, disconnects } = limrunActivity();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-silent-delete');
+  let reportDelete!: () => void;
+  state.deleteGate = new Promise<void>((resolve) => {
+    reportDelete = resolve;
+  });
+  vi.useFakeTimers();
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+    const refused = refusalOf(runtime.leaseLifecycle.release?.(lease));
+    await vi.advanceTimersByTimeAsync(DELETE_ANSWER_WAIT_MS);
+    const error = await refused;
+    // The lease is still held: Limrun never confirmed the instance was gone.
+    assert.ok(
+      error instanceof AppError &&
+        error.details?.reason === 'limrun_instance_delete_unconfirmed' &&
+        error.details.limrunInstanceId === 'android-instance-1' &&
+        /delete/i.test(String(error.details.cause)),
+      `expected the release to refuse within its delete deadline, got ${String(error)}`,
+    );
+    // What that delete goes on to answer is still observed: its late confirmation ends the lease.
+    reportDelete();
+    await vi.advanceTimersByTimeAsync(0);
+  } finally {
+    reportDelete();
+    state.deleteGate = undefined;
+    vi.useRealTimers();
+    await runtime.shutdown();
+  }
+  assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+  assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+});
+
+/** A create that answers after its disposal gave up still owes the end of whatever it names. */
+test('a create that answers after its disposal gave up ends the instance it rents', async () => {
+  const { creates, deletes, connects, disconnects } = limrunActivity();
+  let reportCreate!: () => void;
+  state.createGate = new Promise<void>((resolve) => {
+    reportCreate = resolve;
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-late-create');
+  try {
+    const refusedAllocation = refusalOf(runtime.leaseLifecycle.allocate?.(lease));
+    await waitForCreate(creates + 1);
+    const refusedRelease = refusalOf(runtime.leaseLifecycle.release?.(lease));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(CREATE_ANSWER_WAIT_MS);
+    // The release refused rather than waiting longer, and the create has still not named anything.
+    assert.ok(
+      (await refusedRelease) instanceof AppError,
+      'expected the release to refuse once its create budget expired',
+    );
+    assert.deepEqual(deletedInstances(deletes), []);
+    // The POST answers after that: the instance it names, and the session built on it, belong to the
+    // disposal that is already over, so that disposal ends them.
+    reportCreate();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+    assert.ok((await refusedAllocation) instanceof AppError);
+  } finally {
+    vi.useRealTimers();
+    reportCreate();
+    state.createGate = undefined;
+    await runtime.shutdown();
+  }
+  assert.equal(state.androidCreate.mock.calls.length - creates, 1);
+  assert.equal(state.connectCount - connects, 1);
+});
+
+/** A session built before a later failure is a resource its disposal has to release, not drop. */
+test('a create that fails after its session was built disconnects that session', async () => {
+  const { deletes, disconnects } = limrunActivity();
+  state.uploadedApps = [{ id: 'asset-1', name: 'com.example.app.apk', md5: 'md5', os: 'android' }];
+  // The app is installed under something this provider cannot match unambiguously.
+  state.installedApps = [{ id: 'com.other.app' }, { id: 'com.other.app.fork' }];
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  try {
+    const error = await refusalOf(
+      runtime.leaseLifecycle.allocate?.(androidLease('lease-app-unresolved'), {
+        initialApp: 'com.example.app.apk',
+      }),
+    );
+    assert.ok(
+      error instanceof AppError,
+      `expected the app resolution to fail, got ${String(error)}`,
+    );
+    // The instance it rented is deleted, and so is the connection the session built beside it.
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+  } finally {
+    state.uploadedApps = [];
+    state.installedApps = [];
+    await runtime.shutdown();
+  }
+});
+
+/** A joiner with valid flags is not refused for another caller’s refused flag. */
+test('a joiner whose own flags are valid allocates despite another caller’s refused flag', async () => {
+  const { creates } = limrunActivity();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-mixed-flags');
+  try {
+    // The first call carries a flag this provider reads no field for; the second carries none.
+    const refused = refusalOf(
+      runtime.leaseLifecycle.allocate?.(lease, { flags: { providerOsVersion: '15' } }),
+    );
+    const joined = await runtime.leaseLifecycle.allocate?.(lease);
+    const error = await refused;
+    assert.ok(
+      error instanceof AppError && error.code === 'INVALID_ARGS',
+      `expected the refused caller to be refused for its own flag, got ${String(error)}`,
+    );
+    assert.equal(joined?.limrunInstanceId, 'android-instance-1');
+  } finally {
+    await runtime.shutdown();
+  }
+  // Only the valid caller's lease was billed, and only once.
+  assert.equal(state.androidCreate.mock.calls.length - creates, 1);
+});
+
 function completedRequest(url: string, error?: string): unknown {
   return {
     type: 'complete',
@@ -811,7 +966,7 @@ function testDependencies(): LimrunRuntimeDependencies {
         list: async () => [],
       }),
       inferAppName: async () => 'Example',
-      listApps: async (_adb: LimrunAdbExecutor, _filter: AppsFilter) => [],
+      listApps: async (_adb: LimrunAdbExecutor, _filter: AppsFilter) => state.installedApps,
       getForegroundApp: async () => (state.foreground ? { ...state.foreground } : undefined),
       getKeyboardState: async () => ({ visible: false, inputOwner: 'unknown' as const }),
       dismissKeyboard: async () => ({

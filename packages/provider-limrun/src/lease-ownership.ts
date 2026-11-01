@@ -27,15 +27,28 @@ export type LimrunLeaseOwner = {
   readonly platform: LimrunPlatform;
   /**
    * The create that is making this lease's instance; never rejects unobserved — the runtime reads it. It
-   * carries its own outcome, including a refusal to bill anything for this lease's profile flags.
+   * carries its own outcome, including a refusal to bill anything for the flags of the caller that started it.
+   * A joiner whose own flags were answered for replaces an outcome that billed nothing with its own create.
    */
-  readonly creation: Promise<LimrunCreateOutcome>;
+  creation: Promise<LimrunCreateOutcome>;
   state: LimrunLeaseState;
   /**
    * The instance this lease's create rented, recorded the moment Limrun answered, before any session was
    * built on it. A create that could not finish still owes an end for it, and its disposal reads it here.
    */
   rentedInstanceId: string | undefined;
+  /**
+   * The session this lease's create built, recorded the moment it existed. It is the handle that holds the
+   * instance connection and the host ADB endpoint open, so it stays on the owner even when a later step of
+   * the allocation fails: whoever ends this lease ends those resources too, not only the instance.
+   */
+  session: LimrunRuntimeSession | undefined;
+  /**
+   * The one release of this owner's host resources: the instance connection and the Android ADB endpoint.
+   * Disposal starts it, and the continuation of a create that answered after its disposal refused answers
+   * to the same promise, so a session that arrived late is never released twice and never skipped.
+   */
+  localRelease: Promise<void> | undefined;
   /** The keep-alive interval for the live instance; started when it went live, cleared by its disposal. */
   keepAlive: NodeJS.Timeout | undefined;
   /** What this lease has in capture terms, including a start whose tunnel is still being opened. */
@@ -83,7 +96,10 @@ export type LimrunDisposalOutcome = Readonly<{
 }>;
 
 /**
- * What one create amounted to: the session it made, or why it refused or failed. An instance the create
+ * What one create amounted to: the session it made, why it failed, or that the caller who started it was
+ * refused before anything was billed. `refused_caller` is that caller's own answer and not the lease's: an
+ * owner that rented nothing stays allocatable for a caller whose flags this provider does read, and the
+ * distinction is what keeps one caller's refusal from becoming another caller's outcome. An instance a create
  * rented before it failed is not carried here — the owner records it as soon as Limrun names it, which is
  * earlier than any outcome could be reported.
  */
@@ -93,7 +109,8 @@ export type LimrunCreateOutcome =
       session: LimrunRuntimeSession;
       appAlias: LimrunAppAlias | undefined;
     }>
-  | Readonly<{ status: 'failed'; error: unknown }>;
+  | Readonly<{ status: 'failed'; error: unknown }>
+  | Readonly<{ status: 'refused_caller'; error: unknown }>;
 
 type LimrunLeaseState =
   | Readonly<{ phase: 'allocating' }>

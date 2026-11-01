@@ -1,14 +1,273 @@
 import type Limrun from '@limrun/api';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend } from './device.ts';
-import type { LimrunDisposalOutcome } from './lease-ownership.ts';
+import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
+import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
+import type {
+  LimrunDisposalOutcome,
+  LimrunLeaseOwner,
+  LimrunRuntimeSession,
+  LimrunTeardownRoute,
+} from './lease-ownership.ts';
+import type { SettledNetworkCapture } from './network-har.ts';
 
 /**
- * The route that ends one lease: the release a caller asked for, or the recovery of a lease this runtime lost
- * sight of. Both answer for the same thing — what the lease has running, and whether it stopped — and neither
- * reports a lease as released on anything short of Limrun confirming the delete.
+ * Everything this runtime does once a lease has been taken for good: end what its owner holds, and answer with
+ * what came of it. One lease's disposal runs here, and every route that ends a lease — release, daemon close,
+ * expired-lease recovery, and the create that failed — answers from the same outcome, so none of them can
+ * report a lease as released on anything short of Limrun confirming the delete.
+ *
+ * Every wait here is bounded. Work that outlives its deadline keeps running and stays observed: this module
+ * ends what it eventually makes, and reports what it could not, rather than holding a caller open.
  */
+
+/**
+ * How long a disposal waits for the create to say what it rented. The create itself keeps Limrun's own
+ * timeouts: this bounds only the disposal's wait, so an instance is never held open by a create that stopped
+ * answering, and its owner disposes what that create eventually names.
+ */
+const CREATE_ANSWER_BUDGET_MS = 120_000;
+
+/**
+ * How long a disposal waits for one delete. The SDK clears a request's timer before it reads the response body,
+ * so a DELETE whose body never arrives would otherwise hold the release, the daemon close and every joining
+ * allocation open forever.
+ */
+const DELETE_ANSWER_BUDGET_MS = 30_000;
+
+/**
+ * How long a disposal waits for the local resources it started beside the delete: the instance connection and
+ * the Android ADB endpoint, whose `adb connect` the SDK runs without a deadline.
+ */
+const LOCAL_TEARDOWN_BUDGET_MS = 45_000;
+
+/** How long a disposal waits for a capture's HAR record, which is reporting and never a reason to hold a lease. */
+const CAPTURE_RECORD_BUDGET_MS = 15_000;
+
+/**
+ * What a disposal may ask of the runtime that owns the lease, and nothing else: the delete of one instance, and
+ * the end of one lease's capture. Keeping the disposal to these two is what lets it end an owner without
+ * reaching back into the routes that allocate and read one, and without deciding when a lease is free again.
+ */
+export type LimrunDisposalHost = Readonly<{
+  /** One instance delete. `undefined` answers that Limrun confirmed the instance is gone. */
+  deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<string | undefined>;
+  /** Ends one lease's capture and answers with its record, for a runtime that has captured something. */
+  endCapture(owner: LimrunLeaseOwner): Promise<SettledNetworkCapture | undefined>;
+}>;
+
+/**
+ * Ends what one taken owner stands for: the instance its create made or rented, with every resource the owner
+ * holds beside it. This is the only place an instance is ended, and an owner is taken by exactly one route at a
+ * time, so one instance is ended exactly once.
+ */
+export async function disposeLimrunLeaseOwner(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<LimrunDisposalOutcome> {
+  const { awaitLimrunWithinBudget, joinOutcomeFailures } = await import('./lifecycle-budget.ts');
+  const create = await awaitLimrunWithinBudget(owner.creation, CREATE_ANSWER_BUDGET_MS);
+  // The create answered too late for this disposal to wait on it; what it goes on to name is still this
+  // disposal's to end.
+  if (!create.ok) return await disposeUnansweredCreate(host, owner);
+  // The owner records what its create actually made — the instance the moment Limrun named it, the session the
+  // moment it was built — so a create that failed or refused its caller is disposed from those, exactly like
+  // one that answered.
+  const session = owner.session;
+  const instanceId = session?.instanceId ?? owner.rentedInstanceId;
+  if (instanceId === undefined) return await disposeUnrented(host, owner);
+  // The capture's record is optional reporting, and local teardown can outlive its own steps: neither is
+  // allowed to stand between this disposal and the delete that stops the instance from being billed, so both
+  // are started here and joined after it.
+  const capture = host.endCapture(owner);
+  const local = releaseOwnerResources(owner);
+  const instance = await endInstance(host, owner, session, instanceId);
+  const stuck = await awaitLocalTeardown(local);
+  // The record is optional reporting joined last: a capture that refuses to be written cannot keep a release
+  // from answering for the instance it ended, and is still listable once it does come to.
+  const joined = await awaitLimrunWithinBudget(capture, CAPTURE_RECORD_BUDGET_MS);
+  return {
+    cleanup: instance.cleanup,
+    instanceId,
+    failure: joinOutcomeFailures(instance.failure, stuck),
+    capture: joined.ok ? joined.value : undefined,
+  };
+}
+
+/**
+ * Ends what a disposal holds when the create it waited for never answered. Nothing is known to be running, so
+ * the lease is kept held and refused rather than given back — and the create is watched, because whatever it
+ * eventually names belongs to this disposal and to no other route: a daemon close promises no next pass.
+ */
+async function disposeUnansweredCreate(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<LimrunDisposalOutcome> {
+  const { awaitLimrunWithinBudget, joinOutcomeFailures, workOutstandingFailure } =
+    await import('./lifecycle-budget.ts');
+  const capture = host.endCapture(owner);
+  const outstanding = workOutstandingFailure(
+    `Instance create for lease '${owner.lease.leaseId}'`,
+    CREATE_ANSWER_BUDGET_MS,
+  );
+  owner.creation.then(() => {
+    void endWhatTheCreateNamed(host, owner);
+  });
+  const instanceId = owner.rentedInstanceId;
+  if (instanceId === undefined) {
+    return {
+      cleanup: 'uncertain',
+      instanceId: undefined,
+      failure: outstanding,
+      capture: await capture,
+    };
+  }
+  // An instance is already named, so this disposal ends the billing it can see and leaves the create's silence
+  // as what keeps the lease held.
+  const instance = await endInstance(host, owner, owner.session, instanceId);
+  const local = await awaitLimrunWithinBudget(
+    releaseOwnerResources(owner),
+    LOCAL_TEARDOWN_BUDGET_MS,
+  );
+  return {
+    cleanup: instance.cleanup,
+    instanceId,
+    failure: joinOutcomeFailures(
+      instance.failure,
+      local.ok ? outstanding : workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS),
+    ),
+    capture: await capture,
+  };
+}
+
+/**
+ * Ends what a create answered for after its disposal had refused its caller: the instance it rented, if that is
+ * still owed, and every host resource the session it built holds. Nothing else is left to do this — the lease
+ * was refused to its caller, and no later route is promised.
+ */
+async function endWhatTheCreateNamed(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<void> {
+  const instanceId = owner.rentedInstanceId;
+  if (instanceId !== undefined && owner.deletedInstanceId !== instanceId) {
+    await endInstance(host, owner, owner.session, instanceId);
+  }
+  await releaseOwnerResources(owner);
+}
+
+/**
+ * Ends what a disposal holds when its create answered and no instance is named for the lease: nothing this
+ * runtime rented is running, so the lease can be given back.
+ */
+async function disposeUnrented(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<LimrunDisposalOutcome> {
+  return {
+    cleanup: 'none',
+    instanceId: undefined,
+    failure: undefined,
+    capture: await host.endCapture(owner),
+  };
+}
+
+/**
+ * Ends one owner's instance within a deadline of its own. An attached instance is the caller's own and is never
+ * deleted here; a delete Limrun already confirmed answers for itself; and a delete that never answers keeps the
+ * lease held and stays observed, because what it confirms late is what frees the lease.
+ */
+async function endInstance(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+  session: LimrunRuntimeSession | undefined,
+  instanceId: string,
+): Promise<Readonly<{ cleanup: LimrunDisposalOutcome['cleanup']; failure: string | undefined }>> {
+  const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
+  if (owner.deletedInstanceId === instanceId) return { cleanup: 'confirmed', failure: undefined };
+  if ((session?.ownership ?? 'created') === 'attached') {
+    return { cleanup: 'attached', failure: undefined };
+  }
+  const requested = host.deleteInstance(owner.platform, instanceId);
+  const deleted = await awaitLimrunWithinBudget(requested, DELETE_ANSWER_BUDGET_MS);
+  if (!deleted.ok) {
+    void requested.then((failure) => {
+      if (failure === undefined) confirmLateDelete(owner, instanceId);
+    });
+    return {
+      cleanup: 'uncertain',
+      failure: workOutstandingFailure(
+        `Delete of instance '${instanceId}'`,
+        DELETE_ANSWER_BUDGET_MS,
+      ),
+    };
+  }
+  if (deleted.value === undefined) owner.deletedInstanceId = instanceId;
+  return {
+    cleanup: deleted.value === undefined ? 'confirmed' : 'uncertain',
+    failure: deleted.value,
+  };
+}
+
+/**
+ * Records a delete that confirmed after its disposal stopped waiting for it. The lease stays held for its next
+ * route, which is the one that has to tell its caller the instance is gone; this only makes sure that route
+ * never asks Limrun to delete the same instance twice.
+ */
+function confirmLateDelete(owner: LimrunLeaseOwner, instanceId: string): void {
+  owner.deletedInstanceId = instanceId;
+}
+
+/**
+ * Ends the resources one owner holds besides its instance: the keep-alive beat that would otherwise ping a
+ * deleted instance forever, the instance connection, and the Android ADB tunnel with its reverse mappings. One
+ * release answers for one owner, whichever route asked first, so a session that arrives after this started is
+ * still released by it rather than by a second pass nobody is promised.
+ */
+function releaseOwnerResources(owner: LimrunLeaseOwner): Promise<void> {
+  owner.localRelease ??= releaseLocalResources(owner);
+  return owner.localRelease;
+}
+
+async function releaseLocalResources(owner: LimrunLeaseOwner): Promise<void> {
+  if (owner.keepAlive) clearInterval(owner.keepAlive);
+  owner.keepAlive = undefined;
+  // The session is what holds a host endpoint open. The owner has kept it from the moment it was built, whether
+  // or not the allocation that built it answered, so a create this disposal stopped waiting for is awaited here
+  // rather than passed over: the session it eventually builds has nowhere else to be disconnected.
+  const session = owner.session ?? (await sessionTheCreateBuilt(owner));
+  if (session === undefined) return;
+  session.client.disconnect();
+  // The tunnel's start is an `adb connect` the SDK runs without a deadline. Its cleanup retires the endpoint
+  // first, so a tunnel that answers late ends itself and no caller can reach it meanwhile.
+  if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
+}
+
+/** The session a create answered for, once it answers, for a release that got there first. */
+async function sessionTheCreateBuilt(
+  owner: LimrunLeaseOwner,
+): Promise<LimrunRuntimeSession | undefined> {
+  await owner.creation.catch(() => undefined);
+  return owner.session;
+}
+
+/**
+ * Reports the local teardown a disposal had to stop waiting for. A step that refused is reported as one that
+ * never answered: neither is something this runtime can still fix, and the delete that ran beside it has
+ * already been answered.
+ */
+async function awaitLocalTeardown(local: Promise<void>): Promise<string | undefined> {
+  const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
+  const stuck = workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS);
+  const ended = await awaitLimrunWithinBudget(
+    local.then(
+      (): string | undefined => undefined,
+      (): string => stuck,
+    ),
+    LOCAL_TEARDOWN_BUDGET_MS,
+  );
+  return ended.ok ? ended.value : stuck;
+}
 
 /** What a release answers for one lease: the instance it ended, with what it left and wrote. */
 type LimrunReleaseRecord = Record<string, unknown>;
@@ -78,17 +337,109 @@ async function releaseLabeledInstances(
   return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
 }
 
-/** What a release reports when Limrun did not confirm the delete, so the lease is still held. */
+/**
+ * What a release reports when Limrun did not confirm the delete, so the lease is still held. An unended lease
+ * whose create never named an instance is answered for by the lease alone, because the operator has nothing to
+ * name to Limrun yet.
+ */
 function releaseLeftInstanceRunning(leaseId: string, outcome: LimrunDisposalOutcome): never {
+  const { instanceId } = outcome;
   throw new AppError(
     'COMMAND_FAILED',
     `Limrun instance for lease '${leaseId}' was not confirmed deleted`,
     {
       reason: 'limrun_instance_delete_unconfirmed',
       retriable: true,
-      ...(outcome.instanceId === undefined ? {} : { limrunInstanceId: outcome.instanceId }),
+      ...(instanceId === undefined ? {} : { limrunInstanceId: instanceId }),
       ...(outcome.failure === undefined ? {} : { cause: outcome.failure }),
-      hint: `Release lease '${leaseId}' again, or ask Limrun to delete instance '${outcome.instanceId ?? leaseId}'.`,
+      hint:
+        instanceId === undefined
+          ? `Release lease '${leaseId}' again once its instance create names the instance it rented.`
+          : `Release lease '${leaseId}' again, or ask Limrun to delete instance '${instanceId}'.`,
     },
   );
+}
+
+/**
+ * The refusal an allocation gets when a teardown took its lease while the create ran. The caller passes the
+ * disposal's outcome rather than reading the owner, so this answers with what that teardown came to —
+ * including a delete Limrun did not confirm, which the refused caller is the last route left to hear about.
+ */
+export function allocationRefusedForTake(
+  lease: DeviceLease,
+  by: LimrunTeardownRoute,
+  outcome: LimrunDisposalOutcome,
+): never {
+  const { instanceId } = outcome;
+  throw new AppError(
+    'DEVICE_IN_USE',
+    `Limrun lease '${lease.leaseId}' was released while its instance was being prepared`,
+    {
+      reason: 'limrun_lease_released_mid_allocation',
+      ...(instanceId === undefined
+        ? { hint: `Instance create for lease '${lease.leaseId}' may still rent one. Check Limrun.` }
+        : {
+            limrunInstanceId: instanceId,
+            hint: `Instance '${instanceId}' was ended by the ${by} of this lease. Open a new lease.`,
+          }),
+      ...(outcome.cleanup === 'uncertain'
+        ? { retriable: true, ...(outcome.failure === undefined ? {} : { cause: outcome.failure }) }
+        : {}),
+    },
+  );
+}
+
+/**
+ * What an allocation reports when the create it waited on failed and left an instance running. The hint names
+ * the instance when the create got as far as renting one, and the lease when it did not.
+ */
+export function createLeftInstanceRunning(
+  lease: DeviceLease,
+  outcome: LimrunDisposalOutcome,
+): never {
+  const { instanceId } = outcome;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Limrun lease '${lease.leaseId}' could not be allocated, and its instance could not be deleted`,
+    {
+      reason: 'limrun_instance_delete_unconfirmed',
+      retriable: true,
+      ...(instanceId === undefined ? {} : { limrunInstanceId: instanceId }),
+      ...(outcome.failure === undefined ? {} : { cause: outcome.failure }),
+      hint:
+        instanceId === undefined
+          ? `Ask Limrun what lease '${lease.leaseId}' rented — this runtime could not name the instance.`
+          : `Ask Limrun to delete instance '${instanceId}' — this runtime could not confirm the delete.`,
+    },
+  );
+}
+
+/**
+ * What a daemon close reports for every lease it could not confirm ended. A lease whose create never named an
+ * instance is counted the same as one whose delete was refused: this process moved on without stopping it, and
+ * the operator needs both the count and the reason.
+ */
+export function cleanupLeftInstancesRunning(outcomes: readonly LimrunDisposalOutcome[]): never {
+  const leftRunning = outcomes.map((outcome) => outcome.instanceId);
+  const known = leftRunning.filter((id) => id !== undefined);
+  const plural = outcomes.length === 1 ? '' : 's';
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Limrun cleanup left ${String(outcomes.length)} lease${plural} unended, ${String(known.length)} with a known instance`,
+    {
+      reason: 'limrun_instance_delete_unconfirmed',
+      ...(known.length === 0 ? {} : { limrunInstanceIds: known }),
+      ...(outcomes[0]?.failure === undefined ? {} : { cause: outcomes[0].failure }),
+      ...(known.length === 0
+        ? { hint: unendedLeaseHint(outcomes) }
+        : { hint: `Ask Limrun to delete: ${known.join(', ')}.` }),
+    },
+  );
+}
+
+/** What a close says when the work it could not finish has no instance to name yet: the lease and the work. */
+function unendedLeaseHint(outcomes: readonly LimrunDisposalOutcome[]): string {
+  return `Limrun may still bill work this runtime could not name: ${outcomes
+    .map((outcome) => outcome.failure ?? 'an unconfirmed delete')
+    .join('; ')}.`;
 }
