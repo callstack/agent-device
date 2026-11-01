@@ -471,100 +471,175 @@ extension RunnerTests {
     }
   }
 
-  func testDuplicateCommandIdCoalescesOntoInFlightExecution() throws {
-    // `scroll` keeps its response body in the journal, so the test can tell a replayed outcome from the
-    // typed refusal a bodyless command's repeat gets.
-    let command = try JSONDecoder().decode(
-      Command.self,
-      from: Data(#"{"command":"scroll","commandId":"scroll-coalesce"}"#.utf8)
-    )
-    final class Delivered {
-      var primaryData: RunnerHttpResponse?
-      var waiterData: RunnerHttpResponse?
-      var lateJoinerData: RunnerHttpResponse?
+  /// Routes one `commandId` the way the transport does: an executing send, a second send the journal
+  /// settles onto that execution, and the close with its delivery. `outcome` decides whether the execution
+  /// finished or failed. Returns the bytes that delivery carried, which is what both sends must be answered
+  /// with.
+  @discardableResult
+  private func runExecutionWithJoiner(
+    _ command: Command,
+    into delivered: TransportJoiner,
+    outcome: Response?
+  ) -> RunnerHttpResponse {
+    let executed = commandJournal.accept(command: command)
+    let joined = commandJournal.accept(command: command) { [weak self] commandId in
+      self?.registerJoiner(for: commandId) { result in
+        delivered.joinerData = result.response
+      }
     }
-    let delivered = Delivered()
-    defer { inFlightCommandWaiters.removeAll() }
-
-    // The execute path hands the sending connection's completion to the execution's own delivery; the
-    // join path registers its completion as a waiter of that execution.
-    guard case .execute = commandJournal.accept(command: command) else {
-      return XCTFail("the first send of a commandId must be admitted for execution")
+    if case .execute = executed {} else {
+      XCTFail("the first send of a commandId must be admitted for execution")
     }
-    guard case .join = commandJournal.accept(command: command) else {
-      return XCTFail("a send of a commandId whose execution has not finished must join it")
-    }
-    attachToInFlightExecution(command: command) { result in
-      delivered.waiterData = result.response
+    if case .join = joined {} else {
+      XCTFail("a send of a commandId whose execution has not finished must join it")
     }
 
     commandJournal.start(command: command)
     commandJournal.markDispatched(command: command)
-    commandJournal.finish(
-      command: command,
-      response: Response(ok: true, data: DataPayload(message: "captured"))
-    )
-    let result = RunnerHttpResponse(status: 200, body: "single-result")
-    deliverCommandResult(command: command, result: (result, false)) { result in
+    if let outcome {
+      commandJournal.finish(command: command, response: outcome)
+    } else {
+      commandJournal.fail(command: command, error: NSError(domain: "test", code: 7, userInfo: nil))
+    }
+    let deliveredBytes = RunnerHttpResponse(status: 200, body: "one-delivery")
+    deliverCommandResult(command: command, result: (deliveredBytes, false)) { result in
       delivered.primaryData = result.response
     }
-
-    XCTAssertEqual(delivered.primaryData, result)
-    XCTAssertEqual(delivered.waiterData, result)
-    XCTAssertNil(inFlightCommandWaiters["snapshot-coalesce"])
-
-    // The execution has answered and closed. A send that arrives now is the finished command's repeat,
-    // and it must be answered from the journal instead of waiting for a delivery that already went out.
-    guard case .terminal(let outcome) = commandJournal.accept(command: command) else {
-      return XCTFail("a send of a finished commandId must be answered from the journal")
-    }
-    XCTAssertTrue(outcome.ok)
-    XCTAssertEqual(outcome.data?.message, "captured")
-
-    let lateCommand = try JSONDecoder().decode(
-      Command.self,
-      from: Data(#"{"command":"snapshot","commandId":"snapshot-late-join"}"#.utf8)
-    )
-    commandJournal.accept(command: lateCommand)
-    commandJournal.markDispatched(command: lateCommand)
-    commandJournal.finish(
-      command: lateCommand,
-      response: Response(ok: true, data: DataPayload(message: "captured late"))
-    )
-    attachToInFlightExecution(command: lateCommand) { result in
-      delivered.lateJoinerData = result.response
-    }
-    XCTAssertNotNil(delivered.lateJoinerData, "a join after the answer was recorded must still be answered")
-    XCTAssertNil(inFlightCommandWaiters["snapshot-late-join"], "a journal answer must not register a waiter")
+    return deliveredBytes
   }
 
-  /// The bug this repo cannot survive: a repeat of a `commandId` whose command already finished used to
-  /// be admitted again and drive the device a second time — a second tap. Sends go through the real
-  /// listener here, because admission is the transport's route, not any helper's.
+  func testDuplicateCommandIdCoalescesOntoInFlightExecution() throws {
+    // `scroll` keeps its response body in the journal, so the test can tell a replayed outcome from the
+    // typed refusal a bodyless command's repeat gets.
+    let command = try transportCommand("scroll", id: "scroll-coalesce")
+    let delivered = TransportJoiner()
+    defer { inFlightCommandWaiters.removeAll() }
+
+    let delivery = runExecutionWithJoiner(
+      command,
+      into: delivered,
+      outcome: Response(ok: true, data: DataPayload(message: "captured"))
+    )
+
+    XCTAssertEqual(delivered.primaryData, delivery)
+    XCTAssertEqual(delivered.joinerData, delivery)
+    XCTAssertNil(inFlightCommandWaiters["scroll-coalesce"])
+
+    // The execution has answered and closed. A send that arrives now is the finished command's repeat, and
+    // the journal settles it with the recorded outcome instead of registering it onto a delivery that
+    // already went out.
+    var registeredLateSend = false
+    let lateVerdict = commandJournal.accept(command: command) { _ in
+      registeredLateSend = true
+    }
+    guard case .terminal(let outcome) = lateVerdict else {
+      return XCTFail("a send of a finished commandId must be answered from the journal")
+    }
+    XCTAssertFalse(registeredLateSend, "a send answered from the journal must not be registered")
+    XCTAssertTrue(outcome.ok)
+    XCTAssertEqual(outcome.data?.message, "captured")
+    XCTAssertNil(inFlightCommandWaiters["scroll-coalesce"], "a journal answer must not register a waiter")
+  }
+
+  /// The interleaving that used to leave a connection unanswered: the verdict said join, and the execution
+  /// closed and drained before the send was registered, so nothing was left to answer it — and pruning had
+  /// already hidden the outcome a late check would have read. Settling and registering are one operation
+  /// now, so the send is registered before the transition that closes the entry can run.
+  func testJournalAnswersAJoinerWhenTheCloseThatAnswersItAlsoPrunesTheEntry() throws {
+    // A window full of open commands makes the close that ends this command also prune it: the case where
+    // a send that registered afterwards used to find no entry and no delivery left.
+    let command = try transportCommand("scroll", id: "scroll-join-pruned")
+    let delivered = TransportJoiner()
+    defer { inFlightCommandWaiters.removeAll() }
+    try openCommandsFillingTheJournalWindow(64)
+
+    let delivery = runExecutionWithJoiner(
+      command,
+      into: delivered,
+      outcome: Response(ok: true, data: DataPayload(message: "captured"))
+    )
+    assertJournalWindowDropped("scroll-join-pruned")
+
+    XCTAssertEqual(delivery, delivered.joinerData, "the close that pruned the entry must answer its joiner")
+    XCTAssertNil(inFlightCommandWaiters["scroll-join-pruned"], "answering must not leave a waiter behind")
+  }
+
+  /// A command that fails closes the entry through the same transition, so its joiner is owed the same
+  /// answer.
+  func testJournalAnswersAJoinerWhenTheExecutionFails() throws {
+    let command = try transportCommand("scroll", id: "scroll-join-failed")
+    let delivered = TransportJoiner()
+    defer { inFlightCommandWaiters.removeAll() }
+
+    let delivery = runExecutionWithJoiner(command, into: delivered, outcome: nil)
+
+    XCTAssertEqual(delivery, delivered.joinerData, "the failure that closed the entry must answer its joiner")
+    XCTAssertNil(inFlightCommandWaiters["scroll-join-failed"])
+  }
+
+  /// One send's answers on the transport route: the execution's own delivery and the join's.
+  final class TransportJoiner {
+    var primaryData: RunnerHttpResponse?
+    var joinerData: RunnerHttpResponse?
+  }
+
+  /// Fills the retention window with commands the journal holds as running, so a close that lands after
+  /// them has to prune.
+  private func openCommandsFillingTheJournalWindow(_ count: Int) throws {
+    for index in 0..<count {
+      let open = try transportCommand("readText", id: "queued-\(index)")
+      commandJournal.accept(command: open)
+    }
+  }
+
+  /// Asserts the journal dropped one id's entry, which is the precondition the pruning tests share: with
+  /// the entry gone, only what the journal keeps beside it can decide the next send of that id.
+  private func assertJournalWindowDropped(_ commandId: String) {
+    XCTAssertEqual(
+      commandJournal.status(normalizedCommandId: commandId).lifecycleState,
+      RunnerCommandLifecycleState.notAccepted.rawValue,
+      "the test must have pushed this command's own entry out of the window"
+    )
+  }
+
+  /// The bug this repo cannot survive: a repeat of a `commandId` whose command already finished used to be
+  /// admitted again and drive the device a second time — a second tap — in either retention state the
+  /// finished command's id can sit in: retained in the journal window, or pruned out of it by the pressure
+  /// of a busy session. Sends go through the real listener here, because admission is the transport's
+  /// route, not any helper's.
   ///
-  /// `recordStop` makes the second execution observable without recording anything: with no active
-  /// recording it answers "recording already stopped", so a re-execution would be seen as the recorder
-  /// the test installed being consumed instead of the recorded answer being replayed.
+  /// `recordStop` makes a second execution observable without recording anything: with no active recording
+  /// it answers "recording already stopped", so a re-execution shows up as the recorder this test installs
+  /// being consumed instead of the recorded answer being replayed.
   func testTransportNeverRepeatsAFinishedCommandsExecution() throws {
+    // `recordStop` makes a second execution observable without recording anything: with no active
+    // recording it answers "recording already stopped", so a re-execution shows up as the recorder this
+    // test installs being consumed instead of the recorded answer being replayed.
     let listener = try startTransportListener()
     defer { listener.cancel() }
     let port = try XCTUnwrap(listener.port)
     let client = URLSession(configuration: .ephemeral)
     defer { client.invalidateAndCancel() }
-    let payload = #"{"command":"recordStop","commandId":"record-stop-twice"}"#
+    func recordStop(_ id: String) throws -> Response {
+      try transportHttpResponse(
+        client: client,
+        port: port,
+        payload: #"{"command":"recordStop","commandId":"\#(id)"}"#
+      )
+    }
+    func installRecorderAsEvidence() -> ScreenRecorder {
+      let installed = ScreenRecorder(outputPath: "", fps: 30)
+      activeRecording = installed
+      return installed
+    }
 
     activeRecording = nil
-    let first = try transportHttpResponse(client: client, port: port, payload: payload)
+    let first = try recordStop("record-stop-twice")
     XCTAssertTrue(first.ok, String(describing: first.error))
     XCTAssertEqual(first.data?.message, "recording already stopped")
 
-    // Prove nothing ran the second time: had it run, this recorder would be stopped and cleared.
-    let installed = ScreenRecorder(outputPath: "", fps: 30)
-    activeRecording = installed
-    defer { activeRecording = nil }
-
-    let repeatSend = try transportHttpResponse(client: client, port: port, payload: payload)
-
+    var installed = installRecorderAsEvidence()
+    let repeatSend = try recordStop("record-stop-twice")
     XCTAssertIdentical(activeRecording, installed, "a finished commandId must not execute again")
     XCTAssertEqual(repeatSend.ok, true)
     XCTAssertEqual(
@@ -575,6 +650,32 @@ extension RunnerTests {
     XCTAssertEqual(
       commandJournal.status(normalizedCommandId: "record-stop-twice").lifecycleState,
       RunnerCommandLifecycleState.completed.rawValue
+    )
+
+    // Now the same route for an id whose entry pruning has dropped: only the fact the journal keeps
+    // beside the entry can answer for it, and that fact owes the typed refusal.
+    activeRecording = nil
+    XCTAssertTrue(try recordStop("record-stop-pruned").ok)
+    runnerJournalFinishOtherCommands(commandJournal, 64)
+    assertJournalWindowDropped("record-stop-pruned")
+    installed = installRecorderAsEvidence()
+    defer { activeRecording = nil }
+
+    let resend = try recordStop("record-stop-pruned")
+
+    XCTAssertIdentical(
+      activeRecording,
+      installed,
+      "a pruned id whose work reached the device must not execute again"
+    )
+    XCTAssertEqual(resend.ok, false)
+    XCTAssertEqual(resend.error?.code, RunnerWireErrorCode.commandAlreadyFinished)
+  }
+
+  private func transportCommand(_ command: String, id: String) throws -> Command {
+    try JSONDecoder().decode(
+      Command.self,
+      from: Data(#"{"command":"\#(command)","commandId":"\#(id)"}"#.utf8)
     )
   }
 

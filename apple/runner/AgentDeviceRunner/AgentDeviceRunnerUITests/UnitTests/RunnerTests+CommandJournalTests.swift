@@ -200,6 +200,19 @@ extension RunnerTests {
     XCTAssertNil(largeReadStatus.lifecycleResponseJson)
   }
 
+  /// Fills the 64-entry retention window the way a busy session does: closed commands, oldest first. The
+  /// transport's own retention tests need the same pressure, so this is the one implementation.
+  func runnerJournalFinishOtherCommands(_ journal: RunnerCommandJournal, _ count: Int) {
+    for index in 0..<count {
+      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
+      journal.accept(command: settled)
+      journal.finish(
+        command: settled,
+        response: Response(ok: true, data: DataPayload(text: "x"))
+      )
+    }
+  }
+
   /// The 64-entry window must never cost the runner the ability to answer "is this command still
   /// running?". A queued or executing command is the one entry pruning may not drop: `status` reports
   /// `notAccepted` for an id it does not hold, and the daemon cannot read that as a safe terminal
@@ -211,14 +224,7 @@ extension RunnerTests {
     journal.accept(command: running)
     journal.start(command: running)
 
-    for index in 0..<64 {
-      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
-      journal.accept(command: settled)
-      journal.finish(
-        command: settled,
-        response: Response(ok: true, data: DataPayload(text: "x"))
-      )
-    }
+    runnerJournalFinishOtherCommands(journal, 64)
 
     let status = journal.status(normalizedCommandId: "running-tap")
     XCTAssertEqual(
@@ -239,14 +245,7 @@ extension RunnerTests {
       command: early,
       response: Response(ok: true, data: DataPayload(message: "tapped"))
     )
-    for index in 0..<64 {
-      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
-      journal.accept(command: settled)
-      journal.finish(
-        command: settled,
-        response: Response(ok: true, data: DataPayload(text: "x"))
-      )
-    }
+    runnerJournalFinishOtherCommands(journal, 64)
     XCTAssertEqual(
       journal.status(normalizedCommandId: "pruned-tap").lifecycleState,
       RunnerCommandLifecycleState.notAccepted.rawValue
@@ -259,6 +258,53 @@ extension RunnerTests {
       RunnerCommandLifecycleState.notAccepted.rawValue,
       "a late transition for a pruned id must not report it as running"
     )
+  }
+
+  /// Bounded memory has to drop something, and what it may drop is the outcome body, never the fact that
+  /// the id was spent. Otherwise the retention window itself becomes the bug the journal exists to
+  /// prevent: finish a dispatched tap, let 64 later commands push its entry out, and a delayed resend of
+  /// that tap would be admitted as a new execution and tap the device a second time.
+  func testJournalNeverReAdmitsAPrunedCommandsId() throws {
+    let journal = RunnerCommandJournal()
+    let tap = runnerJournalCommand("tap", id: "spent-tap")
+    journal.accept(command: tap)
+    journal.markDispatched(command: tap)
+    journal.finish(
+      command: tap,
+      response: Response(ok: true, data: DataPayload(message: "tapped"))
+    )
+    runnerJournalFinishOtherCommands(journal, 64)
+
+    guard case .terminal(let outcome) = journal.accept(command: tap) else {
+      return XCTFail("a pruned id whose work reached the device must never be admitted again")
+    }
+    XCTAssertFalse(outcome.ok)
+    XCTAssertEqual(
+      outcome.error?.code,
+      RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
+      "the pruned id's outcome body is gone, so the answer is the typed refusal, got \(String(describing: outcome.error?.code))"
+    )
+  }
+
+  /// The one id pruning must leave free: a command the runner refused before dispatch left nothing on the
+  /// device, and its read-only resend arrives with the same `commandId` (ADR 0005). A closed marker for it
+  /// would refuse that resend and lose a command the runner never ran.
+  func testJournalReAdmitsAPrunedIdWhoseExecutionNeverDispatched() throws {
+    let journal = RunnerCommandJournal()
+    let refused = runnerJournalCommand("readText", id: "refused-before-dispatch")
+    journal.accept(command: refused)
+    journal.finish(
+      command: refused,
+      response: Response(
+        ok: false,
+        error: ErrorPayload(code: "RUNNER_BUSY", message: "The iOS runner is still finishing a previous command.")
+      )
+    )
+    runnerJournalFinishOtherCommands(journal, 64)
+
+    guard case .execute = journal.accept(command: refused) else {
+      return XCTFail("an id the runner refused before dispatch carries no effect and must stay executable")
+    }
   }
 
   /// The daemon resends a read-only command the runner refused with `RUNNER_BUSY`, under its busy

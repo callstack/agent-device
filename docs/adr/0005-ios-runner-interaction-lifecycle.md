@@ -14,8 +14,8 @@ Accepted
 - Invalidate dead cached runner processes without graceful `shutdown`.
 - After `RUNNER_BUSY`, resend only read-only commands, under their busy-specific budget.
 - After `RUNNER_BUSY` on a mutating command, return the refusal to the caller without a resend.
-- Let the runner's command journal decide once per `commandId` whether a send executes, joins the running execution, or is answered from the recorded outcome.
-- Never execute a `commandId` twice, and never evict a journal entry whose execution has not finished.
+- Let the runner's command journal decide once per `commandId` whether a send executes, joins the running execution, or is answered from the recorded outcome, and register a joining send for that answer inside the same decision.
+- Never execute a `commandId` twice, never evict a journal entry whose execution has not finished, and keep the fact that a spent `commandId` was spent after its entry is pruned.
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 
@@ -120,17 +120,21 @@ Thus, it is the single place for a change to that classification.
 Its verdict is `execute`, `join`, or `terminal`:
 
 - `execute` claims the `commandId`, and that send owns the one execution.
-- `join` means an execution is claimed and unfinished. The send attaches as a waiter of it, which keeps a transport retry from stacking a second execution behind the first (#1105).
+- `join` means an execution is claimed and unfinished. The journal registers that send as a waiter of the execution in the same locked operation, which keeps a transport retry from stacking a second execution behind the first (#1105). Settling and registering are one operation because a close between them left the send waiting on a delivery that had already gone out.
 - `terminal` means execution finished with effect on the device. The runner answers with the outcome it recorded, and the command never runs again.
 
 The journal closes a `commandId` at the last fast `RUNNER_BUSY` or `RUNNER_WEDGED` refusal, not at accept.
 A refusal before that point dispatched nothing, so the entry stays open and the read-only busy resend above can still run under its own `commandId`.
 Answering a closed `commandId` uses the retained response, then the retained error, then the typed `COMMAND_ALREADY_FINISHED` refusal for a command whose own classification retains no body.
-That refusal discloses `dispatched: no`: nothing ran for the repeat.
+That refusal is a structured failure the daemon does not retry. Its dispatch disclosure stays `unknown`: the runner will not re-run the command, and only the runner knows whether an earlier send of that id reached the device.
 
 Pruning drops only closed entries, so a queued or executing command always stays queryable.
+When a closed entry that dispatched is pruned, the journal keeps its id in a separate closed-id window of 4096 ids, 64x the entry window, because a bare id carries no outcome body.
+A resend inside that window is answered with the typed refusal; `status` still answers `notAccepted` for it, because only the entry can report an outcome.
+An id the runner refused before dispatch is left free, which is what the read-only busy resend depends on.
 `status` answers `notAccepted` only for an id the journal does not hold.
 The daemon cannot read `notAccepted` as a safe terminal state, so evicting a running command would push it to invalidate a session whose runner is still executing that command.
+A watermark over issued ids was rejected: the daemon mints `commandId` as a random UUID per request, reuses one id across retries and across runner generations, and persists nothing, so no ordering exists to compare.
 
 Rejected: gating re-admission on the runner's read-only classification. That would replay a finished `snapshot` after its caller already received the answer, which is not the same command's first execution.
 

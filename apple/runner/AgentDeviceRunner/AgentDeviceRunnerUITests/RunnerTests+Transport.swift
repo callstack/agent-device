@@ -203,16 +203,25 @@ extension RunnerTests {
         completion((jsonResponse(status: 200, response: response), false))
         return
       }
-      // The journal decides whether this send may run the command at all. Reading that verdict here, at
-      // the one route an inbound request takes, is what keeps one `commandId` to one execution: a
+      // The journal decides here, at the one route an inbound request takes, whether this send may run
+      // the command at all, and when the answer is to join an execution it registers this send for that
+      // execution's answer in the same operation. That is what keeps one `commandId` to one execution: a
       // command that already finished is answered from the journal, so a repeat that arrives after its
-      // answer was delivered cannot drive the device a second time.
-      switch commandJournal.accept(command: command) {
+      // answer was delivered cannot drive the device a second time, and a send told to join can never be
+      // left behind by a delivery that went out first.
+      let admission = commandJournal.accept(command: command) { [weak self] commandId in
+        self?.registerJoiner(for: commandId, completion: completion)
+      }
+      switch admission {
       case .join:
-        // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to the
-        // in-flight execution and receive its response instead of piling a second execution onto the
-        // main queue behind it (#1105 capture pileup).
-        attachToInFlightExecution(command: command, completion: completion)
+        // Re-sends of a still-executing commandId (the daemon's transport retry loop) were registered
+        // onto the in-flight execution above and receive its response instead of piling a second
+        // execution onto the main queue behind it (#1105 capture pileup).
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
       case .terminal(let outcome):
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
@@ -301,31 +310,22 @@ extension RunnerTests {
 
   // MARK: - In-Flight Command Coalescing
 
-  /// Attaches this send to the in-flight execution the journal just told it to join, so the execution's
-  /// own delivery answers it. The journal closes an entry before its delivery drains this waiter list, and
-  /// both take `inFlightCommandLock`, so checking here under that lock decides which answer this send is
-  /// owed exactly once: one that arrives after the entry closed answers from the journal instead of
-  /// waiting for a delivery that already went out.
-  func attachToInFlightExecution(
-    command: Command,
+  /// Records this send as a waiter of the in-flight execution the journal just settled it onto, so the
+  /// execution's own delivery answers it. The journal calls this while it holds its own lock and after it
+  /// checked that the entry is still running, which is what makes the two indivisible: the transition that
+  /// closes an entry needs that lock, and one close drains this list only after it has closed the entry, so
+  /// no send can be recorded here for a delivery that already went out. Takes only
+  /// `inFlightCommandLock`, and never the journal's, so nothing here can re-enter the journal.
+  func registerJoiner(
+    for commandId: String,
     completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
-    guard let commandId = command.commandId?.trimmedNonEmpty else { return }
     inFlightCommandLock.lock()
-    if let outcome = commandJournal.closedOutcome(for: command) {
-      inFlightCommandLock.unlock()
-      completion((jsonResponse(status: 200, response: outcome), false))
-      return
-    }
     inFlightCommandWaiters[commandId, default: []].append(completion)
     inFlightCommandLock.unlock()
-    NSLog(
-      "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
-      command.command.rawValue,
-      commandId
-    )
   }
 
+  /// Answers the send that owns this execution, and every send the journal settled onto it.
   func deliverCommandResult(
     command: Command,
     result: (response: RunnerHttpResponse, shouldFinish: Bool),

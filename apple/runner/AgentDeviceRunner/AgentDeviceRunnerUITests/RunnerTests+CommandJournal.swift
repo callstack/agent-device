@@ -36,7 +36,8 @@ struct RunnerCommandJournalEntry {
 enum RunnerCommandAdmission {
   /// Nothing is running for this id and nothing has finished: the caller owns the one execution.
   case execute
-  /// An execution is claimed and has not finished: the caller joins its outcome and runs nothing.
+  /// An execution is claimed and has not finished: the caller runs nothing and is answered by that
+  /// execution. `admit(command:registeringJoin:)` has already registered the send it gave this verdict.
   case join
   /// Execution finished, and the work reached the device: the caller answers from the journal and
   /// never executes this command again.
@@ -50,19 +51,44 @@ enum RunnerCommandAdmission {
 final class RunnerCommandJournal {
   private let lock = NSLock()
   private let maxEntries = 64
+  /// How many closed `commandId`s are remembered as bare ids once their entry is pruned. The window is
+  /// 64x the entry window because a marker holds no outcome body, only the id.
+  private let maxClosedCommandIds = 4096
   private let maxResponseJsonBytes = 16 * 1024
   private var entries: [String: RunnerCommandJournalEntry] = [:]
   private var order: [String] = []
+  /// Ids whose dispatched execution closed and whose entry has since been pruned: the admission half of
+  /// what the entry recorded, kept without a body so bounded memory cannot make a spent id executable
+  /// again. It settles admission only. `status` still answers `notAccepted` for such an id, because the
+  /// outcome the entry held is gone and only the entry can report one.
+  private var closedCommandIds: Set<String> = []
+  private var closedOrder: [String] = []
 
+  /// Settles one send, and when the answer is to join a running execution, registers that send for the
+  /// answer inside the same locked operation. No transition can close the entry between the two, which is
+  /// what keeps a joined send from waiting on a delivery that already went out. `register` runs on the
+  /// calling thread while the journal's lock is held: it may take a lock of its own, and must not call
+  /// back into this journal. The wire route passes one; a caller that only reads the verdict — a journal
+  /// test, or a probe that will not itself answer for the execution — leaves it unregistered and must not
+  /// treat a `.join` verdict as a send that will be answered.
   @discardableResult
-  func accept(command: Command) -> RunnerCommandAdmission {
+  func accept(
+    command: Command,
+    registeringJoin register: (String) -> Void = { _ in }
+  ) -> RunnerCommandAdmission {
     guard let commandId = command.commandId?.trimmedNonEmpty else { return .execute }
     lock.lock()
     defer { lock.unlock() }
     guard let entry = entries[commandId] else {
+      // The entry can be pruned; the fact it recorded is not, so an id that spent itself on the device
+      // never executes again.
+      if closedCommandIds.contains(commandId) {
+        return .terminal(outcome: alreadyFinishedRefusal(command: command, commandId: commandId, outcomeDropped: true))
+      }
       return claim(command: command, commandId: commandId)
     }
     if !entry.state.isTerminal {
+      register(commandId)
       return .join
     }
     // Nothing of this command ever reached the device, so the id carries no effect to protect and the
@@ -117,19 +143,6 @@ final class RunnerCommandJournal {
       error: ErrorPayload(message: error.localizedDescription),
       marksDispatched: false
     )
-  }
-
-  /// The answer owed a send that joined an execution which has since closed: the outcome the runner
-  /// recorded, whether or not the work reached the device. Registering that send as a waiter instead
-  /// would leave it waiting on a delivery that already went out. `accept` answers a closed id on its own
-  /// terms, so this is narrower than admission.
-  func closedOutcome(for command: Command) -> Response? {
-    guard let commandId = command.commandId?.trimmedNonEmpty else { return nil }
-    lock.lock()
-    let entry = entries[commandId]
-    lock.unlock()
-    guard let entry, entry.state.isTerminal else { return nil }
-    return recordedOutcome(for: entry)
   }
 
   func status(normalizedCommandId commandId: String) -> DataPayload {
@@ -200,16 +213,26 @@ final class RunnerCommandJournal {
     pruneIfNeeded()
   }
 
-  /// Drops the oldest closed entries. An entry whose execution is claimed but not finished is never
-  /// dropped, however deep the backlog: `status` answers `notAccepted` only for an id this journal does
-  /// not hold, and the daemon cannot read that as a safe terminal state — it would invalidate a session
-  /// whose runner is still executing the command it lost the answer to.
+  /// Drops the oldest closed entries, keeping each one's id as the fact that settles admission for it.
+  /// An entry whose execution is claimed but not finished is never dropped, however deep the backlog:
+  /// `status` answers `notAccepted` only for an id this journal does not hold, and the daemon cannot read
+  /// that as a safe terminal state — it would invalidate a session whose runner is still executing the
+  /// command it lost the answer to.
   private func pruneIfNeeded() {
     while order.count > maxEntries {
       guard let removable = order.first(where: { entries[$0]?.state.isTerminal == true }) else {
         return
       }
       order.removeAll { $0 == removable }
+      // Only work that reached the device spends its id. A pruned refusal leaves the id free, which is
+      // what the busy resend of the same `commandId` depends on (ADR 0005).
+      if entries[removable]?.dispatched == true {
+        closedCommandIds.insert(removable)
+        closedOrder.append(removable)
+        while closedOrder.count > maxClosedCommandIds {
+          closedCommandIds.remove(closedOrder.removeFirst())
+        }
+      }
       entries.removeValue(forKey: removable)
     }
   }
@@ -225,12 +248,36 @@ final class RunnerCommandJournal {
     if let error = entry.error {
       return Response(ok: false, error: error)
     }
-    return Response(
+    return alreadyFinishedRefusal(
+      commandId: entry.commandId,
+      commandName: entry.command,
+      outcomeDropped: false
+    )
+  }
+
+  private func alreadyFinishedRefusal(
+    command: Command,
+    commandId: String,
+    outcomeDropped: Bool
+  ) -> Response {
+    alreadyFinishedRefusal(
+      commandId: commandId,
+      commandName: command.command.rawValue,
+      outcomeDropped: outcomeDropped
+    )
+  }
+
+  private func alreadyFinishedRefusal(
+    commandId: String,
+    commandName: String,
+    outcomeDropped: Bool
+  ) -> Response {
+    Response(
       ok: false,
       error: ErrorPayload(
         code: RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
         message:
-          "The runner already finished \(entry.command) with id \(entry.commandId) and kept no response to replay.",
+          "The runner already finished \(commandName) with id \(commandId) and kept no response to replay\(outcomeDropped ? ", because that record has since been dropped" : "").",
         hint:
           "Read the screen with snapshot before sending anything else: the finished command's effect is already on the device."
       )
