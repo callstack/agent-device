@@ -3,4 +3,7 @@
 #import "RunnerSynthesizedGesture.h"
 #import "RunnerSynthesizedTextEntry.h"
 #import "RunnerXCTestEventBridge.h"
-#import "RunnerAXModalScopeCapture.h"
+// The packaged runner omits UnitTests/. OTHER_CFLAGS defines do not reach this header.
+#if __has_include("UnitTests/RunnerAXModalScopeCapture.h")
+#import "UnitTests/RunnerAXModalScopeCapture.h"
+#endif
