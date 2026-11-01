@@ -4,7 +4,9 @@ import XCTest
 
 /// Cross-language parity for the presented-surface rule (#3565): every case in
 /// `contracts/fixtures/ios-presented-surface.json` runs through the runner entry point, which reads no
-/// class names, so each must answer the table's `classBlindExpected`.
+/// class names, so each must answer the table's `classBlindExpected`. A case that states
+/// `modalScopeExpected` must give the answer for all three modal-scope readings: `modal`,
+/// `noExclusion` and `unknown`.
 final class SnapshotPresentedSurfaceTests: XCTestCase {
   private struct Vocabulary: Decodable {
     let presentingElementTypes: [PresentingElementType]
@@ -25,6 +27,7 @@ final class SnapshotPresentedSurfaceTests: XCTestCase {
     let name: String
     let truncated: Bool?
     let classBlindExpected: String
+    let modalScopeExpected: [String: String]?
     let nodes: [Node]
   }
 
@@ -51,10 +54,31 @@ final class SnapshotPresentedSurfaceTests: XCTestCase {
     XCTAssertFalse(cases.isEmpty)
     for testCase in cases {
       XCTAssertEqual(
-        SnapshotPresentedSurface.classify(acquisition(of: testCase)),
+        SnapshotPresentedSurface.classify(acquisition(of: testCase), modalScope: nil),
         try XCTUnwrap(PresentedSurface(rawValue: testCase.classBlindExpected)),
         testCase.name
       )
+    }
+  }
+
+  func testEveryModalScopeReadingClassifiesAsTheGoldenTableStates() throws {
+    let readings: [String: ModalSurfaceReading] = [
+      "modal": .modal([ModalSurface(host: 1, roots: [6])]),
+      "noExclusion": .noExclusion,
+      "unknown": .unknown(.unstable(.screenChanged)),
+    ]
+    let cases = try readFixture().cases.filter { $0.modalScopeExpected != nil }
+    XCTAssertFalse(cases.isEmpty)
+    for testCase in cases {
+      let expected = try XCTUnwrap(testCase.modalScopeExpected)
+      XCTAssertEqual(Set(expected.keys), Set(readings.keys), testCase.name)
+      for (key, reading) in readings {
+        XCTAssertEqual(
+          SnapshotPresentedSurface.classify(acquisition(of: testCase), modalScope: reading),
+          try XCTUnwrap(expected[key].flatMap(PresentedSurface.init(rawValue:))),
+          "\(testCase.name): \(key)"
+        )
+      }
     }
   }
 
@@ -62,8 +86,8 @@ final class SnapshotPresentedSurfaceTests: XCTestCase {
     let alert = try XCTUnwrap(
       try readFixture().cases.first { $0.name == "the same alert through a producer whose name table stops short" }
     )
-    XCTAssertEqual(SnapshotPresentedSurface.classify(acquisition(of: alert, truncated: false)), .presented)
-    XCTAssertEqual(SnapshotPresentedSurface.classify(acquisition(of: alert, truncated: true)), .presented)
+    XCTAssertEqual(SnapshotPresentedSurface.classify(acquisition(of: alert, truncated: false), modalScope: nil), .presented)
+    XCTAssertEqual(SnapshotPresentedSurface.classify(acquisition(of: alert, truncated: true), modalScope: nil), .presented)
   }
 
   private func acquisition(of testCase: FixtureCase, truncated: Bool? = nil) -> SnapshotAcquisition {

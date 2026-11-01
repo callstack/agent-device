@@ -249,7 +249,7 @@ public struct SnapshotAcquisition {
     var keyboardSurfaceIndexes = Set<Int>()
     self.nodes = nodes.map { captured in
       var node = captured
-      if node.type == "Keyboard" || node.type == "Key"
+      if SnapshotKeyboardSurface.isKeyboardOrKey(type: node.type)
         || SnapshotKeyboardSurface.isInputAssistant(type: node.type, identifier: node.identifier)
         || node.parentIndex.map({ keyboardSurfaceIndexes.contains($0) }) == true {
         keyboardSurfaceIndexes.insert(node.index)

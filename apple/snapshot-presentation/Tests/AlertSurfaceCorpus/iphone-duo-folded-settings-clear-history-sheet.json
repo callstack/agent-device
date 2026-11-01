@@ -35,6 +35,32 @@
       ]
     }
   },
+  "expectModalScope": {
+    "reading": "modal",
+    "surfaces": [
+      {
+        "host": 1,
+        "roots": [
+          2
+        ],
+        "actions": [
+          "dismiss popup",
+          "close",
+          "",
+          "checkmark",
+          "",
+          "",
+          "",
+          "",
+          "Close All Tabs",
+          "",
+          "Clear History",
+          "close"
+        ]
+      }
+    ],
+    "excludedActions": []
+  },
   "plain": [
     {"element":"58543:0.1","identifier":"","index":0,"label":"Settings","rect":{"height":678,"width":466,"x":0,"y":0},"type":"Application","viewClass":"UIApplication"},
     {"element":"58543:4423794688.3","identifier":"","index":1,"label":"","parentIndex":0,"rect":{"height":678,"width":466,"x":0,"y":0},"type":"Window","viewClass":"UIWindow"},
