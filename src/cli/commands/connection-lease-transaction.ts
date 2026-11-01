@@ -25,8 +25,11 @@ import { bindLeaseNamedDevice } from './proxy-lease-device.ts';
 
 type LeaseRelease = () => Promise<{ released: boolean }>;
 
+const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
+
 /** One newly created lease awaits release or transfer to a durable session record. */
 export type LeaseLedger = {
+  /** Release or transfer the previous lease before tracking another allocation. */
   track(leaseId: string, release: LeaseRelease): void;
   /** A resolved release ends ownership, including when the daemon reports no such lease. */
   end(leaseId: string): Promise<{ released: boolean }>;
@@ -74,9 +77,6 @@ export function createLeaseLedger(): LeaseLedger {
     },
   };
 }
-
-/** How a rollback reports a lease its release could not end, beside the command's own failure. */
-export const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
 
 /**
  * Brings the connection's lease up to date for this command: renews the one the record names or

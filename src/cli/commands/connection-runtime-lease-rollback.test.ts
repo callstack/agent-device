@@ -13,7 +13,6 @@ import {
   type LeaseAllocateRequest,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
-import { LEASE_ROLLBACK_RELEASE_FAILED_REASON } from './connection-lease-transaction.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -360,7 +359,7 @@ test('a rollback whose release failed reports it on the Metro failure instead of
   assert.deepEqual(thrown.details?.leaseRollback, {
     leaseId: 'lease-1',
     released: false,
-    reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
+    reason: 'LEASE_RELEASE_FAILED',
     error: 'provider rejected the release',
   });
 

@@ -11,7 +11,7 @@ import {
   type ConnectionDeviceScope,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
   requireLeaseDeviceSpec,
@@ -164,10 +164,8 @@ export async function bindLeaseNamedDevice(options: {
 }
 
 /**
- * Refuses a new lease whose backend did not confirm the device spec, ending it through the ledger.
- * A release that could not end the lease is reported in the refusal, which still names the lease,
- * rather than raised in its place, and the lease stays owned so the command's failure path reports
- * it too.
+ * Refuses an unconfirmed spec and attempts release. A thrown release leaves ownership with the
+ * caller for one rollback retry; only that retry reports failure, so recovery leaves no stale evidence.
  */
 async function refuseUnhonouredSpecLease(
   leaseLedger: LeaseLedger,
@@ -175,22 +173,19 @@ async function refuseUnhonouredSpecLease(
   lease: Lease,
   keys: readonly string[],
 ): Promise<AppError> {
-  let outcome: { released: boolean; error?: string };
+  let released: boolean | undefined;
   try {
-    outcome = await leaseLedger.end(lease.leaseId);
-  } catch (error) {
-    outcome = { released: false, error: errorMessage(error) };
+    ({ released } = await leaseLedger.end(lease.leaseId));
+  } catch {
+    // The caller retries the owned lease and attaches any failure as details.leaseRollback.
   }
   return deviceSpecUnsupportedError(
     keys,
-    outcome.released
-      ? 'The proxy backend leased a device without confirming the requested device spec, so the lease was released.'
-      : 'The proxy backend leased a device without confirming the requested device spec, and releasing the lease failed, so it may stay held until it expires.',
+    'The proxy backend leased a device without confirming the requested device spec.',
     {
       session: state.session,
       leaseId: lease.leaseId,
-      released: outcome.released,
-      ...(outcome.error === undefined ? {} : { releaseError: outcome.error }),
+      ...(released === undefined ? {} : { released }),
     },
   );
 }
