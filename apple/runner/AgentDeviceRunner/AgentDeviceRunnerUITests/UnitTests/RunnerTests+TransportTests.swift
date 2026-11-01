@@ -734,8 +734,8 @@ extension RunnerTests {
   #if os(iOS)
     @MainActor
     func testTransportReplaysPasteboardWriteWithoutWritingAgain() throws {
-      let original = UIPasteboard.general.string
-      defer { UIPasteboard.general.string = original }
+      let originalItems = UIPasteboard.general.items
+      defer { UIPasteboard.general.items = originalItems }
       let listener = try startTransportListener()
       defer { listener.cancel() }
       let port = try XCTUnwrap(listener.port)
@@ -774,6 +774,29 @@ extension RunnerTests {
       let nodes = try XCTUnwrap(reply.data?.nodes)
       XCTAssertFalse(nodes.isEmpty)
     }
+  }
+
+  @MainActor
+  func testTransportReexecutesASelectorReadWithTheSameId() throws {
+    app.launch()
+    defer { app.terminate() }
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let client = URLSession(configuration: .ephemeral)
+    defer { client.invalidateAndCancel() }
+    let first = try transportHttpResponse(
+      client: client, port: port,
+      payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"Agent Device Runner"}"#
+    )
+    XCTAssertTrue(first.ok, String(describing: first.error))
+    XCTAssertEqual(first.data?.found, true)
+    let repeated = try transportHttpResponse(
+      client: client, port: port,
+      payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"missing-journal-selector"}"#
+    )
+    XCTAssertTrue(repeated.ok, String(describing: repeated.error))
+    XCTAssertEqual(repeated.data?.found, false, "a finished selector read must execute instead of replaying its retained answer")
   }
 
   private func transportCommand(_ command: String, id: String) throws -> Command {

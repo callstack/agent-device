@@ -637,7 +637,7 @@ extension RunnerTests {
   }
 
   func testJournalReexecutesFinishedReadsWithoutSpendingTheirIds() throws {
-    for name in ["snapshot", "screenshot", "readText", "findText", "gestureViewport", "appState", "status", "alert"] {
+    for name in ["snapshot", "screenshot", "readText", "findText", "gestureViewport", "appState", "status", "alert", "querySelector"] {
       for failed in [false, true] {
         let journal = RunnerCommandJournal()
         let command = runnerJournalCommand(name, id: "repeated-read")
@@ -665,7 +665,7 @@ extension RunnerTests {
   }
 
   func testJournalDoesNotSpendPrunedReadIds() throws {
-    for name in ["snapshot", "screenshot", "readText", "alert"] {
+    for name in ["snapshot", "screenshot", "readText", "alert", "querySelector"] {
       let journal = RunnerCommandJournal()
       let read = runnerJournalCommand(name, id: "pruned-read")
       runnerJournalCloseDispatchedCommand(journal, read, message: "read")

@@ -163,7 +163,8 @@ fileprivate extension CommandTraits {
   static let selectorResolution = CommandTraits(
     launchPolicy: .existingApp,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: true
   )
 
   /// Reads the runner answers from its own capture and state, so preparation never brings an app
