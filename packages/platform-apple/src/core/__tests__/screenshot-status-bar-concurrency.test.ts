@@ -1,9 +1,5 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
-import { withCommandHost } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
@@ -463,113 +459,6 @@ test('a settings write bounds its status bar command like a capture does', async
   ]);
 });
 
-test('one simulator reached through two spellings of its device set keeps one window', async () => {
-  // `simctl --set` follows aliases, so a symlinked or otherwise non-normalized spelling of one set
-  // reaches the same status bar. Two windows over it would let a capture snapshot another capture's
-  // normalization, which is the leak this owner exists to prevent.
-  const setRoot = await mkdtempForTest('sm11-set-');
-  const canonicalSet = await fs.realpath(setRoot);
-  const aliasSet = path.join(canonicalSet, 'link-to-set');
-  await fs.symlink(canonicalSet, aliasSet);
-
-  const entered: string[] = [];
-  const gates = { canonical: createCaptureGate(), alias: createCaptureGate() };
-  const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
-    ...IOS_TEST_SIMULATOR,
-    simulatorSetPath: tag === 'canonical' ? canonicalSet : aliasSet,
-  });
-
-  await withFakeAppleTool(
-    (args) => {
-      const index = args.indexOf('status_bar');
-      if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
-      return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
-    },
-    async () => {
-      const captureFor = (tag: keyof typeof gates) =>
-        captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
-          env: process.env,
-          normalizeStatusBar: true,
-          skipIosSimulatorBootCheck: true,
-          deps: captureDeps(async () => {
-            entered.push(tag);
-            await gates[tag].capture();
-          }),
-        });
-
-      const canonical = captureFor('canonical');
-      await gates.canonical.entered;
-      const alias = captureFor('alias');
-      try {
-        await yieldToQueuedWork();
-        // The aliased capture is still queued: both records address one simulator, so they share
-        // one window and the second cannot snapshot the first capture's normalization.
-        assert.deepEqual(entered, ['canonical']);
-      } finally {
-        gates.canonical.release();
-        gates.alias.release();
-        await Promise.allSettled([canonical, alias]);
-      }
-
-      assert.deepEqual(entered, ['canonical', 'alias']);
-    },
-  );
-});
-
-test('naming the default device set explicitly shares the default window', async () => {
-  // `simctl --set <default root>` selects the same simulators as naming no set, so the two spellings
-  // must not open two windows over one status bar. The host that runs the command owns that root,
-  // so the test binds one whose HOME is the home the owner derives it from.
-  const entered: string[] = [];
-  const gates = { implicit: createCaptureGate(), explicit: createCaptureGate() };
-  const home = process.env.HOME;
-  assert.ok(home, 'the default device root needs a home directory');
-  const defaultSet = path.join(home, 'Library', 'Developer', 'CoreSimulator', 'Devices');
-  const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
-    ...IOS_TEST_SIMULATOR,
-    simulatorSetPath: tag === 'explicit' ? defaultSet : undefined,
-  });
-
-  await withCommandHost(
-    { host: { env: { HOME: home }, cwd: '/' }, requestEnv: undefined },
-    async () => {
-      await withFakeAppleTool(
-        (args) => {
-          const index = args.indexOf('status_bar');
-          if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
-          return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
-        },
-        async () => {
-          const captureFor = (tag: keyof typeof gates) =>
-            captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
-              env: process.env,
-              normalizeStatusBar: true,
-              skipIosSimulatorBootCheck: true,
-              deps: captureDeps(async () => {
-                entered.push(tag);
-                await gates[tag].capture();
-              }),
-            });
-
-          const implicit = captureFor('implicit');
-          await gates.implicit.entered;
-          const explicit = captureFor('explicit');
-          try {
-            await yieldToQueuedWork();
-            assert.deepEqual(entered, ['implicit']);
-          } finally {
-            gates.implicit.release();
-            gates.explicit.release();
-            await Promise.allSettled([implicit, explicit]);
-          }
-
-          assert.deepEqual(entered, ['implicit', 'explicit']);
-        },
-      );
-    },
-  );
-});
-
 test('a timed-out settings write forces the next capture to read the bar again', async () => {
   // A command that hits its deadline may still have reached `simctl`, so a write that times out
   // cannot leave a cached answer about the bar behind: the next capture has to read what the write
@@ -636,9 +525,7 @@ test('a timed-out settings write forces the next capture to read the bar again',
   );
 });
 
-test('simulators of different device sets keep their own status bar windows', async () => {
-  // `simctl status_bar` is scoped with `--set`, so one udid in two sets is two bars. Records that
-  // name one simulator — same udid and same set — share a window; different sets must not queue.
+test('two device records with the same udid and different set paths share one lock', async () => {
   const entered: string[] = [];
   const gates = { one: createCaptureGate(), two: createCaptureGate() };
   const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
@@ -652,7 +539,7 @@ test('simulators of different device sets keep their own status bar windows', as
       const index = args.indexOf('status_bar');
       if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
       const verb = args[index + 2];
-      return verb === 'list' ? 'Current Status Bar Overrides:\n=============================' : '';
+      return verb === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
     },
     async () => {
       const captureFor = (tag: keyof typeof gates) =>
@@ -671,13 +558,14 @@ test('simulators of different device sets keep their own status bar windows', as
       const second = captureFor('two');
       try {
         await yieldToQueuedWork();
-        // Both capture steps run at once: the second set never queued behind the first.
-        assert.deepEqual(entered, ['one', 'two']);
+        assert.deepEqual(entered, ['one']);
       } finally {
         gates.one.release();
         gates.two.release();
-        await Promise.allSettled([first, second]);
+        const results = await Promise.allSettled([first, second]);
+        assert.equal(fulfilledCount(results), 2);
       }
+      assert.deepEqual(entered, ['one', 'two']);
     },
   );
 });

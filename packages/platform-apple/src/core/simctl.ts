@@ -1,13 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  commandHostHomeDirectory,
-  type ExecOptions,
-  type ExecResult,
-} from '@agent-device/host-kit/command';
-import { canonicalHostPathSync } from '@agent-device/host-kit/host-file';
+import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
-import path from 'node:path';
 import { runXcrun, simctlCommand, type ScopedSimctlCommand } from './tool-provider.ts';
 
 declare const simulatorAddress: unique symbol;
@@ -19,48 +13,10 @@ export type SimulatorAddress = Readonly<{ udid: string; simulatorSetPath: string
   readonly [simulatorAddress]: true;
 };
 
-/**
- * The device root `simctl` uses when a command names no set, as the host that will run the command
- * sees it: `simctl` resolves `~` from the environment it is spawned with, which is the bound command
- * host's, not this process's. Answers undefined when no host is bound or that host names no home.
- */
-function defaultSimulatorSetPath(): string | undefined {
-  const home = commandHostHomeDirectory();
-  return home === undefined
-    ? undefined
-    : path.join(home, 'Library', 'Developer', 'CoreSimulator', 'Devices');
-}
-
-/**
- * Canonical identity of one simulator set: `simctl --set` follows aliases and trailing separators,
- * so every spelling of one directory must answer as one value, and naming the executing host's
- * default root explicitly is the default set. Unreadable paths (a set that does not exist on this
- * host) keep their resolved spelling. An explicit set is only ever dropped for the default root of
- * the host that runs the command: without that host's home the explicit set is kept, because a
- * guessed default could erase a scope the caller asked for.
- */
-function canonicalSimulatorSetPath(simulatorSetPath: string | undefined): string | undefined {
-  const spelled = resolveIosSimulatorDeviceSetPath(simulatorSetPath);
-  if (spelled === undefined) return undefined;
-  const canonical = canonicalExistingPath(spelled);
-  const defaultSet = defaultSimulatorSetPath();
-  if (defaultSet === undefined) return canonical;
-  return canonical === canonicalExistingPath(defaultSet) ? undefined : canonical;
-}
-
-function canonicalExistingPath(candidate: string): string {
-  const resolved = path.resolve(candidate);
-  try {
-    return canonicalHostPathSync(resolved);
-  } catch {
-    return path.normalize(resolved);
-  }
-}
-
 export function simulatorAddressFor(device: DeviceInfo): SimulatorAddress {
   const simulatorSetPath =
     isIosFamily(device) && device.kind === 'simulator'
-      ? canonicalSimulatorSetPath(device.simulatorSetPath)
+      ? resolveIosSimulatorDeviceSetPath(device.simulatorSetPath)
       : undefined;
   return Object.freeze({ udid: device.id, simulatorSetPath }) as SimulatorAddress;
 }
@@ -69,7 +25,7 @@ function scopeSimctlArgs(
   simulatorSetPath: string | undefined,
   args: readonly string[],
 ): ScopedSimctlArgs {
-  const resolvedSetPath = canonicalSimulatorSetPath(simulatorSetPath);
+  const resolvedSetPath = resolveIosSimulatorDeviceSetPath(simulatorSetPath);
   const scoped = resolvedSetPath ? ['--set', resolvedSetPath, ...args] : [...args];
   return Object.freeze(scoped) as ScopedSimctlArgs;
 }

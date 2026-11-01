@@ -141,16 +141,6 @@ function parseEnumSetValue(
 export type EnvMap = Record<string, string | undefined>;
 
 /**
- * The home directory a host environment names for itself: its own `HOME`, or `USERPROFILE` on
- * Windows. Returns undefined when the environment names no home; callers must fail closed or skip
- * the home-bound lookup, never fall back to `os.homedir()`, because the process home is an ambient
- * read that #3753 forbids. Derive per-runtime home config through this (#3794).
- */
-export function hostHomeDirectoryFromEnv(env: EnvMap): string | undefined {
-  return env['HOME'] ?? env['USERPROFILE'];
-}
-
-/**
  * The process-level inputs a host hands to the code it runs: the environment and working
  * directory. An entry point captures it once; everything below receives it.
  */

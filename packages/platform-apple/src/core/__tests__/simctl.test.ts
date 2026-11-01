@@ -1,9 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { withCommandHost } from '@agent-device/host-kit/command';
-import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
   buildSimctlArgsForAddress,
   buildSimctlArgsForDevice,
@@ -69,97 +65,6 @@ test('simctlListInventoryArgs prefixes a trimmed simulator set and omits a blank
   assert.deepEqual(simctlListInventoryArgs(' /tmp/set '), ['--set', '/tmp/set', 'list', '-j']);
   assert.deepEqual(simctlListInventoryArgs('  '), ['list', '-j']);
   assert.deepEqual(simctlListInventoryArgs(undefined), ['list', '-j']);
-});
-
-/**
- * The default device root is where `simctl` looks when argv names no set, and `simctl` resolves it
- * from the environment it is spawned with. A daemon request runs on a bound command host whose HOME
- * can differ from this process's, so the identity of "the default set" belongs to that host.
- */
-async function withHostHome<T>(home: string | undefined, run: () => Promise<T>): Promise<T> {
-  return await withCommandHost(
-    { host: { env: home === undefined ? {} : { HOME: home }, cwd: '/' }, requestEnv: undefined },
-    run,
-  );
-}
-
-test('an explicit set is kept when the executing host names a different home', async () => {
-  // The regression: this process's home is the real default root, the host that will run `simctl`
-  // names another one. Erasing the caller's explicit set here would run the command against the
-  // process user's simulators instead of the ones the caller asked for.
-  const requested = await mkdtempForTest('sm11-host-home-set-');
-  const canonicalRequested = await fs.realpath(requested);
-  const processHome = await fs.realpath(process.env.HOME ?? '');
-  const processHomeDefault = path.join(
-    processHome,
-    'Library',
-    'Developer',
-    'CoreSimulator',
-    'Devices',
-  );
-
-  await withHostHome('/tmp/another-host-home', async () => {
-    assert.deepEqual(simctlListInventoryArgs(canonicalRequested), [
-      '--set',
-      canonicalRequested,
-      'list',
-      '-j',
-    ]);
-    assert.deepEqual(
-      simulatorAddressFor({ ...IOS_SIMULATOR, simulatorSetPath: canonicalRequested }),
-      { udid: 'sim-1', simulatorSetPath: canonicalRequested },
-    );
-  });
-
-  // Naming the process user's own default root is not the host's default either.
-  await withHostHome('/tmp/another-host-home', async () => {
-    assert.deepEqual(simctlListInventoryArgs(processHomeDefault), [
-      '--set',
-      processHomeDefault,
-      'list',
-      '-j',
-    ]);
-  });
-});
-
-test('naming the executing host default root answers as the default set', async () => {
-  // The host that runs the command is the authority: when its own HOME names the default root,
-  // spelling it explicitly is the same set as naming none, so both share one lock/cache identity.
-  const hostHome = await fs.realpath(process.env.HOME ?? '');
-  const defaultSet = path.join(hostHome, 'Library', 'Developer', 'CoreSimulator', 'Devices');
-
-  await withHostHome(hostHome, async () => {
-    assert.deepEqual(simctlListInventoryArgs(defaultSet), ['list', '-j']);
-    assert.deepEqual(simulatorAddressFor({ ...IOS_SIMULATOR, simulatorSetPath: defaultSet }), {
-      udid: 'sim-1',
-      simulatorSetPath: undefined,
-    });
-  });
-});
-
-test('an explicit set survives a host that names no home', async () => {
-  // No authority means no default to compare against: the caller's scope is kept, never guessed.
-  const requested = await mkdtempForTest('sm11-unbound-set-');
-  const canonicalRequested = await fs.realpath(requested);
-  await withHostHome(undefined, async () => {
-    assert.deepEqual(simctlListInventoryArgs(canonicalRequested), [
-      '--set',
-      canonicalRequested,
-      'list',
-      '-j',
-    ]);
-  });
-  await withCommandHost(
-    { host: { env: { HOME: 'relative-home' }, cwd: '/' }, requestEnv: undefined },
-    async () => {
-      assert.deepEqual(simctlListInventoryArgs(canonicalRequested), [
-        '--set',
-        canonicalRequested,
-        'list',
-        '-j',
-      ]);
-    },
-  );
 });
 
 test('simctlAvailabilityProbeArgs names no set', () => {

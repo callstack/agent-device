@@ -1,7 +1,6 @@
 export {
   createHostDirectoryLinkSync,
   accessHostFile,
-  canonicalHostPathSync,
   chmodHostFile,
   copyHostFile,
   copyHostPath,
@@ -12,6 +11,7 @@ export {
   hostFileStat,
   hostFileStatSync,
   hostHomeDirectory,
+  hostHomeDirectoryFromEnv,
   hostTemporaryDirectory,
   makeHostTemporaryDirectory,
   readHostBinaryFile,

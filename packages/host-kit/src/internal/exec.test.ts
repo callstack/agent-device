@@ -6,7 +6,6 @@ import {
   coerceExecResult,
   commandDeveloperDir,
   commandHostEnvironment,
-  commandHostHomeDirectory,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmd,
@@ -483,38 +482,6 @@ test('commandHostEnvironment names the enclosing host and refuses outside one', 
   await withCommandHost({ host, requestEnv: undefined }, async () => {
     assert.equal(commandHostEnvironment(), host);
   });
-});
-
-test('commandHostHomeDirectory answers with the home the spawned commands inherit', async () => {
-  // Outside a bound host there is no host home to name: callers keep the caller's own value.
-  assert.equal(commandHostHomeDirectory(), undefined);
-
-  await withCommandHost(
-    { host: hostWith({ HOME: '/host/home' }), requestEnv: undefined },
-    async () => {
-      assert.equal(commandHostHomeDirectory(), '/host/home');
-    },
-  );
-
-  // A request value wins over the host value, exactly as it does for the spawned child.
-  await withCommandHost(
-    { host: hostWith({ HOME: '/host/home' }), requestEnv: { HOME: '/request/home' } },
-    async () => {
-      assert.equal(commandHostHomeDirectory(), '/request/home');
-    },
-  );
-
-  // A host that names no home, or names one the child cannot resolve, answers undefined rather than
-  // this process's home.
-  await withCommandHost({ host: hostWith({ HOME: '' }), requestEnv: undefined }, async () => {
-    assert.equal(commandHostHomeDirectory(), undefined);
-  });
-  await withCommandHost(
-    { host: hostWith({ HOME: 'relative/home' }), requestEnv: undefined },
-    async () => {
-      assert.equal(commandHostHomeDirectory(), undefined);
-    },
-  );
 });
 
 // Windows reports no signal for a terminated process.

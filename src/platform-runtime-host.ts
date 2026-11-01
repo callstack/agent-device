@@ -1,4 +1,4 @@
-import { hostHomeDirectoryFromEnv, type HostEnvironment } from '@agent-device/kernel/source-value';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   DeviceInventoryHost,
   HostOperatingSystem,
@@ -12,6 +12,7 @@ import path from 'node:path';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { createHostCommandRunner } from './platform-runtime-host-command-runner.ts';
+import { hostHomeDirectoryFromEnv } from '@agent-device/host-kit/host-file';
 
 export function createDeviceInventoryHost(host: HostEnvironment): DeviceInventoryHost {
   const env = host.env;

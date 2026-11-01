@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { isExecutablePath, whichCmd } from '@agent-device/host-kit/command';
-import { type EnvMap, hostHomeDirectoryFromEnv } from '@agent-device/kernel/source-value';
+import { hostHomeDirectoryFromEnv } from '@agent-device/host-kit/host-file';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
 /**
  * The host ports one Vega executable lookup needs — the same three the device-inventory host

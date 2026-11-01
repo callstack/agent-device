@@ -7,6 +7,18 @@ export function hostHomeDirectory(): string {
   return os.homedir();
 }
 
+/**
+ * The home directory a named host names for itself: its own HOME (or USERPROFILE on Windows).
+ * Returns undefined when the host env names no home; callers must fail closed or skip the
+ * home-bound lookup, never fall back to `os.homedir()`, because the process home is an ambient
+ * read that #3753 forbids. Derive per-runtime home config through this (#3794).
+ */
+export function hostHomeDirectoryFromEnv(
+  env: Record<string, string | undefined>,
+): string | undefined {
+  return env['HOME'] ?? env['USERPROFILE'];
+}
+
 export function hostTemporaryDirectory(): string {
   return os.tmpdir();
 }
@@ -121,14 +133,6 @@ export function hostFileLstatSync(filePath: string): fs.Stats {
 
 export function readHostSymbolicLinkSync(filePath: string): string {
   return fs.readlinkSync(filePath);
-}
-
-/**
- * The canonical form of a path on this host: every symlink and `.`/`..` segment resolved, so two
- * spellings of one directory answer with one value. Throws when the host cannot resolve the path.
- */
-export function canonicalHostPathSync(candidatePath: string): string {
-  return fs.realpathSync(candidatePath);
 }
 
 export function removeHostFileSync(filePath: string): void {
