@@ -263,11 +263,14 @@ export class SnapshotBridgeManager {
       if (stop.aborted) throw closedSourceRefusal();
       const remainingMs = remainingSnapshotSourceMs(deadline, 'bridge-connect-deadline');
       if (!session.process.isAlive()) {
-        throw await this.bridgeExitOrClose(session, stop);
+        throw await this.bridgeExitOrClose(session, deadline, stop);
       }
       let socket: SnapshotSourceSocket;
       try {
-        socket = await this.connectOnce(session, remainingMs, deadline);
+        socket = await this.host.connect(session.socketPath, {
+          signal: deadline.signal,
+          timeoutMs: Math.min(CONNECT_ATTEMPT_TIMEOUT_MS, remainingMs),
+        });
       } catch (error) {
         await this.awaitConnectRetry(deadline, stop, error);
         continue;
@@ -282,61 +285,65 @@ export class SnapshotBridgeManager {
     }
   }
 
-  private async connectOnce(
-    session: BridgeSession,
-    remainingMs: number,
-    deadline: SnapshotSourceDeadline,
-  ): Promise<SnapshotSourceSocket> {
-    return await this.host.connect(session.socketPath, {
-      signal: deadline.signal,
-      timeoutMs: Math.min(CONNECT_ATTEMPT_TIMEOUT_MS, remainingMs),
-    });
-  }
-
   /**
-   * Why the helper is gone, unless a close ends that question first.
+   * Why the helper is gone, unless the close or the request's own budget ends that question first.
    *
    * The exit status is not free to wait for: the host settles it when the child's own pipes close, and a
-   * descendant that inherited one can hold it pending indefinitely. A close cannot make that answer
-   * arrive, so the close answers here: the refused creation goes on to stop what it started and names the
-   * close, while the read nobody waits on still records the exit if it ever settles.
+   * descendant that inherited one can hold it pending indefinitely. Neither a close nor a spent budget can
+   * make that answer arrive, so each answers here and the refused work goes on to stop what it started.
+   * Whoever stops waiting leaves the read behind as an observer, so a status that answers late is still
+   * diagnosed.
    *
-   * The close only wins while the status is still pending, so the race subscribes to the raw status and
-   * not to its typed conversion: converting takes a turn of its own, and a close landing in that turn
-   * must not overwrite an answer the helper already gave.
+   * The close and the budget win only while the status is still pending, so the race subscribes to the raw
+   * status and not to its typed conversion: converting takes a turn of its own, and an answer landing in
+   * that turn must not be overwritten.
    */
   private async bridgeExitOrClose(
     session: BridgeSession,
+    deadline: SnapshotSourceDeadline,
     stop: AbortSignal,
   ): Promise<SnapshotSourceError> {
+    // Read the budget before anything is subscribed: a deadline that is already spent ends the question
+    // here, with no listener and no timer to take back.
+    const remainingMs = remainingSnapshotSourceMs(deadline, 'bridge-exit-deadline');
     let refuse!: () => void;
     const refusal = new Promise<'closed'>((resolve) => {
       refuse = () => resolve('closed');
     });
     if (stop.aborted) refuse();
     else stop.addEventListener('abort', refuse, { once: true });
+    const stopWaiting = new AbortController();
+    const budget = waitForSnapshotSourceDelay(
+      deadline,
+      remainingMs,
+      'bridge-exit-deadline',
+      stopWaiting.signal,
+    ).then(
+      () => 'timeout' as const,
+      (error: unknown) => ({ cancelled: asSnapshotSourceError(error) }),
+    );
     try {
-      if (!(await this.exitStatusOrClose(session.process, refusal))) {
+      // The raw status keeps its place in the race: its typed conversion takes a turn of its own, and an
+      // answer landing in that turn must not lose. Only the budget is pre-tagged, and a rejected status
+      // is an answer too — `bridgeProcessExited` reads the winner and keeps its typed failure.
+      const answer = await Promise.race([session.process.wait, refusal, budget]).catch(
+        () => 'status' as const,
+      );
+      if (answer === 'closed') {
+        // The close stops waiting on the status, but the read stays subscribed as an observer: a helper
+        // that died on its own keeps its exit code and bounded log if the status ever answers.
+        void bridgeProcessExited(this.host, session.process).catch(() => {});
         throw closedSourceRefusal();
       }
+      if (answer === 'timeout') {
+        void bridgeProcessExited(this.host, session.process).catch(() => {});
+        throw snapshotSourceError('timeout', 'bridge-exit-deadline');
+      }
+      if (typeof answer === 'object' && 'cancelled' in answer) throw answer.cancelled;
       return await bridgeProcessExited(this.host, session.process);
     } finally {
       stop.removeEventListener('abort', refuse);
-    }
-  }
-
-  /**
-   * Whether the helper answered the status question first — either outcome counts, and a rejected status
-   * is an answer too: `bridgeProcessExited` reads the winner and keeps its typed failure.
-   */
-  private async exitStatusOrClose(
-    bridgeProcess: SnapshotSourceProcess,
-    refusal: Promise<'closed'>,
-  ): Promise<boolean> {
-    try {
-      return (await Promise.race([bridgeProcess.wait, refusal])) !== 'closed';
-    } catch {
-      return true;
+      stopWaiting.abort();
     }
   }
 
