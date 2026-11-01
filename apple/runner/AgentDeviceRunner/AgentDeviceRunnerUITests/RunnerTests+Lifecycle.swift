@@ -52,7 +52,7 @@ extension RunnerTests {
   /// session window falls to the system surface's window, which is what the home screen is. macOS
   /// keeps the host display it always recorded.
   func captureRunnerFrame(app: XCUIApplication) -> RunnerImage? {
-    switch captureRunnerFrameResult(app: app, litPanel: requestSurfacePanel) {
+    switch captureRunnerFrameResult(app: app, litPanel: requestLitPanel) {
     case .success(let captured):
       return captured.image
     case .failure:

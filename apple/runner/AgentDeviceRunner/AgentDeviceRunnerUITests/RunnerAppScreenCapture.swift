@@ -34,6 +34,11 @@ enum RunnerAppScreenCaptureFailure: String, Error {
     }
   }
 
+  /// The refusal as a runner reply.
+  var response: Response {
+    Response(ok: false, error: ErrorPayload(code: rawValue, message: message, hint: hint))
+  }
+
   var message: String {
     switch self {
     case .unresolvedWindow:

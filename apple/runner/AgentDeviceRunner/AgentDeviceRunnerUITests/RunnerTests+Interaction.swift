@@ -168,8 +168,10 @@ extension RunnerTests {
 
   func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
-    let element = app.descendants(matching: .any).matching(predicate).firstMatch
-    return element.exists ? element : nil
+    return elementQueries(app: app, matching: .any)
+      .lazy
+      .map { $0.matching(predicate).firstMatch }
+      .first { $0.exists }
   }
 
   func findElement(
@@ -198,7 +200,8 @@ extension RunnerTests {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
     }
 
-    let matches = app.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
+    let matches = elementQueries(app: app, matching: .any)
+      .flatMap { $0.matching(predicate).allElementsBoundByIndex }
       .filter(\.exists)
     let facts = matches.map { element in
       SelectorCandidateFacts(
@@ -236,7 +239,8 @@ extension RunnerTests {
     if frame.isEmpty {
       return false
     }
-    return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: app.frame)
+    let windowFrame = requestLitPanel == nil ? app.frame : onScreenWindowFrame(app: app)
+    return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: windowFrame)
   }
 
   // The tappable on-screen viewport. app.frame is unsuitable: it unions
@@ -260,7 +264,8 @@ extension RunnerTests {
   /// (`RunnerResolveWindowDisplayID`).
   func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
     guard let resolved = resolveRunnerWindowElement(app: app) else {
-      return (nil, app.frame)
+      // A lit-panel request never falls back to the application, whose frame names another panel.
+      return (nil, requestLitPanel == nil ? app.frame : .null)
     }
     return (resolved.window, resolved.frame)
   }
@@ -269,11 +274,10 @@ extension RunnerTests {
   /// back to `app.frame`: when the windows query fails because XCTest cannot serialize the app's
   /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
-    if requestSurfacePanel != nil {
-      if bookedLitPanelSurface == nil {
-        _ = bookRequestLitPanelSurface(app: app)
-      }
-      return bookedLitPanelSurface.map { ($0.window, $0.frame) }
+    if requestLitPanel != nil {
+      _ = bookRequestLitPanelSurface(app: app)
+      guard let booked = litPanelState.surface, booked.app === app else { return nil }
+      return (booked.window, booked.frame)
     }
     for window in app.windows.allElementsBoundByIndex where window.exists {
       let frame = window.frame
@@ -366,7 +370,8 @@ extension RunnerTests {
       }
     }
 
-    let candidates = app.descendants(matching: .any).allElementsBoundByIndex
+    let candidates = elementQueries(app: app, matching: .any)
+      .flatMap { $0.allElementsBoundByIndex }
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
@@ -632,7 +637,7 @@ extension RunnerTests {
     // anchor misses the button. Reference frames and the synthesized display ID still resolve
     // through `resolveRunnerWindow`. A foldable anchors at the lit panel's window instead, because
     // the app origin names the outer panel whichever one is lit.
-    if requestSurfacePanel == nil {
+    if requestLitPanel == nil {
       let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
       return origin.withOffset(CGVector(dx: x, dy: y))
     }

@@ -33,13 +33,20 @@ export async function runAppleRunnerCommand(
     return await runHostBoundAppleRunnerCommand(device, command, options);
   }
   const { resolveRunnerRequestLitPanel } = await import('../foldable/runner-panel.ts');
+  const startedAt = Date.now();
   const litPanel = await resolveRunnerRequestLitPanel(device, {
     signal: resolveRunnerRequestSignal(options),
     requestTimeoutMs: command.timeoutMs,
   });
+  if (!litPanel) return await runHostBoundAppleRunnerCommand(device, command, options);
+  // The runner gets what the panel read left of the request's budget.
+  const timeoutMs =
+    command.timeoutMs === undefined
+      ? undefined
+      : Math.max(1, command.timeoutMs - (Date.now() - startedAt));
   return await runHostBoundAppleRunnerCommand(
     device,
-    litPanel ? { ...command, litPanel } : command,
+    timeoutMs === undefined ? { ...command, litPanel } : { ...command, litPanel, timeoutMs },
     options,
   );
 }

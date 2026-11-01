@@ -1,14 +1,23 @@
 import XCTest
 
-// The lit panel of the command in flight (ADR 0025). Commands run one at a time on
-// `commandExecutionQueue`, where the slot is written, and the surface resolvers read it on main.
-// A recording pump outlives its command, so `recordStart` reads the panel once and carries it.
-extension RunnerTests {
-  struct LitPanelSurface {
-    let window: XCUIElement
-    let frame: CGRect
-  }
+// The lit panel of the command in flight (ADR 0025). It is main-owned, and `executeAccepted` writes
+// it onto the main queue ahead of the command's own main-thread work. Main work a previous command
+// abandoned therefore runs first and still reads that command's panel. A recording pump outlives
+// its command, so `recordStart` reads the panel once and carries it.
+struct LitPanelSurface {
+  let app: XCUIApplication
+  let window: XCUIElement
+  let frame: CGRect
+}
 
+/// The command's lit panel and what it booked on it. Read and written only on the main thread.
+final class RunnerLitPanelState {
+  var panel: RunnerLitPanel?
+  var surface: LitPanelSurface?
+  var windows: (app: XCUIApplication, elements: [XCUIElement])?
+}
+
+extension RunnerTests {
   func setRequestLitPanel(from command: Command) {
     var panel: RunnerLitPanel?
     if let fact = command.litPanel, fact.displayId != 0, fact.widthPt.isFinite, fact.heightPt.isFinite,
@@ -16,51 +25,49 @@ extension RunnerTests {
     {
       panel = RunnerLitPanel(displayID: fact.displayId, widthPt: fact.widthPt, heightPt: fact.heightPt)
     }
-    requestPanelLock.lock()
-    requestLitPanel = panel
-    requestLitSurface = nil
-    requestPanelLock.unlock()
-  }
-
-  /// The lit panel the current request named, or nil for a single-panel request.
-  var requestSurfacePanel: RunnerLitPanel? {
-    requestPanelLock.lock()
-    defer { requestPanelLock.unlock() }
-    return requestLitPanel
-  }
-
-  /// Books the lit panel's window for the rest of the request, or returns why it cannot. A request
-  /// that named no panel books nothing. Once booked, every surface read in the request answers with
-  /// this window, so no later read can fall back to the application's own coordinates.
-  func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
-    guard let litPanel = requestSurfacePanel else { return nil }
-    switch Self.resolveLitPanelSurface(app: app, litPanel: litPanel) {
-    case .failure(let refusal):
-      return refusal
-    case .success(let surface):
-      requestPanelLock.lock()
-      requestLitSurface = surface
-      requestPanelLock.unlock()
-      return nil
+    let state = litPanelState
+    let write = {
+      state.panel = panel
+      state.surface = nil
+      state.windows = nil
+    }
+    if Thread.isMainThread {
+      write()
+    } else {
+      DispatchQueue.main.async(execute: write)
     }
   }
 
-  var bookedLitPanelSurface: LitPanelSurface? {
-    requestPanelLock.lock()
-    defer { requestPanelLock.unlock() }
-    return requestLitSurface
-  }
+  /// The lit panel the current request named, or nil for a single-panel request. Main only.
+  var requestLitPanel: RunnerLitPanel? { litPanelState.panel }
 
-  static func resolveLitPanelSurface(
-    app: AnyObject,
-    litPanel: RunnerLitPanel
-  ) -> Result<LitPanelSurface, RunnerAppScreenCaptureFailure> {
+  /// Books `app`'s window on the lit panel for the rest of the request, or returns why it cannot. A
+  /// request that named no panel books nothing. Later surface reads of `app` answer with this
+  /// window, so none of them can fall back to the application's own coordinates.
+  func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
+    guard let litPanel = requestLitPanel else { return nil }
+    if let booked = litPanelState.surface, booked.app === app { return nil }
     var window: AnyObject?
     var frame = CGRect.null
     let failure = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame)
     guard failure == .none, let element = window as? XCUIElement else {
-      return .failure(RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure))
+      return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    return .success(LitPanelSurface(window: element, frame: frame))
+    litPanelState.surface = LitPanelSurface(app: app, window: element, frame: frame)
+    return nil
+  }
+
+  /// Where an element read searches: the application, or on a lit-panel request only the windows
+  /// proven on the lit display, so a dark-panel element can never answer.
+  func elementSearchRoots(app: XCUIApplication) -> [XCUIElement] {
+    guard let litPanel = requestLitPanel else { return [app] }
+    if let cached = litPanelState.windows, cached.app === app { return cached.elements }
+    let windows = RunnerCopyLitPanelWindows(app, litPanel).compactMap { $0 as? XCUIElement }
+    litPanelState.windows = (app, windows)
+    return windows
+  }
+
+  func elementQueries(app: XCUIApplication, matching type: XCUIElement.ElementType) -> [XCUIElementQuery] {
+    elementSearchRoots(app: app).map { $0.descendants(matching: type) }
   }
 }

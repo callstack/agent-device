@@ -5,6 +5,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
+  IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
   IOS_FOLDABLE_ORIENTATION_READ_TIMEOUT_MS,
   IOS_FOLDABLE_ORIENTATION_SETTLE_ATTEMPTS,
 } from '../core/config.ts';
@@ -29,8 +30,8 @@ const ORIENTATION_UNVERIFIED_HINT =
 /** Resolved panel counts are hardware facts, so each simulator is probed once per daemon. */
 const multiPanelByDevice = new Map<string, boolean>();
 
-// Every surface command reads the panel table, so one that would not answer is not asked again
-// for a few seconds: a failing probe can cost its whole timeout.
+// A device whose panel count was never read routes as single-panel. A full-budget read that failed
+// for it is not repeated for a few seconds, because every surface command would pay it again.
 const unansweredPanelTables = createTtlMemo<string, true>({ ttlMs: 5_000 });
 // Reads overlap, so a failure may finish after a read that started later and already resolved.
 // Each read takes a sequence number, and a failure never overrides a newer resolved read.
@@ -66,27 +67,38 @@ export async function isAppleFoldableSimulator(
   return inventory.multiScreen;
 }
 
+export type FoldablePanelTableRead =
+  | { kind: 'multi-panel'; inventory: AppleDisplayInventory }
+  /** A device the `fold` fact refuses, one with one panel, or one whose panel count is unknown. */
+  | { kind: 'single-panel' }
+  /** A device known to have more than one panel whose table did not answer this time. */
+  | { kind: 'unreadable' };
+
 /**
- * One panel-table read of a multi-panel simulator, or undefined for a device the `fold` fact refuses,
- * one known to have a single panel, or a table that would not answer. It records the panel count it
- * reads, so a single-panel simulator pays one read per daemon.
+ * One panel-table read for a surface request. It records the panel count it reads, so a
+ * single-panel simulator pays one read per daemon.
  */
 export async function readFoldablePanelTable(
   device: DeviceInfo,
-  options: { signal?: AbortSignal; timeoutMs?: number },
-): Promise<AppleDisplayInventory | undefined> {
-  if (!appleFoldableFacts(device).setFoldPose.available) return undefined;
-  if (multiPanelByDevice.get(device.id) === false) return undefined;
-  if (unansweredPanelTables.get(device.id)) return undefined;
+  options: { signal?: AbortSignal; timeoutMs: number },
+): Promise<FoldablePanelTableRead> {
+  if (!appleFoldableFacts(device).setFoldPose.available) return { kind: 'single-panel' };
+  const known = multiPanelByDevice.get(device.id);
+  if (known === false) return { kind: 'single-panel' };
+  if (known === undefined && unansweredPanelTables.get(device.id)) return { kind: 'single-panel' };
   const read = ++panelTableReads;
   const inventory = await queryAppleDisplayInventory(device, options);
   if (inventory.unresolved) {
+    if (known) return { kind: 'unreadable' };
     const newerReadResolved = (latestResolvedRead.get(device.id) ?? 0) > read;
-    if (!options.signal?.aborted && !newerReadResolved) unansweredPanelTables.set(device.id, true);
-    return undefined;
+    const fullBudget = options.timeoutMs >= IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS;
+    if (fullBudget && !options.signal?.aborted && !newerReadResolved) {
+      unansweredPanelTables.set(device.id, true);
+    }
+    return { kind: 'single-panel' };
   }
   recordPanelTable(device, inventory, read);
-  return inventory.multiScreen ? inventory : undefined;
+  return inventory.multiScreen ? { kind: 'multi-panel', inventory } : { kind: 'single-panel' };
 }
 
 /** Rotates a foldable simulator through guest HID and verifies the rotation through CoreDevice. */

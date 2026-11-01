@@ -89,13 +89,10 @@ final class RunnerTests: XCTestCase {
   let app = XCUIApplication()
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
   let mainOwned = RunnerMainOwnedState()
+  let litPanelState = RunnerLitPanelState()
   // Set while serving a command that had to re-activate the bound app, and stamped onto that
   // command's response before it leaves the execution queue (#2682).
   var pendingTargetActivation: TargetActivationFactPayload?
-  // Written on the command queue and read on main; see RunnerRequestPanel.swift.
-  let requestPanelLock = NSLock()
-  var requestLitPanel: RunnerLitPanel?
-  var requestLitSurface: LitPanelSurface?
   // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
   // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
   // input is a scoped witness for the immediately-following bare type; lifecycle and non-text

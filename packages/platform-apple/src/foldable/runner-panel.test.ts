@@ -3,6 +3,7 @@ import { beforeEach, test, vi } from 'vitest';
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { withAppleRunnerProvider } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../foldable/fold-helper-cache.ts', () => ({
   ensureFoldHelperBinary: vi.fn(async () => ({ path: '/cache/fold-helper' })),
@@ -156,7 +157,10 @@ test('the probe takes the request timeout when it is the shorter one', async () 
 });
 
 test('a surface command probes the panel table within its own timeout', async () => {
-  answering(IPHONE_DUO_CLOSED);
+  mockPanelTable.mockImplementation(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return { ok: true as const, payload: IPHONE_DUO_CLOSED };
+  });
   const device = simulator({ name: 'iPhone Duo' });
   const calls: RecordedRunnerCall[] = [];
   await withAppleRunnerProvider(recordingRunnerProvider(calls), { deviceId: device.id }, () =>
@@ -164,6 +168,30 @@ test('a surface command probes the panel table within its own timeout', async ()
   );
   assert.equal(mockPanelTable.mock.lastCall?.[0].timeoutMs, 1_200);
   assert.equal(calls[0]?.command.litPanel?.displayId, 1);
+  const sentTimeoutMs = calls[0]?.command.timeoutMs ?? Number.NaN;
+  assert.ok(sentTimeoutMs > 0 && sentTimeoutMs < 1_200, 'the runner gets what the read left');
+});
+
+test('a known multi-panel device refuses a surface command when its panel table goes unread', async () => {
+  const device = simulator({ name: 'iPhone Duo' });
+  const calls: RecordedRunnerCall[] = [];
+  const run = () =>
+    withAppleRunnerProvider(recordingRunnerProvider(calls), { deviceId: device.id }, () =>
+      runAppleRunnerCommand(device, { command: 'tap', x: 10, y: 20 }),
+    );
+  answering(IPHONE_DUO_CLOSED);
+  await run();
+  assert.equal(calls[0]?.command.litPanel?.displayId, 1);
+
+  mockPanelTable.mockRejectedValue(new Error('devicectl does not report displays'));
+  await assert.rejects(run(), (error: AppError) => {
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'panel-table-unreadable');
+    assert.equal(error.details?.runnerErrorCode, 'APP_SCREEN_UNRESOLVED');
+    assert.equal(error.details?.dispatched, 'no');
+    return true;
+  });
+  assert.equal(calls.length, 1, 'the refused command never reached the runner');
 });
 
 test('a slow failed read does not back off over a newer read that resolved', async () => {

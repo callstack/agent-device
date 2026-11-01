@@ -255,9 +255,10 @@ extension RunnerTests {
   ) -> Result<Data, RunnerAppScreenCaptureFailure> {
 #if os(iOS)
     return Self.navigationVisualSample(
-      from: context.resolvedWindow == nil
+      // A lit-panel request never takes the sole-screen route: a foldable has no sole screen.
+      from: context.resolvedWindow == nil && requestLitPanel == nil
         ? captureSoleAppScreen(app: app)
-        : captureResolvedAppScreen(app: app, litPanel: requestSurfacePanel),
+        : captureResolvedAppScreen(app: app, litPanel: requestLitPanel),
       encoding: { runnerPngData(for: $0.image) }
     )
 #else

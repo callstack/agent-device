@@ -162,10 +162,17 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
 #endif
-    // Only the tree tier can prove which panel a window is on, so a multi-panel request runs it alone.
-    let plan = plan == Self.regularVisiblePlan && requestSurfacePanel != nil ? [.recursiveTree] : plan
+    // Only the tree tier can prove which panel a window is on, so a multi-panel request runs it
+    // alone, and a pin to another backend is refused rather than dropped.
+    var surfacePlan = plan
+    if target.litPanelSurface != nil {
+      if let pinned = options.preferredBackend, pinned != SnapshotBackendKind.recursiveTree.rawValue {
+        throw Self.litPanelBackendPinFailure(pinned)
+      }
+      surfacePlan = [.recursiveTree]
+    }
     let effective = Self.effectiveSnapshotCapturePlan(
-      plan,
+      surfacePlan,
       xCTestChannelPenalized: xCTestChannelPenalized,
       xCTestRecoveryProbeDue: xCTestRecoveryProbeDue,
       availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform)),
@@ -491,6 +498,14 @@ extension RunnerTests {
   /// at its own deadline is rejected as a timeout whatever it collected: keeping its payload as the
   /// fallback is right, accepting it is not, and a node count cannot tell a finished capture from a
   /// sweep the slice cut short (#2781).
+  static func litPanelBackendPinFailure(_ pinned: String) -> SnapshotCaptureFailure {
+    SnapshotCaptureFailure(
+      code: "UNSUPPORTED_OPERATION",
+      message: "a multi-panel snapshot runs only the tree backend, so the \(pinned) backend cannot be pinned",
+      hint: "Snapshot without a backend pin: only the tree backend proves which panel a window is on (ADR 0025)."
+    )
+  }
+
   static func snapshotTierRejectionReason(
     outcome: SnapshotTierOutcome,
     kind: SnapshotBackendKind,

@@ -16,10 +16,7 @@ extension RunnerTests {
     }
     // A screenshot resolves its own surface, the target app and then the system surface.
     if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: refusal.rawValue, message: refusal.message, hint: refusal.hint)
-      )
+      return refusal.response
     }
     switch command.command {
     case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
@@ -496,7 +493,7 @@ extension RunnerTests {
       // which app is foregrounded in order to see which display it is on (#2728).
       switch captureObservedScreen(
         app: resolveAppWithoutActivation(command: command),
-        litPanel: requestSurfacePanel
+        litPanel: requestLitPanel
       ) {
       case .failure(let failure):
         return Response(

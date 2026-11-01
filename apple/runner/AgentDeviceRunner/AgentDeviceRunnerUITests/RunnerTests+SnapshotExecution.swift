@@ -18,14 +18,19 @@ extension RunnerTests {
       case .response(let response):
         return .response(response)
       case .context(let context):
+        if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
+          return .response(refusal.response)
+        }
+        var target = context.observation == nil
+          ? self.takeSnapshotCaptureTarget(app: context.app)
+          : SnapshotCaptureTarget(
+            app: context.app,
+            bundleId: command.appBundleId?.trimmedNonEmpty,
+            processIdentifier: Self.processIdentifier(of: context.app)
+          )
+        target.litPanelSurface = self.requestLitPanel == nil ? nil : self.litPanelState.surface
         return .capture(
-          context.observation == nil
-            ? self.takeSnapshotCaptureTarget(app: context.app)
-            : SnapshotCaptureTarget(
-              app: context.app,
-              bundleId: command.appBundleId?.trimmedNonEmpty,
-              processIdentifier: Self.processIdentifier(of: context.app)
-            ),
+          target,
           systemSurface: context.systemSurface,
           observation: context.observation
         )
@@ -99,14 +104,6 @@ extension RunnerTests {
   ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
-      let litPanelRefusal = try runMainThreadWork(
-        "snapshot_lit_panel",
-        timeout: Self.mainThreadExecutionTimeout,
-        timeoutError: Self.mainThreadExecutionTimeoutError
-      ) {
-        self.bookRequestLitPanelSurface(app: target.app)
-      }
-      if let litPanelRefusal { throw litPanelRefusal }
       var payload: DataPayload
       if options.raw {
         payload = try snapshotRaw(target: target, options: options)
@@ -137,10 +134,7 @@ extension RunnerTests {
       setNeedsPostSnapshotInteractionDelay()
       return Response(ok: true, data: payload)
     } catch let refusal as RunnerAppScreenCaptureFailure {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: refusal.rawValue, message: refusal.message, hint: refusal.hint)
-      )
+      return refusal.response
     } catch let failure as SnapshotCaptureFailure {
       invalidateCachedTargetAfterSnapshotFailure()
       return Response(

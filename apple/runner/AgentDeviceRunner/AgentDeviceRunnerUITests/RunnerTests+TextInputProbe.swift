@@ -178,7 +178,8 @@ extension RunnerTests {
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
-    for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
+    let inputTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
+    for query in inputTypes.flatMap({ elementQueries(app: app, matching: $0) }) {
       if shouldStop() { break }
       let candidates = query.allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS

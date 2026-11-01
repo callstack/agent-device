@@ -343,6 +343,22 @@ extension RunnerTests {
     XCTAssertFalse(absent.resolved)
   }
 
+  /// The one owner of the windows an element read may search: those that report the lit display.
+  /// A window that is gone or names no display is left out.
+  func testLitPanelWindowsAreTheWindowsThatReportTheLitDisplay() {
+    let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let dock = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let windows: [NSObject] = [
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1), home, ScreenlessWindowFixture(),
+      DisplayWindowFixture(frame: Self.innerHome, displayID: 3, present: false), dock,
+    ]
+    let lit = RunnerCopyLitPanelWindows(
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel)
+    XCTAssertEqual(lit.count, 2)
+    XCTAssertTrue((lit.first as AnyObject) === home)
+    XCTAssertTrue((lit.last as AnyObject) === dock)
+  }
+
   func testLitPanelScreenIsTheScreenTheChosenWindowReported() {
     let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
     var screen: AnyObject?

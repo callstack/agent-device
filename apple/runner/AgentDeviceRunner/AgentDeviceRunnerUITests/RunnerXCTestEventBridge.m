@@ -224,6 +224,16 @@ static RunnerApplicationScreenFailure RunnerReadLitPanelCandidate(
   return RunnerReadResolvedWindowScreen(candidate, readFrame, screen, displayID);
 }
 
+// The application's window list, or nil when the query raises or answers no list.
+static NSArray *_Nullable RunnerCopyWindowList(id application) {
+  __block NSArray *windows = nil;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    id elements = [[application valueForKey:@"windows"] valueForKey:@"allElementsBoundByIndex"];
+    windows = [elements isKindOfClass:NSArray.class] ? elements : nil;
+  }];
+  return exception == nil ? windows : nil;
+}
+
 static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
   id application,
   RunnerLitPanel litPanel,
@@ -234,12 +244,8 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
   *window = nil;
   *windowFrame = CGRectNull;
   *screen = nil;
-  __block NSArray *windows = nil;
-  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
-    id elements = [[application valueForKey:@"windows"] valueForKey:@"allElementsBoundByIndex"];
-    windows = [elements isKindOfClass:NSArray.class] ? elements : nil;
-  }];
-  if (exception != nil || windows == nil) {
+  NSArray *windows = RunnerCopyWindowList(application);
+  if (windows == nil) {
     return RunnerApplicationScreenFailureUnresolvedWindow;
   }
   // A window the walk could not place may be the panel's surface, so it refuses every booking. A
@@ -307,6 +313,21 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
     chosenFrame.size.height
   );
   return outcome;
+}
+
+NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel) {
+  NSMutableArray *lit = [NSMutableArray array];
+  for (id candidate in RunnerCopyWindowList(application)) {
+    CGRect frame = CGRectNull;
+    id screen = nil;
+    NSUInteger displayID = 0;
+    if (RunnerReadLitPanelCandidate(candidate, &frame, &screen, &displayID) ==
+          RunnerApplicationScreenFailureNone &&
+        displayID == litPanel.displayID) {
+      [lit addObject:candidate];
+    }
+  }
+  return lit;
 }
 
 RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(

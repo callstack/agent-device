@@ -211,20 +211,11 @@ extension RunnerTests {
       index: 0,
       parentIndex: nil
     )
-    // A multi-panel device lists windows on both panels under one application, and the application's
-    // frame names one panel. The screen is the lit panel's native box and only the windows proven on
-    // its display (ADR 0025).
-    let litPanel = requestSurfacePanel
-    var rootChildren = context.rootSnapshot.children
-    if let litPanel {
-      root.rect = SnapshotRect(CGRect(x: 0, y: 0, width: litPanel.widthPt, height: litPanel.heightPt))
-      rootChildren = Self.windowsOnLitDisplay(rootChildren, litDisplayID: litPanel.displayID) {
-        Self.snapshotDisplayID($0)
-      }
-      if rootChildren.isEmpty {
-        throw RunnerAppScreenCaptureFailure.unresolvedScreen
-      }
+    // The application's frame names one panel; the screen is the booked window's box (ADR 0025).
+    if requestLitPanel != nil, let surface = litPanelState.surface {
+      root.rect = SnapshotRect(surface.frame)
     }
+    let rootChildren = try litPanelRootChildren(context.rootSnapshot)
     var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
       appendCollapsedTabFallbackNodes(
@@ -304,6 +295,19 @@ extension RunnerTests {
       ),
       outcome
     )
+  }
+
+  /// A multi-panel device lists windows on both panels under one application, so a lit-panel
+  /// snapshot descends only into the windows proven on the lit display, and refuses when none is.
+  func litPanelRootChildren(_ root: XCUIElementSnapshot) throws -> [XCUIElementSnapshot] {
+    guard let litPanel = requestLitPanel else { return root.children }
+    let lit = Self.windowsOnLitDisplay(root.children, litDisplayID: litPanel.displayID) {
+      Self.snapshotDisplayID($0)
+    }
+    if lit.isEmpty {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
+    return lit
   }
 
   /// The windows a lit-panel snapshot keeps: only those whose reported display is the lit one. A
@@ -440,7 +444,8 @@ extension RunnerTests {
     func walk(
       _ snapshot: XCUIElementSnapshot,
       depth: Int,
-      parentIndex: Int?
+      parentIndex: Int?,
+      children: [XCUIElementSnapshot]? = nil
     ) throws {
       if let limit = hint.rawTraversalDepth, depth > limit { return }
 
@@ -459,8 +464,7 @@ extension RunnerTests {
         )
       )
 
-      let children = snapshot.children
-      for child in children {
+      for child in children ?? snapshot.children {
         try walk(
           child,
           depth: depth + 1,
@@ -469,10 +473,12 @@ extension RunnerTests {
       }
     }
 
+    // Raw keeps the root's reported frame, and still never descends into the dark panel.
     try walk(
       context.rootSnapshot,
       depth: 0,
-      parentIndex: nil
+      parentIndex: nil,
+      children: try litPanelRootChildren(context.rootSnapshot)
     )
     return SnapshotAcquisition(
       hint: hint,

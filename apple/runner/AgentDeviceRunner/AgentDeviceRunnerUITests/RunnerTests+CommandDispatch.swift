@@ -434,7 +434,7 @@ extension RunnerTests {
           fps: command.fps.map { Int32($0) }
         )
         // The pump outlives this request, so the clip keeps the panel its `recordStart` named.
-        let clipLitPanel = requestSurfacePanel
+        let clipLitPanel = requestLitPanel
         try startRecording(recorder) { [weak self] in
           guard let self else { return .failure(.unresolvedScreen) }
           return self.captureRunnerFrameResult(app: activeApp, litPanel: clipLitPanel)
