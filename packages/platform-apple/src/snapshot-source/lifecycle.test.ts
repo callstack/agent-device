@@ -376,6 +376,100 @@ test('the manager rejects a cached target replaced before acquisition begins', a
   await manager.close();
 });
 
+test('a close during the bridge directory setup leaves no bridge and refuses the capture', async () => {
+  const paused = createPause();
+  const fixture = createLifecycleFixture({ pauseAtDirectorySetup: paused.wait });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const request = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(
+    () => fixture.directorySetups.length === 1,
+    'fixture never reached the bridge directory setup',
+  );
+
+  const closing = manager.close();
+  paused.release();
+
+  await assert.rejects(request, isClosedSourceFailure);
+  await closing;
+  // The creation was refused before it started its helper: nothing was left to reap.
+  assert.equal(fixture.processes.length, 0);
+  await assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline(undefined, 2000) }),
+    isClosedSourceFailure,
+  );
+  assert.equal(fixture.processes.length, 0);
+});
+
+test('a close while the bridge is connecting stops the helper it started and refuses the capture', async () => {
+  const paused = createPause();
+  const fixture = createLifecycleFixture({ pauseAtConnect: paused.wait });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const request = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(() => fixture.connects.length === 1, 'fixture never reached the connect');
+
+  const closing = manager.close();
+  paused.release();
+
+  await assert.rejects(request, isClosedSourceFailure);
+  await closing;
+  // The helper and its connection were already started, so the refused creation had to stop both.
+  assert.equal(fixture.processes.length, 1);
+  assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+  assert.equal(fixture.processes[0]!.alive, false);
+  assert.equal(fixture.sockets.length, 1);
+  assert.equal(fixture.sockets[0]!.destroyed, true);
+  await manager.close();
+  assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+});
+
+test('a close refuses a queued capture instead of letting it wait for a stopped bridge', async () => {
+  const paused = createPause();
+  const fixture = createLifecycleFixture({ pauseAtConnect: paused.wait });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const creating = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 2000 },
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(() => fixture.connects.length === 1, 'fixture never reached the connect');
+  const queued = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 2000 },
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  const closedAt = Date.now();
+
+  const closing = manager.close();
+
+  // The queued capture is refused by the close itself: waiting for the turn would keep it behind a
+  // creation the close has already ended.
+  await assert.rejects(queued, isClosedSourceFailure);
+  assert.ok(Date.now() - closedAt < 100);
+  assert.equal(fixture.sockets.length, 0);
+  paused.release();
+
+  await assert.rejects(creating, isClosedSourceFailure);
+  await closing;
+  assert.equal(fixture.processes.length, 1);
+  assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+});
+
 test('the manager rejects a tree when the target process changes during acquisition', async () => {
   const fixture = createLifecycleFixture({ targetStartTimes: ['start-1', 'start-2'] });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -408,6 +502,10 @@ type LifecycleFixture = {
   diagnostics: Array<Parameters<SnapshotSourceHost['emitDiagnostic']>[0]>;
   socketPaths: string[];
   startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
+  /** The directory each bridge session setup asked the host to create, in order. */
+  directorySetups: string[];
+  /** The socket each bridge connect attempt was for, in order, including one that has not returned. */
+  connects: string[];
 };
 
 function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
@@ -415,11 +513,39 @@ function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
 }
 
 async function waitForDispatch(fixture: LifecycleFixture): Promise<void> {
+  await waitForFixture(
+    () => fixture.sockets[0]?.writes === 1,
+    'Fixture request was not dispatched',
+  );
+}
+
+async function waitForFixture(condition: () => boolean, message: string): Promise<void> {
   const startedAt = Date.now();
-  while (fixture.sockets[0]?.writes !== 1) {
-    if (Date.now() - startedAt >= 1000) throw new Error('Fixture request was not dispatched');
+  while (!condition()) {
+    if (Date.now() - startedAt >= 1000) throw new Error(message);
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
+}
+
+function createPause(): Readonly<{ wait: () => Promise<void>; release: () => void }> {
+  let release!: () => void;
+  const resumed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    wait: async () => {
+      await resumed;
+    },
+    release,
+  };
+}
+
+function isClosedSourceFailure(error: unknown): boolean {
+  return (
+    error instanceof SnapshotSourceError &&
+    error.failureKind === 'unsupported' &&
+    error.failureCode === 'source-closed'
+  );
 }
 
 function createLifecycleFixture(
@@ -430,6 +556,10 @@ function createLifecycleFixture(
     responseGeneration?: string;
     responseErrorKind?: string;
     targetStartTimes?: Array<string | null>;
+    /** Holds the bridge's directory setup open so a test can close the manager inside it. */
+    pauseAtDirectorySetup?: () => Promise<void>;
+    /** Holds a bridge connect open so a test can close the manager inside it. */
+    pauseAtConnect?: () => Promise<void>;
   } = {},
 ): LifecycleFixture {
   const processes: FakeProcess[] = [];
@@ -437,10 +567,17 @@ function createLifecycleFixture(
   const diagnostics: LifecycleFixture['diagnostics'] = [];
   const socketPaths: string[] = [];
   const startedTargets: LifecycleFixture['startedTargets'] = [];
+  const directorySetups: string[] = [];
+  const connects: string[] = [];
   const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const host: SnapshotSourceHost = {
     ...realHost,
     emitDiagnostic: (event) => diagnostics.push(event),
+    ensureDirectory: async (directoryPath) => {
+      directorySetups.push(directoryPath);
+      if (options.pauseAtDirectorySetup) await options.pauseAtDirectorySetup();
+      await realHost.ensureDirectory(directoryPath);
+    },
     readTargetProcessStartTime: async () => options.targetStartTimes?.shift() ?? 'target-start',
     start: (startedTarget, _bridgePath, socketPath) => {
       startedTargets.push(startedTarget);
@@ -449,7 +586,9 @@ function createLifecycleFixture(
       processes.push(process);
       return process;
     },
-    connect: async (_socketPath, connectOptions) => {
+    connect: async (socketPath, connectOptions) => {
+      connects.push(socketPath);
+      if (options.pauseAtConnect) await options.pauseAtConnect();
       if (options.connectDelayMs) {
         await new Promise<void>((resolve, reject) => {
           const finish = (error?: SnapshotSourceError) => {
@@ -476,7 +615,16 @@ function createLifecycleFixture(
       return socket;
     },
   };
-  return { host, processes, sockets, diagnostics, socketPaths, startedTargets };
+  return {
+    host,
+    processes,
+    sockets,
+    diagnostics,
+    socketPaths,
+    startedTargets,
+    directorySetups,
+    connects,
+  };
 }
 
 class FakeProcess implements SnapshotSourceProcess {
