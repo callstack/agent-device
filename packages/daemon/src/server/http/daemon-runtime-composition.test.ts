@@ -1,3 +1,4 @@
+import type { DaemonRuntimeDepsInput } from './daemon-runtime-deps.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,11 +16,7 @@ import {
 } from '@agent-device/test-kit';
 import { interactorResolution } from '../../core/interactor-resolution.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
-import {
-  daemonStartupExitCode,
-  startDaemonRuntime,
-  type DaemonRuntimeDepsInput,
-} from './daemon-runtime.ts';
+import { daemonStartupExitCode, startDaemonRuntime } from './daemon-runtime.ts';
 
 // The server builds its own store, so capture that instance: the proof is about the store the
 // server hands to the composition callbacks, not one the test fabricates.

@@ -1,10 +1,10 @@
 export { daemonStartupExitCode, startDaemonRuntime } from './server/http/daemon-runtime.ts';
 export { reportDaemonClose } from './server/http/server-shutdown.ts';
+export type { DaemonRuntimeController } from './server/http/daemon-runtime.ts';
 export type {
   ComposeDaemonRuntimeDeps,
-  DaemonRuntimeController,
   DaemonRuntimeDeps,
-} from './server/http/daemon-runtime.ts';
+} from './server/http/daemon-runtime-deps.ts';
 export type { ShutdownReport } from './server/http/server-shutdown.ts';
 export type { DaemonInvokeFn, DaemonRequest } from './core/daemon-request.ts';
 export type { DaemonPlatformServices } from './core/platform-services.ts';
