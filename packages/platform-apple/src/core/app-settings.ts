@@ -67,6 +67,7 @@ export async function setIosSetting(
   appBundleId: string | undefined,
   options: SettingOptions | undefined,
   env: Readonly<EnvMap>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | void> {
   if (isMacOs(device)) return await setMacOsHostSetting(setting, state, options, env);
   requireSimulatorDevice(device, 'settings');
@@ -105,39 +106,55 @@ export async function setIosSetting(
     case 'wifi': {
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';
-      await withSimulatorStatusBarHeld(device, async () => {
-        await runSimctlForDevice(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
-        invalidateSimulatorStatusBarOverrideCache(device);
-      });
-      return;
-    }
-    case 'airplane': {
-      const enabled = parseSettingState(state);
-      await withSimulatorStatusBarHeld(device, async () => {
-        if (enabled) {
+      // The write waits for the simulator's status bar window: a capture restores the bar it
+      // snapshotted, so a write that landed inside that window would be reverted by that restore.
+      await withSimulatorStatusBarHeld(
+        device,
+        async () => {
           await runSimctlForDevice(device, [
             'status_bar',
             device.id,
             'override',
-            '--dataNetwork',
-            'hide',
             '--wifiMode',
-            'failed',
-            '--wifiBars',
-            '0',
-            '--cellularMode',
-            'failed',
-            '--cellularBars',
-            '0',
-            '--operatorName',
-            '',
+            mode,
           ]);
           invalidateSimulatorStatusBarOverrideCache(device);
-        } else {
-          await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
-          rememberClearedStatusBarOverrides(device);
-        }
-      });
+        },
+        signal,
+      );
+      return;
+    }
+    case 'airplane': {
+      const enabled = parseSettingState(state);
+      await withSimulatorStatusBarHeld(
+        device,
+        async () => {
+          if (enabled) {
+            await runSimctlForDevice(device, [
+              'status_bar',
+              device.id,
+              'override',
+              '--dataNetwork',
+              'hide',
+              '--wifiMode',
+              'failed',
+              '--wifiBars',
+              '0',
+              '--cellularMode',
+              'failed',
+              '--cellularBars',
+              '0',
+              '--operatorName',
+              '',
+            ]);
+            invalidateSimulatorStatusBarOverrideCache(device);
+          } else {
+            await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
+            rememberClearedStatusBarOverrides(device);
+          }
+        },
+        signal,
+      );
       return;
     }
     case 'faceid':

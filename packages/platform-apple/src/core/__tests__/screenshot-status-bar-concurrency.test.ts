@@ -378,6 +378,93 @@ test('a settings write to the status bar waits for the capture window', async ()
   );
 });
 
+test('a settings write queued behind a capture window can still be cancelled', async () => {
+  const device: DeviceInfo = { ...IOS_TEST_SIMULATOR, id: 'sim-bar-cancel' };
+  invalidateSimulatorStatusBarOverrideCache(device);
+  const statusBar = createFakeStatusBarSimctl(device.id, { wifiMode: 'failed', wifiBars: '0' });
+  const abortController = new AbortController();
+
+  await withFakeAppleTool(statusBar.script, async () => {
+    const gate = createCaptureGate();
+    const capturing = captureSimulatorScreenshotWithFallback(
+      device,
+      '/tmp/normalized.png',
+      screenshotOptions(gate, true),
+    );
+    let outcome: unknown = 'still running';
+    try {
+      await gate.entered;
+      const setting = setIosSetting(
+        device,
+        'wifi',
+        'on',
+        undefined,
+        undefined,
+        process.env,
+        abortController.signal,
+      ).catch((error: unknown) => error);
+      await yieldToQueuedWork();
+      abortController.abort(new Error('request canceled'));
+      outcome = await setting;
+      assert.ok(
+        outcome instanceof Error && outcome.message === 'request canceled',
+        `expected the queued write to reject, received: ${String(outcome)}`,
+      );
+    } finally {
+      gate.release();
+      await Promise.allSettled([capturing]);
+    }
+
+    assert.deepEqual(statusBar.overrides(), { wifiMode: 'failed', wifiBars: '0' });
+  });
+});
+
+test('simulators of different device sets keep their own status bar windows', async () => {
+  // `simctl status_bar` is scoped with `--set`, so one udid in two sets is two bars. Records that
+  // name one simulator — same udid and same set — share a window; different sets must not queue.
+  const entered: string[] = [];
+  const gates = { one: createCaptureGate(), two: createCaptureGate() };
+  const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
+    ...IOS_TEST_SIMULATOR,
+    simulatorSetPath: `/sets/${tag}`,
+  });
+
+  await withFakeAppleTool(
+    (args) => {
+      // The `--set` scope lands before `status_bar`, so locate the verb rather than a fixed index.
+      const index = args.indexOf('status_bar');
+      if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+      const verb = args[index + 2];
+      return verb === 'list' ? 'Current Status Bar Overrides:\n=============================' : '';
+    },
+    async () => {
+      const captureFor = (tag: keyof typeof gates) =>
+        captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
+          env: process.env,
+          normalizeStatusBar: true,
+          skipIosSimulatorBootCheck: true,
+          deps: captureDeps(async () => {
+            entered.push(tag);
+            await gates[tag].capture();
+          }),
+        });
+
+      const first = captureFor('one');
+      await gates.one.entered;
+      const second = captureFor('two');
+      try {
+        await yieldToQueuedWork();
+        // Both capture steps run at once: the second set never queued behind the first.
+        assert.deepEqual(entered, ['one', 'two']);
+      } finally {
+        gates.one.release();
+        gates.two.release();
+        await Promise.allSettled([first, second]);
+      }
+    },
+  );
+});
+
 test('a plain simulator capture waits for the normalization window instead of capturing it', async () => {
   const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
   const seenDuringPlainCapture: StatusBarOverrideState[] = [];

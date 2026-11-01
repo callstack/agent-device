@@ -4,7 +4,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
-import { runSimctlForDevice } from './simctl.ts';
+import { runSimctlForDevice, simulatorAddressFor } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
 type RestorableStatusBarOverrides = Partial<
@@ -205,12 +205,14 @@ function hasKnownClearedStatusBarOverrides(device: DeviceInfo): boolean {
 }
 
 /**
- * Key for both the known-cleared cache and the transaction lock. It names a simulator by platform,
- * kind and id, and leaves out the device set, so two records of one simulator share a key and one
- * transaction instead of normalizing the same status bar at once.
+ * Key for both the known-cleared cache and the transaction lock. It names the simulator's whole
+ * address, because that is the thing whose bar the commands write: `runSimctlForDevice` scopes every
+ * status bar command to the device set, so two records of one simulator share one key, and one
+ * simulator of each set gets its own transaction.
  */
 function statusBarSimulatorKey(device: DeviceInfo): string {
-  return `${device.platform}:${device.kind}:${device.id}`;
+  const { simulatorSetPath } = simulatorAddressFor(device);
+  return `${device.platform}:${device.kind}:${device.id}:${simulatorSetPath ?? ''}`;
 }
 
 async function readSimulatorStatusBarOverrides(

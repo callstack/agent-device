@@ -231,7 +231,7 @@ export function createAppleInteractor(
     readClipboard: () => readIosClipboardText(device),
     writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
     setSetting: (setting, state, appId, options) =>
-      setIosSetting(device, setting, state, appId, options, env),
+      setIosSetting(device, setting, state, appId, options, env, runnerOpts.signal),
     readSetting: (setting) => readIosSetting(device, setting),
     readAlert: (options) => readAppleAlert(device, runnerOpts, options, env),
     awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options, env),
