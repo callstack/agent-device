@@ -35,6 +35,8 @@ export type RevylFixtureOptions = Readonly<{
   screen?: Readonly<{ width: number; height: number }>;
   /** Reports no screen size at all, which is what a health answer without the fields reads as. */
   withoutScreen?: boolean;
+  /** Reports `supports_explicit_drag_duration: true`, which a newer worker does. */
+  dragDuration?: boolean;
   /** The body every `hierarchy` answer carries: iOS JSON or Android XML. */
   hierarchy?: string;
   /** The start response body; a run id is generated when absent. */
@@ -234,6 +236,7 @@ export async function startRevylFixtureBackend(
           ...(options.withoutScreen
             ? {}
             : { screen_width: screen.width, screen_height: screen.height }),
+          ...(options.dragDuration ? { supports_explicit_drag_duration: true } : {}),
         },
       };
     }

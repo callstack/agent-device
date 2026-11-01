@@ -8,7 +8,7 @@ customers; a partner integration gets one through Revyl's partner program.
 npm install -g agent-device
 agent-device plugins add @agent-device/revyl
 export REVYL_API_KEY=your-api-key
-agent-device connect revyl --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app https://apps.example.com/MyApp-simulator.zip
+agent-device connect revyl --platform ios --provider-app https://apps.example.com/MyApp-simulator.zip
 agent-device open com.example.app
 agent-device snapshot -i
 agent-device close

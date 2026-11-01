@@ -193,6 +193,28 @@ test('replays a retried GET and never a side-effecting action', async () => {
   assert.equal(attempts, 1, 'a tap is never replayed: it may already have landed');
 });
 
+test('a hierarchy read that Revyl answers with a 500 is replayed', async () => {
+  // Revyl passes the iOS accessibility service's brief empty answer through as a 500; the next read
+  // returns the tree.
+  let attempts = 0;
+  const client = clientResponding(() => {
+    attempts += 1;
+    return attempts === 1
+      ? jsonError(500, 'accessibility unavailable')
+      : new Response('[]', { status: 200 });
+  });
+  assert.equal(await client.getWorkerHierarchy('run-1'), '[]');
+  assert.equal(attempts, 2);
+
+  attempts = 0;
+  const screenshot = clientResponding(() => {
+    attempts += 1;
+    return jsonError(500, 'worker failed');
+  });
+  await assert.rejects(async () => await screenshot.captureWorkerScreenshot('run-1'));
+  assert.equal(attempts, 1, 'only the hierarchy read opts into replaying a 500');
+});
+
 test('a readiness read answers the polling loop on its first attempt', async () => {
   // The readiness loop owns the poll beat and the deadline, so a transport replay in front of these
   // two would hide Revyl's not-ready answer and stall the very wait being polled for.

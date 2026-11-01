@@ -473,10 +473,7 @@ test('usageForCommand resolves remote help topic', async () => {
     help.indexOf('Revyl cloud-device flow'),
     help.indexOf('Local profile flow'),
   );
-  assert.match(
-    revylFlow,
-    /connect revyl --platform ios --device "iPhone 16" --provider-os-version 18\.0 --provider-app https:\/\//,
-  );
+  assert.match(revylFlow, /connect revyl --platform ios --provider-app https:\/\//);
   assert.match(revylFlow, /must be an https URL/);
   assert.match(revylFlow, /agent-device disconnect/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);

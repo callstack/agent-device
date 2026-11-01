@@ -27,8 +27,6 @@ next device command loads the plugin.
 export REVYL_API_KEY=...
 agent-device connect revyl \
   --platform ios \
-  --device "iPhone 16" \
-  --provider-os-version 18.0 \
   --provider-app https://apps.example.com/MyApp-simulator.zip
 ```
 
@@ -37,6 +35,11 @@ does not rent a device: Revyl picks and boots a device when the first device com
 lease, usually `open`. `--device` and `--provider-os-version` are optional; without them Revyl picks
 from its own pool and reports a device agent-device then uses. A model or OS version Revyl has no
 device for is reported when the session starts, not by `connect`.
+
+To start faster, leave `--device` and `--provider-os-version` unset, so Revyl can pick a simulator
+that is already running. A session can take longer to start when Revyl also installs the app on the
+device. Start the session early and keep it open between steps. To relaunch the app, run `open` again on
+the same session instead of `disconnect` and `connect`.
 
 `--provider-app` is required and must be a public HTTPS URL. Revyl downloads and installs the build
 when it starts the device, so a local path or a provider-specific app reference has no meaning
@@ -64,8 +67,9 @@ A Revyl session runs the commands that reach a device through Revyl's device act
   do on a local device.
 - `click`, `press`, `double tap`, `longpress`, and `fill` by point or by snapshot reference, and
   `scroll` by direction. `scroll` sends one drag of the planned finger path, so `--pixels` and
-  `--amount` mean the same distance they mean on a local device. Revyl's drag takes endpoints only, so
-  `scroll --duration-ms` refuses with that reason rather than running the drag at a speed nobody chose;
+  `--amount` mean the same distance they mean on a local device. `scroll --duration-ms` sets how long
+  the drag takes, from 1 to 10000 ms, when Revyl's worker supports it. An older worker picks the
+  speed itself, so there the flag refuses rather than running the drag at a speed nobody chose.
   `fill --delay-ms` is paced by typing one character per pause.
 - `open` (the session's app), `open` with a deep link or URL, and `close` for the app the session opened.
 - `home`, and `back` on Android. iOS has no system back button; click the app's own back control.
@@ -134,8 +138,6 @@ const scope = {
 const lease = await host.client.leases.allocate({
   ...scope,
   platform: 'ios',
-  device: 'iPhone 16',
-  providerOsVersion: '18.0',
   providerApp: 'https://apps.example.com/MyApp-simulator.zip',
 });
 const client = createAgentDeviceClient({ ...host.clientConfig, ...scope, leaseId: lease.leaseId });
@@ -167,5 +169,7 @@ takes when the daemon loads the plugin from the plugin store.
 - A start that never becomes ready reports `provider-not-ready` or `provider-start-failed` and stops
   the run it started, so a failed `open` does not leave a rented device. Retry, then check that Revyl
   has a device of the requested model and OS version.
+- `snapshot` on iOS can fail with HTTP 500 while the simulator's accessibility service briefly
+  returns nothing. The plugin retries the read; if it still fails, run `snapshot` again.
 - A device that Revyl released while your session was open reports `provider-session-gone`. Run
   `close` and `open` again to rent a fresh one.
