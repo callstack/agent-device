@@ -2,7 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
-import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
@@ -67,7 +67,9 @@ const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
 /**
  * Budget for the restore specifically. Leaving the normalization on the simulator is the failure
  * this owner exists to prevent, so the restore is given the longer deadline; it is still bounded,
- * because an untimed wedged tool would hold the simulator's captures forever.
+ * because an untimed wedged tool would hold the simulator's captures forever. It applies to each
+ * restore command, so one stuck `clear` followed by one stuck `override` can hold this simulator's
+ * captures for twice this budget.
  */
 const STATUS_BAR_RESTORE_TIMEOUT_MS = 30_000;
 
@@ -119,17 +121,24 @@ export async function withNormalizedSimulatorStatusBar<T>(
  * Reserves one simulator's status bar while `capture` runs, without changing the bar. A capture that
  * does not normalize still has to wait: while another capture normalizes the bar, this one would
  * otherwise take its screenshot of the temporary 9:41 overrides.
+ *
+ * `signal` cancels waiting for another capture. It is dropped when the caller already holds this
+ * simulator's window: that caller is the one who gave up, not an obstacle, so a leg of its own work
+ * — a normalized capture falling back to the runner — still runs, and its abort cannot leave the
+ * window it holds without that leg.
  */
 export async function withSimulatorStatusBarHeld<T>(
   device: DeviceInfo,
   capture: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
+  const key = statusBarSimulatorKey(device);
+  const holdsOwnWindow = heldKeyedLockKeys(simulatorStatusBarTransactions).includes(key);
   return await withKeyedLock(
     simulatorStatusBarTransactions,
-    statusBarSimulatorKey(device),
+    key,
     capture,
-    signal,
+    holdsOwnWindow ? undefined : signal,
   );
 }
 

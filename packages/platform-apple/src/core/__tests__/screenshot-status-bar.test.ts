@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
 } from '../screenshot-status-bar.ts';
 import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
@@ -63,6 +64,42 @@ test('withNormalizedSimulatorStatusBar restores prior visible overrides', async 
           'simctl status_bar sim-1 clear',
           `simctl status_bar sim-1 override ${RESTORE_ARGS}`,
         ],
+      );
+    },
+  );
+});
+
+test('a capture leg nested in its own status bar window keeps it after the request aborts', async () => {
+  // The sequence this pins: a normalized capture whose simctl leg fails falls back to the runner
+  // leg while the window is still held. The request may abort in between; the leg the caller is
+  // already inside must still run, and must not queue behind, or be rejected by, the window that
+  // caller holds.
+  const abortController = new AbortController();
+  await withFakeAppleTool(
+    statusBarScript(() => 'Current Status Bar Overrides:\n============================='),
+    async ({ calls }) => {
+      const captured = await withNormalizedSimulatorStatusBar(
+        IOS_TEST_SIMULATOR,
+        async () => {
+          abortController.abort(new Error('caller gave up'));
+          return await withSimulatorStatusBarHeld(
+            IOS_TEST_SIMULATOR,
+            capture,
+            abortController.signal,
+          );
+        },
+        abortController.signal,
+      );
+
+      assert.equal(captured, 'captured', 'the leg inside the window must run');
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [
+          'simctl status_bar sim-1 list',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
+          'simctl status_bar sim-1 clear',
+        ],
+        'the window must still restore once the aborted leg finishes',
       );
     },
   );
