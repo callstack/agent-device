@@ -294,6 +294,7 @@ test('a disposal queued behind a committed recording stop replays that export', 
   await expect(
     finishLiveScreenRecording({ intent: 'disposal', binding: recording.binding }),
   ).resolves.toEqual(stopped);
+  expect(recording.finish).toHaveBeenCalledOnce();
   expect(recording.signals).toHaveBeenCalledOnce();
   expect(recording.binding.read()).toBeUndefined();
 });
@@ -359,13 +360,14 @@ async function adoptCommittedRecording(prefix: string) {
       forceCleanup: async () => ({ status: 'cleaned' }),
     },
   );
+  const finish = vi.fn(handle.finish);
   await adoptStartedScreenRecording({
     admissionLedger: createScreenRecordingAdmissionLedger(),
     binding,
     device: session.device,
     owner,
     fence,
-    pendingHandle: new PendingTransferGuard(handle),
+    pendingHandle: new PendingTransferGuard({ ...handle, finish }),
     envelope: createDurableResourceEnvelope({
       resourceKind: 'screen-recording',
       sessionId: sessionName,
@@ -382,6 +384,7 @@ async function adoptCommittedRecording(prefix: string) {
   if (!queued) throw new Error('Expected adopted screen recording');
   return {
     binding,
+    finish,
     signals,
     outPath,
     /** Puts the slot back the way the queued teardown left it holding it. */

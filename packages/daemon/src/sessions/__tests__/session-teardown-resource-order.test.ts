@@ -230,10 +230,12 @@ test('daemon teardown omits the app-log stop once the app-log fence has settled'
  */
 test.each(CALLERS)(
   '$name settles a resource whose record already committed instead of reporting it unreleased',
-  async ({ run }) => {
+  async ({ name, run }) => {
     stopEvents.terminal.add('audio_probe');
 
-    await expect(run({ sessionName: 'stop-terminal-session' })).resolves.not.toThrow();
+    const result = await run({ sessionName: 'stop-terminal-session' });
+    if (name === 'ordinary close') expect(result).toMatchObject({ ok: true });
+    else expect(result).toBeUndefined();
 
     expect(stopEvents.order).toEqual(COMMON_RESOURCE_ORDER);
   },

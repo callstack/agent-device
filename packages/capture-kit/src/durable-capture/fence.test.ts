@@ -121,11 +121,10 @@ test('a caller holding the same fence cannot write a record an earlier caller co
 });
 
 /**
- * A progress port its own run kept holding outlives that run, and a later run commits the record it
- * was issued against. Two leases, not two transitions on one lease: the escaped one must be dead the
- * moment its own run ends, or its cached `open` view overwrites what the later run committed.
+ * A released lease must not publish while a later run holds the still-open record. The later run's
+ * own lease must remain usable after that refusal and commit the record successfully.
  */
-test('a lease that outlived its run cannot write a record a later run committed', async () => {
+test('a lease released with its run cannot write an open record held by a later run', async () => {
   const resourcePath = makeRecord();
   let escape!: DurableCaptureOpenResourceFenceLease<'screen-recording'>;
   await withDurableCaptureResourceFence({
@@ -144,6 +143,19 @@ test('a lease that outlived its run cannot write a record a later run committed'
     expected: { token: 'current', generation: 1 },
     onCompleted: () => undefined,
     run: async (lease) => {
+      const before = store.read(resourcePath);
+      expect(before).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'open' } });
+      let escapedError: unknown;
+      try {
+        escape.transition('open', { metadata: { phase: 'escaped-write' } });
+      } catch (error) {
+        escapedError = error;
+      }
+      expect(escapedError).toMatchObject({
+        details: { reason: 'ownership-fence-lost' },
+        message: 'Screen recording resource fence was released with its run',
+      });
+      expect(store.read(resourcePath)).toEqual(before);
       lease.transition('completed', { metadata: { phase: 'completed' } });
     },
   });
