@@ -203,9 +203,11 @@ async function endCapture(
   record: (leaseId: string, capture: SettledNetworkCapture) => SettledNetworkCapture,
 ): Promise<SettledNetworkCapture> {
   const { writeCaptureRecord } = await import('./network-har.ts');
-  const settled = await writeCaptureRecord(capture);
-  if (capture.phase === 'capturing') capture.capture.close();
-  return record(leaseId, settled);
+  try {
+    return record(leaseId, await writeCaptureRecord(capture));
+  } finally {
+    if (capture.phase === 'capturing') capture.capture.close();
+  }
 }
 
 function hostsToCapture(hostList: unknown): string[] {

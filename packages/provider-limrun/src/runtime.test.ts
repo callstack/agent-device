@@ -453,7 +453,7 @@ test('a release stops waiting on a stuck ADB tunnel, deletes the instance and sa
     await vi.advanceTimersByTimeAsync(0);
     // The delete does not queue behind the stuck tunnel: it was asked for while that tunnel was still open.
     assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
-    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 0);
 
     // The release's own budget for the local teardown elapses; the delete it ran beside is already answered.
     await vi.advanceTimersByTimeAsync(LOCAL_TEARDOWN_WAIT_MS);
@@ -468,6 +468,7 @@ test('a release stops waiting on a stuck ADB tunnel, deletes the instance and sa
     reportTunnel();
     await vi.advanceTimersByTimeAsync(0);
     const refused = await refusedCommand;
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
     assert.ok(
       refused instanceof AppError && refused.details?.reason === 'limrun_adb_tunnel_cleaned_up',
       `expected the retained command to be refused, got ${String(refused)}`,

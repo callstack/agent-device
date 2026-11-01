@@ -256,10 +256,9 @@ test('Limrun reclaims a labeled iOS instance without an in-memory session', asyn
     assert.deepEqual(limrunMockState.iosList.mock.calls, [
       [{ labelSelector: 'provider=limrun,leaseId=lease-recovered-ios' }],
     ]);
-    assert.deepEqual(
-      limrunMockState.iosDelete.mock.calls.map(([instanceId]) => instanceId),
-      ['ios-instance-recovered'],
-    );
+    assert.deepEqual(limrunMockState.iosDelete.mock.calls, [
+      ['ios-instance-recovered', { maxRetries: 0 }],
+    ]);
   } finally {
     await runtime.shutdown();
   }

@@ -338,10 +338,12 @@ async function releaseLocalResources(owner: LimrunLeaseOwner): Promise<void> {
   // rather than passed over: the session it eventually builds has nowhere else to be disconnected.
   const session = owner.session ?? (await sessionTheCreateBuilt(owner));
   if (session === undefined) return;
-  session.client.disconnect();
-  // The tunnel's start is an `adb connect` the SDK runs without a deadline. Its cleanup retires the endpoint
-  // first, so a tunnel that answers late ends itself and no caller can reach it meanwhile.
-  if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
+  try {
+    // Disconnect closes the SDK's ADB endpoint, so reverse cleanup must finish while that endpoint is live.
+    if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
+  } finally {
+    session.client.disconnect();
+  }
 }
 
 /** The session a create answered for, once it answers, for a release that got there first. */

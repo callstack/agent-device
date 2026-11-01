@@ -64,9 +64,10 @@ vi.mock('@limrun/api/instance-client', () => ({
     pressKey: vi.fn(),
     setText: vi.fn(),
     tap: vi.fn(),
-    startAdbTunnel: vi.fn(async () => {
-      throw new Error('no ADB tunnel is raised by these cases');
-    }),
+    startAdbTunnel: vi.fn(async () => ({
+      address: { address: '127.0.0.1', port: 62001 },
+      close: () => {},
+    })),
     startTunnel: vi.fn(async () => ({
       tunnelId: 't1',
       selectors: [],
@@ -110,6 +111,45 @@ test('a local teardown that refuses beside a pending delete is reported, not loo
     state.deletes.forEach(({ report }) => report());
     state.deletes.length = 0;
     state.disconnectThrows = false;
+    await runtime.shutdown();
+  }
+});
+
+test('release clears reverse mappings before disconnect closes their ADB endpoint', async () => {
+  const disconnectsBefore = state.disconnects;
+  const removed = vi.fn(async () => {});
+  const dependencies = testDependencies();
+  dependencies.android.createPortReverse = async (adb) => ({
+    ensure: async () => {
+      await adb(['reverse', 'tcp:18441', 'tcp:18441']);
+    },
+    list: async () => {
+      if (state.disconnects !== disconnectsBefore) throw new Error('ADB endpoint is disconnected');
+      return [{ local: 'tcp:18441', remote: 'tcp:18441' }];
+    },
+    remove: removed,
+    removeAllOwned: async () => {},
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, dependencies);
+  const lease = androidLease('lease-reverse-before-disconnect');
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+    await runtime.configurePortReverse?.({
+      leaseId: lease.leaseId,
+      provider: 'limrun',
+      devicePort: 18441,
+      hostPort: 18441,
+      name: 'live-regression',
+    });
+    const released = runtime.leaseLifecycle.release?.(lease);
+    await vi.waitFor(() => expect(state.deletes).toHaveLength(1));
+    state.deletes[0]?.report();
+    expect(await released).toMatchObject({ limrunInstanceId: 'android-instance-1' });
+    expect(removed).toHaveBeenCalledWith('tcp:18441');
+    expect(state.disconnects - disconnectsBefore).toBe(1);
+  } finally {
+    state.deletes.forEach(({ report }) => report());
+    state.deletes.length = 0;
     await runtime.shutdown();
   }
 });

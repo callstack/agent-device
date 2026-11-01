@@ -66,6 +66,7 @@ test('a capture that answers late and then refuses is not loosed on the process'
   // import that had to resolve under fake timers would never answer at all.
   await import('./network-har.ts');
   const rejections = watchUnhandledRejections();
+  const close = vi.fn();
   let reportOpened!: (capture: NetworkCapture) => void;
   const opening = new Promise<NetworkCapture>((opened) => {
     reportOpened = opened;
@@ -88,7 +89,7 @@ test('a capture that answers late and then refuses is not loosed on the process'
         failures: async () => {
           throw new Error('the destination tunnel refused to answer');
         },
-        close: () => {},
+        close,
       },
     });
     await vi.advanceTimersByTimeAsync(1_000);
@@ -96,6 +97,7 @@ test('a capture that answers late and then refuses is not loosed on the process'
     // rejection this continuation loosed can be seen at all.
     vi.useRealTimers();
     await rejections.assertIsSilent();
+    expect(close).toHaveBeenCalledOnce();
   } finally {
     vi.useRealTimers();
     rejections.stop();
