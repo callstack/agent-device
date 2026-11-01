@@ -1,10 +1,10 @@
-import assert from 'node:assert/strict';
 import { test, vi, expect } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createLimrunRuntime } from './runtime.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import { watchUnhandledRejections } from './lifecycle.fixtures.ts';
 
 /*
  * A disposal starts its capture end and its local teardown beside the instance delete and joins them only
@@ -198,34 +198,6 @@ test('a capture close that refuses still leaves the delete it ran beside answere
 
 function warningsOf(record: Record<string, unknown>): Array<Record<string, unknown>> {
   return Array.isArray(record.warnings) ? (record.warnings as Record<string, unknown>[]) : [];
-}
-
-/**
- * Collects the rejections the process would die on: the daemon's failure mode for one is to take every
- * other session down with it, so a case whose disposal looses one fails here rather than in production.
- * The check yields to a macrotask first: Node reports a rejection only after the current microtask drain,
- * so asserting before that yield, or removing the listener without one, could pass a leaked rejection
- * unseen.
- */
-function watchUnhandledRejections(): {
-  assertIsSilent: () => Promise<void>;
-  stop: () => void;
-} {
-  const seen: unknown[] = [];
-  const watch = (reason: unknown): void => {
-    seen.push(reason);
-  };
-  process.on('unhandledRejection', watch);
-  return {
-    assertIsSilent: async () => {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
-      if (seen.length === 0) return;
-      assert.fail(`expected no unhandled rejection, got ${String(seen[0])}`);
-    },
-    stop: () => process.off('unhandledRejection', watch),
-  };
 }
 
 function androidLease(leaseId: string): DeviceLease {

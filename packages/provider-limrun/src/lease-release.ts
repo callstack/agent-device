@@ -338,12 +338,17 @@ async function releaseLocalResources(owner: LimrunLeaseOwner): Promise<void> {
   // rather than passed over: the session it eventually builds has nowhere else to be disconnected.
   const session = owner.session ?? (await sessionTheCreateBuilt(owner));
   if (session === undefined) return;
-  try {
-    // Disconnect closes the SDK's ADB endpoint, so reverse cleanup must finish while that endpoint is live.
-    if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
-  } finally {
+  const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+  const tunnel =
+    session.platform === 'android' ? cleanupLimrunAndroidAdbTunnel(session) : Promise.resolve();
+  // Disconnect closes the ADB endpoint: reverse cleanup gets its window, but cannot postpone disconnect
+  // past that window. Both promises are observed before either can settle.
+  const disconnect = awaitLimrunWithinBudget(tunnel, LOCAL_TEARDOWN_BUDGET_MS).then(() => {
     session.client.disconnect();
-  }
+  });
+  const results = await Promise.allSettled([tunnel, disconnect]);
+  const refused = results.find((result) => result.status === 'rejected');
+  if (refused?.status === 'rejected') throw refused.reason;
 }
 
 /** The session a create answered for, once it answers, for a release that got there first. */
