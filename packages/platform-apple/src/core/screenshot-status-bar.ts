@@ -64,6 +64,13 @@ const simulatorStatusBarTransactions = new Map<string, Promise<unknown>>();
 /** Bounds one `simctl status_bar` step so a wedged tool cannot hold a simulator's captures. */
 const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
 
+/**
+ * Budget for the restore specifically. Leaving the normalization on the simulator is the failure
+ * this owner exists to prevent, so the restore is given the longer deadline; it is still bounded,
+ * because an untimed wedged tool would hold the simulator's captures forever.
+ */
+const STATUS_BAR_RESTORE_TIMEOUT_MS = 30_000;
+
 /** What the simulator's status bar held before a capture normalized it. */
 type StatusBarOverrideSnapshot = {
   /** False when the tool refused to answer, so nothing here is safe to restore to. */
@@ -78,9 +85,11 @@ type StatusBarOverrideSnapshot = {
  * as though the caller had set it. A status bar problem never decides whether `capture` runs or
  * what it returns.
  *
- * `signal` cancels the wait for the simulator, never the restore: the normalization is shared device
- * state, so it has to be undone even once the caller has given up. Every status bar command is
- * bounded by {@link STATUS_BAR_COMMAND_TIMEOUT_MS}, so a wedged `simctl` cannot hold the simulator.
+ * `signal` cancels the wait for the simulator only. It is not handed to the status bar commands: a
+ * request that gives up must not leave the normalization behind, so the restore runs to its budget
+ * instead — {@link STATUS_BAR_COMMAND_TIMEOUT_MS} per setup command and the longer
+ * {@link STATUS_BAR_RESTORE_TIMEOUT_MS} per restore command, so even a wedged `simctl` cannot hold
+ * the simulator forever.
  */
 export async function withNormalizedSimulatorStatusBar<T>(
   device: DeviceInfo,
@@ -156,7 +165,7 @@ async function restoreSimulatorStatusBarOverrides(
   device: DeviceInfo,
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
-  await clearSimulatorStatusBarOverride(device);
+  await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
   if (!overrides) {
     rememberClearedStatusBarOverrides(device);
     return;
@@ -164,6 +173,7 @@ async function restoreSimulatorStatusBarOverrides(
   await applySimulatorStatusBarOverrideArgs(
     device,
     buildRestorableStatusBarOverrideArgs(overrides),
+    STATUS_BAR_RESTORE_TIMEOUT_MS,
   );
   invalidateSimulatorStatusBarOverrideCache(device);
 }
@@ -202,20 +212,20 @@ async function readSimulatorStatusBarOverrides(
   return parseSimulatorStatusBarOverrides(result.stdout);
 }
 
-async function clearSimulatorStatusBarOverride(device: DeviceInfo): Promise<void> {
-  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
-    timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
-  });
+async function clearSimulatorStatusBarOverride(
+  device: DeviceInfo,
+  timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
+): Promise<void> {
+  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], { timeoutMs });
 }
 
 async function applySimulatorStatusBarOverrideArgs(
   device: DeviceInfo,
   args: string[],
+  timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
 ): Promise<void> {
   if (args.length === 0) return;
-  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], {
-    timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
-  });
+  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], { timeoutMs });
 }
 
 function parseSimulatorStatusBarOverrides(output: string): RestorableStatusBarOverrides | null {

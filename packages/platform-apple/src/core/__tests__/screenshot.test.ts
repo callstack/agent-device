@@ -54,6 +54,7 @@ import {
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import {
+  invalidateSimulatorStatusBarOverrideCache,
   withNormalizedSimulatorStatusBar,
   withSimulatorStatusBarHeld,
 } from '../screenshot-status-bar.ts';
@@ -621,9 +622,80 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
   }
 });
 
-// A runner capture renders the same screen a simctl capture does, so it must not be taken while a
-// simctl capture holds the simulator's status bar normalized. The holder here is the real status bar
-// owner's reservation (this file's mock keeps every other export real).
+// Both capture legs of one request run inside the status bar window, and the runner leg takes that
+// same window for itself. This drives the real normalization around the real runner fallback, with
+// only the tools faked, so the nesting is exercised rather than assumed.
+test('captureSimulatorScreenshotWithFallback keeps the real runner fallback inside its own status bar window', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-normalized-runner-fallback-');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-1' };
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'fallback-window.png');
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-window-image', 'utf8');
+  const timeline: string[] = [];
+  const steps: string[] = [];
+
+  // The file's mock of the status bar owner stands in for the plain pass-through by default; this
+  // case needs the real transaction, so it restores the implementation `vi.fn` was created with.
+  mockWithNormalizedStatusBar.mockReset();
+  invalidateSimulatorStatusBarOverrideCache(device);
+  mockRetryWithPolicy.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+      stderr: 'Timeout waiting for screen surfaces',
+      exitCode: 60,
+    }),
+  );
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    steps.push('runner');
+    timeline.push('runner');
+    return { message: 'tmp/fallback-window.png' };
+  });
+  mockRunCmd.mockImplementation(async (cmd, args) => {
+    const argv = [cmd, ...(args ?? [])].join(' ');
+    if (argv.includes('status_bar')) {
+      timeline.push(`status_bar:${/status_bar\s+\S+\s+(\S+)/.exec(argv)?.[1]}`);
+      return {
+        exitCode: 0,
+        stdout: 'Current Status Bar Overrides:\n=============================\n',
+        stderr: '',
+      };
+    }
+    if (argv.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected command: ${argv}`);
+  });
+
+  try {
+    const outPath = path.join(tmpDir, 'out.png');
+    await captureSimulatorScreenshotWithFallback(device, outPath, {
+      env: process.env,
+      normalizeStatusBar: true,
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        normalizeDensity: async () => {},
+        captureWithRunner: captureScreenshotViaRunner,
+        shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+        resolveCaptureTarget: async () => ({}),
+      },
+    });
+
+    assert.deepEqual(steps, ['runner']);
+    assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-window-image');
+    // The window belongs to the request: it opens before either capture and closes after the
+    // runner capture, and the runner leg re-enters that window instead of opening its own.
+    assert.deepEqual(timeline, [
+      'status_bar:list',
+      'status_bar:override',
+      'runner',
+      'status_bar:clear',
+    ]);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('captureScreenshotViaRunner waits for a held simulator status bar', async () => {
   const tmpDir = await mkdtempForTest('agent-device-runner-bar-window-');
   const containerPath = path.join(tmpDir, 'container');
