@@ -51,26 +51,13 @@ final class RunnerTests: XCTestCase {
     static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
   }
 
-  /// The wire code a thrown command error travels under: the execution-watchdog timeout keeps its own
-  /// typed code so the daemon records the runner as main-thread-occupied from the stalling command
-  /// itself (#2552), and every other throw stays the generic `COMMAND_FAILED`. The transport encodes a
-  /// live failure with this, and the journal records a thrown failure with it, so a repeat answered from
-  /// the journal's record carries the same code as the answer the caller lost.
-  static func wireErrorCode(for error: Error) -> String {
-    let nsError = error as NSError
-    return nsError.domain == RunnerErrorDomain.general
-      && nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
-      ? RunnerWireErrorCode.mainThreadTimeout
-      : "COMMAND_FAILED"
-  }
-
   /// A replayed failure must carry the same code and recovery hint as its live reply.
   static func thrownErrorPayload(for error: Error) -> ErrorPayload {
     let nsError = error as NSError
     let abandoned = nsError.domain == RunnerErrorDomain.general
       && nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
     return ErrorPayload(
-      code: wireErrorCode(for: error),
+      code: abandoned ? RunnerWireErrorCode.mainThreadTimeout : "COMMAND_FAILED",
       message: error.localizedDescription,
       hint: abandoned
         ? "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."

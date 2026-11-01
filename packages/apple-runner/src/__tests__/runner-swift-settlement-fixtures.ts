@@ -162,6 +162,8 @@ function readSwiftWireErrorCodes(): Record<string, string> {
 export function requireSwiftThrownErrorWireCode(): {
   /** The Swift member whose value the daemon's occupancy verdict keys on. */
   timeoutCode: string;
+  /** The bodyless journal refusal whose occupancy report must stay silent. */
+  finishedCode: string;
   /** Whether the journal's failure record derives its error body from the same owner the transport uses. */
   journalRecordsDerivedCode: boolean;
 } {
@@ -171,6 +173,11 @@ export function requireSwiftThrownErrorWireCode(): {
     timeoutCode !== undefined,
     'RunnerWireErrorCode must declare mainThreadTimeout: the daemon reads this code to record the ' +
       "runner's main thread as still draining, on the live reply and on a journal replay alike.",
+  );
+  const finishedCode = codes['commandAlreadyFinished'];
+  assert.ok(
+    finishedCode !== undefined,
+    'RunnerWireErrorCode must declare commandAlreadyFinished: the daemon reads this code as silent about main-thread occupancy.',
   );
   const journal = fs.readFileSync(SWIFT_JOURNAL, 'utf8');
   const recorded = journal.match(
@@ -200,6 +207,7 @@ export function requireSwiftThrownErrorWireCode(): {
   );
   return {
     timeoutCode,
+    finishedCode,
     journalRecordsDerivedCode: owner.test(recorded),
   };
 }

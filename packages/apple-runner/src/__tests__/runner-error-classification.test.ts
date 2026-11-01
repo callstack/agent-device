@@ -523,6 +523,11 @@ test('the runner writes the occupancy code the daemon reads, on the live reply a
     'the runner must encode the watchdog timeout under the code the daemon keys occupancy on',
   );
   assert.equal(
+    swift.finishedCode,
+    COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+    'the runner must encode its finished-id refusal under the code the daemon reads as silent',
+  );
+  assert.equal(
     swift.journalRecordsDerivedCode,
     true,
     'the journal must record a thrown failure under the same code the transport replies with, so a ' +

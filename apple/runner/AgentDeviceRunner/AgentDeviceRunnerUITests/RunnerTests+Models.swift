@@ -117,7 +117,7 @@ struct CommandTraits {
     launchPolicy: CommandLaunchPolicy,
     convertsRecordedFailure: Bool = false,
     retainsJournalResponseJson: Bool,
-    isReadOnly: Bool = false
+    isReadOnly: Bool
   ) {
     self.isInteraction = isInteraction
     self.retryOnSessionLoss = retryOnSessionLoss
@@ -135,7 +135,8 @@ fileprivate extension CommandTraits {
     isInteraction: true,
     launchPolicy: .mayLaunch,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// Mutations the runner performs without the element-interaction preflight. NOTE: `mouseClick`
@@ -143,7 +144,8 @@ fileprivate extension CommandTraits {
   /// bespoke macOS activation, so classifying it needs a macOS smoke check first (tracked as a
   /// follow-up).
   static let appMutation = CommandTraits(
-    launchPolicy: .mayLaunch, convertsRecordedFailure: true, retainsJournalResponseJson: true
+    launchPolicy: .mayLaunch, convertsRecordedFailure: true, retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// Reads of the session app: replayable after session invalidation, and refused rather than
@@ -178,12 +180,12 @@ fileprivate extension CommandTraits {
   }
 
   /// The runner's own lifecycle: no session app is brought forward, and no mutation is proven.
-  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
+  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true, isReadOnly: false)
 
   /// Device state the runner sets from its own process, such as the pasteboard: no app is brought
   /// forward, since the state belongs to the device rather than to the session app, and no UI
   /// mutation is proven.
-  static let deviceState = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
+  static let deviceState = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true, isReadOnly: false)
 
   /// Commands hosted by the surface that already has focus, which no activation may cancel. A
   /// hardware press belongs to the system rather than to the session app, and an alert answers from
@@ -191,7 +193,8 @@ fileprivate extension CommandTraits {
   static let presentedSurfaceMutation = CommandTraits(
     launchPolicy: .presentedSurface,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// `alert get` changes nothing, so it is the one alert action that may be replayed.
