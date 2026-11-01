@@ -96,7 +96,7 @@ function normalizeLease(data: Record<string, unknown>): Lease {
     deviceKey: readOptionalString(rawLease, 'deviceKey'),
     // Only an allocate answers `reused`; every other read, and any daemon older than the field,
     // omits it, and the caller keeps `created` unset rather than guessing who made the lease.
-    ...(data.reused === true ? { created: false } : data.reused === false ? { created: true } : {}),
+    ...(typeof data.reused === 'boolean' ? { created: !data.reused } : {}),
     ...withLeaseDevice(readLeaseDevice(rawLease.device)),
     ...(rawLease.retainOnClose === true ? { retainOnClose: true } : {}),
     createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,

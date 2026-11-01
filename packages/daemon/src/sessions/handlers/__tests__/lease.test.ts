@@ -83,7 +83,7 @@ test('lease_allocate answers with the lease id the request named', async () => {
 test('lease_allocate answers whether its request created the lease or got back an existing one', async () => {
   const registry = new LeaseRegistry();
   const leaseId = 'abcdef0123456789abcdef0123456789';
-  const allocate = () =>
+  const allocate = (requestedLeaseId?: string) =>
     handleLeaseCommands({
       host: createTestHostEnvironment(),
       req: {
@@ -91,14 +91,18 @@ test('lease_allocate answers whether its request created the lease or got back a
         session: 'default',
         command: 'lease_allocate',
         positionals: [],
-        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+        meta: {
+          tenantId: 'tenant-a',
+          runId: 'run-1',
+          ...(requestedLeaseId ? { leaseId: requestedLeaseId } : {}),
+        },
       },
       sessionName: 'default',
       sessionStore: makeSessionStore('agent-device-allocate-reused-'),
       leaseRegistry: registry,
     });
 
-  const created = await allocate();
+  const created = await allocate(leaseId);
   assert.ok(created?.ok);
   assert.equal(created.data?.reused, false);
   // A repeat for the same run binding gets that lease back, and the answer says this request did

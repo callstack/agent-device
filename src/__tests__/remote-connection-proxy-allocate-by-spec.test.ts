@@ -217,6 +217,38 @@ test('a daemon whose lease names no device gets that lease released and the devi
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a pre-pick daemon omitting created falls back locally without releasing either allocation', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-pre-pick-');
+  const requests: LeaseAllocateRequest[] = [];
+  const releases: LeaseReleaseRequest[] = [];
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'open',
+    flags: { ...flags, device: 'iPhone 17' },
+    client: createTestClient({
+      listDevices: async () => [IPHONE_SIMULATOR],
+      allocate: async (request) => {
+        requests.push(request);
+        const { created: _created, ...lease } = grantedLease(request, {
+          leaseId: `lease-${requests.length}`,
+        });
+        return lease;
+      },
+      release: async (request) => {
+        releases.push(request);
+        return { released: true };
+      },
+    }),
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0]?.deviceKey, undefined);
+  assert.equal(requests[1]?.deviceKey, 'ios:mobile:SIM-LOCAL');
+  assert.equal(materialized.flags.udid, 'SIM-LOCAL');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, 'lease-2');
+  assert.deepEqual(releases, []);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a keyless lease whose release throws stops the local fallback instead of abandoning it', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-old-release-');
   const requests: LeaseAllocateRequest[] = [];
@@ -242,8 +274,7 @@ test('a keyless lease whose release throws stops the local fallback instead of a
     (error: unknown) => {
       const appError = error as AppError;
       assert.equal(appError.code, 'COMMAND_FAILED');
-      assert.equal(appError.details?.reason, 'PROXY_LEASE_RETIREMENT_FAILED');
-      assert.equal(appError.details?.leaseId, 'lease-1');
+      assert.equal(appError.message, 'provider unreachable');
       // The failed retirement rides on the refusal that names it, and the command's failure path
       // retried the lease the ledger still owned.
       assert.deepEqual(appError.details?.leaseRollback, {
@@ -267,36 +298,33 @@ test('a keyless lease whose release throws stops the local fallback instead of a
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('a keyless lease whose release is refused stops the local fallback instead of abandoning it', async () => {
+test('an already absent keyless lease permits fallback and is released only once', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-old-noop-');
   const requests: LeaseAllocateRequest[] = [];
-
-  await assert.rejects(
-    materializeRemoteConnectionForCommand({
-      host: createTestHostEnvironment(),
-      command: 'open',
-      flags: { ...flags, device: 'iPhone 17' },
-      client: createTestClient({
-        listDevices: async () => [IPHONE_SIMULATOR],
-        allocate: async (request) => {
-          requests.push(request);
-          return grantedLease(request, { leaseId: `lease-${requests.length}` });
-        },
-        release: async () => ({ released: false }),
-      }),
+  const releases: LeaseReleaseRequest[] = [];
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'open',
+    flags: { ...flags, device: 'iPhone 17' },
+    client: createTestClient({
+      listDevices: async () => [IPHONE_SIMULATOR],
+      allocate: async (request) => {
+        requests.push(request);
+        return grantedLease(request, { leaseId: `lease-${requests.length}` });
+      },
+      release: async (request) => {
+        releases.push(request);
+        return { released: false };
+      },
     }),
-    (error: unknown) => {
-      const appError = error as AppError;
-      assert.equal(appError.details?.reason, 'PROXY_LEASE_RETIREMENT_FAILED');
-      assert.equal(appError.details?.leaseId, 'lease-1');
-      assert.equal(appError.details?.released, false);
-      return true;
-    },
+  });
+  assert.equal(requests.length, 2);
+  assert.deepEqual(
+    releases.map((request) => request.leaseId),
+    ['lease-1'],
   );
-
-  // A release that answers "did not end it" keeps the lease owned, so the failure path retries it.
-  assert.equal(requests.length, 1);
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+  assert.equal(materialized.flags.udid, 'SIM-LOCAL');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, 'lease-2');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

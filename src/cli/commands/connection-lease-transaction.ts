@@ -23,103 +23,54 @@ import {
 } from './connection-lease-policy.ts';
 import { bindLeaseNamedDevice } from './proxy-lease-device.ts';
 
-/** Whether a release attempt ended the lease, and why not when it did not. */
-export type LeaseReleaseOutcome = { released: boolean; error?: string };
-
 type LeaseRelease = () => Promise<{ released: boolean }>;
 
-/**
- * The lease one command allocated and no durable record has taken over yet — the ledger the
- * materialization consults before ending anything. A command owns a lease from the moment allocate
- * returns it as created by this command, and ownership ends at the first durable write that names
- * it, or when a deliberate release ends it. A lease this command renewed, or that the daemon says it
- * did not create, was named elsewhere first: this path never ends it, because the record or the
- * other run that names it owns it through any failure here.
- */
+/** One newly created lease awaits release or transfer to a durable session record. */
 export type LeaseLedger = {
-  /** Takes the lease this command created, with the release that ends it. */
   track(leaseId: string, release: LeaseRelease): void;
-  /**
-   * Ends an owned lease through its recorded release. The lease stays owned when the release did
-   * not end it, so the failure path reports and retries it; a release already in flight is never
-   * attempted twice.
-   */
-  end(leaseId: string): Promise<LeaseReleaseOutcome>;
-  /** A durable record names the lease now: this command no longer owns it. */
+  /** A resolved release ends ownership, including when the daemon reports no such lease. */
+  end(leaseId: string): Promise<{ released: boolean }>;
   transfer(leaseId: string | undefined): void;
-  /** Ends every lease still owned and reports the ones that stay held beside `failure`. */
   releaseOwnedOnFailure(failure: unknown): Promise<unknown>;
 };
 
 export function createLeaseLedger(): LeaseLedger {
-  const owned = new Map<string, { release: LeaseRelease; inFlight: boolean }>();
+  let owned: { leaseId: string; release: LeaseRelease } | undefined;
 
-  async function attempt(
-    leaseId: string,
-    entry: { release: LeaseRelease },
-  ): Promise<LeaseReleaseOutcome> {
-    try {
-      const outcome = await entry.release();
-      if (outcome.released) owned.delete(leaseId);
-      return outcome.released
-        ? { released: true }
-        : { released: false, error: 'the release did not end the lease' };
-    } catch (error) {
-      return { released: false, error: errorMessage(error) };
-    }
+  async function end(leaseId: string): Promise<{ released: boolean }> {
+    if (owned?.leaseId !== leaseId) return { released: false };
+    const outcome = await owned.release();
+    owned = undefined;
+    return outcome;
   }
 
   return {
     track(leaseId, release) {
-      owned.set(leaseId, { release, inFlight: false });
+      owned = { leaseId, release };
     },
-    async end(leaseId) {
-      const entry = owned.get(leaseId);
-      if (entry === undefined)
-        return { released: false, error: 'this command never owned the lease' };
-      if (entry.inFlight)
-        return { released: false, error: 'a release for this lease is already in flight' };
-      entry.inFlight = true;
-      try {
-        return await attempt(leaseId, entry);
-      } finally {
-        entry.inFlight = false;
-      }
-    },
+    end,
     transfer(leaseId) {
-      if (leaseId !== undefined) owned.delete(leaseId);
+      if (owned?.leaseId === leaseId) owned = undefined;
     },
     async releaseOwnedOnFailure(failure) {
-      const unended: { leaseId: string; error: string }[] = [];
-      for (const [leaseId, entry] of Array.from(owned)) {
-        // An outcome this command is still waiting on is reported, not retried: the lease may or
-        // may not have ended, and a second release beside the first is exactly what the ledger
-        // exists to make impossible.
-        const outcome = entry.inFlight
-          ? { released: false, error: 'a release for this lease was still in flight' }
-          : await attempt(leaseId, entry);
-        if (!outcome.released)
-          unended.push({ leaseId, error: outcome.error ?? 'the release was refused' });
+      if (!owned) return failure;
+      const { leaseId } = owned;
+      try {
+        await end(leaseId);
+        return failure;
+      } catch (error) {
+        const primary = asAppError(failure, 'COMMAND_FAILED');
+        primary.details = {
+          ...primary.details,
+          leaseRollback: {
+            leaseId,
+            released: false,
+            reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
+            error: errorMessage(error),
+          },
+        };
+        return primary;
       }
-      if (unended.length === 0) return failure;
-      const first = unended[0]!;
-      // The command's own failure stays the thrown error (ADR 0010, as amended by ADR 0019), and a
-      // release that could not end the lease rides beside it as typed evidence naming the lease that
-      // stays held until its TTL lapses.
-      const primary = asAppError(failure, 'COMMAND_FAILED');
-      primary.details = {
-        ...primary.details,
-        leaseRollback: {
-          leaseId: first.leaseId,
-          released: false,
-          reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
-          error: first.error,
-          ...(unended.length > 1
-            ? { additionalLeaseIds: unended.slice(1).map((entry) => entry.leaseId) }
-            : {}),
-        },
-      };
-      return primary;
     },
   };
 }
@@ -227,28 +178,14 @@ async function materializeLeaseForCommand(options: {
     preliminaryLeaseBackend ??
     requireRequestedLeaseBackend(nextFlags, command);
   assertRequestedConnectionBackend(state, leaseBackend);
-  // One decision for one axis. Whichever of the backend, the record, and the request names the
-  // narrowest platform, that is what this command records, sends, allocates, and returns; two that
-  // cannot name the same device are refused here rather than resolved later by whoever read first.
-  const platform = narrowConnectionPlatform({
-    leaseBackend,
-    recordedPlatform: nextState.platform,
-    requestedPlatform: nextFlags.platform,
-  });
-  if (!platform.ok) {
-    throw connectionPlatformConflict({
-      session: state.session,
-      leaseBackend,
-      boundPlatform: platform.boundPlatform,
-      requestedPlatform: platform.requestedPlatform,
-      detail: 'bound-connection',
-    });
-  }
-  // Read after the platform is settled: a request that asks for another Apple leaf also asks for a
-  // different target, and the platform is the reason it is being refused.
+  const platform = carriedConnectionPlatform(
+    state.session,
+    { ...nextState, leaseBackend },
+    nextFlags,
+  );
   assertRequestedConnectionTarget(state, nextFlags);
-  nextState = { ...nextState, platform: platform.platform };
-  nextFlags.platform = platform.platform;
+  nextState = { ...nextState, platform };
+  nextFlags.platform = platform;
   let materializedLease = await allocateOrReuseLease(
     client,
     nextState,
@@ -447,7 +384,7 @@ async function allocateOrReuseLease(
     // Ownership starts here, before any caller of this function can fail on this lease.
     leaseLedger.track(lease.leaseId, leaseAllocationRelease(client, state, leaseBackend, lease));
   }
-  return { lease, acquired: created };
+  return { lease, acquired: true };
 }
 
 /**

@@ -11,7 +11,7 @@ import {
   type ConnectionDeviceScope,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
   requireLeaseDeviceSpec,
@@ -104,8 +104,8 @@ async function resolveProxyLeaseStateLocally(options: {
 /**
  * Takes the device from a lease allocated by spec: the one its `deviceKey` names, whether the daemon
  * just picked it or the lease is renewed. A daemon that predates picking leaves the key of a new
- * lease unset, so that lease is released and the device is picked here and allocated by its key, as
- * before. Every lease this client allocates therefore names its device; a renewed lease that names
+ * lease unset, so an owned lease is released before the device is picked here and allocated by its
+ * key. Every lease this client allocates therefore names its device; a renewed lease that names
  * none was supplied from outside, so it is refused and never released.
  *
  * A request that names a device spec has no such fallback: a new lease that does not echo the
@@ -132,11 +132,6 @@ export async function bindLeaseNamedDevice(options: {
   }
   if (leased) {
     const identityConflict = leasedIdentityConflict(options.state, flags, leased);
-    if (identityConflict && acquired) {
-      // Ends through the ledger so this lease is never released twice, and a release that could
-      // not end it is still owned when the refusal below throws — the failure path reports it.
-      await leaseLedger.end(lease.leaseId);
-    }
     if (identityConflict) throw identityConflict;
     if (!acquired) {
       assertLeaseSpecMatchesRequest(options.state, lease, spec, specKeys, leased);
@@ -160,39 +155,12 @@ export async function bindLeaseNamedDevice(options: {
     };
   }
   if (!acquired) throw unboundLeaseError(options.state, lease);
-  await retireKeylessLeaseBeforeFallback(leaseLedger, options.state, lease);
+  await leaseLedger.end(lease.leaseId);
   const resolved = await resolveProxyLeaseStateLocally(options);
   return {
     state: resolved.state,
     materialized: await options.allocateByDeviceKey(resolved.state, flags),
   };
-}
-
-/**
- * Ends a new lease that names no device before the local-pick fallback allocates its replacement.
- * The fallback would otherwise abandon this lease: only the replacement reaches the durable record,
- * and a lease no record names is invisible to disconnect. An unconfirmed retirement therefore fails
- * the command with typed release evidence; the ledger still owns the lease, so the command's failure
- * path retries the release and reports it beside this refusal.
- */
-async function retireKeylessLeaseBeforeFallback(
-  leaseLedger: LeaseLedger,
-  state: RemoteConnectionState,
-  lease: Lease,
-): Promise<void> {
-  const retired = await leaseLedger.end(lease.leaseId);
-  if (retired.released) return;
-  throw new AppError(
-    'COMMAND_FAILED',
-    'The proxy backend leased a device without naming it, and releasing that lease failed, so the local fallback stopped. The lease may stay held until it expires.',
-    {
-      session: state.session,
-      leaseId: lease.leaseId,
-      released: false,
-      reason: 'PROXY_LEASE_RETIREMENT_FAILED',
-      ...(retired.error === undefined ? {} : { releaseError: retired.error }),
-    },
-  );
 }
 
 /**
@@ -207,7 +175,12 @@ async function refuseUnhonouredSpecLease(
   lease: Lease,
   keys: readonly string[],
 ): Promise<AppError> {
-  const outcome = await leaseLedger.end(lease.leaseId);
+  let outcome: { released: boolean; error?: string };
+  try {
+    outcome = await leaseLedger.end(lease.leaseId);
+  } catch (error) {
+    outcome = { released: false, error: errorMessage(error) };
+  }
   return deviceSpecUnsupportedError(
     keys,
     outcome.released

@@ -100,6 +100,39 @@ test('proxy open by device spec sends the spec on allocate without listing devic
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a by-spec grant omitting created binds and records the granted spec without releasing it', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-spec-old-daemon-');
+  const releases: LeaseReleaseRequest[] = [];
+  const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
+    command: 'open',
+    flags: { ...flags, osVersion: '>=26' },
+    client: createTestClient({
+      listDevices: unexpectedCommandCall,
+      allocate: async (request) => {
+        const { created: _created, ...lease } = grantedLease(request, {
+          deviceKey: REMOTE_DEVICE_KEY,
+          device: GRANTED_DEVICE,
+        });
+        return lease;
+      },
+      release: async (request) => {
+        releases.push(request);
+        return { released: true };
+      },
+    }),
+  });
+  assert.equal(materialized.flags.udid, 'SIM-REMOTE');
+  assert.deepEqual(materialized.leaseDevice, GRANTED_DEVICE);
+  assert.deepEqual(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseDeviceSpec, {
+    leaseId: 'lease-1',
+    spec: { osVersion: '>=26' },
+    device: GRANTED_DEVICE,
+  });
+  assert.deepEqual(releases, []);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('proxy open by device spec without a platform or lease backend fails before allocating', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-device-spec-no-platform-');
   const { platform: _platform, ...flagsWithoutPlatform } = flags;

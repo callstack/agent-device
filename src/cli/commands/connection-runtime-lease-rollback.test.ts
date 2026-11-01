@@ -186,6 +186,73 @@ test('a lease the daemon says this request did not create is kept when Metro pre
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('an allocation omitting created is kept when Metro preparation fails', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-old-daemon-',
+  );
+  writeProfile(remoteConfigPath);
+  const releases: string[] = [];
+  const prepareFailure = metroPrepareFailure();
+  await assert.rejects(
+    materializeOnHost({
+      stateDir,
+      remoteConfigPath,
+      client: createTestClient({
+        allocate: async (request) => {
+          const { created: _created, ...lease } = grantedLease(request);
+          return lease;
+        },
+        release: async (request) => {
+          releases.push(request.leaseId);
+          return { released: true };
+        },
+        prepare: async () => {
+          throw prepareFailure;
+        },
+      }),
+    }),
+    (error) => {
+      assert.equal(error, prepareFailure);
+      assert.equal(prepareFailure.details?.leaseRollback, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(releases, []);
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' }), null);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('an already absent lease adds no rollback failure to the Metro error', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-expired-',
+  );
+  writeProfile(remoteConfigPath);
+  const releases: string[] = [];
+  const prepareFailure = metroPrepareFailure();
+  await assert.rejects(
+    materializeOnHost({
+      stateDir,
+      remoteConfigPath,
+      client: createTestClient({
+        release: async (request) => {
+          releases.push(request.leaseId);
+          return { released: false };
+        },
+        prepare: async () => {
+          throw prepareFailure;
+        },
+      }),
+    }),
+    (error) => {
+      assert.equal(error, prepareFailure);
+      assert.equal(prepareFailure.details?.leaseRollback, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(releases, ['lease-1']);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a lease allocated before a platform conflict is still released when acquisition fails', async () => {
   const { tempRoot, stateDir, remoteConfigPath, flags } = proxyWorkspace(
     'agent-device-connect-platform-conflict-',
