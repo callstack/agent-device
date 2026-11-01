@@ -470,6 +470,44 @@ test('a close refuses a queued capture instead of letting it wait for a stopped 
   assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
 });
 
+test('a close while the helper exit status stays unread ends the capture instead of waiting for it', async () => {
+  const fixture = createLifecycleFixture({ helperGoneAtConnect: true });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const request = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 2000 },
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(
+    () => fixture.processes[0]?.exitStatusReads === 1,
+    'the manager never asked for the helper exit status',
+  );
+
+  // Settled before the close: this capture is work the close has to wait for.
+  const outcome = request.then(
+    () => ({ refused: false as const }),
+    (error: unknown) => ({ refused: true as const, error }),
+  );
+
+  const closed = await settleWithin(manager.close(), 500);
+
+  assert.equal(closed, 'settled', 'close waited for an exit status that never arrived');
+  const settled = await outcome;
+  assert.equal(settled.refused, true);
+  assert.ok(settled.refused && isClosedSourceFailure(settled.error));
+  // The helper was already gone, so the refused creation had nothing to stop, and its refusal names
+  // the close rather than a crash whose outcome the manager never learned.
+  assert.deepEqual(fixture.processes[0]!.signals, []);
+  assert.equal(fixture.connects.length, 1);
+  assert.equal(fixture.sockets.length, 0);
+  assert.equal(
+    fixture.diagnostics.some((event) => event.phase === 'ios.snapshot-source.bridge-process-exit'),
+    false,
+  );
+});
+
 test('the manager rejects a tree when the target process changes during acquisition', async () => {
   const fixture = createLifecycleFixture({ targetStartTimes: ['start-1', 'start-2'] });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -519,6 +557,24 @@ async function waitForDispatch(fixture: LifecycleFixture): Promise<void> {
   );
 }
 
+/** Whether `pending` finishes on its own inside `graceMs`, so a test can name a wait it must not need. */
+async function settleWithin(
+  pending: Promise<void>,
+  graceMs: number,
+): Promise<'settled' | 'pending'> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      pending.then(() => 'settled' as const),
+      new Promise<'pending'>((resolve) => {
+        timer = setTimeout(() => resolve('pending'), graceMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function waitForFixture(condition: () => boolean, message: string): Promise<void> {
   const startedAt = Date.now();
   while (!condition()) {
@@ -560,6 +616,11 @@ function createLifecycleFixture(
     pauseAtDirectorySetup?: () => Promise<void>;
     /** Holds a bridge connect open so a test can close the manager inside it. */
     pauseAtConnect?: () => Promise<void>;
+    /**
+     * Takes the helper away without an exit status as the bridge connect is attempted, so the connect
+     * fails and the manager is left reading a status that never arrives.
+     */
+    helperGoneAtConnect?: boolean;
   } = {},
 ): LifecycleFixture {
   const processes: FakeProcess[] = [];
@@ -589,6 +650,12 @@ function createLifecycleFixture(
     connect: async (socketPath, connectOptions) => {
       connects.push(socketPath);
       if (options.pauseAtConnect) await options.pauseAtConnect();
+      if (options.helperGoneAtConnect) {
+        // The manager already saw the helper start, so this is a launch that died without ever
+        // reporting its status: the socket it would have answered on is gone with it.
+        processes[0]?.exitWithoutStatus();
+        throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');
+      }
       if (options.connectDelayMs) {
         await new Promise<void>((resolve, reject) => {
           const finish = (error?: SnapshotSourceError) => {
@@ -630,19 +697,30 @@ function createLifecycleFixture(
 class FakeProcess implements SnapshotSourceProcess {
   alive = true;
   signals: NodeJS.Signals[] = [];
-  readonly wait: Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  /** How often the manager asked for the exit status, counting one read still awaiting a result. */
+  exitStatusReads = 0;
   private readonly processId: number;
-  private resolveWait!: (result: { stdout: string; stderr: string; exitCode: number }) => void;
+  private readonly exitStatus: Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  private resolveExitStatus!: (result: {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }) => void;
 
   constructor(pid: number) {
     this.processId = pid;
-    this.wait = new Promise((resolve) => {
-      this.resolveWait = resolve;
+    this.exitStatus = new Promise((resolve) => {
+      this.resolveExitStatus = resolve;
     });
   }
 
   get pid(): number {
     return this.processId;
+  }
+
+  get wait(): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    this.exitStatusReads += 1;
+    return this.exitStatus;
   }
 
   isAlive(): boolean {
@@ -652,12 +730,17 @@ class FakeProcess implements SnapshotSourceProcess {
   signal(signal: NodeJS.Signals): void {
     this.signals.push(signal);
     this.alive = false;
-    this.resolveWait({ stdout: '', stderr: '', exitCode: signal === 'SIGKILL' ? 137 : 0 });
+    this.resolveExitStatus({ stdout: '', stderr: '', exitCode: signal === 'SIGKILL' ? 137 : 0 });
   }
 
   crash(): void {
     this.alive = false;
-    this.resolveWait({ stdout: '', stderr: 'crashed', exitCode: 1 });
+    this.resolveExitStatus({ stdout: '', stderr: 'crashed', exitCode: 1 });
+  }
+
+  /** Goes away without ever reporting its status, the way a helper with inherited pipes can. */
+  exitWithoutStatus(): void {
+    this.alive = false;
   }
 
   readLog(): string {

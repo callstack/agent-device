@@ -263,7 +263,7 @@ export class SnapshotBridgeManager {
       if (stop.aborted) throw closedSourceRefusal();
       const remainingMs = remainingSnapshotSourceMs(deadline, 'bridge-connect-deadline');
       if (!session.process.isAlive()) {
-        throw await bridgeProcessExited(this.host, session.process);
+        throw await this.bridgeExitOrClose(session, stop);
       }
       let socket: SnapshotSourceSocket;
       try {
@@ -291,6 +291,33 @@ export class SnapshotBridgeManager {
       signal: deadline.signal,
       timeoutMs: Math.min(CONNECT_ATTEMPT_TIMEOUT_MS, remainingMs),
     });
+  }
+
+  /**
+   * Why the helper is gone, unless a close ends that question first.
+   *
+   * The exit status is not free to wait for: the host settles it when the child's own pipes close, and a
+   * descendant that inherited one can hold it pending indefinitely. A close cannot make that answer
+   * arrive, so the close answers here: the refused creation goes on to stop what it started and names the
+   * close, while the read nobody waits on still records the exit if it ever settles.
+   */
+  private async bridgeExitOrClose(
+    session: BridgeSession,
+    stop: AbortSignal,
+  ): Promise<SnapshotSourceError> {
+    let refuse!: () => void;
+    const refusal = new Promise<SnapshotSourceError>((resolve) => {
+      // Resolves rather than rejects: a close that arrives after the exit status did must never leave a
+      // rejection nobody owns.
+      refuse = () => resolve(closedSourceRefusal());
+    });
+    if (stop.aborted) refuse();
+    else stop.addEventListener('abort', refuse, { once: true });
+    try {
+      return await Promise.race([bridgeProcessExited(this.host, session.process), refusal]);
+    } finally {
+      stop.removeEventListener('abort', refuse);
+    }
   }
 
   /**
