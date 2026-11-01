@@ -244,7 +244,10 @@ test('a pre-pick daemon omitting created falls back locally without releasing ei
   assert.equal(requests[0]?.deviceKey, undefined);
   assert.equal(requests[1]?.deviceKey, 'ios:mobile:SIM-LOCAL');
   assert.equal(materialized.flags.udid, 'SIM-LOCAL');
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, 'lease-2');
+  assert.equal(materialized.connection?.deviceKey, 'ios:mobile:SIM-LOCAL');
+  const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
+  assert.equal(state?.leaseId, 'lease-2');
+  assert.equal(state?.deviceKey, 'ios:mobile:SIM-LOCAL');
   assert.deepEqual(releases, []);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
