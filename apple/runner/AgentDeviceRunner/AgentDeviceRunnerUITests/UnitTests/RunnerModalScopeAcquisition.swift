@@ -1,6 +1,7 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
 enum ModalScopeAcquisitionFailure: Equatable {
   case clientUnavailable
   case targetUnresolved
@@ -77,3 +78,4 @@ enum ModalScopeAcquisition {
     tree.nodes.map { ModalScopeNode(element: $0.element, parentElement: $0.parentElement, frame: $0.frame) }
   }
 }
+#endif

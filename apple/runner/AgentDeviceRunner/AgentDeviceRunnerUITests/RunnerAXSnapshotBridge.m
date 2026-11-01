@@ -1,4 +1,4 @@
-#import "RunnerAXSnapshotBridge+Internal.h"
+#import "RunnerAXSnapshotBridge.h"
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/message.h>

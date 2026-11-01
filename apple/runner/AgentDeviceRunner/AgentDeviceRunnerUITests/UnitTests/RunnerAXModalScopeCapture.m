@@ -1,3 +1,4 @@
+#if defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)
 #import "RunnerAXModalScopeCapture.h"
 
 #import <objc/message.h>
@@ -248,3 +249,4 @@ typedef unsigned long long (*RunnerAXUnsignedLongLongMsgSend)(id, SEL);
 }
 
 @end
+#endif

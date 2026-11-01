@@ -2,8 +2,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// The bridge's client, target, request, and attribute plumbing, shared with the other AX reads
-/// so each private call has one implementation.
+/// The bridge's client, target, request, and attribute plumbing, shared with the modal-scope
+/// capture so each private call has one implementation.
 @interface RunnerAXSnapshotBridge ()
 
 + (nullable id)accessibilityApplicationForApplication:(XCUIApplication *)application axClient:(id)axClient;
