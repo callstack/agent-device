@@ -66,8 +66,9 @@ extension ModalSurface {
 
     // Pairing matched elements under parent elements. This walk matches them under the parent node,
     // which also tells apart the occurrences of an element that one read lists under two parents.
-    // An element listed more than once under one parent pairs in order only when the honor-modal read
-    // keeps every occurrence; otherwise the walk reports `duplicatedChild`.
+    // An element listed more than once under one parent pairs in order when the honor-modal read keeps
+    // every occurrence, and counts as removed when it keeps none. When it keeps some but not all, the
+    // walk reports `duplicatedChild`.
     var failure = ModalSurfaceUnknownReason.unstable(.reparentedElement)
     func surfaces(honorModalNode: Int, plainNode: Int) -> [ModalSurface]? {
       var removed = plainChildren[plainNode]

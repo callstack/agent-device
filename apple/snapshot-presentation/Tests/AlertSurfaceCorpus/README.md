@@ -36,13 +36,18 @@ You need:
    ```
 
    Each line shows a node's index, type, and label. `[kept 1 of 3 children]` marks a node where
-   the honor-modal tree removed children. To print the whole tree, add `plain` after the path.
+   the honor-modal tree removed children. `[duplicatedChild: kept 1 of 2 occurrences of …]` marks a
+   node that lists one element more than once, where the honor-modal tree kept only some of them.
+   To print the whole tree, add `plain` after the path. A recording that is out of preorder stops
+   the command; capture it again.
 
 4. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
    buttons. The sources are `blockingSystemModal`, `appAlert`, `safariDialog`, and `dismissPopup`.
    A source you leave out must find nothing. Write `{}` for a screen with no prompt.
 5. Add `expectModalScope` from the printed tree:
    - If no node is marked, write `{"reading": "noExclusion"}`.
+   - If a node is marked `duplicatedChild`, `ModalSurface` can't tell which occurrence lost
+     children, so it reads no surface. Write `{"reading": "unknown", "reason": "duplicatedChild"}`.
    - Otherwise, write `"reading": "modal"` and one surface for each branch. The surface's `host` is
      the innermost marked node of the branch, and its `roots` are the children that node kept.
      `actions` are the labels of the controls under the roots, in the printed order. Empty labels

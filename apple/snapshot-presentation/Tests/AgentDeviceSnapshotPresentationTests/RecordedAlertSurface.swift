@@ -24,9 +24,10 @@ struct RecordedAlertSurface: Decodable {
     let buttons: [String]
   }
 
-  /// `reading` is `modal` or `noExclusion`. A `modal` reading lists each surface by its host and root
-  /// positions in the honor-modal tree, with the labels of the actions it offers, and the labels of
-  /// the honor-modal tree's actions that no surface offers.
+  /// `reading` is `modal`, `noExclusion`, or `unknown` with the `reason` `duplicatedChild`. A
+  /// `modal` reading lists each surface by its host and root positions in the honor-modal tree, with
+  /// the labels of the actions it offers, and the labels of the honor-modal tree's actions that no
+  /// surface offers.
   struct ModalScopeExpectation: Decodable {
     struct Surface: Decodable {
       let host: Int
@@ -35,6 +36,7 @@ struct RecordedAlertSurface: Decodable {
     }
 
     let reading: String
+    let reason: String?
     let surfaces: [Surface]?
     let excludedActions: [String]?
   }
