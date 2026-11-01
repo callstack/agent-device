@@ -775,18 +775,45 @@ extension RunnerTests {
     app.launch()
     defer { app.terminate() }
     try withTransportClient { client, port in
+      let selector = "missing-journal-selector-\(UUID().uuidString)"
+      let payload = #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"\#(selector)"}"#
       let first = try transportHttpResponse(
-        client: client, port: port,
-        payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"Agent Device Runner"}"#
+        client: client, port: port, payload: payload
       )
       XCTAssertTrue(first.ok, String(describing: first.error))
-      XCTAssertEqual(first.data?.found, true)
-      let repeated = try transportHttpResponse(
-        client: client, port: port,
-        payload: #"{"command":"querySelector","commandId":"selector-twice","selectorKey":"label","selectorValue":"missing-journal-selector"}"#
+      XCTAssertEqual(first.data?.found, false)
+      XCTAssertEqual(
+        commandJournal.status(normalizedCommandId: "selector-twice").lifecycleState,
+        RunnerCommandLifecycleState.completed.rawValue
       )
+
+      let queueOccupied = expectation(description: "command queue occupied before selector resend")
+      let releaseQueue = DispatchSemaphore(value: 0)
+      defer { releaseQueue.signal() }
+      commandExecutionQueue.async {
+        queueOccupied.fulfill()
+        releaseQueue.wait()
+      }
+      wait(for: [queueOccupied], timeout: 2)
+
+      let repeatSend = transportHttpRequest(client: client, port: port, payload: payload)
+      let readmitted = XCTNSPredicateExpectation(
+        predicate: NSPredicate { _, _ in
+          self.commandJournal.status(normalizedCommandId: "selector-twice").lifecycleState
+            == RunnerCommandLifecycleState.accepted.rawValue
+        },
+        object: nil
+      )
+      wait(for: [readmitted], timeout: 2)
+      releaseQueue.signal()
+      wait(for: [repeatSend.finished], timeout: 2)
+      let repeated = try repeatSend.response()
       XCTAssertTrue(repeated.ok, String(describing: repeated.error))
-      XCTAssertEqual(repeated.data?.found, false, "a finished selector read must execute instead of replaying its retained answer")
+      XCTAssertEqual(repeated.data?.found, false)
+      XCTAssertEqual(
+        commandJournal.status(normalizedCommandId: "selector-twice").lifecycleState,
+        RunnerCommandLifecycleState.completed.rawValue
+      )
     }
   }
 
