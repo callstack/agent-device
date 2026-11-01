@@ -92,6 +92,8 @@ It reads both lease records only after it holds the daemon registration for the 
 The lease itself is not restored, and its controller connects again.
 Restoring the live lease was rejected: the sessions and device claims of the dead daemon are gone, so a restored lease would name a device that no session can reach.
 A lease that leaves the registry for expiry stays in the journal until its expired-lease record is durable, and a journal write that fails is retried.
+Daemon shutdown performs one final journal write when a retry was owed, and ends those retries.
+A daemon that has shut down writes lease records only synchronously. It arms no timer for them, because a timer could fire after that daemon released its registration, when the records belong to the next daemon.
 Two routes still let the registry forget a provider lease while its device may be rented. The journal and expiry recovery both follow the registry, so neither covers it, and only the provider runtime still holding the device can end it:
 
 - A failed first allocation releases the registry entry without a provider release, while its provider start may still run.
