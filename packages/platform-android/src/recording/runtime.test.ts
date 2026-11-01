@@ -190,6 +190,156 @@ test('serializes a failed rotation so finish cannot publish completion', async (
   }
 });
 
+/**
+ * Pauses the rotation once, at the manifest write that would commit the chunk it has already
+ * launched, so a stop can be driven while that rotation is still in flight.
+ */
+function pauseChunkCommit() {
+  let paused = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    intercept: async (contents: string) => {
+      if (paused) return;
+      const written = JSON.parse(contents) as { chunks?: unknown[] };
+      if (written.chunks?.length !== 2) return;
+      paused = true;
+      await released;
+    },
+    isPaused: () => paused,
+    release: () => release(),
+  };
+}
+
+/** Pauses the launch of the next chunk, so a stop can be claimed before that child is reported. */
+function pauseNextLaunch() {
+  let waiting = false;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    intercept: async () => {
+      waiting = true;
+      await released;
+    },
+    isWaiting: () => waiting,
+    release: () => release(),
+  };
+}
+
+test('does not start a chunk after finish when a successful rotation is still in flight', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const commit = pauseChunkCommit();
+    const runtime = await start({
+      start: async () => {
+        starts += 1;
+        return recordingProcess(String(41 + starts));
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+        await commit.intercept(contents);
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(2);
+    expect(commit.isPaused()).toBe(true);
+    const finishing = handle.finish();
+    commit.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(2);
+    expect(JSON.parse(manifest)).toMatchObject({
+      chunks: [{ remotePid: '42' }, { remotePid: '43' }],
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('does not start a chunk after force cleanup when a successful rotation is still in flight', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const commit = pauseChunkCommit();
+    const runtime = await start({
+      start: async () => {
+        starts += 1;
+        return recordingProcess(String(41 + starts));
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+        await commit.intercept(contents);
+      },
+      readManifest: async () =>
+        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+      removeManifest: async () => {
+        manifest = '';
+        return true;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(2);
+    expect(commit.isPaused()).toBe(true);
+    const cleaning = handle.forceCleanup();
+    commit.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(cleaning).resolves.toEqual({ status: 'cleaned' });
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(2);
+    expect(manifest).toBe('');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('rolls back the chunk a rotation launched after the stop was claimed', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const launch = pauseNextLaunch();
+    const startedPaths: string[] = [];
+    const removed: string[] = [];
+    const runtime = await start({
+      start: async ({ remotePath }: { remotePath: string }) => {
+        starts += 1;
+        if (starts > 1) await launch.intercept();
+        startedPaths.push(remotePath);
+        return recordingProcess(String(41 + starts));
+      },
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+      remove: async (remotePath: string) => {
+        removed.push(remotePath);
+        return true;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(launch.isWaiting()).toBe(true);
+    const finishing = handle.finish();
+    launch.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(finishing).resolves.toMatchObject({ status: 'completed' });
+    expect(starts).toBe(2);
+    expect(removed).toContain(startedPaths[1]);
+    expect(JSON.parse(manifest).chunks).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('falls back to sequential rotation when concurrent start is unavailable', async () => {
   vi.useFakeTimers();
   try {

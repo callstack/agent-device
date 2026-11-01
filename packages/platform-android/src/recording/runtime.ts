@@ -28,6 +28,14 @@ import { cleanupAndroidRecording, reattachAndroidRecording, readLiveEvidence } f
 
 const ROTATE_AFTER_MS = 170_000;
 
+/**
+ * The rotation lifecycle of one recording. `recording` may still start a chunk, `stopping` has been
+ * asked to stop and is settling the rotation it accepted, `finished` has committed its native
+ * evidence. Only `claimStop` and `confirmNativeCleanup` move it, so one owner decides whether a
+ * rotation may still start a chunk on the device.
+ */
+type RecordingPhase = 'recording' | 'stopping' | 'finished';
+
 export async function bindAndroidScreenRecordingRuntime(params: {
   host: PlatformRuntimeHost;
   device: DeviceInfo;
@@ -70,14 +78,41 @@ async function startAndroidRecording(params: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rotation: Promise<void> | undefined;
   let rotationFailure: unknown;
-  let nativeCleanupConfirmed = false;
+  let phase: RecordingPhase = 'recording';
+  /**
+   * Stops accepting rotations and arms nothing that could start one. The claim is synchronous, so the
+   * rotation already in flight cannot publish a chunk behind the stop that interrupted it.
+   */
+  const claimStop = () => {
+    if (timer) clearTimeout(timer);
+    if (phase === 'recording') phase = 'stopping';
+  };
+  const acceptsRotations = () => phase === 'recording';
+  /** Marks the native evidence settled, which is the only way out of `stopping`. */
+  const confirmNativeCleanup = () => {
+    phase = 'finished';
+  };
   const schedule = () => {
+    if (!acceptsRotations()) return;
     timer = setTimeout(() => {
       rotation = rotate().catch((error: unknown) => {
         rotationFailure = error;
       });
     }, ROTATE_AFTER_MS);
     timer.unref?.();
+  };
+  /**
+   * Gives up a chunk the stop refused while it was launching, so its recorder cannot outlive the
+   * recording. An abandoned chunk that cannot be cleaned is a rotation failure: the marker still
+   * names it as pending, and only disposal may then settle it.
+   */
+  const abandonUncommittedChunk = async (chunk: NativeChunk) => {
+    await rollbackChunks(transport, [chunk]);
+    await persistNativeManifest(
+      transport,
+      manifestPath,
+      createNativeManifest(device, input, startedAt, chunks, undefined, transport.mode),
+    ).catch(() => {});
   };
   const rotate = async () => {
     const previous = chunks.at(-1);
@@ -110,6 +145,10 @@ async function startAndroidRecording(params: {
       } catch (sequentialStartError) {
         throw sequentialStartError instanceof Error ? sequentialStartError : concurrentStartError;
       }
+    }
+    if (!acceptsRotations()) {
+      await abandonUncommittedChunk(next);
+      return;
     }
     const nextChunks = [...chunks, { ...next, index: chunks.length + 1 }];
     try {
@@ -144,6 +183,8 @@ async function startAndroidRecording(params: {
       }
       throw error;
     }
+    // Committing is the last point a rotation can still be refused: the device holds this chunk from
+    // here, so it belongs to the recording even when a stop was claimed during the write.
     chunks = nextChunks;
     if (!previousStopped) await stopChunk(transport, previous);
     schedule();
@@ -151,7 +192,7 @@ async function startAndroidRecording(params: {
   schedule();
   const handle = createScreenRecordingLiveHandle(snapshot(input, startedAt), {
     finish: async (current, progress) => {
-      if (timer) clearTimeout(timer);
+      claimStop();
       await rotation;
       if (rotationFailure) throw rotationFailure;
       const outcome = await finalizeAndroidRecording({
@@ -163,12 +204,12 @@ async function startAndroidRecording(params: {
         startedAtMs: initial.startedAtMs,
         progress,
       });
-      nativeCleanupConfirmed = true;
+      confirmNativeCleanup();
       return outcome;
     },
     forceCleanup: async () => {
-      if (timer) clearTimeout(timer);
-      if (nativeCleanupConfirmed) return { status: 'cleaned' } as const;
+      claimStop();
+      if (phase === 'finished') return { status: 'cleaned' } as const;
       try {
         await rotation;
       } catch (error) {
