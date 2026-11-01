@@ -447,6 +447,50 @@ test('does not launch the sequential fallback after the stop was claimed', async
   }
 });
 
+test('still discloses the platform limit when the recorder a fallback retired had already exited', async () => {
+  vi.useFakeTimers();
+  try {
+    let starts = 0;
+    let manifest = '';
+    const retirement = pauseChunkRetirement('42');
+    const runtime = await start({
+      start: async () => {
+        starts += 1;
+        if (starts > 1) throw new Error('concurrent start unavailable');
+        return recordingProcess('42');
+      },
+      // The platform's 180 s cap ended this recorder just before the rotation reached it, so the
+      // retirement is told the recorder was already gone rather than confirming a stop of its own.
+      stop: async ({ pid }: { pid: string }) => {
+        await retirement.intercept(pid);
+        return 'already-missing' as const;
+      },
+      inspect: async () => 'missing' as const,
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+    });
+    const handle = (await runtime.screenRecordingStart(recordingInput())).pendingHandle.transfer();
+    await vi.advanceTimersByTimeAsync(170_000);
+    expect(starts).toBe(3);
+    expect(retirement.isPaused()).toBe(true);
+    const finishing = handle.finish();
+    retirement.release();
+    await vi.advanceTimersByTimeAsync(5_000);
+    const outcome = await finishing;
+    expect(outcome).toMatchObject({ status: 'completed' });
+    // The recorder died of the platform limit before the retirement ran, so that disclosure must
+    // survive the rotation that tried to retire it.
+    expect((outcome as { result?: { warning?: string } }).result?.warning ?? '').toMatch(
+      /platform limit/,
+    );
+    expect(starts).toBe(3);
+    expect(JSON.parse(manifest).chunks).toEqual([expect.objectContaining({ remotePid: '42' })]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('does not dispatch a chunk launch whose pending evidence was written after the stop was claimed', async () => {
   vi.useFakeTimers();
   try {
@@ -487,9 +531,10 @@ test('collects a chunk whose commit published while the stop was in flight', asy
   try {
     let starts = 0;
     // What the device's marker actually holds. A publication runs `printf %s … > tmp && mv -f tmp
-    // manifest`: the rename commits the marker on the device while the host command is still
-    // running, and aborting that command makes the host reject even though the rename already
-    // happened. This mock models that device outcome.
+    // manifest`: the rename commits the marker on the device while the host command is still running,
+    // and aborting that command would make the host reject even though the rename already happened.
+    // The commit therefore takes no stop signal at all, and this mock holds that write in flight
+    // across the stop to show its real outcome decides what the recording keeps.
     const deviceWrites: string[] = [];
     const commit = pauseChunkCommit();
     const startedPaths: string[] = [];
@@ -501,10 +546,9 @@ test('collects a chunk whose commit published while the stop was in flight', asy
         startedPaths.push(remotePath);
         return recordingProcess(String(41 + starts));
       },
-      writeManifest: async ({ contents }: { contents: string }, signal?: AbortSignal) => {
+      writeManifest: async ({ contents }: { contents: string }) => {
         await commit.intercept(contents);
         deviceWrites.push(contents);
-        if (signal?.aborted) throw new Error('manifest publication canceled');
       },
       stop: async ({ pid }: { pid: string }) => {
         if (stopped.has(pid)) return 'already-missing' as const;

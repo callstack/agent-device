@@ -81,9 +81,10 @@ async function startAndroidRecording(params: {
   let rotationFailure: unknown;
   let phase: RecordingPhase = 'recording';
   /**
-   * Whether a rotation retired the active chunk's recorder itself and then withdrew without
-   * replacing it. Finalization must read that recorder's absence as this recording's own retirement,
-   * not as the platform's 180 s limit cutting a recorder short.
+   * Whether a rotation retired the active chunk's recorder itself, confirmed by that stop, and then
+   * withdrew without replacing it. Finalization must read that recorder's absence as this recording's
+   * own retirement, not as the platform's 180 s limit cutting a recorder short. A retirement that
+   * found the recorder already gone is not this recording's doing and records nothing.
    */
   let retiredActiveRecorder = false;
   /**
@@ -153,11 +154,11 @@ async function startAndroidRecording(params: {
       // The stop owns the current recorder now, so do not begin retiring it for a replacement this
       // recording has already given up on. Finalization will stop it like any active chunk.
       if (stopAdmission.signal.aborted) throw new AndroidScreenRecordingStopClaimed();
-      // From here the retirement is this recording's own doing, so a later finalization must not
-      // read this recorder's absence as the platform's 180 s limit, whether or not the replacement
-      // this retirement was made for ever launches.
-      retiredActiveRecorder = true;
-      await stopChunk(transport, previous);
+      // Retiring this recorder is this recording's own doing, so a later finalization must not read
+      // its absence as the platform's 180 s limit, whether or not the replacement this retirement was
+      // made for ever launches. Only a stop that confirmed the recorder was live counts: one already
+      // gone means the recorder ended on its own, and that disclosure must survive this rotation.
+      if (!(await stopChunk(transport, previous))) retiredActiveRecorder = true;
       try {
         return { chunk: await launchChunk(previous), previousStopped: true };
       } catch (sequentialStartError) {
