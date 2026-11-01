@@ -87,7 +87,7 @@ test('withNormalizedSimulatorStatusBar still normalizes when snapshotting curren
   );
 });
 
-test('withNormalizedSimulatorStatusBar restores once for back-to-back captures of a cleared status bar', async () => {
+test('withNormalizedSimulatorStatusBar skips the snapshot read for back-to-back captures of a cleared status bar', async () => {
   await withFakeAppleTool(
     statusBarScript(() => 'Current Status Bar Overrides:\n============================='),
     async ({ calls }) => {

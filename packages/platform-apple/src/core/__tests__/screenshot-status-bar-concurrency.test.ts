@@ -113,12 +113,19 @@ test('overlapping simulator captures both restore the caller status bar override
       skipIosSimulatorBootCheck: true,
       deps: captureDeps(() => secondGate.capture()),
     });
-    await yieldToQueuedWork();
+    try {
+      await yieldToQueuedWork();
 
-    firstGate.release();
-    await first;
-    secondGate.release();
-    await second;
+      firstGate.release();
+      await first;
+      secondGate.release();
+      await second;
+    } finally {
+      // A capture that never reached its gate would keep the simulator's lock and hang every
+      // later case in this file, hiding the failure the test is here to report.
+      firstGate.release();
+      secondGate.release();
+    }
 
     assert.deepEqual(
       statusBar.overrides(),
@@ -156,12 +163,28 @@ test('a failed simulator capture restores the caller overrides and lets the queu
       skipIosSimulatorBootCheck: true,
       deps: captureDeps(() => secondGate.capture()),
     });
-    await yieldToQueuedWork();
+    let firstError: unknown;
+    try {
+      await yieldToQueuedWork();
 
-    firstGate.release();
-    await assert.rejects(() => first);
-    secondGate.release();
-    await second;
+      firstGate.release();
+      firstError = await first.then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      secondGate.release();
+      await second;
+    } finally {
+      firstGate.release();
+      secondGate.release();
+    }
+
+    assert.ok(
+      firstError instanceof AppError,
+      `expected an AppError, received: ${String(firstError)}`,
+    );
+    assert.equal((firstError as AppError).code, 'COMMAND_FAILED');
+    assert.equal((firstError as AppError).message, 'simctl screenshot failed');
 
     assert.deepEqual(statusBar.overrides(), CALLER_OVERRIDES);
     assert.deepEqual(
@@ -188,5 +211,48 @@ test('a single simulator capture normalizes while it captures and restores after
 
     assert.deepEqual(seenDuringCapture, [NORMALIZED_OVERRIDES]);
     assert.deepEqual(statusBar.overrides(), CALLER_OVERRIDES);
+  });
+});
+
+test('a plain simulator capture waits for the normalization window instead of capturing it', async () => {
+  const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
+  const normalizingGate = createCaptureGate();
+  const seenDuringPlainCapture: StatusBarOverrideState[] = [];
+
+  await withFakeAppleTool(statusBar.script, async () => {
+    const normalizing = captureSimulatorScreenshotWithFallback(
+      IOS_TEST_SIMULATOR,
+      '/tmp/normalized.png',
+      {
+        env: process.env,
+        normalizeStatusBar: true,
+        skipIosSimulatorBootCheck: true,
+        deps: captureDeps(() => normalizingGate.capture()),
+      },
+    );
+    await normalizingGate.entered;
+
+    const plain = captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/plain.png', {
+      env: process.env,
+      skipIosSimulatorBootCheck: true,
+      deps: captureDeps(async () => {
+        seenDuringPlainCapture.push(statusBar.overrides());
+      }),
+    });
+    try {
+      await yieldToQueuedWork();
+
+      normalizingGate.release();
+      await normalizing;
+      await plain;
+    } finally {
+      normalizingGate.release();
+    }
+
+    assert.deepEqual(
+      seenDuringPlainCapture,
+      [CALLER_OVERRIDES],
+      'a capture without --normalize-status-bar must not take its screenshot of the temporary normalized bar',
+    );
   });
 });

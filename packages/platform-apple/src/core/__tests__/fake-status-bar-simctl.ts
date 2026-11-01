@@ -82,8 +82,14 @@ type StatusBarOverrideLine = {
   render: (state: StatusBarOverrideState) => string;
 };
 
-function codeOf(codes: Record<string, number>, value: string | undefined): number {
-  return value === undefined ? 0 : (codes[value] ?? 0);
+/** The listing code for one override value; an unmapped value is the fake's bug, not a silent `hide`. */
+function codeOf(codes: Record<string, number>, value: string | undefined, field: string): number {
+  if (value === undefined) return 0;
+  const code = codes[value];
+  if (code === undefined) {
+    throw new Error(`fake simctl status_bar cannot list ${field}: ${value}`);
+  }
+  return code;
 }
 
 const STATUS_BAR_OVERRIDES_LISTING: StatusBarOverrideLine[] = [
@@ -93,17 +99,18 @@ const STATUS_BAR_OVERRIDES_LISTING: StatusBarOverrideLine[] = [
   },
   {
     reads: ['dataNetwork'],
-    render: (state) => `DataNetworkType: ${codeOf(DATA_NETWORK_CODE, state.dataNetwork)}`,
+    render: (state) =>
+      `DataNetworkType: ${codeOf(DATA_NETWORK_CODE, state.dataNetwork, 'dataNetwork')}`,
   },
   {
     reads: ['wifiMode', 'wifiBars'],
     render: (state) =>
-      `WiFi Mode: ${codeOf(WIFI_MODE_CODE, state.wifiMode)}, WiFi Bars: ${state.wifiBars ?? 0}`,
+      `WiFi Mode: ${codeOf(WIFI_MODE_CODE, state.wifiMode, 'wifiMode')}, WiFi Bars: ${state.wifiBars ?? 0}`,
   },
   {
     reads: ['cellularMode', 'cellularBars'],
     render: (state) =>
-      `Cell Mode: ${codeOf(CELLULAR_MODE_CODE, state.cellularMode)}, Cell Bars: ${state.cellularBars ?? 0}`,
+      `Cell Mode: ${codeOf(CELLULAR_MODE_CODE, state.cellularMode, 'cellularMode')}, Cell Bars: ${state.cellularBars ?? 0}`,
   },
   {
     reads: ['operatorName'],

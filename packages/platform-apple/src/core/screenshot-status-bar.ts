@@ -58,8 +58,11 @@ const CELLULAR_MODE_BY_CODE: Record<number, string> = {
 
 const devicesKnownWithoutStatusBarOverrides = new Set<string>();
 
-/** One entry per simulator whose status bar a capture is normalizing right now. */
+/** One entry per simulator whose status bar a capture is holding right now. */
 const simulatorStatusBarTransactions = new Map<string, Promise<unknown>>();
+
+/** Bounds one `simctl status_bar` step so a wedged tool cannot hold a simulator's captures. */
+const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
 
 /** What the simulator's status bar held before a capture normalized it. */
 type StatusBarOverrideSnapshot = {
@@ -70,14 +73,19 @@ type StatusBarOverrideSnapshot = {
 
 /**
  * Runs `capture` with the simulator status bar normalized, then restores the overrides the
- * simulator held before this call. One simulator normalizes one capture at a time: the
- * normalization is temporary state, so a capture that overlapped another would snapshot it and
- * later hand it back as though the caller had set it. A status bar problem never decides whether
- * `capture` runs or what it returns.
+ * simulator held before this call. One simulator handles one of these at a time: the normalization
+ * is temporary state, so a capture that overlapped another would snapshot it and later hand it back
+ * as though the caller had set it. A status bar problem never decides whether `capture` runs or
+ * what it returns.
+ *
+ * `signal` cancels the wait for the simulator, never the restore: the normalization is shared device
+ * state, so it has to be undone even once the caller has given up. Every status bar command is
+ * bounded by {@link STATUS_BAR_COMMAND_TIMEOUT_MS}, so a wedged `simctl` cannot hold the simulator.
  */
 export async function withNormalizedSimulatorStatusBar<T>(
   device: DeviceInfo,
   capture: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   return await withKeyedLock(
     simulatorStatusBarTransactions,
@@ -94,6 +102,25 @@ export async function withNormalizedSimulatorStatusBar<T>(
         ).catch((error) => emitSimulatorStatusBarDiagnostic(device, 'restore_failed', error));
       }
     },
+    signal,
+  );
+}
+
+/**
+ * Reserves one simulator's status bar while `capture` runs, without changing the bar. A capture that
+ * does not normalize still has to wait: while another capture normalizes the bar, this one would
+ * otherwise take its screenshot of the temporary 9:41 overrides.
+ */
+export async function withSimulatorStatusBarHeld<T>(
+  device: DeviceInfo,
+  capture: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  return await withKeyedLock(
+    simulatorStatusBarTransactions,
+    statusBarSimulatorKey(device),
+    capture,
+    signal,
   );
 }
 
@@ -168,6 +195,7 @@ async function readSimulatorStatusBarOverrides(
   const result = requireExecSuccess(
     await runSimctlForDevice(device, ['status_bar', device.id, 'list'], {
       allowFailure: true,
+      timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
     }),
     'Failed to read simulator status bar overrides',
   );
@@ -175,7 +203,9 @@ async function readSimulatorStatusBarOverrides(
 }
 
 async function clearSimulatorStatusBarOverride(device: DeviceInfo): Promise<void> {
-  await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
+  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
+    timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
+  });
 }
 
 async function applySimulatorStatusBarOverrideArgs(
@@ -183,7 +213,9 @@ async function applySimulatorStatusBarOverrideArgs(
   args: string[],
 ): Promise<void> {
   if (args.length === 0) return;
-  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args]);
+  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], {
+    timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
+  });
 }
 
 function parseSimulatorStatusBarOverrides(output: string): RestorableStatusBarOverrides | null {

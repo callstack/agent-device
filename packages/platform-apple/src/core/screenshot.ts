@@ -27,7 +27,10 @@ import {
   resolveRunnerContainerBundleIds,
   type AppleRunnerCommandOptions,
 } from '@agent-device/apple-runner';
-import { withNormalizedSimulatorStatusBar } from './screenshot-status-bar.ts';
+import {
+  withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
+} from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
   resolveAppleCaptureTarget,
@@ -42,10 +45,23 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
   /**
-   * Runs `capture` with the simulator status bar normalized and restores the caller's overrides
-   * afterwards, one capture per simulator at a time.
+   * Runs `capture` while it owns the simulator's status bar: normalized to the deterministic state,
+   * with the caller's overrides restored afterwards. One capture per simulator at a time.
    */
-  withNormalizedStatusBar: <T>(device: DeviceInfo, capture: () => Promise<T>) => Promise<T>;
+  withNormalizedStatusBar: <T>(
+    device: DeviceInfo,
+    capture: () => Promise<T>,
+    signal?: AbortSignal,
+  ) => Promise<T>;
+  /**
+   * Runs `capture` while it owns the simulator's status bar, without changing the bar. It still
+   * waits: a capture that normalizes shows the deterministic state while it is in flight.
+   */
+  withStatusBarHeld: <T>(
+    device: DeviceInfo,
+    capture: () => Promise<T>,
+    signal?: AbortSignal,
+  ) => Promise<T>;
   resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
@@ -91,6 +107,7 @@ type SimulatorScreenshotFlowOptions = {
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
+  withStatusBarHeld: withSimulatorStatusBarHeld,
   resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
@@ -194,10 +211,9 @@ export async function captureSimulatorScreenshotWithFallback(
     return captureFacts;
   };
 
-  if (options.normalizeStatusBar !== true) {
-    return await captureWithFallback();
-  }
-  return await deps.withNormalizedStatusBar(device, captureWithFallback);
+  const holdStatusBar =
+    options.normalizeStatusBar === true ? deps.withNormalizedStatusBar : deps.withStatusBarHeld;
+  return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
 }
 
 export async function captureSimulatorScreenshotWithRetry(
