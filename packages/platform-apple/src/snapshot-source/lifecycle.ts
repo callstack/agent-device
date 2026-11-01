@@ -186,9 +186,7 @@ export class SnapshotBridgeManager {
       sessions.push(entry.session);
     }
     await Promise.all([
-      ...sessions.map(async (session) => {
-        await this.dispose(session, true);
-      }),
+      ...sessions.map((session) => this.dispose(session, true)),
       ...adopted.map(async (work) => {
         await work.settled;
       }),
@@ -306,43 +304,25 @@ export class SnapshotBridgeManager {
     // Read the budget before anything is subscribed: a deadline that is already spent ends the question
     // here, with no listener and no timer to take back.
     const remainingMs = remainingSnapshotSourceMs(deadline, 'bridge-exit-deadline');
-    let refuse!: () => void;
-    const refusal = new Promise<'closed'>((resolve) => {
-      refuse = () => resolve('closed');
-    });
-    if (stop.aborted) refuse();
-    else stop.addEventListener('abort', refuse, { once: true });
+    const exited = bridgeProcessExited(this.host, session.process);
     const stopWaiting = new AbortController();
-    const budget = waitForSnapshotSourceDelay(
-      deadline,
-      remainingMs,
-      'bridge-exit-deadline',
-      stopWaiting.signal,
-    ).then(
-      () => 'timeout' as const,
-      (error: unknown) => ({ cancelled: asSnapshotSourceError(error) }),
-    );
     try {
-      // The raw status keeps its place in the race: its typed conversion takes a turn of its own, and an
-      // answer landing in that turn must not lose. Only the budget is pre-tagged, and a rejected status
-      // is an answer too — `bridgeProcessExited` reads the winner and keeps its typed failure.
-      const answer = await Promise.race([session.process.wait, refusal, budget]).catch(
-        () => 'status' as const,
-      );
-      if (answer === 'closed') {
-        // The close stops waiting on the status, but the read stays subscribed as an observer: a helper
-        // that died on its own keeps its exit code and bounded log if the status ever answers.
-        void bridgeProcessExited(this.host, session.process).catch(() => {});
-        throw closedSourceRefusal();
-      }
-      if (answer === 'timeout') {
-        void bridgeProcessExited(this.host, session.process).catch(() => {});
-        throw snapshotSourceError('timeout', 'bridge-exit-deadline');
-      }
-      if (typeof answer === 'object' && 'cancelled' in answer) throw answer.cancelled;
-      return await bridgeProcessExited(this.host, session.process);
+      const answer = await Promise.race([
+        session.process.wait,
+        waitForSnapshotSourceDelay(
+          deadline,
+          remainingMs,
+          'bridge-exit-deadline',
+          AbortSignal.any([stop, stopWaiting.signal]),
+        ),
+      ]).catch((error: unknown) => {
+        if (error instanceof SnapshotSourceError) throw error;
+        return 'status' as const;
+      });
+      if (answer !== undefined) return await exited;
+      if (stop.aborted) throw closedSourceRefusal();
+      throw snapshotSourceError('timeout', 'bridge-exit-deadline');
     } finally {
-      stop.removeEventListener('abort', refuse);
       stopWaiting.abort();
     }
   }

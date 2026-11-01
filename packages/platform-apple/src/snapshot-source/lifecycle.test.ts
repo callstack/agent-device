@@ -480,7 +480,7 @@ test('a close while the helper exit status stays unread ends the capture instead
     deadline: deadline(undefined, 2000),
   });
   await waitForFixture(
-    () => fixture.processes[0]?.exitStatusReads === 1,
+    () => (fixture.processes[0]?.exitStatusReads ?? 0) >= 1,
     'the manager never asked for the helper exit status',
   );
 
@@ -519,12 +519,10 @@ test('an exit status that answers before the close still reports the helper cras
     deadline: deadline(undefined, 2000),
   });
   await waitForFixture(
-    () => helper()?.exitStatusReads === 1,
+    () => helper()?.exitStatusReads >= 1,
     'the manager never asked for the helper exit status',
   );
 
-  // One synchronous turn: the status answers, and the close arrives right after it. The status had
-  // already answered, so the capture reports the crash the manager was told about, not the close.
   helper().crash();
   const closing = manager.close();
 
@@ -550,11 +548,10 @@ test('a status read that fails before the close still reports the helper crash',
     deadline: deadline(undefined, 2000),
   });
   await waitForFixture(
-    () => helper()?.exitStatusReads === 1,
+    () => helper()?.exitStatusReads >= 1,
     'the manager never asked for the helper exit status',
   );
 
-  // A failing status read is an answer too: the manager knows the helper is not coming back.
   helper().exitWithFailedStatus();
   const closing = manager.close();
 
@@ -568,9 +565,6 @@ test('a capture whose exit status stays unread ends at its own deadline without 
   const helper = () => fixture.processes[0]!;
   const manager = new SnapshotBridgeManager(fixture.host);
 
-  // A 120 ms budget: the helper dies without a status as the connect is attempted, and the exit read
-  // that follows has only this request's own budget to end it. No close arrives, so a wait raced
-  // against the close alone never settles and this request never answers.
   const failure = await manager
     .request({
       target,
@@ -591,47 +585,54 @@ test('a capture whose exit status stays unread ends at its own deadline without 
     'the exit wait did not answer the request budget it was given',
   );
   assert.equal(helper().exitStatusReads >= 1, true);
-  // A status that never answered fabricated no exit diagnostic.
   assert.equal(exitDiagnostics(fixture).length, 0);
   await manager.close();
 });
 
-test('a close that ends the exit wait still records the crash once the helper status answers', async () => {
-  const fixture = createLifecycleFixture({ helperGoneAtConnect: true });
-  const helper = () => fixture.processes[0]!;
-  const manager = new SnapshotBridgeManager(fixture.host);
-  const request = manager.request({
-    target,
-    bridge,
-    limits: { ...limits, maxDurationMs: 2000 },
-    maxDepth: 10,
-    deadline: deadline(undefined, 2000),
-  });
-  await waitForFixture(
-    () => helper()?.exitStatusReads === 1,
-    'the manager never asked for the helper exit status',
-  );
-
-  const closed = await settleWithin(manager.close(), 500);
-  assert.equal(closed, 'settled', 'close waited for an exit status that never arrived');
-  await assert.rejects(request, isClosedSourceFailure);
-  // The close did not learn the outcome, so nothing is diagnosed yet: the crash belongs to the status
-  // read the manager left behind, which is what records it when the helper finally answers.
-  assert.equal(exitDiagnostics(fixture).length, 0);
-
-  helper().crash();
-  await waitForFixture(
-    () => exitDiagnostics(fixture).length === 1,
-    'the status read left behind by the close never diagnosed the exit',
-  );
-  assert.equal(exitDiagnostics(fixture)[0]?.data?.exitCode, 1);
-  await manager.close();
-});
+test.each(['close', 'cancel'] as const)(
+  'a %s that ends the exit wait still diagnoses a late exit',
+  async (ending) => {
+    const fixture = createLifecycleFixture({ helperGoneAtConnect: true });
+    const helper = () => fixture.processes[0]!;
+    const manager = new SnapshotBridgeManager(fixture.host);
+    const cancellation = new AbortController();
+    const request = manager.request({
+      target,
+      bridge,
+      limits: { ...limits, maxDurationMs: 2000 },
+      maxDepth: 10,
+      deadline: deadline(cancellation.signal, 2000),
+    });
+    await waitForFixture(
+      () => helper()?.exitStatusReads >= 1,
+      'the manager never asked for the helper exit status',
+    );
+    if (ending === 'close') {
+      assert.equal(await settleWithin(manager.close(), 500), 'settled');
+      await assert.rejects(request, isClosedSourceFailure);
+    } else {
+      cancellation.abort();
+      await assert.rejects(
+        request,
+        (error: unknown) =>
+          error instanceof SnapshotSourceError &&
+          error.failureKind === 'cancelled' &&
+          error.failureCode === 'abort-signal',
+      );
+    }
+    assert.equal(exitDiagnostics(fixture).length, 0);
+    helper().crash();
+    await waitForFixture(
+      () => exitDiagnostics(fixture).length === 1,
+      `the status read left behind by the ${ending} never diagnosed the exit`,
+    );
+    assert.equal(exitDiagnostics(fixture)[0]?.data?.exitCode, 1);
+    assert.equal(exitDiagnostics(fixture)[0]?.data?.stderr, 'fixture log');
+    await manager.close();
+  },
+);
 
 test('a close during a dispatched capture waits only for the capture deadline the helper died on', async () => {
-  // The helper answers 2000 ms after the write; the request budget is 150 ms, and the helper goes away
-  // without a status while the capture is on the way. The capture's own deadline is what ends it: close
-  // adopts that turn, so close is bounded by the same budget rather than by the status that never answers.
   const fixture = createLifecycleFixture({ responseDelayMs: 2000 });
   const manager = new SnapshotBridgeManager(fixture.host);
   const request = manager.request({
@@ -652,10 +653,11 @@ test('a close during a dispatched capture waits only for the capture deadline th
   );
   await assert.rejects(
     request,
-    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'timeout',
+    (error: unknown) =>
+      error instanceof SnapshotSourceError &&
+      error.failureKind === 'timeout' &&
+      error.failureCode === 'bridge-request-deadline',
   );
-  // The helper was already gone, so there was nothing to signal, and a status that never answered
-  // fabricated no exit diagnostic.
   assert.deepEqual(fixture.processes[0]!.signals, []);
   assert.equal(exitDiagnostics(fixture).length, 0);
 });
