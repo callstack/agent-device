@@ -758,7 +758,7 @@ Platform support:
 - `settings appearance` sets macOS appearance, iOS simulator appearance, or Android night mode.
 - `settings location set <lat> <lon>` sets coordinates on iOS simulators and Android emulators.
 - A target that does not serve a setting refuses it with `UNSUPPORTED_OPERATION` and `error.details.reason` (for example `unsupported-platform-leaf`) before anything changes. A request that names an app the change cannot take is refused first, with `INVALID_ARGS` and `setting_app_not_consumed`. `settings --help` describes where each setting runs.
-- On an iOS simulator, `settings wifi` and `settings airplane` write the status bar, which screenshots share. Each waits until no screenshot of that simulator is in flight, then allows 10 seconds for its own write; the 10 seconds covers the write, never the wait, so a request issued during a screenshot can take as long as that screenshot. Cancel it while it waits and nothing changes.
+- On an iOS simulator, `settings wifi` and `settings airplane` write the status bar, which screenshots share. Each waits until no screenshot of that simulator is in flight, then allows 10 seconds for its own write; the 10 seconds covers the write, never the wait, so a request issued during a screenshot can take as long as that screenshot. If that 10 seconds runs out, the bar may already have changed — read it back before you rely on it. Only cancelling while the request is still waiting guarantees nothing was written.
 
 Device settings:
 

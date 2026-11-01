@@ -7,7 +7,11 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import {
+  type EnvMap,
+  hostHomeDirectoryFromEnv,
+  type HostEnvironment,
+} from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
   stdout: string;
@@ -152,6 +156,20 @@ export function commandDeveloperDir(): string | undefined {
     return scope.requestEnv.DEVELOPER_DIR || undefined;
   }
   return scope?.host.env.DEVELOPER_DIR || undefined;
+}
+
+/**
+ * The home directory of the host that owns the commands this scope spawns, which is the home its
+ * children inherit and the directory tools such as `simctl` resolve `~` from. Answers undefined
+ * outside a bound host, or when that host names no home, or names one that is not absolute: code
+ * that needs a default must then keep what the caller asked for rather than guess this process's
+ * home, which can belong to a different host.
+ */
+export function commandHostHomeDirectory(): string | undefined {
+  const scope = commandHostScope.getStore();
+  if (!scope) return undefined;
+  const home = hostHomeDirectoryFromEnv({ ...scope.host.env, ...scope.requestEnv })?.trim();
+  return home && path.isAbsolute(home) ? home : undefined;
 }
 
 function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {

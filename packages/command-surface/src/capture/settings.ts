@@ -102,7 +102,7 @@ export const settingsCommandFacet = defineCommandFacet({
     summary: 'Change OS settings and app permissions',
     cliDetail: [
       'A bare readable setting reads the value the target holds. A target that does not serve a setting refuses it with UNSUPPORTED_OPERATION before anything changes.',
-      'On an iOS simulator, settings wifi and settings airplane write the status bar, which screenshots share: each waits until no screenshot of that simulator is in flight, then bounds its own status bar command to 10 seconds. That 10 seconds covers the write after the wait, never the wait. A request you cancel while it waits reports the cancellation and changes nothing.',
+      'On an iOS simulator, settings wifi and settings airplane write the status bar, which screenshots share: each waits until no screenshot of that simulator is in flight, then bounds its own status bar command to 10 seconds. That 10 seconds covers the write after the wait, never the wait. A write that hits the deadline may already have changed the bar. Only cancelling while the request is still waiting guarantees nothing was written.',
       '',
       'Settings:',
       ...settingsHelpLines().map((line) => `  ${line}`),

@@ -12,7 +12,6 @@ export {
   hostFileStat,
   hostFileStatSync,
   hostHomeDirectory,
-  hostHomeDirectoryFromEnv,
   hostTemporaryDirectory,
   makeHostTemporaryDirectory,
   readHostBinaryFile,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
@@ -517,10 +518,10 @@ test('one simulator reached through two spellings of its device set keeps one wi
 
 test('naming the default device set explicitly shares the default window', async () => {
   // `simctl --set <default root>` selects the same simulators as naming no set, so the two spellings
-  // must not open two windows over one status bar.
+  // must not open two windows over one status bar. The host that runs the command owns that root,
+  // so the test binds one whose HOME is the home the owner derives it from.
   const entered: string[] = [];
   const gates = { implicit: createCaptureGate(), explicit: createCaptureGate() };
-  // `os.homedir()` answers with `$HOME` on POSIX, which is how the owner derives this root.
   const home = process.env.HOME;
   assert.ok(home, 'the default device root needs a home directory');
   const defaultSet = path.join(home, 'Library', 'Developer', 'CoreSimulator', 'Devices');
@@ -529,37 +530,42 @@ test('naming the default device set explicitly shares the default window', async
     simulatorSetPath: tag === 'explicit' ? defaultSet : undefined,
   });
 
-  await withFakeAppleTool(
-    (args) => {
-      const index = args.indexOf('status_bar');
-      if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
-      return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
-    },
+  await withCommandHost(
+    { host: { env: { HOME: home }, cwd: '/' }, requestEnv: undefined },
     async () => {
-      const captureFor = (tag: keyof typeof gates) =>
-        captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
-          env: process.env,
-          normalizeStatusBar: true,
-          skipIosSimulatorBootCheck: true,
-          deps: captureDeps(async () => {
-            entered.push(tag);
-            await gates[tag].capture();
-          }),
-        });
+      await withFakeAppleTool(
+        (args) => {
+          const index = args.indexOf('status_bar');
+          if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+          return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
+        },
+        async () => {
+          const captureFor = (tag: keyof typeof gates) =>
+            captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
+              env: process.env,
+              normalizeStatusBar: true,
+              skipIosSimulatorBootCheck: true,
+              deps: captureDeps(async () => {
+                entered.push(tag);
+                await gates[tag].capture();
+              }),
+            });
 
-      const implicit = captureFor('implicit');
-      await gates.implicit.entered;
-      const explicit = captureFor('explicit');
-      try {
-        await yieldToQueuedWork();
-        assert.deepEqual(entered, ['implicit']);
-      } finally {
-        gates.implicit.release();
-        gates.explicit.release();
-        await Promise.allSettled([implicit, explicit]);
-      }
+          const implicit = captureFor('implicit');
+          await gates.implicit.entered;
+          const explicit = captureFor('explicit');
+          try {
+            await yieldToQueuedWork();
+            assert.deepEqual(entered, ['implicit']);
+          } finally {
+            gates.implicit.release();
+            gates.explicit.release();
+            await Promise.allSettled([implicit, explicit]);
+          }
 
-      assert.deepEqual(entered, ['implicit', 'explicit']);
+          assert.deepEqual(entered, ['implicit', 'explicit']);
+        },
+      );
     },
   );
 });

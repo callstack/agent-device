@@ -262,12 +262,12 @@ function capturesThroughPhysicalDeviceControl(device: DeviceInfo): boolean {
 /**
  * Captures through the runner backend. An iOS simulator's runner capture renders the same screen a
  * simctl capture does, so it takes the same status bar reservation: while another capture
- * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. The
- * reservation covers the whole capture, including the density normalization the capture flow applies
- * afterwards, because that step reads the file the capture wrote. It re-enters when the caller
- * already holds it, as the simctl fallback does, and an already-aborted request does not reject that
- * re-entry at the lock boundary — see `withSimulatorStatusBarHeld`. The runner command keeps the
- * request's signal.
+ * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. This
+ * reservation covers the runner capture alone; the density normalization the fallback flow applies
+ * afterwards is covered by that flow's own hold, and a direct call here performs no density step.
+ * It re-enters when the caller already holds it, as the simctl fallback does, and an already-aborted
+ * request does not reject that re-entry at the lock boundary — see `withSimulatorStatusBarHeld`. The
+ * runner command keeps the request's signal.
  */
 export async function captureScreenshotViaRunner(
   device: DeviceInfo,
