@@ -170,6 +170,29 @@ test('compileSwiftSourceText resolves a cache name with a long interior dash run
   expect(elapsedMs).toBeLessThan(1_000);
 });
 
+test('a canceled compile kills swiftc through its signal and leaves no temp output', async () => {
+  const cancel = new AbortController();
+  mockRunCmd.mockImplementationOnce(
+    async (_cmd, _args, options) =>
+      await new Promise((_, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+      }),
+  );
+
+  const compiled = compileSwiftSourceText({
+    host: createTestHost(),
+    source: 'print(1)',
+    cacheName: 'canceled',
+    signal: cancel.signal,
+  });
+  await vi.waitFor(() => expect(mockRunCmd).toHaveBeenCalledOnce());
+  cancel.abort();
+
+  await expect(compiled).rejects.toBeDefined();
+  expect(mockRunCmd.mock.calls[0]![2]?.signal).toBe(cancel.signal);
+  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
+});
+
 test('compileSwiftSourceText falls back to swift-helper when the cache name sanitizes to nothing', async () => {
   const executablePath = await compileSwiftSourceText({
     host: createTestHost(),

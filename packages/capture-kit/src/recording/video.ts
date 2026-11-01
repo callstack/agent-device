@@ -40,10 +40,18 @@ exit(exitCode)
 const VALIDATOR_COMPILE_WAIT_MS = 30_000;
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
+type SharedValidatorCompile = {
+  readonly compiled: Promise<string>;
+  readonly cancel: AbortController;
+  waiters: number;
+  settled: boolean;
+};
+
 // A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
-// Callers share one compile, bounded by the Swift cache's own compile timeout; each caller waits for
-// it only within its own budget.
-const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
+// Callers share one compile, and each waits for it only within its own budget. The last caller to
+// stop waiting cancels an unfinished compile: nothing owns `swiftc` once its requests end, so a
+// daemon that exits would leave it running.
+const videoValidatorCompiles = new Map<string, SharedValidatorCompile>();
 
 export async function waitForStableFile(
   filePath: string,
@@ -92,7 +100,7 @@ export async function isPlayableVideo(
   if (container === 'webm') return true;
   try {
     const validatorPath = await waitForValidatorCompile(
-      getVideoValidatorExecutablePath(host),
+      host,
       deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
     );
     const result = await runCmd(validatorPath, [filePath], {
@@ -116,28 +124,40 @@ export async function isPlayableVideo(
   }
 }
 
-function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
+function joinValidatorCompile(host: HostEnvironment): SharedValidatorCompile {
   const cacheRoot = getSwiftCacheRoot(host.env);
-  let compiled = videoValidatorExecutablePaths.get(cacheRoot);
-  if (!compiled) {
-    compiled = compileSwiftSourceText({
+  const existing = videoValidatorCompiles.get(cacheRoot);
+  if (existing) return existing;
+  const cancel = new AbortController();
+  const shared: SharedValidatorCompile = {
+    compiled: compileSwiftSourceText({
       host,
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
-    });
-    videoValidatorExecutablePaths.set(cacheRoot, compiled);
-    // A failed compile is evicted even when every caller stopped waiting for it.
-    const failed = compiled;
-    failed.catch(() => {
-      if (videoValidatorExecutablePaths.get(cacheRoot) === failed) {
-        videoValidatorExecutablePaths.delete(cacheRoot);
-      }
-    });
-  }
-  return compiled;
+      signal: cancel.signal,
+    }),
+    cancel,
+    waiters: 0,
+    settled: false,
+  };
+  videoValidatorCompiles.set(cacheRoot, shared);
+  shared.compiled.then(
+    () => {
+      shared.settled = true;
+    },
+    () => {
+      shared.settled = true;
+      if (videoValidatorCompiles.get(cacheRoot) === shared)
+        videoValidatorCompiles.delete(cacheRoot);
+    },
+  );
+  return shared;
 }
 
-async function waitForValidatorCompile(compiled: Promise<string>, waitMs: number): Promise<string> {
+async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): Promise<string> {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  const shared = joinValidatorCompile(host);
+  shared.waiters += 1;
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -153,9 +173,15 @@ async function waitForValidatorCompile(compiled: Promise<string>, waitMs: number
     );
   });
   try {
-    return await Promise.race([compiled, expired]);
+    return await Promise.race([shared.compiled, expired]);
   } finally {
     clearTimeout(timer);
+    shared.waiters -= 1;
+    if (shared.waiters === 0 && !shared.settled) {
+      if (videoValidatorCompiles.get(cacheRoot) === shared)
+        videoValidatorCompiles.delete(cacheRoot);
+      shared.cancel.abort();
+    }
   }
 }
 
