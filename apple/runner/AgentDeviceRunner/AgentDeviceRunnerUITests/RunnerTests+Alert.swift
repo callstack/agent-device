@@ -33,7 +33,13 @@ extension RunnerTests {
 #if !os(macOS)
     switch resolveBlockingSystemModal(deadline: deadline) {
     case .resolved(let modal):
-      return runnerAlert(modal)
+      return runnerAlert(
+        root: modal.root,
+        ownerApp: modal.ownerApp,
+        actions: modal.actions,
+        source: .blockingSystemModal,
+        window: modal.window
+      )
     case .unresolved:
       return nil
     case .absent:
@@ -49,15 +55,15 @@ extension RunnerTests {
     // now-gone host as `activeApp`, and its `alerts` query raises
     // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
     if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
-      return runnerAlert(root: alert, ownerApp: activeApp, source: .appAlert)
+      return runnerAlert(root: alert, ownerApp: activeApp, actions: actionableElements(in: alert), source: .appAlert)
     }
     if let dialog = firstExistingElement(in: safeElementsQuery {
       activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
     }) {
-      return runnerAlert(root: dialog, ownerApp: activeApp, source: .safariDialog)
+      return runnerAlert(root: dialog, ownerApp: activeApp, actions: actionableElements(in: dialog), source: .safariDialog)
     }
     if let popup = firstDismissPopupWindow(in: activeApp) {
-      return runnerAlert(root: popup, ownerApp: activeApp, source: .dismissPopup)
+      return runnerAlert(root: popup, ownerApp: activeApp, actions: actionableElements(in: popup), source: .dismissPopup)
     }
     return nil
   }
@@ -232,30 +238,18 @@ extension RunnerTests {
     operation()
   }
 
-  private func runnerAlert(_ modal: ResolvedBlockingSystemModal) -> RunnerAlert? {
-    let buttons = modal.actions.filter { isEnabledElement($0) }
-    guard !buttons.isEmpty else {
-      return nil
-    }
-    return RunnerAlert(
-      root: modal.root,
-      ownerApp: modal.ownerApp,
-      buttons: buttons,
-      source: .blockingSystemModal,
-      window: modal.window
-    )
-  }
-
   private func runnerAlert(
     root: XCUIElement,
     ownerApp: XCUIApplication,
-    source: AlertSurfaceSource
+    actions: [XCUIElement],
+    source: AlertSurfaceSource,
+    window: XCUIElement? = nil
   ) -> RunnerAlert? {
-    let buttons = actionableElements(in: root).filter { isEnabledElement($0) }
+    let buttons = actions.filter { isEnabledElement($0) }
     guard !buttons.isEmpty else {
       return nil
     }
-    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: nil)
+    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: window)
   }
 
   private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {
@@ -346,11 +340,7 @@ extension RunnerTests {
   }
 
   private func isEnabledElement(_ element: XCUIElement) -> Bool {
-    var enabled = false
-    _ = RunnerObjCExceptionCatcher.catchException({
-      enabled = element.exists && element.isEnabled
-    })
-    return enabled
+    safely("ALERT_BUTTON_ENABLED", false) { element.exists && element.isEnabled }
   }
 
   // A snapshot can expose an alert's button a beat before the owning app has made it
@@ -379,10 +369,6 @@ extension RunnerTests {
       return override(deadline)
     }
 #endif
-    var hittable = false
-    _ = RunnerObjCExceptionCatcher.catchException({
-      hittable = button.exists && button.isHittable
-    })
-    return hittable
+    return safely("ALERT_BUTTON_HITTABLE", false) { button.exists && button.isHittable }
   }
 }

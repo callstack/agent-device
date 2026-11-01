@@ -6,7 +6,6 @@ import {
   MAX_ALERT_WINDOW_MS,
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
-import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import {
   alertAcceptUse,
   alertDismissUse,
@@ -74,53 +73,21 @@ async function resolveBoundAlertRuntime(
   if (action === 'wait') {
     const admission = await admitRuntimeUse({ ...shared, use: alertWaitUse });
     if (admission.type === 'response') return { ok: false, response: admission.response };
-    const runtime = admission.runtime;
-    return { ok: true, execute: (input) => executeAwaitAlert(runtime, input) };
+    return { ok: true, execute: (input) => admission.runtime.operations.awaitAlert(input) };
   }
   if (action === 'accept') {
     const admission = await admitRuntimeUse({ ...shared, use: alertAcceptUse });
     if (admission.type === 'response') return { ok: false, response: admission.response };
-    const runtime = admission.runtime;
-    return { ok: true, execute: (input) => executeAcceptAlert(runtime, input) };
+    return { ok: true, execute: (input) => admission.runtime.operations.acceptAlert(input) };
   }
   if (action === 'dismiss') {
     const admission = await admitRuntimeUse({ ...shared, use: alertDismissUse });
     if (admission.type === 'response') return { ok: false, response: admission.response };
-    const runtime = admission.runtime;
-    return { ok: true, execute: (input) => executeDismissAlert(runtime, input) };
+    return { ok: true, execute: (input) => admission.runtime.operations.dismissAlert(input) };
   }
   const admission = await admitRuntimeUse({ ...shared, use: alertReadUse });
   if (admission.type === 'response') return { ok: false, response: admission.response };
-  const runtime = admission.runtime;
-  return { ok: true, execute: (input) => executeReadAlert(runtime, input) };
-}
-
-async function executeReadAlert(
-  runtime: BoundDeviceRuntime<typeof alertReadUse>,
-  input: AlertRuntimeInput,
-): Promise<Record<string, unknown>> {
-  return await runtime.operations.readAlert(input);
-}
-
-async function executeAwaitAlert(
-  runtime: BoundDeviceRuntime<typeof alertWaitUse>,
-  input: AlertRuntimeInput,
-): Promise<Record<string, unknown>> {
-  return await runtime.operations.awaitAlert(input);
-}
-
-async function executeAcceptAlert(
-  runtime: BoundDeviceRuntime<typeof alertAcceptUse>,
-  input: AlertRuntimeInput,
-): Promise<Record<string, unknown>> {
-  return await runtime.operations.acceptAlert(input);
-}
-
-async function executeDismissAlert(
-  runtime: BoundDeviceRuntime<typeof alertDismissUse>,
-  input: AlertRuntimeInput,
-): Promise<Record<string, unknown>> {
-  return await runtime.operations.dismissAlert(input);
+  return { ok: true, execute: (input) => admission.runtime.operations.readAlert(input) };
 }
 
 export async function handleAlertCommand(
