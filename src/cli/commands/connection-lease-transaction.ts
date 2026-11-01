@@ -1,3 +1,4 @@
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   isInactiveLeaseError,
   readLeaseAllocateProviderFlags,
@@ -9,16 +10,94 @@ import {
   narrowConnectionPlatform,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, errorMessage } from '@agent-device/kernel/errors';
 import { leaseBackendForPlatform, type LeaseBackend } from '@agent-device/kernel/contracts';
 import type { Lease } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
-import type { ConnectionLeasePolicy } from './connection-lease-policy.ts';
+import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
+import {
+  connectionLeasePolicyForState,
+  type ConnectionLeasePolicy,
+} from './connection-lease-policy.ts';
 import { bindLeaseNamedDevice } from './proxy-lease-device.ts';
 
-export async function materializeLeaseForCommand(options: {
+/**
+ * Brings the connection's lease up to date for this command: renews the one the record names or
+ * allocates the one it does not, then settles the platform axis that decides which device that lease
+ * rents. `unrecordedLease` is the lease this call allocated that no persisted record names yet, so
+ * the caller owns it until its own write transfers ownership.
+ */
+export async function acquireConnectionLease(options: {
+  command: string;
+  client: AgentDeviceClient;
+  state: RemoteConnectionState;
+  nextFlags: CliFlags;
+  positionals?: string[];
+}): Promise<{ state: RemoteConnectionState; changed: boolean; unrecordedLease?: Lease }> {
+  const { command, client, state, nextFlags } = options;
+  const deferredAppSelection = connectionProviderCapabilities(
+    state.leaseProvider,
+  ).supportsDeferredAppSelection;
+  const initialApp =
+    deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
+  if (deferredAppSelection) delete nextFlags.providerApp;
+  const leasePolicy = connectionLeasePolicyForState(state);
+  let nextState = state;
+  let changed = false;
+  let unrecordedLease: Lease | undefined;
+  if (leasePolicy.shouldAllocate(command)) {
+    const materialized = await materializeLeaseForCommand({
+      command,
+      client,
+      state,
+      nextState,
+      nextFlags,
+      initialApp,
+      policy: leasePolicy,
+    });
+    nextState = materialized.state;
+    changed = materialized.changed;
+    unrecordedLease = materialized.acquiredLeaseForCleanup;
+  }
+  nextState = {
+    ...nextState,
+    platform: carriedConnectionPlatform(state.session, nextState, nextFlags),
+  };
+  nextFlags.platform = nextState.platform;
+  return { state: nextState, changed, unrecordedLease };
+}
+
+/**
+ * Settles the platform axis: a command that reached no allocator still returns flags and a record on
+ * this axis, and the record can carry an alias the request asked to narrow. Same rule as the binding
+ * path inside the allocator, so a connection whose backend rents one leaf cannot serve another leaf
+ * simply because this command never allocated.
+ */
+function carriedConnectionPlatform(
+  session: string,
+  state: RemoteConnectionState,
+  flags: CliFlags,
+): CliFlags['platform'] {
+  const platform = narrowConnectionPlatform({
+    leaseBackend: state.leaseBackend,
+    recordedPlatform: state.platform,
+    requestedPlatform: flags.platform,
+  });
+  if (!platform.ok) {
+    throw connectionPlatformConflict({
+      session,
+      leaseBackend: state.leaseBackend,
+      boundPlatform: platform.boundPlatform,
+      requestedPlatform: platform.requestedPlatform,
+      detail: 'bound-connection',
+    });
+  }
+  return platform.platform;
+}
+
+async function materializeLeaseForCommand(options: {
   command: string;
   client: AgentDeviceClient;
   state: RemoteConnectionState;
@@ -166,24 +245,58 @@ export async function releaseRemoteConnectionLease(
   return result;
 }
 
-export async function releaseAcquiredLeaseOnWriteFailure(
-  client: AgentDeviceClient,
-  state: RemoteConnectionState,
-  lease: Lease | undefined,
-): Promise<void> {
-  if (!lease) return;
+/**
+ * Ends the lease this command allocated when the connection record never came to name it, and
+ * returns the error to throw. A lease this command renewed belongs to the record it was already
+ * persisted against, so this path never ends it.
+ *
+ * The failure that ended the command stays the thrown error (ADR 0010, as amended by ADR 0019), with
+ * its own code, message and reason intact. A release that failed too is recorded beside it as typed
+ * secondary evidence under `details.leaseRollback`, never in its place: the command's own failure is
+ * what the caller has to fix, and the lease id names what stays held until the lease lapses.
+ */
+export async function releaseLeaseThisCommandAllocated(options: {
+  client: AgentDeviceClient;
+  state: RemoteConnectionState;
+  acquiredLease: Lease | undefined;
+  failure: unknown;
+}): Promise<unknown> {
+  const { client, state, acquiredLease, failure } = options;
+  if (!acquiredLease) return failure;
   try {
-    const connection = mergeRemoteConnectionRequestMetadata(state, lease);
     await client.leases.release({
       tenant: state.tenant,
       runId: state.runId,
-      leaseId: lease.leaseId,
-      leaseBackend: state.leaseBackend ?? lease.backend,
-      ...connection,
+      leaseId: acquiredLease.leaseId,
+      leaseBackend: state.leaseBackend ?? acquiredLease.backend,
+      ...mergeRemoteConnectionRequestMetadata(state, acquiredLease),
     });
-  } catch {
-    // Preserve the state-write failure; cleanup is best-effort.
+    return failure;
+  } catch (error) {
+    return withLeaseRollbackEvidence(failure, acquiredLease.leaseId, error);
   }
+}
+
+/** How `details.leaseRollback` reads when the rollback itself could not end the lease. */
+export const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
+
+function withLeaseRollbackEvidence(
+  failure: unknown,
+  leaseId: string,
+  releaseError: unknown,
+): unknown {
+  // Coercing a non-`AppError` keeps its cause chain, and gives the evidence a details bag to land in.
+  const primary = asAppError(failure, 'COMMAND_FAILED');
+  primary.details = {
+    ...primary.details,
+    leaseRollback: {
+      leaseId,
+      released: false,
+      reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
+      error: errorMessage(releaseError),
+    },
+  };
+  return primary;
 }
 
 export function resolveRequestedLeaseBackend(flags: CliFlags): LeaseBackend | undefined {

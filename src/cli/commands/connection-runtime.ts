@@ -5,7 +5,6 @@ import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
-  narrowConnectionPlatform,
   readRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -13,7 +12,6 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import type { BatchStep, Lease, LeaseDevice } from '@agent-device/contracts/client';
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
@@ -22,11 +20,9 @@ import {
   primeProviderConnection,
 } from '../connection/provider-policy.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import { connectionLeasePolicyForState } from './connection-lease-policy.ts';
 import {
-  connectionPlatformConflict,
-  materializeLeaseForCommand,
-  releaseAcquiredLeaseOnWriteFailure,
+  acquireConnectionLease,
+  releaseLeaseThisCommandAllocated,
   resolveRequestedLeaseBackend,
 } from './connection-lease-transaction.ts';
 import {
@@ -96,77 +92,57 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
-  const deferredAppSelection = connectionProviderCapabilities(
-    state.leaseProvider,
-  ).supportsDeferredAppSelection;
-  const initialApp =
-    deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
-  if (deferredAppSelection) delete nextFlags.providerApp;
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
-  let acquiredLeaseForCleanup: Lease | undefined;
 
-  const leasePolicy = connectionLeasePolicyForState(nextState);
-  if (leasePolicy.shouldAllocate(command)) {
-    const materializedLease = await materializeLeaseForCommand({
+  // This call owns a lease it allocated from the moment the provider grants it until the persisted
+  // record names it, which is the one place ownership transfers. Every exit before that transfer
+  // ends the lease: a lease no record names is invisible to disconnect, and would hold the device
+  // until its TTL lapses. A lease this call renewed was already named by the stored record, so this
+  // path leaves it to disconnect in every case, including a failure.
+  let unrecordedLease: Lease | undefined;
+  try {
+    const acquired = await acquireConnectionLease({
       command,
       client,
       state,
-      nextState,
       nextFlags,
-      initialApp,
-      policy: leasePolicy,
+      positionals: options.positionals,
     });
-    nextState = materializedLease.state;
-    changed = changed || materializedLease.changed;
-    acquiredLeaseForCleanup = materializedLease.acquiredLeaseForCleanup;
-  }
+    nextState = acquired.state;
+    changed = changed || acquired.changed;
+    unrecordedLease = acquired.unrecordedLease;
 
-  // A command that allocates no lease still returns flags and a record on the platform axis, and the
-  // record can carry an alias the request asked to narrow. Same rule as the binding path above, so a
-  // connection whose backend rents one leaf cannot serve another leaf simply because this command
-  // never reached the allocator.
-  const carriedPlatform = narrowConnectionPlatform({
-    leaseBackend: nextState.leaseBackend,
-    recordedPlatform: nextState.platform,
-    requestedPlatform: nextFlags.platform,
-  });
-  if (!carriedPlatform.ok) {
-    throw connectionPlatformConflict({
-      session: state.session,
-      leaseBackend: nextState.leaseBackend,
-      boundPlatform: carriedPlatform.boundPlatform,
-      requestedPlatform: carriedPlatform.requestedPlatform,
-      detail: 'bound-connection',
+    const runtimePreparation = await prepareRuntimeForCommand({
+      command,
+      flags: nextFlags,
+      client,
+      state,
+      nextState,
+      runtime: nextRuntime,
+      positionals: options.positionals,
+      batchSteps: options.batchSteps,
+      forceRuntimePrepare: options.forceRuntimePrepare,
+    });
+    nextState = runtimePreparation.state;
+    nextRuntime = runtimePreparation.runtime;
+    changed = changed || runtimePreparation.changed;
+    await persistMaterializedConnection({
+      changed,
+      stateDir,
+      state: nextState,
+      preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
+      metroCleanupToStop: runtimePreparation.metroCleanupToStop,
+    });
+  } catch (error) {
+    throw await releaseLeaseThisCommandAllocated({
+      client,
+      state: nextState,
+      acquiredLease: unrecordedLease,
+      failure: error,
     });
   }
-  nextState = { ...nextState, platform: carriedPlatform.platform };
-  nextFlags.platform = carriedPlatform.platform;
-
-  const runtimePreparation = await prepareRuntimeForCommand({
-    command,
-    flags: nextFlags,
-    client,
-    state,
-    nextState,
-    runtime: nextRuntime,
-    positionals: options.positionals,
-    batchSteps: options.batchSteps,
-    forceRuntimePrepare: options.forceRuntimePrepare,
-  });
-  nextState = runtimePreparation.state;
-  nextRuntime = runtimePreparation.runtime;
-  changed = changed || runtimePreparation.changed;
-  await persistMaterializedConnection({
-    changed,
-    stateDir,
-    state: nextState,
-    client,
-    acquiredLeaseForCleanup,
-    preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
-    metroCleanupToStop: runtimePreparation.metroCleanupToStop,
-  });
 
   return {
     flags: {
@@ -187,8 +163,6 @@ async function persistMaterializedConnection(options: {
   changed: boolean;
   stateDir: string;
   state: RemoteConnectionState;
-  client: AgentDeviceClient;
-  acquiredLeaseForCleanup?: Lease;
   preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
   metroCleanupToStop?: RemoteConnectionState['metro'];
 }): Promise<void> {
@@ -196,12 +170,8 @@ async function persistMaterializedConnection(options: {
     try {
       writeRemoteConnectionState({ stateDir: options.stateDir, state: options.state });
     } catch (error) {
+      // The caller's rollback ends the lease this write would have taken ownership of.
       await stopMetroCleanup(options.preparedMetroCleanupOnFailure);
-      await releaseAcquiredLeaseOnWriteFailure(
-        options.client,
-        options.state,
-        options.acquiredLeaseForCleanup,
-      );
       throw error;
     }
   }
