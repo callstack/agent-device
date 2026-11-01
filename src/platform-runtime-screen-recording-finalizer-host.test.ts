@@ -4,12 +4,13 @@ import {
   OVERLAY_BUDGET_MS,
   type overlayRecordingTouches,
 } from '@agent-device/capture-kit/recording-overlay';
+import { Deadline } from '@agent-device/host-kit/retry';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 
 const video = vi.hoisted(() => ({
   stable: vi.fn(async () => {}),
-  playable: vi.fn(async () => {}),
-  isPlayable: vi.fn(async () => true),
+  playable: vi.fn(async (_path: string, _options: { deadline?: Deadline }) => {}),
+  isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
@@ -53,6 +54,7 @@ test('requires stable playable media before publishing finalization telemetry', 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
     host: expect.objectContaining({ cwd: process.cwd() }),
+    deadline: expect.any(Deadline),
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });
@@ -119,9 +121,11 @@ test('the overlay budget covers the playability checks that run before the overl
       targetLabel: 'test recording',
     });
 
-    expect(overlay.mock.calls[0]![0].deadline.remainingMs()).toBe(
-      OVERLAY_BUDGET_MS - playabilityMs,
-    );
+    const budget = overlay.mock.calls[0]![0].deadline;
+    expect(budget.remainingMs()).toBe(OVERLAY_BUDGET_MS - playabilityMs);
+    // The validator compile those checks may run is bounded by the same budget.
+    expect(video.playable.mock.calls[0]![1].deadline).toBe(budget);
+    expect(video.isPlayable.mock.calls[0]![2]).toBe(budget);
   } finally {
     vi.useRealTimers();
   }

@@ -69,6 +69,29 @@ test('each Swift cache root compiles its own validator, and a root reuses the on
   ).toEqual(['/cache/one', '/cache/two']);
 });
 
+test('a deadline, not the fixed compile bound, limits a cold validator compile', async () => {
+  // A cold compile on a loaded CI runner outlasted the fixed 30 s bound while record stop had
+  // most of its 70 s finalization budget left, so the stop failed on a playable recording.
+  const mp4 = writeFixture('deadline.mp4', Buffer.concat([ftyp, moov]));
+  vi.mocked(compileSwiftSourceText).mockClear();
+
+  await waitForPlayableVideo(mp4, {
+    host: { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/deadline' }, cwd: directory },
+    deadline: Deadline.fromTimeoutMs(70_000),
+  });
+  await isPlayableVideo(mp4, {
+    env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/no-deadline' },
+    cwd: directory,
+  });
+
+  const [withDeadline, withoutDeadline] = vi
+    .mocked(compileSwiftSourceText)
+    .mock.calls.map(([params]) => params.timeoutMs);
+  expect(withDeadline).toBeGreaterThan(69_000);
+  expect(withDeadline).toBeLessThanOrEqual(70_000);
+  expect(withoutDeadline).toBe(30_000);
+});
+
 test('reaches the semantic validator with an MP4 container whose last box runs past the file', async () => {
   const truncated = Buffer.concat([ftyp, moov]).subarray(0, ftyp.length + moov.length - 4);
   await expect(

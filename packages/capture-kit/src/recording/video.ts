@@ -35,6 +35,10 @@ semaphore.wait()
 exit(exitCode)
 `.trim();
 
+// A cold Swift module cache makes this compile take over 30 s on a loaded CI runner, so a caller
+// with a deadline, such as `record stop`, bounds the compile by that deadline instead.
+const VALIDATOR_COMPILE_TIMEOUT_MS = 30_000;
+
 // A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
 const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
 
@@ -69,14 +73,22 @@ export async function waitForStableFile(
   }
 }
 
-export async function isPlayableVideo(filePath: string, host: HostEnvironment): Promise<boolean> {
+/**
+ * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
+ * deadline instead of its own fixed bound.
+ */
+export async function isPlayableVideo(
+  filePath: string,
+  host: HostEnvironment,
+  deadline?: Deadline,
+): Promise<boolean> {
   const container = await readVideoContainerKind(filePath);
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
   try {
-    const validatorPath = await getVideoValidatorExecutablePath(host);
+    const validatorPath = await getVideoValidatorExecutablePath(host, deadline);
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
       timeoutMs: 10_000,
@@ -94,7 +106,10 @@ export async function isPlayableVideo(filePath: string, host: HostEnvironment): 
   }
 }
 
-async function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
+async function getVideoValidatorExecutablePath(
+  host: HostEnvironment,
+  deadline: Deadline | undefined,
+): Promise<string> {
   const cacheRoot = getSwiftCacheRoot(host.env);
   let compiled = videoValidatorExecutablePaths.get(cacheRoot);
   if (!compiled) {
@@ -102,7 +117,8 @@ async function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<s
       host,
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
-      timeoutMs: 30_000,
+      // `runCmd` reads a timeout of 0 as none.
+      timeoutMs: deadline ? Math.max(1, deadline.remainingMs()) : VALIDATOR_COMPILE_TIMEOUT_MS,
     });
     videoValidatorExecutablePaths.set(cacheRoot, compiled);
   }
@@ -136,7 +152,7 @@ export async function waitForPlayableVideo(
   const attempts = options.attempts ?? 12;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (await isPlayableVideo(filePath, options.host)) {
+    if (await isPlayableVideo(filePath, options.host, options.deadline)) {
       return;
     }
     if (options.deadline?.isExpired()) {
