@@ -189,6 +189,10 @@ extension RunnerTests {
     if let unavailable = runnerUnavailableResponse(command: command) {
       return unavailable
     }
+    // Past the last fast refusal, this command's work is going to the device, so its `commandId` is
+    // spent: a repeat of it is answered from the journal instead of running the device again. The
+    // read-only busy resend arrives before this point, never after it (ADR 0005).
+    commandJournal.markDispatched(command: command)
     if command.command == .snapshot {
       return try executeSnapshotDispatched(command: command)
     }

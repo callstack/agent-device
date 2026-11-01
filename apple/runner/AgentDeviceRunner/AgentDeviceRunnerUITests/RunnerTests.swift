@@ -44,6 +44,10 @@ final class RunnerTests: XCTestCase {
     static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
+    /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
+    /// classification keeps no response body to replay. Nothing ran for the repeat, so it discloses
+    /// dispatched: no, and its hint sends the caller to observe the screen instead of resending.
+    static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
   }
 
   static let springboardBundleId = "com.apple.springboard"
@@ -104,10 +108,10 @@ final class RunnerTests: XCTestCase {
   var firstInteractionWindow: FirstInteractionWindow?
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
-  // Coalesces duplicate transport sends of the same commandId onto the single in-flight
-  // execution instead of enqueueing them again behind it (#1105 capture pileup).
   let inFlightCommandLock = NSLock()
-  var inFlightCommandIds: Set<String> = []
+  // Waits of a `commandId` whose execution is in flight, so the one execution answers every send that
+  // joined it (#1105 capture pileup). The journal owns whether an execution is in flight; this holds
+  // only the sends that attached to it.
   var inFlightCommandWaiters: [String: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
   // Tracks main-queue work abandoned by the execution watchdog (runMainThreadWork). While any is
   // outstanding the main thread is occupied: new main-thread commands fail fast as busy instead

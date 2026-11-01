@@ -14,6 +14,8 @@ Accepted
 - Invalidate dead cached runner processes without graceful `shutdown`.
 - After `RUNNER_BUSY`, resend only read-only commands, under their busy-specific budget.
 - After `RUNNER_BUSY` on a mutating command, return the refusal to the caller without a resend.
+- Let the runner's command journal decide once per `commandId` whether a send executes, joins the running execution, or is answered from the recorded outcome.
+- Never execute a `commandId` twice, and never evict a journal entry whose execution has not finished.
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 
@@ -113,6 +115,26 @@ Neither path sends a status probe, because a structured reply already answered "
 This bypass is in `runner-lifecycle.ts`.
 The same trait already decides the startup-preflight skip above.
 Thus, it is the single place for a change to that classification.
+
+`RunnerCommandJournal` owns command admission, and the transport asks it once per inbound request.
+Its verdict is `execute`, `join`, or `terminal`:
+
+- `execute` claims the `commandId`, and that send owns the one execution.
+- `join` means an execution is claimed and unfinished. The send attaches as a waiter of it, which keeps a transport retry from stacking a second execution behind the first (#1105).
+- `terminal` means execution finished with effect on the device. The runner answers with the outcome it recorded, and the command never runs again.
+
+The journal closes a `commandId` at the last fast `RUNNER_BUSY` or `RUNNER_WEDGED` refusal, not at accept.
+A refusal before that point dispatched nothing, so the entry stays open and the read-only busy resend above can still run under its own `commandId`.
+Answering a closed `commandId` uses the retained response, then the retained error, then the typed `COMMAND_ALREADY_FINISHED` refusal for a command whose own classification retains no body.
+That refusal discloses `dispatched: no`: nothing ran for the repeat.
+
+Pruning drops only closed entries, so a queued or executing command always stays queryable.
+`status` answers `notAccepted` only for an id the journal does not hold.
+The daemon cannot read `notAccepted` as a safe terminal state, so evicting a running command would push it to invalidate a session whose runner is still executing that command.
+
+Rejected: gating re-admission on the runner's read-only classification. That would replay a finished `snapshot` after its caller already received the answer, which is not the same command's first execution.
+
+Rejected: keeping the transport's own in-flight id set beside the journal. Two records of one lifecycle drifted: the set was cleared when the answer was delivered while the journal still held the entry, so a repeat arriving in that window was admitted and executed again.
 
 If `close` would retain a runner for reuse and that occupancy is set, `close` first stops the runner.
 `close` awaits the stop, so the lease is released before the next request.

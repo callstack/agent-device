@@ -200,6 +200,95 @@ extension RunnerTests {
     XCTAssertNil(largeReadStatus.lifecycleResponseJson)
   }
 
+  /// The 64-entry window must never cost the runner the ability to answer "is this command still
+  /// running?". A queued or executing command is the one entry pruning may not drop: `status` reports
+  /// `notAccepted` for an id it does not hold, and the daemon cannot read that as a safe terminal
+  /// state, so a snapshot burst behind one slow command would push the daemon to invalidate the session
+  /// of a runner that is still executing that command.
+  func testJournalKeepsAnExecutingCommandQueryablePastTheRetentionWindow() throws {
+    let journal = RunnerCommandJournal()
+    let running = runnerJournalCommand("tap", id: "running-tap")
+    journal.accept(command: running)
+    journal.start(command: running)
+
+    for index in 0..<64 {
+      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
+      journal.accept(command: settled)
+      journal.finish(
+        command: settled,
+        response: Response(ok: true, data: DataPayload(text: "x"))
+      )
+    }
+
+    let status = journal.status(normalizedCommandId: "running-tap")
+    XCTAssertEqual(
+      status.lifecycleState,
+      RunnerCommandLifecycleState.started.rawValue,
+      "a command the runner is still executing must stay queryable however many settled entries arrive"
+    )
+  }
+
+  /// A transition for an id the journal no longer holds says nothing about a command the runner is
+  /// running: it has no record to advance. Re-opening one would report `started` for work nobody
+  /// enqueued, which the daemon holds as an in-flight exchange it must wait out or invalidate on.
+  func testJournalDoesNotInventAnEntryForAPrunedCommandId() throws {
+    let journal = RunnerCommandJournal()
+    let early = runnerJournalCommand("tap", id: "pruned-tap")
+    journal.accept(command: early)
+    journal.finish(
+      command: early,
+      response: Response(ok: true, data: DataPayload(message: "tapped"))
+    )
+    for index in 0..<64 {
+      let settled = runnerJournalCommand("readText", id: "settled-\(index)")
+      journal.accept(command: settled)
+      journal.finish(
+        command: settled,
+        response: Response(ok: true, data: DataPayload(text: "x"))
+      )
+    }
+    XCTAssertEqual(
+      journal.status(normalizedCommandId: "pruned-tap").lifecycleState,
+      RunnerCommandLifecycleState.notAccepted.rawValue
+    )
+
+    journal.start(command: early)
+
+    XCTAssertEqual(
+      journal.status(normalizedCommandId: "pruned-tap").lifecycleState,
+      RunnerCommandLifecycleState.notAccepted.rawValue,
+      "a late transition for a pruned id must not report it as running"
+    )
+  }
+
+  /// The daemon resends a read-only command the runner refused with `RUNNER_BUSY`, under its busy
+  /// budget and with the same `commandId` (ADR 0005). A terminal record closes only ids whose execution
+  /// began, so a refusal that dispatched nothing has to leave the id executable once the runner is idle,
+  /// and must still travel as the journal failure the status recovery classifies as `RUNNER_BUSY`.
+  func testJournalAdmitsAgainACommandIdRefusedBeforeDispatch() throws {
+    let command = try runnerJournalCommand("recordStop", id: "busy-then-idle")
+    abandonedMainThreadWorkCount = 1
+    abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
+    defer {
+      abandonedMainThreadWorkCount = 0
+      abandonedMainThreadWorkSince = nil
+    }
+
+    let refused = try execute(command: command)
+    let refusalStatus = commandJournal.status(normalizedCommandId: "busy-then-idle")
+    abandonedMainThreadWorkCount = 0
+    abandonedMainThreadWorkSince = nil
+
+    XCTAssertEqual(refused.error?.code, "RUNNER_BUSY")
+    XCTAssertEqual(refusalStatus.lifecycleState, RunnerCommandLifecycleState.failed.rawValue)
+    XCTAssertEqual(refusalStatus.lifecycleErrorCode, "RUNNER_BUSY")
+
+    let served = try execute(command: command)
+
+    XCTAssertTrue(served.ok, "the refused commandId must run once the runner is idle, got \(String(describing: served.error?.code))")
+    XCTAssertEqual(served.data?.message, "recording already stopped")
+  }
+
   func testCommandJournalKeepsErrorMetadataWhenResponseJsonIsDropped() {
     let journal = RunnerCommandJournal()
     let snapshot = runnerJournalCommand("snapshot", id: "snapshot-error")

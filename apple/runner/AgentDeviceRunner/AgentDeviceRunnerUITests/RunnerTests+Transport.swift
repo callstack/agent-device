@@ -203,46 +203,59 @@ extension RunnerTests {
         completion((jsonResponse(status: 200, response: response), false))
         return
       }
-      // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to
-      // the in-flight execution and receive its response instead of piling a second execution
-      // onto the main queue behind it (#1105 capture pileup).
-      if attachToInFlightCommandIfNeeded(command: command, completion: completion) {
-        return
-      }
-      NSLog(
-        "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
-        command.command.rawValue,
-        command.commandId ?? ""
-      )
-      enqueueAccepted(command: command) { result in
-        switch result {
-        case .success(let response):
-          NSLog(
-            "AGENT_DEVICE_RUNNER_COMMAND_COMPLETED command=%@ commandId=%@ ok=%d",
-            command.command.rawValue,
-            command.commandId ?? "",
-            response.ok ? 1 : 0
-          )
-          self.deliverCommandResult(
-            command: command,
-            result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
-            completion: completion
-          )
-        case .failure(let error):
-          NSLog(
-            "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
-            command.command.rawValue,
-            command.commandId ?? "",
-            String(describing: error)
-          )
-          self.deliverCommandResult(
-            command: command,
-            result: (
-              self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
-              false
-            ),
-            completion: completion
-          )
+      // The journal decides whether this send may run the command at all. Reading that verdict here, at
+      // the one route an inbound request takes, is what keeps one `commandId` to one execution: a
+      // command that already finished is answered from the journal, so a repeat that arrives after its
+      // answer was delivered cannot drive the device a second time.
+      switch commandJournal.accept(command: command) {
+      case .join:
+        // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to the
+        // in-flight execution and receive its response instead of piling a second execution onto the
+        // main queue behind it (#1105 capture pileup).
+        attachToInFlightExecution(command: command, completion: completion)
+      case .terminal(let outcome):
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
+        completion((jsonResponse(status: 200, response: outcome), false))
+      case .execute:
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
+        enqueueAdmittedExecution(command: command) { result in
+          switch result {
+          case .success(let response):
+            NSLog(
+              "AGENT_DEVICE_RUNNER_COMMAND_COMPLETED command=%@ commandId=%@ ok=%d",
+              command.command.rawValue,
+              command.commandId ?? "",
+              response.ok ? 1 : 0
+            )
+            self.deliverCommandResult(
+              command: command,
+              result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
+              completion: completion
+            )
+          case .failure(let error):
+            NSLog(
+              "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
+              command.command.rawValue,
+              command.commandId ?? "",
+              String(describing: error)
+            )
+            self.deliverCommandResult(
+              command: command,
+              result: (
+                self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
+                false
+              ),
+              completion: completion
+            )
+          }
         }
       }
     } catch {
@@ -274,13 +287,13 @@ extension RunnerTests {
     }
   }
 
-  /// Journal-accepts `command` and executes it on `commandExecutionQueue`; `completion` runs on that
-  /// queue.
-  func enqueueAccepted(
+  /// Executes an already-admitted `command` on `commandExecutionQueue`; `completion` runs on that
+  /// queue. Admission is not this function's decision: the route asked the journal for the verdict
+  /// before calling it, so nothing here can re-admit a spent `commandId`.
+  func enqueueAdmittedExecution(
     command: Command,
     completion: @escaping @Sendable (Result<Response, Error>) -> Void
   ) {
-    commandJournal.accept(command: command)
     commandExecutionQueue.async {
       completion(Result { try self.executeAccepted(command: command) })
     }
@@ -288,28 +301,29 @@ extension RunnerTests {
 
   // MARK: - In-Flight Command Coalescing
 
-  /// Returns true when this send duplicated a still-executing commandId and was attached as a
-  /// waiter of the in-flight execution. Otherwise marks the commandId in flight and returns
-  /// false so the caller enqueues the (single) execution.
-  func attachToInFlightCommandIfNeeded(
+  /// Attaches this send to the in-flight execution the journal just told it to join, so the execution's
+  /// own delivery answers it. The journal closes an entry before its delivery drains this waiter list, and
+  /// both take `inFlightCommandLock`, so checking here under that lock decides which answer this send is
+  /// owed exactly once: one that arrives after the entry closed answers from the journal instead of
+  /// waiting for a delivery that already went out.
+  func attachToInFlightExecution(
     command: Command,
     completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
-  ) -> Bool {
-    guard let commandId = command.commandId?.trimmedNonEmpty else { return false }
+  ) {
+    guard let commandId = command.commandId?.trimmedNonEmpty else { return }
     inFlightCommandLock.lock()
-    if inFlightCommandIds.contains(commandId) {
-      inFlightCommandWaiters[commandId, default: []].append(completion)
+    if let outcome = commandJournal.closedOutcome(for: command) {
       inFlightCommandLock.unlock()
-      NSLog(
-        "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
-        command.command.rawValue,
-        commandId
-      )
-      return true
+      completion((jsonResponse(status: 200, response: outcome), false))
+      return
     }
-    inFlightCommandIds.insert(commandId)
+    inFlightCommandWaiters[commandId, default: []].append(completion)
     inFlightCommandLock.unlock()
-    return false
+    NSLog(
+      "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
+      command.command.rawValue,
+      commandId
+    )
   }
 
   func deliverCommandResult(
@@ -320,7 +334,6 @@ extension RunnerTests {
     var waiters: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void] = []
     if let commandId = command.commandId?.trimmedNonEmpty {
       inFlightCommandLock.lock()
-      inFlightCommandIds.remove(commandId)
       waiters = inFlightCommandWaiters.removeValue(forKey: commandId) ?? []
       inFlightCommandLock.unlock()
     }

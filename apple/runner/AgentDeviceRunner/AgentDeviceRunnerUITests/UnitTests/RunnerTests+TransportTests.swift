@@ -472,58 +472,143 @@ extension RunnerTests {
   }
 
   func testDuplicateCommandIdCoalescesOntoInFlightExecution() throws {
+    // `scroll` keeps its response body in the journal, so the test can tell a replayed outcome from the
+    // typed refusal a bodyless command's repeat gets.
     let command = try JSONDecoder().decode(
       Command.self,
-      from: Data(#"{"command":"snapshot","commandId":"snapshot-coalesce"}"#.utf8)
+      from: Data(#"{"command":"scroll","commandId":"scroll-coalesce"}"#.utf8)
     )
     final class Delivered {
       var primaryData: RunnerHttpResponse?
       var waiterData: RunnerHttpResponse?
+      var lateJoinerData: RunnerHttpResponse?
     }
     let delivered = Delivered()
-    defer {
-      inFlightCommandIds.removeAll()
-      inFlightCommandWaiters.removeAll()
+    defer { inFlightCommandWaiters.removeAll() }
+
+    // The execute path hands the sending connection's completion to the execution's own delivery; the
+    // join path registers its completion as a waiter of that execution.
+    guard case .execute = commandJournal.accept(command: command) else {
+      return XCTFail("the first send of a commandId must be admitted for execution")
+    }
+    guard case .join = commandJournal.accept(command: command) else {
+      return XCTFail("a send of a commandId whose execution has not finished must join it")
+    }
+    attachToInFlightExecution(command: command) { result in
+      delivered.waiterData = result.response
     }
 
-    XCTAssertFalse(
-      attachToInFlightCommandIfNeeded(command: command) { result in
-        delivered.primaryData = result.response
-      }
-    )
-    XCTAssertTrue(
-      attachToInFlightCommandIfNeeded(command: command) { result in
-        delivered.waiterData = result.response
-      }
-    )
-
-    let result = RunnerHttpResponse(status: 200, body: "single-result")
-    deliverCommandResult(
+    commandJournal.start(command: command)
+    commandJournal.markDispatched(command: command)
+    commandJournal.finish(
       command: command,
-      result: (result, false)
-    ) { result in
+      response: Response(ok: true, data: DataPayload(message: "captured"))
+    )
+    let result = RunnerHttpResponse(status: 200, body: "single-result")
+    deliverCommandResult(command: command, result: (result, false)) { result in
       delivered.primaryData = result.response
     }
 
     XCTAssertEqual(delivered.primaryData, result)
     XCTAssertEqual(delivered.waiterData, result)
-    XCTAssertFalse(inFlightCommandIds.contains("snapshot-coalesce"))
     XCTAssertNil(inFlightCommandWaiters["snapshot-coalesce"])
+
+    // The execution has answered and closed. A send that arrives now is the finished command's repeat,
+    // and it must be answered from the journal instead of waiting for a delivery that already went out.
+    guard case .terminal(let outcome) = commandJournal.accept(command: command) else {
+      return XCTFail("a send of a finished commandId must be answered from the journal")
+    }
+    XCTAssertTrue(outcome.ok)
+    XCTAssertEqual(outcome.data?.message, "captured")
+
+    let lateCommand = try JSONDecoder().decode(
+      Command.self,
+      from: Data(#"{"command":"snapshot","commandId":"snapshot-late-join"}"#.utf8)
+    )
+    commandJournal.accept(command: lateCommand)
+    commandJournal.markDispatched(command: lateCommand)
+    commandJournal.finish(
+      command: lateCommand,
+      response: Response(ok: true, data: DataPayload(message: "captured late"))
+    )
+    attachToInFlightExecution(command: lateCommand) { result in
+      delivered.lateJoinerData = result.response
+    }
+    XCTAssertNotNil(delivered.lateJoinerData, "a join after the answer was recorded must still be answered")
+    XCTAssertNil(inFlightCommandWaiters["snapshot-late-join"], "a journal answer must not register a waiter")
   }
 
-  /// Routes `command` through the transport's inline and queued paths. The calling test's main
-  /// thread serves the command's main-thread work while it waits.
+  /// The bug this repo cannot survive: a repeat of a `commandId` whose command already finished used to
+  /// be admitted again and drive the device a second time — a second tap. Sends go through the real
+  /// listener here, because admission is the transport's route, not any helper's.
+  ///
+  /// `recordStop` makes the second execution observable without recording anything: with no active
+  /// recording it answers "recording already stopped", so a re-execution would be seen as the recorder
+  /// the test installed being consumed instead of the recorded answer being replayed.
+  func testTransportNeverRepeatsAFinishedCommandsExecution() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let client = URLSession(configuration: .ephemeral)
+    defer { client.invalidateAndCancel() }
+    let payload = #"{"command":"recordStop","commandId":"record-stop-twice"}"#
+
+    activeRecording = nil
+    let first = try transportHttpResponse(client: client, port: port, payload: payload)
+    XCTAssertTrue(first.ok, String(describing: first.error))
+    XCTAssertEqual(first.data?.message, "recording already stopped")
+
+    // Prove nothing ran the second time: had it run, this recorder would be stopped and cleared.
+    let installed = ScreenRecorder(outputPath: "", fps: 30)
+    activeRecording = installed
+    defer { activeRecording = nil }
+
+    let repeatSend = try transportHttpResponse(client: client, port: port, payload: payload)
+
+    XCTAssertIdentical(activeRecording, installed, "a finished commandId must not execute again")
+    XCTAssertEqual(repeatSend.ok, true)
+    XCTAssertEqual(
+      repeatSend.data?.message,
+      "recording already stopped",
+      "the repeat must be answered with the outcome the runner recorded, got \(String(describing: repeatSend.data?.message))"
+    )
+    XCTAssertEqual(
+      commandJournal.status(normalizedCommandId: "record-stop-twice").lifecycleState,
+      RunnerCommandLifecycleState.completed.rawValue
+    )
+  }
+
+  /// Routes `command` the way the transport routes it: an inline read, then the journal's verdict on its
+  /// `commandId`. A finished id comes back as the answer the runner recorded for it; the execute path
+  /// rethrows what the dispatch threw, which the wire path turns into its own response. Sends that need
+  /// the wire path itself, including coalescing and admission end to end, go through
+  /// `startTransportListener` instead.
   func execute(command: Command) throws -> Response {
     dispatchPrecondition(condition: .onQueue(.main))
     if let response = inlineResponse(for: command) {
       return response
+    }
+    switch commandJournal.accept(command: command) {
+    case .terminal(let outcome):
+      return outcome
+    case .join:
+      throw NSError(
+        domain: RunnerErrorDomain.general,
+        code: RunnerErrorCode.commandReturnedNoResponse,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "this seam does not coalesce onto an in-flight execution; send through the transport listener"
+        ]
+      )
+    case .execute:
+      break
     }
     final class ResultBox {
       var result: Result<Response, Error>?
     }
     let box = ResultBox()
     let executed = XCTestExpectation(description: "\(command.command.rawValue) executed off main")
-    enqueueAccepted(command: command) { result in
+    enqueueAdmittedExecution(command: command) { result in
       box.result = result
       executed.fulfill()
     }
