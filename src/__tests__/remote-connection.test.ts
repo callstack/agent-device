@@ -29,10 +29,10 @@ import {
 } from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
 import {
-  hasDeferredMetroConfig,
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
-} from '../cli/commands/connection-runtime.ts';
+} from '../cli/commands/connection-lease-policy.ts';
+import { hasDeferredMetroConfig } from '../cli/commands/connection-metro-runtime.ts';
 import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';
 import {
