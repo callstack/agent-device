@@ -35,6 +35,9 @@ try {
 } catch (error) {
   fail(`${file}: ${(error as Error).message}`);
 }
+if (recording.format !== 2) {
+  fail(`${file}: format ${JSON.stringify(recording.format)} is not 2. Capture it again.`);
+}
 const plain = recordedTree('plain');
 const honorModal = recordedTree('honorModal');
 
@@ -187,7 +190,7 @@ function readModalSurface(): string {
 }
 
 const reading = readModalSurface();
-console.log(`reading: ${reading}`);
+console.log(`ModalSurface reads (the rule's answer, not ground truth): ${reading}`);
 if (reading !== 'modal' || treeName === 'plain') markers.clear();
 
 const depths: number[] = [];
