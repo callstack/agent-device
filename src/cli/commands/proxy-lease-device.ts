@@ -160,12 +160,39 @@ export async function bindLeaseNamedDevice(options: {
     };
   }
   if (!acquired) throw unboundLeaseError(options.state, lease);
-  await leaseLedger.end(lease.leaseId);
+  await retireKeylessLeaseBeforeFallback(leaseLedger, options.state, lease);
   const resolved = await resolveProxyLeaseStateLocally(options);
   return {
     state: resolved.state,
     materialized: await options.allocateByDeviceKey(resolved.state, flags),
   };
+}
+
+/**
+ * Ends a new lease that names no device before the local-pick fallback allocates its replacement.
+ * The fallback would otherwise abandon this lease: only the replacement reaches the durable record,
+ * and a lease no record names is invisible to disconnect. An unconfirmed retirement therefore fails
+ * the command with typed release evidence; the ledger still owns the lease, so the command's failure
+ * path retries the release and reports it beside this refusal.
+ */
+async function retireKeylessLeaseBeforeFallback(
+  leaseLedger: LeaseLedger,
+  state: RemoteConnectionState,
+  lease: Lease,
+): Promise<void> {
+  const retired = await leaseLedger.end(lease.leaseId);
+  if (retired.released) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The proxy backend leased a device without naming it, and releasing that lease failed, so the local fallback stopped. The lease may stay held until it expires.',
+    {
+      session: state.session,
+      leaseId: lease.leaseId,
+      released: false,
+      reason: 'PROXY_LEASE_RETIREMENT_FAILED',
+      ...(retired.error === undefined ? {} : { releaseError: retired.error }),
+    },
+  );
 }
 
 /**

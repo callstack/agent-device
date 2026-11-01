@@ -15,11 +15,12 @@ export type Lease = {
   deviceKey?: string;
   clientId?: string;
   /**
-   * What an allocate answered about this request: `false` when the daemon created the lease for it,
-   * `true` when it handed back a lease that already existed — renewed, or already bound to the run.
+   * What an allocate answered about this request: `true` when the daemon created the lease for it,
+   * `false` when it handed back a lease that already existed — renewed, or already bound to the run.
    * The returned lease alone cannot tell the two apart, and a caller that ends a lease must end only
-   * the one its own request created. Only `leases.allocate` answers this; every other read, and any
-   * daemon older than this field, omits it.
+   * the one its own request created, so release on `created === true` and on nothing else. Only
+   * `leases.allocate` answers this; every other read, any daemon older than this field, and every
+   * lease you did not allocate yourself omit it, and an omitted answer is not permission to release.
    */
   created?: boolean;
   /**
