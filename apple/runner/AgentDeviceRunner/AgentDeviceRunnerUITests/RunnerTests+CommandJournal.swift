@@ -30,15 +30,23 @@ struct RunnerCommandJournalEntry {
   /// on the device and its terminal entry must not close the id: the read-only busy resend carries the
   /// same `commandId` (ADR 0005).
   var dispatched = false
+  /// Which execution of this `commandId` the record belongs to, minted when the id was claimed. The
+  /// transport answers joiners from it, so a delivery reaches only the sends that joined the execution that
+  /// closed. It has to outlive the entry's close: an id the runner refused before dispatch is claimed
+  /// again, and the sends of that new execution must not be answered by the delivery of the refusal that
+  /// freed the id.
+  let executionToken: Int
 }
 
 /// The journal's verdict on one command that carries a `commandId`.
 enum RunnerCommandAdmission {
-  /// Nothing is running for this id and nothing has finished: the caller owns the one execution.
-  case execute
+  /// Nothing is running for this id and nothing has finished: the caller owns the one execution,
+  /// identified by `executionToken` for as long as that claim answers for it.
+  case execute(executionToken: Int)
   /// An execution is claimed and has not finished: the caller runs nothing and is answered by that
-  /// execution. `accept(command:registeringJoin:)` has already registered the send it gave this verdict.
-  case join
+  /// execution, the one `executionToken` names. `accept(command:registeringJoin:)` has already
+  /// registered the send it gave this verdict.
+  case join(executionToken: Int)
   /// Execution finished, and the work reached the device: the caller answers from the journal and
   /// never executes this command again. `answersShutdown` says whether the answer being handed over is
   /// the runner's own successful `shutdown` answer, which the caller owes the runner's end. Neither the
@@ -69,6 +77,9 @@ final class RunnerCommandJournal {
   /// valve above: an id older than that can be admitted again, and `pruneIfNeeded` states that bound.
   private var closedCommandIds: Set<String> = []
   private var closedOrder: [String] = []
+  /// Mints the identity of each claim, so a delivery can tell the sends that joined its own execution from
+  /// the sends that joined a later one under the same `commandId`.
+  private var nextExecutionToken = 0
 
   /// Settles one send, and when the answer is to join a running execution, registers that send for the
   /// answer inside the same locked operation. No transition can close the entry between the two, which is
@@ -80,11 +91,14 @@ final class RunnerCommandJournal {
   @discardableResult
   func accept(
     command: Command,
-    registeringJoin register: (String) -> Void = { _ in }
+    registeringJoin register: (Int) -> Void = { _ in }
   ) -> RunnerCommandAdmission {
-    guard let commandId = command.commandId?.trimmedNonEmpty else { return .execute }
     lock.lock()
     defer { lock.unlock() }
+    guard let commandId = command.commandId?.trimmedNonEmpty else {
+      // No `commandId`, so nothing to settle and no other send can share this claim.
+      return .execute(executionToken: mintExecutionToken())
+    }
     guard let entry = entries[commandId] else {
       // The entry can be pruned; the fact it recorded is not, so an id that spent itself on the device
       // never executes again. Only the entry named the command, so this refusal can name only what the
@@ -100,8 +114,9 @@ final class RunnerCommandJournal {
       return claim(command: command, commandId: commandId)
     }
     if !entry.state.isTerminal {
-      register(commandId)
-      return .join
+      let executionToken = entry.executionToken
+      register(executionToken)
+      return .join(executionToken: executionToken)
     }
     // Nothing of this command ever reached the device, so the id carries no effect to protect and the
     // send that reuses it is that command's own first execution.
@@ -118,39 +133,28 @@ final class RunnerCommandJournal {
     )
   }
 
+  /// Mints a claim identity. Callers hold the journal's lock, except for the no-`commandId` route, which
+  /// needs no entry and only asks for a value no other claim carries.
+  private func mintExecutionToken() -> Int {
+    nextExecutionToken += 1
+    return nextExecutionToken
+  }
+
   func start(command: Command) {
-    update(
-      command: command,
-      state: .started,
-      responseOk: nil,
-      responseJson: nil,
-      error: nil,
-      marksDispatched: false
-    )
+    transition(command: command, reorders: true) { entry in
+      entry.state = .started
+    }
   }
 
   /// Records that this command's work was handed to the device, as opposed to being refused while it
   /// was still queued. Until this point a refusal owes the caller a retry of the same `commandId`.
-  func markDispatched(command: Command) {
-    update(
-      command: command,
-      state: .started,
-      responseOk: nil,
-      responseJson: nil,
-      error: nil,
-      marksDispatched: true
-    )
-  }
-
   func finish(command: Command, response: Response) {
-    update(
-      command: command,
-      state: response.ok ? .completed : .failed,
-      responseOk: response.ok,
-      responseJson: encodeResponseJson(command: command, response: response),
-      error: response.error,
-      marksDispatched: false
-    )
+    transition(command: command, reorders: true) { entry in
+      entry.state = response.ok ? .completed : .failed
+      entry.responseOk = response.ok
+      entry.responseJson = encodeResponseJson(command: command, response: response)
+      entry.error = response.error
+    }
   }
 
   /// Records the failure that ended this command's execution. The typed wire code goes with it, the
@@ -159,17 +163,14 @@ final class RunnerCommandJournal {
   /// ordinary served refusal — which for a `MAIN_THREAD_TIMEOUT` would report the main thread drained
   /// when the command that just timed out is what occupied it.
   func fail(command: Command, error: Error) {
-    update(
-      command: command,
-      state: .failed,
-      responseOk: nil,
-      responseJson: nil,
-      error: ErrorPayload(
-        code: RunnerTests.wireErrorCode(for: error),
-        message: error.localizedDescription
-      ),
-      marksDispatched: false
+    let payload = ErrorPayload(
+      code: RunnerTests.wireErrorCode(for: error),
+      message: error.localizedDescription
     )
+    transition(command: command, reorders: true) { entry in
+      entry.state = .failed
+      entry.error = payload
+    }
   }
 
   func status(normalizedCommandId commandId: String) -> DataPayload {
@@ -196,45 +197,50 @@ final class RunnerCommandJournal {
 
   /// Writes the claim for one execution. Callers hold the lock.
   private func claim(command: Command, commandId: String) -> RunnerCommandAdmission {
+    let executionToken = mintExecutionToken()
     entries[commandId] = RunnerCommandJournalEntry(
       commandId: commandId,
       command: command.command.rawValue,
       state: .accepted,
       responseOk: nil,
       responseJson: nil,
-      error: nil
+      error: nil,
+      executionToken: executionToken
     )
     order.removeAll { $0 == commandId }
     order.append(commandId)
     pruneIfNeeded()
-    return .execute
+    return .execute(executionToken: executionToken)
   }
 
-  /// Moves one claimed entry forward. A transition for an id the journal does not hold describes work it
-  /// never claimed, and one for an entry that already finished restates a closed outcome: neither may
-  /// open a record again. Re-opening one would report `accepted` or `started` for work that is not
-  /// running, and the daemon holds that verdict as an in-flight exchange on a runner it would otherwise
-  /// hand off.
-  private func update(
+  /// Records that this command's work was handed to the device, as opposed to being refused while it
+  /// was still queued. Until this point a refusal owes the caller a retry of the same `commandId`. Only
+  /// the mark moves: the entry keeps its place in the retention order, which is claim order, and the
+  /// state `start` already wrote is what `status` reports for a running command.
+  func markDispatched(command: Command) {
+    transition(command: command, reorders: false) { entry in
+      entry.dispatched = true
+    }
+  }
+
+  /// Applies one transition to the record this command's id holds. A transition for an id the journal does
+  /// not hold describes work it never claimed, and one for an entry that already finished restates a
+  /// closed outcome: neither may open a record again. Re-opening one would report `accepted` or `started`
+  /// for work that is not running, and the daemon holds that verdict as an in-flight exchange on a runner
+  /// it would otherwise hand off. `reorders` is what settling does: an entry that finishes goes to the back
+  /// of the retention order, which records claim order.
+  private func transition(
     command: Command,
-    state: RunnerCommandLifecycleState,
-    responseOk: Bool?,
-    responseJson: String?,
-    error: ErrorPayload?,
-    marksDispatched: Bool
+    reorders: Bool,
+    _ mutate: (inout RunnerCommandJournalEntry) -> Void
   ) {
     guard let commandId = command.commandId?.trimmedNonEmpty else { return }
     lock.lock()
     defer { lock.unlock() }
     guard var entry = entries[commandId], !entry.state.isTerminal else { return }
-    entry.state = state
-    entry.responseOk = responseOk
-    entry.responseJson = responseJson
-    entry.error = error
-    if marksDispatched {
-      entry.dispatched = true
-    }
+    mutate(&entry)
     entries[commandId] = entry
+    guard reorders else { return }
     order.removeAll { $0 == commandId }
     order.append(commandId)
     pruneIfNeeded()

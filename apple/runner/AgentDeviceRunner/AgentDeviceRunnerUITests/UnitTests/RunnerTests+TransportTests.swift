@@ -361,7 +361,7 @@ extension RunnerTests {
     var waiterCount = 0
     repeat {
       inFlightCommandLock.lock()
-      waiterCount = inFlightCommandWaiters["shared-shutdown"]?.count ?? 0
+      waiterCount = inFlightCommandWaiters.values.reduce(0) { $0 + $1.count }
       inFlightCommandLock.unlock()
       if waiterCount == sockets.count - 1 { break }
       Thread.sleep(forTimeInterval: 0.01)
@@ -482,17 +482,27 @@ extension RunnerTests {
     outcome: Response?
   ) -> RunnerHttpResponse {
     let executed = commandJournal.accept(command: command)
-    let joined = commandJournal.accept(command: command) { [weak self] commandId in
-      self?.registerJoiner(for: commandId) { result in
+    var executionToken = -1
+    let joined = commandJournal.accept(command: command) { [weak self] token in
+      executionToken = token
+      self?.registerJoiner(for: token) { result in
         delivered.joinerData = result.response
       }
     }
-    if case .execute = executed {} else {
+    guard case .execute(let claimedToken) = executed else {
       XCTFail("the first send of a commandId must be admitted for execution")
+      return Data()
     }
-    if case .join = joined {} else {
+    guard case .join(let joinedToken) = joined else {
       XCTFail("a send of a commandId whose execution has not finished must join it")
+      return Data()
     }
+    XCTAssertEqual(
+      joinedToken,
+      executionToken,
+      "the joiner is registered for the execution the verdict names"
+    )
+    XCTAssertEqual(claimedToken, joinedToken, "both sends speak of one execution")
 
     commandJournal.start(command: command)
     commandJournal.markDispatched(command: command)
@@ -502,7 +512,7 @@ extension RunnerTests {
       commandJournal.fail(command: command, error: NSError(domain: "test", code: 7, userInfo: nil))
     }
     let deliveredBytes = RunnerHttpResponse(status: 200, body: "one-delivery")
-    deliverCommandResult(command: command, result: (deliveredBytes, false)) { result in
+    deliverCommandResult(executionToken: claimedToken, result: (deliveredBytes, false)) { result in
       delivered.primaryData = result.response
     }
     return deliveredBytes
@@ -523,7 +533,7 @@ extension RunnerTests {
 
     XCTAssertEqual(delivered.primaryData, delivery)
     XCTAssertEqual(delivered.joinerData, delivery)
-    XCTAssertNil(inFlightCommandWaiters["scroll-coalesce"])
+    assertNoJoinersLeft("the close must drain every send that joined it")
 
     // The execution has answered and closed. A send that arrives now is the finished command's repeat, and
     // the journal settles it with the recorded outcome instead of registering it onto a delivery that
@@ -538,7 +548,7 @@ extension RunnerTests {
     XCTAssertFalse(registeredLateSend, "a send answered from the journal must not be registered")
     XCTAssertTrue(outcome.ok)
     XCTAssertEqual(outcome.data?.message, "captured")
-    XCTAssertNil(inFlightCommandWaiters["scroll-coalesce"], "a journal answer must not register a waiter")
+    assertNoJoinersLeft("a journal answer must not register a waiter")
   }
 
   /// The interleaving that used to leave a connection unanswered: the verdict said join, and the execution
@@ -561,7 +571,7 @@ extension RunnerTests {
     assertJournalWindowDropped("scroll-join-pruned")
 
     XCTAssertEqual(delivery, delivered.joinerData, "the close that pruned the entry must answer its joiner")
-    XCTAssertNil(inFlightCommandWaiters["scroll-join-pruned"], "answering must not leave a waiter behind")
+    assertNoJoinersLeft("answering must not leave a waiter behind")
   }
 
   /// A command that fails closes the entry through the same transition, so its joiner is owed the same
@@ -574,7 +584,56 @@ extension RunnerTests {
     let delivery = runExecutionWithJoiner(command, into: delivered, outcome: nil)
 
     XCTAssertEqual(delivery, delivered.joinerData, "the failure that closed the entry must answer its joiner")
-    XCTAssertNil(inFlightCommandWaiters["scroll-join-failed"])
+    assertNoJoinersLeft("a failed close must drain its joiner too")
+  }
+
+  /// A `commandId` the runner refused before dispatch is claimed again, and the delivery of that refusal
+  /// must not answer the sends of the execution that followed it. The journal mints one identity per
+  /// claim and the transport keys its joiners by it, so the two generations cannot cross.
+  func testDeliveryOfARefusalNeverAnswersTheJoinersOfTheExecutionAfterIt() throws {
+    let command = try transportCommand("scroll", id: "scroll-refused-then-rerun")
+    defer { inFlightCommandWaiters.removeAll() }
+
+    // Generation one: claimed, refused before dispatch, and its entry closed with `dispatched == false`.
+    guard case .execute(let firstToken) = commandJournal.accept(command: command) else {
+      return XCTFail("the first send must be admitted")
+    }
+    commandJournal.start(command: command)
+    commandJournal.finish(command: command, response: Response(ok: false, data: nil))
+
+    // Generation two: the same id, admitted again because the refusal left no effect to protect. A send
+    // joins this execution while it runs.
+    guard case .execute(let secondToken) = commandJournal.accept(command: command) else {
+      return XCTFail("a commandId refused before dispatch must be claimable again")
+    }
+    XCTAssertNotEqual(firstToken, secondToken, "each claim gets its own identity")
+    let second = TransportJoiner()
+    let joinVerdict = commandJournal.accept(command: command) { [weak self] token in
+      self?.registerJoiner(for: token) { result in
+        second.joinerData = result.response
+      }
+    }
+    guard case .join = joinVerdict else {
+      return XCTFail("a send of the running execution's id must join it")
+    }
+
+    // The refused generation delivers its own answer. It must reach nobody from the next generation.
+    deliverCommandResult(executionToken: firstToken, result: (Data("refusal".utf8), false)) { _ in }
+    XCTAssertNil(second.joinerData, "a refusal must not answer the execution that replaced it")
+
+    commandJournal.start(command: command)
+    commandJournal.markDispatched(command: command)
+    commandJournal.finish(command: command, response: Response(ok: true, data: DataPayload(message: "ran")))
+    deliverCommandResult(executionToken: secondToken, result: (Data("ran".utf8), false)) { _ in }
+    XCTAssertEqual(second.joinerData, Data("ran".utf8), "the joiner is answered by its own execution")
+  }
+
+  /// Asserts that no send is left waiting for a delivery, whichever execution it joined.
+  private func assertNoJoinersLeft(_ message: String) {
+    XCTAssertFalse(
+      inFlightCommandWaiters.values.contains { !$0.isEmpty },
+      message
+    )
   }
 
   /// One send's answers on the transport route: the execution's own delivery and the join's.

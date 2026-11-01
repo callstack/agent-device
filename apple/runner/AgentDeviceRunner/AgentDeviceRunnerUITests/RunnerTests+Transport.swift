@@ -212,8 +212,8 @@ extension RunnerTests {
       // command that already finished is answered from the journal, so a repeat that arrives after its
       // answer was delivered cannot drive the device a second time, and a send told to join can never be
       // left behind by a delivery that went out first.
-      let admission = commandJournal.accept(command: command) { [weak self] commandId in
-        self?.registerJoiner(for: commandId, completion: completion)
+      let admission = commandJournal.accept(command: command) { [weak self] executionToken in
+        self?.registerJoiner(for: executionToken, completion: completion)
       }
       switch admission {
       case .join:
@@ -236,7 +236,7 @@ extension RunnerTests {
           command.commandId ?? ""
         )
         completion((jsonResponse(status: 200, response: outcome), answersShutdown))
-      case .execute:
+      case .execute(let executionToken):
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
           command.command.rawValue,
@@ -252,7 +252,7 @@ extension RunnerTests {
               response.ok ? 1 : 0
             )
             self.deliverCommandResult(
-              command: command,
+              executionToken: executionToken,
               result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
               completion: completion
             )
@@ -264,7 +264,7 @@ extension RunnerTests {
               String(describing: error)
             )
             self.deliverCommandResult(
-              command: command,
+              executionToken: executionToken,
               result: (
                 self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
                 false
@@ -321,29 +321,30 @@ extension RunnerTests {
   /// execution's own delivery answers it. The journal calls this while it holds its own lock and after it
   /// checked that the entry is still running, which is what makes the two indivisible: the transition that
   /// closes an entry needs that lock, and one close drains this list only after it has closed the entry, so
-  /// no send can be recorded here for a delivery that already went out. Takes only
-  /// `inFlightCommandLock`, and never the journal's, so nothing here can re-enter the journal.
+  /// no send can be recorded here for a delivery that already went out. The key is the execution's identity
+  /// rather than the `commandId`, because a refused-before-dispatch id is claimed again and the sends of
+  /// that execution must not join the refusal that freed the id. Takes only `inFlightCommandLock`, and
+  /// never the journal's, so nothing here can re-enter the journal.
   func registerJoiner(
-    for commandId: String,
+    for executionToken: Int,
     completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
     inFlightCommandLock.lock()
-    inFlightCommandWaiters[commandId, default: []].append(completion)
+    inFlightCommandWaiters[executionToken, default: []].append(completion)
     inFlightCommandLock.unlock()
   }
 
-  /// Answers the send that owns this execution, and every send the journal settled onto it.
+  /// Answers the send that owns this execution, and every send the journal settled onto it. No send can
+  /// join after the close that runs before this delivery, so the list this drains is exactly the sends that
+  /// joined the execution whose work produced `result`.
   func deliverCommandResult(
-    command: Command,
+    executionToken: Int,
     result: (response: RunnerHttpResponse, shouldFinish: Bool),
     completion: ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
-    var waiters: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void] = []
-    if let commandId = command.commandId?.trimmedNonEmpty {
-      inFlightCommandLock.lock()
-      waiters = inFlightCommandWaiters.removeValue(forKey: commandId) ?? []
-      inFlightCommandLock.unlock()
-    }
+    inFlightCommandLock.lock()
+    let waiters = inFlightCommandWaiters.removeValue(forKey: executionToken) ?? []
+    inFlightCommandLock.unlock()
     completion(result)
     for waiter in waiters {
       waiter(result)
@@ -382,7 +383,14 @@ extension RunnerTests {
   /// the caller lost.
   func commandFailedResponse(from error: Error) -> Response {
     let code = RunnerTests.wireErrorCode(for: error)
-    if code == RunnerWireErrorCode.mainThreadTimeout {
+    // The hint says the watchdog abandoned this command's work, so it goes only with the error the
+    // watchdog throws. The code is read from the one owner it derives from, but the branch keys on the
+    // error's own identity: a later code that `wireErrorCode(for:)` learns to derive must not pull an
+    // unrelated throw into this claim.
+    let nsError = error as NSError
+    if nsError.domain == RunnerErrorDomain.general,
+      nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
+    {
       return Response(
         ok: false,
         error: ErrorPayload(

@@ -477,10 +477,21 @@ function runnerReplyFailure(runnerCode: string): AppError {
 // Swift runner really encodes this string — is the test below, which reads the Swift declaration.
 test('the journal refusal of a finished commandId reports nothing about main-thread occupancy', () => {
   assert.equal(COMMAND_ALREADY_FINISHED_RUNNER_CODE, 'COMMAND_ALREADY_FINISHED');
-  assert.equal(
-    runnerMainThreadOccupancyReport(runnerReplyFailure('COMMAND_ALREADY_FINISHED')),
-    'silent',
-  );
+  // The published shape, not only the runner detail: this code travels under its own name the way
+  // `NO_TEXT_INPUT_AT_POINT` does, rather than staying `COMMAND_FAILED` like the diagnostic codes,
+  // because no caller policy reads it — the runner will not re-run the command, whatever an earlier
+  // send of that id did.
+  const refusal = classifyRunnerReportedError(COMMAND_ALREADY_FINISHED_RUNNER_CODE);
+  assert.equal(refusal.code, 'COMMAND_ALREADY_FINISHED');
+  assert.equal(refusal.details.dispatched, 'unknown');
+  assert.equal(refusal.details.retriable, undefined);
+  const refusalError = new AppError(refusal.code, 'already finished', {
+    ...refusal.details,
+    runner: { ok: false, error: { code: COMMAND_ALREADY_FINISHED_RUNNER_CODE, message: 'x' } },
+  });
+  assert.equal(isRetryableRunnerError(refusalError), false);
+  assert.equal(isRunnerBusyError(refusalError), false);
+  assert.equal(runnerMainThreadOccupancyReport(refusalError), 'silent');
   // Without the structured runner payload there is no answer at all, which is also silent.
   assert.equal(runnerMainThreadOccupancyReport(commandFailed('boom')), 'silent');
 });

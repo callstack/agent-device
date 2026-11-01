@@ -120,7 +120,7 @@ Thus, it is the single place for a change to that classification.
 Its verdict is `execute`, `join`, or `terminal`:
 
 - `execute` claims the `commandId`, and that send owns the one execution.
-- `join` means an execution is claimed and unfinished. The journal registers that send as a waiter of the execution in the same locked operation, which keeps a transport retry from stacking a second execution behind the first (#1105). Settling and registering are one operation because a close between them left the send waiting on a delivery that had already gone out.
+- `join` means an execution is claimed and unfinished. The journal registers that send as a waiter of the execution in the same locked operation, which keeps a transport retry from stacking a second execution behind the first (#1105). Settling and registering are one operation because a close between them left the send waiting on a delivery that had already gone out. Each claim carries an execution identity the journal mints, and the transport keys its waiters by it: an id refused before dispatch is claimed again, and the delivery of that refusal must not answer the sends of the execution that follows.
 - `terminal` means execution ended after dispatch. The runner answers with the outcome it recorded, which may be a failure, and the command never runs again. Whether that answer ends the runner is the journal's fact about the record it read, not the repeat's request: a caller may reuse a spent `commandId` under another command name, and the outcome it receives stays the recorded command's.
 
 The journal closes a `commandId` at the last fast `RUNNER_BUSY` or `RUNNER_WEDGED` refusal, not at accept.

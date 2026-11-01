@@ -123,10 +123,12 @@ final class RunnerTests: XCTestCase {
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
   let inFlightCommandLock = NSLock()
-  // Waits of a `commandId` whose execution is in flight, so the one execution answers every send that
-  // joined it (#1105 capture pileup). The journal owns whether an execution is in flight; this holds
-  // only the sends that attached to it.
-  var inFlightCommandWaiters: [String: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
+  /// Waits of an execution whose `commandId` is in flight, keyed by the execution's identity so the one
+  /// execution answers every send that joined it (#1105 capture pileup). The journal owns which execution
+  /// is in flight and mints the identity; this holds only the sends that attached to it. A `commandId` the
+  /// runner refused before dispatch is claimed again, and the key is what keeps that new execution's sends
+  /// from being answered by the delivery of the refusal that freed the id.
+  var inFlightCommandWaiters: [Int: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
   // Tracks main-queue work abandoned by the execution watchdog (runMainThreadWork). While any is
   // outstanding the main thread is occupied: new main-thread commands fail fast as busy instead
   // of queueing behind work that cannot be cancelled, capture plans skip XCTest-backed tiers,
