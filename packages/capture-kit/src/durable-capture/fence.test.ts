@@ -3,7 +3,10 @@ import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { withDurableCaptureResourceFence } from './fence.ts';
+import {
+  withDurableCaptureResourceFence,
+  type DurableCaptureOpenResourceFenceLease,
+} from './fence.ts';
 import { createDurableCaptureResourceStore } from './store.ts';
 
 const store = createDurableCaptureResourceStore({
@@ -111,6 +114,83 @@ test('a caller holding the same fence cannot write a record an earlier caller co
   expect(await second).toBe('completed');
   await first;
   expect(late).not.toHaveBeenCalled();
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+});
+
+/**
+ * A progress port its own run kept holding outlives that run, and a later run commits the record it
+ * was issued against. Two leases, not two transitions on one lease: the escaped one must be dead the
+ * moment its own run ends, or its cached `open` view overwrites what the later run committed.
+ */
+test('a lease that outlived its run cannot write a record a later run committed', async () => {
+  const resourcePath = makeRecord();
+  let escape!: DurableCaptureOpenResourceFenceLease<'screen-recording'>;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      escape = lease;
+    },
+  });
+
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+    },
+  });
+
+  expect(() => escape.transition('open', { metadata: { phase: 'completing' } })).toThrow();
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+});
+
+/**
+ * The reviewer's probe: an escaped lease invoked while the committing run still holds the fence. Its
+ * cached `open` view must not publish, or the manifest that run just committed is overwritten.
+ */
+test('an escaped lease cannot overwrite the record the committing run is writing', async () => {
+  const resourcePath = makeRecord();
+  let escape!: DurableCaptureOpenResourceFenceLease<'screen-recording'>;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      escape = lease;
+    },
+  });
+
+  let escapeWrite: unknown;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+      // The escaped lease is invoked with the committed record already published.
+      try {
+        escape.transition('open', { metadata: { phase: 'completing' } });
+        escapeWrite = 'published';
+      } catch (error) {
+        escapeWrite = error;
+      }
+    },
+  });
+
+  expect(escapeWrite).toMatchObject({ details: { reason: 'resource-already-completed' } });
   expect(store.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },

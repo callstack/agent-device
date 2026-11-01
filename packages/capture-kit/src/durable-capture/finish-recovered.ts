@@ -11,9 +11,9 @@ import { withDurableCaptureResourceFence } from './fence.ts';
 import type { DurableCaptureRecordDefinition } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 import {
+  cleanupDurableCaptureDescriptor,
   finishDurableCaptureHandle,
   requireConfirmedDurableCaptureCleanup,
-  transitionCleanupOutcome,
   transitionFinishOutcome,
 } from './transitions.ts';
 
@@ -78,8 +78,8 @@ export async function finishRecoveredDurableCapture<
           store: definition.store,
           resourcePath: params.resourcePath,
           expected: envelope.fence,
-          // The record committed while this recovery was acquiring authority. Its committed export
-          // is what the caller is served, and this attempt adds nothing to it.
+          // The record committed while this recovery was acquiring authority. It holds the export the
+          // caller is being served, so this attempt writes nothing of its own.
           onCompleted: () => undefined,
           run: async (lease) => {
             transitionFinishOutcome(definition, lease, {
@@ -102,15 +102,10 @@ export async function finishRecoveredDurableCapture<
         );
       case 'unreattachable': {
         if (allowsDurableCaptureDescriptorCleanup(authority.reattached.reason)) {
-          const cleanup = await authority.control.cleanup(envelope);
-          await withDurableCaptureResourceFence({
-            store: definition.store,
+          const cleanup = await cleanupDurableCaptureDescriptor(definition, {
+            envelope,
             resourcePath: params.resourcePath,
-            expected: envelope.fence,
-            // A committed record keeps its facts: this descriptor cleanup cannot make it anything the
-            // finish did not already record, and the caller still reports what cleanup returned.
-            onCompleted: () => undefined,
-            run: async (lease) => transitionCleanupOutcome(lease, cleanup),
+            cleanup: () => authority.control.cleanup(envelope),
           });
           requireConfirmedDurableCaptureCleanup(definition, cleanup);
         }

@@ -12,13 +12,12 @@ import { forceCleanupLiveDurableCapture, finishLiveDurableCapture } from './tran
 /**
  * A cleanup that reaches the fence only after a finish committed the same record. The cleanup had
  * read the session's active resource before that finish, so it holds the fence the record still
- * names; ownership alone must not let it write the record back open or dispose a committed export.
+ * names; ownership alone must not let it write the record back open. It still signals the handle it
+ * captured, because that handle is a native resource of its own that nobody else has disposed.
  */
-test('a cleanup queued behind a committed finish leaves the record completed and cleans nothing', async () => {
+test('a cleanup queued behind a committed finish leaves the record completed and settles its handle', async () => {
   const context = makeDurableCaptureContext();
-  const start = makeDurableCaptureStartResult(context, {
-    cleanup: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
-  });
+  const start = makeDurableCaptureStartResult(context);
   await adoptStartedDurableCapture(
     testCaptureDefinition,
     { ...context, ...start, throwIfCanceled: () => {} },
@@ -45,11 +44,85 @@ test('a cleanup queued behind a committed finish leaves the record completed and
     resourcePath: context.resourcePath,
   });
 
-  expect(start.forceCleanup).not.toHaveBeenCalled();
+  expect(start.forceCleanup).toHaveBeenCalledOnce();
+  expect(start.finish).toHaveBeenCalledOnce();
   expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
+  expect(context.binding.read()).toBeUndefined();
+});
+
+/**
+ * Two finishes captured the same live resource. The first commits its export; the second reaches the
+ * fence after that commit. It previously succeeded by replaying the handle's memoized finish, so a
+ * refusal here is a new user-visible failure on a path that already has the export to serve — the
+ * teardown path reports it as an unreleased resource. It answers the committed completion and drives
+ * the native finish no second time.
+ */
+test('a finish queued behind a committed finish replays the committed export without re-finishing', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  await adoptStartedDurableCapture(
+    testCaptureDefinition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const queued = context.binding.read();
+  if (!queued) throw new Error('Expected adopted test capture session');
+
+  const first = await finishLiveDurableCapture(
+    testCaptureDefinition,
+    { binding: context.binding, intent: 'capture' },
+    context.resourcePath,
+  );
+
+  context.binding.adopt(queued);
+  await expect(
+    finishLiveDurableCapture(
+      testCaptureDefinition,
+      { binding: context.binding, intent: 'disposal' },
+      context.resourcePath,
+    ),
+  ).resolves.toEqual(first);
+  expect(start.finish).toHaveBeenCalledOnce();
+  expect(context.binding.read()).toBeUndefined();
+});
+
+/**
+ * A failed finish that confirmed its compensating cleanup committed a record with no export in it.
+ * Nothing is serveable from it, so the caller keeps its own error rather than a made-up completion.
+ */
+test('a finish queued behind a commit that produced no export keeps its refusal', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  await adoptStartedDurableCapture(
+    testCaptureDefinition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const queued = context.binding.read();
+  if (!queued) throw new Error('Expected adopted test capture session');
+  // A record that committed without ever storing this kind's completion.
+  testCaptureStore.write(context.resourcePath, {
+    ...(
+      testCaptureStore.read(context.resourcePath) as Extract<
+        ReturnType<typeof testCaptureStore.read>,
+        { status: 'decoded' }
+      >
+    ).envelope,
+    lifecycle: 'completed',
+    metadata: { phase: 'completed', cleanupStatus: 'cleaned' },
+  });
+
+  await expect(
+    finishLiveDurableCapture(
+      testCaptureDefinition,
+      { binding: context.binding, intent: 'disposal' },
+      context.resourcePath,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'resource-already-completed' } });
+  expect(start.finish).not.toHaveBeenCalled();
 });
 
 /**

@@ -4,7 +4,7 @@ import type {
   DurableResourceLifecycleState,
 } from '@agent-device/contracts/durable-resource-envelope';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
-import type { DurableCaptureResourceStore } from './store.ts';
+import type { DurableCaptureResourceRecord, DurableCaptureResourceStore } from './store.ts';
 
 const resourceFenceTails = new Map<string, Promise<void>>();
 
@@ -32,9 +32,13 @@ export type DurableCaptureCompletedResourceFenceLease<K extends string> = Readon
  * present the same fence, so serialization alone would let a queued attempt drive a record another
  * attempt already committed. This is the one owner of that rule. While it holds the fence it reads
  * the record's lifecycle, and a `completed` record is terminal — a run that finds one never receives
- * a lease, so it cannot reach native or destructive work, and answers from `onCompleted` instead. A
- * transition inside a run that committed its record is refused the same way, which is what keeps a
- * late progress write from reopening an export that is already served.
+ * a lease, so it cannot reach native or destructive work, and answers from `onCompleted` instead.
+ *
+ * Admission is re-checked at every write, not only at lease issue. A run can hand its lease or its
+ * progress port to something that outlives it, so a transition re-reads the persisted record and
+ * publishes onto that: a lease whose own run has ended, one that finds the fence gone, and one that
+ * finds the record committed are each refused before publication. That is what keeps an escaped
+ * progress or completion write from overwriting the outcome another run committed.
  */
 export async function withDurableCaptureResourceFence<K extends string, Result>(
   params: Readonly<{
@@ -47,42 +51,64 @@ export async function withDurableCaptureResourceFence<K extends string, Result>(
   }>,
 ): Promise<Result> {
   return await serializeResource(params.resourcePath, async () => {
-    const record = params.store.read(params.resourcePath);
-    if (record.status !== 'decoded') {
-      throw fenceError(
-        params.store,
-        record.status === 'missing'
-          ? `${params.store.displayName} resource record is missing`
-          : `${params.store.displayName} resource record is unreattachable: ${record.message}`,
-      );
+    const admitted = requireAdmissibleRecord(params.store, params.resourcePath, params.expected);
+    if (admitted.envelope.lifecycle === 'completed') {
+      return await params.onCompleted({ envelope: admitted.envelope });
     }
-    if (!sameFence(record.envelope.fence, params.expected)) {
-      throw fenceError(
-        params.store,
-        `${params.store.displayName} resource ownership fence was lost`,
-      );
+    let current = admitted.envelope;
+    // The lease is the run's, for as long as that run is the one holding the fence.
+    let issued = true;
+    try {
+      return await params.run({
+        get envelope() {
+          return current;
+        },
+        transition(lifecycle, update = {}) {
+          // The persisted record decides, so a lease cannot publish from a view its own run cached.
+          const persisted = requireAdmissibleRecord(
+            params.store,
+            params.resourcePath,
+            params.expected,
+          );
+          if (persisted.envelope.lifecycle === 'completed') {
+            throw completedDurableCaptureError(params.store);
+          }
+          if (!issued) throw releasedLeaseError(params.store);
+          current = Object.freeze({
+            ...persisted.envelope,
+            lifecycle,
+            ...(update.descriptor === undefined ? {} : { descriptor: update.descriptor }),
+            ...(update.metadata === undefined ? {} : { metadata: update.metadata }),
+          });
+          params.store.write(params.resourcePath, current);
+          return current;
+        },
+      });
+    } finally {
+      issued = false;
     }
-    if (record.envelope.lifecycle === 'completed') {
-      return await params.onCompleted({ envelope: record.envelope });
-    }
-    let current = record.envelope;
-    return await params.run({
-      get envelope() {
-        return current;
-      },
-      transition(lifecycle, update = {}) {
-        if (current.lifecycle === 'completed') throw completedDurableCaptureError(params.store);
-        current = Object.freeze({
-          ...current,
-          lifecycle,
-          ...(update.descriptor === undefined ? {} : { descriptor: update.descriptor }),
-          ...(update.metadata === undefined ? {} : { metadata: update.metadata }),
-        });
-        params.store.write(params.resourcePath, current);
-        return current;
-      },
-    });
   });
+}
+
+/** The record this caller still owns, refusing a record it no longer holds a fence over. */
+function requireAdmissibleRecord<K extends string>(
+  store: DurableCaptureResourceStore<K>,
+  resourcePath: string,
+  expected: ResourceOwnershipFence,
+): Extract<DurableCaptureResourceRecord<K>, { status: 'decoded' }> {
+  const record = store.read(resourcePath);
+  if (record.status !== 'decoded') {
+    throw fenceError(
+      store,
+      record.status === 'missing'
+        ? `${store.displayName} resource record is missing`
+        : `${store.displayName} resource record is unreattachable: ${record.message}`,
+    );
+  }
+  if (!sameFence(record.envelope.fence, expected)) {
+    throw fenceError(store, `${store.displayName} resource ownership fence was lost`);
+  }
+  return record;
 }
 
 function sameFence(left: ResourceOwnershipFence, right: ResourceOwnershipFence): boolean {
@@ -115,6 +141,22 @@ function fenceError(store: DurableCaptureResourceStore<string>, message: string)
     retriable: false,
     hint: `Use the current ${store.displayName.toLowerCase()} resource owner or retain the recovery record for manual recovery.`,
   });
+}
+
+/**
+ * The refusal a lease gives once the run it was issued to has ended. The caller no longer holds the
+ * record, whatever its cached view says, so the reason is the one a lost fence already publishes.
+ */
+function releasedLeaseError(store: DurableCaptureResourceStore<string>): AppError {
+  return fenceError(store, `${store.displayName} resource fence was released with its run`);
+}
+
+/**
+ * Whether an error is the refusal a terminal record gives. A caller releasing a resource treats it as
+ * settled: the record is committed, so the resource is released, whatever the record could replay.
+ */
+export function isCompletedDurableCaptureError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'resource-already-completed';
 }
 
 /**

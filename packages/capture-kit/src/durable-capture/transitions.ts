@@ -7,6 +7,7 @@ import {
 } from '@agent-device/contracts/durable-resource';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -70,10 +71,13 @@ export async function finishDurableCaptureHandle<
     store: definition.store,
     resourcePath: params.resourcePath,
     expected: params.fence,
-    // The caller that committed this record already returned its export. A finish arriving after
-    // that replays nothing of its own: the kind's completion is its own metadata, and the durable
-    // manifest is what serves it.
-    onCompleted: () => {
+    // The record this fence found committed already holds an outcome. A finish arriving after that is
+    // not a failure to report: it is a caller that needs what the first finish produced, and the record
+    // is the only place it can come from. A queued teardown finish that had to be refused this way
+    // reported the session's export as an unreleased resource.
+    onCompleted: async ({ envelope }) => {
+      const replayed = await definition.completionFromMetadata?.(envelope.metadata);
+      if (replayed !== undefined) return replayed;
       throw completedDurableCaptureError(definition.store);
     },
     run: async (lease) => {
@@ -210,11 +214,11 @@ export async function forceCleanupLiveDurableCapture<
     store: definition.store,
     resourcePath: params.resourcePath,
     expected: active.envelope.fence,
-    // A committed record has already been through the finish that disposes what this kind's cleanup
-    // would: its own handle answers a cleanup after a completed finish with the same confirmed
-    // outcome without signalling anything. Settling the slot here is what releases the resource a
-    // caller captured before that finish, and leaves the record as committed.
-    onCompleted: () => ({ status: 'already-missing' as const }),
+    // The record is settled, but the handle this caller captured is still a native resource of its
+    // own: a commit through another entry point (recovery, or a finish this caller never saw) leaves
+    // it live here. Signal it and report what it answers, without letting it touch the record — a
+    // kind whose cleanup is already done after its own commit answers confirmed.
+    onCompleted: async () => await active.handle.forceCleanup(),
     run: async (lease) => {
       markCompletingDurableCapture(lease);
       const result = await active.handle.forceCleanup();
@@ -224,6 +228,37 @@ export async function forceCleanupLiveDurableCapture<
   });
   requireConfirmedDurableCaptureCleanup(definition, outcome);
   params.binding.clear(active);
+}
+
+/**
+ * Removes what a persisted record points at when its native resource could not be reattached, and
+ * journals that removal.
+ *
+ * The cleanup is destructive, so it runs inside the fence's `run`, not before it: acquiring recovery
+ * authority can take long enough for another caller to commit the record, and removal that arrives
+ * after that commit has nothing left to remove. The terminal branch therefore answers `already-missing`
+ * — what a committed record states about its own descriptor, since the commit that produced it confirmed
+ * its cleanup — and removes nothing.
+ */
+export async function cleanupDurableCaptureDescriptor<K extends string>(
+  definition: DurableCaptureRecordDefinition<K, unknown>,
+  params: {
+    envelope: DurableResourceEnvelope<K>;
+    resourcePath: string;
+    cleanup(): Promise<CleanupOutcome>;
+  },
+): Promise<CleanupOutcome> {
+  return await withDurableCaptureResourceFence({
+    store: definition.store,
+    resourcePath: params.resourcePath,
+    expected: params.envelope.fence,
+    onCompleted: () => ({ status: 'already-missing' as const }),
+    run: async (lease) => {
+      const outcome = await params.cleanup();
+      transitionCleanupOutcome(lease, outcome);
+      return outcome;
+    },
+  });
 }
 
 export function transitionCleanupOutcome<K extends string>(

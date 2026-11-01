@@ -273,6 +273,84 @@ test('a record stop that fails after collecting resumes through the fence withou
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
+/**
+ * What session teardown does with a recording `record stop` already committed: the queued disposal had
+ * read the session's recording before that stop, so it still holds the handle and the fence the record
+ * names. It is answered with the export the stop produced and signals the recorder no second time.
+ * Before the record could answer for its own export, this refusal surfaced as an unreleased resource on
+ * session cleanup, and a second `record stop` looked like a failure to callers.
+ */
+test('a disposal queued behind a committed recording stop replays that export', async () => {
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(
+    'screen-recording-replayed-stop-',
+  );
+  const sessionName = 'recording';
+  const session: TestRecordingSession = { name: sessionName, device };
+  sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
+  const owner = localRuntimeOwner('android');
+  const fence = { token: 'recording-fence', generation: 1 } as const;
+  const signals = vi.fn(async () => ({ observation: { recorder: 'confirmed' as const } }));
+  const handle = createScreenRecordingLiveHandle(
+    {
+      backend: 'android',
+      outPath: '/tmp/recording.mp4',
+      startedAt: 1,
+      scope: 'app',
+      showTouches: false,
+      recordOnlySession: false,
+      gestureEvents: [],
+    },
+    {
+      finish: (snapshot, progress) =>
+        stopAndExportScreenRecording({
+          snapshot,
+          progress,
+          steps: {
+            stop: signals,
+            collect: async () => {},
+            finalize: async () => ({ nativePathDisposition: 'retired' as const }),
+            discard: async () => {},
+          },
+        }),
+      forceCleanup: async () => ({ status: 'cleaned' }),
+    },
+  );
+  await adoptStartedScreenRecording({
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    binding,
+    device: session.device,
+    owner,
+    fence,
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope: createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: sessionName,
+      device: { id: session.device.id, family: 'android', kind: 'emulator' },
+      owner,
+      fence,
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { recordingId: 'recording-id' } },
+    }),
+    throwIfCanceled: () => {},
+  });
+  // The queued teardown's own view of the slot, captured while the record was still open.
+  const queued = binding.read();
+  if (!queued) throw new Error('Expected adopted screen recording');
+
+  const stopped = await finishLiveScreenRecording({ intent: 'capture', binding });
+  binding.adopt(queued);
+
+  await expect(finishLiveScreenRecording({ intent: 'disposal', binding })).resolves.toEqual(
+    stopped,
+  );
+  expect(signals).toHaveBeenCalledOnce();
+  expect(binding.read()).toBeUndefined();
+});
+
 function resourcePath(
   sessionStore: CaptureAdmissionSessionStore<TestRecordingSession>,
   sessionName: string,

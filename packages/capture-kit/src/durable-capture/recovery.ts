@@ -16,7 +16,11 @@ import {
 import { withDurableCaptureResourceFence } from './fence.ts';
 import type { DurableCaptureRecordDefinition } from './definition.ts';
 import { durableCaptureDiagnosticPrefix } from './labels.ts';
-import { markCompletingDurableCapture, transitionCleanupOutcome } from './transitions.ts';
+import {
+  cleanupDurableCaptureDescriptor,
+  markCompletingDurableCapture,
+  transitionCleanupOutcome,
+} from './transitions.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
 
@@ -162,9 +166,10 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           store: params.definition.store,
           resourcePath,
           expected: envelope.fence,
-          // The record committed between selection and this fence, so its cleanup is already the
-          // finish's own: settled, with nothing left for recovery to signal or delete.
-          onCompleted: () => ({ status: 'already-missing' as const }),
+          // The record committed between selection and this fence. The handle recovery reattached is
+          // still this process's native resource, so the terminal branch signals it too; only the
+          // record's own facts are off limits to it.
+          onCompleted: async () => await handle.forceCleanup(),
           run: async (lease) => {
             markCompletingDurableCapture(lease);
             const outcome = await handle.forceCleanup();
@@ -192,15 +197,10 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           });
           return false;
         }
-        const cleanup = await authority.control.cleanup(envelope);
-        await withDurableCaptureResourceFence({
-          store: params.definition.store,
+        const cleanup = await cleanupDurableCaptureDescriptor(params.definition, {
+          envelope,
           resourcePath,
-          expected: envelope.fence,
-          // A committed record keeps its facts: this descriptor cleanup cannot make it anything the
-          // finish did not already record, and the caller still reports what cleanup returned.
-          onCompleted: () => undefined,
-          run: async (lease) => transitionCleanupOutcome(lease, cleanup),
+          cleanup: () => authority.control.cleanup(envelope),
         });
         return isConfirmedCleanup(cleanup);
       }

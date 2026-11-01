@@ -20,8 +20,8 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DurableCaptureResourceRecord } from '../durable-capture/index.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
-  screenRecordingDurableResource,
-} from './screen-recording-session-resource.ts';
+  screenRecordingResourceStore,
+} from './screen-recording-resource-store.ts';
 
 /**
  * What a `record stop` owes a session, decided from the durable recording manifest alone.
@@ -94,11 +94,10 @@ function readSessionManifest(params: ScreenRecordingManifestParams): Readonly<{
   resourcePath: string;
   record: DurableCaptureResourceRecord<'screen-recording'>;
 }> {
-  const resourcePath = screenRecordingDurableResource.resourcePath(
-    params.sessionStore,
-    params.sessionName,
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    params.sessionStore.resolveSessionDir(params.sessionName),
   );
-  return { resourcePath, record: screenRecordingDurableResource.store.read(resourcePath) };
+  return { resourcePath, record: screenRecordingResourceStore.read(resourcePath) };
 }
 
 function assertManifestBelongsToRequest(
@@ -123,11 +122,14 @@ function assertManifestBelongsToRequest(
 
 /**
  * The stop response the manifest stored, or nothing when it is not a whole one. The envelope store
- * has already bounded this metadata to frozen plain JSON, so what recovery still has to establish is
+ * has already bounded this metadata to frozen plain JSON, so what a reader still has to establish is
  * that the stored response answers correctly: the path it serves, the caller-side paths a remote
  * download is named after, and the duration the response subtracts.
+ *
+ * Two callers need exactly that verdict: a stop whose response never reached its caller, and a finish
+ * that reached the record after another caller committed it. Both are answered from here.
  */
-function readStoredCompletion(
+export function readStoredCompletion(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletion | undefined {
   const stored = metadata?.[SCREEN_RECORDING_COMPLETION_METADATA_KEY];

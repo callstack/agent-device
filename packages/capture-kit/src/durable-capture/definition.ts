@@ -57,6 +57,19 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   displayName: string;
   store: DurableCaptureResourceStore<K>;
   completionMetadata(result: C): JsonObject;
+  /**
+   * The completion this kind stored in a record that is already committed, or nothing it can serve.
+   *
+   * A committed record is the only account of an outcome a queued caller has never seen, so the kind
+   * that wrote it is the one that reads it back: that caller is then answered with the outcome the
+   * first finish produced instead of being refused, or driven through work that already happened. A
+   * reader answers `undefined` for a stored shape it does not recognise, so a partial or foreign record
+   * cannot yield a plausible-looking outcome.
+   *
+   * Optional because a kind whose stored metadata cannot carry its whole outcome has nothing honest to
+   * replay; its callers then get the terminal refusal.
+   */
+  completionFromMetadata?(metadata: JsonObject | undefined): C | undefined | Promise<C | undefined>;
   failedFinishPolicy: DurableCaptureFailedFinishPolicy;
   messages: Readonly<{
     noActive: string;
