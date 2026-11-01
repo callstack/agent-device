@@ -68,21 +68,25 @@ export function createDaemonShutdownClaimLedger(
     superseded: [],
     unattributable: [],
   };
+  // Keyed by the claim's owner token, which is minted per acquisition. A session name cannot carry
+  // this: two cwd-scoped sessions are both named `default`, and one of them reading the other's
+  // verdict turns an orphan into a report of a clean release.
   const outcomes = new Map<string, DeviceClaimClearOutcome | typeof CLEAR_UNRECORDED>();
   return {
     claims,
     releaseClaim: async (session) => {
-      if (!session.deviceClaim) return;
+      const claim = session.deviceClaim;
+      if (!claim) return;
       try {
-        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim, env));
+        outcomes.set(claim.ownerToken, await clearDeviceClaim(claim, env));
       } catch (error) {
-        outcomes.set(session.name, CLEAR_UNRECORDED);
+        outcomes.set(claim.ownerToken, CLEAR_UNRECORDED);
         emitDiagnostic({
           level: 'warn',
           phase: 'daemon_shutdown_device_claim_release_failed',
           data: {
             session: session.name,
-            deviceKey: session.deviceClaim.deviceKey,
+            deviceKey: claim.deviceKey,
             error: error instanceof Error ? error.message : String(error),
           },
         });
@@ -99,7 +103,7 @@ export function createDaemonShutdownClaimLedger(
       };
       // Exhaustive rather than defaulted: a member added to `DeviceClaimClearOutcome` has to declare
       // which bucket it belongs to here, instead of arriving in `orphaned` unnoticed.
-      const outcome = outcomes.get(session.name);
+      const outcome = outcomes.get(claim.ownerToken);
       switch (outcome) {
         case 'deleted':
         case 'absent':

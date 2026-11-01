@@ -78,7 +78,13 @@ export class LeaseInFlightWorkRegistry {
     if (entry.released) return false;
     entry.released = true;
     entries.delete(entry);
-    if (entries.size === 0) this.entriesByLeaseId.delete(leaseId);
+    // Only the set this pass was issued out of still accounts for this lease. Pruning a cancelled
+    // pass can leave that set empty while a later pass already claimed the lease through a new one
+    // (#2509), so dropping the key here would delete that request's claim and let the lease expire
+    // under the command still running on it.
+    if (entries.size === 0 && this.entriesByLeaseId.get(leaseId) === entries) {
+      this.entriesByLeaseId.delete(leaseId);
+    }
     return entry.wanted();
   }
 }
