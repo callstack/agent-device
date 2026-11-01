@@ -230,6 +230,10 @@ extension RunnerTests {
         // spent `commandId` under another command name, and what it receives is still the recorded
         // command's outcome. `finish()` guards its own expectation against being fulfilled twice, so a
         // shutdown that several sends receive is harmless.
+        // `jsonResponse` stamps the outcome it is given, so a replayed success reports the main thread's
+        // occupancy NOW rather than the occupancy the recorded answer was written under — the stored body
+        // is kept unstamped for exactly this reason. That is what lets a replayed answer settle a stale
+        // busy report on the daemon side; the journal itself observed nothing.
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
           command.command.rawValue,
@@ -378,34 +382,11 @@ extension RunnerTests {
     Response(ok: false, error: ErrorPayload(code: code, message: message, hint: hint))
   }
 
-  /// Turns a thrown command error into its wire response, under the one code mapping the journal's
-  /// failure record uses, so the answer a resend reads from the journal cannot disagree with the answer
-  /// the caller lost.
+  /// Turns a thrown command error into its wire response, under the one error body the journal's failure
+  /// record uses, so the answer a resend reads from the journal cannot disagree with the answer the caller
+  /// lost.
   func commandFailedResponse(from error: Error) -> Response {
-    let code = RunnerTests.wireErrorCode(for: error)
-    // The hint says the watchdog abandoned this command's work, so it goes only with the error the
-    // watchdog throws. The code is read from the one owner it derives from, but the branch keys on the
-    // error's own identity: a later code that `wireErrorCode(for:)` learns to derive must not pull an
-    // unrelated throw into this claim.
-    let nsError = error as NSError
-    if nsError.domain == RunnerErrorDomain.general,
-      nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
-    {
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: code,
-          message: error.localizedDescription,
-          hint:
-            "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."
-        )
-      )
-    }
-    return errorResponse(
-      code: code,
-      message: error.localizedDescription,
-      hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
-    )
+    Response(ok: false, error: RunnerTests.thrownErrorPayload(for: error))
   }
 
   /// Present on every response so the daemon can refuse a runner build that predates the token.

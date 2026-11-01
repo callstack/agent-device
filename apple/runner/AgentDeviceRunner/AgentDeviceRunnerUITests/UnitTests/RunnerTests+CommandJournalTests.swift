@@ -210,7 +210,7 @@ extension RunnerTests {
     dispatched: Bool = false
   ) {
     for index in 0..<count {
-      let settled = runnerJournalCommand("readText", id: "\(idPrefix)-\(index)")
+      let settled = runnerJournalCommand("recordStop", id: "\(idPrefix)-\(index)")
       journal.accept(command: settled)
       if dispatched {
         journal.markDispatched(command: settled)
@@ -335,7 +335,7 @@ extension RunnerTests {
     // below claims an entry, which pressures the window to evict one more.
     runnerJournalFinishOtherCommands(journal, 1, idPrefix: "valve", dispatched: true)
 
-    let nextOldest = runnerJournalCommand("readText", id: "window-0")
+    let nextOldest = runnerJournalCommand("recordStop", id: "window-0")
     guard case .terminal(let stillRefused, _) = journal.accept(command: nextOldest) else {
       return XCTFail("the valve must release the oldest closed id only, not the next-oldest")
     }
@@ -355,7 +355,7 @@ extension RunnerTests {
   /// would refuse that resend and lose a command the runner never ran.
   func testJournalReAdmitsAPrunedIdWhoseExecutionNeverDispatched() throws {
     let journal = RunnerCommandJournal()
-    let refused = runnerJournalCommand("readText", id: "refused-before-dispatch")
+    let refused = runnerJournalCommand("recordStop", id: "refused-before-dispatch")
     journal.accept(command: refused)
     journal.finish(
       command: refused,
@@ -384,11 +384,14 @@ extension RunnerTests {
   /// for its observable no-op answer, not for its class.
   func testJournalAdmitsAgainACommandIdRefusedBeforeDispatch() throws {
     let command = runnerJournalCommand("recordStop", id: "busy-then-idle")
+    let installed = ScreenRecorder(outputPath: "", fps: 30)
+    activeRecording = installed
     abandonedMainThreadWorkCount = 1
     abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
     defer {
       abandonedMainThreadWorkCount = 0
       abandonedMainThreadWorkSince = nil
+      activeRecording = nil
     }
 
     let refused = try execute(command: command)
@@ -399,6 +402,8 @@ extension RunnerTests {
     XCTAssertEqual(refused.error?.code, "RUNNER_BUSY")
     XCTAssertEqual(refusalStatus.lifecycleState, RunnerCommandLifecycleState.failed.rawValue)
     XCTAssertEqual(refusalStatus.lifecycleErrorCode, "RUNNER_BUSY")
+    XCTAssertIdentical(activeRecording, installed, "a pre-dispatch refusal must not stop recording")
+    activeRecording = nil
 
     let served = try execute(command: command)
 
@@ -433,6 +438,10 @@ extension RunnerTests {
     journal.accept(command: tap)
     journal.markDispatched(command: tap)
     journal.finish(command: tap, response: Response(ok: true, data: DataPayload(message: "tapped")))
+
+    guard case .terminal = journal.accept(command: runnerJournalCommand("snapshot", id: "spent-then-named-shutdown")) else {
+      return XCTFail("renaming a spent mutation to a read must not bypass admission")
+    }
 
     let shutdown = runnerJournalCommand("shutdown", id: "spent-then-named-shutdown")
     XCTAssertEqual(
@@ -483,9 +492,9 @@ extension RunnerTests {
   /// timed out on the execution watchdog is answered from this record, and a failure stored without its
   /// code reaches the daemon as an ordinary served refusal: it would report the thread drained at the
   /// exact moment the timed-out command occupied it.
-  func testJournalReplayOfAThrownFailureCarriesItsWireCode() throws {
+  func testJournalReplayOfAThrownFailureCarriesItsWholeErrorBody() throws {
     let journal = RunnerCommandJournal()
-    let command = runnerJournalCommand("readText", id: "timed-out-then-repeated")
+    let command = runnerJournalCommand("recordStop", id: "timed-out-then-repeated")
     journal.accept(command: command)
     journal.markDispatched(command: command)
     journal.fail(command: command, error: Self.mainThreadExecutionTimeoutError())
@@ -505,6 +514,14 @@ extension RunnerTests {
       replay.error?.code,
       RunnerWireErrorCode.mainThreadTimeout,
       "a replayed failure must carry the code the live answer carried, got \(String(describing: replay.error?.code))"
+    )
+    // The hint is what a caller acts on, so the record has to hold the whole error body the live reply
+    // carried, not just its code: this one is the watchdog's "wait and retry" advice. Compared with the
+    // live reply for the same throw, so the two cannot drift without failing here.
+    XCTAssertEqual(
+      replay.error?.hint,
+      commandFailedResponse(from: Self.mainThreadExecutionTimeoutError()).error?.hint,
+      "a replayed failure must carry the hint the live answer carried"
     )
     XCTAssertEqual(
       journal.status(normalizedCommandId: "timed-out-then-repeated").lifecycleErrorCode,
@@ -617,6 +634,48 @@ extension RunnerTests {
     XCTAssertEqual(decoded.data?.sequenceResults?.count, 3)
     XCTAssertEqual(decoded.data?.sequenceResults?[2].ok, false)
     XCTAssertEqual(decoded.data?.sequenceResults?[2].errorCode, "UNSUPPORTED_OPERATION")
+  }
+
+  func testJournalReexecutesFinishedReadsWithoutSpendingTheirIds() throws {
+    for name in ["snapshot", "screenshot", "readText", "findText", "gestureViewport", "appState", "status", "alert"] {
+      for failed in [false, true] {
+        let journal = RunnerCommandJournal()
+        let command = runnerJournalCommand(name, id: "repeated-read")
+        journal.accept(command: command)
+        journal.markDispatched(command: command)
+        if failed {
+          journal.fail(command: command, error: Self.mainThreadExecutionTimeoutError())
+        } else {
+          journal.finish(command: command, response: Response(ok: true, data: DataPayload(text: "first")))
+        }
+        guard case .execute = journal.accept(command: command) else {
+          XCTFail("a finished \(name) read must execute again, including after a failure: \(failed)")
+          continue
+        }
+        journal.markDispatched(command: command)
+        journal.finish(command: command, response: Response(ok: true))
+        runnerJournalFinishOtherCommands(journal, 64)
+        XCTAssertEqual(journal.status(normalizedCommandId: "repeated-read").lifecycleState, "notAccepted")
+        guard case .execute = journal.accept(command: command) else {
+          XCTFail("a pruned \(name) read must leave no closed-id marker")
+          continue
+        }
+      }
+    }
+  }
+
+  func testJournalDoesNotSpendPrunedReadIds() throws {
+    for name in ["snapshot", "screenshot", "readText", "alert"] {
+      let journal = RunnerCommandJournal()
+      let read = runnerJournalCommand(name, id: "pruned-read")
+      runnerJournalCloseDispatchedCommand(journal, read, message: "read")
+      runnerJournalFinishOtherCommands(journal, 64)
+      XCTAssertEqual(journal.status(normalizedCommandId: "pruned-read").lifecycleState, "notAccepted")
+      guard case .execute = journal.accept(command: read) else {
+        XCTFail("pruning a \(name) read must leave its id reusable")
+        continue
+      }
+    }
   }
 
   private func runnerJournalCommand(_ command: String, id: String) -> Command {

@@ -539,6 +539,8 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 
 ## Retry after a failed command
 
+If an Apple runner returns `COMMAND_ALREADY_FINISHED`, it has already finished that command ID and cannot replay its outcome. Run `snapshot -i` to inspect the result before deciding whether to send another interaction.
+
 When a command fails, read `error.details.dispatched` before you retry:
 
 - `no`: the action never reached the device. Check `details.reason` before retrying; a bounded

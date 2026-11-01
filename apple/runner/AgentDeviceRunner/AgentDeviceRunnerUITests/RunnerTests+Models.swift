@@ -108,19 +108,23 @@ struct CommandTraits {
   let convertsRecordedFailure: Bool
   /// Whether the journal may store this command's response JSON, subject to its byte limit.
   let retainsJournalResponseJson: Bool
+  /// Whether a finished command may execute again under the same id after a lost reply.
+  let isReadOnly: Bool
 
   init(
     isInteraction: Bool = false,
     retryOnSessionLoss: Bool = false,
     launchPolicy: CommandLaunchPolicy,
     convertsRecordedFailure: Bool = false,
-    retainsJournalResponseJson: Bool
+    retainsJournalResponseJson: Bool,
+    isReadOnly: Bool = false
   ) {
     self.isInteraction = isInteraction
     self.retryOnSessionLoss = retryOnSessionLoss
     self.launchPolicy = launchPolicy
     self.convertsRecordedFailure = convertsRecordedFailure
     self.retainsJournalResponseJson = retainsJournalResponseJson
+    self.isReadOnly = isReadOnly
   }
 }
 
@@ -147,7 +151,8 @@ fileprivate extension CommandTraits {
   static func appRead(retainsJournalResponseJson: Bool) -> CommandTraits {
     CommandTraits(
       retryOnSessionLoss: true, launchPolicy: .existingApp,
-      retainsJournalResponseJson: retainsJournalResponseJson
+      retainsJournalResponseJson: retainsJournalResponseJson,
+      isReadOnly: true
     )
   }
 
@@ -166,7 +171,8 @@ fileprivate extension CommandTraits {
   static func runnerCaptureRead(retainsJournalResponseJson: Bool) -> CommandTraits {
     CommandTraits(
       retryOnSessionLoss: true, launchPolicy: .noApp,
-      retainsJournalResponseJson: retainsJournalResponseJson
+      retainsJournalResponseJson: retainsJournalResponseJson,
+      isReadOnly: true
     )
   }
 
@@ -191,7 +197,8 @@ fileprivate extension CommandTraits {
   static let presentedSurfaceQuery = CommandTraits(
     retryOnSessionLoss: true,
     launchPolicy: .presentedSurface,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: true
   )
 }
 

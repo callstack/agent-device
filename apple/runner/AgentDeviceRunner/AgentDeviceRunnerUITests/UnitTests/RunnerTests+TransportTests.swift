@@ -1,5 +1,8 @@
 import XCTest
 import Network
+#if os(iOS)
+import UIKit
+#endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
@@ -728,6 +731,51 @@ extension RunnerTests {
     XCTAssertEqual(resend.error?.code, RunnerWireErrorCode.commandAlreadyFinished)
   }
 
+  #if os(iOS)
+    @MainActor
+    func testTransportReplaysPasteboardWriteWithoutWritingAgain() throws {
+      let original = UIPasteboard.general.string
+      defer { UIPasteboard.general.string = original }
+      let listener = try startTransportListener()
+      defer { listener.cancel() }
+      let port = try XCTUnwrap(listener.port)
+      let client = URLSession(configuration: .ephemeral)
+      defer { client.invalidateAndCancel() }
+      let first = try transportHttpResponse(
+        client: client, port: port,
+        payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"journal-first-write"}"#
+      )
+      XCTAssertTrue(first.ok, String(describing: first.error))
+      XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
+      let repeated = try transportHttpResponse(
+        client: client, port: port,
+        payload: #"{"command":"pasteboardWrite","commandId":"pasteboard-twice","text":"would-overwrite-on-reexecution"}"#
+      )
+      XCTAssertTrue(repeated.ok, String(describing: repeated.error))
+      XCTAssertEqual(UIPasteboard.general.string, "journal-first-write")
+      XCTAssertEqual(repeated.data?.runnerMainThreadBusy, false)
+    }
+  #endif
+
+  @MainActor
+  func testTransportReexecutesAFinishedSnapshotWithTheSameId() throws {
+    app.launch()
+    defer { app.terminate() }
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let client = URLSession(configuration: .ephemeral)
+    defer { client.invalidateAndCancel() }
+    let payload = #"{"command":"snapshot","commandId":"snapshot-twice","interactiveOnly":true}"#
+
+    for _ in 0..<2 {
+      let reply = try transportHttpResponse(client: client, port: port, payload: payload)
+      XCTAssertTrue(reply.ok, String(describing: reply.error))
+      let nodes = try XCTUnwrap(reply.data?.nodes)
+      XCTAssertFalse(nodes.isEmpty)
+    }
+  }
+
   private func transportCommand(_ command: String, id: String) throws -> Command {
     try JSONDecoder().decode(
       Command.self,
@@ -766,7 +814,7 @@ extension RunnerTests {
         mainOwned.bundleId = nil
       }
       let payload =
-        #"{"command":"alert","commandId":"alert-timed-out","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
+        #"{"command":"alert","commandId":"alert-timed-out","appBundleId":"com.apple.springboard","action":"accept","timeoutMs":500}"#
       let command = try JSONDecoder().decode(Command.self, from: Data(payload.utf8))
 
       XCTAssertThrowsError(try execute(command: command)) { error in
@@ -836,7 +884,7 @@ extension RunnerTests {
   /// id really ran. Ending the runner there would stop it on some other command's answer, so the resend
   /// is answered and the runner keeps serving.
   func testTransportDoesNotFinishOnAReplayOfAnotherCommandsRecordedAnswer() throws {
-    let spent = try transportCommand("readText", id: "spent-then-named-shutdown")
+    let spent = try transportCommand("recordStart", id: "spent-then-named-shutdown")
     commandJournal.accept(command: spent)
     commandJournal.markDispatched(command: spent)
     commandJournal.finish(

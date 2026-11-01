@@ -64,6 +64,20 @@ final class RunnerTests: XCTestCase {
       : "COMMAND_FAILED"
   }
 
+  /// A replayed failure must carry the same code and recovery hint as its live reply.
+  static func thrownErrorPayload(for error: Error) -> ErrorPayload {
+    let nsError = error as NSError
+    let abandoned = nsError.domain == RunnerErrorDomain.general
+      && nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
+    return ErrorPayload(
+      code: wireErrorCode(for: error),
+      message: error.localizedDescription,
+      hint: abandoned
+        ? "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."
+        : "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
+    )
+  }
+
   static let springboardBundleId = "com.apple.springboard"
   // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
   // and macOS have no such host, so there is nothing to probe there.

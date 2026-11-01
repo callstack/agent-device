@@ -36,18 +36,19 @@ struct RunnerCommandJournalEntry {
   /// again, and the sends of that new execution must not be answered by the delivery of the refusal that
   /// freed the id.
   let executionToken: Int
+  let isReadOnly: Bool
 }
 
 /// The journal's verdict on one command that carries a `commandId`.
 enum RunnerCommandAdmission {
-  /// Nothing is running for this id and nothing has finished: the caller owns the one execution,
+  /// The caller owns this execution,
   /// identified by `executionToken` for as long as that claim answers for it.
   case execute(executionToken: Int)
   /// An execution is claimed and has not finished: the caller runs nothing and is answered by that
   /// execution, the one `executionToken` names. `accept(command:registeringJoin:)` has already
   /// registered the send it gave this verdict.
   case join(executionToken: Int)
-  /// Execution finished, and the work reached the device: the caller answers from the journal and
+  /// Non-read execution finished after dispatch: the caller answers from the journal and
   /// never executes this command again. `answersShutdown` says whether the answer being handed over is
   /// the runner's own successful `shutdown` answer, which the caller owes the runner's end. Neither the
   /// repeat's request nor the command name alone can answer that: a caller may reuse a spent `commandId`
@@ -57,14 +58,13 @@ enum RunnerCommandAdmission {
 
 /// The runner's one command-lifecycle record: what it holds for a `commandId`, whether that id may run,
 /// and what `status` answers for it. The transport asks this type before enqueuing anything, so one
-/// `commandId` is executed at most once in a runner process, and a command that already finished cannot be
-/// replayed onto the device by a repeat that arrives after its answer was delivered. The one release is
-/// `closedCommandIdSafetyValve`, and `pruneIfNeeded` states the bound it leaves.
+/// mutation id stays spent after execution, while a finished read can execute again after a lost reply.
+/// `closedCommandIdSafetyValve` releases the oldest marker; `pruneIfNeeded` states its bound.
 final class RunnerCommandJournal {
   private let lock = NSLock()
   private let maxEntries = 64
   /// Memory safety valve on closed-id retention, not an admission boundary: the journal keeps a closed
-  /// id as long as it runs, and this only stops a runner from growing without limit. It is 64x the entry
+  /// mutation id until its marker is evicted. It is 64x the entry
   /// window because a marker holds no outcome body, only the id. Tests read it rather than repeat it.
   static let closedCommandIdSafetyValve = 4096
   private let maxResponseJsonBytes = 16 * 1024
@@ -118,9 +118,10 @@ final class RunnerCommandJournal {
       register(executionToken)
       return .join(executionToken: executionToken)
     }
-    // Nothing of this command ever reached the device, so the id carries no effect to protect and the
-    // send that reuses it is that command's own first execution.
-    guard entry.dispatched else {
+    // Reads execute again after finishing, including after a lost reply or a recorded failure.
+    // A pre-dispatch refusal also leaves the id reusable. Classification belongs to the recorded
+    // command: renaming a spent mutation to a read must not bypass its admission history.
+    guard entry.dispatched, !entry.isReadOnly else {
       return claim(command: command, commandId: commandId)
     }
     let outcome = recordedOutcome(for: entry)
@@ -133,8 +134,7 @@ final class RunnerCommandJournal {
     )
   }
 
-  /// Mints a claim identity. Callers hold the journal's lock, except for the no-`commandId` route, which
-  /// needs no entry and only asks for a value no other claim carries.
+  /// Callers hold the journal's lock, including for commands without an id.
   private func mintExecutionToken() -> Int {
     nextExecutionToken += 1
     return nextExecutionToken
@@ -146,8 +146,9 @@ final class RunnerCommandJournal {
     }
   }
 
-  /// Records that this command's work was handed to the device, as opposed to being refused while it
-  /// was still queued. Until this point a refusal owes the caller a retry of the same `commandId`.
+  /// Records the outcome that ended this command's execution: the state its `ok` implies, the response
+  /// body where the command's trait retains a replayable one, and its error. Whether the id this record
+  /// closes is spent is the separate `dispatched` mark `markDispatched` writes.
   func finish(command: Command, response: Response) {
     transition(command: command, reorders: true) { entry in
       entry.state = response.ok ? .completed : .failed
@@ -157,16 +158,13 @@ final class RunnerCommandJournal {
     }
   }
 
-  /// Records the failure that ended this command's execution. The typed wire code goes with it, the
-  /// same one the transport puts on the live reply for the same throw: a repeat of this `commandId` is
-  /// answered from this record, and a failure that arrives without its code reads to the daemon as an
-  /// ordinary served refusal — which for a `MAIN_THREAD_TIMEOUT` would report the main thread drained
-  /// when the command that just timed out is what occupied it.
+  /// Records the failure that ended this command's execution. The typed wire code and the hint go with it,
+  /// the same error body the transport puts on the live reply for the same throw: a repeat of this
+  /// `commandId` is answered from this record, and a failure that arrives without its code reads to the
+  /// daemon as an ordinary served refusal — which for a `MAIN_THREAD_TIMEOUT` would report the main thread
+  /// drained when the command that just timed out is what occupied it.
   func fail(command: Command, error: Error) {
-    let payload = ErrorPayload(
-      code: RunnerTests.wireErrorCode(for: error),
-      message: error.localizedDescription
-    )
+    let payload = RunnerTests.thrownErrorPayload(for: error)
     transition(command: command, reorders: true) { entry in
       entry.state = .failed
       entry.error = payload
@@ -205,7 +203,8 @@ final class RunnerCommandJournal {
       responseOk: nil,
       responseJson: nil,
       error: nil,
-      executionToken: executionToken
+      executionToken: executionToken,
+      isReadOnly: command.traits.isReadOnly
     )
     order.removeAll { $0 == commandId }
     order.append(commandId)
@@ -257,9 +256,9 @@ final class RunnerCommandJournal {
         return
       }
       order.removeAll { $0 == removable }
-      // Only work that reached the device spends its id. A pruned refusal leaves the id free, which is
-      // what the busy resend of the same `commandId` depends on (ADR 0005).
-      if entries[removable]?.dispatched == true {
+      // Only dispatched non-read commands spend their ids. Reads and pre-dispatch refusals leave
+      // no marker, so resends can execute after the outcome is pruned (ADR 0005).
+      if let entry = entries[removable], entry.dispatched, !entry.isReadOnly {
         // The two closed-id structures stay one-to-one, and nothing here needs a duplicate check to keep
         // them that way: an id enters `closedCommandIds` only in this branch, and an id whose entry this
         // journal no longer holds can be claimed again only once the marker is gone — which the valve
@@ -325,7 +324,7 @@ final class RunnerCommandJournal {
         code: RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
         message: reason,
         hint:
-          "Read the screen with snapshot before sending anything else: the finished command's effect is already on the device."
+          "Read the screen with snapshot before sending anything else: the finished command's work reached the device, so it may already have had its effect."
       )
     )
   }
