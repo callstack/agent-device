@@ -45,8 +45,9 @@ final class RunnerTests: XCTestCase {
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
-    /// classification keeps no response body to replay. Nothing ran for the repeat, so it discloses
-    /// dispatched: no, and its hint sends the caller to observe the screen instead of resending.
+    /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
+    /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
+    /// reached the device — and its hint sends the caller to observe the screen instead of resending.
     static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
   }
 

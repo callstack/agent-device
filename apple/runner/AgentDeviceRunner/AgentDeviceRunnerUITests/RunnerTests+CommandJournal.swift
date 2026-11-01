@@ -37,7 +37,7 @@ enum RunnerCommandAdmission {
   /// Nothing is running for this id and nothing has finished: the caller owns the one execution.
   case execute
   /// An execution is claimed and has not finished: the caller runs nothing and is answered by that
-  /// execution. `admit(command:registeringJoin:)` has already registered the send it gave this verdict.
+  /// execution. `accept(command:registeringJoin:)` has already registered the send it gave this verdict.
   case join
   /// Execution finished, and the work reached the device: the caller answers from the journal and
   /// never executes this command again.
@@ -233,9 +233,9 @@ final class RunnerCommandJournal {
         closedCommandIds.insert(removable)
         closedOrder.append(removable)
         while closedOrder.count > Self.closedCommandIdSafetyValve {
-          // The safety valve is the one place a spent id returns to circulation: a resend more than 4096
-          // completed commands later can re-execute, and the daemon resends only after a lost response
-          // within one request deadline.
+          // The safety valve is the one place a spent id returns to circulation: a resend more than
+          // 4096 completed dispatches later, within this runner process, can re-execute. A runner
+          // restart starts a new journal, which answers `notAccepted` for every id.
           closedCommandIds.remove(closedOrder.removeFirst())
         }
       }
@@ -278,12 +278,17 @@ final class RunnerCommandJournal {
     commandName: String,
     outcomeDropped: Bool
   ) -> Response {
-    Response(
+    // Two whole messages rather than one sentence spliced into another: which record is gone is the
+    // fact the caller acts on, so each variant has to read as a sentence on its own.
+    let reason =
+      outcomeDropped
+      ? "The runner already finished \(commandName) with id \(commandId). That command's recorded outcome has since been dropped from the journal, so there is no response to replay."
+      : "The runner already finished \(commandName) with id \(commandId) and kept no response to replay."
+    return Response(
       ok: false,
       error: ErrorPayload(
         code: RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
-        message:
-          "The runner already finished \(commandName) with id \(commandId) and kept no response to replay\(outcomeDropped ? ", because that record has since been dropped" : "").",
+        message: reason,
         hint:
           "Read the screen with snapshot before sending anything else: the finished command's effect is already on the device."
       )

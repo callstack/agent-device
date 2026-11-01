@@ -333,9 +333,9 @@ export class RunnerCommandAccounting {
  *
  * `completed` and `failed` close an entry — from the response's `ok` in `finish`, or a thrown error in
  * `fail` — so execution ended. `accepted` and `started` are written as execution opens, so they share
- * one in-flight verdict. `notAccepted` is what `status` reports for an id the journal does not hold —
- * one it never claimed, or one whose entry was pruned and whose closed-id record has since been released
- * — which this daemon cannot read as terminal.
+ * one in-flight verdict. `notAccepted` is what `status` reports for an id the journal does not hold,
+ * whether that id was never claimed or its entry was pruned — the wire never draws that line, and
+ * this daemon cannot read either reading as terminal.
  */
 const RUNNER_TERMINAL_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['completed', 'failed']);
 export const RUNNER_IN_FLIGHT_LIFECYCLE_STATES: ReadonlySet<string> = new Set([

@@ -612,9 +612,6 @@ extension RunnerTests {
   /// it answers "recording already stopped", so a re-execution shows up as the recorder this test installs
   /// being consumed instead of the recorded answer being replayed.
   func testTransportNeverRepeatsAFinishedCommandsExecution() throws {
-    // `recordStop` makes a second execution observable without recording anything: with no active
-    // recording it answers "recording already stopped", so a re-execution shows up as the recorder this
-    // test installs being consumed instead of the recorded answer being replayed.
     let listener = try startTransportListener()
     defer { listener.cancel() }
     let port = try XCTUnwrap(listener.port)

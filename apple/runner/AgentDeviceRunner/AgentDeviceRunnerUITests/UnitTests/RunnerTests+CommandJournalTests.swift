@@ -307,8 +307,7 @@ extension RunnerTests {
   /// therefore exact, and these are both halves of it: a spent id is refused for the whole window, and the
   /// only id the valve releases is the oldest one, when a close fills the window past it. An id released
   /// there is one whose command completed more than `closedCommandIdSafetyValve` dispatched commands
-  /// earlier, which is the residual bound ADR 0005 states: the daemon resends only after a lost response,
-  /// within one request deadline, never that far behind.
+  /// earlier, within this runner process, which is the residual bound ADR 0005 states.
   func testJournalRefusesASpentIdAcrossTheClosedIdWindowAndReleasesOnlyTheOldest() throws {
     let journal = RunnerCommandJournal()
     let tap = runnerJournalCommand("tap", id: "spent-tap")
@@ -331,8 +330,20 @@ extension RunnerTests {
       "the last close inside the window must still refuse the spent id"
     )
 
-    // One more dispatched close fills the window, and the valve moves on by exactly one id.
+    // One more dispatched close fills the window, and the valve moves on by exactly one id. That id
+    // is checked first while asking about a neighbour cannot disturb it: admitting the released id
+    // below claims an entry, which pressures the window to evict one more.
     runnerJournalFinishOtherCommands(journal, 1, idPrefix: "valve", dispatched: true)
+
+    let nextOldest = runnerJournalCommand("readText", id: "window-0")
+    guard case .terminal(let stillRefused) = journal.accept(command: nextOldest) else {
+      return XCTFail("the valve must release the oldest closed id only, not the next-oldest")
+    }
+    XCTAssertEqual(
+      stillRefused.error?.code,
+      RunnerTests.RunnerWireErrorCode.commandAlreadyFinished,
+      "one close past the valve releases exactly one id"
+    )
 
     guard case .execute = journal.accept(command: tap) else {
       return XCTFail("the valve must release exactly the oldest closed id")
@@ -355,17 +366,24 @@ extension RunnerTests {
     )
     runnerJournalFinishOtherCommands(journal, 64)
 
+    XCTAssertEqual(
+      journal.status(normalizedCommandId: "refused-before-dispatch").lifecycleState,
+      RunnerCommandLifecycleState.notAccepted.rawValue,
+      "the test must have pushed this refusal's own entry out of the window"
+    )
+
     guard case .execute = journal.accept(command: refused) else {
       return XCTFail("an id the runner refused before dispatch carries no effect and must stay executable")
     }
   }
 
-  /// The daemon resends a read-only command the runner refused with `RUNNER_BUSY`, under its busy
-  /// budget and with the same `commandId` (ADR 0005). A terminal record closes only ids whose execution
-  /// began, so a refusal that dispatched nothing has to leave the id executable once the runner is idle,
-  /// and must still travel as the journal failure the status recovery classifies as `RUNNER_BUSY`.
+  /// The journal closes only ids whose execution began, so a `RUNNER_BUSY` refusal that dispatched
+  /// nothing leaves the id executable once the runner is idle, and travels as the journal failure the
+  /// status recovery classifies as `RUNNER_BUSY`. Scoped to journal admission: the daemon's same-id
+  /// busy resend covers read-only commands (`index-busy-resend.test.ts`), and `recordStop` is here
+  /// for its observable no-op answer, not for its class.
   func testJournalAdmitsAgainACommandIdRefusedBeforeDispatch() throws {
-    let command = try runnerJournalCommand("recordStop", id: "busy-then-idle")
+    let command = runnerJournalCommand("recordStop", id: "busy-then-idle")
     abandonedMainThreadWorkCount = 1
     abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
     defer {
