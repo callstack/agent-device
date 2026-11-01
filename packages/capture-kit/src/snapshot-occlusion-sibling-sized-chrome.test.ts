@@ -715,6 +715,23 @@ test('a lone screen keeps its tab bar uncovered by a host with no presentation b
   assert.deepEqual(coveredLabels(nodes), []);
 });
 
+test('a host listing its own tab bar first keeps it pressable when it encloses nothing beneath', () => {
+  // After a previous host, a tab bar listed first counts as the screen beneath only when the host also
+  // encloses a region before that previous host.
+  const nodes = capturedTree([
+    [0, undefined, 'Application', 'UIApplication', 'App', [0, 0, 402, 874]],
+    [1, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 874]],
+    [2, 0, 'TabBar', 'UITabBar', 'Tab Bar', [0, 791, 402, 83]],
+    [3, 2, 'Button', '_UITabButton', 'Home', [25, 795, 98, 54]],
+    [4, 0, 'NavigationBar', 'UINavigationBar', 'Title', [0, 62, 402, 54]],
+    [5, 0, 'CollectionView', 'UICollectionView', undefined, [0, 116, 402, 675]],
+    [6, 5, 'Button', 'UIButton', 'Row', [16, 132, 370, 52]],
+    [7, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), []);
+});
+
 test('a bottom host enclosing nothing but a tab bar keeps that tab bar pressable', () => {
   // A host after a viewport-sized one that hosts only the tab bar: with no other region of its own,
   // the tab bar is its own presentation's, as before.

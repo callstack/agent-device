@@ -376,15 +376,6 @@ function isSiblingSizedChromeContainer(
   );
 }
 
-/**
- * Toolbar hosts draw their descendants, not their enclosing frame. A host that encloses bars or
- * scroll containers of its own presentation, the siblings after the previous toolbar and before
- * this host, covers nothing of it. A host that encloses the presentation beneath it, which an
- * undimmed sheet keeps in the capture, covers only that presentation; after a previous toolbar,
- * enclosed tab bars listed first belong to it unless they are all the host encloses. A host that
- * encloses nothing, or a presentation stacked over it, keeps covering. Like the sibling-sized
- * exemption, this cannot tell an opaque toolbar from a host.
- */
 type ToolbarHostReach =
   | { kind: 'own-presentation' }
   | { kind: 'over-beneath'; parentIndex: number; ownBranchIndexes: ReadonlySet<number> };
@@ -400,6 +391,15 @@ function toolbarHostReach(
   return reach;
 }
 
+/**
+ * Toolbar hosts draw their descendants, not their enclosing frame. A host that encloses bars or
+ * scroll containers of its own presentation, the siblings after the previous toolbar and before
+ * this host, covers nothing of it. A host that encloses the presentation beneath it, which an
+ * undimmed sheet keeps in the capture, covers only that presentation, including enclosed tab bars
+ * listed first after the previous toolbar. A host that encloses nothing, or a presentation stacked
+ * over it, keeps covering. Like the sibling-sized exemption, this cannot tell an opaque toolbar
+ * from a host.
+ */
 function classifyToolbarHostReach(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
@@ -420,21 +420,11 @@ function classifyToolbarHostReach(
   const ownEnclosed = enclosedPositions.filter(
     (siblingPosition) => siblingPosition >= previousHostEnd,
   );
+  if (ownEnclosed.length === enclosedPositions.length) return { kind: 'own-presentation' };
   const beneathTabBars = new Set<number>();
-  if (previousHostEnd > 0) {
-    for (const siblingPosition of ownEnclosed) {
-      if (!nodeKindIncludesAny(siblings[siblingPosition]!, TAB_BAR_KIND_FRAGMENTS)) break;
-      beneathTabBars.add(siblingPosition);
-    }
-  }
-  if (
-    beneathTabBars.size === ownEnclosed.length &&
-    enclosedPositions.length === ownEnclosed.length
-  ) {
-    beneathTabBars.clear();
-  }
-  if (enclosedPositions.length === ownEnclosed.length && beneathTabBars.size === 0) {
-    return { kind: 'own-presentation' };
+  for (const siblingPosition of ownEnclosed) {
+    if (!nodeKindIncludesAny(siblings[siblingPosition]!, TAB_BAR_KIND_FRAGMENTS)) break;
+    beneathTabBars.add(siblingPosition);
   }
   return {
     kind: 'over-beneath',
