@@ -255,6 +255,9 @@ function isRetryable(request: RevylRequest, outcome: RevylResponse | Error): boo
   if (outcome instanceof Error) {
     return outcome instanceof AppError && outcome.details?.reason === 'provider-unreachable';
   }
+  // A read has no side effect to land twice. Revyl answers `hierarchy` with a 500 while the iOS
+  // simulator's accessibility service briefly returns nothing, and a replay reads the tree.
+  if (request.method === 'GET' && outcome.status === 500) return true;
   return revylFailure(request.route ?? 'general', outcome.status).retryable;
 }
 

@@ -215,28 +215,17 @@ class RevylInteractor implements Interactor {
    * `pixels` and endpoints. Revyl's own `/swipe` is not used: it moves the finger a distance the
    * worker chooses, so `--pixels` and `--amount` would be silently dropped.
    *
-   * Revyl's `/drag` body carries endpoints only — no duration field exists — so the worker chooses
-   * how fast the finger travels and the report names no `durationMs`. `scroll --duration-ms` is therefore
-   * refused: a drag that ran at Revyl's own speed while reporting the caller's number would be a false
-   * echo, and one that said nothing would drop what the caller asked for.
+   * A worker whose `health` reports `supports_explicit_drag_duration` takes `duration_ms` in the
+   * `/drag` body, so `scroll --duration-ms` rides it and the report echoes it. Any other worker
+   * chooses how fast the finger travels, so the flag is refused there: a drag that ran at Revyl's own
+   * speed while reporting the caller's number would be a false echo.
    */
   async scroll(
     direction: ScrollDirection,
     options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown>> {
-    if (options?.durationMs !== undefined) {
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'Revyl scrolls with one drag and cannot be told how fast the finger travels.',
-        {
-          reason: 'unsupported-provider-mode',
-          command: 'scroll',
-          flag: '--duration-ms',
-          runId: this.session.runId,
-          hint: 'Scroll without --duration-ms; the drag runs at the speed Revyl gives it.',
-        },
-      );
-    }
+    const durationMs = options?.durationMs;
+    if (durationMs !== undefined) this.requireDragDuration(durationMs);
     const screen = this.session.screen;
     if (!screen) {
       throw new AppError(
@@ -262,11 +251,35 @@ class RevylInteractor implements Interactor {
       start_y: plan.y1,
       end_x: plan.x2,
       end_y: plan.y2,
+      ...(durationMs === undefined ? {} : { duration_ms: durationMs }),
     });
     return {
       ...plan,
+      ...(durationMs === undefined ? {} : { durationMs }),
       backend: 'revyl-device-proxy',
     };
+  }
+
+  /** Refuses a drag duration this worker cannot honor; Revyl's `duration_ms` starts at 1. */
+  private requireDragDuration(durationMs: number): void {
+    if (!this.session.dragDuration) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'This Revyl worker scrolls with one drag and cannot be told how fast the finger travels.',
+        {
+          reason: 'unsupported-provider-mode',
+          command: 'scroll',
+          flag: '--duration-ms',
+          runId: this.session.runId,
+          hint: 'Scroll without --duration-ms; the drag runs at the speed Revyl gives it.',
+        },
+      );
+    }
+    if (durationMs < 1) {
+      throw new AppError('INVALID_ARGS', 'Revyl drag --duration-ms must be at least 1.', {
+        flag: '--duration-ms',
+      });
+    }
   }
 
   /**

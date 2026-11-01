@@ -31,6 +31,8 @@ export type RevylSession = Readonly<{
   sessionId: string;
   /** Read from `health`; a snapshot without it cannot measure a keyboard band. */
   screen: RevylScreenSize | undefined;
+  /** Read from `health`: whether `/drag` takes the finger's travel time as `duration_ms`. */
+  dragDuration: boolean;
   device: DeviceInfo;
   client: RevylClient;
   lease: DeviceLease;
@@ -175,6 +177,7 @@ export async function startRevylSession(
         runId,
         sessionId,
         screen: readRevylScreenSize(health),
+        dragDuration: health.supports_explicit_drag_duration === true,
         device: buildRevylDevice(input.platform, lease, runId),
         client,
         lease,

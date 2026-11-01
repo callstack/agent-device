@@ -634,12 +634,12 @@ Limrun direct-device flow:
 Revyl cloud-device flow (plugin, install separately):
   agent-device plugins add @agent-device/revyl
   export REVYL_API_KEY=...
-  agent-device connect revyl --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app https://downloads.example.test/app.zip
+  agent-device connect revyl --platform ios --provider-app https://downloads.example.test/app.zip
   agent-device open com.example.app
   agent-device snapshot -i
   agent-device close
   agent-device disconnect
-  Revyl starts a device from its own pool, so --device and --provider-os-version are preferences it picks from rather than a catalog lookup, and --provider-app must be an https URL it can download. connect verifies the key without renting a device; the device is rented on the first command that needs it and released on close or disconnect.
+  Revyl starts a device from its own pool, so --device and --provider-os-version are preferences it picks from rather than a catalog lookup; leave them unset to get a simulator that is already warm. --provider-app must be an https URL it can download. connect verifies the key without renting a device; the device is rented on the first command that needs it and released on close or disconnect.
 
 Local profile flow:
   agent-device connect --remote-config ./remote-config.json

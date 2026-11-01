@@ -302,14 +302,43 @@ test('scroll dispatches the planned finger path as one drag', async () => {
   });
   assert.equal(report.pixels, 300);
   assert.equal(report.direction, 'down');
-  // Revyl's `/drag` body has no duration field, so the report names none: a duration the worker never
+  // No duration was asked for, so the report names none: a duration the worker never
   // ran must not appear as though it were honored.
   assert.equal('durationMs' in report, false);
 });
 
+test('a scroll that names a duration sends it when the worker takes one', async () => {
+  const { fixture, interactor } = await liveInteractor('ios', { dragDuration: true });
+  const report = (await interactor.scroll?.('down', { pixels: 300, durationMs: 900 })) as Record<
+    string,
+    unknown
+  >;
+
+  assert.deepEqual(fixture.bodyFor('drag'), {
+    start_x: 195,
+    start_y: 572,
+    end_x: 195,
+    end_y: 272,
+    duration_ms: 900,
+  });
+  assert.equal(report.durationMs, 900);
+});
+
+test('a zero scroll duration is refused before the drag, since Revyl takes at least 1 ms', async () => {
+  const { fixture, interactor } = await liveInteractor('ios', { dragDuration: true });
+  await assert.rejects(
+    () => interactor.scroll?.('down', { pixels: 300, durationMs: 0 }),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+  assert.equal(
+    fixture.paths().some((request) => request.endsWith('/drag')),
+    false,
+  );
+});
+
 test('a scroll that names a duration is refused rather than run at another speed', async () => {
-  // The caller asked how fast the finger travels and Revyl's drag cannot be told, so the command is
-  // answered with that fact. Running the drag at Revyl's speed in silence would drop what was asked for.
+  // This worker reports no drag duration support, so the command is answered with that fact. Running
+  // the drag at Revyl's speed in silence would drop what was asked for.
   const { fixture, interactor } = await liveInteractor('ios');
 
   await assert.rejects(
