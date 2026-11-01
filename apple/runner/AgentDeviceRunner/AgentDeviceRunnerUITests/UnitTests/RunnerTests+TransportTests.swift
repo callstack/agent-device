@@ -676,6 +676,102 @@ extension RunnerTests {
     )
   }
 
+  /// A command that closed through the throw path must be answered from the journal with the same code
+  /// the live answer carried. The daemon reads that code to decide whether the runner's main thread is
+  /// still draining the work this command abandoned: a replayed failure that arrives without it reads
+  /// as an ordinary served refusal, which reports the thread drained at the exact moment the timed-out
+  /// command occupies it.
+  ///
+  /// The alert route is the throw path this lane can drive on its own deadline: the resolution outlives
+  /// the 500 ms request, so the bounded dispatch throws the watchdog timeout, `executeAccepted` records
+  /// it, and the repeat is answered from that record.
+  ///
+  /// Repeats go through `execute(command:)`, which routes a send the way the transport does, so this
+  /// proves the wire path and not a helper's.
+  #if os(iOS)
+    @MainActor
+    func testTransportReplaysAThrownFailureWithItsWireCode() throws {
+      let resolutionExited = expectation(description: "blocked alert resolution exited")
+      let releaseResolution = DispatchSemaphore(value: 0)
+      mainOwned.app = springboard
+      mainOwned.bundleId = Self.springboardBundleId
+      alertResolutionOverrideForTesting = { _ in
+        _ = releaseResolution.wait(timeout: .now() + 2)
+        resolutionExited.fulfill()
+        return nil
+      }
+      defer {
+        releaseResolution.signal()
+        alertResolutionOverrideForTesting = nil
+        mainOwned.app = nil
+        mainOwned.bundleId = nil
+      }
+      let payload =
+        #"{"command":"alert","commandId":"alert-timed-out","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
+      let command = try JSONDecoder().decode(Command.self, from: Data(payload.utf8))
+
+      XCTAssertThrowsError(try execute(command: command)) { error in
+        XCTAssertEqual((error as NSError).code, RunnerErrorCode.mainThreadExecutionTimedOut)
+      }
+      releaseResolution.signal()
+      wait(for: [resolutionExited], timeout: 2)
+      let drainDeadline = Date().addingTimeInterval(2)
+      while hasAbandonedMainThreadWork(), Date() < drainDeadline {
+        sleepFor(0.005)
+      }
+
+      let replay = try execute(command: command)
+
+      XCTAssertEqual(replay.ok, false)
+      XCTAssertEqual(
+        replay.error?.code,
+        RunnerWireErrorCode.mainThreadTimeout,
+        "a replayed failure must carry the code the live answer carried, got \(String(describing: replay.error?.code))"
+      )
+    }
+  #endif
+
+  /// A `shutdown` answer is what ends the runner's own XCTest run, so the send that receives it has to be
+  /// the one that ends the runner — including the send the journal answers. A resend whose first answer
+  /// the daemon lost is exactly the case the journal exists to serve: if that reply is not allowed to
+  /// finish, the runner keeps listening with no caller left to stop it, and disposal has to wait out its
+  /// timeout and escalate to a signal.
+  func testTransportFinishesTheRunnerOnAReplayOfAFinishedShutdown() throws {
+    let command = try transportCommand("shutdown", id: "shutdown-answered-twice")
+    // The state a resend finds: this shutdown ran, was marked dispatched, and closed with its answer.
+    commandJournal.accept(command: command)
+    commandJournal.markDispatched(command: command)
+    commandJournal.finish(
+      command: command,
+      response: Response(ok: true, data: DataPayload(message: "shutdown"))
+    )
+
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let client = URLSession(configuration: .ephemeral)
+    defer { client.invalidateAndCancel() }
+    let finished = expectation(description: "the replayed shutdown asked the runner to finish")
+    // Cleared on the way out so a run that never finished cannot leak the expectation into the next
+    // test; the delivery that fulfils it clears it first.
+    defer { doneExpectation = nil }
+    doneExpectation = finished
+
+    let reply = try transportHttpResponse(
+      client: client,
+      port: port,
+      payload: #"{"command":"shutdown","commandId":"shutdown-answered-twice"}"#
+    )
+
+    XCTAssertEqual(reply.ok, true)
+    XCTAssertEqual(
+      reply.data?.message,
+      "shutdown",
+      "the repeat is answered from the journal rather than executed again"
+    )
+    wait(for: [finished], timeout: 2)
+  }
+
   /// Routes `command` the way the transport routes it: an inline read, then the journal's verdict on its
   /// `commandId`. A finished id comes back as the answer the runner recorded for it; the execute path
   /// rethrows what the dispatch threw, which the wire path turns into its own response. Sends that need

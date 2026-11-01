@@ -51,6 +51,19 @@ final class RunnerTests: XCTestCase {
     static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
   }
 
+  /// The wire code a thrown command error travels under: the execution-watchdog timeout keeps its own
+  /// typed code so the daemon records the runner as main-thread-occupied from the stalling command
+  /// itself (#2552), and every other throw stays the generic `COMMAND_FAILED`. The transport encodes a
+  /// live failure with this, and the journal records a thrown failure with it, so a repeat answered from
+  /// the journal's record carries the same code as the answer the caller lost.
+  static func wireErrorCode(for error: Error) -> String {
+    let nsError = error as NSError
+    return nsError.domain == RunnerErrorDomain.general
+      && nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
+      ? RunnerWireErrorCode.mainThreadTimeout
+      : "COMMAND_FAILED"
+  }
+
   static let springboardBundleId = "com.apple.springboard"
   // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
   // and macOS have no such host, so there is nothing to probe there.

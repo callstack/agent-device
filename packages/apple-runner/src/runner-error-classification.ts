@@ -682,7 +682,9 @@ export function runnerMainThreadOccupancyReport(error: unknown): RunnerMainThrea
   if (isRunnerBusyError(error) || isRunnerMainThreadTimeoutError(error)) return 'occupied';
   // A transport-shaped failure never reached the runner, so it reports nothing.
   if (!isStructuredRunnerFailure(error)) return 'silent';
-  // The journal answered from its own record, so no execution observed the main thread.
+  // The journal answered from its own record, so no execution observed the main thread. This is the
+  // code the journal stores for a command whose own classification keeps no body; a recorded failure
+  // carries its real code and is read as the occupancy that code reports.
   if (error.details?.runnerErrorCode === COMMAND_ALREADY_FINISHED_RUNNER_CODE) return 'silent';
   return 'drained';
 }

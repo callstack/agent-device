@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
   TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
@@ -21,6 +22,7 @@ import {
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
 import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
+import { requireSwiftThrownErrorWireCode } from './runner-swift-settlement-fixtures.ts';
 
 const TAP = { command: 'tap' } as const;
 const SNAPSHOT = { command: 'snapshot' } as const;
@@ -471,8 +473,8 @@ function runnerReplyFailure(runnerCode: string): AppError {
   });
 }
 
-// The literal is what the Swift runner encodes, so it is the contract and not the constant name:
-// a rename on one side has to fail here rather than silently split the pair.
+// Pins the daemon-side literal, in the repo's style for these codes. The cross-language tie — that the
+// Swift runner really encodes this string — is the test below, which reads the Swift declaration.
 test('the journal refusal of a finished commandId reports nothing about main-thread occupancy', () => {
   assert.equal(COMMAND_ALREADY_FINISHED_RUNNER_CODE, 'COMMAND_ALREADY_FINISHED');
   assert.equal(
@@ -490,6 +492,31 @@ test('occupancy reads the busy refusal and the stalling timeout as occupied, and
     'occupied',
   );
   assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('ELEMENT_NOT_FOUND')), 'drained');
+});
+
+/**
+ * The occupancy verdict and the code the runner writes for it are one claim across two languages, so
+ * the Swift declaration is read here rather than restated: renaming
+ * `RunnerTests.RunnerWireErrorCode.mainThreadTimeout` splits the pair and fails this test. The same
+ * read ties the journal's failure record to that code. A repeat of a command that closed by throwing is
+ * answered from that record, and a record without the code reaches the daemon as an ordinary served
+ * refusal, which would report the main thread drained while the command that just timed out is what
+ * occupies it.
+ */
+test('the runner writes the occupancy code the daemon reads, on the live reply and the journal record', () => {
+  const swift = requireSwiftThrownErrorWireCode();
+
+  assert.equal(
+    swift.timeoutCode,
+    MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+    'the runner must encode the watchdog timeout under the code the daemon keys occupancy on',
+  );
+  assert.equal(
+    swift.journalRecordsDerivedCode,
+    true,
+    'the journal must record a thrown failure under the same code the transport replies with, so a ' +
+      'replayed failure reports the same runner condition as the answer the caller lost',
+  );
 });
 
 // --- runner that predates the listener token ---

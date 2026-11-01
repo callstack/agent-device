@@ -19,6 +19,10 @@ const SWIFT_JOURNAL = path.resolve(
   here,
   '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift',
 );
+const SWIFT_RUNNER = path.resolve(
+  here,
+  '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
+);
 
 /** `inlineResponse(for:)`'s switch arms, up to the `default:` where queued commands begin. */
 const INLINE_SWITCH =
@@ -124,4 +128,61 @@ export function requireLifecycleSettlementRows(
     lifecycleState,
     settlesCharge: expectations[lifecycleState]!,
   }));
+}
+
+/** The string values `RunnerWireErrorCode` declares, keyed by the Swift member name. */
+function readSwiftWireErrorCodes(): Record<string, string> {
+  const swift = fs.readFileSync(SWIFT_RUNNER, 'utf8');
+  const declaration = swift.match(/enum RunnerWireErrorCode \{([\s\S]*?)\n {2}\}/);
+  const body = declaration?.[1];
+  assert.ok(
+    body !== undefined,
+    'RunnerTests.swift must declare RunnerWireErrorCode with a body. The daemon keys behavior on ' +
+      'these codes, so a runner that stops naming them in one place breaks the tie here first.',
+  );
+  const codes: Record<string, string> = {};
+  for (const [, member, value] of body.matchAll(/static let (\w+) = "([A-Z0-9_]+)"/g)) {
+    codes[member!] = value!;
+  }
+  assert.ok(
+    Object.keys(codes).length > 0,
+    'RunnerWireErrorCode declares no `static let NAME = "CODE"` row this reader can parse',
+  );
+  return codes;
+}
+
+/**
+ * The wire code the runner derives for one thrown error. Both readers of a failed command — the
+ * transport encoding a live reply, and the journal recording a thrown one so a repeat can be answered
+ * from it — must use this one declaration, or the answer a resend receives reports a different runner
+ * condition than the answer the caller lost. The daemon keys main-thread occupancy on the timeout code,
+ * so the pair this ties is genuinely cross-language: it reads the Swift side rather than a second copy
+ * of the same string in a TypeScript test.
+ */
+export function requireSwiftThrownErrorWireCode(): {
+  /** The Swift member whose value the daemon's occupancy verdict keys on. */
+  timeoutCode: string;
+  /** Whether the journal's failure record derives its code from the same declaration. */
+  journalRecordsDerivedCode: boolean;
+} {
+  const codes = readSwiftWireErrorCodes();
+  const timeoutCode = codes['mainThreadTimeout'];
+  assert.ok(
+    timeoutCode !== undefined,
+    'RunnerWireErrorCode must declare mainThreadTimeout: the daemon reads this code to record the ' +
+      "runner's main thread as still draining, on the live reply and on a journal replay alike.",
+  );
+  const journal = fs.readFileSync(SWIFT_JOURNAL, 'utf8');
+  const recorded = journal.match(
+    /func fail\(command: Command, error: Error\)[\s\S]*?\n {2}\}/,
+  )?.[0];
+  assert.ok(
+    recorded !== undefined,
+    'RunnerCommandJournal must declare fail(command:error:) — the record a repeated commandId is ' +
+      'answered from when the command closed by throwing.',
+  );
+  return {
+    timeoutCode,
+    journalRecordsDerivedCode: /RunnerTests\.wireErrorCode\(for: error\)/.test(recorded),
+  };
 }

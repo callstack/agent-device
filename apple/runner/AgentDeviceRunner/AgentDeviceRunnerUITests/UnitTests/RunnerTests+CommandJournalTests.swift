@@ -406,6 +406,41 @@ extension RunnerTests {
     XCTAssertEqual(served.data?.message, "recording already stopped")
   }
 
+  /// The recorded failure has to carry the same code the live answer carried, because the daemon reads
+  /// that code to decide whether the runner's main thread is still draining. A repeat of a command that
+  /// timed out on the execution watchdog is answered from this record, and a failure stored without its
+  /// code reaches the daemon as an ordinary served refusal: it would report the thread drained at the
+  /// exact moment the timed-out command occupied it.
+  func testJournalReplayOfAThrownFailureCarriesItsWireCode() throws {
+    let journal = RunnerCommandJournal()
+    let command = runnerJournalCommand("readText", id: "timed-out-then-repeated")
+    journal.accept(command: command)
+    journal.markDispatched(command: command)
+    journal.fail(command: command, error: Self.mainThreadExecutionTimeoutError())
+    // Nothing of a timed-out command is retained to replay, so the recorded failure is the only answer
+    // a repeat can be given.
+    XCTAssertEqual(
+      journal.status(normalizedCommandId: "timed-out-then-repeated").lifecycleResponseJson,
+      nil
+    )
+
+    guard case .terminal(let replay) = journal.accept(command: command) else {
+      return XCTFail("a repeat of a finished, dispatched commandId is answered from the journal")
+    }
+
+    XCTAssertEqual(replay.ok, false)
+    XCTAssertEqual(
+      replay.error?.code,
+      RunnerWireErrorCode.mainThreadTimeout,
+      "a replayed failure must carry the code the live answer carried, got \(String(describing: replay.error?.code))"
+    )
+    XCTAssertEqual(
+      journal.status(normalizedCommandId: "timed-out-then-repeated").lifecycleErrorCode,
+      RunnerWireErrorCode.mainThreadTimeout,
+      "`status` recovery reads the same record and must see the code too"
+    )
+  }
+
   func testCommandJournalKeepsErrorMetadataWhenResponseJsonIsDropped() {
     let journal = RunnerCommandJournal()
     let snapshot = runnerJournalCommand("snapshot", id: "snapshot-error")

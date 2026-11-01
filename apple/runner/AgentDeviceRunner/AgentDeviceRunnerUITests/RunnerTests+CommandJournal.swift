@@ -137,13 +137,21 @@ final class RunnerCommandJournal {
     )
   }
 
+  /// Records the failure that ended this command's execution. The typed wire code goes with it, the
+  /// same one the transport puts on the live reply for the same throw: a repeat of this `commandId` is
+  /// answered from this record, and a failure that arrives without its code reads to the daemon as an
+  /// ordinary served refusal — which for a `MAIN_THREAD_TIMEOUT` would report the main thread drained
+  /// when the command that just timed out is what occupied it.
   func fail(command: Command, error: Error) {
     update(
       command: command,
       state: .failed,
       responseOk: nil,
       responseJson: nil,
-      error: ErrorPayload(message: error.localizedDescription),
+      error: ErrorPayload(
+        code: RunnerTests.wireErrorCode(for: error),
+        message: error.localizedDescription
+      ),
       marksDispatched: false
     )
   }
