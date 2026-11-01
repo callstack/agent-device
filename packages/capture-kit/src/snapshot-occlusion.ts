@@ -34,6 +34,7 @@ const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
  */
 const VIEWPORT_CHROME_TOP_INSET_PT = 4;
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
+const TAB_BAR_KIND_FRAGMENTS = ['tabbar'];
 const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
@@ -77,6 +78,7 @@ type OcclusionScan = {
 type NeighbourhoodIndex = {
   byIndex: Map<number, RawSnapshotNode>;
   childrenByParent: Map<number, RawSnapshotNode[]>;
+  toolbarHostReach: Map<number, ToolbarHostReach | null>;
 };
 
 function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): NeighbourhoodIndex {
@@ -89,7 +91,7 @@ function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): Neighbour
     if (siblings) siblings.push(node);
     else childrenByParent.set(node.parentIndex, [node]);
   }
-  return { byIndex, childrenByParent };
+  return { byIndex, childrenByParent, toolbarHostReach: new Map() };
 }
 
 export type SnapshotOcclusionOptions = {
@@ -295,6 +297,7 @@ function visibleCoverRect(
   if (areRelatedSnapshotNodes(target, candidate, scan.byIndex)) return null;
   const candidateRect = positiveRect(candidate.rect);
   if (!candidateRect || areRectsApproximatelyEqual(targetRect, candidateRect)) return null;
+  if (isInToolbarHostOwnPresentation(candidate, target, scan)) return null;
   if (findCoveringNode(scan, candidatePosition, candidate, options)) return null;
   return candidateRect;
 }
@@ -349,7 +352,7 @@ function isOverlayLikeNode(
  * gate keeps a `dialog`/`sheet`/`alert` sized to the content around it covering.
  *
  * Accepted limit for stacked presentations: the interactive projection lists them as siblings of one
- * root. iOS drops what sits beneath a sheet from the capture, but keeps what sits beneath a
+ * root. iOS drops what sits beneath a SwiftUI sheet from the capture, but keeps what sits beneath a
  * full-screen cover, and the cover's toolbar host is viewport-sized, so the full-viewport exemption
  * lets it through. Beneath a cover, only the cover's own bars and a lower presentation's
  * non-exempt toolbar host still cover.
@@ -374,29 +377,109 @@ function isSiblingSizedChromeContainer(
 }
 
 /**
- * SwiftUI toolbar hosts draw their descendants, not their enclosing frame. Exempt a host only
- * when it encloses bars or scroll containers from its own presentation: the siblings after the
- * previous toolbar and before this host. Enclosing another presentation's regions keeps it covering.
+ * Toolbar hosts draw their descendants, not their enclosing frame, so a host covers nothing of its
+ * own presentation: the bars and scroll containers after the previous toolbar and before this host.
+ * A host that also encloses the presentation beneath it, which an undimmed sheet keeps in the
+ * capture, covers that presentation; after a previous toolbar, enclosed tab bars listed first belong
+ * to it unless they are all the host encloses. Enclosing a presentation stacked over the host keeps
+ * it covering.
  */
+type ToolbarHostReach =
+  | { kind: 'own-presentation' }
+  | { kind: 'over-beneath'; parentIndex: number; ownBranchIndexes: ReadonlySet<number> };
+
+function toolbarHostReach(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): ToolbarHostReach | null {
+  const cached = neighbourhood.toolbarHostReach.get(node.index);
+  if (cached !== undefined) return cached;
+  const reach = classifyToolbarHostReach(node, neighbourhood);
+  neighbourhood.toolbarHostReach.set(node.index, reach);
+  return reach;
+}
+
+function classifyToolbarHostReach(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): ToolbarHostReach | null {
+  if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return null;
+  if (typeof node.parentIndex !== 'number') return null;
+  const rect = positiveRect(node.rect);
+  if (!rect) return null;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex)!;
+  const position = siblings.findIndex((sibling) => sibling.index === node.index);
+  const enclosedPositions = siblings.flatMap((sibling, siblingPosition) =>
+    siblingPosition !== position && isEnclosedHostedRegion(rect, sibling) ? [siblingPosition] : [],
+  );
+  if (enclosedPositions.some((siblingPosition) => siblingPosition > position)) return null;
+
+  const previousHostEnd = ownPresentationStart(siblings, position);
+  const ownEnclosed = enclosedPositions.filter(
+    (siblingPosition) => siblingPosition >= previousHostEnd,
+  );
+  const beneathTabBars = new Set<number>();
+  if (previousHostEnd > 0) {
+    for (const siblingPosition of ownEnclosed) {
+      if (!nodeKindIncludesAny(siblings[siblingPosition]!, TAB_BAR_KIND_FRAGMENTS)) break;
+      beneathTabBars.add(siblingPosition);
+    }
+  }
+  if (
+    beneathTabBars.size === ownEnclosed.length &&
+    enclosedPositions.length === ownEnclosed.length
+  ) {
+    beneathTabBars.clear();
+  }
+  if (ownEnclosed.length === 0) return null;
+  if (enclosedPositions.length === ownEnclosed.length && beneathTabBars.size === 0) {
+    return { kind: 'own-presentation' };
+  }
+  return {
+    kind: 'over-beneath',
+    parentIndex: node.parentIndex,
+    ownBranchIndexes: new Set(
+      siblings
+        .slice(previousHostEnd, position)
+        .filter((_, offset) => !beneathTabBars.has(previousHostEnd + offset))
+        .map((sibling) => sibling.index),
+    ),
+  };
+}
+
 function isOwnPresentationToolbarHost(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
-  if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
-  if (typeof node.parentIndex !== 'number') return false;
-  const rect = positiveRect(node.rect);
-  if (!rect) return false;
-  const siblings = neighbourhood.childrenByParent.get(node.parentIndex)!;
-  const position = siblings.findIndex((sibling) => sibling.index === node.index);
-  const ownStart = ownPresentationStart(siblings, position);
+  return toolbarHostReach(node, neighbourhood)?.kind === 'own-presentation';
+}
 
-  let hasHostedRegion = false;
-  for (const [siblingPosition, sibling] of siblings.entries()) {
-    if (siblingPosition === position || !isEnclosedHostedRegion(rect, sibling)) continue;
-    if (siblingPosition < ownStart || siblingPosition > position) return false;
-    hasHostedRegion = true;
+function isInToolbarHostOwnPresentation(
+  host: RawSnapshotNode,
+  target: RawSnapshotNode,
+  scan: OcclusionScan,
+): boolean {
+  const reach = toolbarHostReach(host, scan.neighbourhood);
+  if (reach?.kind !== 'over-beneath') return false;
+  const branch = branchUnderParent(target, reach.parentIndex, scan.byIndex);
+  return branch !== undefined && reach.ownBranchIndexes.has(branch.index);
+}
+
+/** The target itself or its ancestor that is a direct child of `parentIndex`. */
+function branchUnderParent(
+  node: RawSnapshotNode,
+  parentIndex: number,
+  byIndex: Map<number, RawSnapshotNode>,
+): RawSnapshotNode | undefined {
+  let current: RawSnapshotNode | undefined = node;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    if (current.parentIndex === parentIndex) return current;
+    visited.add(current.index);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
   }
-  return hasHostedRegion;
+  return undefined;
 }
 
 function ownPresentationStart(siblings: readonly RawSnapshotNode[], position: number): number {
