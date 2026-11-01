@@ -70,7 +70,9 @@ test('iOS simulator recording reports host contention and recovers through the f
       const recordingPath = path.join(tmpDir, 'sim-recording.mp4');
       const recorderPath = nativeRecordingPath(recordingPath);
       const collectedPath = collectedRecordingPath(recordingPath);
-      const runnerTranscript = createProviderTranscript([]);
+      const runnerTranscript = createProviderTranscript([
+        { command: 'ios.runner.snapshot', result: { currentUptimeMs: 100 }, repeat: true },
+      ]);
       const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
         runnerTranscript,
         'ios.runner',
@@ -171,6 +173,10 @@ test('iOS simulator recording reports host contention and recovers through the f
         assertRecordingStopped(recordStop, recordingPath, { showTouches: false });
         assert.equal(fs.existsSync(ownedProcessRecordPath), false);
 
+        assert.equal(
+          runnerTranscript.calls.filter(({ command }) => command === 'ios.runner.snapshot').length,
+          2,
+        );
         runnerTranscript.assertComplete();
         // The recorder is told its own path, and the caller's path arrives from a copy of it
         // (ADR 0024 2.3), so neither sibling is left behind for the next run to wonder about.

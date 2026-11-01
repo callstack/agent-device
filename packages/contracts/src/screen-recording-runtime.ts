@@ -132,6 +132,7 @@ export type ScreenRecordingLiveHandle = LiveResourceHandle<ScreenRecordingComple
 
 export type ScreenRecordingStartInput = Readonly<{
   sessionId: string;
+  requestId?: string;
   outputPath: string;
   clientOutputPath?: string;
   scope: RecordingScope;

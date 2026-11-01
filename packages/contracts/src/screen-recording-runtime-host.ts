@@ -77,6 +77,7 @@ export type AppleScreenRecordingHost = Readonly<{
     device: DeviceInfo,
     appBundleId: string,
     signal?: AbortSignal,
+    requestId?: string,
   ): Promise<AppleScreenRecordingClockAnchor | undefined>;
   isRunnerBundleId(bundleId: string): Promise<boolean>;
 }>;

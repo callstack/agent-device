@@ -37,10 +37,10 @@ export function createAppleScreenRecordingHost(
         await import('./platform-runtime-screen-recording-apple-runner-host.ts');
       await retrieveAppleRunnerRecording(device, remotePath, outputPath, host.env, signal);
     },
-    captureClockAnchor: async (device, appBundleId, signal) => {
+    captureClockAnchor: async (device, appBundleId, signal, requestId) => {
       const { captureAppleClockAnchor } =
         await import('./platform-runtime-screen-recording-apple-runner-host.ts');
-      return await captureAppleClockAnchor(device, appBundleId, signal);
+      return await captureAppleClockAnchor(device, appBundleId, signal, requestId);
     },
     isRunnerBundleId: async (bundleId) => {
       const { isAppleRunnerBundleId } =

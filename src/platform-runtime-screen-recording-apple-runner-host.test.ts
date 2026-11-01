@@ -1,3 +1,8 @@
+import {
+  clearRequestAbortRegistration,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { expect, test, vi } from 'vitest';
 import {
   captureAppleClockAnchor,
@@ -54,3 +59,43 @@ test('focused simulator-only transport never warms a local Apple runner', async 
   );
   expect(runnerClient.run).not.toHaveBeenCalled();
 });
+
+test.each([false, true])(
+  'clock-anchor capture preserves request cancellation=%s with an independent caller signal',
+  async (canceled) => {
+    const requestId = `record-anchor-cancel-${canceled}`;
+    const registration = registerRequestAbort(requestId)!;
+    const callerSignal = new AbortController().signal;
+    runnerClient.run.mockReset();
+    runnerClient.run.mockImplementationOnce(async () => {
+      if (canceled) {
+        markRequestCanceled(requestId);
+        throw registration.controller.signal.reason;
+      }
+      throw new Error('clock anchor unavailable');
+    });
+    try {
+      const capture = captureAppleClockAnchor(
+        simulator,
+        'com.example.app',
+        callerSignal,
+        requestId,
+      );
+      if (canceled) {
+        await expect(capture).rejects.toMatchObject({
+          code: 'COMMAND_FAILED',
+          details: { reason: 'request_canceled' },
+        });
+      } else {
+        await expect(capture).resolves.toBeUndefined();
+      }
+      expect(runnerClient.run).toHaveBeenCalledOnce();
+      const forwarded = runnerClient.run.mock.calls[0]?.[2];
+      expect(forwarded?.requestId).toBe(requestId);
+      expect(forwarded?.signal).toBe(callerSignal);
+      expect(callerSignal.aborted).toBe(false);
+    } finally {
+      clearRequestAbortRegistration(registration);
+    }
+  },
+);

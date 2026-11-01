@@ -854,8 +854,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'short visible fixture mutation produces a non-empty playable Android MP4',
     ),
     iosSimulator: iosSimulator.live(
-      'full:observability-artifacts',
-      'visible mutation produces a playable MP4',
+      'smoke:capture-close',
+      'active-session recording captures a visible mutation into a playable MP4',
     ),
     macos: macos.live(
       'provider:macos-recording',

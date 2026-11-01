@@ -86,8 +86,8 @@ function createLazyAppleHost(host: HostEnvironment): ScreenRecordingRuntimeHost[
       await (await load()).inspectRunner(device, sessionId, authority),
     retrieveRunnerRecording: async (device, remotePath, outputPath, signal) =>
       await (await load()).retrieveRunnerRecording(device, remotePath, outputPath, signal),
-    captureClockAnchor: async (device, appBundleId, signal) =>
-      await (await load()).captureClockAnchor(device, appBundleId, signal),
+    captureClockAnchor: async (device, appBundleId, signal, requestId) =>
+      await (await load()).captureClockAnchor(device, appBundleId, signal, requestId),
     isRunnerBundleId: async (bundleId) => await (await load()).isRunnerBundleId(bundleId),
   });
 }
