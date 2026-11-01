@@ -16,9 +16,8 @@ import {
   SETTLE_TAIL_SAMPLE,
   STALE_REF_SAMPLE,
 } from '../help-conformance-sample-outputs.mjs';
-import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
-import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
-import { openCliOutput } from '../../src/commands/management/output.ts';
+import { formatCliOutput } from '@agent-device/command-output';
+import type { CommandName } from '@agent-device/command-surface';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -29,8 +28,7 @@ import type { RemoteConnectionState } from '@agent-device/remote/remote-connecti
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
-import { printHumanError } from '../../src/commands/output/error.ts';
-import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
+import { printHumanError } from '../../src/commands/output/human-error.ts';
 import { captureHelpConformanceErrorRoutes } from '../../test/integration/provider-scenarios/help-conformance-error-routes.ts';
 import {
   createContractClock,
@@ -57,11 +55,19 @@ export type SampleProducer = {
   render: () => string | Promise<string>;
 };
 
-const formatPress = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.press({ input: {}, result }).text;
+/** The text the production dispatcher renders for a command's result. */
+async function formatCommandText(
+  name: CommandName,
+  result: unknown,
+  input: Record<string, unknown> = {},
+): Promise<string> {
+  const output = await formatCliOutput({ name, input, result, env: {}, stderrIsTTY: false });
+  return output?.text ?? '';
+}
 
-const formatFill = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.fill({ input: {}, result }).text;
+const formatPress = (result: Record<string, unknown>) => formatCommandText('press', result);
+
+const formatFill = (result: Record<string, unknown>) => formatCommandText('fill', result);
 
 /** The `Error (CODE): …` + `Hint: …` text printHumanError writes to stderr. */
 async function renderHumanError(error: AppError): Promise<string> {
@@ -241,20 +247,25 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         },
       ];
       const verdict = { state: 'recovered', backend: 'private-ax' } as SnapshotQualityVerdict;
-      return formatSnapshotText({
-        nodes,
-        backend: 'private-ax',
-        snapshotQuality: verdict,
-        warnings: renderSnapshotQualityWarnings(verdict, nodes),
-        interactiveOnly: true,
-      }).trimEnd();
+      return (
+        await formatCommandText(
+          'snapshot',
+          {
+            nodes,
+            backend: 'private-ax',
+            snapshotQuality: verdict,
+            warnings: renderSnapshotQualityWarnings(verdict, nodes),
+          },
+          { interactiveOnly: true },
+        )
+      ).trimEnd();
     },
   },
   {
     name: 'OFFSCREEN_TARGET_SNAPSHOT_SAMPLE',
     producer: 'the visible-first snapshot renderer with off-screen rows summarized',
     sample: OFFSCREEN_TARGET_SNAPSHOT_SAMPLE,
-    render: () => {
+    render: async () => {
       // A settings-style scrollable list in an 800pt viewport: five rows fit,
       // four more (Privacy & Security, Notifications, Wallpaper, Developer) are
       // laid out below it, so visible-first presentation summarizes them and
@@ -302,9 +313,12 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
         row(10, 'e11', 'Wallpaper', 1160),
         row(11, 'e12', 'Developer', 1290),
       ];
-      return formatSnapshotText(
-        { nodes, backend: 'xctest', truncated: false },
-        { interactiveOnly: true },
+      return (
+        await formatCommandText(
+          'snapshot',
+          { nodes, backend: 'xctest', truncated: false },
+          { interactiveOnly: true },
+        )
       ).trimEnd();
     },
   },
@@ -315,19 +329,15 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     render: async () => {
       const warning =
         'The session is open, but the initial interactive snapshot failed (COMMAND_FAILED: capture failed). Run: agent-device snapshot -i';
-      return (
-        (
-          await openCliOutput({
-            session: 'default',
-            warnings: [warning],
-            initialSnapshotError: {
-              code: 'COMMAND_FAILED',
-              message: 'capture failed',
-            },
-            identifiers: { session: 'default' },
-          })
-        ).text ?? ''
-      );
+      return await formatCommandText('open', {
+        session: 'default',
+        warnings: [warning],
+        initialSnapshotError: {
+          code: 'COMMAND_FAILED',
+          message: 'capture failed',
+        },
+        identifiers: { session: 'default' },
+      });
     },
   },
   {
@@ -376,11 +386,13 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
           actions: ['Reply', 'Repost', 'Open post options menu'],
         },
       ];
-      const output = await snapshotCliOutput({
-        result: { nodes, backend: 'xctest', truncated: false },
-        interactiveOnly: true,
-      });
-      return (output.text ?? '').trimEnd();
+      return (
+        await formatCommandText(
+          'snapshot',
+          { nodes, backend: 'xctest', truncated: false },
+          { interactiveOnly: true },
+        )
+      ).trimEnd();
     },
   },
   {

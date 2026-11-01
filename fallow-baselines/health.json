@@ -90,7 +90,7 @@
     "packages/command-surface/src/cli-grammar/common.ts:high impact",
     "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
-    "src/commands/interaction/output.ts:high impact",
+    "packages/command-output/src/interaction/output.ts:high impact",
     "packages/capture-kit/src/snapshot/snapshot-lines.ts:high impact",
     "packages/kernel/src/rect-center.ts:high impact",
     "packages/platform-apple/src/core/app-launch.ts:complexity",

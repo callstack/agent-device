@@ -1,5 +1,5 @@
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
+import { formatScreenshotDiffText, formatSnapshotDiffText } from '@agent-device/command-output';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
@@ -53,7 +53,9 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
       flags,
       env: host.env,
     });
-    await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result, host.env));
+    await writeCommandOutput(flags, result, () =>
+      formatSnapshotDiffText(result, host.env, process.stdout),
+    );
     return true;
   }
 
@@ -104,7 +106,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
   });
 
   await writeCommandOutput(flags, result, () =>
-    formatScreenshotDiffText(result as ScreenshotDiffResult, host),
+    formatScreenshotDiffText(result as ScreenshotDiffResult, host, process.stdout),
   );
   return true;
 };
