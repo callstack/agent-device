@@ -32,6 +32,9 @@ final class ModalSurfaceTests: XCTestCase {
           excluded.remove(at: try XCTUnwrap(excluded.firstIndex(of: action), "\(name): \(action.label)"))
         }
         XCTAssertEqual(excluded.map(\.label), expected.excludedActions, "\(name): excluded actions")
+      case .unknown(.duplicatedChild):
+        XCTAssertEqual(expected.reading, "unknown", name)
+        XCTAssertEqual(expected.reason, "duplicatedChild", name)
       case .unknown:
         XCTFail("\(name): \(reading)")
       }

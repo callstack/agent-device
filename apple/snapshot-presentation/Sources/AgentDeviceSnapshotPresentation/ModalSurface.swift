@@ -58,21 +58,27 @@ extension ModalSurface {
     case .paired:
       break
     }
+    // An empty honor-modal read also reports `rootMismatch`. That is only a label: the result is
+    // unknown either way.
     guard plain.first?.element == honorModal.first?.element else { return .unknown(.rootMismatch) }
     guard let plainChildren = children(of: plain), let honorModalChildren = children(of: honorModal)
     else { return .unknown(.unorderedRead) }
 
     // Pairing matched elements under parent elements. This walk matches them under the parent node,
     // which also tells apart the occurrences of an element that one read lists under two parents.
+    // An element listed more than once under one parent pairs in order when the honor-modal read keeps
+    // every occurrence, and counts as removed when it keeps none. When it keeps some but not all, the
+    // walk reports `duplicatedChild`.
     var failure = ModalSurfaceUnknownReason.unstable(.reparentedElement)
     func surfaces(honorModalNode: Int, plainNode: Int) -> [ModalSurface]? {
       var removed = plainChildren[plainNode]
       var kept: [(honorModal: Int, plain: Int)] = []
+      let listed = occurrences(of: plainChildren[plainNode], in: plain)
+      let keptListed = occurrences(of: honorModalChildren[honorModalNode], in: honorModal)
       for child in honorModalChildren[honorModalNode] {
         let element = honorModal[child].element
-        let listed = plainChildren[plainNode].filter { plain[$0].element == element }.count
-        let keptListed = honorModalChildren[honorModalNode].filter { honorModal[$0].element == element }.count
-        guard listed < 2 || keptListed >= listed else {
+        let listedCount = listed[element, default: 0]
+        guard listedCount < 2 || keptListed[element, default: 0] >= listedCount else {
           failure = .duplicatedChild
           return nil
         }
@@ -107,6 +113,10 @@ extension ModalSurface {
       && (AlertSurface.actionableTypes.contains(node.type)
         || AlertSurface.isDismissPopupMarker(node.label) || AlertSurface.isDismissPopupMarker(node.identifier))
     return (isAction ? [node] : []) + node.children.flatMap { actions(in: $0, keyboardOwned: keyboardOwned) }
+  }
+
+  private static func occurrences(of positions: [Int], in nodes: [ModalScopeNode]) -> [String: Int] {
+    positions.reduce(into: [:]) { counts, position in counts[nodes[position].element, default: 0] += 1 }
   }
 
   /// Each node's children, in order. A read lists every node after its parent, so a node's parent
