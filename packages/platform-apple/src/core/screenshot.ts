@@ -27,10 +27,7 @@ import {
   resolveRunnerContainerBundleIds,
   type AppleRunnerCommandOptions,
 } from '@agent-device/apple-runner';
-import {
-  emitSimulatorStatusBarDiagnostic,
-  prepareSimulatorStatusBarForScreenshot,
-} from './screenshot-status-bar.ts';
+import { withNormalizedSimulatorStatusBar } from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
   resolveAppleCaptureTarget,
@@ -44,7 +41,11 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
-  prepareStatusBarForScreenshot: (device: DeviceInfo) => Promise<() => Promise<void>>;
+  /**
+   * Runs `capture` with the simulator status bar normalized and restores the caller's overrides
+   * afterwards, one capture per simulator at a time.
+   */
+  withNormalizedStatusBar: <T>(device: DeviceInfo, capture: () => Promise<T>) => Promise<T>;
   resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
@@ -89,7 +90,7 @@ type SimulatorScreenshotFlowOptions = {
 
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
-  prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+  withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
   resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
@@ -154,15 +155,7 @@ export async function captureSimulatorScreenshotWithFallback(
     await deps.captureWithRetry(device, outPath, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
-  let restoreStatusBar = async () => {};
-  if (options.normalizeStatusBar === true) {
-    try {
-      restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
-    } catch (error) {
-      emitSimulatorStatusBarDiagnostic(device, 'prepare_failed', error);
-    }
-  }
-  try {
+  const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
     try {
       await captureAndNormalize();
       return captureFacts;
@@ -199,11 +192,12 @@ export async function captureSimulatorScreenshotWithFallback(
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
     return captureFacts;
-  } finally {
-    await restoreStatusBar().catch((error) =>
-      emitSimulatorStatusBarDiagnostic(device, 'restore_failed', error),
-    );
+  };
+
+  if (options.normalizeStatusBar !== true) {
+    return await captureWithFallback();
   }
+  return await deps.withNormalizedStatusBar(device, captureWithFallback);
 }
 
 export async function captureSimulatorScreenshotWithRetry(
