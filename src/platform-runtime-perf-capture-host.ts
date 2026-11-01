@@ -182,6 +182,11 @@ function createCaptureHandle(
   let cleanup: Promise<CleanupOutcome> | undefined;
   const clean = async (): Promise<CleanupOutcome> =>
     await steps.cleanup().then(() => ({ status: 'cleaned' }) as const, cleanupPending);
+  const forceCleanup = async () =>
+    (cleanup ??= clean().then((outcome) => {
+      if (outcome.status === 'cleanup-pending') cleanup = undefined;
+      return outcome;
+    }));
   return Object.freeze({
     inspect: steps.inspect,
     setOutputPath: (value: string) => {
@@ -197,9 +202,9 @@ function createCaptureHandle(
           throw error;
         },
       )),
-    forceCleanup: async () => (cleanup ??= clean()),
+    forceCleanup,
     [Symbol.asyncDispose]: async () => {
-      const outcome = await (cleanup ??= clean());
+      const outcome = await forceCleanup();
       assertCleanup(outcome);
     },
   });

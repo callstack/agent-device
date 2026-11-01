@@ -98,6 +98,7 @@ function createPollerHandle(
       await polling;
       const failures = await disposeAll([options.reader, output]);
       if (failures.length > 0) {
+        finishPromise = undefined;
         state = 'failed';
         return {
           status: 'cleanup-pending',

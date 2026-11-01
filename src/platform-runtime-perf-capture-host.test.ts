@@ -156,6 +156,25 @@ test('starts, retargets, finishes, and cleans a Simpleperf profile through one l
   expect(androidNative.cleanupAndroidNativePerfSession).toHaveBeenCalledTimes(1);
 });
 
+test('native perf disposal retries a failed cleanup and memoizes confirmation', async () => {
+  androidNative.startAndroidPerfettoTrace.mockResolvedValue(
+    androidCapture({ kind: 'perfetto', type: 'trace' }),
+  );
+  androidNative.cleanupAndroidNativePerfSession.mockRejectedValueOnce(
+    new Error('Cleanup unavailable'),
+  );
+  const started = await startAndroidPerfCapture(
+    device,
+    localRuntimeOwner('android'),
+    captureInput({ kind: 'perfetto', mode: 'trace' }),
+  );
+  const handle = started.pendingHandle.transfer();
+  await expect(handle[Symbol.asyncDispose]()).rejects.toThrow('Cleanup unavailable');
+  await handle[Symbol.asyncDispose]();
+  await handle[Symbol.asyncDispose]();
+  expect(androidNative.cleanupAndroidNativePerfSession).toHaveBeenCalledTimes(2);
+});
+
 test('starts and finishes an Android Perfetto trace', async () => {
   const capture = androidCapture({ kind: 'perfetto', type: 'trace' });
   androidNative.startAndroidPerfettoTrace.mockResolvedValue(capture);

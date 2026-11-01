@@ -34,23 +34,23 @@ export function createScreenRecordingLiveHandle(
 ): ScreenRecordingLiveHandle {
   let snapshot = freezeSnapshot(initial);
   let finish: Promise<FinishOutcome<ScreenRecordingCompletion>> | undefined;
-  let finishRequested = false;
+  let terminalRequested = false;
   let cleanup: Promise<CleanupOutcome> | undefined;
   let disposal: Promise<void> | undefined;
   // Once a finish or a cleanup has been asked for, the recording no longer accepts telemetry.
-  const terminal = (): boolean => finishRequested || cleanup !== undefined;
+  const terminal = (): boolean => terminalRequested;
   const finishRecording = (progress?: DurableCaptureProgress) => {
     // Only a finished recording stays memoized. A finish the host refused has to be re-driven
     // by the next `record stop`, which is how a recording recovers without a daemon restart.
-    finishRequested = true;
+    terminalRequested = true;
     finish ??= implementation.finish(snapshot, progress).catch((error: unknown) => {
       finish = undefined;
       throw error;
     });
     return finish;
   };
-  const forceCleanup = () =>
-    (cleanup ??= finish
+  const clean = () =>
+    finish
       ? finish.then(
           async (outcome) =>
             outcome.status === 'completed'
@@ -58,7 +58,20 @@ export function createScreenRecordingLiveHandle(
               : await implementation.forceCleanup(snapshot),
           async () => await implementation.forceCleanup(snapshot),
         )
-      : implementation.forceCleanup(snapshot));
+      : implementation.forceCleanup(snapshot);
+  const forceCleanup = () => {
+    terminalRequested = true;
+    return (cleanup ??= clean().then(
+      (outcome) => {
+        if (!isConfirmedCleanup(outcome)) cleanup = undefined;
+        return outcome;
+      },
+      (error) => {
+        cleanup = undefined;
+        throw error;
+      },
+    ));
+  };
   return Object.freeze({
     inspect: () => snapshot,
     appendGestureEvents: (events: readonly RecordingGestureEvent[]) => {
@@ -86,7 +99,12 @@ export function createScreenRecordingLiveHandle(
     finish: finishRecording,
     forceCleanup,
     [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedCleanup);
+      disposal ??= forceCleanup()
+        .then(assertConfirmedCleanup)
+        .catch((error) => {
+          disposal = undefined;
+          throw error;
+        });
       await disposal;
     },
   });

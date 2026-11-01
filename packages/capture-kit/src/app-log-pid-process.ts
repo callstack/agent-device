@@ -98,6 +98,9 @@ export async function createPidScopedAppLogProcess(
         state = next;
       },
       output,
+    }).then((outcome) => {
+      if (outcome.status === 'cleanup-pending') finishPromise = undefined;
+      return outcome;
     }));
   const startedAt = options.host.clock.now();
   return createAppLogLiveHandleFromFinish({

@@ -1,4 +1,12 @@
 import { expect, test, vi } from 'vitest';
+import fs from 'node:fs';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import { createAppLogLiveHandle } from '../app-log-live-handle.ts';
+import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import { adoptStartedDurableCapture } from './adoption.ts';
 import {
   createTestCaptureDefinition,
@@ -6,6 +14,7 @@ import {
   makeDurableCaptureStartResult,
   testCaptureDefinition,
   testCaptureStore,
+  type TestCaptureHandle,
 } from './durable-capture.fixtures.ts';
 import {
   forceCleanupLiveDurableCapture,
@@ -44,32 +53,108 @@ test.each(['replay', 'refusal'] as const)(
   },
 );
 
-test('a terminal finish reports captured-handle disposal failure instead of a settled refusal', async () => {
-  const definition = { ...testCaptureDefinition, completionFromMetadata: undefined };
-  const cleanupError = new Error('Captured handle disposal failed');
-  const { context, captured, record } = await captureWhoseRecordAnotherHandleCommitted(
-    definition,
-    cleanupError,
-  );
+test.each(['replay', 'refusal'] as const)(
+  'a failed terminal disposal retains the %s binding for a later successful teardown',
+  async (outcome) => {
+    const definition = {
+      ...testCaptureDefinition,
+      completionFromMetadata:
+        outcome === 'replay' ? testCaptureDefinition.completionFromMetadata : undefined,
+    };
+    const { context, captured, completion, record } =
+      await captureWhoseRecordAnotherHandleCommitted(definition);
+    const dispose = vi
+      .spyOn(captured.handle, Symbol.asyncDispose)
+      .mockRejectedValueOnce(new Error('Captured handle disposal failed'));
+    const logPath = `${context.resourcePath}.diagnostics.ndjson`;
+    const finish = () =>
+      finishLiveDurableCapture(
+        definition,
+        { binding: context.binding, intent: 'disposal' },
+        context.resourcePath,
+      );
+    await withDiagnosticsScope({ command: 'record', logPath }, async () => {
+      const [first] = await Promise.allSettled([finish()]);
+      expect(context.binding.read()?.handle).toBe(captured.handle);
+      if (outcome === 'replay') expect(first).toEqual({ status: 'fulfilled', value: completion });
+      else
+        expect(first).toMatchObject({
+          status: 'rejected',
+          reason: { details: { reason: 'cleanup-unconfirmed', cleanupStatus: 'cleanup-pending' } },
+        });
+      flushDiagnosticsToSessionFile({ force: true });
+    });
+    const events = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        phase: 'test_capture_terminal_cleanup_pending',
+        data: expect.objectContaining({
+          cleanup: {
+            status: 'cleanup-pending',
+            reason: 'cleanup-unconfirmed',
+            message: 'Captured handle disposal failed',
+          },
+        }),
+      }),
+    );
+    if (outcome === 'replay') await expect(finish()).resolves.toEqual(completion);
+    else
+      await expect(finish()).rejects.toMatchObject({
+        details: { reason: 'resource-already-completed' },
+      });
+    expect(dispose).toHaveBeenCalledTimes(2);
+    expect(captured.finish).not.toHaveBeenCalled();
+    expect(context.binding.read()).toBeUndefined();
+    expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+  },
+);
 
-  await expect(
-    finishLiveDurableCapture(
-      definition,
-      { binding: context.binding, intent: 'disposal' },
-      context.resourcePath,
-    ),
-  ).rejects.toBe(cleanupError);
-  expect(captured.forceCleanup).toHaveBeenCalledOnce();
-  expect(captured.finish).not.toHaveBeenCalled();
-  expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
-});
+test.each(['rejected', 'unconfirmed'] as const)(
+  'a retained real app-log handle retries its %s disposal',
+  async (failure) => {
+    const cleanup = vi.fn<() => Promise<CleanupOutcome>>().mockResolvedValue({ status: 'cleaned' });
+    if (failure === 'rejected') cleanup.mockRejectedValueOnce(new Error('Transport unavailable'));
+    else cleanup.mockResolvedValueOnce({ status: 'cleanup-pending', reason: 'transport-failed' });
+    const handle = createAppLogLiveHandle({
+      inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+      finish: async () => {
+        throw new Error('Terminal replay must not re-finish');
+      },
+      forceCleanup: cleanup,
+    });
+    const { context, completion, record } = await captureWhoseRecordAnotherHandleCommitted(
+      testCaptureDefinition,
+      handle,
+    );
+    const finish = () =>
+      finishLiveDurableCapture(
+        testCaptureDefinition,
+        { binding: context.binding, intent: 'disposal' },
+        context.resourcePath,
+      );
+    await expect(finish()).resolves.toEqual(completion);
+    expect(context.binding.read()?.handle).toBe(handle);
+    await expect(finish()).resolves.toEqual(completion);
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(context.binding.read()).toBeUndefined();
+    expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+  },
+);
 
 async function captureWhoseRecordAnotherHandleCommitted(
   definition: typeof testCaptureDefinition,
-  cleanupError?: Error,
+  handle?: TestCaptureHandle,
 ) {
   const context = makeDurableCaptureContext();
-  const captured = makeDurableCaptureStartResult(context, { cleanupError });
+  const start = makeDurableCaptureStartResult(context);
+  const captured = handle
+    ? { ...start, handle, pendingHandle: new PendingTransferGuard(handle) }
+    : start;
   await adoptStartedDurableCapture(
     definition,
     { ...context, ...captured, throwIfCanceled: () => {} },

@@ -4,6 +4,35 @@ import { expect, test, vi } from 'vitest';
 import { startAppleAppLogs } from './start.ts';
 import { appleDevice, hostFixture } from './runtime.fixtures.ts';
 
+test('a host log handle retries failed output disposal after its process exited', async () => {
+  const dispose = vi.fn(async () => {}).mockRejectedValueOnce(new Error('Close unavailable'));
+  const fixture = hostFixture({
+    startProcess: async () => ({
+      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+      terminate: async () => {},
+      [Symbol.asyncDispose]: async () => {},
+    }),
+  });
+  const host = {
+    ...fixture.host,
+    outputs: {
+      ...fixture.host.outputs,
+      openAppend: async () => ({ write: async () => {}, [Symbol.asyncDispose]: dispose }),
+    },
+  };
+  const started = await startAppleAppLogs(
+    host,
+    appleDevice({ appleOs: 'macos', kind: 'device' }),
+    startInput(),
+    localRuntimeOwner('apple'),
+  );
+  const handle = started.pendingHandle.transfer();
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'cleanup-pending' });
+  await handle[Symbol.asyncDispose]();
+  await handle[Symbol.asyncDispose]();
+  expect(dispose).toHaveBeenCalledTimes(2);
+});
+
 test('simulator start resolves its app container through appleTools and keeps plutil generic', async () => {
   const appleToolRun = vi.fn(async () => ({
     stdout: '/tmp/Example.app\n',

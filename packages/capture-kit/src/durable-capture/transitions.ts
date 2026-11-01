@@ -1,5 +1,6 @@
 import {
   type CleanupOutcome,
+  type CleanupPendingReason,
   type DurableCaptureProgress,
   type FinishOutcome,
   type LiveResourceHandle,
@@ -22,6 +23,14 @@ import type {
 } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
+const CLEANUP_PENDING_REASONS: Readonly<Record<CleanupPendingReason, true>> = {
+  'ownership-fence-lost': true,
+  'owner-unavailable': true,
+  'transport-failed': true,
+  'cleanup-unconfirmed': true,
+  'manual-recovery-required': true,
+};
+
 export async function finishLiveDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
@@ -36,18 +45,26 @@ export async function finishLiveDurableCapture<
 ): Promise<C> {
   const active = params.binding.read();
   if (!active) throw new AppError('INVALID_ARGS', definition.messages.noActive);
+  let cleanupPending = false;
   try {
     const result = await finishDurableCaptureHandle(definition, {
       handle: active.handle,
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      onCleanupPending: () => {
+        cleanupPending = true;
+      },
     });
-    params.binding.clear(active);
+    if (!cleanupPending) params.binding.clear(active);
     return result;
   } catch (error) {
     const record = definition.store.read(resourcePath);
-    if (record.status === 'decoded' && record.envelope.lifecycle === 'completed') {
+    if (
+      !cleanupPending &&
+      record.status === 'decoded' &&
+      record.envelope.lifecycle === 'completed'
+    ) {
       params.binding.clear(active);
     }
     throw error;
@@ -65,6 +82,7 @@ export async function finishDurableCaptureHandle<
     fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
 ): Promise<C> {
   return await withDurableCaptureResourceFence({
@@ -76,9 +94,29 @@ export async function finishDurableCaptureHandle<
     // is the only place it can come from. A queued teardown finish that had to be refused this way
     // reported the session's export as an unreleased resource.
     onCompleted: async ({ envelope }) => {
-      await params.handle[Symbol.asyncDispose]();
+      let cleanup: Extract<CleanupOutcome, { status: 'cleanup-pending' }> | undefined;
+      try {
+        await params.handle[Symbol.asyncDispose]();
+      } catch (error) {
+        const reason = error instanceof AppError ? error.details?.reason : undefined;
+        cleanup = {
+          status: 'cleanup-pending',
+          reason:
+            typeof reason === 'string' && Object.hasOwn(CLEANUP_PENDING_REASONS, reason)
+              ? (reason as CleanupPendingReason)
+              : 'cleanup-unconfirmed',
+          message: errorMessage(error),
+        };
+        params.onCleanupPending?.(cleanup);
+        emitDiagnostic({
+          level: 'warn',
+          phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_terminal_cleanup_pending`,
+          data: { resourcePath: params.resourcePath, cleanup },
+        });
+      }
       const replayed = await definition.completionFromMetadata?.(envelope.metadata);
       if (replayed !== undefined) return replayed;
+      if (cleanup) throw cleanupPendingError(definition, cleanup);
       throw completedDurableCaptureError(definition.store);
     },
     run: async (lease) => {
@@ -298,6 +336,7 @@ function cleanupPendingError(
       `${capitalizeDurableCaptureLabel(definition.displayName)} cleanup could not be confirmed`,
     {
       reason: outcome.reason,
+      cleanupStatus: outcome.status,
       retriable: outcome.reason !== 'ownership-fence-lost',
       hint: definition.messages.cleanupPendingHint,
     },

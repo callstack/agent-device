@@ -139,13 +139,24 @@ function createHostAudioProbeLiveHandle(
         result: finalizeStatus(snapshot, beforeStop, 'stopped'),
       } as const;
     })());
-  const forceCleanup = () =>
-    (cleanup ??= finish
+  const clean = () =>
+    finish
       ? finish.then(
           async () => ({ status: 'cleaned' }) as const,
           async () => await terminateForCleanup(process),
         )
-      : terminateForCleanup(process));
+      : terminateForCleanup(process);
+  const forceCleanup = () =>
+    (cleanup ??= clean().then(
+      (outcome) => {
+        if (!isConfirmedCleanup(outcome)) cleanup = undefined;
+        return outcome;
+      },
+      (error) => {
+        cleanup = undefined;
+        throw error;
+      },
+    ));
   return Object.freeze({
     inspect: () => snapshot,
     status: async () => {
@@ -157,7 +168,12 @@ function createHostAudioProbeLiveHandle(
     finish: finishProbe,
     forceCleanup,
     [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedAudioProbeCleanup);
+      disposal ??= forceCleanup()
+        .then(assertConfirmedAudioProbeCleanup)
+        .catch((error) => {
+          disposal = undefined;
+          throw error;
+        });
       await disposal;
     },
   });

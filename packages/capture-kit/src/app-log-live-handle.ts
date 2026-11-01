@@ -23,13 +23,28 @@ export function createAppLogLiveHandle(
   let finish: Promise<FinishOutcome<AppLogCompletion>> | undefined;
   let cleanup: Promise<CleanupOutcome> | undefined;
   let disposal: Promise<void> | undefined;
-  const forceCleanup = (): Promise<CleanupOutcome> => (cleanup ??= implementation.forceCleanup());
+  const forceCleanup = (): Promise<CleanupOutcome> =>
+    (cleanup ??= implementation.forceCleanup().then(
+      (outcome) => {
+        if (!isConfirmedCleanup(outcome)) cleanup = undefined;
+        return outcome;
+      },
+      (error) => {
+        cleanup = undefined;
+        throw error;
+      },
+    ));
   return Object.freeze({
     inspect: () => implementation.inspect(),
     finish: () => (finish ??= implementation.finish()),
     forceCleanup,
     [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedCleanup);
+      disposal ??= forceCleanup()
+        .then(assertConfirmedCleanup)
+        .catch((error) => {
+          disposal = undefined;
+          throw error;
+        });
       await disposal;
     },
   });

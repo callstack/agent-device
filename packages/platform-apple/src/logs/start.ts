@@ -290,6 +290,7 @@ function createAppleProcessHandle(
         async () => await output[Symbol.asyncDispose](),
       ]);
       if (failures.length > 0) {
+        finishPromise = undefined;
         state = 'failed';
         return {
           status: 'cleanup-pending',
