@@ -30,13 +30,29 @@ const PERSISTED_LEASE_NUMBER_FIELDS = ['createdAt', 'heartbeatAt', 'expiresAt'] 
 
 type Timer = ReturnType<typeof setTimeout>;
 
+/**
+ * The lifecycle of one releaser. `running` admits releases and re-arms retries. `draining` is the
+ * bounded shutdown window in which the final release attempts run. `closed` starts no provider attempt
+ * and arms no timer: its providers may already be disposed, and a timer could fire after this daemon
+ * released its registration and rewrite records the next daemon owns. It still writes lease records
+ * synchronously, because they are how the next daemon learns what to recover.
+ */
+type ReleaserPhase = 'running' | 'draining' | 'closed';
+
+const PHASE_RANK: Record<ReleaserPhase, number> = { running: 0, draining: 1, closed: 2 };
+
 type PersistedProviderLeaseRecord = {
   version: number;
   leases: DeviceLease[];
 };
 
 export type ExpiredProviderLeaseReleaser = {
+  /** Opens the bounded shutdown window: the final release attempts, and the accounting that feeds the drain report. */
   beginShutdown: () => void;
+  /**
+   * Ends one lease. Admits it while this releaser runs or is draining. Once closed it starts no
+   * provider attempt: a recoverable lease is made durable for the next daemon instead.
+   */
   release: (lease: DeviceLease) => Promise<void>;
   /** Journals the registry's live provider leases, so a daemon killed while holding them recovers them. */
   recordLiveLeases: (leases: readonly DeviceLease[]) => void;
@@ -76,11 +92,19 @@ export function createExpiredProviderLeaseReleaser(options: {
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   let retryTimer: Timer | undefined;
   const activeReleaseAttempts = new Map<string, Promise<void>>();
-  let trackingShutdownReleases = false;
-  const shutdownReleasedLeases = new Map<string, DeviceLease>();
+  let phase: ReleaserPhase = 'running';
+  /** The releases this drain window observed; replaced at each window so one window's set is never another's. */
+  let drainReleasedLeases = new Map<string, DeviceLease>();
+
+  /** Moves the lifecycle forward and nothing else: the phase never goes back. */
+  const advancePhase = (next: ReleaserPhase): void => {
+    if (PHASE_RANK[next] > PHASE_RANK[phase]) phase = next;
+  };
 
   const recordReleasedLease = (lease: DeviceLease): void => {
-    if (trackingShutdownReleases) shutdownReleasedLeases.set(lease.leaseId, lease);
+    // The drain window is the only period that reports releases, so the phase is the tracker and the
+    // set cannot grow outside it.
+    if (phase === 'draining') drainReleasedLeases.set(lease.leaseId, lease);
   };
 
   const persistPendingLeases = (): boolean => {
@@ -156,6 +180,9 @@ export function createExpiredProviderLeaseReleaser(options: {
       journalRetryTimer = undefined;
     } catch (error) {
       emitJournalFailure('provider_lease_journal_write_failed', journal.size, error);
+      // The retry timer is not armed once closed: it could fire after this daemon released its
+      // registration, and writes made then belong to the daemon that holds it.
+      if (phase === 'closed') return;
       journalRetryTimer ??= setTimeout(() => {
         journalRetryTimer = undefined;
         writeJournal();
@@ -189,6 +216,9 @@ export function createExpiredProviderLeaseReleaser(options: {
 
   const scheduleRetry = (): void => {
     if (
+      // A closed releaser retries nothing: its providers may already be disposed, and the next daemon
+      // inherits whatever these lease records still hold.
+      phase === 'closed' ||
       retryTimer ||
       (!hasRetryableLiveLease(pendingLiveLeases, options.providerRuntimeIds) &&
         !hasRetryableRecoveryLease(pendingRecoveryLeases, options.recoverableProviderIds))
@@ -227,6 +257,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 
   const ensureLiveReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
+    if (phase === 'closed') return undefined;
     if (!isProviderRuntimeAvailable(lease, options.providerRuntimeIds)) return undefined;
     const key = `live:${lease.leaseId}`;
     const activeAttempt = activeReleaseAttempts.get(key);
@@ -241,6 +272,7 @@ export function createExpiredProviderLeaseReleaser(options: {
   };
 
   const ensureRecoveryReleaseAttempt = (lease: DeviceLease): Promise<void> | undefined => {
+    if (phase === 'closed') return undefined;
     if (!isRecoverableProviderAvailable(lease, options.recoverableProviderIds)) return undefined;
     if (!persistedRecoveryLeaseIds.has(lease.leaseId) && !persistPendingLeases()) return undefined;
     const key = `recovery:${lease.leaseId}`;
@@ -270,8 +302,8 @@ export function createExpiredProviderLeaseReleaser(options: {
 
   return {
     beginShutdown: () => {
-      shutdownReleasedLeases.clear();
-      trackingShutdownReleases = true;
+      advancePhase('draining');
+      drainReleasedLeases = new Map();
     },
     release: async (lease) => {
       if (!lease.leaseProvider) return;
@@ -311,24 +343,22 @@ export function createExpiredProviderLeaseReleaser(options: {
             activeReleaseAttempts.has(`recovery:${lease.leaseId}`),
           ),
         ],
-        released: [...shutdownReleasedLeases.values()],
+        released: [...drainReleasedLeases.values()],
       };
-      trackingShutdownReleases = false;
-      shutdownReleasedLeases.clear();
+      drainReleasedLeases = new Map();
       return result;
     },
     shutdown: () => {
+      advancePhase('closed');
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = undefined;
       if (journalRetryTimer) {
         // One last attempt, so a journal that a retry was still owed does not outlive this daemon stale.
+        // The closed phase keeps this the last lease record write that is owed a retry.
         clearTimeout(journalRetryTimer);
         journalRetryTimer = undefined;
         writeJournal();
       }
-      // A last attempt that failed re-armed the timer; nothing runs it after shutdown.
-      if (journalRetryTimer) clearTimeout(journalRetryTimer);
-      journalRetryTimer = undefined;
     },
   };
 }
