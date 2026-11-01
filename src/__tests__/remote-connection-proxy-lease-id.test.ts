@@ -40,6 +40,8 @@ function recordingAllocate(requests: LeaseAllocateRequest[]) {
       leaseProvider: request.leaseProvider,
       clientId: request.clientId,
       deviceKey: request.deviceKey ?? leased.deviceKey,
+      // The daemon created this lease for this request, even though its id is the daemon's own.
+      created: true,
     };
   };
 }

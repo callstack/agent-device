@@ -2,11 +2,15 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   connectionWorkspace,
   createTestClient,
+  grantedLease,
+  proxyWorkspace,
   recordedLeaseRelease,
   seedConnectionState,
+  type LeaseAllocateRequest,
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
 import { LEASE_ROLLBACK_RELEASE_FAILED_REASON } from './connection-lease-transaction.ts';
@@ -61,11 +65,15 @@ function materializeOnHost(options: {
   });
 }
 
+function writeProfile(remoteConfigPath: string) {
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+}
+
 test('a lease this command allocated is released when Metro preparation fails', async () => {
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-metro-fail-',
   );
-  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  writeProfile(remoteConfigPath);
   const release = recordedLeaseRelease();
   const prepareFailure = metroPrepareFailure();
 
@@ -98,7 +106,7 @@ test('a lease this command renewed is kept when Metro preparation fails', async 
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-metro-fail-reused-',
   );
-  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  writeProfile(remoteConfigPath);
   const release = recordedLeaseRelease();
   seedConnectionState({
     stateDir,
@@ -140,11 +148,119 @@ test('a lease this command renewed is kept when Metro preparation fails', async 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a lease the daemon says this request did not create is kept when Metro preparation fails', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-metro-fail-not-created-',
+  );
+  writeProfile(remoteConfigPath);
+  const release = recordedLeaseRelease();
+  const prepareFailure = metroPrepareFailure();
+
+  await assert.rejects(
+    async () =>
+      await materializeOnHost({
+        stateDir,
+        remoteConfigPath,
+        client: createTestClient({
+          // Another session of the same tenant/run holds this lease; the daemon hands it to the
+          // repeat allocation instead of creating one, and only the answer says so.
+          allocate: async (request: LeaseAllocateRequest) => ({
+            leaseId: 'lease-held-by-another-session',
+            tenantId: request.tenant,
+            runId: request.runId,
+            backend: request.leaseBackend ?? 'android-instance',
+            created: false,
+          }),
+          release: release.stub,
+          prepare: async () => {
+            throw prepareFailure;
+          },
+        }),
+      }),
+    prepareFailure,
+  );
+
+  // The other session's record names that lease, so this failed command must leave it alive.
+  assert.equal(release.request, undefined);
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a lease allocated before a platform conflict is still released when acquisition fails', async () => {
+  const { tempRoot, stateDir, remoteConfigPath, flags } = proxyWorkspace(
+    'agent-device-connect-platform-conflict-',
+  );
+  const release = recordedLeaseRelease();
+
+  // The proxy grants an Android device for an ios-instance lease: allocation succeeded, the axis
+  // only disagrees once acquisition settles the platform afterwards, and the grant must not leak.
+  await assert.rejects(
+    async () =>
+      await materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
+        command: 'open',
+        flags: { ...flags, stateDir, remoteConfig: remoteConfigPath },
+        client: createTestClient({
+          allocate: async (request) =>
+            grantedLease(request, { deviceKey: 'android:mobile:emulator-5554' }),
+          release: release.stub,
+        }),
+      }),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'CONNECTION_PLATFORM_CONFLICT',
+  );
+
+  assert.equal(release.request?.leaseId, 'lease-1');
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a lease the session record already names survives an active-pointer write failure', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-pointer-fail-',
+  );
+  writeProfile(remoteConfigPath);
+  const release = recordedLeaseRelease();
+
+  const originalRenameSync = fs.renameSync.bind(fs);
+  const writeFailure = new Error('pointer write failed');
+  vi.spyOn(fs, 'renameSync').mockImplementation((oldPath, newPath) => {
+    if (String(newPath).endsWith(path.join('remote-connections', '.active-session.json'))) {
+      throw writeFailure;
+    }
+    return originalRenameSync(oldPath, newPath);
+  });
+
+  await assert.rejects(
+    async () =>
+      await materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
+        command: 'open',
+        // No Metro settings at all: the failure comes from the pointer write, not from Metro.
+        flags: {
+          ...metroFlags(stateDir, remoteConfigPath),
+          metroPublicBaseUrl: undefined,
+          metroProxyBaseUrl: undefined,
+        },
+        client: createTestClient({ release: release.stub }),
+      }),
+    writeFailure,
+  );
+
+  // The durable session record names the lease: the pointer is a reader, not the commit point,
+  // and disconnect can still find the lease through the record.
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.leaseId, 'lease-1');
+  assert.equal(release.request, undefined);
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a rollback whose release failed reports it on the Metro failure instead of masking it', async () => {
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-metro-fail-release-',
   );
-  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  writeProfile(remoteConfigPath);
   const prepareFailure = metroPrepareFailure();
   const releaseFailure = new AppError('COMMAND_FAILED', 'provider rejected the release');
 

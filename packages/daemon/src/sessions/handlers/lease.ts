@@ -141,7 +141,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
         return {
           ok: true,
-          data: { lease: allocated, ...(providerData ? { provider: providerData } : {}) },
+          data: {
+            lease: allocated,
+            // Whether this request was handed a lease that already existed. A caller that may end
+            // the lease needs this: the returned lease alone does not say who created it.
+            reused,
+            ...(providerData ? { provider: providerData } : {}),
+          },
         };
       });
     }

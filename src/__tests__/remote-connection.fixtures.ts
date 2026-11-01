@@ -100,6 +100,8 @@ export function createTestClient(
           tenantId: request.tenant,
           runId: request.runId,
           backend: request.leaseBackend ?? 'android-instance',
+          // A daemon that creates the lease for this request says so; see Lease.created.
+          created: true,
         })),
       heartbeat:
         options.heartbeat ??
@@ -210,6 +212,7 @@ export function recordedLeaseAllocate(options: {
         leaseProvider: incoming.leaseProvider,
         clientId: incoming.clientId,
         deviceKey: incoming.deviceKey,
+        created: true,
       };
     },
     get request() {
@@ -343,6 +346,8 @@ export function grantedLease(request: LeaseAllocateRequest, extra: Partial<Lease
     leaseProvider: request.leaseProvider,
     clientId: request.clientId,
     deviceKey: request.deviceKey,
+    // These stubs stand for a current daemon, which says whether the request created the lease.
+    created: true,
     ...extra,
   };
 }

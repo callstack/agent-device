@@ -245,6 +245,12 @@ export function readRemoteConnectionState(options: {
 export function writeRemoteConnectionState(options: {
   stateDir: string;
   state: RemoteConnectionState;
+  /**
+   * Runs once the session record has landed, before the active-session pointer is updated. A caller
+   * that was holding the lease this record names until it was durable acts here: from this point the
+   * record owns it, and a later pointer failure must not be read as a record that never came to be.
+   */
+  onSessionRecordCommitted?: () => void;
 }): void {
   const statePath = remoteConnectionStatePath({
     stateDir: options.stateDir,
@@ -252,6 +258,7 @@ export function writeRemoteConnectionState(options: {
   });
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   writeJsonFile(statePath, options.state);
+  options.onSessionRecordCommitted?.();
   writeJsonFile(activeConnectionStatePath(options.stateDir), { session: options.state.session });
 }
 

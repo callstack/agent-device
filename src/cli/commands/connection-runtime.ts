@@ -11,7 +11,7 @@ import {
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
-import type { BatchStep, Lease, LeaseDevice } from '@agent-device/contracts/client';
+import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
@@ -22,8 +22,9 @@ import {
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
   acquireConnectionLease,
-  releaseLeaseThisCommandAllocated,
+  createLeaseLedger,
   resolveRequestedLeaseBackend,
+  type LeaseLedger,
 } from './connection-lease-transaction.ts';
 import {
   prepareRuntimeForCommand,
@@ -96,12 +97,13 @@ export async function materializeRemoteConnectionForCommand(options: {
   let nextState = state;
   let changed = !existingState;
 
-  // This call owns a lease it allocated from the moment the provider grants it until the persisted
-  // record names it, which is the one place ownership transfers. Every exit before that transfer
-  // ends the lease: a lease no record names is invisible to disconnect, and would hold the device
-  // until its TTL lapses. A lease this call renewed was already named by the stored record, so this
-  // path leaves it to disconnect in every case, including a failure.
-  let unrecordedLease: Lease | undefined;
+  // The ledger owns a lease this command created from the moment allocation returns it, before any
+  // later step can fail, and holds it until the durable session record names it — the one place
+  // ownership transfers. Every exit before that transfer ends the lease: a lease no record names is
+  // invisible to disconnect, and would hold the device until its TTL lapses. A lease this call
+  // renewed, or one the provider granted to another holder, is named elsewhere already, so this
+  // path leaves it to whoever does in every case, including a failure.
+  const leaseLedger = createLeaseLedger();
   try {
     const acquired = await acquireConnectionLease({
       command,
@@ -109,10 +111,10 @@ export async function materializeRemoteConnectionForCommand(options: {
       state,
       nextFlags,
       positionals: options.positionals,
+      leaseLedger,
     });
     nextState = acquired.state;
     changed = changed || acquired.changed;
-    unrecordedLease = acquired.unrecordedLease;
 
     const runtimePreparation = await prepareRuntimeForCommand({
       command,
@@ -132,16 +134,12 @@ export async function materializeRemoteConnectionForCommand(options: {
       changed,
       stateDir,
       state: nextState,
+      leaseLedger,
       preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
       metroCleanupToStop: runtimePreparation.metroCleanupToStop,
     });
   } catch (error) {
-    throw await releaseLeaseThisCommandAllocated({
-      client,
-      state: nextState,
-      acquiredLease: unrecordedLease,
-      failure: error,
-    });
+    throw await leaseLedger.releaseOwnedOnFailure(error);
   }
 
   return {
@@ -163,14 +161,22 @@ async function persistMaterializedConnection(options: {
   changed: boolean;
   stateDir: string;
   state: RemoteConnectionState;
+  leaseLedger: LeaseLedger;
   preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
   metroCleanupToStop?: RemoteConnectionState['metro'];
 }): Promise<void> {
   if (options.changed) {
     try {
-      writeRemoteConnectionState({ stateDir: options.stateDir, state: options.state });
+      // The session record is the durable commit point: the moment it lands, it names the lease and
+      // the ledger stops owning it. The active-pointer update that follows is a convenience reader
+      // for the default session; its failure leaves the named lease owned by the record, not by us.
+      writeRemoteConnectionState({
+        stateDir: options.stateDir,
+        state: options.state,
+        onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
+      });
     } catch (error) {
-      // The caller's rollback ends the lease this write would have taken ownership of.
+      // The caller's rollback ends any lease the record never came to name.
       await stopMetroCleanup(options.preparedMetroCleanupOnFailure);
       throw error;
     }

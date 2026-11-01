@@ -15,6 +15,14 @@ export type Lease = {
   deviceKey?: string;
   clientId?: string;
   /**
+   * What an allocate answered about this request: `false` when the daemon created the lease for it,
+   * `true` when it handed back a lease that already existed — renewed, or already bound to the run.
+   * The returned lease alone cannot tell the two apart, and a caller that ends a lease must end only
+   * the one its own request created. Only `leases.allocate` answers this; every other read, and any
+   * daemon older than this field, omits it.
+   */
+  created?: boolean;
+  /**
    * The device granted for a request that named a device spec, written by the backend that
    * honoured the spec. A daemon refuses a spec instead, so only such a backend sets it.
    */
