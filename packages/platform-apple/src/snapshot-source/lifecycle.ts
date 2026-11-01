@@ -300,23 +300,43 @@ export class SnapshotBridgeManager {
    * descendant that inherited one can hold it pending indefinitely. A close cannot make that answer
    * arrive, so the close answers here: the refused creation goes on to stop what it started and names the
    * close, while the read nobody waits on still records the exit if it ever settles.
+   *
+   * The close only wins while the status is still pending, so the race subscribes to the raw status and
+   * not to its typed conversion: converting takes a turn of its own, and a close landing in that turn
+   * must not overwrite an answer the helper already gave.
    */
   private async bridgeExitOrClose(
     session: BridgeSession,
     stop: AbortSignal,
   ): Promise<SnapshotSourceError> {
     let refuse!: () => void;
-    const refusal = new Promise<SnapshotSourceError>((resolve) => {
-      // Resolves rather than rejects: a close that arrives after the exit status did must never leave a
-      // rejection nobody owns.
-      refuse = () => resolve(closedSourceRefusal());
+    const refusal = new Promise<'closed'>((resolve) => {
+      refuse = () => resolve('closed');
     });
     if (stop.aborted) refuse();
     else stop.addEventListener('abort', refuse, { once: true });
     try {
-      return await Promise.race([bridgeProcessExited(this.host, session.process), refusal]);
+      if (!(await this.exitStatusOrClose(session.process, refusal))) {
+        throw closedSourceRefusal();
+      }
+      return await bridgeProcessExited(this.host, session.process);
     } finally {
       stop.removeEventListener('abort', refuse);
+    }
+  }
+
+  /**
+   * Whether the helper answered the status question first — either outcome counts, and a rejected status
+   * is an answer too: `bridgeProcessExited` reads the winner and keeps its typed failure.
+   */
+  private async exitStatusOrClose(
+    bridgeProcess: SnapshotSourceProcess,
+    refusal: Promise<'closed'>,
+  ): Promise<boolean> {
+    try {
+      return (await Promise.race([bridgeProcess.wait, refusal])) !== 'closed';
+    } catch {
+      return true;
     }
   }
 

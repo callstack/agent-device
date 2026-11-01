@@ -508,6 +508,62 @@ test('a close while the helper exit status stays unread ends the capture instead
   );
 });
 
+test('an exit status that answers before the close still reports the helper crash', async () => {
+  const fixture = createLifecycleFixture({ helperGoneAtConnect: true });
+  const helper = () => fixture.processes[0]!;
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const request = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 2000 },
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(
+    () => helper()?.exitStatusReads === 1,
+    'the manager never asked for the helper exit status',
+  );
+
+  // One synchronous turn: the status answers, and the close arrives right after it. The status had
+  // already answered, so the capture reports the crash the manager was told about, not the close.
+  helper().crash();
+  const closing = manager.close();
+
+  await assert.rejects(request, isHelperCrashFailure);
+  await closing;
+  assert.deepEqual(helper().signals, []);
+  const exitDiagnostic = fixture.diagnostics.filter(
+    (event) => event.phase === 'ios.snapshot-source.bridge-process-exit',
+  );
+  assert.equal(exitDiagnostic.length, 1);
+  assert.equal(exitDiagnostic[0]?.data?.exitCode, 1);
+});
+
+test('a status read that fails before the close still reports the helper crash', async () => {
+  const fixture = createLifecycleFixture({ helperGoneAtConnect: true });
+  const helper = () => fixture.processes[0]!;
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const request = manager.request({
+    target,
+    bridge,
+    limits: { ...limits, maxDurationMs: 2000 },
+    maxDepth: 10,
+    deadline: deadline(undefined, 2000),
+  });
+  await waitForFixture(
+    () => helper()?.exitStatusReads === 1,
+    'the manager never asked for the helper exit status',
+  );
+
+  // A failing status read is an answer too: the manager knows the helper is not coming back.
+  helper().exitWithFailedStatus();
+  const closing = manager.close();
+
+  await assert.rejects(request, isHelperCrashFailure);
+  await closing;
+  assert.deepEqual(helper().signals, []);
+});
+
 test('the manager rejects a tree when the target process changes during acquisition', async () => {
   const fixture = createLifecycleFixture({ targetStartTimes: ['start-1', 'start-2'] });
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -601,6 +657,14 @@ function isClosedSourceFailure(error: unknown): boolean {
     error instanceof SnapshotSourceError &&
     error.failureKind === 'unsupported' &&
     error.failureCode === 'source-closed'
+  );
+}
+
+function isHelperCrashFailure(error: unknown): boolean {
+  return (
+    error instanceof SnapshotSourceError &&
+    error.failureKind === 'process-crash' &&
+    error.failureCode === 'bridge-exited'
   );
 }
 
@@ -706,11 +770,13 @@ class FakeProcess implements SnapshotSourceProcess {
     stderr: string;
     exitCode: number;
   }) => void;
+  private rejectExitStatus!: (error: Error) => void;
 
   constructor(pid: number) {
     this.processId = pid;
-    this.exitStatus = new Promise((resolve) => {
+    this.exitStatus = new Promise((resolve, reject) => {
       this.resolveExitStatus = resolve;
+      this.rejectExitStatus = reject;
     });
   }
 
@@ -741,6 +807,12 @@ class FakeProcess implements SnapshotSourceProcess {
   /** Goes away without ever reporting its status, the way a helper with inherited pipes can. */
   exitWithoutStatus(): void {
     this.alive = false;
+  }
+
+  /** Goes away with the status read itself failing, the way a launch that never started can. */
+  exitWithFailedStatus(): void {
+    this.alive = false;
+    this.rejectExitStatus(new Error('helper launch failed'));
   }
 
   readLog(): string {
