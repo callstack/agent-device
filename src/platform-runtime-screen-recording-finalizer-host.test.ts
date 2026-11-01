@@ -132,10 +132,11 @@ test('the overlay budget covers the playability checks that run before the overl
 
 test('a recording confirmed playable as the budget runs out is not refused by a second check', async () => {
   // A check after the budget is spent reads as not playable, so the finalizer decides on the
-  // verdict of the wait that confirmed the file rather than asking again.
+  // verdict of the wait that confirmed the file rather than asking again. Any second check, with
+  // the spent budget or without one, refuses here.
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
-    video.isPlayable.mockImplementation(async (_path, _host, deadline) => !deadline?.isExpired());
+    video.isPlayable.mockResolvedValue(false);
     video.playable.mockImplementationOnce(async () => {
       vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
       return true;
@@ -149,6 +150,7 @@ test('a recording confirmed playable as the budget runs out is not refused by a 
         targetLabel: 'test recording',
       }),
     ).resolves.toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
+    expect(video.isPlayable).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }
