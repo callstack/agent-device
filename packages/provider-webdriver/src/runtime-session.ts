@@ -70,8 +70,8 @@ type WebDriverLeaseEntry = {
  * Whichever route took a lease away from its allocation, and the single disposal of what that entry
  * stood for. `settled` is what that disposal reported and stays missing while it is still running, so a
  * caller can tell a session that is gone from one whose outcome it cannot see yet. `artifacts` is the
- * release envelope's report and is deliberately separate: it is optional, so it is never what a lease or
- * a daemon close waits through.
+ * release envelope's report and is deliberately separate: releasing the lease slot and `shutdown()`
+ * await only disposal. A release also awaits artifacts, including when it joins a shutdown's take.
  */
 type WebDriverLeaseTake = {
   by: 'release' | 'shutdown';
@@ -102,9 +102,8 @@ function warningMessagesByCode(warnings: CloudWebDriverReleaseWarning[]): Record
 }
 
 /**
- * Budget for one provider callback this manager waits on. A plugin may supply its own `prepareSession`
- * cleanup and artifact lookup, and those callbacks are the plugin's code, so this manager cannot assume
- * they answer: they get the budget this package already gives one WebDriver round trip.
+ * Budget for prepared-session cleanup on disposal and failed creation, and for teardown artifact lookup.
+ * The preparation callback itself is not bounded by this budget.
  */
 const DEFAULT_PROVIDER_CALLBACK_TIMEOUT_MS = 30_000;
 
@@ -350,10 +349,9 @@ export class WebDriverSessionManager {
     const settle = (outcome: WebDriverDisposalOutcome): void => {
       take.settled = outcome;
       take.providerSessionId = outcome.session?.providerSessionId;
-      // The artifact report belongs to the release envelope and to nothing else: it starts here and the
-      // release joins it, while the lease and a daemon close are answered by `disposal` alone. A plugin's
-      // artifact lookup therefore cannot keep a lease from being allocated again, nor a close from
-      // finishing.
+      // The artifact report starts once session deletion and provider cleanup settle. The lease slot is
+      // freed and `shutdown()` answers without awaiting it. A release still joins the report, even when
+      // shutdown started this take.
       take.artifacts =
         outcome.session === undefined
           ? undefined
@@ -381,8 +379,8 @@ export class WebDriverSessionManager {
   /**
    * Ends what one taken entry stands for: the session its create rented, once that create answers, or
    * nothing when the create billed nothing. This is the only place a session is ended, and one entry is
-   * taken by exactly one route, so a session is ended once. Everything here is bounded: the provider's own
-   * cleanup belongs to the plugin that supplied it, and this manager must still answer when it does not.
+   * taken by exactly one route, so a session is ended once. After creation answers, session deletion and
+   * provider cleanup are bounded. Creation still awaits `prepareSession` without a callback budget.
    */
   private async disposeTakenEntry(entry: WebDriverLeaseEntry): Promise<WebDriverDisposalOutcome> {
     const session = entry.session ?? (await entry.creation.catch(() => undefined));
