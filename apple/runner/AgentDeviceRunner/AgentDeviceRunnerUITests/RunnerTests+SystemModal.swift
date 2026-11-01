@@ -176,7 +176,6 @@ extension RunnerTests {
   private func safeIsActionableCandidate(_ candidate: XCUIElement, seen: inout Set<String>) -> Bool {
     safely("MODAL_ACTION", false) {
       if !candidate.exists || !candidate.isHittable { return false }
-      if !actionableTypes.contains(candidate.elementType) { return false }
       let frame = candidate.frame
       if frame.isNull || frame.isEmpty { return false }
       let key = "\(candidate.elementType.rawValue)-\(frame.origin.x)-\(frame.origin.y)-\(frame.size.width)-\(frame.size.height)-\(candidate.label)"
