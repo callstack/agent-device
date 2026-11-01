@@ -36,10 +36,9 @@ lease, usually `open`. `--device` and `--provider-os-version` are optional; with
 from its own pool and reports a device agent-device then uses. A model or OS version Revyl has no
 device for is reported when the session starts, not by `connect`.
 
-To start faster, leave `--device` and `--provider-os-version` unset. Revyl then hands you a
-simulator that is already warm. The first session of the day can take over a minute because Revyl
-installs the app while it starts the device; later sessions usually start in 15 to 25 seconds.
-Start the session early and keep it open between steps. To relaunch the app, run `open` again on
+To start faster, leave `--device` and `--provider-os-version` unset, so Revyl can pick a simulator
+that is already running. A session can take longer to start when Revyl also installs the app on the
+device. Start the session early and keep it open between steps. To relaunch the app, run `open` again on
 the same session instead of `disconnect` and `connect`.
 
 `--provider-app` is required and must be a public HTTPS URL. Revyl downloads and installs the build

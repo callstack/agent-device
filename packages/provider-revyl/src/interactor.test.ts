@@ -328,7 +328,10 @@ test('a zero scroll duration is refused before the drag, since Revyl takes at le
   const { fixture, interactor } = await liveInteractor('ios', { dragDuration: true });
   await assert.rejects(
     () => interactor.scroll?.('down', { pixels: 300, durationMs: 0 }),
-    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.flag === '--duration-ms',
   );
   assert.equal(
     fixture.paths().some((request) => request.endsWith('/drag')),

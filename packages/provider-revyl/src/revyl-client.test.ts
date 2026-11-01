@@ -205,6 +205,14 @@ test('a hierarchy read that Revyl answers with a 500 is replayed', async () => {
   });
   assert.equal(await client.getWorkerHierarchy('run-1'), '[]');
   assert.equal(attempts, 2);
+
+  attempts = 0;
+  const screenshot = clientResponding(() => {
+    attempts += 1;
+    return jsonError(500, 'worker failed');
+  });
+  await assert.rejects(async () => await screenshot.captureWorkerScreenshot('run-1'));
+  assert.equal(attempts, 1, 'only the hierarchy read opts into replaying a 500');
 });
 
 test('a readiness read answers the polling loop on its first attempt', async () => {

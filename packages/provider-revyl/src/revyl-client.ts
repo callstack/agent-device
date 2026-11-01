@@ -51,6 +51,12 @@ type RevylRequest = Readonly<{
    * idempotent, which `/stop` is; a device action is never replayed.
    */
   retry?: boolean;
+  /**
+   * Also replays a 500, which the status table reads as unconfirmed. Only `hierarchy` sets it: Revyl
+   * answers it with a 500 while the iOS simulator's accessibility service briefly returns nothing,
+   * and the read has no side effect to land twice.
+   */
+  retryServerError?: boolean;
   /** A device-proxy action carries the agent header; an execution-API call does not. */
   workerAction?: boolean;
   /** Defaults to `general`, which never reads a 404 or 410 as a gone session. */
@@ -175,7 +181,10 @@ export function createRevylClient(options: RevylClientOptions): RevylClient {
     },
     async getWorkerHierarchy(workflowRunId, signal) {
       return new TextDecoder().decode(
-        await body(workerRequest(workflowRunId, 'hierarchy', signal)),
+        await body({
+          ...workerRequest(workflowRunId, 'hierarchy', signal),
+          retryServerError: true,
+        }),
       );
     },
     async captureWorkerScreenshot(workflowRunId, signal) {
@@ -255,9 +264,7 @@ function isRetryable(request: RevylRequest, outcome: RevylResponse | Error): boo
   if (outcome instanceof Error) {
     return outcome instanceof AppError && outcome.details?.reason === 'provider-unreachable';
   }
-  // A read has no side effect to land twice. Revyl answers `hierarchy` with a 500 while the iOS
-  // simulator's accessibility service briefly returns nothing, and a replay reads the tree.
-  if (request.method === 'GET' && outcome.status === 500) return true;
+  if (request.retryServerError === true && outcome.status === 500) return true;
   return revylFailure(request.route ?? 'general', outcome.status).retryable;
 }
 
