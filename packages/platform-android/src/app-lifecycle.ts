@@ -296,18 +296,17 @@ function isDispatchedAndroidLaunchTimeout(
   );
 }
 
-async function waitForAndroidPackageForeground(
+function waitForAndroidPackageForeground(
   device: DeviceInfo,
   packageName: string,
   deadline: Deadline,
 ): Promise<boolean> {
-  while (!deadline.isExpired()) {
-    const foreground = await probeBeforeDeadline(deadline, () => readAndroidForegroundApp(device));
-    if (!foreground) break;
-    if (foreground.value?.package === packageName) return true;
-    await sleep(ANDROID_HELPER_OPEN_FOREGROUND_POLL_MS);
-  }
-  return false;
+  return waitForAndroidForegroundPackage(
+    device,
+    deadline,
+    ANDROID_HELPER_OPEN_FOREGROUND_POLL_MS,
+    (foregroundPackage) => foregroundPackage === packageName,
+  );
 }
 
 /** `am start -W` names the activity this launch resumed on its `Activity: <package>/<class>` line. */
@@ -743,16 +742,30 @@ function androidCloseTimeoutError(packageName: string, phase: AndroidStopFencePh
   });
 }
 
-async function waitForAndroidPackageNotForeground(
+function waitForAndroidPackageNotForeground(
   device: DeviceInfo,
   packageName: string,
 ): Promise<boolean> {
-  const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS);
+  return waitForAndroidForegroundPackage(
+    device,
+    Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS),
+    ANDROID_CLOSE_FOCUS_POLL_MS,
+    (foregroundPackage) => foregroundPackage !== packageName,
+  );
+}
+
+/** Polls the foreground package until `matches` holds, or false once the deadline expires. */
+async function waitForAndroidForegroundPackage(
+  device: DeviceInfo,
+  deadline: Deadline,
+  pollMs: number,
+  matches: (foregroundPackage: string | undefined) => boolean,
+): Promise<boolean> {
   while (!deadline.isExpired()) {
     const foreground = await probeBeforeDeadline(deadline, () => readAndroidForegroundApp(device));
     if (!foreground) break;
-    if (foreground.value?.package !== packageName) return true;
-    await sleep(ANDROID_CLOSE_FOCUS_POLL_MS);
+    if (matches(foreground.value?.package)) return true;
+    await sleep(pollMs);
   }
   return false;
 }
