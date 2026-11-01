@@ -18,6 +18,18 @@ export class AndroidScreenRecordingStartRollbackUnconfirmed extends Error {
   }
 }
 
+/**
+ * Refusal raised when the recording's stop was claimed before a chunk launch was dispatched. It is
+ * how the launch owner reports that the stop outran it, so the rotation withdraws without starting a
+ * recorder. Only `startPendingChunk` raises it: a commit already in flight runs to its real outcome,
+ * because cancelling the host command cannot prove what the device's rename did.
+ */
+export class AndroidScreenRecordingStopClaimed extends Error {
+  constructor() {
+    super('Android screenrecord rotation refused: the recording stop was already claimed');
+  }
+}
+
 export function candidateRemotePaths(
   preferredDir: string | undefined,
   now = Date.now(),

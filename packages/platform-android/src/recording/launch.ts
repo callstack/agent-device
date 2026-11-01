@@ -3,6 +3,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import {
   AndroidScreenRecordingStartRollbackUnconfirmed,
+  AndroidScreenRecordingStopClaimed,
   candidateRemotePaths,
   rollbackChunks,
   startChunkAt,
@@ -99,20 +100,37 @@ export async function startPendingChunk(params: {
   chunks: readonly NativeChunk[];
   manifestPath: string;
   preferredDir: string;
+  // Refuses a device start once the recording's stop has been claimed.
+  launchAdmission: AbortSignal;
 }): Promise<NativeChunk> {
-  const { transport, device, input, startedAt, chunks, manifestPath, preferredDir } = params;
+  const {
+    transport,
+    device,
+    input,
+    startedAt,
+    chunks,
+    manifestPath,
+    preferredDir,
+    launchAdmission,
+  } = params;
   let last: unknown;
   for (const remotePath of candidateRemotePaths(preferredDir)) {
+    if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
     await persistNativeManifest(
       transport,
       manifestPath,
       createNativeManifest(device, input, startedAt, chunks, remotePath, transport.mode),
     );
     try {
+      // The pending evidence is on the device, but the stop may have been claimed while it was being
+      // written. Refuse here rather than dispatch a recorder the recording has already given up.
+      if (launchAdmission.aborted) throw new AndroidScreenRecordingStopClaimed();
       return await startChunkAt(transport, remotePath, input);
     } catch (error) {
       if (error instanceof AndroidScreenRecordingStartRollbackUnconfirmed) throw error;
       try {
+        // Clears the pending marker, which names a recorder nothing launched when the refusal raised
+        // this error.
         await persistNativeManifest(
           transport,
           manifestPath,

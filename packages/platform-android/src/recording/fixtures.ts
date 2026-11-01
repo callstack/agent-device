@@ -88,8 +88,11 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
       legacy.readManifest
         ? await legacy.readManifest(manifestPath)
         : { status: 'missing' as const },
-    writeManifest: async (request: { manifestPath: string; contents: string }) => {
-      await legacy.writeManifest?.(request);
+    writeManifest: async (
+      request: { manifestPath: string; contents: string },
+      signal?: AbortSignal,
+    ) => {
+      await legacy.writeManifest?.(request, signal);
     },
     removeManifest: async (manifestPath: string) =>
       legacy.removeManifest ? await legacy.removeManifest(manifestPath) : true,
