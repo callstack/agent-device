@@ -8,20 +8,25 @@ extension RunnerTests {
   /// loopback peer may idle, so its clock starts at its first byte.
   static let requestTimeout: TimeInterval = 30
 
-  /// Starts one connection and reads one request from it once its path is known. Every refusal
-  /// answers and closes that connection only; the listener keeps serving.
+  /// An unused loopback connection watches listener lifetime. Used connections have bounded idle time.
+  static let connectionIdleTimeout: TimeInterval = 30
+
+  /// Every request is authenticated, including subsequent requests on an admitted connection.
   func handle(connection: NWConnection) {
     guard let token = listenerToken else {
       connection.cancel()
       return
     }
+    transportConnections[ObjectIdentifier(connection)] = connection
     connection.stateUpdateHandler = { [weak self] state in
       switch state {
       case .ready:
-        connection.stateUpdateHandler = nil
         self?.admit(connection, token: token)
       case .failed:
         connection.cancel()
+      case .cancelled:
+        connection.stateUpdateHandler = nil
+        self?.transportConnections.removeValue(forKey: ObjectIdentifier(connection))
       default:
         break
       }
@@ -60,6 +65,8 @@ extension RunnerTests {
   }
 
   private func consume(_ data: Data, for inbound: RunnerInboundRequest, over connection: NWConnection) {
+    inbound.idleDeadline?.cancel()
+    inbound.idleDeadline = nil
     if inbound.deadline == nil {
       armDeadline(for: inbound, over: connection)
     }
@@ -89,8 +96,9 @@ extension RunnerTests {
     }
     inbound.close()
     let body = inbound.buffer.subdata(in: head.bodyOffset..<bodyEnd)
-    handleRequestBody(body) { [weak self] result in
-      self?.sendResult(result, over: connection)
+    let remainder = Data(inbound.buffer.suffix(from: bodyEnd))
+    handleRequestBody(body) { [weak self, token = inbound.token] result in
+      self?.sendResult(result, over: connection, request: head, token: token, remainder: remainder)
     }
   }
 
@@ -114,37 +122,64 @@ extension RunnerTests {
       status: rejection.status,
       response: errorResponse(code: rejection.code, message: rejection.message)
     )
-    sendResponse(response, over: connection)
+    sendResponse(response, over: connection, closeConnection: true)
   }
 
   private func sendResult(
-    _ result: (data: Data, shouldFinish: Bool),
-    over connection: NWConnection
+    _ result: (response: RunnerHttpResponse, shouldFinish: Bool),
+    over connection: NWConnection,
+    request: RunnerHttpAdmittedHead,
+    token: RunnerListenerToken,
+    remainder: Data
   ) {
-    sendResponse(result.data, over: connection) { [weak self] in
+    let closeConnection = !request.keepsConnectionAlive || result.shouldFinish
+    sendResponse(result.response, over: connection, closeConnection: closeConnection) { [weak self] sent in
+      guard let self else { return }
       if result.shouldFinish {
-        self?.finish()
+        self.finish()
+      } else if sent && !closeConnection {
+        self.readNextRequest(over: connection, token: token, buffered: remainder)
       }
     }
   }
 
+  private func readNextRequest(over connection: NWConnection, token: RunnerListenerToken, buffered: Data) {
+    guard transportConnections[ObjectIdentifier(connection)] != nil else { return }
+    let inbound = RunnerInboundRequest(token: token)
+    if !buffered.isEmpty {
+      consume(buffered, for: inbound, over: connection)
+      return
+    }
+    // Idle expiry is silent; a partial request gets its own full arrival deadline and a 408.
+    let idleDeadline = DispatchWorkItem {
+      guard !inbound.closed else { return }
+      inbound.close()
+      connection.cancel()
+    }
+    inbound.idleDeadline = idleDeadline
+    transportQueue.asyncAfter(deadline: .now() + Self.connectionIdleTimeout, execute: idleDeadline)
+    receiveRequest(inbound, over: connection)
+  }
+
   private func sendResponse(
-    _ response: Data,
+    _ response: RunnerHttpResponse,
     over connection: NWConnection,
-    afterSend: @escaping @Sendable () -> Void = {}
+    closeConnection: Bool,
+    afterSend: @escaping @Sendable (Bool) -> Void = { _ in }
   ) {
-    connection.send(content: response, isComplete: true, completion: .contentProcessed { error in
+    // Network delivers send completions on the connection's transport queue.
+    connection.send(content: response.encoded(closeConnection: closeConnection), completion: .contentProcessed { error in
       if let error {
         NSLog("AGENT_DEVICE_RUNNER_SEND_FAILED=%@", String(describing: error))
       }
-      connection.cancel()
-      afterSend()
+      if closeConnection || error != nil { connection.cancel() }
+      afterSend(error == nil)
     })
   }
 
   private func handleRequestBody(
     _ body: Data,
-    completion: @escaping @Sendable ((data: Data, shouldFinish: Bool)) -> Void
+    completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
     guard String(data: body, encoding: .utf8) != nil else {
       completion((
@@ -257,7 +292,7 @@ extension RunnerTests {
   /// false so the caller enqueues the (single) execution.
   func attachToInFlightCommandIfNeeded(
     command: Command,
-    completion: @escaping @Sendable ((data: Data, shouldFinish: Bool)) -> Void
+    completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) -> Bool {
     guard let commandId = command.commandId?.trimmedNonEmpty else { return false }
     inFlightCommandLock.lock()
@@ -278,10 +313,10 @@ extension RunnerTests {
 
   func deliverCommandResult(
     command: Command,
-    result: (data: Data, shouldFinish: Bool),
-    completion: ((data: Data, shouldFinish: Bool)) -> Void
+    result: (response: RunnerHttpResponse, shouldFinish: Bool),
+    completion: ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
-    var waiters: [@Sendable ((data: Data, shouldFinish: Bool)) -> Void] = []
+    var waiters: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void] = []
     if let commandId = command.commandId?.trimmedNonEmpty {
       inFlightCommandLock.lock()
       inFlightCommandIds.remove(commandId)
@@ -296,7 +331,7 @@ extension RunnerTests {
 
   // MARK: - Response Encoding
 
-  private func jsonResponse(status: Int, response: Response) -> Data {
+  private func jsonResponse(status: Int, response: Response) -> RunnerHttpResponse {
     // Stamp the gesture-clock uptime at the END of command handling, just before the HTTP
     // write, so the warm snapshot and recordStart responses carry the anchor for free. This
     // runs AFTER commandJournal.finish, so journal-stored lifecycleResponseJson stays
@@ -310,7 +345,7 @@ extension RunnerTests {
       : response
     let encoder = JSONEncoder()
     let body = (try? encoder.encode(stamped)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-    return httpResponse(status: status, body: body)
+    return RunnerHttpResponse(status: status, body: body)
   }
 
   private func errorResponse(code: String, message: String, hint: String? = nil) -> Response {
@@ -343,21 +378,66 @@ extension RunnerTests {
     )
   }
 
-  private func httpResponse(status: Int, body: String) -> Data {
+  /// Present on every response so the daemon can refuse a runner build that predates the token.
+  static let authEnforcedResponseHeader = "X-Agent-Device-Runner-Auth"
+
+  func closeTransport() {
+    listener?.cancel()
+    listener = nil
+    for connection in transportConnections.values { connection.cancel() }
+    transportConnections.removeAll()
+  }
+
+  private func finish() {
+    closeTransport()
+    // Guard against double-fulfill: coalesced shutdown sends deliver one result to
+    // multiple waiters, each of which may ask to finish.
+    doneExpectation?.fulfill()
+    doneExpectation = nil
+  }
+}
+
+/// One request on a connection, read on the transport queue.
+final class RunnerInboundRequest {
+  let token: RunnerListenerToken
+  var buffer = Data()
+  var head: RunnerHttpAdmittedHead?
+  var deadline: DispatchWorkItem?
+  var idleDeadline: DispatchWorkItem?
+  private(set) var closed = false
+
+  init(token: RunnerListenerToken) {
+    self.token = token
+  }
+
+  /// Ends reading this request: its body is complete, it was refused, or the peer left. Dropping the
+  /// deadline also releases the request it holds.
+  func close() {
+    closed = true
+    deadline?.cancel()
+    deadline = nil
+    idleDeadline?.cancel()
+    idleDeadline = nil
+  }
+}
+
+/// Coalesced commands share their response, but each connection owns its persistence policy.
+struct RunnerHttpResponse: Equatable, Sendable {
+  let status: Int
+  let body: String
+
+  func encoded(closeConnection: Bool) -> Data {
     let headers = [
       "HTTP/1.1 \(status) \(Self.reasonPhrase(status))",
       "Content-Type: application/json",
       "Content-Length: \(body.utf8.count)",
-      "\(Self.authEnforcedResponseHeader): required",
-      "Connection: close",
+      "\(RunnerTests.authEnforcedResponseHeader): required",
+      "Connection: \(closeConnection ? "close" : "keep-alive")",
       "",
       body
     ].joined(separator: "\r\n")
     return Data(headers.utf8)
   }
-
-  /// Present on every response so the daemon can refuse a runner build that predates the token.
-  static let authEnforcedResponseHeader = "X-Agent-Device-Runner-Auth"
 
   private static func reasonPhrase(_ status: Int) -> String {
     switch status {
@@ -372,35 +452,5 @@ extension RunnerTests {
     case 431: return "Request Header Fields Too Large"
     default: return "Internal Server Error"
     }
-  }
-
-  private func finish() {
-    listener?.cancel()
-    listener = nil
-    // Guard against double-fulfill: coalesced shutdown sends deliver one result to
-    // multiple waiters, each of which may ask to finish.
-    doneExpectation?.fulfill()
-    doneExpectation = nil
-  }
-}
-
-/// One connection's request, read on the transport queue.
-final class RunnerInboundRequest {
-  let token: RunnerListenerToken
-  var buffer = Data()
-  var head: RunnerHttpAdmittedHead?
-  var deadline: DispatchWorkItem?
-  private(set) var closed = false
-
-  init(token: RunnerListenerToken) {
-    self.token = token
-  }
-
-  /// Ends reading this request: its body is complete, it was refused, or the peer left. Dropping the
-  /// deadline also releases the request it holds.
-  func close() {
-    closed = true
-    deadline?.cancel()
-    deadline = nil
   }
 }
