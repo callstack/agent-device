@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from './adb-executor.ts';
 import { openAndroidApp } from './app-lifecycle.ts';
@@ -8,9 +8,13 @@ import './__tests__/test-utils/android-host-test-setup.ts';
 
 vi.mock('./automation-helper.ts', () => ({ runAndroidAutomationHelper: vi.fn() }));
 const helper = vi.mocked(runAndroidAutomationHelper);
-const hostShell = vi.fn(async (): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
-  throw new Error('Unexpected host shell after helper admission');
-});
+const hostShell = vi.fn(
+  async (
+    _args: readonly string[],
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+    throw new Error('Unexpected host shell after helper admission');
+  },
+);
 const pkg = 'com.example.app';
 
 beforeEach(() => {
@@ -18,6 +22,23 @@ beforeEach(() => {
   hostShell.mockReset();
   hostShell.mockRejectedValue(new Error('Unexpected host shell after helper admission'));
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const timedOutLaunch = (activityPackage: string) =>
+  `Starting: Intent { act=android.intent.action.MAIN cmp=${activityPackage}/.MainActivity }\n` +
+  `Status: timeout\nLaunchState: UNKNOWN (-1)\nActivity: ${activityPackage}/.MainActivity\n` +
+  'WaitTime: 10330\nComplete\n';
+
+function focusedWindow(focusedPackage: string) {
+  return {
+    stdout: `mCurrentFocus=Window{42 u0 ${focusedPackage}/.MainActivity}\n`,
+    stderr: '',
+    exitCode: 0,
+  };
+}
 
 async function isolated<T>(run: () => Promise<T>): Promise<T> {
   return await withAndroidAdbProvider({ exec: hostShell }, { serial: ANDROID_EMULATOR.id }, run);
@@ -43,15 +64,56 @@ test('a helper error after possible application mutation is returned without a s
   expect(hostShell).not.toHaveBeenCalled();
 });
 
-test('an unsuccessful helper launch is a failure and is never retried as a host launch', async () => {
+test('a helper launch timeout without an Activity line is a failure and is never retried', async () => {
   helper.mockResolvedValue({
     kind: 'launched',
     output: 'Status: timeout\n',
   });
   await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
+    message: 'Android helper could not launch the application',
   });
   expect(hostShell).not.toHaveBeenCalled();
+});
+
+test('a helper launch timeout naming another package is a failure without a foreground wait', async () => {
+  helper.mockResolvedValue({ kind: 'launched', output: timedOutLaunch('com.example.other') });
+  await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Android helper could not launch the application',
+  });
+  expect(hostShell).not.toHaveBeenCalled();
+});
+
+test('a dispatched helper launch timeout succeeds once the package reaches the foreground', async () => {
+  helper.mockResolvedValue({ kind: 'launched', output: timedOutLaunch(pkg) });
+  hostShell
+    .mockResolvedValueOnce(focusedWindow('com.android.launcher'))
+    .mockResolvedValue(focusedWindow(pkg));
+  vi.useFakeTimers();
+  const opened = isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg));
+  await vi.advanceTimersByTimeAsync(1_000);
+  await expect(opened).resolves.toBe(pkg);
+  expect(hostShell.mock.calls.map(([args]) => args)).toEqual([
+    ['shell', 'dumpsys', 'window', 'windows'],
+    ['shell', 'dumpsys', 'window', 'windows'],
+  ]);
+});
+
+test('a dispatched helper launch timeout fails when the package never reaches the foreground', async () => {
+  helper.mockResolvedValue({ kind: 'launched', output: timedOutLaunch(pkg) });
+  hostShell.mockResolvedValue(focusedWindow('com.android.launcher'));
+  vi.useFakeTimers();
+  const opened = isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg));
+  const failure = expect(opened).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'android-launch-not-foreground', packageName: pkg, timeoutMs: 30_000 },
+  });
+  await vi.advanceTimersByTimeAsync(30_000);
+  await failure;
+  const shellCalls = hostShell.mock.calls.map(([args]) => args);
+  expect(shellCalls.length).toBeGreaterThan(1);
+  expect(shellCalls.every((args) => args.join(' ') === 'shell dumpsys window windows')).toBe(true);
 });
 
 test.each([true, false])(
