@@ -1,5 +1,5 @@
-// Records an app's whole accessibility tree from a booted iOS simulator into the alert surface
-// corpus that `swift test --package-path apple/snapshot-presentation` replays. See
+// Records an app's plain and honor-modal accessibility trees from a booted iOS simulator into the
+// alert surface corpus that `swift test --package-path apple/snapshot-presentation` replays. See
 // apple/snapshot-presentation/Tests/AlertSurfaceCorpus/README.md.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -29,16 +29,22 @@ const fixture = path.join(
   `${name}.json`,
 );
 
+// The shell's runner bundle ids take precedence over the app id below, so the capture drops them.
+const captureEnv = { ...process.env };
+delete captureEnv.AGENT_DEVICE_IOS_BUNDLE_ID;
+delete captureEnv.AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID;
 execFileSync('sh', ['./scripts/build-xcuitest-apple.sh'], {
   cwd: root,
   stdio: 'inherit',
   env: {
-    ...process.env,
+    ...captureEnv,
     AGENT_DEVICE_XCUITEST_PLATFORM: 'ios',
     AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1',
     AGENT_DEVICE_XCUITEST_ARCHS: 'arm64',
     AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derived,
     AGENT_DEVICE_XCUITEST_DESTINATION: 'generic/platform=iOS Simulator',
+    // Its own bundle id, so the capture runs beside an agent-device runner on the same simulator.
+    AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID: 'com.callstack.agentdevice.alert-surface-capture',
   },
 });
 const products = path.join(derived, 'Build', 'Products');
@@ -47,7 +53,12 @@ if (!xctestrun) throw new Error(`No .xctestrun in ${products}`);
 
 const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'alert-surface-'));
 const output = path.join(outputDir, 'tree.json');
-let nodes: unknown[];
+let trees: {
+  order: string[];
+  milliseconds: Record<string, number>;
+  plain: unknown[];
+  honorModal: unknown[];
+};
 try {
   execFileSync(
     'xcodebuild',
@@ -70,7 +81,7 @@ try {
     },
   );
   if (!fs.existsSync(output)) throw new Error('The capture test wrote no tree');
-  nodes = JSON.parse(fs.readFileSync(output, 'utf8')) as unknown[];
+  trees = JSON.parse(fs.readFileSync(output, 'utf8')) as typeof trees;
 } finally {
   fs.rmSync(outputDir, { recursive: true, force: true });
 }
@@ -85,11 +96,21 @@ const [runtime, device] =
 const previous = fs.existsSync(fixture)
   ? (JSON.parse(fs.readFileSync(fixture, 'utf8')) as { expect?: unknown })
   : {};
+const [xcode = 'unknown', build = 'unknown'] = execFileSync('xcodebuild', ['-version'], {
+  encoding: 'utf8',
+})
+  .trim()
+  .split('\n')
+  .map((line) => line.replace(/^(Xcode|Build version) /, ''));
 const recorded = {
+  format: 2,
   capture: {
     bundle,
     device: device?.name ?? udid,
     runtime: runtime?.replace('com.apple.CoreSimulator.SimRuntime.', '') ?? 'unknown',
+    toolchain: `Xcode ${xcode} (${build})`,
+    order: trees.order,
+    milliseconds: trees.milliseconds,
     commit: execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
       cwd: root,
       encoding: 'utf8',
@@ -99,8 +120,15 @@ const recorded = {
 };
 // One node per line, so a recapture reads as a reviewable diff of changed nodes.
 const header = JSON.stringify(recorded, null, 2).replace(/\n}$/, '');
-const body = nodes.map((node) => `    ${JSON.stringify(node)}`).join(',\n');
-fs.writeFileSync(fixture, `${header},\n  "nodes": [\n${body}\n  ]\n}\n`);
+const tree = (key: string, nodes: unknown[]) =>
+  `  "${key}": [\n${nodes.map((node) => `    ${JSON.stringify(node)}`).join(',\n')}\n  ]`;
+fs.writeFileSync(
+  fixture,
+  `${header},\n${tree('plain', trees.plain)},\n${tree('honorModal', trees.honorModal)}\n}\n`,
+);
+console.log(
+  `plain ${trees.plain.length} nodes, honorModal ${trees.honorModal.length} nodes, ms ${JSON.stringify(trees.milliseconds)}`,
+);
 console.log(
   previous.expect === undefined
     ? `Wrote ${path.relative(root, fixture)}. Add "expect" from what the screen shows.`

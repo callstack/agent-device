@@ -1,5 +1,4 @@
 import XCTest
-import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 /// A frame as the corpus spells it: the `FixtureRect` spelling, so an unusable box is named.
@@ -28,15 +27,26 @@ private struct RecordedAlertSurfaceRect: Encodable {
 private struct RecordedAlertSurfaceNode: Encodable {
   let index: Int
   let parentIndex: Int?
+  let element: String
   let type: String
   let identifier: String
   let label: String
   let rect: RecordedAlertSurfaceRect
+  let viewClass: String?
+  let viewControllerClass: String?
+}
+
+private struct RecordedAlertSurfaceCapture: Encodable {
+  let order: [String]
+  let milliseconds: [String: Int]
+  let plain: [RecordedAlertSurfaceNode]
+  let honorModal: [RecordedAlertSurfaceNode]
 }
 
 extension RunnerTests {
-  /// Records an app's whole accessibility tree for the alert surface corpus. It runs only from
-  /// `pnpm capture:alert-surface`, which sets the bundle and the output path.
+  /// Records an app's plain and honor-modal accessibility trees for the alert surface corpus, and
+  /// fails when the reads do not pair. It runs only from `pnpm capture:alert-surface`, which sets
+  /// the bundle and the output path.
   @MainActor
   func testCaptureAlertSurfaceTree() throws {
     let environment = ProcessInfo.processInfo.environment
@@ -45,24 +55,43 @@ extension RunnerTests {
     else {
       throw XCTSkip("Run through pnpm capture:alert-surface")
     }
-    let snapshot = try XCUIApplication(bundleIdentifier: bundleId).snapshot()
-    var nodes: [RecordedAlertSurfaceNode] = []
-    func record(_ node: AlertSurfaceNode, parentIndex: Int?) {
-      let index = nodes.count
-      nodes.append(RecordedAlertSurfaceNode(
-        index: index,
-        parentIndex: parentIndex,
-        type: node.type,
-        identifier: node.identifier,
-        label: node.label,
-        rect: RecordedAlertSurfaceRect(frame: node.frame)
-      ))
-      node.children.forEach { record($0, parentIndex: index) }
+    let acquisition = ModalScopeAcquisition.acquire(
+      of: XCUIApplication(bundleIdentifier: bundleId),
+      includeClassNames: true,
+      deadline: Date().addingTimeInterval(30)
+    )
+    guard case let .paired(reads) = acquisition else {
+      XCTFail("No paired capture: \(acquisition)")
+      return
     }
-    record(alertSurfaceNode(snapshot), parentIndex: nil)
+    func record(_ tree: RunnerAXModalScopeTree) -> [RecordedAlertSurfaceNode] {
+      tree.nodes.enumerated().map { index, node in
+        RecordedAlertSurfaceNode(
+          index: index,
+          parentIndex: node.parentIndex < 0 ? nil : node.parentIndex,
+          element: node.element,
+          type: alertSurfaceTypeName(XCUIElement.ElementType(rawValue: UInt(node.elementType)) ?? .any),
+          identifier: node.identifier,
+          label: node.label,
+          rect: RecordedAlertSurfaceRect(frame: node.frame),
+          viewClass: node.viewClass,
+          viewControllerClass: node.viewControllerClass
+        )
+      }
+    }
+    let capture = RecordedAlertSurfaceCapture(
+      order: ["honorModal", "plain", "confirmingHonorModal"],
+      milliseconds: [
+        "honorModal": Int((reads.honorModal.duration * 1_000).rounded()),
+        "plain": Int((reads.plain.duration * 1_000).rounded()),
+        "confirmingHonorModal": Int((reads.confirmingHonorModal.duration * 1_000).rounded()),
+      ],
+      plain: record(reads.plain),
+      honorModal: record(reads.honorModal)
+    )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    try encoder.encode(nodes).write(to: URL(fileURLWithPath: output))
+    try encoder.encode(capture).write(to: URL(fileURLWithPath: output))
   }
 }
 #endif

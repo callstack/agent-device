@@ -3,3 +3,4 @@
 #import "RunnerSynthesizedGesture.h"
 #import "RunnerSynthesizedTextEntry.h"
 #import "RunnerXCTestEventBridge.h"
+#import "RunnerAXModalScopeCapture.h"

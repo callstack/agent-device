@@ -52,19 +52,21 @@ extension RunnerTests {
   /// The tree the alert rules read. Snapshot output has no names for alerts and sheets, so the
   /// rules name them here.
   func alertSurfaceNode(_ snapshot: XCUIElementSnapshot) -> AlertSurfaceNode {
-    let type: String
-    switch snapshot.elementType {
-    case .alert: type = "Alert"
-    case .sheet: type = "Sheet"
-    default: type = elementTypeName(snapshot.elementType)
-    }
-    return AlertSurfaceNode(
-      type: type,
+    AlertSurfaceNode(
+      type: alertSurfaceTypeName(snapshot.elementType),
       identifier: snapshot.identifier,
       label: snapshot.label,
       frame: snapshot.frame,
       children: snapshot.children.map { alertSurfaceNode($0) }
     )
+  }
+
+  func alertSurfaceTypeName(_ type: XCUIElement.ElementType) -> String {
+    switch type {
+    case .alert: return "Alert"
+    case .sheet: return "Sheet"
+    default: return elementTypeName(type)
+    }
   }
 
   func alertVerificationResponse(
