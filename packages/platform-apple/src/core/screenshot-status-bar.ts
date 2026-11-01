@@ -174,17 +174,27 @@ async function restoreSimulatorStatusBarOverrides(
   device: DeviceInfo,
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
-  await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
+  try {
+    await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
+  } catch (error) {
+    // The simulator now holds whatever the timed-out command left, so no later capture may trust a
+    // cached answer about it: it has to read the bar again.
+    invalidateSimulatorStatusBarOverrideCache(device);
+    throw error;
+  }
   if (!overrides) {
     rememberClearedStatusBarOverrides(device);
     return;
   }
-  await applySimulatorStatusBarOverrideArgs(
-    device,
-    buildRestorableStatusBarOverrideArgs(overrides),
-    STATUS_BAR_RESTORE_TIMEOUT_MS,
-  );
-  invalidateSimulatorStatusBarOverrideCache(device);
+  try {
+    await applySimulatorStatusBarOverrideArgs(
+      device,
+      buildRestorableStatusBarOverrideArgs(overrides),
+      STATUS_BAR_RESTORE_TIMEOUT_MS,
+    );
+  } finally {
+    invalidateSimulatorStatusBarOverrideCache(device);
+  }
 }
 
 export function invalidateSimulatorStatusBarOverrideCache(device: DeviceInfo): void {

@@ -249,13 +249,25 @@ export async function captureSimulatorScreenshotWithRetry(
   );
 }
 
+/** The runner renders this target's screen the way `simctl io screenshot` does, through the simulator. */
+function capturesThroughSimulatorStatusBar(device: DeviceInfo): boolean {
+  return device.kind === 'simulator' && !isMacOs(device);
+}
+
+/** The runner reaches this target through the physical-device control rather than the runner app. */
+function capturesThroughPhysicalDeviceControl(device: DeviceInfo): boolean {
+  return device.kind === 'device' && !isMacOs(device);
+}
+
 /**
  * Captures through the runner backend. An iOS simulator's runner capture renders the same screen a
  * simctl capture does, so it takes the same status bar reservation: while another capture
  * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. The
- * reservation re-enters when the caller already holds it, as the simctl fallback does, and an
- * already-aborted request does not reject that re-entry at the lock boundary — see
- * `withSimulatorStatusBarHeld`. The runner command keeps the request's signal.
+ * reservation covers the whole capture, including the density normalization the capture flow applies
+ * afterwards, because that step reads the file the capture wrote. It re-enters when the caller
+ * already holds it, as the simctl fallback does, and an already-aborted request does not reject that
+ * re-entry at the lock boundary — see `withSimulatorStatusBarHeld`. The runner command keeps the
+ * request's signal.
  */
 export async function captureScreenshotViaRunner(
   device: DeviceInfo,
@@ -265,7 +277,7 @@ export async function captureScreenshotViaRunner(
   runnerOptions: AppleRunnerCommandOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
-  if (device.kind !== 'simulator' || isMacOs(device)) {
+  if (!capturesThroughSimulatorStatusBar(device)) {
     return await captureRunnerScreenshot(
       device,
       outPath,
@@ -291,7 +303,7 @@ async function captureRunnerScreenshot(
   runnerOptions: AppleRunnerCommandOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
-  if (device.kind === 'device' && !isMacOs(device)) {
+  if (capturesThroughPhysicalDeviceControl(device)) {
     await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
       appBundleId,
       fullscreen,

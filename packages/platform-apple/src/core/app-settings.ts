@@ -35,6 +35,7 @@ import { buildSimctlArgsForDevice, readSimctlContainerPath, runSimctlForDevice }
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
+  withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { runXcrun } from './tool-provider.ts';
@@ -104,35 +105,39 @@ export async function setIosSetting(
     case 'wifi': {
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';
-      await runSimctlForDevice(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
-      invalidateSimulatorStatusBarOverrideCache(device);
+      await withSimulatorStatusBarHeld(device, async () => {
+        await runSimctlForDevice(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
+        invalidateSimulatorStatusBarOverrideCache(device);
+      });
       return;
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
-      if (enabled) {
-        await runSimctlForDevice(device, [
-          'status_bar',
-          device.id,
-          'override',
-          '--dataNetwork',
-          'hide',
-          '--wifiMode',
-          'failed',
-          '--wifiBars',
-          '0',
-          '--cellularMode',
-          'failed',
-          '--cellularBars',
-          '0',
-          '--operatorName',
-          '',
-        ]);
-        invalidateSimulatorStatusBarOverrideCache(device);
-      } else {
-        await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
-        rememberClearedStatusBarOverrides(device);
-      }
+      await withSimulatorStatusBarHeld(device, async () => {
+        if (enabled) {
+          await runSimctlForDevice(device, [
+            'status_bar',
+            device.id,
+            'override',
+            '--dataNetwork',
+            'hide',
+            '--wifiMode',
+            'failed',
+            '--wifiBars',
+            '0',
+            '--cellularMode',
+            'failed',
+            '--cellularBars',
+            '0',
+            '--operatorName',
+            '',
+          ]);
+          invalidateSimulatorStatusBarOverrideCache(device);
+        } else {
+          await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
+          rememberClearedStatusBarOverrides(device);
+        }
+      });
       return;
     }
     case 'faceid':

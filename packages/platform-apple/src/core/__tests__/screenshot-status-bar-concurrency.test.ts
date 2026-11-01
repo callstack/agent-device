@@ -1,8 +1,17 @@
-import { beforeEach, test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
+
+// `setIosSetting` boots through this owner; the capture route under test skips it, so the settings
+// case below needs it quiet without touching the status bar owner.
+vi.mock('../simulator.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../simulator.ts')>();
+  return { ...actual, ensureBootedSimulator: async () => {} };
+});
+
+import { setIosSetting } from '../app-settings.ts';
 import { captureSimulatorScreenshotWithFallback } from '../screenshot.ts';
 import { invalidateSimulatorStatusBarOverrideCache } from '../screenshot-status-bar.ts';
 import {
@@ -247,6 +256,126 @@ test('a single simulator capture normalizes while it captures and restores after
     assert.deepEqual(seenDuringCapture, [NORMALIZED_OVERRIDES]);
     assert.deepEqual(statusBar.overrides(), CALLER_OVERRIDES);
   });
+});
+
+test('an already-aborted request does not start a plain simulator capture', async () => {
+  // Since the plain path takes the window it also honours the request's cancellation: a request the
+  // caller gave up on stops before it does device work nobody will read.
+  const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
+  const abortController = new AbortController();
+  abortController.abort(new Error('request canceled'));
+  let captureStarted = false;
+
+  await withFakeAppleTool(statusBar.script, async () => {
+    const options = screenshotOptions(createCaptureGate(), false);
+    const settled = await captureSimulatorScreenshotWithFallback(
+      IOS_TEST_SIMULATOR,
+      '/tmp/aborted.png',
+      {
+        ...options,
+        deps: {
+          ...options.deps,
+          captureWithRetry: async () => {
+            captureStarted = true;
+          },
+        },
+        runnerOptions: { signal: abortController.signal },
+      },
+    ).then(
+      () => 'fulfilled',
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+
+    assert.equal(settled, 'request canceled');
+    assert.equal(captureStarted, false);
+  });
+});
+
+test('an aborted request leaves the queue behind another request on the same simulator', async () => {
+  // Dropping the signal for a holder's own nested leg must stay caller-scoped: another request that
+  // merely shares the simulator keeps its cancellation, so it leaves the queue when its own caller
+  // gives up instead of waiting for the holder to finish.
+  const statusBar = createFakeStatusBarSimctl(IOS_TEST_SIMULATOR.id, CALLER_OVERRIDES);
+  const holderGate = createCaptureGate();
+  const abortController = new AbortController();
+
+  await withFakeAppleTool(statusBar.script, async () => {
+    const holder = captureSimulatorScreenshotWithFallback(
+      IOS_TEST_SIMULATOR,
+      '/tmp/holder.png',
+      screenshotOptions(holderGate, true),
+    );
+    await holderGate.entered;
+
+    let queuedCaptureStarted = false;
+    const queued = captureSimulatorScreenshotWithFallback(
+      IOS_TEST_SIMULATOR,
+      '/tmp/aborted-queue.png',
+      {
+        env: process.env,
+        normalizeStatusBar: false,
+        skipIosSimulatorBootCheck: true,
+        deps: captureDeps(async () => {
+          queuedCaptureStarted = true;
+        }),
+        runnerOptions: { signal: abortController.signal },
+      },
+    ).catch((error: unknown) => error);
+
+    await yieldToQueuedWork();
+    abortController.abort(new Error('request canceled'));
+    const outcome = await queued;
+    holderGate.release();
+    await holder;
+
+    assert.ok(
+      outcome instanceof Error && outcome.message === 'request canceled',
+      `expected the queued capture to reject with the abort reason, received: ${String(outcome)}`,
+    );
+    assert.equal(queuedCaptureStarted, false, 'the aborted capture must not reach the device');
+  });
+});
+
+test('a settings write to the status bar waits for the capture window', async () => {
+  // Its own simulator id: a lock this case leaves held must never make a later case wait for it.
+  const device: DeviceInfo = { ...IOS_TEST_SIMULATOR, id: 'sim-bar-writer' };
+  invalidateSimulatorStatusBarOverrideCache(device);
+  const statusBar = createFakeStatusBarSimctl(device.id, { wifiMode: 'failed', wifiBars: '0' });
+
+  await withFakeAppleTool(
+    (args) => statusBar.script(args),
+    async ({ calls }) => {
+      const gate = createCaptureGate();
+      const capturing = captureSimulatorScreenshotWithFallback(
+        device,
+        '/tmp/normalized.png',
+        screenshotOptions(gate, true),
+      );
+      let settingDone = false;
+      let setting: Promise<unknown> = Promise.resolve();
+      try {
+        await gate.entered;
+        setting = setIosSetting(device, 'wifi', 'on', undefined, undefined, process.env).then(
+          () => {
+            settingDone = true;
+          },
+        );
+        await yieldToQueuedWork();
+        assert.equal(settingDone, false, 'a status bar write must wait for the capture window');
+      } finally {
+        gate.release();
+        await Promise.allSettled([capturing, setting]);
+      }
+
+      // The write lands after the capture restored the bar the caller had, so that restore cannot
+      // revert a setting the caller asked for while the capture was running.
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')).at(-1),
+        'simctl status_bar sim-bar-writer override --wifiMode active',
+      );
+      assert.deepEqual(statusBar.overrides(), { wifiMode: 'active', wifiBars: '0' });
+    },
+  );
 });
 
 test('a plain simulator capture waits for the normalization window instead of capturing it', async () => {

@@ -224,6 +224,39 @@ test('a failed status bar restore logs restore_failed and keeps the capture resu
   ]);
 });
 
+test('a failed status bar restore leaves no known-cleared answer for the next capture', async () => {
+  // "This simulator holds no overrides" is only true once a restore's `clear` actually completed.
+  // When it fails, the simulator holds whatever the failed command left, so the next capture must
+  // read the bar again instead of trusting that answer and normalizing without a clear.
+  const CLEARED_LISTING = 'Current Status Bar Overrides:\n=============================';
+  let clearAttempts = 0;
+  await withFakeAppleTool(
+    (args) => {
+      if (args[3] === 'list') return CLEARED_LISTING;
+      if (args[3] === 'clear') {
+        clearAttempts += 1;
+        if (clearAttempts === 1) return '';
+        return new AppError('COMMAND_FAILED', 'clear timed out', {
+          exitCode: 1,
+          stderr: 'clear timed out',
+        });
+      }
+      return '';
+    },
+    async ({ calls }) => {
+      // First capture: a clean restore earns the known-cleared answer.
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      calls.length = 0;
+      // Second capture: its restore fails, and that answer has to go with it.
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      calls.length = 0;
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+
+      assert.equal(calls[0]?.join(' '), 'simctl status_bar sim-1 list');
+    },
+  );
+});
+
 test('a failed status bar override logs prepare_failed and the capture still runs', async () => {
   const events = await statusBarDiagnosticEvents(async () => {
     await withFakeAppleTool(
