@@ -354,9 +354,14 @@ extension RunnerTests {
     ]
     let lit = RunnerCopyLitPanelWindows(
       DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel)
-    XCTAssertEqual(lit.count, 2)
-    XCTAssertTrue((lit.first as AnyObject) === home)
-    XCTAssertTrue((lit.last as AnyObject) === dock)
+    XCTAssertEqual(lit?.count, 2)
+    XCTAssertTrue((lit?.first as AnyObject) === home)
+    XCTAssertTrue((lit?.last as AnyObject) === dock)
+    XCTAssertNil(
+      RunnerCopyLitPanelWindows(
+        DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel),
+      "an unreadable window list is not an empty lit display"
+    )
   }
 
   func testLitPanelScreenIsTheScreenTheChosenWindowReported() {

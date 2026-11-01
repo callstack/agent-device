@@ -14,7 +14,8 @@ struct LitPanelSurface {
 final class RunnerLitPanelState {
   var panel: RunnerLitPanel?
   var surface: LitPanelSurface?
-  var windows: (app: XCUIApplication, elements: [XCUIElement])?
+  /// Nil elements: the window list could not be read.
+  var windows: (app: XCUIApplication, elements: [XCUIElement]?)?
 }
 
 extension RunnerTests {
@@ -58,11 +59,23 @@ extension RunnerTests {
   }
 
   /// Where an element read searches: the application, or on a lit-panel request only the windows
-  /// proven on the lit display, so a dark-panel element can never answer.
+  /// proven on the lit display, so a dark-panel element can never answer. An unreadable window list
+  /// searches nothing; `litPanelWindowsRefusal` says so before the read.
   func elementSearchRoots(app: XCUIApplication) -> [XCUIElement] {
-    guard let litPanel = requestLitPanel else { return [app] }
+    guard requestLitPanel != nil else { return [app] }
+    return litPanelWindows(app: app) ?? []
+  }
+
+  /// Why an element read on a lit-panel request cannot search, or nil when it can.
+  func litPanelWindowsRefusal(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
+    guard requestLitPanel != nil, litPanelWindows(app: app) == nil else { return nil }
+    return .unresolvedScreen
+  }
+
+  private func litPanelWindows(app: XCUIApplication) -> [XCUIElement]? {
+    guard let litPanel = requestLitPanel else { return nil }
     if let cached = litPanelState.windows, cached.app === app { return cached.elements }
-    let windows = RunnerCopyLitPanelWindows(app, litPanel).compactMap { $0 as? XCUIElement }
+    let windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap { $0 as? XCUIElement }
     litPanelState.windows = (app, windows)
     return windows
   }

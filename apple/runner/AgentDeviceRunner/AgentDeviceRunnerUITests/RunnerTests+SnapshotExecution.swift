@@ -21,6 +21,11 @@ extension RunnerTests {
         if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
           return .response(refusal.response)
         }
+        if self.requestLitPanel != nil,
+          let refusal = Self.litPanelBackendPinRefusal(Self.presentationOptions(from: command).preferredBackend)
+        {
+          return .response(refusal)
+        }
         var target = context.observation == nil
           ? self.takeSnapshotCaptureTarget(app: context.app)
           : SnapshotCaptureTarget(
@@ -164,6 +169,23 @@ extension RunnerTests {
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))
     }
+  }
+
+  /// A multi-panel snapshot runs only the tree backend, the one that proves which panel a window is
+  /// on, so a pin to another backend is refused as a request. It never reaches the capture plan and
+  /// leaves the cached target alone.
+  static func litPanelBackendPinRefusal(_ preferredBackend: String?) -> Response? {
+    guard let pinned = preferredBackend, pinned != SnapshotBackendKind.recursiveTree.rawValue else {
+      return nil
+    }
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "UNSUPPORTED_OPERATION",
+        message: "a multi-panel snapshot runs only the tree backend, so the \(pinned) backend cannot be pinned",
+        hint: "Snapshot without a backend pin: only the tree backend proves which panel a window is on (ADR 0025)."
+      )
+    )
   }
 
   func invalidateCachedTargetAfterSnapshotFailure() {

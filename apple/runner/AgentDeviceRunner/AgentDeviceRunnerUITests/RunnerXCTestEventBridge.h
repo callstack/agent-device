@@ -79,8 +79,9 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
 
 // The application's windows that report `litPanel`'s display, in list order. A window that is gone
 // or names no display is left out, because it may be on the dark panel. Element reads on a
-// multi-panel request search only under these windows.
-FOUNDATION_EXPORT NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel);
+// multi-panel request search only under these windows. Returns nil when the window list itself
+// cannot be read, which is not the same answer as no window on the lit display.
+FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel);
 
 // `RunnerResolveApplicationScreen` for a multi-panel device: the window comes from
 // `RunnerResolveLitPanelWindow` instead of the application's first window.

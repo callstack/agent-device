@@ -316,8 +316,12 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
 }
 
 NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel) {
+  NSArray *windows = RunnerCopyWindowList(application);
+  if (windows == nil) {
+    return nil;
+  }
   NSMutableArray *lit = [NSMutableArray array];
-  for (id candidate in RunnerCopyWindowList(application)) {
+  for (id candidate in windows) {
     CGRect frame = CGRectNull;
     id screen = nil;
     NSUInteger displayID = 0;

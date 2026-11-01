@@ -49,7 +49,10 @@ extension RunnerTests {
   }
 
   func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() {
-    XCTAssertEqual(Self.litPanelBackendPinFailure("private-ax").code, "UNSUPPORTED_OPERATION")
+    XCTAssertEqual(Self.litPanelBackendPinRefusal("private-ax")?.error?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertEqual(Self.litPanelBackendPinRefusal("queries")?.error?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNil(Self.litPanelBackendPinRefusal("tree"))
+    XCTAssertNil(Self.litPanelBackendPinRefusal(nil))
   }
 
   /// Decoded from JSON, so a renamed wire field fails here.
@@ -133,6 +136,31 @@ extension RunnerTests {
     XCTAssertNotNil(found.text)
     XCTAssertFalse(found.named, "a selector read must not search off the lit display")
     XCTAssertNil(found.namedText, "a point read must not search off the lit display")
+  }
+
+  /// A refused pin is a request refusal: it never reaches the capture plan, so it does not
+  /// invalidate the cached target the next command relies on.
+  @MainActor
+  func testLitPanelSnapshotPinRefusalKeepsTheCachedTarget() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    defer {
+      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let window = app.windows.firstMatch
+    var displayID: UInt = 0
+    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
+    let size = window.frame.size
+    let command = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"snapshot","preferredBackend":"private-ax","litPanel":{"displayId":\#(displayID),"widthPt":\#(size.width),"heightPt":\#(size.height)}}"#
+    )
+    setRequestLitPanel(from: command)
+    let response = try executeSnapshotDispatched(command: command)
+    XCTAssertEqual(response.error?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertTrue(mainOwned.app === app, "a refused pin must not invalidate the cached target")
   }
 
   @MainActor

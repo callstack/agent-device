@@ -18,6 +18,12 @@ extension RunnerTests {
     if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
       return refusal.response
     }
+    // An element read whose lit-panel window list cannot be read refuses instead of finding nothing.
+    if command.command == .readText || command.selectorKey != nil,
+      let refusal = litPanelWindowsRefusal(app: activeApp)
+    {
+      return refusal.response
+    }
     switch command.command {
     case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
       .appState, .pasteboardWrite, .snapshot:

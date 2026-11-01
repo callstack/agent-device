@@ -721,7 +721,7 @@ With a named panel, the runner walks at most eight windows. It books the first w
 
 The request books the window before it acts. A refusal is returned before any gesture or snapshot. Dispatch, the coordinate fallback, and the snapshot viewport reuse the booked window of the same app, so they never fall back to the application's own frame. Element reads (`readText`, the text-input lookup, and selector queries) search only under the application's windows that report the lit display. The panel is written onto the main queue behind work already queued there, so work that a previous command abandoned still reads that command's panel. Capture resolves its own window with the same rule. It asks the system surface only when the app has no window, and it refuses an app on the dark panel.
 
-A snapshot runs only the tree tier, because only that tier can prove which display a window is on. A pin to another backend is refused with `UNSUPPORTED_OPERATION`. The snapshot traverses the application's tree, not only the booked window, and keeps every window whose element snapshot reports the lit display. A window that reports no display is dropped. If no window is proven, the snapshot refuses with `APP_SCREEN_UNRESOLVED`. The root takes the booked window's frame. `--raw` applies the same window filter and keeps the root's reported frame.
+A snapshot runs only the tree tier, because only that tier can prove which display a window is on. A pin to another backend is refused with `UNSUPPORTED_OPERATION`. The snapshot traverses the application's tree, not only the booked window, and keeps every window whose element snapshot reports the lit display. A window that reports no display is dropped. If no window is proven, the snapshot refuses with `APP_SCREEN_UNRESOLVED`. The root takes the booked window's frame. `--raw` applies the same window filter and the same root frame, so raw and regular coordinates share one space. Element reads whose window list cannot be read refuse with `APP_SCREEN_UNRESOLVED` instead of finding nothing.
 
 Rejected alternatives:
 
@@ -733,5 +733,5 @@ Rejected alternatives:
 Consequences:
 
 - `runner.log` prints `AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=<id>(<w>x<h>) windows=<n> outcome=<reason> frame=(…)`. `SYNTHESIZED_DISPATCH reference=` must equal that frame, and `SYNTHESIZED_RECORD displayID=` must equal `lit=`.
-- A recording keeps the panel that its `recordStart` named. A fold during the recording leaves that panel dark, and later frames are refused. Start a new recording after a fold.
+- A recording keeps the panel that its `recordStart` named. The runner cannot read panel power, so it does not notice a fold during the recording: SpringBoard keeps windows on the panel that went dark, and later frames show that dark panel. Start a new recording after a fold.
 - Open gap: on the folded home screen, XCTest reports the page icons with the inner panel's layout in both panels' windows. The Dock and the page indicator report the outer panel correctly.

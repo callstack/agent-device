@@ -211,10 +211,7 @@ extension RunnerTests {
       index: 0,
       parentIndex: nil
     )
-    // The application's frame names one panel; the screen is the booked window's box (ADR 0025).
-    if requestLitPanel != nil, let surface = litPanelState.surface {
-      root.rect = SnapshotRect(surface.frame)
-    }
+    publishLitPanelRoot(&root)
     let rootChildren = try litPanelRootChildren(context.rootSnapshot)
     var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
@@ -295,6 +292,14 @@ extension RunnerTests {
       ),
       outcome
     )
+  }
+
+  /// The application's frame names one panel, so a lit-panel snapshot's root, raw or regular, is the
+  /// booked window's box (ADR 0025).
+  func publishLitPanelRoot(_ root: inout RawAXNode) {
+    if requestLitPanel != nil, let surface = litPanelState.surface {
+      root.rect = SnapshotRect(surface.frame)
+    }
   }
 
   /// A multi-panel device lists windows on both panels under one application, so a lit-panel
@@ -473,13 +478,15 @@ extension RunnerTests {
       }
     }
 
-    // Raw keeps the root's reported frame, and still never descends into the dark panel.
     try walk(
       context.rootSnapshot,
       depth: 0,
       parentIndex: nil,
       children: try litPanelRootChildren(context.rootSnapshot)
     )
+    if !nodes.isEmpty {
+      publishLitPanelRoot(&nodes[0])
+    }
     return SnapshotAcquisition(
       hint: hint,
       nodes: nodes,
