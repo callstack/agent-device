@@ -3,6 +3,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { cleanupLimrunAndroidAdbTunnel } from './android.ts';
 import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
+import type { LimrunBudgetOutcome } from './lifecycle-budget.ts';
 import { LIMRUN_PROVIDER, platformForLimrunLeaseBackend, type LimrunPlatform } from './device.ts';
 import type {
   LimrunDeleteResult,
@@ -67,8 +68,12 @@ export async function disposeLimrunLeaseOwner(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
 ): Promise<LimrunDisposalOutcome> {
-  const { awaitLimrunWithinBudget, joinOutcomeFailures, workOutstandingFailure } =
-    await import('./lifecycle-budget.ts');
+  const {
+    awaitLimrunWithinBudget,
+    joinOutcomeFailures,
+    keepLimrunObserved,
+    workOutstandingFailure,
+  } = await import('./lifecycle-budget.ts');
   const create = await awaitLimrunWithinBudget(owner.creation, CREATE_ANSWER_BUDGET_MS);
   // The create answered too late for this disposal to wait on it; what it goes on to name is still this
   // disposal's to end.
@@ -81,9 +86,11 @@ export async function disposeLimrunLeaseOwner(
   if (instanceId === undefined) return await disposeUnrented(host, owner);
   // The capture's record is optional reporting, and local teardown can outlive its own steps: neither is
   // allowed to stand between this disposal and the delete that stops the instance from being billed, so both
-  // are started here and joined after it.
-  const capture = host.endCapture(owner);
-  const local = releaseOwnerResources(owner);
+  // are started here and joined after it. Both are observed in this same step: a step of either one that
+  // refuses before the join below is reached has this disposal as its observer from the moment it started,
+  // so no refusal of a resource this route already owns can reach the process as an unhandled rejection.
+  const capture = keepLimrunObserved(host.endCapture(owner));
+  const local = keepLimrunObserved(releaseOwnerResources(owner));
   const instance = await endInstance(host, owner, session, instanceId);
   const stuck = await awaitLocalTeardown(local);
   // The record is optional reporting joined last: a capture that refuses to be written cannot keep a release
@@ -94,14 +101,26 @@ export async function disposeLimrunLeaseOwner(
     instanceId,
     failure: joinOutcomeFailures(
       instance.failure,
-      joinOutcomeFailures(
-        stuck,
-        joined.ok ? undefined : workOutstandingFailure('Capture record', CAPTURE_RECORD_BUDGET_MS),
-      ),
+      joinOutcomeFailures(stuck, captureRecordOutcome(joined, workOutstandingFailure)),
     ),
     cause: instance.cause,
     capture: joined.ok ? joined.value : undefined,
   };
+}
+
+/**
+ * What the joined capture record leaves to report: nothing, a refusal of the record itself, or a wait
+ * that ran out. A refusal is reported as what it is, because a record that will never be written is not
+ * the same thing as one that may still arrive.
+ */
+function captureRecordOutcome(
+  joined: LimrunBudgetOutcome<SettledNetworkCapture | undefined>,
+  outstanding: (work: string, budgetMs: number) => string,
+): string | undefined {
+  if (joined.ok) return undefined;
+  return 'rejected' in joined
+    ? 'Capture record refused to be written'
+    : outstanding('Capture record', CAPTURE_RECORD_BUDGET_MS);
 }
 
 /**
@@ -113,8 +132,11 @@ async function disposeUnansweredCreate(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
 ): Promise<LimrunDisposalOutcome> {
-  const { joinOutcomeFailures, workOutstandingFailure } = await import('./lifecycle-budget.ts');
-  const capture = awaitEndedCapture(host, owner);
+  const { joinOutcomeFailures, keepLimrunObserved, workOutstandingFailure } =
+    await import('./lifecycle-budget.ts');
+  // Observed the step it starts in, like the disposal's other early work: this route answers only after
+  // the local teardown below, so a capture end that refuses meanwhile has its observer already beside it.
+  const capture = keepLimrunObserved(awaitEndedCapture(host, owner));
   const outstanding = workOutstandingFailure(
     `Instance create for lease '${owner.lease.leaseId}'`,
     CREATE_ANSWER_BUDGET_MS,
@@ -240,15 +262,21 @@ async function endInstance(
   }
   const deleted = await awaitLimrunWithinBudget(requested, DELETE_ANSWER_BUDGET_MS);
   if (!deleted.ok) {
-    void requested.then((answer) => {
-      if (answer.failure === undefined) confirmLateDelete(owner, instanceId);
-    });
+    // Both branches of the request are answered for here: this continuation outlives its budget, and the
+    // route that started it has stopped waiting, so nothing it reports later may reach the process as an
+    // unhandled rejection.
+    void requested.then(
+      (answer) => {
+        if (answer.failure === undefined) confirmLateDelete(owner, instanceId);
+      },
+      () => undefined,
+    );
     return {
       cleanup: 'uncertain',
-      failure: workOutstandingFailure(
-        `Delete of instance '${instanceId}'`,
-        DELETE_ANSWER_BUDGET_MS,
-      ),
+      failure:
+        'rejected' in deleted
+          ? `Delete of instance '${instanceId}' could not be attempted`
+          : workOutstandingFailure(`Delete of instance '${instanceId}'`, DELETE_ANSWER_BUDGET_MS),
       cause: undefined,
     };
   }
@@ -303,21 +331,17 @@ async function sessionTheCreateBuilt(
 }
 
 /**
- * Reports the local teardown a disposal had to stop waiting for. A step that refused is reported as one that
- * never answered: neither is something this runtime can still fix, and the delete that ran beside it has
- * already been answered.
+ * Reports the local teardown a disposal had to stop waiting for. A step that refused and a step that never
+ * answered are both reported as what they are: neither is something this runtime can still fix, and the
+ * delete that ran beside it has already been answered.
  */
 async function awaitLocalTeardown(local: Promise<void>): Promise<string | undefined> {
   const { awaitLimrunWithinBudget, workOutstandingFailure } = await import('./lifecycle-budget.ts');
-  const stuck = workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS);
-  const ended = await awaitLimrunWithinBudget(
-    local.then(
-      (): string | undefined => undefined,
-      (): string => stuck,
-    ),
-    LOCAL_TEARDOWN_BUDGET_MS,
-  );
-  return ended.ok ? ended.value : stuck;
+  const ended = await awaitLimrunWithinBudget(local, LOCAL_TEARDOWN_BUDGET_MS);
+  if (ended.ok) return undefined;
+  return 'rejected' in ended
+    ? 'Local teardown refused to finish'
+    : workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS);
 }
 
 /** What a release answers for one lease: the instance it ended, with what it left and wrote. */

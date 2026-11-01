@@ -7,12 +7,8 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import {
-  androidAdbHostTarget,
-  androidAdbInvocation,
-  androidAdbSerialTarget,
-} from '@agent-device/platform-android/mechanics';
 import { createLimrunRuntime } from './runtime.ts';
+import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
 import { unusedLimrunRuntimeHost } from './runtime.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import type {
@@ -835,21 +831,37 @@ test('a create that fails after its session was built disconnects that session',
   }
 });
 
-/** The alias a lease was created with answers for the asset name its caller reuses. */
+/**
+ * The alias a lease was created with answers for the asset name its caller reuses — through the binding
+ * the daemon actually resolves open targets with, and only while the lease is held: once it is released,
+ * the name answers as the plain string it is, mapped by nothing.
+ */
 test('a created app alias resolves the asset name back to the installed identifier', async () => {
   state.uploadedApps = [{ id: 'asset-1', name: 'settings.apk', md5: 'md5', os: 'android' }];
   state.installedApps = [{ id: 'com.example.settings' }];
-  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
-  const resolve = (device: DeviceInfo, app: string) => runtime.resolveAppReference(device, app);
+  const registration = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies(), {
+    includePlatformModule: true,
+  });
   try {
-    const device = await allocateAndroidDevice(runtime, 'lease-alias', 'settings.apk');
-    assert.equal(resolve(device, 'settings.apk'), 'com.example.settings');
-    assert.equal(resolve(device, 'com.other.app'), 'com.other.app');
-    assert.equal(resolve({ ...device, id: 'other:android:x' }, 'settings.apk'), 'settings.apk');
+    const device = await allocateAndroidDevice(registration.runtime, 'lease-alias', 'settings.apk');
+    const owner = await registration.platformModule.loadRuntime(unusedLimrunRuntimeHost());
+    const binding = await owner.bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: requestScope(),
+    });
+    const resolve = async (app: string) =>
+      await binding.operations.resolveOpenTarget?.({ target: app, surface: 'app' });
+    assert.equal((await resolve('settings.apk'))?.appBundleId, 'com.example.settings');
+    assert.equal((await resolve('com.other.app'))?.appBundleId, 'com.other.app');
+
+    // The alias belonged to the lease, and the lease is gone: nothing maps the asset name any more.
+    await registration.runtime.shutdown();
+    assert.equal((await resolve('settings.apk'))?.appBundleId, 'settings.apk');
   } finally {
     state.uploadedApps = [];
     state.installedApps = [];
-    await runtime.shutdown();
+    await registration.runtime.shutdown();
   }
 });
 
@@ -954,47 +966,18 @@ function androidLease(leaseId: string): DeviceLease {
 }
 
 function testDependencies(): LimrunRuntimeDependencies {
+  const stub = stubLimrunRuntimeDependencies();
   return {
-    clientVersion: 'test-version',
+    ...stub,
     android: {
+      ...stub.android,
+      // The ADB provider an interactor was handed is kept: a case drives it after its lease is gone.
       createInteractor: (_device, adb) => {
         state.heldAdbProvider = adb;
         return {} as Interactor;
       },
-      createPortReverse: async () => ({
-        ensure: async () => {},
-        remove: async () => {},
-        removeAllOwned: async () => {},
-        list: async () => [],
-      }),
-      inferAppName: async () => 'Example',
       listApps: async (_adb: LimrunAdbExecutor, _filter: AppsFilter) => state.installedApps,
       getForegroundApp: async () => (state.foreground ? { ...state.foreground } : undefined),
-      getKeyboardState: async () => ({ visible: false, inputOwner: 'unknown' as const }),
-      dismissKeyboard: async () => ({
-        visible: false,
-        inputOwner: 'unknown' as const,
-        attempts: 0,
-        wasVisible: false,
-        dismissed: false,
-      }),
-      readLogs: async () => '',
-      forceStopApp: async () => {},
-      deviceAdbInvocation: (serial: string, command: readonly string[]) =>
-        androidAdbInvocation(androidAdbSerialTarget(serial), command),
-      hostAdbInvocation: (command: readonly string[]) =>
-        androidAdbInvocation(androidAdbHostTarget(), command),
-      adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
-    host: {
-      runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      archiveDirectory: async () => undefined,
-      downloadFile: async () => undefined,
-    },
-    ios: {
-      applySimctlSetting: async () => undefined,
-      resolveAppAlias: async (app: string) => app,
-      readBundleAppName: async () => undefined,
-    },
-  } satisfies LimrunRuntimeDependencies;
+  };
 }

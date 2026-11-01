@@ -8,25 +8,34 @@
  * it runs to its end, and its owner disposes what it eventually makes.
  */
 
-/** How the wait ended, kept so a caller states which work was still outstanding rather than guessing. */
+/**
+ * How the wait ended, kept so a caller states which work was still outstanding rather than guessing.
+ * A work item that refused is an outcome of its own: every wait this type answers for is reporting,
+ * cleanup, or a handshake somebody else can still act on, so a refusal is never this route's failure
+ * to re-raise — it maps to this variant and the caller says what it could not use.
+ */
 export type LimrunBudgetOutcome<T> =
   | Readonly<{ ok: true; value: T }>
-  | Readonly<{ ok: false; expired: true }>;
+  | Readonly<{ ok: false; expired: true }>
+  | Readonly<{ ok: false; rejected: true }>;
 
 /**
  * Waits for `work` within `budgetMs`, unref'd so a daemon close is never held open by the timer alone.
- * A work item that was too slow to be awaited is kept observed, so the outcome it reports later cannot
- * surface as an unhandled rejection.
+ * Both of the work's answers are mapped to outcomes in this step, so a work item that rejects can
+ * never reach the process as an unhandled rejection, whether it answers inside the budget or after it.
  */
 export async function awaitLimrunWithinBudget<T>(
   work: Promise<T>,
   budgetMs: number,
 ): Promise<LimrunBudgetOutcome<T>> {
-  void Promise.resolve(work).catch(() => undefined);
+  const settled = Promise.resolve(work).then(
+    (value): LimrunBudgetOutcome<T> => ({ ok: true, value }),
+    (): LimrunBudgetOutcome<T> => ({ ok: false, rejected: true }),
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      work.then((value): LimrunBudgetOutcome<T> => ({ ok: true, value })),
+      settled,
       new Promise<LimrunBudgetOutcome<T>>((expired) => {
         timer = setTimeout(() => expired({ ok: false, expired: true }), budgetMs);
         timer.unref?.();
@@ -35,6 +44,17 @@ export async function awaitLimrunWithinBudget<T>(
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
+}
+
+/**
+ * Keeps work that was started without being awaited yet observed for as long as that lasts: the handler
+ * attached here is what stops a refusal that arrives before the awaiting step from reaching the process as
+ * an unhandled rejection. The same promise comes back, so the route that starts the work is still the one
+ * that awaits what it answers with.
+ */
+export function keepLimrunObserved<T>(work: Promise<T>): Promise<T> {
+  void work.catch(() => undefined);
+  return work;
 }
 
 /**

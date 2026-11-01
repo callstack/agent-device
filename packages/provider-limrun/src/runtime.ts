@@ -83,8 +83,6 @@ export type LimrunRuntimeOptions = {
 export type LimrunRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
-  /** Maps an uploaded asset name this lease was created with back to its installed identifier. */
-  resolveAppReference(device: DeviceInfo, app: string): string;
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
