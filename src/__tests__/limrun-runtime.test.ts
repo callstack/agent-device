@@ -754,7 +754,19 @@ test('Limrun keeps session tracked when release fails so release can be retried'
     await allocateLease(lease);
     limrunMockState.androidDelete.mockRejectedValueOnce(new Error('temporary delete failure'));
 
-    await assert.rejects(() => releaseLease(lease), /temporary delete failure/);
+    // An unconfirmed delete is reported as such, with the instance still held, rather than as a release.
+    await assert.rejects(
+      () => releaseLease(lease),
+      (error: unknown) => {
+        const details = (error as AppError).details;
+        return (
+          error instanceof AppError &&
+          details?.reason === 'limrun_instance_delete_unconfirmed' &&
+          details.limrunInstanceId === 'android-instance-1' &&
+          details.cause === 'temporary delete failure'
+        );
+      },
+    );
     assert.deepEqual(await releaseLease(lease), { limrunInstanceId: 'android-instance-1' });
   } finally {
     await runtime.shutdown();

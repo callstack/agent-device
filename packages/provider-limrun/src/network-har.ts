@@ -4,8 +4,10 @@ import { DestinationTunnelSessionError } from '@limrun/api/destination-tunnel-di
 import type { DestinationTunnelHAREntry } from '@limrun/api/destination-tunnel-har';
 import type { DestinationTunnelInspectionEvent } from '@limrun/api/destination-tunnel-inspection';
 import type { DestinationTcpTunnel } from '@limrun/api/destination-tunnel-dialer';
+import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import fs from 'node:fs';
 import path from 'node:path';
+import { LIMRUN_PROVIDER } from './device.ts';
 
 /**
  * The Limrun network capture: one destination tunnel with inspection. Completed requests stay in
@@ -148,7 +150,7 @@ export async function startLimrunHarCapture(
 }
 
 /** Writes the entries as a HAR 1.2 file that only the daemon's user can read. */
-export async function writeLimrunHar(
+async function writeLimrunHar(
   harPath: string,
   entries: readonly DestinationTunnelHAREntry[],
 ): Promise<void> {
@@ -181,4 +183,91 @@ function defaultPort(url: URL | null): number | undefined {
   if (!url) return undefined;
   if (url.port) return Number(url.port);
   return url.protocol === 'https:' ? 443 : url.protocol === 'http:' ? 80 : undefined;
+}
+
+/** What one lease's capture came to once it was written or refused. */
+export type SettledNetworkCapture =
+  | Readonly<{ phase: 'written'; harPath: string; failures: LimrunNetworkFailures }>
+  | Readonly<{
+      phase: 'unavailable';
+      reason: 'capture-dir-unset' | 'tunnel-in-use' | 'tunnel-start-failed' | 'har-write-failed';
+      message?: string;
+    }>;
+
+/** What one lease has in capture terms: what it is capturing now, or what its capture came to. */
+export type NetworkCapture =
+  | SettledNetworkCapture
+  | Readonly<{ phase: 'capturing'; harPath: string; capture: LimrunHarCapture }>;
+
+/** Where one lease's HAR goes, so the lease id is the only name a capture's file needs. */
+export function limrunHarPath(harDir: string, leaseId: string): string {
+  return path.join(harDir, `${leaseId}.har`);
+}
+
+/**
+ * Writes one capture's HAR and answers with the record it came to. The capture itself is left alone, so an
+ * artifacts read can snapshot a live lease's traffic without ending the capture. A settled capture is
+ * already its own record.
+ */
+export async function writeCaptureRecord(capture: NetworkCapture): Promise<SettledNetworkCapture> {
+  if (capture.phase !== 'capturing') return capture;
+  const failures = await capture.capture.failures();
+  try {
+    await writeLimrunHar(capture.harPath, capture.capture.entries());
+    return { phase: 'written', harPath: capture.harPath, failures };
+  } catch (error) {
+    return {
+      phase: 'unavailable',
+      reason: 'har-write-failed',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+const NETWORK_ARTIFACT_NAME = 'Network traffic (HAR on the daemon host)';
+
+/** What `artifacts` answers for one lease's capture record. */
+export function networkArtifacts(capture: SettledNetworkCapture): CloudArtifactsResult {
+  if (capture.phase === 'unavailable') {
+    return {
+      provider: LIMRUN_PROVIDER,
+      status: 'unavailable',
+      message: `Network capture unavailable (${capture.reason})${capture.message ? `: ${capture.message}` : ''}`,
+      cloudArtifacts: [
+        {
+          provider: LIMRUN_PROVIDER,
+          kind: 'network',
+          name: NETWORK_ARTIFACT_NAME,
+          availability: 'unavailable',
+          metadata: { reason: capture.reason },
+        },
+      ],
+    };
+  }
+  const { count, last, lastDialFailure, truncated } = capture.failures;
+  const summary = [
+    `Network capture failures: ${count}`,
+    ...(last
+      ? [`last ${last.kind}${last.host ? ` ${last.host}${last.port ? `:${last.port}` : ''}` : ''}`]
+      : []),
+    ...(lastDialFailure ? [`last dial failure ${lastDialFailure}`] : []),
+    ...(truncated > 0 ? [`${truncated} oldest requests left the HAR`] : []),
+  ].join('; ');
+  return {
+    provider: LIMRUN_PROVIDER,
+    status: 'ready',
+    ...(count > 0 || lastDialFailure || truncated > 0 ? { message: summary } : {}),
+    cloudArtifacts: [
+      {
+        provider: LIMRUN_PROVIDER,
+        kind: 'network',
+        name: NETWORK_ARTIFACT_NAME,
+        url: capture.harPath,
+        extension: 'har',
+        contentType: 'application/json',
+        availability: 'ready',
+        metadata: { failures: capture.failures },
+      },
+    ],
+  };
 }

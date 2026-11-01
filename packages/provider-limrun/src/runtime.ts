@@ -13,7 +13,7 @@ import type {
   ProviderPortReverseOptions,
 } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   cleanupLimrunAndroidAdbTunnel,
   configureLimrunAndroidPortReverse,
@@ -30,12 +30,7 @@ import {
   platformForLimrunLeaseBackend,
   type LimrunPlatform,
 } from './device.ts';
-import {
-  createLimrunIosInteractor,
-  createLimrunIosSession,
-  installLimrunIosApp,
-  type LimrunIosSession,
-} from './ios.ts';
+import { createLimrunIosInteractor, createLimrunIosSession, installLimrunIosApp } from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type {
@@ -55,12 +50,33 @@ import type {
   CloudArtifactProvider,
   CloudArtifactsResult,
 } from '@agent-device/contracts/observability';
-import type { LimrunHarCapture, LimrunNetworkFailures } from './network-har.ts';
-import path from 'node:path';
-
-type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
+import type {
+  LimrunAppAlias,
+  LimrunCreateOutcome,
+  LimrunDisposalOutcome,
+  LimrunLeaseOwner,
+  LimrunRuntimeSession,
+  LimrunTeardownRoute,
+} from './lease-ownership.ts';
+import type { LimrunCaptureLifecycle } from './capture-lifecycle.ts';
 
 const KEEP_ALIVE_INTERVAL_MS = 30_000;
+
+/**
+ * How long a teardown waits for the create to say what it rented. The create itself keeps Limrun's own
+ * timeouts: this bounds only the teardown's wait, so an instance is never held open by a create that
+ * stopped answering, and the owner is kept for the next route to end what that create rents.
+ */
+const CREATE_ANSWER_BUDGET_MS = 120_000;
+
+/**
+ * How long a teardown waits for the local resources it started beside the delete: the instance connection
+ * and the Android ADB endpoint, whose `adb connect` the SDK runs without a deadline.
+ */
+const LOCAL_TEARDOWN_BUDGET_MS = 45_000;
+
+/** How long a teardown waits for a capture's HAR record, which is reporting and never a reason to hold a lease. */
+const CAPTURE_RECORD_BUDGET_MS = 15_000;
 
 export type LimrunRuntimeOptions = {
   /** Organization API key. It creates and deletes instances for platforms without `instances`. */
@@ -114,13 +130,19 @@ export function createLimrunRuntime(
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
-  private readonly sessions = new Map<string, LimrunRuntimeSession>();
-  private readonly keepAliveTimers = new Map<string, NodeJS.Timeout>();
-  private readonly networkCaptures = new Map<string, NetworkCapture>();
-  private readonly appAliases = new Map<
-    string,
-    Readonly<{ assetName: string; installedAppId: string }>
-  >();
+  /**
+   * A lease has an owner from the step it is allocated until the one disposal of it confirms. Allocate,
+   * join, release, recovery, shutdown and every reader of a live session go through this one map, so an
+   * in-flight create is never invisible to the route that has to end what it rents.
+   */
+  private readonly leases = new Map<string, LimrunLeaseOwner>();
+  /**
+   * What each lease's network capture goes through, including the records a release settled. Absent until a
+   * lease asks for a capture, which is what keeps the capture's module out of a runtime that captures nothing.
+   */
+  private capturesInstance?: LimrunCaptureLifecycle;
+  /** Whether this runtime has shut down; it then holds nothing, so it must create nothing. */
+  private shutDown = false;
   private readonly options: LimrunRuntimeOptions;
   private readonly dependencies: LimrunRuntimeDependencies;
   readonly provider = LIMRUN_PROVIDER;
@@ -153,7 +175,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   readonly deviceInventoryProvider: DeviceInventoryProvider = async (request) => {
     if (request.leaseProvider !== this.provider || !request.leaseId) return null;
-    const session = this.sessions.get(request.leaseId);
+    const session = this.liveSessionForLease(request.leaseId);
     if (!session) return null;
     if (request.platform && request.platform !== session.platform) return [];
     return [session.device];
@@ -171,6 +193,24 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
           userAgent: limrunUserAgent(dependencies.clientVersion),
         })
       : undefined;
+  }
+
+  /**
+   * The capture lifecycle, made the first time a lease asks for a capture. The records a release settled live
+   * there, so an artifacts read for a lease this runtime no longer holds goes through the same instance that
+   * settled them, and a runtime that never captures anything never evaluates that module.
+   */
+  private async captures(): Promise<LimrunCaptureLifecycle> {
+    if (this.capturesInstance === undefined) {
+      const { LimrunCaptureLifecycle } = await import('./capture-lifecycle.ts');
+      // Two allocations can be inside this load at once, and the settled records have to be one lifecycle's.
+      this.capturesInstance ??= new LimrunCaptureLifecycle({
+        harDir: this.options.networkHarDir,
+        liveSessionOf: (owner) => this.liveSession(owner),
+        heldOwners: () => this.leases.values(),
+      });
+    }
+    return this.capturesInstance;
   }
 
   ownsDevice(device: DeviceInfo): boolean {
@@ -246,11 +286,25 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return portReverseResult(options);
   }
 
+  /**
+   * Ends every instance this runtime holds or is on its way to holding, and says so when it could not.
+   * Each lease is taken, or joined, in one synchronous step, so a create that answers afterwards is
+   * disposed by the one disposal of that lease and by no other route, and a release already running is
+   * awaited rather than raced.
+   */
   async shutdown(): Promise<void> {
-    const sessions = [...this.sessions.values()];
-    await Promise.allSettled(sessions.map(async (session) => await this.terminateSession(session)));
-    this.sessions.clear();
-    this.appAliases.clear();
+    this.shutDown = true;
+    // Snapshot before anything is awaited: `allocate` refuses once this flag is set and publishes an
+    // owner only where none exists, and nothing between the flag and this loop awaits. So no create can
+    // start here, and every create already running has an owner for this loop to take.
+    const outcomes = await Promise.all(
+      [...this.leases.values()].map(async (owner) => await this.take(owner, 'shutdown')),
+    );
+    // An instance Limrun would not give back is still billed, and this process will not stop it. The
+    // plugin's close is where an operator learns what a daemon close left running, so the instance and
+    // the provider's refusal travel on the error rather than being dropped.
+    const unended = outcomes.filter((outcome) => outcome.cleanup === 'uncertain');
+    if (unended.length > 0) throw cleanupLeftInstancesRunning(unended);
   }
 
   private async allocate(
@@ -260,87 +314,393 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (lease.leaseProvider !== this.provider) return undefined;
     const platform = platformForLimrunLeaseBackend(lease.backend);
     if (!platform) return undefined;
-    const { rejectRefusedLimrunProfileFields } = await import('./session-allocation.ts');
-    // Before the reuse below, since a repeat allocation of a live lease carries flags of its own, and
-    // ahead of attach as well as create, since an attached instance reads none of them either.
-    rejectRefusedLimrunProfileFields(context);
-    const existing = this.sessions.get(lease.leaseId);
-    const session =
-      existing ??
-      (await this.attachSession(platform, lease)) ??
-      (await this.createSession(platform, lease, context));
-    if (!existing) {
-      this.sessions.set(lease.leaseId, session);
-      if (this.options.keepAlive) this.startKeepAlive(lease.leaseId, session);
+    // Joining a lease somebody else allocated, so this call answers for flags of its own, and it settles
+    // them before it reads any state. Nothing else awaits on this route: the lookup below is the last one.
+    if (this.leases.has(lease.leaseId)) await this.rejectRefusedProfileFields(context);
+    // Published without awaiting anything, so a lease is never unowned while its allocation is at its first
+    // await: a release or a shutdown arriving there finds this owner and takes it, and the create that owner
+    // stands on checks this call's own profile flags before it bills anything.
+    let owner = this.leases.get(lease.leaseId);
+    if (owner === undefined) {
+      // Nothing between this lookup and the publication below awaits, so two allocations of one lease can
+      // never both pass it, and this runtime can be shut down only before or after this step.
+      if (this.shutDown) throw allocationRefusedAfterShutdown(lease);
+      owner = this.beginAllocation(lease, platform, context);
     }
-    // A repeat allocation can ask for the capture, or retry one that could not start.
-    if (
-      context?.flags?.providerNetworkLogs === true &&
-      this.networkCaptures.get(lease.leaseId)?.phase !== 'capturing'
-    ) {
-      await this.startNetworkCapture(lease.leaseId, session, context.flags.providerNetworkHosts);
+    if (owner.state.phase === 'allocating') {
+      const create = await owner.creation;
+      if (create.status === 'failed') {
+        // A create that failed has no release coming for it, so this call is the only route left to end an
+        // instance it made before failing. What it came to outranks why the create did not finish: an
+        // instance Limrun is still billing is the caller's problem first.
+        const outcome = await this.settleFailedCreate(owner);
+        if (outcome?.cleanup === 'uncertain') throw createLeftInstanceRunning(lease, outcome);
+        throw create.error;
+      }
+      this.goLive(owner, create.session, create.appAlias);
     }
+    // A repeat allocation can ask for the capture, or retry one that could not start. A lease a teardown has
+    // already taken starts nothing: `captures.start` reads the owner's own live session, and what this lease
+    // has is that teardown's to end.
+    if (context?.flags?.providerNetworkLogs === true && owner.capture?.phase !== 'capturing') {
+      const captures = await this.captures();
+      await captures.start(owner, context.flags.providerNetworkHosts);
+    }
+    // A release or shutdown that took the lease while this call waited owns the instance the create made, and
+    // answers for it. This caller is refused for that teardown, with what it came to, rather than being handed
+    // an instance nothing will release for it. The refusal waits for the teardown to answer, so this caller
+    // never reports before the instance it was promised is gone.
+    const taken = owner.state;
+    if (taken.phase === 'releasing') {
+      const outcome = await taken.disposal;
+      throw allocationRefusedForTake(lease, taken.by, outcome);
+    }
+    const session = this.requireLiveSession(owner);
     return { limrunInstanceId: session.instanceId, device: session.device };
   }
 
-  private async startNetworkCapture(
-    leaseId: string,
-    session: LimrunRuntimeSession,
-    hostList: unknown,
-  ): Promise<void> {
-    const harDir = this.options.networkHarDir;
-    if (!harDir) {
-      this.networkCaptures.set(leaseId, { phase: 'unavailable', reason: 'capture-dir-unset' });
-      return;
-    }
-    const hosts =
-      typeof hostList === 'string'
-        ? hostList
-            .split(',')
-            .map((host) => host.trim())
-            .filter(Boolean)
-        : [];
-    const { startLimrunHarCapture } = await import('./network-har.ts');
-    const result = await startLimrunHarCapture(
-      session.client,
-      hosts.length > 0 ? hosts : undefined,
-    );
-    this.networkCaptures.set(
-      leaseId,
-      result.ok
-        ? {
-            phase: 'capturing',
-            harPath: path.join(harDir, `${leaseId}.har`),
-            capture: result.capture,
-          }
-        : { phase: 'unavailable', reason: result.reason, message: result.message },
-    );
+  /** The profile flags this provider reads nothing for, refused for a lease this runtime already holds. */
+  private async rejectRefusedProfileFields(context?: LeaseLifecycleContext): Promise<void> {
+    // Loaded here rather than eagerly so this package entry's declared closure stays unchanged. The create
+    // of a new allocation refuses the same flags as its first step, inside the owner it published.
+    const { rejectRefusedLimrunProfileFields } = await import('./session-allocation.ts');
+    rejectRefusedLimrunProfileFields(context);
   }
 
-  /** Writes a live capture's HAR now; a released capture reports the file it wrote at release. */
-  private async writeNetworkCapture(leaseId: string): Promise<SettledNetworkCapture | undefined> {
-    const state = this.networkCaptures.get(leaseId);
-    if (state?.phase !== 'capturing') return state;
-    const failures = await state.capture.failures();
+  /**
+   * Publishes the owner one allocation's create is standing on, in the same step that starts the create
+   * and before it can answer, so a duplicate allocation joins that create instead of making a second
+   * instance, and a release or shutdown arriving mid-create has somewhere to find the instance that create
+   * is on its way to making. The owner records that instance the moment Limrun names it, so whichever route
+   * takes the lease has what it has to end.
+   */
+  private beginAllocation(
+    lease: DeviceLease,
+    platform: LimrunPlatform,
+    context?: LeaseLifecycleContext,
+  ): LimrunLeaseOwner {
+    let report!: (create: LimrunCreateOutcome) => void;
+    const creation = new Promise<LimrunCreateOutcome>((settled) => {
+      report = settled;
+    });
+    const owner: LimrunLeaseOwner = {
+      lease,
+      platform,
+      creation,
+      state: { phase: 'allocating' },
+      rentedInstanceId: undefined,
+      keepAlive: undefined,
+      capture: undefined,
+      appAlias: undefined,
+      deletedInstanceId: undefined,
+    };
+    this.leases.set(lease.leaseId, owner);
+    // The create is started after the publication above, so its answer can never arrive without an owner
+    // beside it. Whichever route takes the lease in the meantime ends what this answer names.
+    void this.createForLease(owner, context).then(report);
+    return owner;
+  }
+
+  /**
+   * Attaches or makes this lease's instance and answers with the whole outcome rather than with a promise
+   * that resolves or rejects: a refused caller still has to say whether anything was left running, and the
+   * owner is where an instance this create rented gets recorded. Nothing here ends an instance, and nothing
+   * retries a create: a create whose answer was lost may have made an instance anyway, and that instance is
+   * reported and ended, never replaced by a second one.
+   */
+  private async createForLease(
+    owner: LimrunLeaseOwner,
+    context?: LeaseLifecycleContext,
+  ): Promise<LimrunCreateOutcome> {
     try {
-      const { writeLimrunHar } = await import('./network-har.ts');
-      await writeLimrunHar(state.harPath, state.capture.entries());
-      return { phase: 'written', harPath: state.harPath, failures };
-    } catch (error) {
-      return {
-        phase: 'unavailable',
-        reason: 'har-write-failed',
-        message: error instanceof Error ? error.message : String(error),
+      const {
+        allocateLimrunAndroidSession,
+        allocateLimrunIosSession,
+        rejectRefusedLimrunProfileFields,
+        resolvePreinstalledAppId,
+        resolveRequestedLimrunAppAsset,
+      } = await import('./session-allocation.ts');
+      // The first step of the create, so an allocation that published its owner before it could await
+      // anything still bills nothing for flags this provider reads no field for.
+      rejectRefusedLimrunProfileFields(context);
+      const platform = owner.platform;
+      // Attach first, and only ask for the organization client if there is nothing to attach: an attached
+      // instance needs no API key, and is not created with an app asset of ours.
+      const attached = await this.attachSession(platform, owner.lease);
+      if (attached) {
+        return { status: 'ready', session: attached, appAlias: undefined };
+      }
+      const limrun = this.orgClient('Creating an instance');
+      const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
+      const params = this.sessionAllocationParams(limrun, owner.lease, requestedAsset);
+      const rent = (instanceId: string): void => {
+        owner.rentedInstanceId = instanceId;
       };
+      const session =
+        platform === 'ios'
+          ? await allocateLimrunIosSession(params, rent)
+          : await allocateLimrunAndroidSession(params, rent);
+      const appAlias: LimrunAppAlias | undefined = requestedAsset && {
+        assetName: requestedAsset.name,
+        installedAppId: await resolvePreinstalledAppId(session, requestedAsset),
+      };
+      return { status: 'ready', session, appAlias };
+    } catch (error) {
+      return { status: 'failed', error };
     }
+  }
+
+  /**
+   * Puts the instance one create made, and the app alias that came with it, onto its owner. Another
+   * allocation that joined the same create can get here first, and a route that took the lease while the
+   * create ran owns the instance instead — either way this owner is already where it belongs, and nothing
+   * is published for a lease that no longer has an allocation.
+   */
+  private goLive(
+    owner: LimrunLeaseOwner,
+    session: LimrunRuntimeSession,
+    appAlias: LimrunAppAlias | undefined,
+  ): void {
+    if (owner.state.phase !== 'allocating') return;
+    owner.appAlias = appAlias;
+    owner.state = { phase: 'live', session };
+    if (this.options.keepAlive) this.startKeepAlive(owner, session);
+  }
+
+  /**
+   * Closes an owner whose create made nothing, and ends the instance one that made an instance before it
+   * failed. A create that failed has no release coming for it — its caller is being refused — so this is
+   * the route that ends what it left running, through the same take every other teardown goes through.
+   * The outcome is reported to that caller, which is the only one left to hear it.
+   */
+  private async settleFailedCreate(
+    owner: LimrunLeaseOwner,
+  ): Promise<LimrunDisposalOutcome | undefined> {
+    const state = owner.state;
+    if (state.phase === 'allocating') return await this.take(owner, 'create');
+    // Another route took the lease while this call waited, and its disposal owns what the create made.
+    return state.phase === 'releasing' ? await state.disposal : undefined;
+  }
+
+  /**
+   * Hands one lease's resources to the one route that may end them, or joins the disposal already ending
+   * them. The take and the disposal it starts are recorded before this step returns, so no route can reach
+   * the lease in between and find it free, and the owner leaves the map only once that disposal confirmed.
+   * A disposal that could not confirm keeps the owner here, so the next release, recovery or shutdown
+   * retries the delete rather than reporting an instance Limrun may still be billing.
+   */
+  private take(owner: LimrunLeaseOwner, by: LimrunTeardownRoute): Promise<LimrunDisposalOutcome> {
+    const taken = owner.state;
+    const settled = taken.phase === 'releasing' ? taken.settled : undefined;
+    if (taken.phase === 'releasing' && !(settled?.cleanup === 'uncertain')) return taken.disposal;
+    let reportDisposal!: (outcome: LimrunDisposalOutcome) => void;
+    const disposal = new Promise<LimrunDisposalOutcome>((settledOutcome) => {
+      reportDisposal = settledOutcome;
+    });
+    owner.state = {
+      phase: 'releasing',
+      by,
+      instanceId:
+        this.liveSession(owner)?.instanceId ?? owner.rentedInstanceId ?? settled?.instanceId,
+      disposal,
+      settled: undefined,
+    };
+    const report = (outcome: LimrunDisposalOutcome): void => {
+      const state = owner.state;
+      if (state.phase === 'releasing') {
+        state.settled = outcome;
+        state.instanceId = outcome.instanceId ?? state.instanceId;
+        // Whatever the create made is now ended, or was never made, so this owner holds nothing and the
+        // lease is free again. An unconfirmed delete keeps the owner so its outcome can be retried.
+        if (outcome.cleanup !== 'uncertain') this.closeOwner(owner);
+      }
+      reportDisposal(outcome);
+    };
+    // `disposeOwner` reports the failures it can name, so the rejection branch is only for what it could not
+    // report at all. The disposal still answers, because a caller may be waiting on this lease's instance.
+    void this.disposeOwner(owner).then(report, (error: unknown) => {
+      report({
+        cleanup: 'uncertain',
+        instanceId: owner.rentedInstanceId,
+        failure: errorMessage(error),
+        capture: undefined,
+      });
+    });
+    return disposal;
+  }
+
+  /**
+   * Ends what one taken owner stands for: the instance its create made or rented, with every resource the
+   * owner holds beside it. This is the only place an instance is ended, and an owner is taken by exactly one
+   * route at a time, so one instance is ended exactly once. Every wait here is bounded: work that outlives
+   * its budget keeps running and cleans up what it makes, and nothing of it stands between this route and the
+   * delete that stops the instance from being billed.
+   */
+  private async disposeOwner(owner: LimrunLeaseOwner): Promise<LimrunDisposalOutcome> {
+    const { awaitLimrunWithinBudget, joinOutcomeFailures } = await import('./lifecycle-budget.ts');
+    // A create that outlives this budget is reported rather than waited on: the owner is kept, so the next
+    // release, recovery or daemon close ends whatever that create goes on renting.
+    const create = await awaitLimrunWithinBudget(owner.creation, CREATE_ANSWER_BUDGET_MS);
+    const session = create.ok && create.value.status === 'ready' ? create.value.session : undefined;
+    const instanceId = session?.instanceId ?? owner.rentedInstanceId;
+    if (instanceId === undefined) return await this.disposeUnrented(owner, create.ok);
+    // The capture's record is optional reporting, and local teardown can outlive its own steps: neither is
+    // allowed to stand between this route and the delete that stops the instance from being billed, so both
+    // are started here and joined after it. A lease that never asked for a capture has no lifecycle to end,
+    // so its disposal never loads one.
+    const capture = this.capturesInstance?.end(owner);
+    const local = this.releaseOwnerResources(owner, session);
+    const instance = await this.endInstance(owner, session, instanceId);
+    const stuck = await this.awaitLocalTeardown(local);
+    // The record is optional reporting joined last: a capture that refuses to be written cannot keep a
+    // release from answering for the instance it ended, and is still listable once it does come to.
+    const joined =
+      capture === undefined
+        ? undefined
+        : await awaitLimrunWithinBudget(capture, CAPTURE_RECORD_BUDGET_MS);
+    return {
+      cleanup: instance.cleanup,
+      instanceId,
+      failure: joinOutcomeFailures(instance.failure, stuck),
+      capture: joined?.ok ? joined.value : undefined,
+    };
+  }
+
+  /**
+   * Ends what a disposal holds when no instance is named for the lease: its capture, and an outcome that
+   * keeps the lease held only while a create this route lost sight of may still rent something.
+   */
+  private async disposeUnrented(
+    owner: LimrunLeaseOwner,
+    createAnswered: boolean,
+  ): Promise<LimrunDisposalOutcome> {
+    const { workOutstandingFailure } = await import('./lifecycle-budget.ts');
+    const capture = await this.capturesInstance?.end(owner);
+    if (createAnswered) {
+      return { cleanup: 'none', instanceId: undefined, failure: undefined, capture };
+    }
+    return {
+      cleanup: 'uncertain',
+      instanceId: undefined,
+      failure: workOutstandingFailure(
+        `Instance create for lease '${owner.lease.leaseId}'`,
+        CREATE_ANSWER_BUDGET_MS,
+      ),
+      capture,
+    };
+  }
+
+  /**
+   * Ends one owner's instance. A delete Limrun already confirmed answers for itself, an attached instance is
+   * the caller's own to delete, and a created one is deleted here, with that answer deciding whether the
+   * lease can be given back.
+   */
+  private async endInstance(
+    owner: LimrunLeaseOwner,
+    session: LimrunRuntimeSession | undefined,
+    instanceId: string,
+  ): Promise<Readonly<{ cleanup: LimrunDisposalOutcome['cleanup']; failure: string | undefined }>> {
+    if (owner.deletedInstanceId === instanceId) return { cleanup: 'confirmed', failure: undefined };
+    if ((session?.ownership ?? 'created') === 'attached') {
+      // An attached instance is the caller's own, and this runtime was never given the right to delete it.
+      return { cleanup: 'attached', failure: undefined };
+    }
+    const failure = await this.deleteInstance(owner.platform, instanceId);
+    if (failure === undefined) owner.deletedInstanceId = instanceId;
+    return { cleanup: failure === undefined ? 'confirmed' : 'uncertain', failure };
+  }
+
+  /**
+   * Ends the resources one owner holds besides its instance: the keep-alive beat that would otherwise ping a
+   * deleted instance forever, the instance connection, and the Android ADB tunnel and its reverse mappings.
+   * Each is released once, whichever route took the lease.
+   */
+  private async releaseOwnerResources(
+    owner: LimrunLeaseOwner,
+    session: LimrunRuntimeSession | undefined,
+  ): Promise<void> {
+    if (owner.keepAlive) clearInterval(owner.keepAlive);
+    owner.keepAlive = undefined;
+    if (session === undefined) return;
+    session.client.disconnect();
+    // The tunnel's start is an `adb connect` the SDK runs without a deadline. Its cleanup retires the
+    // endpoint first, so a tunnel that answers late ends itself and no caller can reach it meanwhile.
+    if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
+  }
+
+  /**
+   * Reports the local teardown this route had to stop waiting for. A step that refused is reported as one
+   * that never answered: neither is something this runtime can still fix, and the delete that ran beside it
+   * has already been answered.
+   */
+  private async awaitLocalTeardown(local: Promise<void>): Promise<string | undefined> {
+    const { awaitLimrunWithinBudget, workOutstandingFailure } =
+      await import('./lifecycle-budget.ts');
+    const stuck = workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS);
+    const ended = await awaitLimrunWithinBudget(
+      local.then(
+        (): string | undefined => undefined,
+        (): string => stuck,
+      ),
+      LOCAL_TEARDOWN_BUDGET_MS,
+    );
+    return ended.ok ? ended.value : stuck;
+  }
+
+  /** One instance delete. `undefined` is Limrun's confirmation that the instance is gone. */
+  private async deleteInstance(
+    platform: LimrunPlatform,
+    instanceId: string,
+  ): Promise<string | undefined> {
+    try {
+      const limrun = this.orgClient('Deleting an instance');
+      if (platform === 'ios') {
+        await limrun.iosInstances.delete(instanceId);
+      } else {
+        await limrun.androidInstances.delete(instanceId);
+      }
+      return undefined;
+    } catch (error) {
+      return errorMessage(error);
+    }
+  }
+
+  /** Removes an owner once it holds nothing, and only while it is still the map's owner for that lease. */
+  private closeOwner(owner: LimrunLeaseOwner): void {
+    if (this.leases.get(owner.lease.leaseId) === owner) this.leases.delete(owner.lease.leaseId);
+  }
+
+  private startKeepAlive(owner: LimrunLeaseOwner, session: LimrunRuntimeSession): void {
+    const timer = setInterval(() => {
+      try {
+        session.client.keepAlive();
+      } catch {
+        // A dead connection surfaces on the next real command.
+      }
+    }, KEEP_ALIVE_INTERVAL_MS);
+    timer.unref();
+    owner.keepAlive = timer;
   }
 
   readonly cloudArtifacts: CloudArtifactProvider = {
-    listCloudArtifacts: async (query) => {
-      const capture = query.leaseId ? await this.writeNetworkCapture(query.leaseId) : undefined;
-      return capture && networkArtifacts(capture);
-    },
+    listCloudArtifacts: async (query) => await this.listCloudArtifacts(query.leaseId),
   };
+
+  /**
+   * What `artifacts` answers for one lease: its capture written now while the lease is held, and the
+   * record a release settled after the lease is gone. A runtime that never started a capture has no
+   * lifecycle to ask, so nothing is loaded for it.
+   */
+  private async listCloudArtifacts(
+    leaseId: string | undefined,
+  ): Promise<CloudArtifactsResult | undefined> {
+    if (leaseId === undefined) return undefined;
+    const captures = this.capturesInstance;
+    if (captures === undefined) return undefined;
+    const { networkArtifacts } = await import('./network-har.ts');
+    const capture = await captures.list(leaseId, this.leases.get(leaseId)?.capture);
+    return capture && networkArtifacts(capture);
+  }
 
   private async attachSession(
     platform: LimrunPlatform,
@@ -364,39 +724,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return (
       ios && (await createLimrunIosSession({ ...target(ios.apiUrl), ...ios }, this.dependencies))
     );
-  }
-
-  private async createSession(
-    platform: LimrunPlatform,
-    lease: DeviceLease,
-    context?: LeaseLifecycleContext,
-  ): Promise<LimrunRuntimeSession> {
-    const {
-      allocateLimrunAndroidSession,
-      allocateLimrunIosSession,
-      resolvePreinstalledAppId,
-      resolveRequestedLimrunAppAsset,
-    } = await import('./session-allocation.ts');
-    const limrun = this.orgClient('Creating an instance');
-    const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
-    const params = this.sessionAllocationParams(limrun, lease, requestedAsset);
-    const session =
-      platform === 'ios'
-        ? await allocateLimrunIosSession(params)
-        : await allocateLimrunAndroidSession(params);
-    if (requestedAsset) {
-      try {
-        const installedAppId = await resolvePreinstalledAppId(session, requestedAsset);
-        this.appAliases.set(lease.leaseId, {
-          assetName: requestedAsset.name,
-          installedAppId,
-        });
-      } catch (error) {
-        await this.terminateSession(session);
-        throw error;
-      }
-    }
-    return session;
   }
 
   private sessionAllocationParams(limrun: Limrun, lease: DeviceLease, app?: LimrunAppAsset) {
@@ -424,99 +751,51 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   private async release(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
-    const session = this.sessions.get(lease.leaseId);
-    if (!session) return await this.releaseRecoveredSession(lease);
-    const live = this.networkCaptures.get(lease.leaseId);
-    const capture = await this.writeNetworkCapture(lease.leaseId);
-    if (capture) {
-      // Re-insertion keeps the map in settle order, so the oldest released record goes first.
-      this.networkCaptures.delete(lease.leaseId);
-      this.networkCaptures.set(lease.leaseId, capture);
-    }
-    for (const leaseId of this.networkCaptures.keys()) {
-      if (this.networkCaptures.size <= SETTLED_NETWORK_CAPTURE_LIMIT) break;
-      if (!this.sessions.has(leaseId)) this.networkCaptures.delete(leaseId);
-    }
-    if (live?.phase === 'capturing') live.capture.close();
-    await this.terminateSession(session);
-    this.sessions.delete(lease.leaseId);
-    this.appAliases.delete(lease.leaseId);
-    return {
-      limrunInstanceId: session.instanceId,
-      ...(capture ? { cloudArtifacts: networkArtifacts(capture) } : {}),
-    };
-  }
-
-  private async releaseRecoveredSession(
-    lease: DeviceLease,
-  ): Promise<Record<string, unknown> | undefined> {
-    const platform = platformForLimrunLeaseBackend(lease.backend);
-    const limrun = this.limrun;
-    if (!platform || !limrun) return undefined;
-    const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
-    const instances =
-      platform === 'ios'
-        ? await limrun.iosInstances.list({ labelSelector })
-        : await limrun.androidInstances.list({ labelSelector });
-    const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
-    for (const instanceId of instanceIds) {
-      if (platform === 'ios') {
-        await limrun.iosInstances.delete(instanceId);
-      } else {
-        await limrun.androidInstances.delete(instanceId);
-      }
-    }
-    if (instanceIds.length === 0) return undefined;
-    return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
-  }
-
-  private startKeepAlive(leaseId: string, session: LimrunRuntimeSession): void {
-    const timer = setInterval(() => {
-      try {
-        session.client.keepAlive();
-      } catch {
-        // A dead connection surfaces on the next real command.
-      }
-    }, KEEP_ALIVE_INTERVAL_MS);
-    timer.unref();
-    this.keepAliveTimers.set(leaseId, timer);
-  }
-
-  private async terminateSession(session: LimrunRuntimeSession): Promise<void> {
-    const leaseId = session.lease.leaseId;
-    clearInterval(this.keepAliveTimers.get(leaseId));
-    this.keepAliveTimers.delete(leaseId);
-    const capture = this.networkCaptures.get(leaseId);
-    if (capture?.phase === 'capturing') {
-      this.networkCaptures.delete(leaseId);
-      capture.capture.close();
-    }
-    session.client.disconnect();
-    if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
-    if (session.ownership === 'attached') return;
-    const limrun = this.orgClient('Deleting an instance');
-    if (session.platform === 'ios') {
-      await limrun.iosInstances.delete(session.instanceId);
-    } else {
-      await limrun.androidInstances.delete(session.instanceId);
-    }
+    // The take happens in this step, before anything is loaded: the release owns the lease from here, and no
+    // await in between can let the allocation still waiting on its create answer ahead of it.
+    const owner = this.leases.get(lease.leaseId);
+    const disposal = owner === undefined ? undefined : this.take(owner, 'release');
+    const { releaseLimrunLease } = await import('./lease-release.ts');
+    return await releaseLimrunLease(this.limrun, lease, disposal);
   }
 
   private orgClient(operation: string, hint?: string): Limrun {
     return requireLimrunOrgClient(this.limrun, operation, hint);
   }
 
+  /** The live session of one owner: what its create made, and only while the lease is held. */
+  private liveSession(owner: LimrunLeaseOwner | undefined): LimrunRuntimeSession | undefined {
+    return owner?.state.phase === 'live' ? owner.state.session : undefined;
+  }
+
+  /** The live session of one owner, for a route that has already refused every other phase. */
+  private requireLiveSession(owner: LimrunLeaseOwner): LimrunRuntimeSession {
+    const session = this.liveSession(owner);
+    if (session === undefined) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Limrun lease '${owner.lease.leaseId}' has no live session`,
+        { reason: 'limrun_lease_not_live' },
+      );
+    }
+    return session;
+  }
+
+  private liveSessionForLease(leaseId: string): LimrunRuntimeSession | undefined {
+    return this.liveSession(this.leases.get(leaseId));
+  }
+
   private getSessionForDevice(device: DeviceInfo): LimrunRuntimeSession | undefined {
     const parsed = parseLimrunDeviceId(device.id);
     if (!parsed) return undefined;
-    const session = this.sessions.get(parsed.leaseId);
+    const session = this.liveSessionForLease(parsed.leaseId);
     return session?.platform === parsed.platform ? session : undefined;
   }
 
   resolveAppReference(device: DeviceInfo, app: string): string {
     const parsed = parseLimrunDeviceId(device.id);
     if (!parsed) return app;
-    const alias = this.appAliases.get(parsed.leaseId);
+    const alias = this.leases.get(parsed.leaseId)?.appAlias;
     return alias?.assetName === app ? alias.installedAppId : app;
   }
 
@@ -549,7 +828,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   private requireAndroidPortReverseSession(leaseId: string): LimrunAndroidSession | undefined {
-    const session = this.sessions.get(leaseId);
+    const session = this.liveSessionForLease(leaseId);
     if (!session || session.platform === 'android') return session;
     throw unsupported(
       'port reverse',
@@ -642,64 +921,75 @@ function unsupported(command: string, message: string): never {
   throw new AppError('UNSUPPORTED_OPERATION', message, { command });
 }
 
-/** Released captures stay listable; the oldest records are forgotten past this count. */
-const SETTLED_NETWORK_CAPTURE_LIMIT = 32;
+/** A lease cannot be allocated into a runtime that has been told to end every instance it holds. */
+function allocationRefusedAfterShutdown(lease: DeviceLease): never {
+  throw new AppError(
+    'SESSION_NOT_FOUND',
+    `Cannot allocate Limrun lease '${lease.leaseId}': this runtime is shut down`,
+    {
+      reason: 'limrun_runtime_shut_down',
+      hint: 'Start the daemon again to allocate a Limrun lease.',
+    },
+  );
+}
 
-type SettledNetworkCapture =
-  | Readonly<{ phase: 'written'; harPath: string; failures: LimrunNetworkFailures }>
-  | Readonly<{
-      phase: 'unavailable';
-      reason: 'capture-dir-unset' | 'tunnel-in-use' | 'tunnel-start-failed' | 'har-write-failed';
-      message?: string;
-    }>;
+/**
+ * The refusal an allocation gets when a teardown took its lease while the create ran. The caller passes the
+ * disposal's outcome rather than reading the owner, so this answers with what that teardown came to —
+ * including a delete Limrun did not confirm, which the refused caller is the last route left to hear about.
+ */
+function allocationRefusedForTake(
+  lease: DeviceLease,
+  by: LimrunTeardownRoute,
+  outcome: LimrunDisposalOutcome,
+): never {
+  const { instanceId } = outcome;
+  throw new AppError(
+    'DEVICE_IN_USE',
+    `Limrun lease '${lease.leaseId}' was released while its instance was being prepared`,
+    {
+      reason: 'limrun_lease_released_mid_allocation',
+      ...(instanceId === undefined
+        ? {}
+        : {
+            limrunInstanceId: instanceId,
+            hint: `Instance '${instanceId}' was ended by the ${by} of this lease. Open a new lease.`,
+          }),
+      ...(outcome.cleanup === 'uncertain'
+        ? { retriable: true, ...(outcome.failure === undefined ? {} : { cause: outcome.failure }) }
+        : {}),
+    },
+  );
+}
 
-type NetworkCapture =
-  | SettledNetworkCapture
-  | Readonly<{ phase: 'capturing'; harPath: string; capture: LimrunHarCapture }>;
+/** What an allocation reports when the create it waited on failed and left an instance running. */
+function createLeftInstanceRunning(lease: DeviceLease, outcome: LimrunDisposalOutcome): never {
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Limrun lease '${lease.leaseId}' could not be allocated, and its instance could not be deleted`,
+    {
+      reason: 'limrun_instance_delete_unconfirmed',
+      retriable: true,
+      ...(outcome.instanceId === undefined ? {} : { limrunInstanceId: outcome.instanceId }),
+      ...(outcome.failure === undefined ? {} : { cause: outcome.failure }),
+      hint: `Ask Limrun to delete instance '${outcome.instanceId ?? lease.leaseId}' — this runtime could not confirm the delete.`,
+    },
+  );
+}
 
-const NETWORK_ARTIFACT_NAME = 'Network traffic (HAR on the daemon host)';
-
-function networkArtifacts(capture: SettledNetworkCapture): CloudArtifactsResult {
-  if (capture.phase === 'unavailable') {
-    return {
-      provider: LIMRUN_PROVIDER,
-      status: 'unavailable',
-      message: `Network capture unavailable (${capture.reason})${capture.message ? `: ${capture.message}` : ''}`,
-      cloudArtifacts: [
-        {
-          provider: LIMRUN_PROVIDER,
-          kind: 'network',
-          name: NETWORK_ARTIFACT_NAME,
-          availability: 'unavailable',
-          metadata: { reason: capture.reason },
-        },
-      ],
-    };
-  }
-  const { count, last, lastDialFailure, truncated } = capture.failures;
-  const summary = [
-    `Network capture failures: ${count}`,
-    ...(last
-      ? [`last ${last.kind}${last.host ? ` ${last.host}${last.port ? `:${last.port}` : ''}` : ''}`]
-      : []),
-    ...(lastDialFailure ? [`last dial failure ${lastDialFailure}`] : []),
-    ...(truncated > 0 ? [`${truncated} oldest requests left the HAR`] : []),
-  ].join('; ');
-  return {
-    provider: LIMRUN_PROVIDER,
-    status: 'ready',
-    ...(count > 0 || lastDialFailure || truncated > 0 ? { message: summary } : {}),
-    cloudArtifacts: [
-      {
-        provider: LIMRUN_PROVIDER,
-        kind: 'network',
-        name: NETWORK_ARTIFACT_NAME,
-        url: capture.harPath,
-        extension: 'har',
-        contentType: 'application/json',
-        availability: 'ready',
-        metadata: { failures: capture.failures },
-      },
-    ],
-  };
+/** What a daemon close reports for every instance it could not stop before the process moved on. */
+function cleanupLeftInstancesRunning(outcomes: readonly LimrunDisposalOutcome[]): never {
+  const leftRunning = outcomes
+    .map((outcome) => outcome.instanceId)
+    .filter((id) => id !== undefined);
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Limrun cleanup could not delete ${String(leftRunning.length)} instance${leftRunning.length === 1 ? '' : 's'}`,
+    {
+      reason: 'limrun_instance_delete_unconfirmed',
+      ...(leftRunning.length === 0 ? {} : { limrunInstanceIds: leftRunning }),
+      ...(outcomes[0]?.failure === undefined ? {} : { cause: outcomes[0].failure }),
+      hint: `Ask Limrun to delete: ${leftRunning.join(', ')}.`,
+    },
+  );
 }

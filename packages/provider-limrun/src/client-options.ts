@@ -8,6 +8,13 @@ export function limrunUserAgent(clientVersion: string): string {
   return `${LIMRUN_CLIENT_ID}/${clientVersion}`;
 }
 
+/**
+ * Asks the SDK for one attempt at a request whose failure this runtime cannot tell apart from Limrun having
+ * done the work: the SDK retries a lost answer by POSTing again, and a repeated instance create rents a
+ * second instance. The SDK defaults to two retries, so a request that must not repeat carries this.
+ */
+export const LIMRUN_SINGLE_ATTEMPT = Object.freeze({ maxRetries: 0 });
+
 /** The organization client, or a typed refusal for an operation that needs the API key. */
 export function requireLimrunOrgClient(
   limrun: Limrun | undefined,

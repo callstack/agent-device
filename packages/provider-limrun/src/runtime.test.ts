@@ -15,7 +15,11 @@ import {
 import { createLimrunRuntime } from './runtime.ts';
 import { unusedLimrunRuntimeHost } from './runtime.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
-import type { LimrunAdbExecutor, LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import type {
+  LimrunAdbExecutor,
+  LimrunAdbProvider,
+  LimrunRuntimeDependencies,
+} from './runtime-dependencies.ts';
 
 /**
  * The provider's platform module is the daemon's real load path: `createLimrunRuntime(...,
@@ -32,49 +36,505 @@ const state = vi.hoisted(() => ({
   tunnelClose: vi.fn(),
   captureTunnelClose: vi.fn(),
   onInspectionEvent: undefined as ((event: unknown) => void) | undefined,
+  androidCreate: vi.fn(async () => ({
+    metadata: { id: 'android-instance-1' },
+    status: {
+      token: 'instance-token',
+      apiUrl: 'https://android.example',
+      adbWebSocketUrl: 'wss://adb.example',
+    },
+  })),
+  androidDelete: vi.fn(async (_instanceId: string) => {
+    if (state.deleteFails) throw new Error('Limrun refused to delete the instance');
+  }),
+  /** Made to reject by a case whose instance delete is refused, the one failure a lease may not swallow. */
+  deleteFails: false,
+  keepAlive: vi.fn(),
+  /** Instance-client connections the provider made, so one lease can be shown to make one. */
+  connectCount: 0,
+  /**
+   * Held by a case that has to keep a create in flight after its instance was rented, which is the window
+   * in which a release or a daemon close has to find the instance.
+   */
+  createGate: undefined as Promise<void> | undefined,
+  /**
+   * Held by a case that has to keep a session's destination tunnel or ADB tunnel in flight, which is the
+   * window a release has to cover for a tunnel that has not been opened yet.
+   */
+  tunnelGate: undefined as Promise<void> | undefined,
+  /** Made to throw by a case whose session connection fails after its instance was rented. */
+  connectFails: false,
+  /** Destination tunnels and ADB tunnels this runtime asked the SDK to open. */
+  captureStarts: 0,
+  adbTunnelStarts: 0,
+  /**
+   * The ADB provider last handed to an interactor, which is the handle a caller keeps for a session whose
+   * lease has since ended.
+   */
+  heldAdbProvider: undefined as LimrunAdbProvider | undefined,
 }));
 
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
     readonly androidInstances = {
-      create: vi.fn(async () => ({
-        metadata: { id: 'android-instance-1' },
-        status: {
-          token: 'instance-token',
-          apiUrl: 'https://android.example',
-          adbWebSocketUrl: 'wss://adb.example',
-        },
-      })),
-      list: vi.fn(),
-      delete: vi.fn(async () => undefined),
+      create: async () => {
+        const instance = await state.androidCreate();
+        await state.createGate;
+        return instance;
+      },
+      // Expired-lease recovery finds nothing under this lease's labels, so a release of a lease the
+      // runtime lost answers nothing rather than reaching an unstubbed SDK call.
+      list: vi.fn(async () => ({ getPaginatedItems: () => [] })),
+      delete: state.androidDelete,
     };
     readonly assets = { getOrUpload: vi.fn(), list: vi.fn() };
   },
 }));
 
 vi.mock('@limrun/api/instance-client', () => ({
-  createInstanceClient: vi.fn(async () => ({
-    disconnect: state.disconnect,
-    keepAlive: vi.fn(),
-    openUrl: vi.fn(),
-    sendAsset: vi.fn(),
-    pressKey: vi.fn(),
-    setText: vi.fn(),
-    tap: vi.fn(),
-    startAdbTunnel: vi.fn(async () => ({
-      address: { address: '127.0.0.1', port: 62_001 },
-      close: state.tunnelClose,
-    })),
-    startTunnel: vi.fn(async (options: { onInspectionEvent: (event: unknown) => void }) => {
-      state.onInspectionEvent = options.onInspectionEvent;
-      return { tunnelId: 't1', selectors: [], close: state.captureTunnelClose };
-    }),
-    getTunnelStatus: vi.fn(async () => ({
-      lastDialFailure: { tunnelId: 't1', reason: 'dns_not_found' },
-    })),
-  })),
+  createInstanceClient: vi.fn(async () => {
+    state.connectCount += 1;
+    if (state.connectFails) throw new Error('instance connection refused');
+    return {
+      disconnect: state.disconnect,
+      keepAlive: state.keepAlive,
+      openUrl: vi.fn(),
+      sendAsset: vi.fn(),
+      pressKey: vi.fn(),
+      setText: vi.fn(),
+      tap: vi.fn(),
+      startAdbTunnel: vi.fn(async () => {
+        state.adbTunnelStarts += 1;
+        await state.tunnelGate;
+        return { address: { address: '127.0.0.1', port: 62_001 }, close: state.tunnelClose };
+      }),
+      startTunnel: vi.fn(async (options: { onInspectionEvent: (event: unknown) => void }) => {
+        state.captureStarts += 1;
+        state.onInspectionEvent = options.onInspectionEvent;
+        await state.tunnelGate;
+        return { tunnelId: 't1', selectors: [], close: state.captureTunnelClose };
+      }),
+      getTunnelStatus: vi.fn(async () => ({
+        lastDialFailure: { tunnelId: 't1', reason: 'dns_not_found' },
+      })),
+    };
+  }),
 }));
+
+/**
+ * One lease has one set of resources, however many routes arrive at it: a leased instance cannot be rented
+ * twice, left untracked by a release or a daemon close that raced its create, or kept alive after it is
+ * gone. The mock `state` is shared by this file, so each case measures from its own baseline.
+ */
+
+test('two allocations of one lease rent one instance and start one keep-alive timer', async () => {
+  let reportCreate!: () => void;
+  state.createGate = new Promise<void>((resolve) => {
+    reportCreate = resolve;
+  });
+  const { connects, creates, deletes, disconnects } = limrunActivity();
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', keepAlive: true },
+    testDependencies(),
+  );
+  let started: ReturnType<typeof vi.spyOn> | undefined;
+  try {
+    // The second call arrives while the first one's create is still running.
+    const first = runtime.leaseLifecycle.allocate?.(androidLease('lease-race'));
+    const second = runtime.leaseLifecycle.allocate?.(androidLease('lease-race'));
+    await waitForCreate(creates + 1);
+    started = vi.spyOn(globalThis, 'setInterval');
+    reportCreate();
+
+    assert.equal((await first)?.limrunInstanceId, 'android-instance-1');
+    assert.equal((await second)?.limrunInstanceId, 'android-instance-1');
+    assert.equal(state.connectCount - connects, 1);
+    assert.equal(started.mock.calls.length, 1);
+  } finally {
+    started?.mockRestore();
+    await runtime.shutdown();
+    state.createGate = undefined;
+  }
+  // The second allocation is not an orphaned session behind the first: one create, one connection, one delete.
+  const activity = limrunActivity();
+  assert.equal(activity.creates - creates, 1);
+  assert.equal(activity.connects - connects, 1);
+  assert.deepEqual(
+    state.androidDelete.mock.calls.slice(deletes).map(([instanceId]) => instanceId),
+    ['android-instance-1'],
+  );
+  assert.equal(activity.disconnects - disconnects, 1);
+});
+
+test('a release that arrives before the create answered ends the instance that create made', async () => {
+  let reportCreate!: () => void;
+  state.createGate = new Promise<void>((resolve) => {
+    reportCreate = resolve;
+  });
+  const { creates, deletes, disconnects } = limrunActivity();
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', keepAlive: true },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-race-release');
+  let started: ReturnType<typeof vi.spyOn> | undefined;
+  try {
+    const allocating = runtime.leaseLifecycle.allocate?.(lease);
+    const refused = refusalOf(allocating);
+    await waitForCreate(creates + 1);
+    started = vi.spyOn(globalThis, 'setInterval');
+
+    const released = runtime.leaseLifecycle.release?.(lease);
+    reportCreate();
+
+    // The release cannot answer before the instance it is waiting for exists, so it names what it ended.
+    assert.deepEqual(await released, { limrunInstanceId: 'android-instance-1' });
+    // The allocation whose instance was taken from it is refused rather than handed a dead session.
+    const error = await refused;
+    assert.ok(
+      error instanceof AppError &&
+        error.details?.reason === 'limrun_lease_released_mid_allocation' &&
+        error.details.limrunInstanceId === 'android-instance-1',
+      `expected the allocation to be refused for the release, got ${String(error)}`,
+    );
+    assert.equal(started.mock.calls.length, 0);
+    assert.deepEqual(
+      state.androidDelete.mock.calls.slice(deletes).map(([instanceId]) => instanceId),
+      ['android-instance-1'],
+    );
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+  } finally {
+    started?.mockRestore();
+    await runtime.shutdown();
+    state.createGate = undefined;
+  }
+  // One instance, so one delete: the allocation's own refusal does not end a second one.
+  assert.equal(state.androidDelete.mock.calls.length - deletes, 1);
+});
+
+test('a shutdown while the create runs ends the instance that create made', async () => {
+  let reportCreate!: () => void;
+  state.createGate = new Promise<void>((resolve) => {
+    reportCreate = resolve;
+  });
+  const { creates, deletes } = limrunActivity();
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', keepAlive: true },
+    testDependencies(),
+  );
+  let started: ReturnType<typeof vi.spyOn> | undefined;
+  try {
+    const allocating = runtime.leaseLifecycle.allocate?.(androidLease('lease-race-shutdown'));
+    const refused = refusalOf(allocating);
+    await waitForCreate(creates + 1);
+    started = vi.spyOn(globalThis, 'setInterval');
+
+    const closing = runtime.shutdown();
+    reportCreate();
+    await closing;
+
+    const error = await refused;
+    assert.ok(
+      error instanceof AppError && error.details?.reason === 'limrun_lease_released_mid_allocation',
+      `expected the allocation to be refused for the shutdown, got ${String(error)}`,
+    );
+    assert.equal(started.mock.calls.length, 0);
+    // Nothing may allocate into a runtime that was told to end every instance it holds.
+    await assert.rejects(
+      async () => await runtime.leaseLifecycle.allocate?.(androidLease('lease-after-shutdown')),
+      (error) => error instanceof AppError && error.details?.reason === 'limrun_runtime_shut_down',
+    );
+    assert.deepEqual(
+      state.androidDelete.mock.calls.slice(deletes).map(([instanceId]) => instanceId),
+      ['android-instance-1'],
+    );
+  } finally {
+    started?.mockRestore();
+    state.createGate = undefined;
+  }
+});
+
+/** Lets an allocation reach the instance create, which is a few module loads away, without clock waits. */
+async function waitForCreate(calls: number): Promise<void> {
+  await vi.waitFor(() => assert.equal(state.androidCreate.mock.calls.length, calls));
+}
+
+test('a release that arrives before the allocation yields ends the instance its create rents', async () => {
+  const { creates, deletes } = limrunActivity();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-release-before-yield');
+  try {
+    // Neither call is awaited between: the release arrives at the allocation's first suspension point.
+    const allocating = runtime.leaseLifecycle.allocate?.(lease);
+    const refused = refusalOf(allocating);
+    const released = runtime.leaseLifecycle.release?.(lease);
+
+    // The release had an owner to take, so it answers for the instance that create went on renting.
+    assert.deepEqual(await released, { limrunInstanceId: 'android-instance-1' });
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    const error = await refused;
+    assert.ok(
+      error instanceof AppError &&
+        error.details?.reason === 'limrun_lease_released_mid_allocation' &&
+        error.details.limrunInstanceId === 'android-instance-1',
+      `expected the allocation to be refused for the release, got ${String(error)}`,
+    );
+  } finally {
+    await runtime.shutdown();
+  }
+  // One instance was rented and one was ended; the refused allocation did not rent another.
+  assert.equal(state.androidCreate.mock.calls.length - creates, 1);
+  assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+});
+
+test('the create of a new lease refuses a profile flag it is given no field for', async () => {
+  const { creates } = limrunActivity();
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  try {
+    await assert.rejects(
+      async () =>
+        await runtime.leaseLifecycle.allocate?.(androidLease('lease-refused-flag'), {
+          flags: { providerNetworkLogs: true, providerOsVersion: '15' },
+        }),
+      (error) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    );
+  } finally {
+    await runtime.shutdown();
+  }
+  // Nothing was billed before the refused flag was answered for.
+  assert.equal(state.androidCreate.mock.calls.length - creates, 0);
+});
+
+test('a create that failed after renting keeps its unconfirmed delete for the next route', async () => {
+  const { deletes } = limrunActivity();
+  state.connectFails = true;
+  state.deleteFails = true;
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  try {
+    // The instance was rented before the session connection failed, and Limrun refused this delete.
+    const error = await refusalOf(
+      runtime.leaseLifecycle.allocate?.(androidLease('lease-rented-then-failed')),
+    );
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    assert.ok(
+      error instanceof AppError &&
+        error.details?.reason === 'limrun_instance_delete_unconfirmed' &&
+        error.details.limrunInstanceId === 'android-instance-1',
+      `expected the allocation to report the unended instance, got ${String(error)}`,
+    );
+
+    // The lease is still held, so the daemon close retries the delete it could not confirm.
+    state.deleteFails = false;
+    await runtime.shutdown();
+  } finally {
+    state.connectFails = false;
+    state.deleteFails = false;
+    await runtime.shutdown();
+  }
+  // The retried delete ended the same instance the create rented, rather than forgetting it was owed.
+  assert.deepEqual(deletedInstances(deletes), ['android-instance-1', 'android-instance-1']);
+});
+
+test('two allocations that ask for traffic logs open one destination tunnel', async () => {
+  const { captures, captureCloses } = limrunActivity();
+  let reportTunnel!: () => void;
+  state.tunnelGate = new Promise<void>((resolve) => {
+    reportTunnel = resolve;
+  });
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: mkdtempForTestSync('limrun-har-') },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-capture-race');
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+    // Both repeat allocations ask for the capture while the first one's tunnel is still being opened.
+    const first = runtime.leaseLifecycle.allocate?.(lease, {
+      flags: { providerNetworkLogs: true },
+    });
+    const second = runtime.leaseLifecycle.allocate?.(lease, {
+      flags: { providerNetworkLogs: true },
+    });
+    await waitForNewOpen(captures, () => state.captureStarts);
+    reportTunnel();
+    await Promise.all([first, second]);
+
+    // The second allocation joined the start in flight rather than opening a tunnel whose `already_active`
+    // refusal would be reported over the capture that is working.
+    assert.equal(state.captureStarts - captures, 1);
+  } finally {
+    state.tunnelGate = undefined;
+    await runtime.shutdown();
+  }
+  assert.equal(state.captureTunnelClose.mock.calls.length - captureCloses, 1);
+});
+
+test('a release that arrives while a tunnel is opening ends the tunnel that answers late', async () => {
+  const { captures, captureCloses, deletes } = limrunActivity();
+  let reportTunnel!: () => void;
+  state.tunnelGate = new Promise<void>((resolve) => {
+    reportTunnel = resolve;
+  });
+  const harDir = mkdtempForTestSync('limrun-har-');
+  const runtime = createLimrunRuntime(
+    { apiKey: 'lim_test_key', networkHarDir: harDir },
+    testDependencies(),
+  );
+  const lease = androidLease('lease-capture-teardown');
+  try {
+    await runtime.leaseLifecycle.allocate?.(lease);
+
+    // The capture's destination tunnel is still being opened when the release arrives.
+    const capturing = refusalOf(
+      runtime.leaseLifecycle.allocate?.(lease, { flags: { providerNetworkLogs: true } }),
+    );
+    await waitForNewOpen(captures, () => state.captureStarts);
+    const released = runtime.leaseLifecycle.release?.(lease);
+    reportTunnel();
+
+    const record = (await released) as Record<string, unknown>;
+    assert.equal(record.limrunInstanceId, 'android-instance-1');
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    // The release wrote the capture's record as well, so `artifacts` can still name the HAR.
+    assert.equal(
+      (record.cloudArtifacts as { cloudArtifacts: { url?: string }[] }).cloudArtifacts[0]?.url,
+      path.join(harDir, `${lease.leaseId}.har`),
+    );
+    const error = await capturing;
+    assert.ok(
+      error instanceof AppError && error.details?.reason === 'limrun_lease_released_mid_allocation',
+      `expected the capture allocation to be refused for the release, got ${String(error)}`,
+    );
+  } finally {
+    state.tunnelGate = undefined;
+    await runtime.shutdown();
+  }
+  // The release owned a tunnel whose open had not answered, and ended it where it landed.
+  assert.equal(state.captureTunnelClose.mock.calls.length - captureCloses, 1);
+});
+
+test('a release stops waiting on a stuck ADB tunnel, deletes the instance and says what it left', async () => {
+  const { deletes, disconnects, adbTunnels, tunnelCloses } = limrunActivity();
+  let reportTunnel!: () => void;
+  state.tunnelGate = new Promise<void>((resolve) => {
+    reportTunnel = resolve;
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-stuck-tunnel');
+  let refusedCommand: Promise<unknown> | undefined;
+  vi.useFakeTimers();
+  try {
+    const device = await allocateAndroidDevice(runtime, lease.leaseId);
+    if (!runtime.getInteractor(device)) throw new Error('Limrun runtime must return an interactor');
+    // A retained interactor raises this session's ADB tunnel, an `adb connect` the SDK starts without a
+    // deadline; it is still stuck when the release arrives.
+    const command = heldAdbCommand(['shell', 'echo', 'held']);
+    refusedCommand = refusalOf(command);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(state.adbTunnelStarts - adbTunnels, 1);
+
+    const released = runtime.leaseLifecycle.release?.(lease);
+    await vi.advanceTimersByTimeAsync(0);
+    // The delete does not queue behind the stuck tunnel: it was asked for while that tunnel was still open.
+    assert.deepEqual(deletedInstances(deletes), ['android-instance-1']);
+    assert.equal(state.disconnect.mock.calls.length - disconnects, 1);
+
+    // The release's own budget for the local teardown elapses; the delete it ran beside is already answered.
+    await vi.advanceTimersByTimeAsync(LOCAL_TEARDOWN_WAIT_MS);
+    const [warning] = warningsOf(await released);
+    assert.equal(warning?.code, 'LIMRUN_TEARDOWN_INCOMPLETE');
+    // The report names the work this route stopped waiting for, and the instance it left a host endpoint on.
+    assert.match(String(warning?.message), /Local teardown/);
+    assert.equal(warning?.limrunInstanceId, 'android-instance-1');
+    // The lease is given back: the stuck tunnel is reported, not held over the next allocation.
+    await runtime.leaseLifecycle.allocate?.(lease);
+
+    reportTunnel();
+    await vi.advanceTimersByTimeAsync(0);
+    const refused = await refusedCommand;
+    assert.ok(
+      refused instanceof AppError && refused.details?.reason === 'limrun_adb_tunnel_cleaned_up',
+      `expected the retained command to be refused, got ${String(refused)}`,
+    );
+  } finally {
+    reportTunnel();
+    vi.useRealTimers();
+    state.tunnelGate = undefined;
+    await runtime.shutdown();
+    await (refusedCommand ?? Promise.resolve());
+  }
+  // The tunnel that answered into a retired session was closed where it landed, and no second one was raised.
+  assert.equal(state.adbTunnelStarts - adbTunnels, 1);
+  assert.equal(state.tunnelClose.mock.calls.length - tunnelCloses, 1);
+});
+
+/** The retained interactor's own ADB handle, driven outside any request this runtime is serving. */
+function heldAdbCommand(args: readonly string[]): Promise<unknown> {
+  const provider = state.heldAdbProvider;
+  if (!provider) throw new Error('Expected the runtime to hand an interactor an ADB provider');
+  return provider.exec(args);
+}
+
+function warningsOf(record: Record<string, unknown> | undefined): WarningRecord[] {
+  return Array.isArray(record?.warnings) ? (record.warnings as WarningRecord[]) : [];
+}
+
+type WarningRecord = Readonly<{
+  code?: string;
+  message?: string;
+  limrunInstanceId?: string;
+}>;
+
+/**
+ * Longer than the release's own budget for the local resources it started beside the delete, which is what
+ * the case waits out. The delete is asked for independently of it.
+ */
+const LOCAL_TEARDOWN_WAIT_MS = 60_000;
+
+/**
+ * Why one racing call refused, captured from the moment it starts. Two routes can answer in either order,
+ * and the one that answers first must not leave the other's refusal unobserved.
+ */
+function refusalOf(call: Promise<unknown> | undefined): Promise<unknown> {
+  return (call ?? Promise.resolve()).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
+/** Where the shared instance-control mocks stand, so a case can measure only what it caused. */
+function limrunActivity(): {
+  creates: number;
+  deletes: number;
+  disconnects: number;
+  connects: number;
+  captures: number;
+  captureCloses: number;
+  adbTunnels: number;
+  tunnelCloses: number;
+} {
+  return {
+    creates: state.androidCreate.mock.calls.length,
+    deletes: state.androidDelete.mock.calls.length,
+    disconnects: state.disconnect.mock.calls.length,
+    connects: state.connectCount,
+    captures: state.captureStarts,
+    captureCloses: state.captureTunnelClose.mock.calls.length,
+    adbTunnels: state.adbTunnelStarts,
+    tunnelCloses: state.tunnelClose.mock.calls.length,
+  };
+}
+
+/** The instance ids the runtime asked Limrun to delete after a case's own baseline. */
+function deletedInstances(from: number): string[] {
+  return state.androidDelete.mock.calls.slice(from).map(([instanceId]) => instanceId as string);
+}
+
+/** Lets a case reach a resource a call is on its way to opening, without clock waits. */
+async function waitForNewOpen(starts: number, opened: () => number): Promise<void> {
+  await vi.waitFor(() => assert.ok(opened() > starts, 'expected a new tunnel to be attempted'));
+}
 
 test('the platform module answers app state from the live Android provider session', async () => {
   const registration = createLimrunRuntime(
@@ -187,6 +647,7 @@ test('the platform module surfaces an aborted request inside the app-state reade
 });
 
 test('a network capture writes a private HAR with its failures on artifacts and at release', async () => {
+  const captureCloses = state.captureTunnelClose.mock.calls.length;
   const harDir = mkdtempForTestSync('limrun-har-');
   const runtime = createLimrunRuntime(
     { apiKey: 'lim_test_key', networkHarDir: harDir },
@@ -228,7 +689,7 @@ test('a network capture writes a private HAR with its failures on artifacts and 
       cloudArtifacts?: { cloudArtifacts: { url?: string }[]; message?: string };
     };
     assert.equal(released.cloudArtifacts?.cloudArtifacts[0]?.url, harPath);
-    assert.equal(state.captureTunnelClose.mock.calls.length, 1);
+    assert.equal(state.captureTunnelClose.mock.calls.length - captureCloses, 1);
     assert.match(
       String(released.cloudArtifacts?.message),
       /last request-failed missing\.example\.com:443/,
@@ -339,7 +800,10 @@ function testDependencies(): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test-version',
     android: {
-      createInteractor: () => ({}) as Interactor,
+      createInteractor: (_device, adb) => {
+        state.heldAdbProvider = adb;
+        return {} as Interactor;
+      },
       createPortReverse: async () => ({
         ensure: async () => {},
         remove: async () => {},
