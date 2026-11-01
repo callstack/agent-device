@@ -254,7 +254,8 @@ export async function captureSimulatorScreenshotWithRetry(
  * simctl capture does, so it takes the same status bar reservation: while another capture
  * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. The
  * reservation re-enters when the caller already holds it, as the simctl fallback does, and an
- * already-aborted request does not cancel that re-entry — see `withSimulatorStatusBarHeld`.
+ * already-aborted request does not reject that re-entry at the lock boundary — see
+ * `withSimulatorStatusBarHeld`. The runner command keeps the request's signal.
  */
 export async function captureScreenshotViaRunner(
   device: DeviceInfo,

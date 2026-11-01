@@ -124,8 +124,8 @@ export async function withNormalizedSimulatorStatusBar<T>(
  *
  * `signal` cancels waiting for another capture. It is dropped when the caller already holds this
  * simulator's window: that caller is the one who gave up, not an obstacle, so a leg of its own work
- * — a normalized capture falling back to the runner — still runs, and its abort cannot leave the
- * window it holds without that leg.
+ * is not rejected at the lock boundary and the window still restores what it normalized. The leg
+ * keeps the request's signal, so a request that has given up still stops as early as it can.
  */
 export async function withSimulatorStatusBarHeld<T>(
   device: DeviceInfo,
