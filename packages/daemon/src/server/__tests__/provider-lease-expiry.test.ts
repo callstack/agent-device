@@ -150,10 +150,11 @@ test('shutdown drain reports releases completed before and during its final retr
   });
 
   try {
-    await releaser.release(releasedBeforeShutdown);
+    await expect(releaser.release(releasedBeforeShutdown)).resolves.toEqual({ status: 'released' });
     releaser.beginShutdown();
-    await releaser.release(releasedDuringShutdown);
-    await releaser.release(lease);
+    // This one's first attempt fails, so the releaser keeps it and the drain retries it.
+    await expect(releaser.release(releasedDuringShutdown)).resolves.toEqual({ status: 'retrying' });
+    await expect(releaser.release(lease)).resolves.toEqual({ status: 'released' });
     const drained = await releaser.drain(10);
 
     expect(release).toHaveBeenCalledTimes(4);
@@ -387,6 +388,144 @@ test('daemon startup recovers inherited lease records only after it holds the re
   expect(refused).toBeGreaterThanOrEqual(0);
   expect(recovery).toBeGreaterThan(refused);
   expect(source.indexOf('expiredProviderLeaseReleaser.retryPending()')).toBe(-1);
+});
+
+test('a release that fails after shutdown is not retried and stays durable', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+  const lease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'limrun',
+  });
+  let rejectHeldRelease: ((error: Error) => void) | undefined;
+  const recoverExpiredLease = vi.fn(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectHeldRelease = reject;
+      }),
+  );
+  const releaser = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['limrun'],
+    retryDelayMs: 1_000,
+  });
+
+  try {
+    releaser.beginShutdown();
+    // The provider call is still in flight when the drain budget runs out, so its outcome is unknown.
+    const admitted = releaser.release(lease);
+    const drained = releaser.drain(10);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await drained).toEqual({ pending: [lease], unknown: [lease], released: [] });
+    expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
+
+    // Plugins are disposed here. The provider call this daemon is waiting on then fails.
+    releaser.shutdown();
+    rejectHeldRelease!(new Error('provider plugin disposed'));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(recoverExpiredLease).toHaveBeenCalledTimes(1);
+    // Nothing is armed to call the provider again, and nothing is armed to write a lease record.
+    expect(vi.getTimerCount()).toBe(0);
+    const record = JSON.parse(
+      fs.readFileSync(`${stateDir}/expired-provider-leases.json`, 'utf8'),
+    ) as { leases: DeviceLease[] };
+    expect(record.leases.map((entry) => entry.leaseId)).toEqual([lease.leaseId]);
+    // The provider call this daemon was waiting on failed once the releaser had closed, so the lease
+    // stayed pending, and nothing here will attempt it again. The record is what carries it forward.
+    await expect(admitted).resolves.toEqual({ status: 'refused', reason: 'closed', durable: true });
+  } finally {
+    releaser.shutdown();
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('release after shutdown starts no provider call and retries nothing', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-expired-provider-lease-');
+  const liveOnlyLease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+  });
+  const recoverableLease = new LeaseRegistry().allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-2',
+    leaseProvider: 'limrun',
+  });
+  const release = vi.fn(async (_lease: DeviceLease) => ({}));
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const releaser = createExpiredProviderLeaseReleaser({
+    leaseLifecycleProvider: { release },
+    providerRuntimeIds: ['browserstack'],
+    recoverExpiredLease,
+    stateDir,
+    recoverableProviderIds: ['limrun'],
+    retryDelayMs: 10,
+  });
+
+  try {
+    releaser.shutdown();
+    await expect(releaser.release(liveOnlyLease)).resolves.toEqual({
+      status: 'refused',
+      reason: 'closed',
+      durable: false,
+    });
+    await expect(releaser.release(recoverableLease)).resolves.toEqual({
+      status: 'refused',
+      reason: 'closed',
+      durable: true,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(release).not.toHaveBeenCalled();
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+    // What a closed daemon cannot release, it leaves durable for the next one.
+    const record = JSON.parse(
+      fs.readFileSync(`${stateDir}/expired-provider-leases.json`, 'utf8'),
+    ) as { leases: DeviceLease[] };
+    expect(record.leases.map((entry) => entry.leaseId)).toEqual([recoverableLease.leaseId]);
+  } finally {
+    releaser.shutdown();
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a lease that expires after shutdown is still recovered by the next daemon', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-live-provider-lease-');
+  let now = 1_000;
+  const recoverExpiredLease = vi.fn(async (_lease: DeviceLease) => undefined);
+  const options = { recoverExpiredLease, stateDir, recoverableProviderIds: ['revyl'] };
+  const daemon = createExpiredProviderLeaseReleaser(options);
+  const registry = new LeaseRegistry({
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+    onLeaseExpired: (lease) => void daemon.release(lease),
+    onProviderLeasesChanged: (leases) => daemon.recordLiveLeases(leases),
+  });
+
+  try {
+    const lease = registry.allocateLease({ tenantId: 't', runId: 'run-1', leaseProvider: 'revyl' });
+    daemon.shutdown();
+    // An abandoned request let this lease expire once this daemon had stopped releasing.
+    now = 1_011;
+    registry.consumeExpiredLease(lease.leaseId);
+
+    expect(recoverExpiredLease).not.toHaveBeenCalled();
+
+    const restartedDaemon = createExpiredProviderLeaseReleaser(options);
+    await restartedDaemon.recoverInherited();
+    expect(recoverExpiredLease).toHaveBeenCalledWith(lease);
+    restartedDaemon.shutdown();
+  } finally {
+    daemon.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
 });
 
 test('an unreadable live journal is reported with its path and left on disk', async () => {

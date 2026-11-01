@@ -1,5 +1,9 @@
 import { normalizeError } from '@agent-device/kernel/errors';
-import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import {
+  emitDiagnostic,
+  type DiagnosticLevel,
+  type ResourceDiagnostic,
+} from '@agent-device/host-kit/diagnostics';
 import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonRegistrationOwner } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
@@ -21,14 +25,20 @@ export async function flushDaemonStartupDiagnostics(
   });
 }
 
-/** Records one daemon-level event outside any request scope, with debug forced on. */
+/**
+ * Records one daemon-level event outside any request scope, with debug forced on.
+ * `level` is the event's own severity; it defaults to `warn` because these events are all daemon
+ * shutdown or recovery problems, and a caller passes another only to keep a severity its own owner
+ * already decided.
+ */
 export async function emitDaemonDiagnostic(
   logPath: string,
   phase: string,
   data: Record<string, unknown>,
+  level: DiagnosticLevel = 'warn',
 ): Promise<void> {
   await withDaemonDiagnosticsScope({ logPath }, () => {
-    emitDiagnostic({ level: 'warn', phase, data });
+    emitDiagnostic({ level, phase, data });
   });
 }
 

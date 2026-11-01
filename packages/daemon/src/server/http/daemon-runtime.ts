@@ -29,7 +29,10 @@ import {
   type InteractorResolution,
 } from '../../core/interactor-resolution.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
+import {
+  createExpiredProviderLeaseReleaser,
+  leaseReleaseDiagnosticEvent,
+} from '../provider-lease-expiry.ts';
 import { createRequestHandler, type RequestRouterDeps } from '../request-router.ts';
 import {
   createLeaseSessionEnd,
@@ -379,7 +382,24 @@ async function startDaemonRuntimeOnHost(
     minLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MIN_TTL_MS),
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease) => {
-      void expiredProviderLeaseReleaser.release(lease);
+      void expiredProviderLeaseReleaser.release(lease).then(
+        (outcome) => {
+          // A lease can expire after shutdown closed the releaser, and the sweep runs outside any
+          // request, so this report goes to the daemon log rather than a request scope.
+          const event = leaseReleaseDiagnosticEvent(lease, outcome);
+          if (event) {
+            void emitDaemonDiagnostic(logPath, event.phase, event.data, event.level).catch(
+              () => undefined,
+            );
+          }
+        },
+        (error: unknown) => {
+          void emitDaemonDiagnostic(logPath, 'provider_lease_release_outcome_failed', {
+            leaseId: lease.leaseId,
+            error: error instanceof Error ? error.message : String(error),
+          }).catch(() => undefined);
+        },
+      );
       void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
     onProviderLeasesChanged: (leases) => expiredProviderLeaseReleaser.recordLiveLeases(leases),
@@ -840,13 +860,13 @@ async function startDaemonRuntimeOnHost(
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     const sessions = await teardownDaemonSessions();
-    await withDaemonDiagnosticsScope({ logPath }, async () => {
-      await finalizeDaemonLeases({
+    const leaseFinalization = await withDaemonDiagnosticsScope({ logPath }, async () =>
+      finalizeDaemonLeases({
         leaseRegistry,
         expiredProviderLeaseReleaser,
         timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
-      });
-    });
+      }),
+    );
     try {
       await deps.ownerLifecycle.resetAndroidSnapshotHelper();
     } catch (error) {
@@ -865,6 +885,9 @@ async function startDaemonRuntimeOnHost(
       data: {
         releasedLeaseIds: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pendingLeaseIds: providerReleaseDrain.pending.map((lease) => lease.leaseId),
+        // The drain only sees work it still holds, so the refusals the finalizer was given are reported
+        // here as well: they are leases this daemon will not end, and this is the shutdown's one summary.
+        refusedLeaseIds: [...leaseFinalization.refused],
         releasedDeviceKeys: shutdownClaimLedger.claims.released.map((claim) => claim.deviceKey),
         orphanedDeviceKeys: shutdownClaimLedger.claims.orphaned.map((claim) => claim.deviceKey),
       },
