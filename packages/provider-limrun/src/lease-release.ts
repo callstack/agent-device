@@ -65,7 +65,8 @@ export async function disposeLimrunLeaseOwner(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
 ): Promise<LimrunDisposalOutcome> {
-  const { awaitLimrunWithinBudget, joinOutcomeFailures } = await import('./lifecycle-budget.ts');
+  const { awaitLimrunWithinBudget, joinOutcomeFailures, workOutstandingFailure } =
+    await import('./lifecycle-budget.ts');
   const create = await awaitLimrunWithinBudget(owner.creation, CREATE_ANSWER_BUDGET_MS);
   // The create answered too late for this disposal to wait on it; what it goes on to name is still this
   // disposal's to end.
@@ -89,7 +90,13 @@ export async function disposeLimrunLeaseOwner(
   return {
     cleanup: instance.cleanup,
     instanceId,
-    failure: joinOutcomeFailures(instance.failure, stuck),
+    failure: joinOutcomeFailures(
+      instance.failure,
+      joinOutcomeFailures(
+        stuck,
+        joined.ok ? undefined : workOutstandingFailure('Capture record', CAPTURE_RECORD_BUDGET_MS),
+      ),
+    ),
     capture: joined.ok ? joined.value : undefined,
   };
 }
@@ -103,16 +110,20 @@ async function disposeUnansweredCreate(
   host: LimrunDisposalHost,
   owner: LimrunLeaseOwner,
 ): Promise<LimrunDisposalOutcome> {
-  const { awaitLimrunWithinBudget, joinOutcomeFailures, workOutstandingFailure } =
-    await import('./lifecycle-budget.ts');
-  const capture = host.endCapture(owner);
+  const { joinOutcomeFailures, workOutstandingFailure } = await import('./lifecycle-budget.ts');
+  const capture = awaitEndedCapture(host, owner);
   const outstanding = workOutstandingFailure(
     `Instance create for lease '${owner.lease.leaseId}'`,
     CREATE_ANSWER_BUDGET_MS,
   );
-  owner.creation.then(() => {
-    void endWhatTheCreateNamed(host, owner);
-  });
+  // Observed on both branches: this continuation outlives every budget, so a failure of it must not reach
+  // the process as an unhandled rejection.
+  owner.creation.then(
+    () => {
+      void endWhatTheCreateNamed(host, owner).catch(() => undefined);
+    },
+    () => undefined,
+  );
   const instanceId = owner.rentedInstanceId;
   if (instanceId === undefined) {
     return {
@@ -125,17 +136,13 @@ async function disposeUnansweredCreate(
   // An instance is already named, so this disposal ends the billing it can see and leaves the create's silence
   // as what keeps the lease held.
   const instance = await endInstance(host, owner, owner.session, instanceId);
-  const local = await awaitLimrunWithinBudget(
-    releaseOwnerResources(owner),
-    LOCAL_TEARDOWN_BUDGET_MS,
-  );
+  // Reported, not thrown: a local step that refuses is one this disposal can no longer fix, and the delete
+  // it ran beside has already been answered for.
+  const stuck = await awaitLocalTeardown(releaseOwnerResources(owner));
   return {
     cleanup: instance.cleanup,
     instanceId,
-    failure: joinOutcomeFailures(
-      instance.failure,
-      local.ok ? outstanding : workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS),
-    ),
+    failure: joinOutcomeFailures(instance.failure, stuck ?? outstanding),
     capture: await capture,
   };
 }
@@ -168,8 +175,21 @@ async function disposeUnrented(
     cleanup: 'none',
     instanceId: undefined,
     failure: undefined,
-    capture: await host.endCapture(owner),
+    capture: await awaitEndedCapture(host, owner),
   };
+}
+
+/**
+ * Ends one lease's capture within the budget a record is given everywhere else, so a HAR write that stops
+ * answering cannot hold a disposal that has already ended, or owes nothing, for longer than reporting is worth.
+ */
+async function awaitEndedCapture(
+  host: LimrunDisposalHost,
+  owner: LimrunLeaseOwner,
+): Promise<SettledNetworkCapture | undefined> {
+  const { awaitLimrunWithinBudget } = await import('./lifecycle-budget.ts');
+  const ended = await awaitLimrunWithinBudget(host.endCapture(owner), CAPTURE_RECORD_BUDGET_MS);
+  return ended.ok ? ended.value : undefined;
 }
 
 /**
@@ -188,7 +208,22 @@ async function endInstance(
   if ((session?.ownership ?? 'created') === 'attached') {
     return { cleanup: 'attached', failure: undefined };
   }
-  const requested = host.deleteInstance(owner.platform, instanceId);
+  const requested =
+    owner.pendingDelete?.instanceId === instanceId
+      ? // This owner already has a delete with Limrun for this instance, however far from answering. One
+        // instance is deleted by one request: a second route that owes its end waits on that request.
+        owner.pendingDelete.requested
+      : host.deleteInstance(owner.platform, instanceId);
+  if (owner.pendingDelete?.instanceId !== instanceId) {
+    const inFlight = { instanceId, requested };
+    owner.pendingDelete = inFlight;
+    // A delete that answered leaves nothing for a later route to join: a confirmed one is recorded as
+    // deleted, and a refused one is that later route's to retry.
+    const forgotten = (): void => {
+      if (owner.pendingDelete === inFlight) owner.pendingDelete = undefined;
+    };
+    void requested.then(forgotten, forgotten);
+  }
   const deleted = await awaitLimrunWithinBudget(requested, DELETE_ANSWER_BUDGET_MS);
   if (!deleted.ok) {
     void requested.then((failure) => {
@@ -429,7 +464,13 @@ export function cleanupLeftInstancesRunning(outcomes: readonly LimrunDisposalOut
     {
       reason: 'limrun_instance_delete_unconfirmed',
       ...(known.length === 0 ? {} : { limrunInstanceIds: known }),
-      ...(outcomes[0]?.failure === undefined ? {} : { cause: outcomes[0].failure }),
+      // Why every lease this close could not end, not only the first: each failure is a separate thing the
+      // operator may have to name to Limrun.
+      ...(outcomes.every((outcome) => outcome.failure === undefined)
+        ? {}
+        : {
+            cause: outcomes.map((outcome) => outcome.failure ?? 'an unconfirmed delete').join('; '),
+          }),
       ...(known.length === 0
         ? { hint: unendedLeaseHint(outcomes) }
         : { hint: `Ask Limrun to delete: ${known.join(', ')}.` }),

@@ -57,6 +57,14 @@ export type LimrunLeaseOwner = {
   appAlias: LimrunAppAlias | undefined;
   /** The instance Limrun has already confirmed deleted, so a retried disposal never bills a second delete. */
   deletedInstanceId: string | undefined;
+  /**
+   * The delete this owner has in flight: the instance it names, and the request Limrun has not answered. A
+   * route that owes the end of that instance waits on this request rather than sending Limrun a second one —
+   * a delete whose answer this disposal stopped waiting for is still the delete that instance is getting.
+   */
+  pendingDelete:
+    | Readonly<{ instanceId: string; requested: Promise<string | undefined> }>
+    | undefined;
 };
 
 /** What one lease has live in this runtime, whatever its platform. */

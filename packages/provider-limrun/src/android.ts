@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createAndroidInstanceClient,
@@ -184,7 +185,12 @@ export async function cleanupLimrunAndroidAdbTunnel(session: LimrunAndroidSessio
       // ask for.
       session.adbReverseExecutor = async (args, options) =>
         await runLimrunAndroidAdbAtSerial(session, serial, args, options);
-      await cleanupAndroidPortReverse(session);
+      // The teardown's marker covers this route and every dispatch this cleanup starts from it, including a
+      // reverse manager that answers a later request of its own inside the same await chain. A caller command
+      // that reaches this route through any other path carries no marker.
+      await limrunAdbTeardownScope.run(true, async () => {
+        await cleanupAndroidPortReverse(session);
+      });
       await session.dependencies.host
         .runAdb(session.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
           allowFailure: true,
@@ -239,14 +245,25 @@ async function runLimrunAndroidAdb(
 /**
  * The reverse manager's own route to the device. It is the session's route while the session is live, and
  * cleanup's route of its own once the session is retired: clearing reverse mappings means reaching the device
- * that is about to be disconnected, and that has to stay possible after every caller of this session was refused.
+ * that is about to be disconnected, and that has to stay possible after every caller of this session was
+ * refused. Only the cleanup's own dispatches carry its teardown scope, so no caller command is ever
+ * dispatched at the serial the teardown is ending.
  */
+/**
+ * Whether one dispatch belongs to a session's teardown: true only for the dispatches that teardown itself
+ * started. The reverse manager is given this predicate as its route, and a provider that hands a caller
+ * command to it — a reverse command queued inside an operation of its own — carries no marker, so the
+ * manager cannot have a caller's mapping bound at a serial that is on its way out. A marker set by one
+ * session never authorises another session's route.
+ */
+const limrunAdbTeardownScope = new AsyncLocalStorage<boolean>();
+
 async function runLimrunAndroidReverseAdb(
   session: LimrunAndroidAdbSession,
   args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ): Promise<LimrunAdbCommandResult> {
-  const atSerial = session.adbReverseExecutor;
+  const atSerial = limrunAdbTeardownScope.getStore() ? session.adbReverseExecutor : undefined;
   if (atSerial !== undefined) return await atSerial(args, options);
   return await runLimrunAndroidAdb(session, args, options);
 }

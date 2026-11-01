@@ -77,6 +77,8 @@ export type LimrunRuntimeOptions = {
 export type LimrunRuntime = ProviderDeviceRuntime & {
   recoverExpiredLease: ProviderExpiredLeaseRecovery;
   getDeviceSession(device: DeviceInfo): LimrunDeviceSession | undefined;
+  /** Maps an uploaded asset name this lease was created with back to its installed identifier. */
+  resolveAppReference(device: DeviceInfo, app: string): string;
 };
 
 export type LimrunRuntimeRegistration = Readonly<{
@@ -122,7 +124,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly leases = new Map<string, LimrunLeaseOwner>();
   /**
    * What each lease's network capture goes through, including the records a release settled. Absent until a
-   * lease asks for a capture, which is what keeps the capture's module out of a runtime that captures nothing.
+   * lease asks for a capture, which is what keeps the capture's module out of a runtime that captures nothing:
+   * the lifecycle is only ever reached through `await import('./capture-lifecycle.ts')` in `captures()`, and
+   * this declaration stays a type for exactly that reason.
    */
   private capturesInstance?: LimrunCaptureLifecycle;
   /** Whether this runtime has shut down; it then holds nothing, so it must create nothing. */
@@ -310,6 +314,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       // never both pass it, and this runtime can be shut down only before or after this step.
       if (this.shutDown) throw allocationRefusedAfterShutdown(lease);
       owner = this.beginAllocation(lease, platform, context);
+    } else {
+      // A lease this runtime already holds, so this call answers for flags of its own, and settles them before
+      // it awaits anything else — including a create that is already running. Joining one is no way to be
+      // handed a session this caller was never entitled to; a new lease is validated as the first step of its
+      // own create instead, which is what keeps this publication free of any await.
+      await this.rejectRefusedProfileFields(context);
     }
     await this.joinCreation(owner, context);
     // A repeat allocation can ask for the capture, or retry one that could not start. A lease a teardown has
@@ -341,12 +351,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     owner: LimrunLeaseOwner,
     context?: LeaseLifecycleContext,
   ): Promise<void> {
-    if (owner.state.phase === 'live') {
-      // A lease this runtime allocated earlier: this call answers for flags of its own, and settles them
-      // before it reads any more state.
-      await this.rejectRefusedProfileFields(context);
-      return;
-    }
     if (owner.state.phase !== 'allocating') return;
     const create = await this.creationFor(owner, context);
     if (create === undefined) return;
@@ -369,10 +373,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   /**
    * The create one caller is entitled to: the one its lease's owner stands on, unless that create refused the
    * caller that started it for a flag this provider reads no field for. That refusal billed nothing, so it is
-   * the other caller's answer and not this lease's: this caller answers for its own flags first — a refusal of
-   * its own is its own to throw — and a caller whose flags this provider does read asks for the create the
-   * refusal foreclosed and makes it the lease's creation, on the owner the lease already has. Any later joiner
-   * of the same refusal follows that create rather than renting a second instance.
+   * that caller's answer and not this lease's: a caller whose own flags this provider does read asks for the
+   * create the refusal foreclosed and makes it the lease's creation, on the owner the lease already has. Any
+   * later joiner of the same refusal follows that create rather than renting a second instance.
    */
   private async creationFor(
     owner: LimrunLeaseOwner,
@@ -382,8 +385,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       const started = owner.creation;
       const create = await started;
       if (create.status !== 'refused_caller') return create;
-      await this.rejectRefusedProfileFields(context);
-      // Another joiner of the same refusal replaced it while this caller was being answered: join that create.
+      // This caller's own flags were answered for before it got here, so the refusal below is another
+      // caller's. Another joiner of it may have replaced it while this caller was being answered: join that.
       if (owner.creation !== started) continue;
       // A teardown took the lease in the meantime, so what this lease has is that route's to end.
       if (owner.state.phase !== 'allocating') return undefined;
@@ -429,6 +432,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       capture: undefined,
       appAlias: undefined,
       deletedInstanceId: undefined,
+      pendingDelete: undefined,
     };
     this.leases.set(lease.leaseId, owner);
     // The create is started after the publication above, so its answer can never arrive without an owner

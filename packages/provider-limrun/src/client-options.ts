@@ -12,6 +12,10 @@ export function limrunUserAgent(clientVersion: string): string {
  * Asks the SDK for one attempt at a request whose failure this runtime cannot tell apart from Limrun having
  * done the work: the SDK retries a lost answer by POSTing again, and a repeated instance create rents a
  * second instance. The SDK defaults to two retries, so a request that must not repeat carries this.
+ *
+ * The option is the SDK's request-scoped `maxRetries` (`RequestOptions`, @limrun/api 0.64.1), which every
+ * resource method takes as its second argument. `session-allocation.test.ts` pins that this is what the
+ * create honours: it drives the real SDK against a local server that drops the answer and asserts one POST.
  */
 export const LIMRUN_SINGLE_ATTEMPT = Object.freeze({ maxRetries: 0 });
 

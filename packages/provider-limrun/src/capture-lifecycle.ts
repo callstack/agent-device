@@ -50,7 +50,11 @@ export class LimrunCaptureLifecycle {
   async start(owner: LimrunLeaseOwner, hostList: unknown): Promise<void> {
     const held = owner.capture;
     if (held?.phase === 'starting') {
-      await held.opening;
+      // Joining another allocation's destination tunnel is waited for within the budget a read or a teardown
+      // gives that same handshake, and its outcome changes nothing here: the start keeps its own owner to
+      // publish to, and this lease's teardown is the route that ends whatever tunnel it opens. So a handshake
+      // that stops answering costs this caller its wait, and nothing else.
+      await awaitLimrunWithinBudget(held.opening, CAPTURE_OPEN_BUDGET_MS);
       return;
     }
     const harDir = this.host.harDir;
@@ -107,9 +111,14 @@ export class LimrunCaptureLifecycle {
     // written and ended by the continuation below all the same, so it is never left without an owner.
     const opened = await awaitLimrunWithinBudget(state.opening, CAPTURE_OPEN_BUDGET_MS);
     if (opened.ok) return await endCapture(leaseId, opened.value, this.record);
-    void state.opening.then(async (late) => {
-      await endCapture(leaseId, late, this.record);
-    });
+    void state.opening.then(
+      async (late) => {
+        await endCapture(leaseId, late, this.record);
+      },
+      // Observed: this continuation outlives its budget, so a late failure of it must not reach the process
+      // as an unhandled rejection. The tunnel it could not end stays the host's, reported by nothing else.
+      () => undefined,
+    );
     return this.settled.get(leaseId);
   }
 

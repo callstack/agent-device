@@ -58,6 +58,48 @@ test('a command that arrives while cleanup holds its serial is refused', async (
   expect(tunnels.start).toHaveBeenCalledOnce();
 });
 
+/**
+ * The serial a cleanup is ending is reached only by the cleanup's own dispatches. A reverse command that
+ * arrives while that cleanup is mid-request goes back through the session's closed public route, so nothing
+ * gets mapped at a device that is being disconnected, behind the cleanup's one listing.
+ */
+test('a reverse command that arrives during cleanup is refused, not dispatched at the ending serial', async () => {
+  const runs: string[][] = [];
+  let reportList!: () => void;
+  reverse.listGate = new Promise<void>((resolve) => {
+    reportList = resolve;
+  });
+  const deps = androidDependencies(runs);
+  // The route the reverse manager dispatches through, which is what production hands it.
+  let reverseRoute!: (args: readonly string[]) => Promise<unknown>;
+  deps.android.createPortReverse = async (adb) => {
+    reverseRoute = adb;
+    return reverse;
+  };
+  const session = await createLimrunAndroidSession(ANDROID_SESSION_OPTIONS, deps);
+  // The first command raises the tunnel this session owns, giving cleanup a serial to end.
+  await session.adbProvider.exec(['shell', 'echo', 'ready']);
+  const dispatched = runs.length;
+  try {
+    // Cleanup holds its listing open: its teardown executor is published at the serial it is ending.
+    const cleanup = cleanupLimrunAndroidAdbTunnel(session);
+    await vi.waitFor(() => expect(reverse.list).toHaveBeenCalledOnce());
+
+    await expect(reverseRoute(['reverse', 'tcp:9001', 'tcp:8001'])).rejects.toMatchObject({
+      code: 'SESSION_NOT_FOUND',
+      details: { reason: 'limrun_adb_tunnel_cleaned_up' },
+    });
+
+    reportList();
+    await cleanup;
+  } finally {
+    reverse.listGate = undefined;
+  }
+  // Nothing mapped an endpoint behind the cleanup's back: no reverse command was dispatched at all, because
+  // the listing and the removals are stubbed and the caller's command never reached the device.
+  expect(runs.slice(dispatched).filter((argv) => argv.includes('reverse'))).toEqual([]);
+});
+
 const tunnels = vi.hoisted(() => ({
   /**
    * Held by a case that has to keep a tunnel in flight, which is the window a session's cleanup has to
