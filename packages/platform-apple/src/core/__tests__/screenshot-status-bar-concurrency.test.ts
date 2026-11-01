@@ -1,5 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
@@ -98,6 +101,9 @@ function screenshotFailure(): AppError {
 async function yieldToQueuedWork(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
 }
+
+/** What `simctl status_bar <udid> list` answers when the simulator holds no overrides. */
+const CLEARED_STATUS_BAR_LISTING = 'Current Status Bar Overrides:\n=============================';
 
 function screenshotOptions(
   gate: CaptureGate,
@@ -454,6 +460,174 @@ test('a settings write bounds its status bar command like a capture does', async
     STATUS_BAR_COMMAND_TIMEOUT_MS,
     STATUS_BAR_COMMAND_TIMEOUT_MS,
   ]);
+});
+
+test('one simulator reached through two spellings of its device set keeps one window', async () => {
+  // `simctl --set` follows aliases, so a symlinked or otherwise non-normalized spelling of one set
+  // reaches the same status bar. Two windows over it would let a capture snapshot another capture's
+  // normalization, which is the leak this owner exists to prevent.
+  const setRoot = await mkdtempForTest('sm11-set-');
+  const canonicalSet = await fs.realpath(setRoot);
+  const aliasSet = path.join(canonicalSet, 'link-to-set');
+  await fs.symlink(canonicalSet, aliasSet);
+
+  const entered: string[] = [];
+  const gates = { canonical: createCaptureGate(), alias: createCaptureGate() };
+  const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
+    ...IOS_TEST_SIMULATOR,
+    simulatorSetPath: tag === 'canonical' ? canonicalSet : aliasSet,
+  });
+
+  await withFakeAppleTool(
+    (args) => {
+      const index = args.indexOf('status_bar');
+      if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+      return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
+    },
+    async () => {
+      const captureFor = (tag: keyof typeof gates) =>
+        captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
+          env: process.env,
+          normalizeStatusBar: true,
+          skipIosSimulatorBootCheck: true,
+          deps: captureDeps(async () => {
+            entered.push(tag);
+            await gates[tag].capture();
+          }),
+        });
+
+      const canonical = captureFor('canonical');
+      await gates.canonical.entered;
+      const alias = captureFor('alias');
+      try {
+        await yieldToQueuedWork();
+        // The aliased capture is still queued: both records address one simulator, so they share
+        // one window and the second cannot snapshot the first capture's normalization.
+        assert.deepEqual(entered, ['canonical']);
+      } finally {
+        gates.canonical.release();
+        gates.alias.release();
+        await Promise.allSettled([canonical, alias]);
+      }
+
+      assert.deepEqual(entered, ['canonical', 'alias']);
+    },
+  );
+});
+
+test('naming the default device set explicitly shares the default window', async () => {
+  // `simctl --set <default root>` selects the same simulators as naming no set, so the two spellings
+  // must not open two windows over one status bar.
+  const entered: string[] = [];
+  const gates = { implicit: createCaptureGate(), explicit: createCaptureGate() };
+  // `os.homedir()` answers with `$HOME` on POSIX, which is how the owner derives this root.
+  const home = process.env.HOME;
+  assert.ok(home, 'the default device root needs a home directory');
+  const defaultSet = path.join(home, 'Library', 'Developer', 'CoreSimulator', 'Devices');
+  const deviceFor = (tag: keyof typeof gates): DeviceInfo => ({
+    ...IOS_TEST_SIMULATOR,
+    simulatorSetPath: tag === 'explicit' ? defaultSet : undefined,
+  });
+
+  await withFakeAppleTool(
+    (args) => {
+      const index = args.indexOf('status_bar');
+      if (index === -1) return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
+      return args[index + 2] === 'list' ? CLEARED_STATUS_BAR_LISTING : '';
+    },
+    async () => {
+      const captureFor = (tag: keyof typeof gates) =>
+        captureSimulatorScreenshotWithFallback(deviceFor(tag), `/tmp/${tag}.png`, {
+          env: process.env,
+          normalizeStatusBar: true,
+          skipIosSimulatorBootCheck: true,
+          deps: captureDeps(async () => {
+            entered.push(tag);
+            await gates[tag].capture();
+          }),
+        });
+
+      const implicit = captureFor('implicit');
+      await gates.implicit.entered;
+      const explicit = captureFor('explicit');
+      try {
+        await yieldToQueuedWork();
+        assert.deepEqual(entered, ['implicit']);
+      } finally {
+        gates.implicit.release();
+        gates.explicit.release();
+        await Promise.allSettled([implicit, explicit]);
+      }
+
+      assert.deepEqual(entered, ['implicit', 'explicit']);
+    },
+  );
+});
+
+test('a timed-out settings write forces the next capture to read the bar again', async () => {
+  // A command that hits its deadline may still have reached `simctl`, so a write that times out
+  // cannot leave a cached answer about the bar behind: the next capture has to read what the write
+  // applied, or it would normalize over a setting the caller asked for and restore without it.
+  const device: DeviceInfo = { ...IOS_TEST_SIMULATOR, id: 'sim-bar-timeout' };
+  invalidateSimulatorStatusBarOverrideCache(device);
+  const statusBar = createFakeStatusBarSimctl(device.id, {});
+  let timeoutApplied = false;
+
+  await withFakeAppleTool(
+    (args) => {
+      const response = statusBar.script(args);
+      // The settings write is the override that names only `--wifiMode`: a capture's normalization
+      // and its restore both name the other fields.
+      const lastOption = args.at(-2);
+      if (args.includes('--wifiMode') && lastOption === '--wifiMode' && !timeoutApplied) {
+        timeoutApplied = true;
+        return new AppError('COMMAND_FAILED', 'xcrun timed out after 10000ms', { exitCode: 1 });
+      }
+      return response;
+    },
+    async ({ calls }) => {
+      // A capture with nothing on the bar earns the answer that the bar is cleared.
+      await captureSimulatorScreenshotWithFallback(device, '/tmp/cleared.png', {
+        env: process.env,
+        normalizeStatusBar: true,
+        skipIosSimulatorBootCheck: true,
+        deps: captureDeps(async () => {}),
+      });
+      calls.length = 0;
+
+      await setIosSetting(device, 'wifi', 'on', undefined, undefined, process.env).then(
+        () => assert.fail('expected the write to time out'),
+        (error: unknown) =>
+          assert.match(String((error as Error).message), /timed out/, 'the timeout must surface'),
+      );
+      assert.deepEqual(
+        statusBar.overrides(),
+        { wifiMode: 'active' },
+        'the write reached the simulator before its deadline',
+      );
+      calls.length = 0;
+
+      await captureSimulatorScreenshotWithFallback(device, '/tmp/after-timeout.png', {
+        env: process.env,
+        normalizeStatusBar: true,
+        skipIosSimulatorBootCheck: true,
+        deps: captureDeps(async () => {}),
+      });
+
+      assert.equal(
+        calls[0]?.join(' '),
+        `simctl status_bar ${device.id} list`,
+        'a capture after a timed-out write must read the bar, not trust a cached answer',
+      );
+      assert.deepEqual(
+        statusBar.overrides(),
+        // `simctl` reports a Wi-Fi mode together with a bars count, so the snapshot the capture
+        // restores from names both once the timed-out write has applied the mode.
+        { wifiMode: 'active', wifiBars: '0' },
+        'the capture must restore the setting the timed-out write applied',
+      );
+    },
+  );
 });
 
 test('simulators of different device sets keep their own status bar windows', async () => {

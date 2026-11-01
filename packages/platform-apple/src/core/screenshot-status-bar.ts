@@ -174,11 +174,13 @@ async function restoreSimulatorStatusBarOverrides(
   device: DeviceInfo,
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
-  // Only a restore that ran to the end may change the known-cleared answer. A `clear` that fails
-  // leaves the normalization on the bar, and the answer that says "this bar is cleared" is the one
-  // that fixes it: the next capture skips the read, so it cannot adopt the leftover as the caller's
-  // state, and its own restore clears the bar. Reading the bar after a failed clear would do the
-  // opposite — adopt the leftover and hand it back on every later capture.
+  // Only a restore that ran to the end may change the known-cleared answer, and this covers the
+  // simulator the answer already says is cleared. A `clear` that fails leaves the normalization on
+  // the bar, and that answer is the one that fixes it: the next capture skips the read, so it cannot
+  // adopt the leftover as the caller's state, and its own restore clears the bar. Reading the bar
+  // after a failed clear would do the opposite — adopt the leftover and hand it back on every later
+  // capture. When the snapshot held the caller's own overrides, a failed `clear` cannot return them:
+  // that recovery needs the snapshot itself and is tracked separately.
   await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
   if (!overrides) {
     rememberClearedStatusBarOverrides(device);

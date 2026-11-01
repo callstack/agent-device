@@ -112,12 +112,14 @@ export async function setIosSetting(
       await withSimulatorStatusBarHeld(
         device,
         async () => {
+          // Dropped before the command, not after it: a write that hits its deadline may still have
+          // reached `simctl`, so no answer about the bar survives the attempt either way.
+          invalidateSimulatorStatusBarOverrideCache(device);
           await runSimctlForDevice(
             device,
             ['status_bar', device.id, 'override', '--wifiMode', mode],
             { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
           );
-          invalidateSimulatorStatusBarOverrideCache(device);
         },
         signal,
       );
@@ -130,6 +132,9 @@ export async function setIosSetting(
       await withSimulatorStatusBarHeld(
         device,
         async () => {
+          // Dropped before the command, as for `wifi`: a write that hits its deadline may still have
+          // reached `simctl`, so no answer about the bar survives the attempt.
+          invalidateSimulatorStatusBarOverrideCache(device);
           if (enabled) {
             await runSimctlForDevice(
               device,
@@ -152,7 +157,6 @@ export async function setIosSetting(
               ],
               { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
             );
-            invalidateSimulatorStatusBarOverrideCache(device);
           } else {
             await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
               timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,

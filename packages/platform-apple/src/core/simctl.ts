@@ -1,7 +1,9 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
+import { canonicalHostPathSync, hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
+import path from 'node:path';
 import { runXcrun, simctlCommand, type ScopedSimctlCommand } from './tool-provider.ts';
 
 declare const simulatorAddress: unique symbol;
@@ -13,10 +15,40 @@ export type SimulatorAddress = Readonly<{ udid: string; simulatorSetPath: string
   readonly [simulatorAddress]: true;
 };
 
+/**
+ * The device root `simctl` uses when a command names no set. Naming this directory explicitly with
+ * `--set` selects the same simulators, so the flag value and the default share one identity.
+ */
+function defaultSimulatorSetPath(): string {
+  return path.join(hostHomeDirectory(), 'Library', 'Developer', 'CoreSimulator', 'Devices');
+}
+
+/**
+ * Canonical identity of one simulator set: `simctl --set` follows aliases and trailing separators,
+ * so every spelling of one directory must answer as one value, and naming the default root
+ * explicitly is the default set. Unreadable paths (a set that does not exist on this host) keep
+ * their resolved spelling.
+ */
+function canonicalSimulatorSetPath(simulatorSetPath: string | undefined): string | undefined {
+  const spelled = resolveIosSimulatorDeviceSetPath(simulatorSetPath);
+  if (spelled === undefined) return undefined;
+  const canonical = canonicalExistingPath(spelled);
+  return canonical === canonicalExistingPath(defaultSimulatorSetPath()) ? undefined : canonical;
+}
+
+function canonicalExistingPath(candidate: string): string {
+  const resolved = path.resolve(candidate);
+  try {
+    return canonicalHostPathSync(resolved);
+  } catch {
+    return path.normalize(resolved);
+  }
+}
+
 export function simulatorAddressFor(device: DeviceInfo): SimulatorAddress {
   const simulatorSetPath =
     isIosFamily(device) && device.kind === 'simulator'
-      ? resolveIosSimulatorDeviceSetPath(device.simulatorSetPath)
+      ? canonicalSimulatorSetPath(device.simulatorSetPath)
       : undefined;
   return Object.freeze({ udid: device.id, simulatorSetPath }) as SimulatorAddress;
 }
@@ -25,7 +57,7 @@ function scopeSimctlArgs(
   simulatorSetPath: string | undefined,
   args: readonly string[],
 ): ScopedSimctlArgs {
-  const resolvedSetPath = resolveIosSimulatorDeviceSetPath(simulatorSetPath);
+  const resolvedSetPath = canonicalSimulatorSetPath(simulatorSetPath);
   const scoped = resolvedSetPath ? ['--set', resolvedSetPath, ...args] : [...args];
   return Object.freeze(scoped) as ScopedSimctlArgs;
 }

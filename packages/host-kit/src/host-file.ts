@@ -1,6 +1,7 @@
 export {
   createHostDirectoryLinkSync,
   accessHostFile,
+  canonicalHostPathSync,
   chmodHostFile,
   copyHostFile,
   copyHostPath,

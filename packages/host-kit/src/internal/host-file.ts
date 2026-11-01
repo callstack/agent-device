@@ -135,6 +135,14 @@ export function readHostSymbolicLinkSync(filePath: string): string {
   return fs.readlinkSync(filePath);
 }
 
+/**
+ * The canonical form of a path on this host: every symlink and `.`/`..` segment resolved, so two
+ * spellings of one directory answer with one value. Throws when the host cannot resolve the path.
+ */
+export function canonicalHostPathSync(candidatePath: string): string {
+  return fs.realpathSync(candidatePath);
+}
+
 export function removeHostFileSync(filePath: string): void {
   fs.unlinkSync(filePath);
 }
