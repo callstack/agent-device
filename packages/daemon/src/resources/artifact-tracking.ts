@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
@@ -34,6 +34,11 @@ type DirectoryArchive = {
   sizeBytes: number;
 };
 
+type DirectoryArchiveBuild = {
+  promise: Promise<DirectoryArchive>;
+  controller: AbortController;
+};
+
 type ArtifactSourceCleanup = {
   remainingEntries: number;
   deleteAfterDownload: boolean;
@@ -55,8 +60,7 @@ type ArtifactEntry = {
   sourceCleanup: ArtifactSourceCleanup;
   createdAt: number;
   directoryArchive?: DirectoryArchive;
-  directoryArchivePromise?: Promise<DirectoryArchive>;
-  archiveAbortController?: AbortController;
+  directoryArchiveBuild?: DirectoryArchiveBuild;
   activeDownloads: Set<ArtifactDownload>;
   cleanupRequested: boolean;
   timer: ReturnType<typeof setTimeout>;
@@ -178,7 +182,7 @@ export async function openDownloadableArtifact(
   hostEnv: NodeJS.ProcessEnv,
   signal?: AbortSignal,
 ): Promise<OpenedDownloadableArtifact> {
-  signal?.throwIfAborted();
+  if (signal?.aborted) throw createRequestCanceledError();
   const artifacts = pendingArtifacts();
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
   const download: ArtifactDownload = {
@@ -196,7 +200,8 @@ export async function openDownloadableArtifact(
     ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
   );
   deadline.unref();
-  const cancel = () => cancelArtifactDownload(artifactId, entry, download, signal?.reason);
+  const cancel = () =>
+    cancelArtifactDownload(artifactId, entry, download, createRequestCanceledError());
   signal?.addEventListener('abort', cancel, { once: true });
   if (signal?.aborted) cancel();
   try {
@@ -228,7 +233,7 @@ function cancelArtifactDownload(
   download.controller.abort(reason);
   if (!download.stream) {
     if ([...entry.activeDownloads].every(({ controller }) => controller.signal.aborted)) {
-      entry.archiveAbortController?.abort(reason);
+      entry.directoryArchiveBuild?.controller.abort(reason);
     }
     return;
   }
@@ -338,17 +343,20 @@ async function ensureDirectoryArchive(
   if (entry.directoryArchive && fs.existsSync(entry.directoryArchive.archivePath)) {
     return entry.directoryArchive;
   }
-  if (entry.directoryArchivePromise && entry.archiveAbortController?.signal.aborted === false) {
-    return await entry.directoryArchivePromise;
+  const currentBuild = entry.directoryArchiveBuild;
+  if (currentBuild && !currentBuild.controller.signal.aborted) {
+    return await currentBuild.promise;
   }
 
-  const archivePromise = createDirectoryArchive(artifactId, entry, hostEnv);
-  entry.directoryArchivePromise = archivePromise;
+  const controller = new AbortController();
+  const archivePromise = createDirectoryArchive(artifactId, entry, hostEnv, controller);
+  const build = { promise: archivePromise, controller };
+  entry.directoryArchiveBuild = build;
   try {
     return await archivePromise;
   } finally {
-    if (entry.directoryArchivePromise === archivePromise) {
-      entry.directoryArchivePromise = undefined;
+    if (entry.directoryArchiveBuild === build) {
+      entry.directoryArchiveBuild = undefined;
     }
   }
 }
@@ -357,21 +365,21 @@ async function createDirectoryArchive(
   artifactId: string,
   entry: ArtifactEntry,
   hostEnv: NodeJS.ProcessEnv,
+  controller: AbortController,
 ): Promise<DirectoryArchive> {
-  cleanupDirectoryArchive(entry);
-
-  const sourceName = safeArtifactFilename(
-    entry.fileName,
-    path.basename(entry.artifactPath) || artifactId,
-  );
-  const fileName = archiveFilename(sourceName);
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
-  );
-  const archivePath = path.join(tempDir, fileName);
-  const controller = new AbortController();
-  entry.archiveAbortController = controller;
+  let tempDir: string | undefined;
   try {
+    cleanupDirectoryArchive(entry);
+
+    const sourceName = safeArtifactFilename(
+      entry.fileName,
+      path.basename(entry.artifactPath) || artifactId,
+    );
+    const fileName = archiveFilename(sourceName);
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
+    );
+    const archivePath = path.join(tempDir, fileName);
     await runCmd(
       'tar',
       [
@@ -401,17 +409,23 @@ async function createDirectoryArchive(
     entry.directoryArchive = archive;
     return archive;
   } catch (error) {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    if (controller.signal.aborted) throw controller.signal.reason;
-    if (error instanceof AppError) throw error;
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Failed to archive downloadable artifact: ${entry.artifactPath}`,
-      { artifactPath: entry.artifactPath },
-      error instanceof Error ? error : undefined,
-    );
+    const failure = controller.signal.aborted
+      ? controller.signal.reason
+      : error instanceof AppError
+        ? error
+        : new AppError(
+            'COMMAND_FAILED',
+            `Failed to archive downloadable artifact: ${entry.artifactPath}`,
+            { artifactPath: entry.artifactPath },
+            error instanceof Error ? error : undefined,
+          );
+    controller.abort(failure);
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    throw failure;
   } finally {
-    if (entry.archiveAbortController === controller) entry.archiveAbortController = undefined;
+    if (entry.directoryArchiveBuild?.controller === controller) {
+      entry.directoryArchiveBuild = undefined;
+    }
   }
 }
 
@@ -455,7 +469,7 @@ function requestArtifactCleanup(
   entry.cleanupRequested = true;
   clearTimeout(entry.timer);
   if (entry.activeDownloads.size > 0 || artifacts.get(artifactId) !== entry) return;
-  entry.archiveAbortController?.abort(
+  entry.directoryArchiveBuild?.controller.abort(
     expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId),
   );
   artifacts.delete(artifactId);

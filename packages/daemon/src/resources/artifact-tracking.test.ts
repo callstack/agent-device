@@ -5,6 +5,7 @@ import { buffer } from 'node:stream/consumers';
 import { gunzipSync } from 'node:zlib';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { AppError, isRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
@@ -84,7 +85,7 @@ test('cancelling the archive builder preserves a second download waiting for its
   }
 });
 
-test.each(['deadline-aborted', 'failed'] as const)(
+test.each(['deadline-aborted', 'failed', 'late-aborted'] as const)(
   'a live artifact starts a fresh archive while a %s build is settling',
   async (failure) => {
     const root = mkdtempForTestSync('fu-art-retry-build-');
@@ -101,10 +102,22 @@ test.each(['deadline-aborted', 'failed'] as const)(
     const cancelled = new Promise<void>((resolve) => {
       aborted = resolve;
     });
+    let tarSucceeded!: () => void;
+    const succeeded = new Promise<void>((resolve) => {
+      tarSucceeded = resolve;
+    });
+    let firstArchiveDir = '';
     const runCmd = command.runCmd;
     const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      firstArchiveDir = path.dirname(String(args[1]?.[1]));
       if (failure === 'failed') throw new Error('tar failed');
       args[2]?.signal?.addEventListener('abort', aborted, { once: true });
+      if (failure === 'late-aborted') {
+        const result = await runCmd(...args);
+        tarSucceeded();
+        await settling;
+        return result;
+      }
       await settling;
       return await runCmd(...args);
     });
@@ -119,7 +132,8 @@ test.each(['deadline-aborted', 'failed'] as const)(
       void first.catch(() => {});
       const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
       timers.mockRestore();
-      if (failure === 'deadline-aborted') {
+      if (failure !== 'failed') {
+        if (failure === 'late-aborted') await succeeded;
         expect(deadline).toBeTypeOf('function');
         runtime.run(() => deadline!());
         await cancelled;
@@ -131,13 +145,14 @@ test.each(['deadline-aborted', 'failed'] as const)(
       void second.catch(() => {});
       finishAborted();
       await expect(first).rejects.toMatchObject(
-        failure === 'deadline-aborted'
+        failure !== 'failed'
           ? { details: { reason: 'RESOURCE_EXPIRED' } }
           : {
               code: 'COMMAND_FAILED',
               message: `Failed to archive downloadable artifact: ${artifactPath}`,
             },
       );
+      expect(fs.existsSync(firstArchiveDir)).toBe(false);
       const download = await second;
       const closed = once(download.stream, 'close');
       const bytes = await buffer(download.stream);
@@ -145,7 +160,8 @@ test.each(['deadline-aborted', 'failed'] as const)(
       download.release();
       expect(gunzipSync(bytes).includes(expected)).toBe(true);
       expect(archive).toHaveBeenCalledTimes(2);
-      runtime.run(() => cleanupDownloadableArtifact(id));
+      if (failure === 'late-aborted') runtime.dispose();
+      else runtime.run(() => cleanupDownloadableArtifact(id));
       expect(fs.existsSync(artifactPath)).toBe(false);
       expect(fs.existsSync(path.dirname(String(download.stream.path)))).toBe(false);
     } finally {
@@ -160,6 +176,107 @@ test.each(['deadline-aborted', 'failed'] as const)(
         }
         download.release();
       }
+      runtime.dispose();
+      archive.mockRestore();
+    }
+  },
+);
+
+test('an archive setup failure does not poison a simultaneous retry', async () => {
+  const root = mkdtempForTestSync('fu-art-setup-retry-');
+  const artifactPath = path.join(root, 'capture.trace');
+  fs.mkdirSync(artifactPath);
+  fs.writeFileSync(path.join(artifactPath, 'payload'), 'retry after setup failure');
+  const runtime = createRuntimeStateHandle();
+  const directories = vi.spyOn(fs, 'mkdtempSync').mockImplementationOnce(() => {
+    throw new AppError('COMMAND_FAILED', 'archive setup failed');
+  });
+  const openings: Array<Promise<OpenedDownloadableArtifact>> = [];
+  try {
+    const id = runtime.run(() =>
+      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+    );
+    const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    openings.push(first);
+    void first.catch(() => {});
+    const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    openings.push(second);
+    void second.catch(() => {});
+    await expect(first).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: 'archive setup failed',
+    });
+    const download = await second;
+    const closed = once(download.stream, 'close');
+    expect(
+      gunzipSync(await buffer(download.stream)).includes(Buffer.from('retry after setup failure')),
+    ).toBe(true);
+    await closed;
+    download.release();
+    runtime.run(() => cleanupDownloadableArtifact(id));
+    expect(fs.existsSync(artifactPath)).toBe(false);
+  } finally {
+    for (const result of await Promise.allSettled(openings)) {
+      if (result.status !== 'fulfilled') continue;
+      const download = result.value;
+      if (!download.stream.closed) {
+        const closed = once(download.stream, 'close');
+        download.stream.destroy();
+        await closed;
+      }
+      download.release();
+    }
+    directories.mockRestore();
+    runtime.dispose();
+  }
+});
+
+test.each(['before opening', 'while archiving'] as const)(
+  'caller cancellation %s has a typed reason without forwarding caller data',
+  async (phase) => {
+    const root = mkdtempForTestSync('fu-art-client-cancel-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'cancelled payload');
+    const runtime = createRuntimeStateHandle();
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      const signal = args[2]!.signal!;
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+      throw new Error('aborted tar cannot complete');
+    });
+    const caller = new AbortController();
+    const reason = new AppError('COMMAND_FAILED', 'private caller cancellation data', {
+      reason: 'RESOURCE_EXPIRED',
+    });
+    let opening: Promise<OpenedDownloadableArtifact> | undefined;
+    try {
+      const id = runtime.run(() =>
+        trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+      );
+      if (phase === 'before opening') caller.abort(reason);
+      opening = runtime.run(() =>
+        openDownloadableArtifact(id, undefined, process.env, caller.signal),
+      );
+      void opening.catch(() => {});
+      if (phase === 'while archiving') caller.abort(reason);
+      const error = await opening.catch((error: unknown) => error);
+      expect(isRequestCanceledError(error)).toBe(true);
+      const normalized = normalizeError(error);
+      expect(normalized).toMatchObject({
+        code: 'COMMAND_FAILED',
+        message: 'request canceled',
+        details: { reason: 'request_canceled' },
+      });
+      expect(JSON.stringify(normalized)).not.toContain('private caller cancellation data');
+      expect(JSON.stringify(normalized)).not.toContain('RESOURCE_EXPIRED');
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      runtime.run(() => cleanupDownloadableArtifact(id));
+      expect(fs.existsSync(artifactPath)).toBe(false);
+    } finally {
+      caller.abort();
+      if (opening) await Promise.allSettled([opening]);
       runtime.dispose();
       archive.mockRestore();
     }

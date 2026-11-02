@@ -84,7 +84,9 @@ async function handleArtifactDownload(
   }
 
   const controller = new AbortController();
-  const cancel = () => controller.abort();
+  const cancel = () => {
+    if (!res.writableFinished) controller.abort();
+  };
   res.once('close', cancel);
   if (res.destroyed) cancel();
   try {

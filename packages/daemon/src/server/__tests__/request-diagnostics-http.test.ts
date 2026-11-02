@@ -94,7 +94,9 @@ test('request diagnostics route serves one record as ndjson to an authorized cal
   });
 });
 
-test('request diagnostics returns complete JSON when its stream fails before headers', async () => {
+test('request diagnostics returns complete JSON when its stream fails before headers', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
   await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
     writeRecord(sessionsDir, 'default', 'abc123');
     const createReadStream = fs.createReadStream;
