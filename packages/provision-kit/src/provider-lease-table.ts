@@ -154,7 +154,10 @@ type Outcome<Session> =
 type RentalRecord<Handle> = {
   readonly handle: Handle;
   stopped: boolean;
-  /** The stop in flight, which outlives a teardown that stopped waiting for it. */
+  /**
+   * The stop in flight, which outlives a teardown that stopped waiting for it. It is also the fence that
+   * keeps a later rental's stop from overtaking this one, so it is cleared only when the stop settles.
+   */
   stopping: Promise<StopFailure | undefined> | undefined;
 };
 

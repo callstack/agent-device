@@ -77,13 +77,16 @@ export function providerRuntimeOwner(
   });
 }
 
-// Changing the key length or the scrypt cost re-identifies every derived instance; an instance a
-// composition names outright, such as Limrun's `runtimeInstance` option, is not derived here at all. For a provider that
-// writes its instance into durable state, such as Limrun's app-log descriptors, that orphans every such
-// resource; Revyl keeps its instance in-process only. Each provider pins its own digest through the
-// wrapper that builds its principal.
+// The key length and the scrypt cost, block size and parallelism all feed the digest: changing any of
+// them re-identifies every derived instance (`maxmem` is only a cap). An instance a composition names
+// outright, such as Limrun's `runtimeInstance` option, is not derived here at all. For a provider that
+// writes its instance into durable state, such as Limrun's app-log descriptors, a change orphans every
+// such resource; Revyl keeps its instance in-process only. Each provider pins its own digest through
+// the wrapper that builds its principal.
 const RUNTIME_INSTANCE_KEY_LENGTH_BYTES = 32;
 const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
+const RUNTIME_INSTANCE_SCRYPT_BLOCK_SIZE = 8;
+const RUNTIME_INSTANCE_SCRYPT_PARALLELISM = 1;
 const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
 
 /**
@@ -135,7 +138,12 @@ export function providerRuntimeInstance(
     JSON.stringify(facts),
     `agent-device:${normalizedProvider}-runtime-owner:v1`,
     RUNTIME_INSTANCE_KEY_LENGTH_BYTES,
-    { N: RUNTIME_INSTANCE_SCRYPT_COST, r: 8, p: 1, maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY },
+    {
+      N: RUNTIME_INSTANCE_SCRYPT_COST,
+      r: RUNTIME_INSTANCE_SCRYPT_BLOCK_SIZE,
+      p: RUNTIME_INSTANCE_SCRYPT_PARALLELISM,
+      maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY,
+    },
   );
   return `principal-${fingerprint.toString('hex')}`;
 }
