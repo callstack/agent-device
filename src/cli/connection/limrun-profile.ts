@@ -7,7 +7,7 @@ import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/prov
 import { LIMRUN_PROFILE_FIELDS } from '@agent-device/provider-limrun';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
-import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
+import { resolveRequestedLeaseBackend } from '../commands/connection-lease-transaction.ts';
 import {
   limrunInstanceVariables,
   limrunPlatformForLeaseBackend,

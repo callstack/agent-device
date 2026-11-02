@@ -17,13 +17,16 @@ export function createLeaseClient(
   const control = async (positionals: string[], options?: InternalRequestOptions) =>
     await execute(INTERNAL_COMMANDS.humanControl, positionals, options);
   return {
-    allocate: async (options) =>
-      normalizeLease(
-        await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
-          ...options,
-          leaseId: options.leaseId,
-        }),
-      ),
+    allocate: async (options) => {
+      const data = await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
+        ...options,
+        leaseId: options.leaseId,
+      });
+      return {
+        ...normalizeLease(data),
+        ...(typeof data.reused === 'boolean' ? { created: !data.reused } : {}),
+      };
+    },
     heartbeat: async (options) =>
       normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
     release: async (options) => {

@@ -1,67 +1,37 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
-import crypto from 'node:crypto';
-import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopMetroTunnel } from '@agent-device/react-native';
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
-// Provenance-preserving file-only read (no ambient env defaults merged in) —
-// see resolvePreviousOwnDaemonAuthToken below for why this must not be
-// resolveRemoteConfigProfile.
-import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
-import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import {
-  isInactiveLeaseError,
-  readLeaseAllocateProviderFlags,
-  requireLeaseDeviceSpec,
-} from '@agent-device/contracts/lease-scope';
-import {
-  narrowConnectionPlatform,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
-  mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
   writeRemoteConnectionState,
-  type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
+  type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { profileToCliFlags } from '../remote-config-flags.ts';
-import type { BatchStep, Lease, LeaseDevice } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  isSessionRuntimePlatform,
-  leaseBackendForPlatform,
-  type LeaseBackend,
-  type SessionRuntimeHints,
-} from '@agent-device/kernel/contracts';
+import type { BatchStep, LeaseDevice } from '@agent-device/contracts/client';
+import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { readMetroPrepareKind, type AgentDeviceClient } from '@agent-device/command-surface';
+import type { AgentDeviceClient } from '@agent-device/command-surface';
 import {
   connectionProviderCapabilities,
   primeProviderConnection,
 } from '../connection/provider-policy.ts';
-import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
+import { profileToCliFlags } from '../remote-config-flags.ts';
 import {
-  bindLeaseNamedDevice,
-  grantedLeaseDevice,
-  resolveProxyLeaseState,
-  type ResolvedLeaseState,
-} from './proxy-lease-device.ts';
-
-const leaseDeferredCommands = new Set([
-  'artifacts',
-  'connect',
-  'connection',
-  'close',
-  'disconnect',
-  'metro',
-  'session',
-]);
-const runtimeDeferredCommands = new Set(['open']);
-export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
-export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
+  acquireConnectionLease,
+  createLeaseLedger,
+  resolveRequestedLeaseBackend,
+  type LeaseLedger,
+} from './connection-lease-transaction.ts';
+import {
+  prepareRuntimeForCommand,
+  selectCompatibleRuntime,
+  stopMetroCleanup,
+} from './connection-metro-runtime.ts';
+import { grantedLeaseDevice } from './proxy-lease-device.ts';
 
 export async function materializeRemoteConnectionForCommand(options: {
   host: HostEnvironment;
@@ -123,77 +93,50 @@ export async function materializeRemoteConnectionForCommand(options: {
       remoteConfig.profile,
     );
   const nextFlags = { ...mergedFlags, session: state.session };
-  const deferredAppSelection = connectionProviderCapabilities(
-    state.leaseProvider,
-  ).supportsDeferredAppSelection;
-  const initialApp =
-    deferredAppSelection && command === PUBLIC_COMMANDS.open ? options.positionals?.[0] : undefined;
-  if (deferredAppSelection) delete nextFlags.providerApp;
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
   let changed = !existingState;
-  let acquiredLeaseForCleanup: Lease | undefined;
 
-  const leasePolicy = connectionLeasePolicyForState(nextState);
-  if (leasePolicy.shouldAllocate(command)) {
-    const materializedLease = await materializeLeaseForCommand({
+  // Unknown creation evidence permits discard before binding, but only confirmed creation permits
+  // rollback after a later failure. A committed session record takes over either lease.
+  const leaseLedger = createLeaseLedger();
+  try {
+    const acquired = await acquireConnectionLease({
       command,
       client,
       state,
-      nextState,
       nextFlags,
-      initialApp,
-      policy: leasePolicy,
+      positionals: options.positionals,
+      leaseLedger,
     });
-    nextState = materializedLease.state;
-    changed = changed || materializedLease.changed;
-    acquiredLeaseForCleanup = materializedLease.acquiredLeaseForCleanup;
-  }
+    nextState = acquired.state;
+    changed = changed || acquired.changed;
 
-  // A command that allocates no lease still returns flags and a record on the platform axis, and the
-  // record can carry an alias the request asked to narrow. Same rule as the binding path above, so a
-  // connection whose backend rents one leaf cannot serve another leaf simply because this command
-  // never reached the allocator.
-  const carriedPlatform = narrowConnectionPlatform({
-    leaseBackend: nextState.leaseBackend,
-    recordedPlatform: nextState.platform,
-    requestedPlatform: nextFlags.platform,
-  });
-  if (!carriedPlatform.ok) {
-    throw connectionPlatformConflict({
-      session: state.session,
-      leaseBackend: nextState.leaseBackend,
-      boundPlatform: carriedPlatform.boundPlatform,
-      requestedPlatform: carriedPlatform.requestedPlatform,
-      detail: 'bound-connection',
+    const runtimePreparation = await prepareRuntimeForCommand({
+      command,
+      flags: nextFlags,
+      client,
+      state,
+      nextState,
+      runtime: nextRuntime,
+      positionals: options.positionals,
+      batchSteps: options.batchSteps,
+      forceRuntimePrepare: options.forceRuntimePrepare,
     });
+    nextState = runtimePreparation.state;
+    nextRuntime = runtimePreparation.runtime;
+    changed = changed || runtimePreparation.changed;
+    await persistMaterializedConnection({
+      changed,
+      stateDir,
+      state: nextState,
+      leaseLedger,
+      preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
+      metroCleanupToStop: runtimePreparation.metroCleanupToStop,
+    });
+  } catch (error) {
+    throw await leaseLedger.releaseOwnedOnFailure(error);
   }
-  nextState = { ...nextState, platform: carriedPlatform.platform };
-  nextFlags.platform = carriedPlatform.platform;
-
-  const runtimePreparation = await prepareRuntimeForCommand({
-    command,
-    flags: nextFlags,
-    client,
-    state,
-    nextState,
-    runtime: nextRuntime,
-    positionals: options.positionals,
-    batchSteps: options.batchSteps,
-    forceRuntimePrepare: options.forceRuntimePrepare,
-  });
-  nextState = runtimePreparation.state;
-  nextRuntime = runtimePreparation.runtime;
-  changed = changed || runtimePreparation.changed;
-  await persistMaterializedConnection({
-    changed,
-    stateDir,
-    state: nextState,
-    client,
-    acquiredLeaseForCleanup,
-    preparedMetroCleanupOnFailure: runtimePreparation.preparedMetroCleanupOnFailure,
-    metroCleanupToStop: runtimePreparation.metroCleanupToStop,
-  });
 
   return {
     flags: {
@@ -210,627 +153,31 @@ export async function materializeRemoteConnectionForCommand(options: {
   };
 }
 
-async function prepareRuntimeForCommand(options: {
-  command: string;
-  flags: CliFlags;
-  client: AgentDeviceClient;
-  state: RemoteConnectionState;
-  nextState: RemoteConnectionState;
-  runtime?: SessionRuntimeHints;
-  positionals?: string[];
-  batchSteps?: BatchStep[];
-  forceRuntimePrepare?: boolean;
-}): Promise<{
-  state: RemoteConnectionState;
-  runtime?: SessionRuntimeHints;
-  changed: boolean;
-  metroCleanupToStop?: RemoteConnectionState['metro'];
-  preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
-}> {
-  const { command, flags, state, client } = options;
-  let nextState = ensureRuntimeLeaseState(options.nextState, flags);
-  const nextRuntime = options.runtime;
-  if (
-    !shouldPrepareRuntimeForCommand(command, flags, options.batchSteps, options.positionals) ||
-    !hasDeferredMetroConfig(flags) ||
-    !shouldPrepareRuntime(options.forceRuntimePrepare, nextRuntime, flags.platform)
-  ) {
-    return { state: nextState, runtime: nextRuntime, changed: false };
-  }
-  if (!nextState.leaseId) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `${command} requires a resolved remote lease before Metro runtime can be prepared.`,
-    );
-  }
-  const prepared = await prepareConnectedMetro(
-    flags,
-    client,
-    state.remoteConfigPath,
-    state.session,
-    {
-      tenantId: state.tenant,
-      runId: state.runId,
-      leaseId: nextState.leaseId,
-    },
-  );
-  const replacesExistingMetroCleanup = !isSameMetroCleanup(nextState.metro, prepared.cleanup);
-  nextState = {
-    ...nextState,
-    runtime: prepared.runtime,
-    metro: prepared.cleanup,
-    updatedAt: new Date().toISOString(),
-  };
-  return {
-    state: nextState,
-    runtime: prepared.runtime,
-    changed: true,
-    metroCleanupToStop: replacesExistingMetroCleanup ? options.nextState.metro : undefined,
-    preparedMetroCleanupOnFailure: replacesExistingMetroCleanup ? prepared.cleanup : undefined,
-  };
-}
-
-function ensureRuntimeLeaseState(
-  state: RemoteConnectionState,
-  flags: CliFlags,
-): RemoteConnectionState {
-  if (state.leaseId || !flags.leaseId) return state;
-  return {
-    ...state,
-    leaseId: flags.leaseId,
-    leaseBackend: flags.leaseBackend,
-  };
-}
-
-function shouldPrepareRuntime(
-  forceRuntimePrepare: boolean | undefined,
-  runtime: SessionRuntimeHints | undefined,
-  platform: CliFlags['platform'],
-): boolean {
-  return (
-    forceRuntimePrepare === true || !runtime || !isRuntimeCompatibleWithPlatform(runtime, platform)
-  );
-}
-
 async function persistMaterializedConnection(options: {
   changed: boolean;
   stateDir: string;
   state: RemoteConnectionState;
-  client: AgentDeviceClient;
-  acquiredLeaseForCleanup?: Lease;
+  leaseLedger: LeaseLedger;
   preparedMetroCleanupOnFailure?: RemoteConnectionState['metro'];
   metroCleanupToStop?: RemoteConnectionState['metro'];
 }): Promise<void> {
   if (options.changed) {
     try {
-      writeRemoteConnectionState({ stateDir: options.stateDir, state: options.state });
+      // The session record is the durable commit point: the moment it lands, it names the lease and
+      // the ledger stops owning it. The active-pointer update that follows is a convenience reader
+      // for the default session; its failure leaves the named lease owned by the record, not by us.
+      writeRemoteConnectionState({
+        stateDir: options.stateDir,
+        state: options.state,
+        onSessionRecordCommitted: () => options.leaseLedger.transfer(options.state.leaseId),
+      });
     } catch (error) {
+      // The caller's rollback ends any lease the record never came to name.
       await stopMetroCleanup(options.preparedMetroCleanupOnFailure);
-      await releaseAcquiredLeaseOnWriteFailure(
-        options.client,
-        options.state,
-        options.acquiredLeaseForCleanup,
-      );
       throw error;
     }
   }
   await stopMetroCleanup(options.metroCleanupToStop);
-}
-
-async function materializeLeaseForCommand(options: {
-  command: string;
-  client: AgentDeviceClient;
-  state: RemoteConnectionState;
-  nextState: RemoteConnectionState;
-  nextFlags: CliFlags;
-  initialApp?: string;
-  policy: ConnectionLeasePolicy;
-}): Promise<{
-  state: RemoteConnectionState;
-  changed: boolean;
-  acquiredLeaseForCleanup?: Lease;
-}> {
-  const { command, client, state, nextFlags, policy } = options;
-  const preliminaryLeaseBackend = state.leaseBackend ?? resolveRequestedLeaseBackend(nextFlags);
-  let nextState = options.nextState;
-  const resolvedLeaseState = await policy.resolveLeaseState({
-    command,
-    client,
-    state: nextState,
-    flags: nextFlags,
-    leaseBackend: preliminaryLeaseBackend,
-  });
-  nextState = resolvedLeaseState.state;
-  const leaseBackend =
-    nextState.leaseBackend ??
-    preliminaryLeaseBackend ??
-    requireRequestedLeaseBackend(nextFlags, command);
-  assertRequestedConnectionBackend(state, leaseBackend);
-  // One decision for one axis. Whichever of the backend, the record, and the request names the
-  // narrowest platform, that is what this command records, sends, allocates, and returns; two that
-  // cannot name the same device are refused here rather than resolved later by whoever read first.
-  const platform = narrowConnectionPlatform({
-    leaseBackend,
-    recordedPlatform: nextState.platform,
-    requestedPlatform: nextFlags.platform,
-  });
-  if (!platform.ok) {
-    throw connectionPlatformConflict({
-      session: state.session,
-      leaseBackend,
-      boundPlatform: platform.boundPlatform,
-      requestedPlatform: platform.requestedPlatform,
-      detail: 'bound-connection',
-    });
-  }
-  // Read after the platform is settled: a request that asks for another Apple leaf also asks for a
-  // different target, and the platform is the reason it is being refused.
-  assertRequestedConnectionTarget(state, nextFlags);
-  nextState = { ...nextState, platform: platform.platform };
-  nextFlags.platform = platform.platform;
-  let materializedLease = await allocateOrReuseLease(
-    client,
-    nextState,
-    leaseBackend,
-    policy,
-    nextFlags,
-    options.initialApp,
-    resolvedLeaseState.allocateBySpec,
-  );
-  if (resolvedLeaseState.allocateBySpec) {
-    const bound = await bindLeaseNamedDevice({
-      client,
-      state: nextState,
-      flags: nextFlags,
-      leaseBackend,
-      materialized: materializedLease,
-      allocateByDeviceKey: (boundState, flags) =>
-        allocateOrReuseLease(client, boundState, leaseBackend, policy, flags, options.initialApp),
-    });
-    nextState = bound.state;
-    materializedLease = bound.materialized;
-  }
-  const lease = materializedLease.lease;
-  nextFlags.leaseId = lease.leaseId;
-  nextFlags.leaseBackend = leaseBackend;
-  nextFlags.target = nextState.target ?? nextFlags.target;
-  if (leaseStateMatches(nextState, lease, leaseBackend)) {
-    return {
-      state: nextState,
-      changed: false,
-      acquiredLeaseForCleanup: materializedLease.acquired ? lease : undefined,
-    };
-  }
-  return {
-    state: buildMaterializedLeaseState(nextState, lease, leaseBackend, nextFlags),
-    changed: true,
-    acquiredLeaseForCleanup: materializedLease.acquired ? lease : undefined,
-  };
-}
-
-function leaseStateMatches(
-  state: RemoteConnectionState,
-  lease: Lease,
-  leaseBackend: LeaseBackend,
-): boolean {
-  return (
-    state.leaseId === lease.leaseId &&
-    state.leaseBackend === leaseBackend &&
-    state.deviceKey === (lease.deviceKey ?? state.deviceKey)
-  );
-}
-
-function buildMaterializedLeaseState(
-  state: RemoteConnectionState,
-  lease: Lease,
-  leaseBackend: LeaseBackend,
-  flags: CliFlags,
-): RemoteConnectionState {
-  const connection = mergeRemoteConnectionRequestMetadata(lease, state);
-  return {
-    ...state,
-    leaseId: lease.leaseId,
-    leaseBackend,
-    ...connection,
-    platform: state.platform ?? flags.platform,
-    target: state.target ?? flags.target,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-type ConnectionLeasePolicy = {
-  shouldAllocate(command: string): boolean;
-  ttlMs(state: RemoteConnectionState): number | undefined;
-  /** The id this client names a new lease with; without it the daemon mints one. */
-  newLeaseId?(): string;
-  resolveLeaseState(options: {
-    command: string;
-    client: AgentDeviceClient;
-    state: RemoteConnectionState;
-    flags: CliFlags;
-    leaseBackend?: LeaseBackend;
-  }): Promise<ResolvedLeaseState>;
-};
-
-function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  if (state.leaseBackend === 'macos-app') return MACOS_APP_CONNECTION_LEASE_POLICY;
-  const capabilities = connectionProviderCapabilities(state.leaseProvider);
-  if (capabilities.leaseKind === 'proxy') {
-    return PROXY_CONNECTION_LEASE_POLICY;
-  }
-  if (capabilities.supportsDeferredAppSelection) {
-    return DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY;
-  }
-  if (capabilities.usesCloudWebDriverLease) {
-    return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
-  }
-  return DEFAULT_CONNECTION_LEASE_POLICY;
-}
-
-const DEFERRED_APP_SELECTION_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) =>
-    command !== PUBLIC_COMMANDS.apps && !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
-  resolveLeaseState: async (options) => ({ state: options.state }),
-};
-
-const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
-  resolveLeaseState: async (options) => ({ state: options.state }),
-};
-
-const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
-  ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
-  // Known before the daemon allocates, so a host in front of it can name the lease with the same id.
-  newLeaseId: () => crypto.randomBytes(16).toString('hex'),
-  resolveLeaseState: resolveProxyLeaseState,
-};
-
-/**
- * A `macos-app` lease names one app, and the host allocated it: the client uses the lease its
- * remote config names as it is, and never resolves a device into a new key or allocates a lease.
- */
-const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
-  ttlMs: () => undefined,
-  resolveLeaseState: async ({ state }) => {
-    if (!state.leaseId || !state.deviceKey) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'A macos-app connection needs the leaseId and deviceKey the host allocated in its remote config.',
-      );
-    }
-    return { state: { ...state, platform: 'macos' } };
-  },
-};
-
-const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
-  shouldAllocate: (command) => !leaseDeferredCommands.has(command),
-  ttlMs: () => CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
-  resolveLeaseState: async (options) => ({ state: options.state }),
-};
-
-async function prepareConnectedMetro(
-  flags: CliFlags,
-  client: AgentDeviceClient,
-  remoteConfigPath: string,
-  session: string,
-  bridgeScope: MetroBridgeScope,
-): Promise<{
-  runtime?: SessionRuntimeHints;
-  cleanup?: NonNullable<RemoteConnectionState['metro']>;
-}> {
-  if (!flags.metroProjectRoot && !flags.metroPublicBaseUrl && !flags.metroProxyBaseUrl) {
-    return {};
-  }
-  if (flags.platform !== 'ios' && flags.platform !== 'android') {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Deferred Metro preparation requires platform "ios" or "android".',
-    );
-  }
-  if (!flags.metroPublicBaseUrl && !flags.metroProxyBaseUrl) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Deferred Metro preparation requires metroPublicBaseUrl or metroProxyBaseUrl when Metro settings are provided.',
-    );
-  }
-  const prepared = await client.metro.prepare({
-    projectRoot: flags.metroProjectRoot,
-    kind: readMetroPrepareKind(flags.metroKind),
-    publicBaseUrl: flags.metroPublicBaseUrl,
-    proxyBaseUrl: flags.metroProxyBaseUrl,
-    bearerToken: flags.metroBearerToken,
-    bridgeScope,
-    launchUrl: flags.launchUrl,
-    companionProfileKey: remoteConfigPath,
-    companionConsumerKey: session,
-    port: flags.metroPreparePort,
-    listenHost: flags.metroListenHost,
-    statusHost: flags.metroStatusHost,
-    startupTimeoutMs: flags.metroStartupTimeoutMs,
-    probeTimeoutMs: flags.metroProbeTimeoutMs,
-    reuseExisting: flags.metroNoReuseExisting ? false : undefined,
-    installDependenciesIfNeeded: flags.metroNoInstallDeps ? false : undefined,
-    runtimeFilePath: flags.metroRuntimeFile,
-  });
-  return {
-    runtime: flags.platform === 'ios' ? prepared.iosRuntime : prepared.androidRuntime,
-    cleanup: flags.metroProxyBaseUrl
-      ? {
-          projectRoot: prepared.projectRoot,
-          profileKey: remoteConfigPath,
-          consumerKey: session,
-        }
-      : undefined,
-  };
-}
-
-export async function stopMetroCleanup(
-  cleanup: RemoteConnectionState['metro'] | undefined,
-): Promise<void> {
-  if (!cleanup) return;
-  try {
-    await stopMetroTunnel(cleanup);
-  } catch {
-    // Connection lifecycle cleanup must stay best-effort.
-  }
-}
-
-/** The host allocated a `macos-app` lease and ends it itself; a tenant never releases it. */
-export function isHostAllocatedLease(state: RemoteConnectionState): boolean {
-  return state.leaseBackend === 'macos-app';
-}
-
-export async function releaseRemoteConnectionLease(
-  client: AgentDeviceClient,
-  state: RemoteConnectionState,
-  // The daemon bearer token is never persisted on `state` (ADR 0007); callers
-  // pass the token already resolved via the flag/env/CLI-session chain.
-  daemonAuthToken?: string,
-): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
-  if (!state.leaseId || isHostAllocatedLease(state)) return { released: false };
-  const result = await client.leases.release({
-    tenant: state.tenant,
-    runId: state.runId,
-    leaseId: state.leaseId,
-    leaseBackend: state.leaseBackend,
-    daemonBaseUrl: state.daemon?.baseUrl,
-    daemonAuthToken,
-    daemonTransport: state.daemon?.transport,
-    daemonServerMode: state.daemon?.serverMode,
-    ...buildRemoteConnectionRequestMetadata(state),
-  });
-  return result;
-}
-
-// A forced reconnect releases the *previous* connection's lease, which must be
-// authenticated against the *previous* endpoint's own credential — never the
-// new connection's token (that would send an unrelated endpoint's secret to
-// an endpoint it was never issued for). See plans/007 for the full rule.
-type PreviousLeaseAuthResolution =
-  | { canAuthenticate: true; daemonAuthToken?: string }
-  | { canAuthenticate: false };
-
-function resolvePreviousLeaseAuth(options: {
-  previous: RemoteConnectionState;
-  nextDaemonBaseUrl?: string;
-  ambientDaemonAuthToken?: string;
-  cwd: string;
-  env: Record<string, string | undefined>;
-}): PreviousLeaseAuthResolution {
-  const ownToken = resolvePreviousOwnDaemonAuthToken(options.previous, options.cwd, options.env);
-  if (ownToken) return { canAuthenticate: true, daemonAuthToken: ownToken };
-  if (options.previous.daemon?.baseUrl === options.nextDaemonBaseUrl) {
-    // Same endpoint: the ambient credential plausibly belongs to it too.
-    return { canAuthenticate: true, daemonAuthToken: options.ambientDaemonAuthToken };
-  }
-  return { canAuthenticate: false };
-}
-
-function resolvePreviousOwnDaemonAuthToken(
-  previous: RemoteConnectionState,
-  cwd: string,
-  env: Record<string, string | undefined>,
-): string | undefined {
-  try {
-    // readRemoteConfigFile, not resolveRemoteConfigProfile: the latter merges
-    // ambient environment defaults (e.g. AGENT_DEVICE_DAEMON_AUTH_TOKEN) into
-    // the profile, which would let the *new* connection's env-sourced token
-    // masquerade as a credential that provably belongs to the *previous*
-    // endpoint. Only a token the previous config file itself declares counts
-    // here; the env fallback is rule 2's job, gated on matching endpoints.
-    const { profile } = readRemoteConfigFile({
-      configPath: previous.remoteConfigPath,
-      cwd,
-      env,
-    });
-    if (!profile.daemonAuthToken) return undefined;
-    // The path alone is not provenance. `remoteConfigPath` names a file *now*,
-    // while the claim being made is about what that file declared when the
-    // previous connection was established — and a config path is routinely
-    // reused (edited in place, re-pointed at a second environment) between the
-    // two. Without this check, "connect to A from ./remote.json, re-point
-    // ./remote.json at B, connect --force" reads B's token as A's own and
-    // sends it to A during lease release: the same cross-endpoint leak the
-    // env-merge fix closed, arriving through the file instead.
-    return previousConfigStillSpeaksForPreviousEndpoint(previous, profile.daemonBaseUrl)
-      ? profile.daemonAuthToken
-      : undefined;
-  } catch {
-    // A missing/unparseable previous config is the "cannot authenticate"
-    // case handled by the caller, not an error to propagate here.
-    return undefined;
-  }
-}
-
-/**
- * Whether the previous connection's config file can still vouch for a token as
- * belonging to the previous connection's endpoint.
- *
- * The file must explicitly declare the same endpoint recorded in the previous
- * connection state. A matching file hash proves only that the file itself did
- * not change; it does not prove that its endpoint/token were effective when
- * CLI flags may have overridden them. Endpoint equality is the provenance
- * boundary and also preserves the benign rotated-credential case.
- *
- * The endpoint comparison runs both sides through
- * `buildRemoteConnectionDaemonState`, the same normalizer that produced the
- * stored `daemon.baseUrl`, so it compares like with like rather than raw
- * strings that differ only by a trailing slash.
- *
- * A file that changed and no longer declares an endpoint at all cannot vouch
- * for anything: the caller then falls back to rule 2 (matching endpoints) or
- * reports the lease as unreleasable, which is a warning and an orphaned lease
- * — the correct price for not sending a credential somewhere it may not belong.
- */
-function previousConfigStillSpeaksForPreviousEndpoint(
-  previous: RemoteConnectionState,
-  declaredDaemonBaseUrl: string | undefined,
-): boolean {
-  const declared = buildRemoteConnectionDaemonState({
-    daemonBaseUrl: declaredDaemonBaseUrl,
-  })?.baseUrl;
-  return declared !== undefined && declared === previous.daemon?.baseUrl;
-}
-
-export async function releasePreviousLease(
-  client: AgentDeviceClient,
-  previous: RemoteConnectionState,
-  options: {
-    nextDaemonBaseUrl?: string;
-    ambientDaemonAuthToken?: string;
-    cwd: string;
-    env: Record<string, string | undefined>;
-  },
-): Promise<PreviousLeaseReleaseNotice | undefined> {
-  if (!previous.leaseId || isHostAllocatedLease(previous)) return undefined;
-  const auth = resolvePreviousLeaseAuth({
-    previous,
-    nextDaemonBaseUrl: options.nextDaemonBaseUrl,
-    ambientDaemonAuthToken: options.ambientDaemonAuthToken,
-    cwd: options.cwd,
-    env: options.env,
-  });
-  if (!auth.canAuthenticate) {
-    return buildUnreleasedPreviousLeaseNotice(
-      previous,
-      'no credential known to belong to that endpoint was available',
-    );
-  }
-  try {
-    await releaseRemoteConnectionLease(client, previous, auth.daemonAuthToken);
-    return undefined;
-  } catch {
-    // Reconnect must still succeed; surface the failure instead of hiding it.
-    return buildUnreleasedPreviousLeaseNotice(previous, 'the release request failed');
-  }
-}
-
-function buildUnreleasedPreviousLeaseNotice(
-  previous: RemoteConnectionState,
-  reason: string,
-): PreviousLeaseReleaseNotice {
-  return {
-    status: 'unreleased',
-    message:
-      `Could not release the previous lease ${previous.leaseId} ` +
-      `(tenant ${previous.tenant}, run ${previous.runId}) ` +
-      `at ${previous.daemon?.baseUrl ?? 'its daemon'}: ${reason}. ` +
-      'It was left in place — release it manually if it is still active.',
-  };
-}
-
-async function releaseAcquiredLeaseOnWriteFailure(
-  client: AgentDeviceClient,
-  state: RemoteConnectionState,
-  lease: Lease | undefined,
-): Promise<void> {
-  if (!lease) return;
-  try {
-    const connection = mergeRemoteConnectionRequestMetadata(state, lease);
-    await client.leases.release({
-      tenant: state.tenant,
-      runId: state.runId,
-      leaseId: lease.leaseId,
-      leaseBackend: state.leaseBackend ?? lease.backend,
-      ...connection,
-    });
-  } catch {
-    // Preserve the state-write failure; cleanup is best-effort.
-  }
-}
-
-export function resolveRequestedLeaseBackend(flags: CliFlags): LeaseBackend | undefined {
-  return flags.leaseBackend ?? leaseBackendForPlatform(flags.platform);
-}
-
-function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBackend {
-  const leaseBackend = resolveRequestedLeaseBackend(flags);
-  if (leaseBackend) return leaseBackend;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${command} requires --platform ios|android|harmonyos or --lease-backend when the remote connection has not resolved a lease yet.`,
-  );
-}
-
-function shouldPrepareRuntimeForCommand(
-  command: string,
-  flags: CliFlags,
-  batchSteps?: BatchStep[],
-  positionals: string[] = [],
-): boolean {
-  if (command === 'cdp') {
-    return shouldAgentCdpUseRemoteBridgeUrl(positionals) && Boolean(flags.metroPublicBaseUrl);
-  }
-  if (runtimeDeferredCommands.has(command)) {
-    return true;
-  }
-  if (command !== 'batch' || !batchSteps) {
-    return false;
-  }
-  return batchSteps.some((step) => {
-    const stepCommand = step.command.trim().toLowerCase();
-    return runtimeDeferredCommands.has(stepCommand) && step.runtime === undefined;
-  });
-}
-
-export function hasDeferredMetroConfig(flags: CliFlags): boolean {
-  const metroKind = flags.metroKind;
-  return Boolean(
-    flags.metroPublicBaseUrl || flags.metroProxyBaseUrl || flags.metroProjectRoot || metroKind,
-  );
-}
-
-function isRuntimeCompatibleWithPlatform(
-  runtime: SessionRuntimeHints,
-  platform: CliFlags['platform'],
-): boolean {
-  if (!runtime.platform || !platform || !isSessionRuntimePlatform(platform)) {
-    return true;
-  }
-  return runtime.platform === platform;
-}
-
-function isSameMetroCleanup(
-  left: RemoteConnectionState['metro'] | undefined,
-  right: RemoteConnectionState['metro'] | undefined,
-): boolean {
-  return (
-    left?.projectRoot === right?.projectRoot &&
-    left?.profileKey === right?.profileKey &&
-    left?.consumerKey === right?.consumerKey
-  );
-}
-
-function selectCompatibleRuntime(
-  runtime: SessionRuntimeHints | undefined,
-  platform: CliFlags['platform'],
-): SessionRuntimeHints | undefined {
-  if (!runtime) return undefined;
-  return isRuntimeCompatibleWithPlatform(runtime, platform) ? runtime : undefined;
 }
 
 // A stored connection names its provider; before one exists, the remote config profile does.
@@ -886,132 +233,4 @@ function createRemoteConnectionStateFromFlags(
     connectedAt: now,
     updatedAt: now,
   };
-}
-
-async function allocateOrReuseLease(
-  client: AgentDeviceClient,
-  state: RemoteConnectionState,
-  leaseBackend: LeaseBackend,
-  policy: ConnectionLeasePolicy,
-  flags: CliFlags,
-  initialApp?: string,
-  allocateBySpec?: boolean,
-): Promise<{ lease: Lease; acquired: boolean }> {
-  const connection = buildRemoteConnectionRequestMetadata(state);
-  if (state.leaseId && state.leaseBackend === leaseBackend) {
-    const existing = await heartbeatOrAllocateLease(client, state.leaseId, {
-      tenant: state.tenant,
-      runId: state.runId,
-      leaseBackend,
-      ...connection,
-      ttlMs: policy.ttlMs(state),
-    });
-    if (existing) return { lease: existing, acquired: false };
-  }
-  if (leaseBackend === 'macos-app') {
-    throw new AppError('UNAUTHORIZED', 'The host-allocated macos-app lease is no longer active.', {
-      reason: 'LEASE_NOT_FOUND',
-      leaseId: state.leaseId,
-      hint: 'Ask the host for a new macos-app lease and update the remote config.',
-    });
-  }
-  // The spec rides only a by-spec allocate, so it is added below rather than taken from the flags.
-  const {
-    osVersion: _osVersion,
-    imageTag: _imageTag,
-    physical: _physical,
-    ...providerFlags
-  } = readLeaseAllocateProviderFlags(flags);
-  const lease = await client.leases.allocate({
-    tenant: state.tenant,
-    runId: state.runId,
-    leaseId: policy.newLeaseId?.(),
-    leaseBackend,
-    ...connection,
-    ...(allocateBySpec ? { deviceKey: undefined } : {}),
-    ttlMs: policy.ttlMs(state),
-    ...providerFlags,
-    platform: state.platform ?? flags.platform,
-    target: state.target ?? flags.target,
-    ...(allocateBySpec ? requireLeaseDeviceSpec(flags).spec : {}),
-    providerApp: initialApp ?? flags.providerApp,
-  });
-  return { lease, acquired: true };
-}
-
-/**
- * The refusal raised when the platform axis cannot be decided: two of the backend, the record, and
- * the request name devices that are not the same device. `detail` says which of the three disagreed,
- * because the advice differs — a bound connection is replaced with `--force`, and a request that
- * contradicts itself has no `--force` to reach.
- */
-export function connectionPlatformConflict(
-  options: Readonly<{
-    session: string;
-    leaseBackend: LeaseBackend | undefined;
-    boundPlatform?: CliFlags['platform'];
-    requestedPlatform?: CliFlags['platform'];
-    detail: 'bound-connection' | 'requested-backend';
-  }>,
-): AppError {
-  return new AppError(
-    'INVALID_ARGS',
-    options.detail === 'bound-connection'
-      ? 'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.'
-      : 'The requested platform does not match the device this lease backend rents.',
-    {
-      session: options.session,
-      leaseBackend: options.leaseBackend,
-      platform: options.boundPlatform,
-      requestedPlatform: options.requestedPlatform,
-      reason: 'CONNECTION_PLATFORM_CONFLICT',
-    },
-  );
-}
-
-function assertRequestedConnectionBackend(
-  state: RemoteConnectionState,
-  requestedLeaseBackend: LeaseBackend,
-): void {
-  if (state.leaseBackend && state.leaseBackend !== requestedLeaseBackend) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Active remote connection is already bound to a different lease backend. Re-run connect --force to replace it.',
-      { session: state.session, leaseBackend: state.leaseBackend },
-    );
-  }
-}
-
-function assertRequestedConnectionTarget(state: RemoteConnectionState, flags: CliFlags): void {
-  if (state.target && flags.target && state.target !== flags.target) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Active remote connection is already bound to a different target. Re-run connect --force to replace it.',
-      { session: state.session, target: state.target },
-    );
-  }
-}
-
-async function heartbeatOrAllocateLease(
-  client: AgentDeviceClient,
-  leaseId: string,
-  scope: {
-    tenant: string;
-    runId: string;
-    leaseBackend: LeaseBackend;
-    leaseProvider?: RemoteConnectionState['leaseProvider'];
-    clientId?: string;
-    deviceKey?: string;
-    ttlMs?: number;
-  },
-): Promise<Lease | undefined> {
-  try {
-    return await client.leases.heartbeat({
-      ...scope,
-      leaseId,
-    });
-  } catch (error) {
-    if (isInactiveLeaseError(error)) return undefined;
-    throw error;
-  }
 }

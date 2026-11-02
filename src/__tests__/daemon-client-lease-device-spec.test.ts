@@ -67,6 +67,23 @@ test('a daemon refuses a lease allocate naming a device spec and records no leas
     });
     assert.equal(lease.leaseId, LEASE_ID);
     assert.equal(lease.device, undefined);
+    // The answer that crosses the wire says this request created the lease, so a client that may
+    // end a lease can tell its own from one the daemon had already issued.
+    assert.equal(lease.created, true);
+    const repeated = await client.leases.allocate({
+      tenant: 'proxy',
+      runId: 'run-spec',
+      leaseBackend: 'ios-instance',
+      platform: 'ios',
+    });
+    assert.equal(repeated.leaseId, LEASE_ID);
+    assert.equal(repeated.created, false);
+    await client.leases.release({
+      tenant: 'proxy',
+      runId: 'run-spec',
+      leaseId: LEASE_ID,
+      leaseBackend: 'ios-instance',
+    });
   } finally {
     await daemon.close();
   }

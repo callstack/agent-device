@@ -15,6 +15,13 @@ export type Lease = {
   deviceKey?: string;
   clientId?: string;
   /**
+   * What an allocate answered: `true` when this request created the lease, `false` on reuse.
+   * Only allocate answers this; heartbeats and older daemons omit creation evidence.
+   * A discarded allocate response can be released unless `created` is false.
+   * Rollback after binding requires `created` to be true.
+   */
+  created?: boolean;
+  /**
    * The device granted for a request that named a device spec, written by the backend that
    * honoured the spec. A daemon refuses a spec instead, so only such a backend sets it.
    */

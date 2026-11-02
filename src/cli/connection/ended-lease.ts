@@ -7,7 +7,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { isHostAllocatedLease } from '../commands/connection-runtime.ts';
+import { isHostAllocatedLease } from '../commands/connection-lease-transaction.ts';
 import { connectionProviderCapabilities } from './provider-policy.ts';
 
 /**

@@ -5,7 +5,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
-import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
+import { resolveRequestedLeaseBackend } from '../commands/connection-lease-transaction.ts';
 import { buildConnectClientId } from './client-id.ts';
 
 export function resolveProxyConnectProfile(options: {

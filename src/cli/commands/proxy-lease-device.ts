@@ -6,13 +6,12 @@ import {
 } from '@agent-device/kernel/device';
 import {
   buildConnectionDeviceKey,
-  mergeRemoteConnectionRequestMetadata,
   parseConnectionDeviceKey,
   resolveConnectionDeviceScope,
   type ConnectionDeviceScope,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceSpecUnsupportedError,
   requireLeaseDeviceSpec,
@@ -21,6 +20,7 @@ import type { Lease, LeaseDevice, LeaseDeviceSpec } from '@agent-device/contract
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '@agent-device/command-surface';
+import type { LeaseLedger } from './connection-lease-transaction.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
@@ -104,8 +104,8 @@ async function resolveProxyLeaseStateLocally(options: {
 /**
  * Takes the device from a lease allocated by spec: the one its `deviceKey` names, whether the daemon
  * just picked it or the lease is renewed. A daemon that predates picking leaves the key of a new
- * lease unset, so that lease is released and the device is picked here and allocated by its key, as
- * before. Every lease this client allocates therefore names its device; a renewed lease that names
+ * lease unset, so an owned lease is released before the device is picked here and allocated by its
+ * key. Every lease this client allocates therefore names its device; a renewed lease that names
  * none was supplied from outside, so it is refused and never released.
  *
  * A request that names a device spec has no such fallback: a new lease that does not echo the
@@ -120,21 +120,19 @@ export async function bindLeaseNamedDevice(options: {
   flags: CliFlags;
   leaseBackend: LeaseBackend;
   materialized: MaterializedLease;
+  leaseLedger: LeaseLedger;
   allocateByDeviceKey(state: RemoteConnectionState, flags: CliFlags): Promise<MaterializedLease>;
 }): Promise<{ state: RemoteConnectionState; materialized: MaterializedLease }> {
-  const { client, flags, materialized } = options;
+  const { client, flags, materialized, leaseLedger } = options;
   const { lease, acquired } = materialized;
   const { spec, keys: specKeys } = requireLeaseDeviceSpec(flags);
   const leased = parseConnectionDeviceKey(lease.deviceKey);
   if (acquired && specKeys.length > 0 && (!lease.device || !leased)) {
-    throw await releaseUnhonouredSpecLease(client, options.state, lease, specKeys);
+    throw await refuseUnhonouredSpecLease(leaseLedger, options.state, lease, specKeys);
   }
   if (leased) {
     const identityConflict = leasedIdentityConflict(options.state, flags, leased);
-    if (identityConflict && acquired) {
-      await releaseLease(client, options.state, lease).catch(() => undefined);
-    }
-    if (identityConflict) throw identityConflict;
+    if (identityConflict) throw await releaseRefusedLease(leaseLedger, lease, identityConflict);
     if (!acquired) {
       assertLeaseSpecMatchesRequest(options.state, lease, spec, specKeys, leased);
       await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
@@ -157,7 +155,8 @@ export async function bindLeaseNamedDevice(options: {
     };
   }
   if (!acquired) throw unboundLeaseError(options.state, lease);
-  await releaseLease(client, options.state, lease);
+  const retired = await leaseLedger.end(lease.leaseId);
+  if (retired === undefined) throw unboundLeaseError(options.state, lease);
   const resolved = await resolveProxyLeaseStateLocally(options);
   return {
     state: resolved.state,
@@ -165,45 +164,36 @@ export async function bindLeaseNamedDevice(options: {
   };
 }
 
-async function releaseLease(
-  client: AgentDeviceClient,
-  state: RemoteConnectionState,
-  lease: Lease,
-): Promise<{ released: boolean }> {
-  return await client.leases.release({
-    tenant: state.tenant,
-    runId: state.runId,
-    leaseId: lease.leaseId,
-    leaseBackend: lease.backend,
-    ...mergeRemoteConnectionRequestMetadata(lease, state),
-    deviceKey: lease.deviceKey,
-  });
-}
-
-/**
- * Releases a new lease whose backend did not confirm the device spec, and returns the refusal. A
- * release that fails is reported in the refusal, which still names the lease, rather than raised in
- * its place: the lease then lapses after its inactivity window.
- */
-async function releaseUnhonouredSpecLease(
-  client: AgentDeviceClient,
+/** A refused allocation is discarded unless the daemon explicitly reported reuse. */
+async function refuseUnhonouredSpecLease(
+  leaseLedger: LeaseLedger,
   state: RemoteConnectionState,
   lease: Lease,
   keys: readonly string[],
 ): Promise<AppError> {
-  let release: { released: boolean; releaseError?: string };
-  try {
-    release = { released: (await releaseLease(client, state, lease)).released };
-  } catch (error) {
-    release = { released: false, releaseError: errorMessage(error) };
-  }
-  return deviceSpecUnsupportedError(
-    keys,
-    release.released
-      ? 'The proxy backend leased a device without confirming the requested device spec, so the lease was released.'
-      : 'The proxy backend leased a device without confirming the requested device spec, and releasing the lease failed, so it may stay held until it expires.',
-    { session: state.session, leaseId: lease.leaseId, ...release },
+  return await releaseRefusedLease(
+    leaseLedger,
+    lease,
+    deviceSpecUnsupportedError(
+      keys,
+      'The proxy backend leased a device without confirming the requested device spec.',
+      { session: state.session, leaseId: lease.leaseId },
+    ),
   );
+}
+
+async function releaseRefusedLease(
+  leaseLedger: LeaseLedger,
+  lease: Lease,
+  failure: AppError,
+): Promise<AppError> {
+  try {
+    const outcome = await leaseLedger.end(lease.leaseId, failure);
+    if (outcome !== undefined) failure.details = { ...failure.details, released: outcome.released };
+  } catch {
+    // end() records the failure; only confirmed creation permits the caller's rollback retry.
+  }
+  return failure;
 }
 
 /**

@@ -80,6 +80,39 @@ test('lease_allocate answers with the lease id the request named', async () => {
   assert.equal(registry.listActiveLeases()[0]?.leaseId, leaseId);
 });
 
+test('lease_allocate answers whether its request created the lease or got back an existing one', async () => {
+  const registry = new LeaseRegistry();
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const allocate = (requestedLeaseId?: string) =>
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: {
+          tenantId: 'tenant-a',
+          runId: 'run-1',
+          ...(requestedLeaseId ? { leaseId: requestedLeaseId } : {}),
+        },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-allocate-reused-'),
+      leaseRegistry: registry,
+    });
+
+  const created = await allocate(leaseId);
+  assert.ok(created?.ok);
+  assert.equal(created.data?.reused, false);
+  // A repeat for the same run binding gets that lease back, and the answer says this request did
+  // not create it — a client that might end the lease must end only the one its request created.
+  const repeated = await allocate();
+  assert.ok(repeated?.ok);
+  assert.equal((repeated.data?.lease as DeviceLease | undefined)?.leaseId, leaseId);
+  assert.equal(repeated.data?.reused, true);
+});
+
 test('lease_release still releases a retainOnClose lease through the provider', async () => {
   const registry = new LeaseRegistry();
   const lease = registry.allocateLease({

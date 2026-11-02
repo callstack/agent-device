@@ -30,12 +30,11 @@ import {
 } from '../connection/connect-provider-adapters.ts';
 import {
   connectionPlatformConflict,
-  hasDeferredMetroConfig,
   releaseRemoteConnectionLease,
-  releasePreviousLease,
   resolveRequestedLeaseBackend,
-  stopMetroCleanup,
-} from './connection-runtime.ts';
+} from './connection-lease-transaction.ts';
+import { hasDeferredMetroConfig, stopMetroCleanup } from './connection-metro-runtime.ts';
+import { releasePreviousLease } from './connection-previous-lease.ts';
 import { writeCommandOutput } from './shared.ts';
 import { formatDeliveredArtifactLines } from '@agent-device/command-output';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
