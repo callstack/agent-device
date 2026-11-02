@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import {
   createProviderLeaseTable,
@@ -169,6 +169,19 @@ test('overlapping allocations of one lease share one start, and a repeat reuses 
   assert.deepEqual(await first, { id: 'session-1' });
   assert.deepEqual(await second, { id: 'session-1' });
   assert.deepEqual(await provider.table.allocate(lease(), {}), { id: 'session-1' });
+  // Reusing the ready session is checked the same way as joining the start.
+  await assert.rejects(
+    provider.table.allocate(
+      lease(),
+      { app: 'b' },
+      {
+        requireJoinable: () => {
+          throw new Error('different request');
+        },
+      },
+    ),
+    /different request/,
+  );
   assert.equal(provider.controls.length, 1);
 });
 
@@ -228,7 +241,10 @@ test('a release during a start refuses the waiting allocation and stops the devi
   await settle();
   assert.deepEqual(provider.stopped, [], 'the stop waits for the answer that names the device');
   provider.answerStart(0, ready('session-1'));
-  assert.equal((await releasing)?.handle.id, 'session-1');
+  assert.deepEqual(await releasing, {
+    handle: { id: 'session-1' },
+    session: { id: 'session-1' },
+  });
   await refused;
   assert.deepEqual(provider.stopped, ['session-1']);
 });
@@ -246,6 +262,39 @@ test('a caller that aborts mid-start is answered at once, and the late device is
   await settle();
   assert.deepEqual(provider.stopped, ['session-1']);
   assert.equal(await provider.table.release('lease-1'), undefined);
+});
+
+test("a ready answer after the only caller's deadline is stopped, even before its timer fires", async () => {
+  // The clock moves past the deadline without running timers, which is a busy event loop: the caller's
+  // own give-up has not run yet when the start answers.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const provider = fakeProvider();
+    const allocating = provider.table.allocate(lease(), {}, { deadline: Date.now() + 100 });
+    const refused = assert.rejects(allocating, reason('provider-not-ready'));
+    await settle();
+    vi.setSystemTime(Date.now() + 200);
+    provider.answerStart(0, ready('session-1'));
+    await refused;
+    await settle();
+    assert.deepEqual(provider.stopped, ['session-1']);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a caller whose budget is already spent sends no start', async () => {
+  const provider = fakeProvider();
+  await assert.rejects(
+    provider.table.allocate(lease('lease-1'), {}, { deadline: Date.now() - 1 }),
+    reason('provider-not-ready'),
+  );
+  await assert.rejects(
+    provider.table.allocate(lease('lease-2'), {}, { signal: AbortSignal.abort() }),
+    reason('request_canceled'),
+  );
+  await settle();
+  assert.equal(provider.controls.length, 0);
 });
 
 test('a joiner still waiting keeps the device when the caller that started it gives up', async () => {
@@ -384,6 +433,9 @@ test('a published rental is stopped when its start stalls, and the late answer e
   });
   await gaveUp;
   assert.deepEqual(provider.stopped, ['instance-1'], 'the stalled rental is stopped by its handle');
+  // The start may still rent, so the lease id is not handed to a new allocation meanwhile.
+  await assert.rejects(provider.table.allocate(lease(), {}), reason('lease-releasing'));
+  assert.equal(provider.controls.length, 1);
 
   // The start finally answers with the same rental: it is already stopped, so the lease ends.
   provider.answerStart(0, ready('instance-1'));
@@ -427,6 +479,31 @@ test('shutdown waits for an in-flight allocation, stops its device, and refuses 
     reason('runtime-shutting-down'),
   );
   assert.equal(provider.controls.length, 1);
+});
+
+test('shutdown also ends a lease that a recovery opens while it drains', async () => {
+  const provider = fakeProvider();
+  await allocated(provider);
+  const stop = deferred<void>();
+  provider.queueStop(async () => await stop.promise);
+  // The recovery's own stop fails, and so does the drain's retry of it.
+  provider.queueStop(refusedStop());
+  provider.queueStop(refusedStop());
+
+  const shutdown = provider.table.shutdown();
+  await settle();
+  const recovery = assert.rejects(
+    provider.table.recover(lease('lease-2')),
+    reason('provider-cleanup-pending', 'recover'),
+  );
+  stop.resolve();
+  await assert.rejects(shutdown, (error: unknown) => {
+    assert.ok(reason('provider-cleanup-pending', 'shutdown')(error));
+    assert.deepEqual((error as TableError).details.handles, ['found-lease-2']);
+    return true;
+  });
+  await recovery;
+  assert.deepEqual(provider.stopped, ['session-1', 'found-lease-2', 'found-lease-2']);
 });
 
 test('shutdown reports what it could not stop and keeps it for a later release', async () => {

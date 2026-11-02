@@ -77,9 +77,10 @@ export function providerRuntimeOwner(
   });
 }
 
-// Changing these re-identifies every provider runtime, and so orphans every durable resource whose
-// envelope names an owner instance, such as a Limrun app-log descriptor. The length is fixed for the
-// same reason. Each provider pins its own digest through the wrapper that builds its principal.
+// Changing these re-identifies every provider runtime. For a provider that writes its instance into
+// durable state, such as Limrun's app-log descriptors, that orphans every such resource; Revyl keeps
+// its instance in-process only. The length is fixed for the same reason. Each provider pins its own
+// digest through the wrapper that builds its principal.
 const RUNTIME_INSTANCE_KEY_LENGTH_BYTES = 32;
 const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
 const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;

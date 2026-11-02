@@ -23,7 +23,7 @@ import {
 } from './device.ts';
 import { createRevylClient, isRevylSessionGone, type RevylClient } from './revyl-client.ts';
 import {
-  REVYL_START_TIMEOUT_MS,
+  REVYL_ALLOCATION_TIMEOUT_MS,
   revylCallerGaveUp,
   revylCleanupPending,
   startRevylSession,
@@ -43,6 +43,9 @@ import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 import type { RevylStartRequest } from './session-allocation.ts';
+
+/** What one lease's start asks Revyl for, with the platform the lease was admitted for. */
+type RevylLeaseRequest = RevylStartRequest & Readonly<{ platform: RevylPlatform }>;
 
 export type RevylRuntimeOptions = Readonly<{
   apiKey: string;
@@ -96,7 +99,7 @@ export function createRevylRuntime(options: RevylRuntimeOptions): RevylRuntimeRe
 class RevylRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly options: RevylRuntimeOptions;
   /** Every lease this runtime rents a device for, until Revyl confirms that device's `/stop`. */
-  private readonly leases: ProviderLeaseTable<RevylSession, RevylRentedSession, RevylStartRequest>;
+  private readonly leases: ProviderLeaseTable<RevylSession, RevylRentedSession, RevylLeaseRequest>;
   readonly provider = REVYL_PROVIDER;
 
   readonly leaseLifecycle: LeaseLifecycleProvider = {
@@ -128,7 +131,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       ...(options.backendUrl === undefined ? {} : { backendUrl: options.backendUrl }),
       clientVersion: options.clientVersion,
     });
-    this.leases = createProviderLeaseTable(revylLeaseDriver(client));
+    this.leases = createProviderLeaseTable(createRevylLeaseDriver(client));
   }
 
   ownsDevice(device: DeviceInfo): boolean {
@@ -167,10 +170,15 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // Before the join below: an allocation that reuses a live lease still carries flags of its own,
     // and Revyl reads none of them — whether it starts a device or joins one that is starting.
     rejectRefusedRevylProfileFields(context);
-    const request = resolveRevylStartRequest(context, {
-      ...(this.options.deviceModel === undefined ? {} : { deviceModel: this.options.deviceModel }),
-      ...(this.options.osVersion === undefined ? {} : { osVersion: this.options.osVersion }),
-    });
+    const request: RevylLeaseRequest = {
+      ...resolveRevylStartRequest(context, {
+        ...(this.options.deviceModel === undefined
+          ? {}
+          : { deviceModel: this.options.deviceModel }),
+        ...(this.options.osVersion === undefined ? {} : { osVersion: this.options.osVersion }),
+      }),
+      platform,
+    };
     const session = await this.leases.allocate(lease, request, {
       ...revylCallerBudget(context),
       requireJoinable: (started) => requireSameRevylStartRequest(lease.leaseId, started, request),
@@ -205,16 +213,16 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
  * What Revyl supplies to the lease table. A session is stopped by the id this runtime issued for its
  * lease, so that id is also what a lease this process never started is recovered by.
  */
-function revylLeaseDriver(
+function createRevylLeaseDriver(
   client: RevylClient,
-): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylStartRequest> {
+): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylLeaseRequest> {
   return {
-    startTimeoutMs: REVYL_START_TIMEOUT_MS,
+    startTimeoutMs: REVYL_ALLOCATION_TIMEOUT_MS,
     // A session is created when `start_device` answers, not when it is sent, so the issued id is never
     // published before that answer: a stop sent earlier reads as "already gone" and leaves the device.
     start: async (lease, request, control) => {
       const started = await startRevylSession(client, lease, {
-        platform: revylLeasePlatform(lease),
+        platform: request.platform,
         appUrl: request.appUrl,
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
@@ -282,7 +290,7 @@ function revylLeasePlatform(lease: DeviceLease): RevylPlatform {
 
 /**
  * The caller's own patience, read from the lease context it arrived with. The lease table cuts its
- * deadline to `REVYL_START_TIMEOUT_MS`.
+ * deadline to `REVYL_ALLOCATION_TIMEOUT_MS`.
  */
 function revylCallerBudget(context?: LeaseLifecycleContext): RevylCallerBudget {
   return {

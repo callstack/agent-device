@@ -17,8 +17,12 @@ import type {
 
 /** How long Revyl may take to assign a worker and connect the device before the start is given up on. */
 const READY_TIMEOUT_MS = 240_000;
-/** The longest one allocation may take: `start_device`'s own answer budget, then readiness. */
-export const REVYL_START_TIMEOUT_MS = REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS;
+/**
+ * The longest one allocation may take: `start_device`'s own answer budget, then readiness measured
+ * from that answer, and a margin so the lease table's cap never cuts readiness Revyl still allows.
+ */
+export const REVYL_ALLOCATION_TIMEOUT_MS =
+  REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS + 10_000;
 /** Revyl's worker answers `health` with 503 until the device is attached; the CLI polls on that beat. */
 const READY_POLL_INTERVAL_MS = 2_000;
 /** Revyl releases an idle session on its own; this is the lease the runtime asks for. */
@@ -61,7 +65,7 @@ export type RevylStartRequestInput = Readonly<{
 
 /**
  * One caller's own patience: the signal it cancels with and the deadline it stops at. Both are optional,
- * and the lease table cuts the deadline to `REVYL_START_TIMEOUT_MS`.
+ * and the lease table cuts the deadline to `REVYL_ALLOCATION_TIMEOUT_MS`.
  */
 export type RevylCallerBudget = Readonly<{ signal?: AbortSignal; deadline?: number }>;
 

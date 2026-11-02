@@ -418,6 +418,8 @@ test('a release that lands mid-start stops the session only once Revyl has made 
   // only has from the lease, and that is what makes the stop below land after the session exists.
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+  // The release reports the device the start rented, not only the session id.
+  assert.equal(released?.revylRunId, 'run-1');
   await refused;
 
   const answered = fixture.answeredPaths();

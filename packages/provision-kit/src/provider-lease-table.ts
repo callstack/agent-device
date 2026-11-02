@@ -156,6 +156,9 @@ type Rental<Handle> =
 
 type StopFailure = Readonly<{ cause: unknown }>;
 
+/** One caller waiting for a start, with the budget that decides whether it still wants the device. */
+type Waiter = Readonly<{ deadline: number; signal: AbortSignal | undefined }>;
+
 type StartAnswer<Session, Handle> =
   | ProviderLeaseStart<Session, Handle>
   | Readonly<{ status: 'rejected'; error: unknown }>;
@@ -189,8 +192,8 @@ class LeaseEntry<Session, Handle, Request> {
   /** The stop in flight, which outlives a teardown that stopped waiting for it. */
   stopping: Readonly<{ key: string; promise: Promise<StopFailure | undefined> }> | undefined =
     undefined;
-  /** Callers still waiting for the start. */
-  waiters = 0;
+  /** Callers still waiting for the start; one leaves the moment it gives up. */
+  readonly waiters = new Set<Waiter>();
   /** Set once anything starts ending the lease; it never serves an allocation again. */
   releasing = false;
   /** The one teardown in flight, joined by every release, recovery, and drain. */
@@ -260,6 +263,10 @@ class LeaseTable<Session, Handle, Request> {
     };
     const timeoutAt = Date.now() + this.driver.startTimeoutMs;
     const deadline = Math.min(caller.deadline ?? timeoutAt, timeoutAt);
+    // A caller whose budget is already spent never sends a start that nobody would wait for.
+    if (!existing && (caller.signal?.aborted || deadline <= Date.now())) {
+      throw this.driver.gaveUp(lease, caller, 0, undefined);
+    }
     const entry = existing ?? this.rent(lease, request, caller, deadline, timeoutAt);
     const outcome = await this.join(entry, caller, deadline);
     if (this.shuttingDown) throw this.driver.shuttingDown(lease);
@@ -289,17 +296,21 @@ class LeaseTable<Session, Handle, Request> {
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
-    const ended = await Promise.all(
-      [...this.entries.values()].map(async (entry) => ({
-        entry,
-        ended: await this.teardown(entry),
-      })),
-    );
-    const unconfirmed = ended.flatMap(({ entry, ended: outcome }) =>
-      outcome.status === 'pending'
-        ? [{ leaseId: entry.lease.leaseId, handle: outcome.handle, cause: outcome.cause }]
-        : [],
-    );
+    const unconfirmed: ProviderUnconfirmedStop<Handle>[] = [];
+    const drained = new Set<LeaseEntry<Session, Handle, Request>>();
+    // A recovery or release can open an entry while the drain runs, so the drain repeats until it has
+    // ended every entry it finds.
+    for (;;) {
+      const entries = [...this.entries.values()].filter((entry) => !drained.has(entry));
+      if (entries.length === 0) break;
+      for (const entry of entries) drained.add(entry);
+      const ended = await Promise.all(entries.map(async (entry) => await this.teardown(entry)));
+      ended.forEach((outcome, index) => {
+        if (outcome.status !== 'pending') return;
+        const leaseId = entries[index]!.lease.leaseId;
+        unconfirmed.push({ leaseId, handle: outcome.handle, cause: outcome.cause });
+      });
+    }
     if (unconfirmed.length > 0) {
       throw this.driver.cleanupPending(unconfirmed, { route: 'shutdown' });
     }
@@ -348,9 +359,11 @@ class LeaseTable<Session, Handle, Request> {
     const startedAt = Date.now();
     const answer = await this.callStart(entry, request, caller);
     recordAnswer(entry, answer);
-    if (answer.status === 'ready' && !entry.releasing && entry.waiters > 0) {
+    if (answer.status === 'ready') {
+      // Recorded even when nobody takes it, so the teardown reports the device it stopped.
       entry.session = answer.session;
-      return { status: 'ready', session: answer.session };
+      if (!entry.releasing && stillWanted(entry))
+        return { status: 'ready', session: answer.session };
     }
     return await this.endFailedStart(entry, this.startFailure(entry, answer, caller, startedAt));
   }
@@ -436,9 +449,10 @@ class LeaseTable<Session, Handle, Request> {
     const signal = caller.signal
       ? AbortSignal.any([caller.signal, timeout.signal])
       : timeout.signal;
+    const waiter: Waiter = { deadline, signal: caller.signal };
     let onAbort = (): void => undefined;
-    entry.waiters += 1;
     try {
+      entry.waiters.add(waiter);
       if (signal.aborted) throw giveUp();
       const gaveUp = new Promise<never>((_, reject) => {
         onAbort = () => reject(giveUp());
@@ -446,7 +460,7 @@ class LeaseTable<Session, Handle, Request> {
       });
       return await Promise.race([entry.start, gaveUp]);
     } finally {
-      entry.waiters -= 1;
+      entry.waiters.delete(waiter);
       clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
     }
@@ -603,4 +617,15 @@ function recordAnswer<Session, Handle, Request>(
   }
   entry.answered = true;
   entry.markAnswered();
+}
+
+/** Whether any caller still waits for the start within its own budget. */
+function stillWanted<Session, Handle, Request>(
+  entry: LeaseEntry<Session, Handle, Request>,
+): boolean {
+  const now = Date.now();
+  for (const waiter of entry.waiters) {
+    if (!waiter.signal?.aborted && now < waiter.deadline) return true;
+  }
+  return false;
 }
