@@ -43,6 +43,8 @@ type ArtifactEntry = {
   createdAt: number;
   directoryArchive?: DirectoryArchive;
   directoryArchivePromise?: Promise<DirectoryArchive>;
+  activeDownloads: number;
+  cleanupRequested: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -57,10 +59,8 @@ const artifactTracking = (): ArtifactTrackingState =>
     ARTIFACT_TRACKING_SLOT,
     (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
     (state) => {
-      for (const entry of state.artifacts.values()) {
-        clearTimeout(entry.timer);
-        cleanupDirectoryArchive(entry);
-        if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
+      for (const [id, entry] of state.artifacts) {
+        requestArtifactCleanup(state.artifacts, id, entry);
       }
       for (const entry of state.uploads.values()) {
         clearTimeout(entry.timer);
@@ -85,7 +85,7 @@ export type DownloadableArtifactRegistration = {
 
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
 
-export type PreparedDownloadableArtifact = {
+type PreparedDownloadableArtifact = {
   artifactPath: string;
   fileName?: string;
   mimeType: string;
@@ -114,6 +114,8 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
     deleteAfterDownload: params.deleteAfterDownload !== false,
+    activeDownloads: 0,
+    cleanupRequested: false,
     createdAt,
     timer,
   });
@@ -130,20 +132,33 @@ function findTrackedArtifactId(
   return undefined;
 }
 
-export async function prepareDownloadableArtifact(
+export async function openDownloadableArtifact(
   artifactId: string,
   tenantId: string | undefined,
   hostEnv: NodeJS.ProcessEnv,
-): Promise<PreparedDownloadableArtifact> {
+): Promise<PreparedDownloadableArtifact & { stream: fs.ReadStream }> {
+  const artifacts = pendingArtifacts();
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
-  const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
-  if (!payload) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Artifact path is not a regular file or directory: ${entry.artifactPath}`,
-    );
+  entry.activeDownloads += 1;
+  const release = () => {
+    entry.activeDownloads -= 1;
+    if (entry.cleanupRequested) requestArtifactCleanup(artifacts, artifactId, entry);
+  };
+  try {
+    const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
+    if (!payload) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Artifact path is not a regular file or directory: ${entry.artifactPath}`,
+      );
+    }
+    const stream = fs.createReadStream(payload.artifactPath);
+    stream.once('close', release);
+    return { ...payload, stream };
+  } catch (error) {
+    release();
+    throw error;
   }
-  return payload;
 }
 
 export async function listDownloadableArtifacts(
@@ -161,7 +176,7 @@ export async function listDownloadableArtifacts(
       continue;
     }
     const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
-    if (!payload) continue;
+    if (!payload || entry.cleanupRequested) continue;
     artifacts.push({
       id,
       ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
@@ -201,6 +216,9 @@ function readDownloadableArtifactEntry(
     tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
   );
+  if (entry.cleanupRequested) {
+    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  }
   let stat: fs.Stats;
   try {
     stat = fs.statSync(entry.artifactPath);
@@ -299,9 +317,8 @@ async function createDirectoryArchive(
       fileName,
       sizeBytes: fs.statSync(archivePath).size,
     };
-    // The artifact may be consumed or expire while tar is still archiving.
-    if (pendingArtifacts().get(artifactId) !== entry) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    // Inventory can expire while tar is still archiving.
+    if (entry.cleanupRequested && entry.activeDownloads === 0) {
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
     entry.directoryArchive = archive;
@@ -325,8 +342,7 @@ function archiveFilename(fileName: string): string {
 }
 
 function canReadArtifact(entry: ArtifactEntry, tenantId: string | undefined): boolean {
-  if (!entry.tenantId) return true;
-  return entry.tenantId === tenantId;
+  return !entry.cleanupRequested && (!entry.tenantId || entry.tenantId === tenantId);
 }
 
 function safeArtifactFilename(fileName: string | undefined, fallback: string): string {
@@ -345,10 +361,21 @@ function hasUnsafeFilenameCharacter(fileName: string): boolean {
 }
 
 export function cleanupDownloadableArtifact(artifactId: string): void {
-  const entry = pendingArtifacts().get(artifactId);
+  const artifacts = pendingArtifacts();
+  const entry = artifacts.get(artifactId);
   if (!entry) return;
+  requestArtifactCleanup(artifacts, artifactId, entry);
+}
+
+function requestArtifactCleanup(
+  artifacts: Map<string, ArtifactEntry>,
+  artifactId: string,
+  entry: ArtifactEntry,
+): void {
+  entry.cleanupRequested = true;
   clearTimeout(entry.timer);
-  pendingArtifacts().delete(artifactId);
+  if (entry.activeDownloads > 0 || artifacts.get(artifactId) !== entry) return;
+  artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
   if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
 }

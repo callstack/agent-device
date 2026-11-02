@@ -84,6 +84,9 @@ the daemon. When you specify an output path through the CLI, SDK, or MCP, it sel
 destination on your machine. Direct RPC callers receive artifact IDs and download each result with
 `GET /artifacts/<id>` using the same authentication.
 
+Artifacts leave the inventory after download or after 15 minutes. Downloads already in progress
+can finish before their files are removed, including overlapping downloads of a directory archive.
+
 Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
 publication with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`
 and `reinstall` binaries, `push` payload files, and xctrace template files. Upload binaries with the

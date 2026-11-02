@@ -1,11 +1,10 @@
-import fs from 'node:fs';
 import http from 'node:http';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import {
   cleanupDownloadableArtifact,
   listDownloadableArtifacts,
-  prepareDownloadableArtifact,
+  openDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
@@ -92,9 +91,9 @@ async function handleArtifactDownload(
     });
     if (!auth) return;
 
-    const artifact = await prepareDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
+    const artifact = await openDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
     const retainArtifactAfterDownload = options.retainArtifacts === true;
-    const stream = fs.createReadStream(artifact.artifactPath);
+    const { stream } = artifact;
     res.statusCode = 200;
     res.setHeader('content-type', artifact.mimeType);
     res.setHeader('content-length', String(artifact.sizeBytes));
@@ -124,10 +123,12 @@ async function handleArtifactDownload(
     stream.on('end', cleanupCompletedDownload);
     res.on('finish', cleanupCompletedDownload);
     res.on('close', () => {
+      stream.destroy();
       if (res.writableFinished) {
         cleanupCompletedDownload();
       }
     });
+    if (res.destroyed) stream.destroy();
     stream.pipe(res);
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
