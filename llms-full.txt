@@ -2206,7 +2206,9 @@ agent-device alert dismiss
 
 * iOS runner refusals carry `error.details.reason`: `runner_busy` means the runner ran nothing (`dispatched: no`); `runner_main_thread_timeout` means the action may still land (`dispatched: unknown`); `no_text_input_at_point` and `text_input_probe_unavailable` mean a `fill` refused before dispatching anything (`dispatched: no`) — see Text entry below.
 
-* If a sheet or permission prompt is visible but `alert` reports none, treat it as app UI: run `snapshot -i -s "<visible label>"`, then `press @ref`. Android alert support is snapshot-derived, and not every iOS simulator permission surface is a native alert.
+* On the Apple XCUITest runner, a blocking system prompt whose buttons the runner cannot read fails with `error.code: ALERT_UNRESOLVED` and `details.dispatched: no`. A prompt is on screen, so this is never “no alert”. `alert get` reports it at once. `accept`, `dismiss`, and `alert wait` retry it within their windows, like absence, and report it, not a timeout, when the last check still saw it. Inspect the prompt with `screenshot`, then `snapshot -i`, and `press @ref` on the visible button.
+
+* If a sheet or permission prompt is visible but `alert` reports none, `alert` did not recognize it. Run `snapshot -i -s "<visible label>"`, then `press @ref` on the visible button. Android alert support is snapshot-derived, and not every iOS simulator permission surface is a native alert.
 
 ## Interactions
 
