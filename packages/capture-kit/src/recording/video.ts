@@ -88,7 +88,8 @@ export async function waitForStableFile(
 /**
  * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
  * deadline instead of its own fixed bound, and a validator run the deadline cuts short or leaves no
- * time for reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time.
+ * time for reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time. A WebM
+ * verdict reads only the file's structure, with no validator, so the deadline does not apply to it.
  */
 export async function isPlayableVideo(
   filePath: string,
