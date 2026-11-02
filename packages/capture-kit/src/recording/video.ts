@@ -87,8 +87,9 @@ export async function waitForStableFile(
 
 /**
  * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
- * deadline instead of its own fixed bound, and a validator run the deadline cuts short or leaves no
- * time for reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time. A WebM
+ * deadline instead of its own fixed bound. A validator run that times out, or that the deadline
+ * leaves no time for, reads as not playable, like a poll in `waitForPlayableVideo` that runs out of
+ * time. A WebM
  * verdict reads only the file's structure, with no validator, so the deadline does not apply to it.
  */
 export async function isPlayableVideo(
@@ -118,8 +119,7 @@ export async function isPlayableVideo(
       timeoutMs: runTimeoutMs,
       env: buildSwiftToolEnv(host.env),
     }).catch((error: unknown) => {
-      // The deadline, not the validator's own bound, cut this run short.
-      if (runTimeoutMs < VALIDATOR_RUN_TIMEOUT_MS && isCommandTimeoutError(error)) return undefined;
+      if (isCommandTimeoutError(error)) return undefined;
       throw error;
     });
     if (!result) return false;

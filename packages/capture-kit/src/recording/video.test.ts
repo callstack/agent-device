@@ -182,7 +182,7 @@ test('the validator run after a compile stays inside the caller deadline', async
   expect(withoutDeadline).toBe(10_000);
 });
 
-test('a validator run the caller deadline cuts short reads as not playable', async () => {
+test('a validator run that times out reads as not playable, whatever bound stopped it', async () => {
   const mp4 = writeFixture('run-cut-short.mp4', Buffer.concat([ftyp, moov]));
   const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/run-cut-short' }, cwd: directory };
   const timedOut = (timeoutMs: number) =>
@@ -192,10 +192,11 @@ test('a validator run the caller deadline cuts short reads as not playable', asy
   });
   try {
     await expect(isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(5))).resolves.toBe(false);
-    // Without a deadline, the validator's own bound is a failure to report, not a verdict.
-    await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
-      details: { timeoutMs: 10_000 },
-    });
+    await expect(isPlayableVideo(mp4, host)).resolves.toBe(false);
+    expect(vi.mocked(runCmd).mock.calls.map(([, , options]) => options?.timeoutMs)).toEqual([
+      expect.any(Number),
+      10_000,
+    ]);
   } finally {
     vi.mocked(runCmd).mockReset();
     vi.mocked(runCmd).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
