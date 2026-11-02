@@ -84,7 +84,8 @@ the daemon. When you specify an output path through the CLI, SDK, or MCP, it sel
 destination on your machine. Direct RPC callers receive artifact IDs and download each result with
 `GET /artifacts/<id>` using the same authentication.
 
-Artifacts leave the inventory after download or after 15 minutes. Downloads already in progress
+By default, artifacts leave the inventory after download or after 15 minutes.
+`AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.
 
 Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script

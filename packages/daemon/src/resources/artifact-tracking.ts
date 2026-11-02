@@ -32,6 +32,11 @@ type DirectoryArchive = {
   sizeBytes: number;
 };
 
+type ArtifactSourceCleanup = {
+  remainingEntries: number;
+  deleteAfterDownload: boolean;
+};
+
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
@@ -39,7 +44,7 @@ type ArtifactEntry = {
   fileName?: string;
   displayRotation?: DeviceRotation;
   sessionName?: string;
-  deleteAfterDownload: boolean;
+  sourceCleanup: ArtifactSourceCleanup;
   createdAt: number;
   directoryArchive?: DirectoryArchive;
   directoryArchivePromise?: Promise<DirectoryArchive>;
@@ -106,6 +111,12 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     cleanupDownloadableArtifact(artifactId);
   }, ARTIFACT_CLEANUP_TIMEOUT_MS);
   timer.unref();
+  const sourceCleanup = findArtifactSourceCleanup(params.artifactPath) ?? {
+    remainingEntries: 0,
+    deleteAfterDownload: true,
+  };
+  sourceCleanup.remainingEntries += 1;
+  sourceCleanup.deleteAfterDownload &&= params.deleteAfterDownload !== false;
   pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
@@ -113,7 +124,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
-    deleteAfterDownload: params.deleteAfterDownload !== false,
+    sourceCleanup,
     activeDownloads: 0,
     cleanupRequested: false,
     createdAt,
@@ -127,7 +138,19 @@ function findTrackedArtifactId(
   tenantId: string | undefined,
 ): string | undefined {
   for (const [artifactId, entry] of pendingArtifacts()) {
-    if (entry.artifactPath === artifactPath && entry.tenantId === tenantId) return artifactId;
+    if (
+      !entry.cleanupRequested &&
+      entry.artifactPath === artifactPath &&
+      entry.tenantId === tenantId
+    )
+      return artifactId;
+  }
+  return undefined;
+}
+
+function findArtifactSourceCleanup(artifactPath: string): ArtifactSourceCleanup | undefined {
+  for (const entry of pendingArtifacts().values()) {
+    if (entry.artifactPath === artifactPath) return entry.sourceCleanup;
   }
   return undefined;
 }
@@ -377,7 +400,10 @@ function requestArtifactCleanup(
   if (entry.activeDownloads > 0 || artifacts.get(artifactId) !== entry) return;
   artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
-  if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
+  entry.sourceCleanup.remainingEntries -= 1;
+  if (entry.sourceCleanup.remainingEntries === 0 && entry.sourceCleanup.deleteAfterDownload) {
+    removeBestEffort(entry.artifactPath);
+  }
 }
 
 function removeBestEffort(targetPath: string): void {
