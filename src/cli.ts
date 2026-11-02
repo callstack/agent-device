@@ -47,8 +47,8 @@ import {
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
+import { remoteSessionRequiredError } from '@agent-device/contracts/lease-scope';
 import {
-  remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';

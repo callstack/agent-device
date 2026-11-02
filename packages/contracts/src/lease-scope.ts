@@ -94,6 +94,19 @@ type LeaseOptionsLike = {
   clientId?: string;
 };
 
+/** The refusal for a request on a provider lease that names no session. */
+export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'A leased remote connection needs its session named: pass --session <name> or set AGENT_DEVICE_SESSION.',
+    {
+      reason: 'REMOTE_SESSION_REQUIRED',
+      ...(leaseProvider === undefined ? {} : { leaseProvider }),
+      hint: "Without a name, a command could reach another agent's connection on this machine.",
+    },
+  );
+}
+
 export function leaseScopeFromRequest(req: LeaseRequestLike): LeaseScope {
   return stripUndefined({
     tenantId: req.meta?.tenantId ?? readFlagString(req.flags, 'tenant'),

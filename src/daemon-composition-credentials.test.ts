@@ -84,6 +84,7 @@ test('daemon startup compares lease credentials with its own startup environment
             method: 'agent_device.lease.allocate',
             params: {
               token,
+              session: 'agent-a',
               tenantId: 'tenant',
               runId: 'run',
               leaseProvider: 'browserstack',

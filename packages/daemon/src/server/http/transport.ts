@@ -133,7 +133,12 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   // forge those semantics even though the legacy socket request otherwise
   // preserves its existing raw wire shape.
   const { internal: _internal, ...request } = parsed as Record<string, unknown>;
-  return request as DaemonRequest;
+  const session = request.session;
+  return (
+    typeof session === 'string' && session.trim()
+      ? request
+      : { ...request, internal: { sessionOmitted: true } }
+  ) as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {

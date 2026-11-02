@@ -142,6 +142,7 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
       id: 'limrun-public-allocation',
       method: 'agent_device.lease.allocate',
       params: {
+        session: 'agent-a',
         tenantId: 'tenant-a',
         runId: 'run-a',
         backend: 'android-instance',

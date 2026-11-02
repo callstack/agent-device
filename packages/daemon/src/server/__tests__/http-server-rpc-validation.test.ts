@@ -126,6 +126,7 @@ test('the rpc boundary never accepts internal request fields from the wire', asy
         id: 'req-1',
         method: 'agent_device.command',
         params: {
+          session: 'agent-a',
           command: 'snapshot',
           positionals: [],
           internal: {
@@ -339,6 +340,7 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
   try {
     const port = await listenOnLoopback(server);
     const response = await postCommandRpc(port, {
+      session: 'agent-a',
       command: 'install_source',
       positionals: [],
       flags: { platform: 'android' },

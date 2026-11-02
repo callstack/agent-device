@@ -31,6 +31,7 @@ import {
   resolveEffectiveSessionName,
 } from '../sessions/session-routing.ts';
 import {
+  assertProviderLeaseRequestNamesSession,
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
 } from '../sessions/request-admission.ts';
@@ -288,6 +289,7 @@ export async function createRequestExecutionScope(params: {
   }
   try {
     if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
+    assertProviderLeaseRequestNamesSession(scopedReq, sessionStore.lookup(sessionName)?.session);
     assertRequestLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
