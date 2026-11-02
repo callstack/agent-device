@@ -15,10 +15,11 @@ struct RunnerLaunchConfirmationPrompt {
 
   private let wordings: [(title: NSRegularExpression, open: String, cancel: String)]
 
-  /// A wording whose title format has no app-name placeholder (`%@` or `%1$@`) is skipped, because
-  /// its pattern would match a title with no app name.
+  /// A wording whose title format has no app-name placeholder is skipped, because its pattern would
+  /// match a title with no app name. A placeholder is `%@`, a positional `%1$@`, or Apple's
+  /// bracketed object format `%[tt]@`, as Finnish words it.
   init(wordings: [Wording]) {
-    let placeholder = try! NSRegularExpression(pattern: "%(?:\\d+\\$)?@")
+    let placeholder = try! NSRegularExpression(pattern: "%(?:\\d+\\$)?(?:\\[[^\\]]*\\])?@")
     self.wordings = wordings.compactMap { wording in
       let format = wording.titleFormat as NSString
       let slots = placeholder.matches(in: wording.titleFormat, range: NSRange(location: 0, length: format.length))

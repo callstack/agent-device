@@ -37,20 +37,32 @@ extension RunnerAlertLabelVocabulary {
   /// preferred language the app localizes into, so every preferred language takes part.
   static let system = fromSystemStrings(languages: Locale.preferredLanguages)
 
-  /// Pairs each English prompt string with the same key's value in each of `languages`. Every
-  /// permission table must read, or none counts: a missing table could hide the translation that
-  /// makes a label in another table claim both actions. The launch confirmation's table only adds
-  /// its own open and cancel labels, so without it the permission vocabulary stays whole.
+  /// Pairs each English prompt string with the same key's value in each of `languages`.
   static func fromSystemStrings(languages: [String]) -> RunnerAlertLabelVocabulary {
+    composed(
+      permission: RunnerSystemPromptStrings.read(RunnerSystemPromptStrings.promptTables, languages: languages),
+      launchConfirmation: RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages),
+      languages: languages
+    )
+  }
+
+  /// Every permission table must read, or none counts: a missing table could hide the translation
+  /// that makes a label in another table claim both actions. The launch confirmation's table only
+  /// adds its own open and cancel labels, so without it the permission vocabulary stays whole.
+  static func composed(
+    permission: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
+    launchConfirmation: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
+    languages: [String]
+  ) -> RunnerAlertLabelVocabulary {
     var tables: [RunnerSystemPromptStrings]
-    switch RunnerSystemPromptStrings.read(RunnerSystemPromptStrings.promptTables, languages: languages) {
+    switch permission {
     case .failure(let failure):
       RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary", languages: languages)
       return .english
     case .success(let read):
       tables = read
     }
-    switch RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages) {
+    switch launchConfirmation {
     case .failure(let failure):
       RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary-launch-confirmation", languages: languages)
     case .success(let read):

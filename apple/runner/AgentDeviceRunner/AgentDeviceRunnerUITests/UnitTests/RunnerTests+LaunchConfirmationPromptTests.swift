@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
@@ -74,6 +75,98 @@ extension RunnerTests {
       .init(titleFormat: "Open in “%1$@”?", open: "Open", cancel: "Cancel")
     ])
     XCTAssertTrue(positional.recognizes(title: "Open in “Test App”?", buttons: ["Cancel", "Open"]))
+  }
+
+  /// Apple's bracketed object format, as Finnish words the title, marks the app-name slot too,
+  /// also beside a position.
+  func testLaunchConfirmationWordingAcceptsBracketedObjectFormats() {
+    let finnish = RunnerLaunchConfirmationPrompt(wordings: [
+      .init(titleFormat: "Avataanko %[tt]@-apissa?", open: "Avaa", cancel: "Peruuta")
+    ])
+    XCTAssertTrue(finnish.recognizes(title: "Avataanko Agent Device Tester-apissa?", buttons: ["Peruuta", "Avaa"]))
+    XCTAssertFalse(finnish.recognizes(title: "Avataanko -apissa?", buttons: ["Peruuta", "Avaa"]))
+
+    let positional = RunnerLaunchConfirmationPrompt(wordings: [
+      .init(titleFormat: "Avataanko %1$[tt]@-apissa?", open: "Avaa", cancel: "Peruuta")
+    ])
+    XCTAssertTrue(positional.recognizes(title: "Avataanko Testi-apissa?", buttons: ["Peruuta", "Avaa"]))
+  }
+}
+#endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS) && targetEnvironment(simulator)
+extension RunnerTests {
+  /// Every `SchemeApproval` localization the simulated OS installs yields a matcher that
+  /// recognizes its own rendered title with its own buttons, so the next format variant fails here.
+  func testEveryInstalledSchemeApprovalWordingBecomesAMatcher() throws {
+    let foundationPath = "/System/Library/Frameworks/Foundation.framework"
+    let foundation = try XCTUnwrap(Bundle(identifier: "com.apple.Foundation")?.bundlePath)
+    let root = String(foundation.dropLast(foundationPath.count))
+    let table = RunnerSystemPromptStrings.launchConfirmationTable
+    let bundle = try XCTUnwrap(Bundle(path: root + table.path))
+    let localizations = bundle.localizations.filter {
+      $0 != "en" && $0 != "Base"
+        && bundle.url(forResource: table.table, withExtension: "strings", subdirectory: nil, localization: $0) != nil
+    }
+    XCTAssertGreaterThan(localizations.count, 10, "the runtime installs many SchemeApproval localizations")
+    let placeholder = try NSRegularExpression(pattern: "%(?:\\d+\\$)?(?:\\[[^\\]]*\\])?@")
+    for localization in localizations {
+      let url = try XCTUnwrap(
+        bundle.url(forResource: table.table, withExtension: "strings", subdirectory: nil, localization: localization)
+      )
+      let strings = try XCTUnwrap(NSDictionary(contentsOf: url) as? [String: String])
+      let format = try XCTUnwrap(strings["SCHEME_APPROVAL_PROMPT_TITLE_NO_SOURCE"], localization)
+      let open = try XCTUnwrap(strings["SCHEME_APPROVAL_OPEN_BUTTON"], localization)
+      let cancel = try XCTUnwrap(strings["SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON"], localization)
+      let title = placeholder.stringByReplacingMatches(
+        in: format, range: NSRange(format.startIndex..., in: format), withTemplate: "Test App"
+      )
+      XCTAssertNotEqual(title, format, "\(localization): the title format has an app-name slot the matcher knows")
+      let prompt = RunnerLaunchConfirmationPrompt.fromSystemStrings(languages: [localization])
+      XCTAssertTrue(prompt.recognizes(title: title, buttons: [cancel, open]), "\(localization): \(format)")
+    }
+  }
+
+  /// Without the `SchemeApproval` table the permission prompts keep their translations; only the
+  /// launch confirmation's own labels are lost.
+  func testMissingSchemeApprovalTableKeepsThePermissionVocabulary() {
+    let permission = RunnerSystemPromptStrings(english: ["DENY": "Don’t Allow"], localized: ["fr": ["DENY": "Refuser"]])
+    let launch = RunnerSystemPromptStrings(english: ["OPEN": "Open"], localized: ["fr": ["OPEN": "Ouvrir"]])
+    let missing = RunnerSystemPromptStrings.UnavailableSource(source: "CoreServices.framework")
+
+    let without = RunnerAlertLabelVocabulary.composed(
+      permission: .success([permission]), launchConfirmation: .failure(missing), languages: ["fr"]
+    )
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["Refuser", "Autoriser"], action: "dismiss", vocabulary: without), 0)
+    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Annuler", "Ouvrir"], action: "accept", vocabulary: without))
+
+    let with = RunnerAlertLabelVocabulary.composed(
+      permission: .success([permission]), launchConfirmation: .success([launch]), languages: ["fr"]
+    )
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["Annuler", "Ouvrir"], action: "accept", vocabulary: with), 1)
+
+    let noPermission = RunnerAlertLabelVocabulary.composed(
+      permission: .failure(missing), launchConfirmation: .success([launch]), languages: ["fr"]
+    )
+    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Refuser", "Autoriser"], action: "dismiss", vocabulary: noPermission))
+  }
+
+  /// An app alert can carry the exact wording and buttons, and `open` accepts a marked alert, so
+  /// only SpringBoard's own blocking modal is marked.
+  func testOnlySpringBoardsBlockingModalIsMarkedAsTheLaunchConfirmation() {
+    let title = "Open in “Test App”?"
+    let items = ["Cancel", "Open"]
+    let foreign = XCUIApplication(bundleIdentifier: "com.example.app")
+    func alert(owner: XCUIApplication, source: AlertSurfaceSource) -> RunnerAlert {
+      RunnerAlert(root: owner, ownerApp: owner, buttons: [], source: source, window: nil)
+    }
+    XCTAssertTrue(marksLaunchConfirmation(alert(owner: springboard, source: .blockingSystemModal), title: title, items: items))
+    XCTAssertFalse(marksLaunchConfirmation(alert(owner: foreign, source: .appAlert), title: title, items: items))
+    XCTAssertFalse(marksLaunchConfirmation(alert(owner: foreign, source: .blockingSystemModal), title: title, items: items))
+    XCTAssertFalse(marksLaunchConfirmation(alert(owner: springboard, source: .appAlert), title: title, items: items))
+    XCTAssertFalse(
+      marksLaunchConfirmation(alert(owner: springboard, source: .blockingSystemModal), title: "Allow Test App?", items: items)
+    )
   }
 }
 #endif
