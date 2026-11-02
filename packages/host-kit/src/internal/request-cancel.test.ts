@@ -8,6 +8,7 @@ import {
 } from '@agent-device/kernel/errors';
 import {
   clearRequestAbortRegistration,
+  clearRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
@@ -15,6 +16,25 @@ import {
   throwIfRequestCanceled,
   withRequestDeadline,
 } from './request-cancel.ts';
+
+test('an early live request remains cancelable after more than 50,000 registrations', () => {
+  const requestId = 'early-live-request';
+  const registration = registerRequestAbort(requestId)!;
+  try {
+    for (let index = 0; index < 50_001; index++) {
+      registerRequestAbort(`later-live-request-${index}`);
+    }
+    markRequestCanceled(requestId);
+    assert.equal(registration.controller.signal.aborted, true);
+    assert.equal(isRequestCanceledError(registration.controller.signal.reason), true);
+    assert.equal(getRequestSignal(requestId), registration.controller.signal);
+  } finally {
+    clearRequestCanceled(requestId);
+    for (let index = 0; index < 50_001; index++) {
+      clearRequestCanceled(`later-live-request-${index}`);
+    }
+  }
+});
 
 test('resolveRequestTrackingId generates unique ids for fallback seeds', () => {
   const first = resolveRequestTrackingId(undefined, 42);
