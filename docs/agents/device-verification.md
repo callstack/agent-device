@@ -31,18 +31,17 @@ A failed command can look like a fast success. Before you record the time of a c
 
 Use one session for each purpose. For more isolation, use a separate `--state-dir` under `/private/tmp`.
 Close each session that you opened manually, including failed attempts, with its original session, platform, UDID, and state directory.
+If your session booted a local simulator or emulator, add `--shutdown`, unless the user asks to keep it running.
 
 For `DEVICE_IN_USE`:
 
 - "already in use by session X": follow the `close --session` hint of this daemon.
 - "owned by session X in workspace Y": examine `device status`. Use `device release --stale` only for provably dead owners.
   A live or uncertain owner blocks `open`, unless the device rebooted after the claim.
-  With reboot evidence, `open` settles old resources, takes the claim, and reports the release in `warnings`.
   Do not search for PIDs. Do not steal the claim.
 
 If cleanup is stuck, run `agent-device device status --stale`.
 To stop the owning daemon, run `agent-device daemon stop --state-dir <dir>`. For retained runners, add `--clean`.
-To release dead owners, run `agent-device device release --stale`.
 If you are blocked, report the session, state directory, and status output. Always report incomplete cleanup.
 The physical runner handoff checklist is in `docs/evidence/ios-physical-runner-handoff-2026-09-19.md`.
 
