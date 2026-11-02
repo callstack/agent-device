@@ -6,6 +6,7 @@ import {
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
   readRemoteConnectionState,
+  sessionLeaseScope,
   writeRemoteConnectionState,
   type RemoteConnectionRequestMetadata,
   type RemoteConnectionState,
@@ -191,15 +192,25 @@ function providerOf(
 function createRemoteConnectionStateFromFlags(
   flags: CliFlags,
   remoteConfigPath: string,
-  profile: Pick<RemoteConnectionState, 'leaseProvider' | 'clientId' | 'deviceKey'> = {},
+  profile: Partial<
+    Pick<RemoteConnectionState, 'leaseProvider' | 'clientId' | 'deviceKey' | 'runId'>
+  > = {},
 ): RemoteConnectionState {
+  const session = flags.session ?? 'default';
+  const scope = sessionLeaseScope(
+    { ...profile, leaseId: flags.leaseId, runId: profile.runId },
+    session,
+  );
+  // A run the caller passed with --run-id is theirs to share; only the profile's run is per session.
+  const runId = flags.runId === profile.runId ? scope.runId : flags.runId;
+  const clientId = scope.clientId;
   if (!flags.tenant) {
     throw new AppError(
       'INVALID_ARGS',
       'remote command requires tenant in remote config or via --tenant <id>.',
     );
   }
-  if (!flags.runId) {
+  if (!runId) {
     throw new AppError(
       'INVALID_ARGS',
       'remote command requires runId in remote config or via --run-id <id>.',
@@ -217,16 +228,16 @@ function createRemoteConnectionStateFromFlags(
   const now = new Date().toISOString();
   return {
     version: 1,
-    session: flags.session ?? 'default',
+    session,
     remoteConfigPath,
     remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
     daemon: buildRemoteConnectionDaemonState(flags),
     tenant: flags.tenant,
-    runId: flags.runId,
+    runId,
     leaseId: flags.leaseId,
     leaseBackend: flags.leaseBackend ?? resolveRequestedLeaseBackend(flags),
     leaseProvider: profile.leaseProvider,
-    clientId: profile.clientId,
+    clientId,
     deviceKey: profile.deviceKey,
     platform: flags.platform,
     target: flags.target,

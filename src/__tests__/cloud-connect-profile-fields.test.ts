@@ -13,6 +13,8 @@ test('connect limrun refuses profile fields Limrun does not read', async () => {
     [
       'connect',
       'limrun',
+      '--session',
+      'ci',
       '--platform',
       'ios',
       '--provider-os-version',

@@ -11,6 +11,7 @@ Export your Limrun API key, for example from CI secrets. Set `LIMRUN_REGION` to 
 
 ```bash
 export LIMRUN_API_KEY=...
+export AGENT_DEVICE_SESSION=checkout-android
 agent-device connect limrun --platform android
 ```
 
@@ -32,6 +33,7 @@ The `lim` CLI reads the same variables, so one set works for both tools. Set all
 ```bash
 export LIM_IOS_INSTANCE_URL=...
 export LIM_IOS_INSTANCE_TOKEN=...
+export AGENT_DEVICE_SESSION=preview-ios
 
 agent-device connect limrun --platform ios
 agent-device open com.example.app
@@ -57,6 +59,7 @@ A new Limrun instance does not contain your app. Run `install <package-or-bundle
 
 ```bash
 export LIMRUN_API_KEY=...
+export AGENT_DEVICE_SESSION=checkout-android
 
 agent-device connect limrun --platform android
 agent-device install com.example.app ./app.apk
@@ -93,6 +96,7 @@ Before you turn it on, know what the capture changes:
 Pass your app's API hosts with `--provider-network-hosts`, then open the app after you connect:
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-ios
 agent-device connect limrun --platform ios --provider-network-logs \
   --provider-network-hosts "api.example.com,*.cdn.example.com,localhost:8081"
 agent-device open com.example.app

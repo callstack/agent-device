@@ -557,6 +557,7 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device proxy --port 4310
     cloudflared tunnel --url http://127.0.0.1:4310
   On the remote client:
+    export AGENT_DEVICE_SESSION=checkout-agent
     agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
     agent-device devices --platform ios
     agent-device open Maps --platform ios --device "iPhone 17 Pro"
@@ -564,6 +565,8 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device artifacts --json
     agent-device close
     agent-device disconnect
+
+Leased sessions: a connection from connect proxy, connect (cloud), another connect provider, or a remote config that sets leaseProvider leases its device for one agent. Every command on it, from connect to disconnect, names its session with --session <name>, AGENT_DEVICE_SESSION, or a config session. Without one, it fails with INVALID_ARGS, reason REMOTE_SESSION_REQUIRED, before anything is leased, and never falls back to the connection another agent on the machine saved last. Set AGENT_DEVICE_SESSION once per agent or CI job before connect.
 
 Proxy lease by device spec:
   Without --udid or --serial, open, install, reinstall, and uninstall through connect proxy send --platform, --target, and --device on the lease allocate, and the backend in front of the daemon picks the device. --os <version|range>, --image-tag <tag>, and --physical add a device spec to that request. A non-blank osVersion or imageTag and physical: true name a spec key, sent as given; the backend validates its value (for example, Android --os is an API level). A blank string and physical: false name nothing, from the CLI, the SDK, or MCP. A value of another type fails with INVALID_ARGS, reason device-spec-invalid. connect proxy stores the spec keys it names as defaults like --platform and --device.
@@ -579,6 +582,7 @@ Human takeover of a leased remote device:
   An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Host administrators supply the exact lease backend/provider/device key and use the local daemon token, not a tenant credential. This host-admin route is intentionally not forwarded by agent-device proxy. Holds do not survive daemon restart; re-establish them after reconnecting. The same listener and token serve GET/PUT/DELETE /admin/leases, where a host allocates a macos-app lease confining a client to one app (<bundleId> or <bundleId>@<pid>); tenants cannot allocate one.
 
 Cloud profile flow:
+  export AGENT_DEVICE_SESSION=checkout-ios
   agent-device connect
   agent-device open com.example.app
   agent-device snapshot
@@ -586,7 +590,7 @@ Cloud profile flow:
 
 TestMu AI virtual-device flow (emulators and simulators):
   agent-device plugins add @agent-device/testmu
-  export LT_USERNAME=... LT_ACCESS_KEY=...
+  export LT_USERNAME=... LT_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-ios
   agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app lt://APP-id
   agent-device open com.example.app
   agent-device snapshot -i
@@ -595,11 +599,11 @@ TestMu AI virtual-device flow (emulators and simulators):
   agent-device disconnect
 
 TestMu AI real-device flow:
-  agent-device connect testmu --provider-device-type real --platform ios --device "iPhone 16" --provider-os-version 18 --provider-app ./MyApp.ipa
+  agent-device connect testmu --provider-device-type real --platform ios --device "iPhone 16" --provider-os-version 18 --provider-app ./MyApp.ipa --session checkout-real
   Real iOS devices are listed by major OS version (18, not 18.0) and install a signed .ipa. Real and virtual devices have separate upload APIs, so pass an lt:// id uploaded for the pool you connect to.
 
 BrowserStack hosted-device flow:
-  BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=...
+  export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id
   agent-device open com.example.app
   agent-device snapshot -i
@@ -608,7 +612,7 @@ BrowserStack hosted-device flow:
   agent-device disconnect
 
 AWS Device Farm hosted-device flow:
-  AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=...
+  export AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect aws-device-farm --platform android --aws-project-arn <arn> --aws-device-arn <arn> --aws-app-arn <arn>
   agent-device open com.example.app
   agent-device snapshot -i
@@ -618,7 +622,7 @@ AWS Device Farm hosted-device flow:
   AWS Device Farm currently supports Android and iOS WebDriver sessions only; Vega OS and Vega Fire TV ARNs are not routed.
 
 Limrun direct-device flow:
-  LIMRUN_API_KEY=...
+  export LIMRUN_API_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect limrun --platform android
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
@@ -633,7 +637,7 @@ Limrun direct-device flow:
 
 Revyl cloud-device flow (plugin, install separately):
   agent-device plugins add @agent-device/revyl
-  export REVYL_API_KEY=...
+  export REVYL_API_KEY=... AGENT_DEVICE_SESSION=checkout-ios
   agent-device connect revyl --platform ios --provider-app https://downloads.example.test/app.zip
   agent-device open com.example.app
   agent-device snapshot -i

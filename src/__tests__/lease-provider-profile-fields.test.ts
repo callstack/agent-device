@@ -87,15 +87,18 @@ test('a remote-config profile cannot carry a field Limrun refuses past lease all
   });
 
   try {
-    const result = await runCliCapture(['open', '--state-dir', stateDir, '--json'], {
-      cwd: project,
-      env: {
-        HOME: home,
-        AGENT_DEVICE_DAEMON_BASE_URL: daemon.baseUrl,
-        AGENT_DEVICE_DAEMON_AUTH_TOKEN: daemon.runtime.token,
+    const result = await runCliCapture(
+      ['open', '--session', 'limrun-profile', '--state-dir', stateDir, '--json'],
+      {
+        cwd: project,
+        env: {
+          HOME: home,
+          AGENT_DEVICE_DAEMON_BASE_URL: daemon.baseUrl,
+          AGENT_DEVICE_DAEMON_AUTH_TOKEN: daemon.runtime.token,
+        },
+        useRealDaemonClient: true,
       },
-      useRealDaemonClient: true,
-    });
+    );
 
     assert.equal(result.code, 1);
     const payload = JSON.parse(result.stdout);

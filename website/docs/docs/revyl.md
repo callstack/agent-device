@@ -25,6 +25,7 @@ next device command loads the plugin.
 
 ```bash
 export REVYL_API_KEY=...
+export AGENT_DEVICE_SESSION=checkout-ios
 agent-device connect revyl \
   --platform ios \
   --provider-app https://apps.example.com/MyApp-simulator.zip
@@ -46,6 +47,7 @@ when it starts the device, so a local path or a provider-specific app reference 
 there. Pass the zipped `.app` for iOS the way Revyl expects it, and the `.apk` URL for Android.
 
 `open` takes the app's installed bundle identifier or package name, not the file name in that URL.
+Run these commands in the same shell, so they use the `AGENT_DEVICE_SESSION` you exported:
 
 ```bash
 agent-device open com.example.app
@@ -92,9 +94,12 @@ report a refused command as a success:
 
 ## Run it in CI
 
-The plugin reads only `REVYL_API_KEY` and the optional `REVYL_API_URL`, so one secret is enough:
+The plugin reads only `REVYL_API_KEY` and the optional `REVYL_API_URL`, so one secret is enough. Name the session once for the job, so that every step reaches the same connection:
 
 ```yaml
+env:
+  AGENT_DEVICE_SESSION: revyl-${{ github.run_id }}
+steps:
 - run: npm install -g agent-device && agent-device plugins add @agent-device/revyl
 - run: agent-device connect revyl --platform android --provider-app "$APP_URL"
 - run: agent-device open com.example.app && agent-device snapshot -i

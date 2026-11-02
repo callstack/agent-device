@@ -69,7 +69,7 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
   try {
     // A successful run returns without exiting; a failure that exits or throws fails the test.
     await runCli(
-      ['open', '--state-dir', stateDir, '--json'],
+      ['open', '--session', 'transport-run', '--state-dir', stateDir, '--json'],
       { sendToDaemon: vi.fn(), transportForHost },
       host,
     ).catch((error: unknown) => {

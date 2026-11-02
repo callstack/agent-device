@@ -7,11 +7,13 @@ import { pathToFileURL } from 'node:url';
 import { formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import './support/provider-disconnect-fetch.mjs';
 
-test('built CLI provider flow closes active generated session before disconnect cleanup', async (t) => {
+test('built CLI provider flow closes its named session before disconnect cleanup', async (t) => {
   const fixture = createProviderDaemonFixture(t);
   const env = createProviderEnv(fixture);
+  await assertUnnamedRefused(fixture, env, browserStackConnectArgs(fixture));
   const activeSession = await connectBrowserStackProvider(fixture, env);
-  await openProviderApp(fixture, env);
+  await assertUnnamedRefused(fixture, env, ['open', 'Demo']);
+  await openProviderApp(fixture, env, activeSession);
   await disconnectProviderSession(fixture, env, activeSession);
   assertProviderDisconnectRpc(readRpcRequests(fixture), activeSession);
   await assertNoActiveConnection(fixture, env);
@@ -71,7 +73,22 @@ async function connectBrowserStackProvider(
   fixture: ProviderDaemonFixture,
   env: NodeJS.ProcessEnv,
 ): Promise<string> {
-  const connectArgs = [
+  const connectArgs = [...browserStackConnectArgs(fixture), '--session', 'bs-smoke'];
+  const connectResult = await runBuiltCliJson(connectArgs, env);
+
+  assert.equal(connectResult.status, 0, formatResultDebug('connect', connectArgs, connectResult));
+  assert.equal(
+    connectResult.json?.success,
+    true,
+    formatResultDebug('connect', connectArgs, connectResult),
+  );
+  const activeSession = connectResult.json?.data?.session;
+  assert.equal(activeSession, 'bs-smoke');
+  return activeSession;
+}
+
+function browserStackConnectArgs(fixture: ProviderDaemonFixture): string[] {
+  return [
     'connect',
     'browserstack',
     '--platform',
@@ -90,24 +107,40 @@ async function connectBrowserStackProvider(
     fixture.stateDir,
     '--json',
   ];
-  const connectResult = await runBuiltCliJson(connectArgs, env);
+}
 
-  assert.equal(connectResult.status, 0, formatResultDebug('connect', connectArgs, connectResult));
+// A leased provider flow is refused at every step that names no session.
+async function assertUnnamedRefused(
+  fixture: ProviderDaemonFixture,
+  env: NodeJS.ProcessEnv,
+  command: string[],
+): Promise<void> {
+  const args = command.includes('--state-dir')
+    ? command
+    : [...command, '--state-dir', fixture.stateDir, '--json'];
+  const result = await runBuiltCliJson(args, env);
+  assert.equal(result.status, 1, formatResultDebug(command[0] ?? '', args, result));
   assert.equal(
-    connectResult.json?.success,
-    true,
-    formatResultDebug('connect', connectArgs, connectResult),
+    result.json?.error?.details?.reason,
+    'REMOTE_SESSION_REQUIRED',
+    formatResultDebug(command[0] ?? '', args, result),
   );
-  const activeSession = connectResult.json?.data?.session;
-  assert.match(activeSession, /^adc-/);
-  return activeSession;
 }
 
 async function openProviderApp(
   fixture: ProviderDaemonFixture,
   env: NodeJS.ProcessEnv,
+  session: string,
 ): Promise<void> {
-  const openArgs = ['open', 'Demo', '--state-dir', fixture.stateDir, '--json'];
+  const openArgs = [
+    'open',
+    'Demo',
+    '--session',
+    session,
+    '--state-dir',
+    fixture.stateDir,
+    '--json',
+  ];
   const openResult = await runBuiltCliJson(openArgs, env);
   assert.equal(openResult.status, 0, formatResultDebug('open', openArgs, openResult));
   assert.equal(openResult.json?.success, true, formatResultDebug('open', openArgs, openResult));
@@ -118,7 +151,14 @@ async function disconnectProviderSession(
   env: NodeJS.ProcessEnv,
   activeSession: string,
 ): Promise<void> {
-  const disconnectArgs = ['disconnect', '--state-dir', fixture.stateDir, '--json'];
+  const disconnectArgs = [
+    'disconnect',
+    '--session',
+    activeSession,
+    '--state-dir',
+    fixture.stateDir,
+    '--json',
+  ];
   const disconnectResult = await runBuiltCliJson(disconnectArgs, env);
   assert.equal(
     disconnectResult.status,

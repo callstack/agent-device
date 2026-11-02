@@ -337,7 +337,17 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
 
 test('connect limrun refuses the device type', async () => {
   const result = await runCliCapture(
-    ['connect', 'limrun', '--platform', 'ios', '--provider-device-type', 'real', '--json'],
+    [
+      'connect',
+      'limrun',
+      '--session',
+      'ci',
+      '--platform',
+      'ios',
+      '--provider-device-type',
+      'real',
+      '--json',
+    ],
     {
       env: { LIMRUN_API_KEY: 'lim_test_key' },
       stateDirPrefix: 'agent-device-connect-limrun-device-type-',
