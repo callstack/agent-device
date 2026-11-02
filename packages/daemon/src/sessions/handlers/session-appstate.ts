@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import { isApplePlatform } from '@agent-device/kernel/device';
 import { hasExplicitDeviceSelector } from '../../core/device/device-selector-intent.ts';
 import {
