@@ -347,8 +347,9 @@ NSString * _Nullable RunnerResolveSoleScreen(
   }
   // An iPhone keeps every app full-screen, so its idiom answers the rule and admission never pays
   // for the fills-screen probe. Off the phone idiom the route opens only on that proof. The display
-  // size is one more AXRuntime read (~0.6–0.9 ms): a command keeps a successful one, and a failed
-  // one is read again by the next gesture.
+  // size is a separate AXRuntime read (~0.6–0.9 ms) the caller makes after admission, the first time
+  // a command needs the box; a command keeps a successful read, and the next gesture retries a failed
+  // one.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
       RunnerProbeApplicationFillsScreen(application) != RunnerFullScreenEvidenceFillsScreen) {
     return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";

@@ -28,7 +28,9 @@ extension RunnerTests {
       )
     }
     let frame = context.referenceFrame
-    guard let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation) else {
+    guard
+      let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation)
+    else {
       return Self.unmeasuredSoleDisplayOutcome(gesture: "drag")
     }
     let start = CoordinateSpaceRotation.native(
@@ -202,7 +204,7 @@ extension RunnerTests {
         interfaceOrientation: orientation
       )
     else {
-      return Self.unmeasuredSoleDisplayOutcome(gesture: "long press")
+      return Self.unmeasuredSoleDisplayOutcome(gesture: "longpress")
     }
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
@@ -570,7 +572,9 @@ extension RunnerTests {
 
   static func unmeasuredSoleDisplayOutcome(gesture: String) -> RunnerInteractionOutcome {
     .unsupported(
-      message: "synthesized \(gesture) could not read the size of the device's only screen, and the app is not proven to fill it, so its coordinates cannot be rotated",
+      message:
+        "synthesized \(gesture) could not read the size of the device's only screen, and the app is not "
+        + "proven to fill it, so its coordinates cannot be rotated",
       hint: "Retry after the app is foregrounded; the runner log records why the screen size could not be read."
     )
   }
@@ -746,7 +750,9 @@ extension RunnerTests {
       width: plan.viewport.width,
       height: plan.viewport.height
     )
-    guard let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation) else {
+    guard
+      let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation)
+    else {
       return Self.unmeasuredSoleDisplayOutcome(gesture: "gesture")
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
