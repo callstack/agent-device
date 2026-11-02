@@ -345,8 +345,10 @@ NSString * _Nullable RunnerResolveSoleScreen(
     );
     return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
   }
-  // An iPhone keeps every app full-screen, so its idiom answers the rule and the route never pays
-  // for the probe. Off the phone idiom the route opens only on the fills-screen proof.
+  // An iPhone keeps every app full-screen, so its idiom answers the rule and admission never pays
+  // for the fills-screen probe. Off the phone idiom the route opens only on that proof. Every
+  // device still pays one AXRuntime read (~0.6–0.9 ms) when the caller sizes the display with
+  // `RunnerSystemApplicationScreenSize`.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
       RunnerProbeApplicationFillsScreen(application) != RunnerFullScreenEvidenceFillsScreen) {
     return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
