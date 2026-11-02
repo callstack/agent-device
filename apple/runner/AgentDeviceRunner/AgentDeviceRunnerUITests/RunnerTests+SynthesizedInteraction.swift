@@ -522,8 +522,8 @@ extension RunnerTests {
   }
 #endif
 
-  /// The screen in the app's interface orientation, anchored at the origin like a window frame. An
-  /// unknown orientation cannot say which way to lay the screen, so it names no frame.
+  /// The screen, in points, in the app's interface orientation, anchored at the origin like a window
+  /// frame. An unknown orientation cannot say which way to lay the screen, so it names no frame.
   static func soleScreenReferenceFrame(
     portraitSize size: CGSize,
     interfaceOrientation: Int

@@ -134,6 +134,7 @@ extension RunnerTests {
   func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
     app.launch()
     mainOwned.app = app
+    let appFrame = app.frame
     let restoreXCTest = try simulateUnserializableAppTree()
     defer {
       restoreXCTest()
@@ -148,11 +149,10 @@ extension RunnerTests {
 
     if soleScreenRouteIsOpen(for: app) {
       XCTAssertTrue(response.ok, String(describing: response.error))
-      let screen = UIScreen.main.bounds
       XCTAssertEqual(response.data?.x, 0)
       XCTAssertEqual(response.data?.y, 0)
-      XCTAssertEqual(response.data?.x2, Double(screen.width))
-      XCTAssertEqual(response.data?.y2, Double(screen.height))
+      XCTAssertEqual(try XCTUnwrap(response.data?.x2), Double(appFrame.width), accuracy: 0.5)
+      XCTAssertEqual(try XCTUnwrap(response.data?.y2), Double(appFrame.height), accuracy: 0.5)
     } else {
       XCTAssertFalse(response.ok)
       XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
@@ -228,14 +228,17 @@ extension RunnerTests {
       height: max(appFrame.width, appFrame.height)
     )
     XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
-    XCTAssertEqual(
-      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
-      CGRect(origin: .zero, size: screen)
-    )
-    XCTAssertEqual(
-      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight),
-      CGRect(x: 0, y: 0, width: screen.height, height: screen.width)
-    )
+    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt.
+    let expectations = [
+      (RunnerInterfaceOrientation.portrait, screen),
+      (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
+    ]
+    for (orientation, expected) in expectations {
+      let frame = synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: orientation)
+      XCTAssertEqual(frame.origin, .zero)
+      XCTAssertEqual(frame.width, expected.width, accuracy: 0.5)
+      XCTAssertEqual(frame.height, expected.height, accuracy: 0.5)
+    }
   }
 #endif
 
