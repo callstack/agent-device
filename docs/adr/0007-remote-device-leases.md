@@ -4,7 +4,7 @@
 
 Accepted
 
-Decision history: 2026-10-21, a `macos-app` lease session takes its app device's claim instead of no claim, so exclusion against whole-Mac and same-app sessions also holds across daemons (ADR 0035, #3323).
+Decision history: 2026-10-21, a `macos-app` lease session takes its app device's claim instead of no claim, so exclusion against whole-Mac and same-app sessions also holds across daemons (ADR 0035, #3323). 2026-11-02, cloud provider runtimes serve their lease lifecycle from one shared lease table instead of a table of their own (#4102).
 
 ## Rules at a glance
 
@@ -160,6 +160,21 @@ The allocation therefore holds a work pass while the provider allocates.
 The lease cannot expire during that allocation.
 If a successful allocation is still wanted by its requester, the inactivity TTL starts from the moment allocation completed.
 A requester that hung up preserves nothing, and its allocation is released as before.
+
+A cloud provider runtime serves allocation, release, expired-lease recovery, and shutdown from one shared lease table, `@agent-device/capture-kit/provider-lease-table`.
+The provider supplies only start, stop, find-by-lease, and the errors that it reports.
+The table owns the rules that decide whether a billed device is still rented:
+
+- One lease id has at most one start. Overlapping allocations join it, and a ready session is reused.
+- Each caller waits until the earlier of its own deadline and the provider's start timeout. A caller that gives up stops nothing, because other callers can still wait for the same device.
+- If a start does not become ready, the table stops what that start rented before any caller sees the failure. This includes a ready answer that arrives after the deadline of its start.
+- A release forgets a session only after the provider confirmed its stop. A stop that fails keeps the session for the next release. Concurrent release, recovery, and shutdown share one stop.
+- Shutdown refuses new allocations, waits for every start, and stops every session. It reports the sessions whose stop failed with `provider-cleanup-pending`.
+- Expired-lease recovery stops what find-by-lease names for a lease that this process does not hold. If the provider cannot name or stop it, recovery throws, and the daemon keeps the lease pending.
+
+A table in each provider was rejected: each provider derived the same rules again, and most review findings on the second provider (#4092) were about that bookkeeping.
+Contracts was rejected as the home, because the table is lifecycle mechanics and not wire vocabulary.
+Open gap: Limrun keeps its own lease ownership until it moves onto the table (#4102).
 
 ## Client-side work that precedes admission
 

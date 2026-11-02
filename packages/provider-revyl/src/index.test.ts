@@ -139,5 +139,5 @@ test('one account and origin is one runtime identity whatever the URL spelling',
     base,
   );
   // The identity is a hash, never the key: it travels into diagnostics.
-  assert.match(base, /^principal-[0-9a-f]{32}$/);
+  assert.match(base, /^principal-[0-9a-f]{64}$/);
 });

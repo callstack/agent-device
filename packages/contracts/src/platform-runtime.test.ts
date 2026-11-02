@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
+  providerRuntimeInstance,
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
@@ -212,6 +213,39 @@ function testBinding(
     [Symbol.asyncDispose]: async () => undefined,
   };
 }
+
+const LIMRUN_PRINCIPAL = {
+  provider: 'limrun',
+  region: 'eu',
+  apiKey: 'secret-key',
+  attachedIos: undefined,
+  attachedAndroid: undefined,
+} as const;
+
+/**
+ * The digest is durable: a provider descriptor written before this release names the instance its
+ * runtime derived, so the pin is the contract. A change here orphans every live descriptor.
+ */
+test('providerRuntimeInstance keeps the digest durable descriptors carry', () => {
+  assert.equal(
+    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+    'principal-1426b5849137d86f197cdb796882e8f619e8be77eda1b424144502e1da55af29',
+  );
+  // The salt carries the provider, so one set of credentials is a different account elsewhere.
+  assert.notEqual(
+    providerRuntimeInstance({ ...LIMRUN_PRINCIPAL, provider: 'other-provider' }),
+    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+  );
+  // The provider is normalized as `providerRuntimeOwner` normalizes it, so one account cannot
+  // arrive as two owners through spelling.
+  assert.equal(
+    providerRuntimeInstance({ ...LIMRUN_PRINCIPAL, provider: ' limrun ' }),
+    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+  );
+  // No secret is readable from what travels into diagnostics and durable state.
+  assert.ok(!providerRuntimeInstance(LIMRUN_PRINCIPAL).includes('secret-key'));
+  assert.throws(() => providerRuntimeInstance({ provider: '   ' }), /non-empty provider principal/);
+});
 
 test('unavailableFact freezes the cell and omits hint when none is given', () => {
   const bare = unavailableFact('unsupported-device-kind');

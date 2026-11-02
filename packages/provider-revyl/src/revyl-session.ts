@@ -3,7 +3,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildRevylDevice, type RevylPlatform } from './device.ts';
-import { revylFailureRefusedTheRequest, type RevylClient } from './revyl-client.ts';
+import {
+  REVYL_START_DEVICE_TIMEOUT_MS,
+  revylFailureRefusedTheRequest,
+  type RevylClient,
+} from './revyl-client.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 import type {
   RevylStartDeviceRequest,
@@ -13,6 +17,8 @@ import type {
 
 /** How long Revyl may take to assign a worker and connect the device before the start is given up on. */
 const READY_TIMEOUT_MS = 240_000;
+/** The longest one allocation may take: `start_device`'s own answer budget, then readiness. */
+export const REVYL_START_TIMEOUT_MS = REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS;
 /** Revyl's worker answers `health` with 503 until the device is attached; the CLI polls on that beat. */
 const READY_POLL_INTERVAL_MS = 2_000;
 /** Revyl releases an idle session on its own; this is the lease the runtime asks for. */
@@ -55,21 +61,9 @@ export type RevylStartRequestInput = Readonly<{
 
 /**
  * One caller's own patience: the signal it cancels with and the deadline it stops at. Both are optional,
- * and a caller with neither waits for whatever its work takes.
+ * and the lease table cuts the deadline to `REVYL_START_TIMEOUT_MS`.
  */
 export type RevylCallerBudget = Readonly<{ signal?: AbortSignal; deadline?: number }>;
-
-/**
- * One caller's wait for work this process is already doing, bounded by that caller's own deadline and
- * canceled with its own signal. `settled` says whether this wait is what ended the race, which is what
- * lets a caller report its own cancellation rather than the outcome of a shared request it stopped
- * watching. `dispose` retires the listener once the work itself is done.
- */
-export type RevylCallerWait<T> = Readonly<{
-  promise: Promise<T>;
-  settled: () => boolean;
-  dispose: () => void;
-}>;
 
 /**
  * The session one start left under rent: the session that holds the device, and the run that routes to
@@ -212,44 +206,6 @@ async function submitRevylStart(
     ...(input.osVersion === undefined ? {} : { os_version: input.osVersion }),
   };
   return await client.startDevice(request);
-}
-
-/**
- * One caller's wait for work this process is already doing, bounded by that caller's own deadline and
- * canceled with its own signal. `settled` says whether this wait is what ended the race, which is what
- * lets a caller report its own cancellation rather than the outcome of a shared request it stopped
- * watching. `dispose` retires the listener once the work itself is done.
- */
-export function revylCallerWait<T>(
-  deadline: number,
-  budget: RevylCallerBudget,
-  onGiveUp: () => unknown,
-): RevylCallerWait<T> | undefined {
-  if (budget.deadline === undefined && budget.signal === undefined) return undefined;
-  const parts: AbortSignal[] = [];
-  if (Number.isFinite(deadline))
-    parts.push(AbortSignal.timeout(Math.max(0, deadline - Date.now())));
-  if (budget.signal !== undefined) parts.push(budget.signal);
-  const signal = parts.length === 1 ? parts[0]! : AbortSignal.any(parts);
-  let rejected = false;
-  let onAbort: () => void = () => {};
-  const reject = (reason: unknown) => {
-    rejected = true;
-    return reason;
-  };
-  // A signal that is already aborted never fires its listener, so that wait has to start over the
-  // edge rather than sit on it.
-  const promise = signal.aborted
-    ? Promise.reject(reject(onGiveUp()))
-    : new Promise<T>((_, rejectPromise) => {
-        onAbort = () => rejectPromise(reject(onGiveUp()));
-        signal.addEventListener('abort', onAbort, { once: true });
-      });
-  return Object.freeze({
-    promise,
-    settled: () => rejected,
-    dispose: () => signal.removeEventListener('abort', onAbort),
-  });
 }
 
 function startCanceled(input: RevylStartRequestInput): AppError {
