@@ -28,6 +28,9 @@
       "path": "../provider-webdriver"
     },
     {
+      "path": "../provision-kit"
+    },
+    {
       "path": "../test-kit"
     }
   ]
