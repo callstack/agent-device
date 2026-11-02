@@ -137,7 +137,7 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   return (
     typeof session === 'string' && session.trim()
       ? request
-      : { ...request, internal: { sessionOmitted: true } }
+      : { ...request, session: 'default', internal: { sessionOmitted: true } }
   ) as DaemonRequest;
 }
 

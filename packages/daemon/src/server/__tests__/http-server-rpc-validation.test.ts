@@ -358,12 +358,12 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
 });
 
 test.for([
-  ['omitted', {}, true],
-  ['blank', { session: '  ' }, true],
-  ['named', { session: 'agent-a' }, undefined],
+  ['omitted', {}, 'default', true],
+  ['blank', { session: '  ' }, 'default', true],
+  ['named', { session: 'agent-a' }, 'agent-a', undefined],
 ] as const)(
   'install_from_source records a session that is %s',
-  async ([_label, session, sessionOmitted], t) => {
+  async ([_label, session, resolvedSession, sessionOmitted], t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
 
     const received: DaemonRequest[] = [];
@@ -392,6 +392,8 @@ test.for([
           },
         }),
       });
+      assert.equal(received.length, 1);
+      assert.equal(received[0]?.session, resolvedSession);
       assert.equal(received[0]?.internal?.sessionOmitted, sessionOmitted);
     } finally {
       await closeLoopbackServer(server);

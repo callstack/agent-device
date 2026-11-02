@@ -45,10 +45,7 @@ const SUPPORTED_RPC_METHODS = new Set([
 function requestSessionFields(
   session: string | undefined,
 ): Pick<DaemonRequest, 'session' | 'internal'> {
-  return {
-    session: session ?? 'default',
-    ...(session?.trim() ? {} : { internal: { sessionOmitted: true } }),
-  };
+  return session?.trim() ? { session } : { session: 'default', internal: { sessionOmitted: true } };
 }
 
 function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders): DaemonRequest {
