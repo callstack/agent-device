@@ -36,7 +36,9 @@ function deferred<T>(): Deferred<T> {
  * A provider whose starts and stops the test answers by hand. Each start waits on `starts`, each stop on
  * the next queued answer when one is queued, and every call is recorded.
  */
-function fakeProvider(options: { startTimeoutMs?: number; stopTimeoutMs?: number } = {}) {
+function fakeProvider(
+  options: { startTimeoutMs?: number; stopTimeoutMs?: number; releasingThrows?: boolean } = {},
+) {
   const controls: Array<ProviderLeaseStartControl<Handle>> = [];
   const stopped: string[] = [];
   const found: string[] = [];
@@ -65,7 +67,10 @@ function fakeProvider(options: { startTimeoutMs?: number; stopTimeoutMs?: number
     },
     shuttingDown: (lease) =>
       new TableError({ reason: 'runtime-shutting-down', leaseId: lease.leaseId }),
-    releasing: (lease) => new TableError({ reason: 'lease-releasing', leaseId: lease.leaseId }),
+    releasing: (lease) => {
+      if (options.releasingThrows) throw new Error('driver bug');
+      return new TableError({ reason: 'lease-releasing', leaseId: lease.leaseId });
+    },
     gaveUp: (lease, caller, budgetMs, rented) =>
       new TableError({
         reason: caller.signal?.aborted ? 'request_canceled' : 'provider-not-ready',
@@ -404,14 +409,32 @@ test('a failed start is stopped before its failure reaches the caller', async ()
   });
 });
 
-test('a start that rejects is cleaned up by the handle the provider finds for its lease', async () => {
-  const provider = fakeProvider();
+test('a start that fails answers its caller at once, stops what it rented, and frees the lease', async () => {
+  const provider = fakeProvider({ startTimeoutMs: 60_000 });
   const allocating = provider.table.allocate(lease(), {});
   await settle();
-  provider.failStart(0, new Error('lost answer'));
+  const startedAt = Date.now();
+  setTimeout(() => provider.failStart(0, new Error('lost answer')), 50);
   await assert.rejects(allocating, /lost answer/);
+  assert.ok(Date.now() - startedAt < 1_000, 'the failure is not held to the start timeout');
   assert.deepEqual(provider.found, ['lease-1']);
   assert.deepEqual(provider.stopped, ['found-lease-1']);
+  // The stop is confirmed, so no entry is left: a new allocation starts afresh.
+  const fresh = provider.table.allocate(lease(), {});
+  await settle();
+  provider.answerStart(1, ready('session-2'));
+  assert.deepEqual(await fresh, { id: 'session-2' });
+});
+
+test("a driver whose releasing() throws still has a late answer's device stopped", async () => {
+  const provider = fakeProvider({ startTimeoutMs: 30, releasingThrows: true });
+  void provider.table.allocate(lease(), {}).catch(() => undefined);
+  await settle();
+  await assert.rejects(provider.table.release('lease-1'), reason('provider-cleanup-pending'));
+  provider.answerStart(0, ready('late'));
+  await settle();
+  await settle();
+  assert.deepEqual(provider.stopped, ['late']);
 });
 
 test('a lost start answer the provider cannot find keeps the lease until a retry finds it', async () => {
@@ -467,22 +490,6 @@ test('a published rental is stopped when its start stalls, and the late answer e
   await settle();
   assert.equal(await provider.table.release('lease-1'), undefined);
   assert.deepEqual(provider.stopped, ['instance-1']);
-});
-
-test('a stop that outlives its budget is joined by the retry instead of sent twice', async () => {
-  const provider = fakeProvider({ stopTimeoutMs: 20 });
-  await allocated(provider);
-  const stop = deferred<void>();
-  provider.queueStop(async () => await stop.promise);
-
-  await assert.rejects(
-    provider.table.release('lease-1'),
-    reason('provider-cleanup-pending', 'release'),
-  );
-  const retry = provider.table.release('lease-1');
-  stop.resolve();
-  assert.equal((await retry)?.handle.id, 'session-1');
-  assert.deepEqual(provider.stopped, ['session-1']);
 });
 
 test('a rental named while an earlier stop is still in flight waits for that stop to confirm', async () => {

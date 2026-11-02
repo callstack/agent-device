@@ -14,10 +14,7 @@ export type ProviderLeaseBudget = Readonly<{ signal?: AbortSignal; deadline?: nu
 
 export type ProviderLeaseAllocateOptions<Request> = ProviderLeaseBudget &
   Readonly<{
-    /**
-     * Refuses to join a start made for `started` when this allocation asks for something else. Throw the
-     * refusal; the table calls this before the allocation joins anything.
-     */
+    /** Throws to refuse joining a start made for another request; called before anything is joined. */
     requireJoinable?(started: Request): void;
   }>;
 
@@ -30,19 +27,16 @@ export type ProviderLeaseStartControl<Handle> = Readonly<{
   /** Epoch-ms by which the start should answer: `startTimeoutMs` after it was sent. */
   deadline: number;
   /**
-   * Publishes a rental as soon as the provider can stop it, before the start answers, so a release or a
-   * drain can stop a device whose start stalls. A later call with another handle adds a rental; the table
-   * stops every one it was told of. Do not publish a handle whose stop could arrive before the provider
-   * created the session it names.
+   * Publishes a rental the provider can already stop, before the start answers; the table stops every
+   * rental it is told of. Never publish a handle whose stop could arrive before its session exists.
    */
   rented(handle: Handle): void;
 }>;
 
 /**
- * What one start amounted to. A ready start hands over its session and the handle that stops it. A failed
- * start names in `rented` what it left under rent; omitting it says the start rented nothing beyond what
- * it published through `rented`, which the table still stops. A start that rejects instead is read as one that may
- * have rented, and the table stops the published handle or what `findByLease` names.
+ * What one start amounted to: a ready session and its handle, or a failure naming in `rented` what it
+ * left rented beyond what it published. A rejection may have rented; the table stops what is published
+ * or what `findByLease` names.
  */
 export type ProviderLeaseStart<Session, Handle> =
   | Readonly<{ status: 'ready'; session: Session; handle: Handle }>
@@ -53,10 +47,7 @@ export type ProviderLeaseCleanupScope =
   | Readonly<{ route: 'start' | 'release' | 'recover'; leaseId: string }>
   | Readonly<{ route: 'shutdown' }>;
 
-/**
- * A rental that stays rented, and why. `handle` is absent when the provider could not name the rental,
- * because the start never answered or `findByLease` failed.
- */
+/** A rental that stays rented, and why; `handle` is absent when nobody could name it yet. */
 export type ProviderUnconfirmedStop<Handle> = Readonly<{
   leaseId: string;
   handle: Handle | undefined;
@@ -70,9 +61,7 @@ export type ProviderLeaseDriver<Session, Handle, Request> = Readonly<{
    */
   startTimeoutMs: number;
   /**
-   * How long one teardown waits for a stop to answer. A stop that outlives it is reported as unconfirmed,
-   * and the next teardown joins the same stop instead of sending a second one. Unset waits for the answer.
-   * Only the stop is bounded here; `findByLease` answers within the provider's own request budget.
+   * How long a teardown waits for one stop; a later teardown joins a stop that outlived it. Unset waits.
    */
   stopTimeoutMs?: number;
   start(
@@ -84,10 +73,7 @@ export type ProviderLeaseDriver<Session, Handle, Request> = Readonly<{
   stop(handle: Handle): Promise<void>;
   /** Identifies a rental, so one rental is stopped once whichever route named it. */
   handleKey(handle: Handle): string;
-  /**
-   * Names what a lease rented when the table cannot, as after a daemon restart or a start that rejected.
-   * Rejects when the provider cannot name it, which keeps the lease pending for a later retry.
-   */
+  /** Names what a lease rented after a restart or a rejected start; rejecting keeps the lease pending. */
   findByLease(lease: DeviceLease): Promise<Handle>;
   /** The error for an allocation that arrives or finishes while the runtime shuts down. */
   shuttingDown(lease: DeviceLease): Error;
@@ -402,7 +388,14 @@ class LeaseTable<Session, Handle, Request> {
         return { status: 'ready', session: answer.session };
       }
     }
-    return await this.endFailedStart(entry, this.startFailure(entry, answer, caller, startedAt));
+    let failure: unknown;
+    try {
+      failure = this.startFailure(entry, answer, caller, startedAt);
+    } catch (error) {
+      // A driver whose error factory throws must not keep a rented device from being stopped.
+      failure = error;
+    }
+    return await this.endFailedStart(entry, failure);
   }
 
   /** The start's answer, with a rejection read as an answer that may have rented. */
