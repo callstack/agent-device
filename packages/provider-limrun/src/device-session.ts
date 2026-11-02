@@ -59,16 +59,19 @@ type LimrunDeviceSessionBase = {
   readonly interactor: Interactor;
   listApps(filter?: AppsFilter): Promise<LimrunInstalledApp[]>;
   pressKey(key: string, modifiers?: string[]): Promise<void>;
-  startRecording(options?: { quality?: LimrunRecordingQuality }): Promise<void>;
-  /** Stops the instance recorder and answers where the finished file is served; nothing is downloaded. */
-  stopRecording(): Promise<{ downloadUrl: string }>;
+  startRecording(options: { recordingId: string; quality?: LimrunRecordingQuality }): Promise<void>;
+  /** Stops the identified recorder and answers where the finished file is served; nothing is downloaded. */
+  stopRecording(recordingId: string): Promise<{ downloadUrl: string }>;
   /** Fetches a served recording to `outPath` within a fixed deadline. Retriable while the instance lives. */
   downloadRecording(input: { downloadUrl: string; outPath: string }): Promise<void>;
 };
 
 type LimrunRecordingClient = {
-  startRecording(options?: { quality?: LimrunRecordingQuality }): Promise<void>;
-  stopRecording(saveTo: { localPath?: string }): Promise<string>;
+  startRecordingSession(options: {
+    recordingId: string;
+    quality?: LimrunRecordingQuality;
+  }): Promise<string>;
+  stopRecordingSession(recordingId: string): Promise<string>;
 };
 
 /**
@@ -170,12 +173,13 @@ function createRecordingOperations(
   host: Pick<LimrunHostAdapter, 'downloadFile'>,
 ) {
   return {
-    startRecording: async (options?: { quality?: LimrunRecordingQuality }) => {
-      await client.startRecording(options);
+    startRecording: async (options: { recordingId: string; quality?: LimrunRecordingQuality }) => {
+      await client.startRecordingSession(options);
     },
-    // Without `localPath` the SDK only stops the recorder and returns the served URL; a download
-    // tied to the one-shot stop could not be retried after a dropped transfer.
-    stopRecording: async () => ({ downloadUrl: await client.stopRecording({}) }),
+    // Keep downloads separate from stopping so a dropped transfer can be retried.
+    stopRecording: async (recordingId: string) => ({
+      downloadUrl: await client.stopRecordingSession(recordingId),
+    }),
     downloadRecording: async (input: { downloadUrl: string; outPath: string }) => {
       await host.downloadFile({
         url: input.downloadUrl,

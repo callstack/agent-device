@@ -112,7 +112,10 @@ test('the high preset maps onto the low end of the legacy high band', async () =
 
   await operations.screenRecordingStart(input({ exportQuality: 'high' }));
 
-  expect(session.startRecording).toHaveBeenCalledWith({ quality: 8 });
+  expect(session.startRecording).toHaveBeenCalledWith({
+    recordingId: expect.any(String),
+    quality: 8,
+  });
 });
 
 test('stop asks the instance once, downloads the served MP4 to the output path, finalizes, and confirms the recorder', async () => {
@@ -257,4 +260,39 @@ test('the bound owner serves record start and stop through the live device sessi
     'download:/tmp/limrun-recording.mp4',
     'finalize',
   ]);
+});
+
+test('finishing or cleaning one recording leaves other recordings on the instance active', async () => {
+  const active = new Set(['external-recording']);
+  const calls: string[] = [];
+  const session: LimrunScreenRecordingSession = {
+    startRecording: async ({ recordingId }) => {
+      if (active.has(recordingId)) throw new Error('Recording ID already exists');
+      active.add(recordingId);
+    },
+    stopRecording: async (recordingId) => {
+      if (!active.delete(recordingId)) throw new Error('Recording does not exist');
+      return { downloadUrl: `${DOWNLOAD_URL}&recordingId=${recordingId}` };
+    },
+    downloadRecording: async () => {},
+  };
+  const operations = createLimrunScreenRecordingOperations({
+    host: fakeRecordingHost(calls),
+    device: limrunIosSimulator,
+    owner,
+    signal: new AbortController().signal,
+    getDeviceSession: () => session,
+  });
+  const first = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+  const second = (
+    await operations.screenRecordingStart(input({ outputPath: '/tmp/second-recording.mp4' }))
+  ).pendingHandle.transfer();
+  expect(active.size).toBe(3);
+
+  await expect(first.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(active.size).toBe(2);
+  expect(active.has('external-recording')).toBe(true);
+
+  await expect(second.forceCleanup()).resolves.toEqual({ status: 'cleaned' });
+  expect([...active]).toEqual(['external-recording']);
 });
