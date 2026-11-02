@@ -190,14 +190,16 @@ test('a validator run that times out reads as not playable, whatever bound stopp
   vi.mocked(runCmd).mockImplementation(async (_cmd, _args, options) => {
     throw timedOut(options!.timeoutMs!);
   });
+  // A frozen clock keeps the 5 ms budget from passing before the validator runs.
+  vi.useFakeTimers({ toFake: ['Date'] });
   try {
     await expect(isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(5))).resolves.toBe(false);
     await expect(isPlayableVideo(mp4, host)).resolves.toBe(false);
     expect(vi.mocked(runCmd).mock.calls.map(([, , options]) => options?.timeoutMs)).toEqual([
-      expect.any(Number),
-      10_000,
+      5, 10_000,
     ]);
   } finally {
+    vi.useRealTimers();
     vi.mocked(runCmd).mockReset();
     vi.mocked(runCmd).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   }
