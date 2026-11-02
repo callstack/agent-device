@@ -74,6 +74,7 @@ export type ProviderLeaseDriver<Session, Handle, Request> = Readonly<{
   /** Identifies a rental, so one rental is stopped once whichever route named it. */
   handleKey(handle: Handle): string;
   /** Names what a lease rented after a restart or a rejected start; rejecting keeps the lease pending. */
+  // The table does not bound it, so each provider bounds it with its own request timeout.
   findByLease(lease: DeviceLease): Promise<Handle>;
   /** The error for an allocation that arrives or finishes while the runtime shuts down. */
   shuttingDown(lease: DeviceLease): Error;
@@ -251,15 +252,28 @@ class LeaseTable<Session, Handle, Request> {
     return this.entries.get(entry.lease.leaseId)?.generation === entry.generation;
   }
 
+  /** Every refusal names shutdown first, then a lease that is ending or replaced, else `fallback`. */
+  private refusal(
+    lease: DeviceLease,
+    entry: LeaseEntry<Session, Handle, Request> | undefined,
+    fallback: () => unknown,
+  ): unknown {
+    if (this.shuttingDown) return this.driver.shuttingDown(lease);
+    if (entry && (entry.phase === 'ending' || !this.isCurrent(entry))) {
+      return this.driver.releasing(lease);
+    }
+    return fallback();
+  }
+
   async allocate(
     lease: DeviceLease,
     request: Request,
     options: ProviderLeaseAllocateOptions<Request> = {},
   ): Promise<Session> {
     // Nothing between these checks and the entry's registration awaits, so no teardown is missed.
-    if (this.shuttingDown) throw this.driver.shuttingDown(lease);
     const existing = this.entries.get(lease.leaseId);
-    if (existing?.phase === 'ending') throw this.driver.releasing(lease);
+    if (this.shuttingDown || existing?.phase === 'ending')
+      throw this.refusal(lease, existing, () => 0);
     if (existing?.request !== undefined) options.requireJoinable?.(existing.request);
     const caller = callerBudget(options);
     const timeoutAt = Date.now() + this.driver.startTimeoutMs;
@@ -282,14 +296,17 @@ class LeaseTable<Session, Handle, Request> {
     deadline: number,
     budgetMs: number,
   ): Session {
-    if (this.shuttingDown) throw this.driver.shuttingDown(entry.lease);
-    if (outcome.status === 'failed') throw outcome.error;
-    // A release that started while this caller waited owns the device now.
-    if (entry.phase !== 'ready' || !this.isCurrent(entry)) throw this.driver.releasing(entry.lease);
-    // Checked at delivery, on a fresh start and on reuse alike: the session stays for callers in budget.
-    if (budgetSpent(caller, deadline)) {
-      throw this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
-    }
+    // A start that failed on its own reports its own error; only shutdown outranks it.
+    if (outcome.status === 'failed')
+      throw this.refusal(entry.lease, undefined, () => outcome.error);
+    // A release that started while this caller waited owns the device now. The budget is checked at
+    // delivery, on a fresh start and on reuse alike: the session stays for callers in budget.
+    const refused = this.refusal(entry.lease, entry, () =>
+      budgetSpent(caller, deadline)
+        ? this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest)
+        : undefined,
+    );
+    if (refused !== undefined) throw refused;
     return outcome.session;
   }
 
@@ -426,10 +443,12 @@ class LeaseTable<Session, Handle, Request> {
     startedAt: number,
   ): unknown {
     // A lease that is ending is why the callers get nothing, whatever the aborted start answered.
-    if (entry.phase === 'ending') return this.driver.releasing(entry.lease);
-    if (answer.status !== 'ready') return answer.error;
     const budgetMs = Math.max(0, entry.answerBy - startedAt);
-    return this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle);
+    return this.refusal(entry.lease, entry, () =>
+      answer.status === 'ready'
+        ? this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle)
+        : answer.error,
+    );
   }
 
   /**
@@ -469,7 +488,16 @@ class LeaseTable<Session, Handle, Request> {
   ): Promise<Outcome<Session>> {
     if (entry.phase === 'ready') return { status: 'ready', session: entry.session! };
     const budgetMs = Math.max(0, deadline - Date.now());
-    const giveUp = () => this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
+    // Guarded, so a throwing driver factory still settles this caller.
+    const giveUp = (): unknown => {
+      try {
+        return this.refusal(entry.lease, entry, () =>
+          this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest),
+        );
+      } catch (error) {
+        return error;
+      }
+    };
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), budgetMs);
     // Listened to directly rather than through `AbortSignal.any`, so a long-lived caller signal keeps no
@@ -482,9 +510,11 @@ class LeaseTable<Session, Handle, Request> {
       if (signals.some((signal) => signal.aborted)) throw giveUp();
       const gaveUp = new Promise<never>((_, reject) => {
         onAbort = () => {
+          // Built before this caller leaves: its own departure must not read as someone else's release.
+          const refusal = giveUp();
           entry.waiters.delete(waiter);
           this.abandonIfUnwanted(entry);
-          reject(giveUp());
+          reject(refusal);
         };
         for (const signal of signals) signal.addEventListener('abort', onAbort, { once: true });
       });
