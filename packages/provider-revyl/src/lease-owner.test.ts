@@ -91,6 +91,7 @@ test('release before the first allocation await refuses the device it takes', as
   h.start.resolve(started());
   h.stop.resolve(stopped());
   await disposal;
+  assert.equal(h.stops(), 1);
   assert.equal(await refused, true);
   assert.equal(h.runtime.hasLiveSession(device), false);
 });
