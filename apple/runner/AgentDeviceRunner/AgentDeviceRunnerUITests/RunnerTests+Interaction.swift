@@ -233,13 +233,18 @@ extension RunnerTests {
   // with no frame at all cannot be coordinate-tapped, otherwise the decision
   // is the shared TapPointPolicy center-in-frame rule (golden parity table
   // with the TS twin). app.frame is the frame source here — replay taps
-  // resolved bounds Maestro-style, so the union frame is intentional.
+  // resolved bounds Maestro-style, so the union frame is intentional. A
+  // lit-panel request uses its booked window, because app.frame names one
+  // panel, and refuses when no window is booked (ADR 0025).
   private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) -> Bool {
     let frame = element.frame
     if frame.isEmpty {
       return false
     }
     let windowFrame = requestLitPanel == nil ? app.frame : onScreenWindowFrame(app: app)
+    if requestLitPanel != nil, windowFrame.isNull {
+      return false
+    }
     return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: windowFrame)
   }
 

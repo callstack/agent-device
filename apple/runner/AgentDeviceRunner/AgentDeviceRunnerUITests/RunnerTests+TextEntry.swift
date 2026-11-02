@@ -516,8 +516,8 @@ extension RunnerTests {
 
   /// Resolves the target's input, with the snapshot the resolution read it through. A bound target
   /// accepts only an input whose snapshot carries its bound identity, so every post, read-back,
-  /// verification poll, and repair refuses an input that took the bound one's place. It re-reads a
-  /// target the request's focus read already resolved, so a lit-panel refusal here is no answer.
+  /// verification poll, and repair refuses an input that took the bound one's place. A lit-panel
+  /// refusal at the refresh point answers no input, never the app-wide reads after it.
   func resolveTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
     guard let boundIdentity = target.boundIdentity else {
       return resolveUnboundTextEntryInput(app: app, target: target)
@@ -537,11 +537,13 @@ extension RunnerTests {
        let read = textInputIfStillResolves(input, contentTranslation: target.contentTranslation) {
       return read
     }
-    if target.inputAtRefreshPoint == nil,
-       let refreshPoint = target.refreshPoint,
-       case .matches(let candidates)? = try? probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation),
-       let match = candidates.first(where: { $0.identity == boundIdentity }) {
-      return match
+    if target.inputAtRefreshPoint == nil, let refreshPoint = target.refreshPoint {
+      guard let probe = try? probeTextInputs(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) else {
+        return nil
+      }
+      if case .matches(let candidates) = probe, let match = candidates.first(where: { $0.identity == boundIdentity }) {
+        return match
+      }
     }
     if let focused = focusedTextInput(app: app), let input = boundInput(focused) {
       return input
@@ -617,9 +619,13 @@ extension RunnerTests {
     if let element = target.element, let input = read(element) {
       return input
     }
-    if let refreshPoint = target.refreshPoint,
-       let refreshed = try? textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y, contentTranslation: target.contentTranslation) {
-      return refreshed
+    if let refreshPoint = target.refreshPoint {
+      guard let candidates = try? textInputCandidatesAt(app: app, point: refreshPoint, contentTranslation: target.contentTranslation) else {
+        return nil
+      }
+      if let refreshed = candidates.first {
+        return refreshed
+      }
     }
     return focusedTextInput(app: app).flatMap(read)
   }

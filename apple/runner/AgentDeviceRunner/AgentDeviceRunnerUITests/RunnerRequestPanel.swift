@@ -59,19 +59,22 @@ extension RunnerTests {
   }
 
   /// Where an element read searches: the application, or on a lit-panel request only the windows
-  /// proven on the lit display, so a dark-panel element can never answer. A lit-panel window list
-  /// that cannot be read throws `APP_SCREEN_UNRESOLVED`, so no read can mistake it for no match.
+  /// proven on the lit display. A list that cannot be read throws `APP_SCREEN_UNRESOLVED`. The walk
+  /// runs inside an issue scope, so a window that vanishes mid-walk refuses instead of ending the
+  /// session (#2995).
   func elementSearchRoots(app: XCUIApplication) throws -> [XCUIElement] {
     guard let litPanel = requestLitPanel else { return [app] }
     if let cached = litPanelState.windows, cached.app === app { return cached.elements }
+    var windows: [XCUIElement]?
+    let walk = holdingRecordedIssues {
+      windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap { $0 as? XCUIElement }
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-    let unanswerable = litPanelWindowListUnanswerableForTesting
-#else
-    let unanswerable = false
+      if litPanelWindowWalkIssueForTesting {
+        record(XCTIssue(type: .assertionFailure, compactDescription: "Window vanished during the lit-panel walk"))
+      }
 #endif
-    guard !unanswerable,
-      let windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap({ $0 as? XCUIElement })
-    else {
+    }
+    guard walk.issues.isEmpty, walk.exceptionMessage == nil, let windows else {
       throw RunnerAppScreenCaptureFailure.unresolvedScreen
     }
     litPanelState.windows = (app, windows)

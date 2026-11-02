@@ -11,10 +11,8 @@ const PANEL_TABLE_UNREADABLE_HINT =
 
 /**
  * The lit panel a runner request names, read fresh per request because a fold changes it (ADR
- * 0025). The read never outlasts the request's `timeoutMs`; a read that spends all of it is
- * refused like an unread table, so the runner never gets a request with no time left. Undefined
- * keeps the runner's historic first-window route, which only a device not known to have more than
- * one panel may take.
+ * 0025). A read that spends the request's `timeoutMs` is refused like an unread table. Undefined
+ * keeps the historic first-window route, for a device not known to have more than one panel.
  */
 export async function resolveRunnerRequestLitPanel(
   device: DeviceInfo,

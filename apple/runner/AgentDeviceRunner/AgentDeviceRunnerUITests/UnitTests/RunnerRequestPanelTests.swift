@@ -98,7 +98,7 @@ extension RunnerTests {
 
   @MainActor
   private func tearDownLitPanelApp() {
-    litPanelWindowListUnanswerableForTesting = false
+    litPanelWindowWalkIssueForTesting = false
     setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
     invalidateCachedTarget(reason: "unit_test_cleanup")
     app.terminate()
@@ -133,11 +133,11 @@ extension RunnerTests {
     XCTAssertFalse(fellBack, "no read in the request may fall back to the app")
   }
 
-  /// The app's window is booked on the lit panel, and then its window list stops answering: an
-  /// element read refuses with the typed code instead of finding nothing, and a coordinate `type`
-  /// refuses before it taps a point with no target.
+  /// The app's window is booked on the lit panel, and then a window vanishes during the element
+  /// search's walk: the issue is held, the read refuses with the typed code instead of finding
+  /// nothing, and a coordinate `type` refuses before it taps a point with no target.
   @MainActor
-  func testElementReadsRefuseWhenTheLitPanelWindowListIsUnanswerable() throws {
+  func testElementReadsRefuseWhenTheLitPanelWindowWalkFails() throws {
     let (panel, frame) = launchAppOnTheLitPanel()
     defer { tearDownLitPanelApp() }
     for json in [
@@ -147,11 +147,40 @@ extension RunnerTests {
       let command = try runnerCommandFixture(json)
       setRequestLitPanel(from: command)
       XCTAssertNil(bookRequestLitPanelSurface(app: app), "the window is on the lit panel")
-      litPanelWindowListUnanswerableForTesting = true
+      litPanelWindowWalkIssueForTesting = true
       let response = try executeOnMainPrepared(command: command, activeApp: app)
-      litPanelWindowListUnanswerableForTesting = false
+      litPanelWindowWalkIssueForTesting = false
       XCTAssertEqual(response.error?.code, "APP_SCREEN_UNRESOLVED", json)
     }
+  }
+
+  /// A bound input re-read at its refresh point answers no input when the lit-panel walk fails: the
+  /// app-wide identifier query after it could name the dark panel's twin.
+  @MainActor
+  func testBoundInputReReadAnswersNoInputWhenTheLitPanelWalkFails() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    let (panel, _) = launchAppOnTheLitPanel()
+    defer {
+      app.launchArguments = []
+      tearDownLitPanelApp()
+    }
+    let identifier = "agent-device-hardware-keyboard-input"
+    let field = app.textFields[identifier]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let frame = field.frame
+    let target = TextEntryTarget(
+      element: nil,
+      refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+      prefersFocusedElement: false,
+      contentTranslation: .none,
+      boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: identifier)
+    )
+    let command = try runnerCommandFixture(#"{"command":"type",\#(panel)}"#)
+    setRequestLitPanel(from: command)
+    XCTAssertNotNil(resolveTextEntryInput(app: app, target: target), "the walk answers")
+    setRequestLitPanel(from: command)
+    litPanelWindowWalkIssueForTesting = true
+    XCTAssertNil(resolveTextEntryInput(app: app, target: target))
   }
 
   /// With a lit panel named, selector and point reads search only the windows on that display; the

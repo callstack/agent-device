@@ -170,26 +170,20 @@ extension RunnerTests {
   }
 
   /// A multi-panel snapshot runs only the tree backend, the one that proves which panel a window is
-  /// on, so a pin to another backend is refused as a request. It never reaches the capture plan and
-  /// leaves the cached target alone. `customActions` without a pin implies the private-ax pin, so
-  /// the refusal names it.
+  /// on, so a pin to another backend, or `customActions` implying one, is refused as a request.
   static func litPanelBackendPinRefusal(_ command: Command) -> Response? {
     guard let pinned = presentationOptions(from: command).preferredBackend,
       pinned != SnapshotBackendKind.recursiveTree.rawValue
     else {
       return nil
     }
-    let impliedByCustomActions = command.preferredBackend == nil
+    let cause = command.preferredBackend == nil ? "customActions" : "the \(pinned) backend pin"
     return Response(
       ok: false,
       error: ErrorPayload(
         code: "UNSUPPORTED_OPERATION",
-        message: impliedByCustomActions
-          ? "a multi-panel snapshot runs only the tree backend, so customActions, which only the \(pinned) backend reads, cannot be served"
-          : "a multi-panel snapshot runs only the tree backend, so the \(pinned) backend cannot be pinned",
-        hint: impliedByCustomActions
-          ? "Snapshot without customActions: only the tree backend proves which panel a window is on (ADR 0025)."
-          : "Snapshot without a backend pin: only the tree backend proves which panel a window is on (ADR 0025)."
+        message: "a multi-panel snapshot runs only the tree backend, so \(cause) cannot be served",
+        hint: "Snapshot without \(cause): only the tree backend proves which panel a window is on (ADR 0025)."
       )
     )
   }
