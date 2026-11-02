@@ -37,7 +37,7 @@ extension RunnerTests {
   /// The OS's own SchemeApproval strings supply the wording: a French or Japanese device reads the
   /// confirmation, and `accept` picks its open button where the English labels cannot.
   func testSystemStringsRecognizeAndAnswerTheLocalizedLaunchConfirmation() {
-    let languages = ["fr-FR", "ja-JP"]
+    let languages = ["fr-FR", "ja-JP", "fi-FI"]
     let prompt = RunnerLaunchConfirmationPrompt.fromSystemStrings(languages: languages)
     let vocabulary = RunnerAlertLabelVocabulary.fromSystemStrings(languages: languages)
 
@@ -47,6 +47,9 @@ extension RunnerTests {
 
     XCTAssertTrue(prompt.recognizes(title: "“テスト”で開きますか?", buttons: ["キャンセル", "開く"]))
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["キャンセル", "開く"], action: "accept", vocabulary: vocabulary), 1)
+
+    XCTAssertTrue(prompt.recognizes(title: "Avataanko Testi-apissa?", buttons: ["Kumoa", "Avaa"]))
+    XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["Kumoa", "Avaa"], action: "accept", vocabulary: vocabulary), 1)
 
     XCTAssertFalse(prompt.recognizes(title: "Öffnen in „Test“?", buttons: ["Abbrechen", "Öffnen"]), "German is not preferred")
   }
