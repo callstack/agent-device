@@ -392,14 +392,16 @@ export class LeaseRegistry {
       },
     };
     const holds = this.holdsByDevice.get(key) ?? new Map<string, OwnedHumanControlHold>();
+    const current = existing?.hold.state === 'active' ? existing : pending;
     this.holdsByDevice.set(key, holds);
-    holds.set(id, pending);
-    return await this.activateHumanControlHold(key, pending, input.ttlMs, signal);
+    holds.set(id, current);
+    return await this.activateHumanControlHold(key, pending, current, input.ttlMs, signal);
   }
 
   private async activateHumanControlHold(
     key: string,
     pending: OwnedHumanControlHold,
+    current: OwnedHumanControlHold,
     ttlMs: number | undefined,
     signal?: AbortSignal,
   ): Promise<HumanControlHold> {
@@ -408,7 +410,7 @@ export class LeaseRegistry {
     try {
       await this.mutations.wait(key, signal);
       signal?.throwIfAborted();
-      if (holds.get(id) !== pending) {
+      if (holds.get(id) !== current) {
         throw new AppError(
           'COMMAND_FAILED',
           'Human-control hold changed before activation completed.',
@@ -422,6 +424,7 @@ export class LeaseRegistry {
         updatedAt: activatedAt,
         ...(ttlMs === undefined ? {} : { expiresAt: activatedAt + ttlMs }),
       };
+      holds.set(id, pending);
       this.refreshHeldLease(key, activatedAt);
       return cloneHumanControlHold(pending.hold);
     } catch (error) {
