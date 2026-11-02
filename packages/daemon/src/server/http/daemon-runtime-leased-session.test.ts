@@ -92,6 +92,38 @@ test.each([
   expect(other.result?.ok, JSON.stringify(other)).toBe(true);
 });
 
+test('a client that names no session is refused before a provider lease is allocated', async () => {
+  const { backend: leaseBackend, ...scope } = PROXY_SCOPE;
+
+  const refused = await rpc('agent_device.command', {
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    meta: { ...scope, leaseBackend, sessionExplicit: false },
+  });
+
+  expectSessionRequired(refused);
+  const other = await allocate({ ...PROXY_SCOPE, clientId: 'client-b', session: 'agent-b' });
+  expect(other.result?.ok, JSON.stringify(other)).toBe(true);
+});
+
+test.each([
+  ['in its meta', { sessionExplicit: true }, {}],
+  ['in its flags', { sessionExplicit: false }, { session: 'default' }],
+])('a client that names the default session %s is not refused', async (_label, meta, flags) => {
+  const { backend: leaseBackend, ...scope } = PROXY_SCOPE;
+
+  const allocated = await rpc('agent_device.command', {
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    flags,
+    meta: { ...scope, leaseBackend, ...meta },
+  });
+
+  expect(allocated.result?.ok, JSON.stringify(allocated)).toBe(true);
+});
+
 test('an unnamed heartbeat is refused and the named lease stays usable', async () => {
   const leaseId = await allocateNamedLease('agent-a');
 

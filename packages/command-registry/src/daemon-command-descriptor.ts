@@ -39,6 +39,12 @@ export type DaemonCommandDescriptor<TRequest = DispatchedCommand> = {
   refFrameEffect?: DaemonRefFrameEffect<TRequest>;
   leaseAdmissionExempt?: boolean;
   /**
+   * This command uses neither the lease nor the device of the session it resolves, so only a lease
+   * it carries itself can make an unnamed request need a session. A command without it acts through
+   * that session and stays refused.
+   */
+  ignoresSessionLease?: boolean;
+  /**
    * ADR 0007: this command may run under a `macos-app` lease, or on a daemon whose policy requires
    * one. A command without it is refused there, `leaseAdmissionExempt` or not, so a command
    * added later stays out until it opts in.

@@ -93,6 +93,7 @@ Configure the client directly when your Node.js process manages the BrowserStack
 import { createAgentDeviceClient } from 'agent-device';
 
 const client = createAgentDeviceClient({
+  session: 'checkout-android',
   leaseProvider: 'browserstack',
   platform: 'android',
   device: 'Google Pixel 8',
