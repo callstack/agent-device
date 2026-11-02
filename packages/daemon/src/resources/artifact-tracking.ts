@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { finished } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -17,6 +18,7 @@ import {
 // --- Downloadable artifact tracking ---
 
 const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
+const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
 const DOWNLOADABLE_ARTIFACT_RESOURCE: TenantOwnedResourceKind = {
   label: 'Artifact',
@@ -37,6 +39,12 @@ type ArtifactSourceCleanup = {
   deleteAfterDownload: boolean;
 };
 
+type ArtifactDownload = {
+  controller: AbortController;
+  stream?: fs.ReadStream;
+  release: () => void;
+};
+
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
@@ -48,7 +56,8 @@ type ArtifactEntry = {
   createdAt: number;
   directoryArchive?: DirectoryArchive;
   directoryArchivePromise?: Promise<DirectoryArchive>;
-  activeDownloads: number;
+  archiveAbortController?: AbortController;
+  activeDownloads: Set<ArtifactDownload>;
   cleanupRequested: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -66,6 +75,7 @@ const artifactTracking = (): ArtifactTrackingState =>
     (state) => {
       for (const [id, entry] of state.artifacts) {
         requestArtifactCleanup(state.artifacts, id, entry);
+        for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
       }
       for (const entry of state.uploads.values()) {
         clearTimeout(entry.timer);
@@ -97,6 +107,13 @@ type PreparedDownloadableArtifact = {
   sizeBytes: number;
 };
 
+export type OpenedDownloadableArtifact = PreparedDownloadableArtifact & {
+  stream: fs.ReadStream;
+  signal: AbortSignal;
+  /** Release ownership after the download pipeline settles, including failure. */
+  release: () => void;
+};
+
 /**
  * Registers one file for download and returns its id. A file the same tenant can already download
  * returns its existing entry unchanged: two ids for one file would each delete it after their own
@@ -125,7 +142,7 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
     sourceCleanup,
-    activeDownloads: 0,
+    activeDownloads: new Set(),
     cleanupRequested: false,
     createdAt,
     timer,
@@ -159,16 +176,26 @@ export async function openDownloadableArtifact(
   artifactId: string,
   tenantId: string | undefined,
   hostEnv: NodeJS.ProcessEnv,
-): Promise<PreparedDownloadableArtifact & { stream: fs.ReadStream }> {
+): Promise<OpenedDownloadableArtifact> {
   const artifacts = pendingArtifacts();
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
-  entry.activeDownloads += 1;
-  const release = () => {
-    entry.activeDownloads -= 1;
-    if (entry.cleanupRequested) requestArtifactCleanup(artifacts, artifactId, entry);
+  const download: ArtifactDownload = {
+    controller: new AbortController(),
+    release: () => {
+      if (!entry.activeDownloads.delete(download)) return;
+      clearTimeout(deadline);
+      if (entry.cleanupRequested) requestArtifactCleanup(artifacts, artifactId, entry);
+    },
   };
+  entry.activeDownloads.add(download);
+  const deadline = setTimeout(
+    () => cancelArtifactDownload(artifactId, entry, download),
+    ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
+  );
+  deadline.unref();
   try {
     const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
+    download.controller.signal.throwIfAborted();
     if (!payload) {
       throw new AppError(
         'COMMAND_FAILED',
@@ -176,12 +203,29 @@ export async function openDownloadableArtifact(
       );
     }
     const stream = fs.createReadStream(payload.artifactPath);
-    stream.once('close', release);
-    return { ...payload, stream };
+    download.stream = stream;
+    return { ...payload, stream, signal: download.controller.signal, release: download.release };
   } catch (error) {
-    release();
+    download.release();
     throw error;
   }
+}
+
+function cancelArtifactDownload(
+  artifactId: string,
+  entry: ArtifactEntry,
+  download: ArtifactDownload,
+): void {
+  if (!entry.activeDownloads.has(download)) return;
+  const reason = expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  download.controller.abort(reason);
+  if (!download.stream) {
+    entry.archiveAbortController?.abort(reason);
+    return;
+  }
+  const closed = finished(download.stream, { cleanup: true }).catch(() => {});
+  download.stream.destroy();
+  void closed.then(download.release);
 }
 
 export async function listDownloadableArtifacts(
@@ -316,6 +360,8 @@ async function createDirectoryArchive(
     path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
   );
   const archivePath = path.join(tempDir, fileName);
+  const controller = new AbortController();
+  entry.archiveAbortController = controller;
   try {
     await runCmd(
       'tar',
@@ -328,12 +374,15 @@ async function createDirectoryArchive(
         path.basename(entry.artifactPath),
       ],
       {
+        signal: controller.signal,
+        timeoutMs: ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
         env: {
           ...hostEnv,
           COPYFILE_DISABLE: '1',
         },
       },
     );
+    controller.signal.throwIfAborted();
     const archive = {
       archivePath,
       tempDir,
@@ -341,13 +390,14 @@ async function createDirectoryArchive(
       sizeBytes: fs.statSync(archivePath).size,
     };
     // Inventory can expire while tar is still archiving.
-    if (entry.cleanupRequested && entry.activeDownloads === 0) {
+    if (entry.cleanupRequested && entry.activeDownloads.size === 0) {
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
     entry.directoryArchive = archive;
     return archive;
   } catch (error) {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    if (controller.signal.aborted) throw controller.signal.reason;
     if (error instanceof AppError) throw error;
     throw new AppError(
       'COMMAND_FAILED',
@@ -355,6 +405,8 @@ async function createDirectoryArchive(
       { artifactPath: entry.artifactPath },
       error instanceof Error ? error : undefined,
     );
+  } finally {
+    if (entry.archiveAbortController === controller) entry.archiveAbortController = undefined;
   }
 }
 
@@ -397,7 +449,10 @@ function requestArtifactCleanup(
 ): void {
   entry.cleanupRequested = true;
   clearTimeout(entry.timer);
-  if (entry.activeDownloads > 0 || artifacts.get(artifactId) !== entry) return;
+  if (entry.activeDownloads.size > 0 || artifacts.get(artifactId) !== entry) return;
+  entry.archiveAbortController?.abort(
+    expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId),
+  );
   artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
   entry.sourceCleanup.remainingEntries -= 1;

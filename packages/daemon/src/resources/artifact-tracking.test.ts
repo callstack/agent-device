@@ -11,6 +11,7 @@ import {
   openDownloadableArtifact,
   trackDownloadableArtifact,
   trackUploadedArtifact,
+  type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
 
 test('disposing a runtime removes the temporary files it still tracks', () => {
@@ -71,7 +72,7 @@ test.each(
     const payloadPath = path.join(artifactPath, 'payload');
     fs.writeFileSync(payloadPath, 'original capture marker');
     const runtime = createRuntimeStateHandle();
-    const streams: fs.ReadStream[] = [];
+    const downloads: OpenedDownloadableArtifact[] = [];
     const track = (deleteAfterDownload = true) =>
       runtime.run(() =>
         trackDownloadableArtifact({
@@ -82,16 +83,19 @@ test.each(
         }),
       );
     const open = async (id: string) => {
-      const artifact = await runtime.run(() =>
+      const artifact: OpenedDownloadableArtifact = await runtime.run(() =>
         openDownloadableArtifact(id, 'tenant-a', process.env),
       );
-      streams.push(artifact.stream);
-      return artifact.stream;
+      downloads.push(artifact);
+      return artifact;
     };
-    const read = async (stream: fs.ReadStream, expected: string) => {
+    const read = async (download: OpenedDownloadableArtifact, expected: string) => {
+      const { stream } = download;
       const closed = once(stream, 'close');
       const bytes = await buffer(stream);
       await closed;
+      download.release();
+      download.release();
       expect(gunzipSync(bytes).includes(Buffer.from(expected))).toBe(true);
       expect(fs.existsSync(path.dirname(String(stream.path)))).toBe(false);
     };
@@ -115,11 +119,13 @@ test.each(
       }
       expect(fs.existsSync(artifactPath)).toBe(!deleteAfterDownload);
     } finally {
-      for (const stream of streams) {
-        if (stream.closed) continue;
-        const closed = once(stream, 'close');
-        stream.destroy();
-        await closed;
+      for (const download of downloads) {
+        if (!download.stream.closed) {
+          const closed = once(download.stream, 'close');
+          download.stream.destroy();
+          await closed;
+        }
+        download.release();
       }
       runtime.dispose();
     }

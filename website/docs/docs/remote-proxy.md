@@ -87,6 +87,8 @@ destination on your machine. Direct RPC callers receive artifact IDs and downloa
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.
+Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it
+and cleans up after its pipeline stops.
 
 Remote requests ignore `meta.cwd`. They refuse host tooling paths, `--launch-console`, and script
 publication with reason `REMOTE_HOST_INPUT_DENIED`. They also refuse daemon host paths as `install`

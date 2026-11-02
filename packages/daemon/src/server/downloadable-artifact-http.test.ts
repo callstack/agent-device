@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
@@ -15,6 +16,204 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+type DownloadFixture = {
+  source: string;
+  runtime: ReturnType<typeof createRuntimeStateHandle>;
+  streams: fs.ReadStream[];
+  start(): void;
+  abortClient(): void;
+  failResponse(): void;
+  outcome(): 'pending' | 'complete' | 'failed';
+  cleanupCount(): number;
+  expire(): void;
+  fireDeadlines(): void;
+};
+
+async function withDownloadFixture(
+  run: (fixture: DownloadFixture) => Promise<void>,
+  configureStream: (stream: fs.ReadStream) => void,
+): Promise<void> {
+  const root = mkdtempForTestSync('fu-art-pipeline-');
+  const source = path.join(root, 'capture.trace');
+  fs.mkdirSync(source);
+  fs.writeFileSync(path.join(source, 'payload'), crypto.randomBytes(256 * 1024));
+  const runtime = createRuntimeStateHandle();
+  const server = await runtime.run(() =>
+    createDaemonHttpServer({
+      token: 'fu-art-secret',
+      handleRequest: async () => ({ ok: true, data: {} }),
+      env: process.env,
+      cwd: process.cwd(),
+    }),
+  );
+  const port = await listenOnLoopback(server);
+  let activeResponse: http.ServerResponse | undefined;
+  server.on('request', (_request, response) => {
+    activeResponse = response;
+  });
+  const timers = vi.spyOn(globalThis, 'setTimeout');
+  const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
+  const id = runtime.run(() =>
+    trackDownloadableArtifact({ artifactPath: source, artifactType: 'trace-log' }),
+  );
+  const expire = timers.mock.calls[0]![0];
+  const removed = vi.spyOn(fs, 'rmSync');
+  const streams: fs.ReadStream[] = [];
+  const createReadStream = fs.createReadStream;
+  const reads = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+    const stream = createReadStream(file, options);
+    streams.push(stream);
+    configureStream(stream);
+    return stream;
+  });
+  const agent = new http.Agent({ keepAlive: true });
+  let request: http.ClientRequest | undefined;
+  let outcome: 'pending' | 'complete' | 'failed' = 'pending';
+  try {
+    await run({
+      source,
+      runtime,
+      streams,
+      start: () => {
+        request = http.get(
+          `http://127.0.0.1:${port}/artifacts/${id}`,
+          {
+            agent,
+            headers: { authorization: 'Bearer fu-art-secret' },
+          },
+          (response) => {
+            response.on('end', () => {
+              outcome = 'complete';
+            });
+            response.on('aborted', () => {
+              outcome = 'failed';
+            });
+            response.on('error', () => {
+              outcome = 'failed';
+            });
+            response.resume();
+          },
+        );
+        request.on('error', () => {
+          outcome = 'failed';
+        });
+      },
+      abortClient: () => request?.destroy(),
+      failResponse: () => activeResponse?.destroy(new Error('injected response failure')),
+      outcome: () => outcome,
+      cleanupCount: () => removed.mock.calls.filter(([target]) => target === source).length,
+      expire: () => runtime.run(expire),
+      fireDeadlines: () => {
+        for (const [index, [callback, delay]] of timers.mock.calls.entries()) {
+          const handle = timers.mock.results[index]!.value;
+          if (
+            delay !== 15 * 60 * 1000 ||
+            clearedTimers.mock.calls.some(([cleared]) => cleared === handle)
+          )
+            continue;
+          runtime.run(callback);
+        }
+      },
+    });
+  } finally {
+    request?.destroy();
+    agent.destroy();
+    for (const stream of streams) {
+      if (stream.closed) continue;
+      const closed = new Promise<void>((resolve) => stream.once('close', resolve));
+      stream.destroy();
+      await closed;
+    }
+    reads.mockRestore();
+    timers.mockRestore();
+    clearedTimers.mockRestore();
+    await closeLoopbackServer(server);
+    runtime.dispose();
+    removed.mockRestore();
+  }
+}
+
+test.each(['destroyed', 'truncated', 'errored'] as const)(
+  'a %s artifact read terminates the HTTP response',
+  async (failure) => {
+    await withDownloadFixture(
+      async (fixture) => {
+        fixture.start();
+        await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
+        fixture.expire();
+        await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+        expect(fixture.cleanupCount()).toBe(1);
+      },
+      (stream) => {
+        if (failure === 'truncated') {
+          stream.once('open', () =>
+            fs.truncateSync(String(stream.path), fs.statSync(String(stream.path)).size - 1),
+          );
+        } else {
+          let chunks = 0;
+          stream.on('data', () => {
+            if (++chunks === 2)
+              stream.destroy(
+                failure === 'errored' ? new Error('injected read failure') : undefined,
+              );
+          });
+        }
+      },
+    );
+  },
+);
+
+test.each(['deadline', 'runtime disposal'] as const)(
+  '%s cancels an active download and removes its files',
+  async (trigger) => {
+    const started = deferred();
+    await withDownloadFixture(
+      async (fixture) => {
+        fixture.start();
+        await started.promise;
+        if (trigger === 'deadline') fixture.fireDeadlines();
+        else fixture.runtime.dispose();
+        await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
+        await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+        expect(fixture.streams.every((stream) => stream.closed)).toBe(true);
+        expect(fixture.cleanupCount()).toBe(1);
+        for (const stream of fixture.streams) {
+          expect(fs.existsSync(path.dirname(String(stream.path)))).toBe(false);
+        }
+      },
+      (stream) =>
+        stream.once('data', () => {
+          stream.pause();
+          started.resolve();
+        }),
+    );
+  },
+);
+
+test.each(['client abort', 'response error'] as const)(
+  '%s releases an active download before expiry cleanup',
+  async (failure) => {
+    const started = deferred();
+    await withDownloadFixture(
+      async (fixture) => {
+        fixture.start();
+        await started.promise;
+        if (failure === 'client abort') fixture.abortClient();
+        else fixture.failResponse();
+        await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
+        fixture.expire();
+        await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+        expect(fixture.cleanupCount()).toBe(1);
+      },
+      (stream) =>
+        stream.once('data', () => {
+          stream.pause();
+          started.resolve();
+        }),
+    );
+  },
+);
 
 test('a directory artifact expires after download header setup throws', async () => {
   const root = mkdtempForTestSync('fu-art-header-error-');
@@ -42,12 +241,20 @@ test('a directory artifact expires after download header setup throws', async ()
   const expire = timer.mock.calls[0]![0];
   timer.mockRestore();
   const streams = vi.spyOn(fs, 'createReadStream');
+  const controller = new AbortController();
   try {
     const response = await fetch(`http://127.0.0.1:${port}/artifacts/${artifactId}`, {
       headers: { authorization: 'Bearer fu-art-secret' },
+      signal: controller.signal,
     });
     expect(response.status).toBe(500);
-    await response.body?.cancel();
+    let body: unknown;
+    const consumed = response.json().then((value: unknown) => {
+      body = value;
+    });
+    void consumed.catch(() => {});
+    await vi.waitFor(() => expect(body).toMatchObject({ ok: false }));
+    await consumed;
     const stream = streams.mock.results[0]!.value as fs.ReadStream;
     const archiveDir = path.dirname(String(stream.path));
     runtime.run(expire);
@@ -55,6 +262,7 @@ test('a directory artifact expires after download header setup throws', async ()
     expect(stream.closed).toBe(true);
     expect(fs.existsSync(archiveDir)).toBe(false);
   } finally {
+    controller.abort();
     for (const result of streams.mock.results) {
       const stream = result.value as fs.ReadStream;
       if (stream.closed) continue;
