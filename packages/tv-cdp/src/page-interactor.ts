@@ -13,7 +13,7 @@ import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
-import { connectCdp, listTargets } from './cdp.ts';
+import { connectCdp, listTargets, withTunnelRemoval } from './cdp.ts';
 import { keyEvents, supportedRemoteButtons, type KeyDefinition, type RemoteKeys } from './keys.ts';
 import { createPageLog, type PageLog } from './page-log.ts';
 import { SNAPSHOT_EXPRESSION, type SnapshotCapture } from './snapshot.ts';
@@ -41,8 +41,9 @@ async function attachPage(
   timeoutMs = 30_000,
 ) {
   if (session.released) {
-    tunnel.close();
-    throw interruptedOpen(session, appId);
+    session.tunnel = tunnel;
+    detachPage(session);
+    return await failAfterTeardown(session, interruptedOpen(session, appId), signal);
   }
   // Teardown closes only what the session holds, so the tunnel goes on it before the first await.
   session.tunnel = tunnel;
@@ -79,9 +80,13 @@ async function attachPage(
       });
     }
   } catch (error) {
-    if (!attached()) throw interruptedOpen(session, appId);
-    detachPage(session);
-    throw error;
+    const interrupted = !attached();
+    if (!interrupted) detachPage(session);
+    return await failAfterTeardown(
+      session,
+      interrupted ? interruptedOpen(session, appId) : error,
+      signal,
+    );
   }
   watchTarget(session, tunnel);
 }
@@ -121,12 +126,66 @@ function appLog(session: TvSession, appId: string): PageLog {
   return created;
 }
 
+// A page can drop with no request to report a failed tunnel removal to, so the session keeps the
+// first failure until a close or release can.
 export function detachPage(session: TvSession) {
-  session.page?.close();
-  session.tunnel?.close();
+  const { page, tunnel } = session;
   session.page = undefined;
   session.tunnel = undefined;
   session.appId = undefined;
+  page?.close();
+  if (!tunnel) return;
+  const previous = session.teardown;
+  const removal = tunnel.close().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  session.teardown = Promise.all([previous, removal]).then(
+    ([earlier, latest]) => earlier ?? latest,
+  );
+}
+
+/**
+ * Waits for every tunnel the session closed and resolves true, or resolves false as soon as the
+ * request is cancelled; a removal still running keeps its outcome for a later close or release.
+ */
+async function settleTeardown(session: TvSession, signal: AbortSignal | undefined) {
+  const { teardown } = session;
+  if (!teardown) return true;
+  if (!signal) {
+    await teardown;
+    return true;
+  }
+  if (signal.aborted) return false;
+  return await new Promise<boolean>((resolve) => {
+    const cancelled = () => resolve(false);
+    signal.addEventListener('abort', cancelled, { once: true });
+    void teardown.then(() => {
+      signal.removeEventListener('abort', cancelled);
+      resolve(true);
+    });
+  });
+}
+
+/** Waits for every tunnel the session closed, and throws the first failed removal once. */
+export async function finishTeardown(session: TvSession) {
+  const failure = await session.teardown;
+  session.teardown = undefined;
+  if (failure) throw failure;
+}
+
+/** Throws the error that ended the operation, naming a tunnel removal that failed in time with it. */
+async function failAfterTeardown(
+  session: TvSession,
+  primary: unknown,
+  signal: AbortSignal | undefined,
+): Promise<never> {
+  if (await settleTeardown(session, signal)) {
+    const failure = await session.teardown;
+    session.teardown = undefined;
+    if (failure) throw withTunnelRemoval(primary, failure);
+  }
+  throw primary;
 }
 
 export function createPageInteractor(
@@ -192,6 +251,7 @@ export function createPageInteractor(
   return {
     async open(app, options) {
       detachPage(session);
+      await settleTeardown(session, signal);
       const tunnel = await tv.launch(app, {
         relaunch: options?.terminateRunningApp === true,
         signal,
@@ -202,7 +262,12 @@ export function createPageInteractor(
     openDevice: unsupported('Opening the device without an app'),
     async close(app) {
       detachPage(session);
-      await tv.close(app);
+      try {
+        await tv.close(app, { signal });
+      } catch (error) {
+        return await failAfterTeardown(session, error, signal);
+      }
+      await finishTeardown(session);
     },
     async tap(x, y) {
       await press(x, y, 100);

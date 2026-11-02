@@ -27,14 +27,15 @@ export function createWebosRuntime(options: WebosOptions, host: WebosRuntimeHost
     }
     const tv = ares.forDevice(device.name);
     return {
+      id: device.endpoint,
       name: device.name,
       launch: async (appId, { relaunch, signal }) => {
         if (relaunch) await tv.close(appId, signal).catch(() => {});
         await tv.launch(appId, signal);
         return await tv.inspect(appId, signal);
       },
-      close: (appId) => tv.close(appId),
-      listApps: tv.listApps,
+      close: (appId, options) => tv.close(appId, options?.signal),
+      listApps: (options) => tv.listApps(options?.signal),
     };
   }
 
