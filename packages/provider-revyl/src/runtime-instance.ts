@@ -3,8 +3,8 @@ import { REVYL_PROVIDER } from './device.ts';
 import { REVYL_DEFAULT_BACKEND_URL, resolveRevylBackendUrl } from './revyl-client.ts';
 
 /**
- * The stable identity of one Revyl runtime, and so of one owner. Two runtimes that rent devices for
- * the same account against the same origin share it; two accounts never do.
+ * The stable identity of one Revyl runtime, and so of one owner: one per account and origin. The
+ * instance travels into diagnostics, so `providerRuntimeInstance` digests the principal, never carries it.
  */
 export function resolveRevylRuntimeInstance(
   options: Readonly<{

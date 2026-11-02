@@ -249,7 +249,7 @@ function createRevylLeaseDriver(
       new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
         reason: 'provider-lease-releasing',
         leaseId: lease.leaseId,
-        hint: 'Connect again to rent a device under a new lease.',
+        hint: 'Run open again; it allocates a new lease and rents a fresh device.',
       }),
     gaveUp: (lease, caller, budgetMs, rented) =>
       revylCallerGaveUp(

@@ -174,4 +174,5 @@ takes when the daemon loads the plugin from the plugin store.
 - A device that Revyl released while your session was open reports `provider-session-gone`. Run
   `close` and `open` again to rent a fresh one.
 - An `open` still waiting for its device when its lease is released reports `provider-lease-releasing`.
-  That lease is ending; run `open` again, which allocates a new lease and rents a fresh device.
+  That lease is ending; run `open` again, which allocates a new lease and rents a fresh device. An
+  `open` that names no deadline stops waiting for a device after 370 s.
