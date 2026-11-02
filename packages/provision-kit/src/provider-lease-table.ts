@@ -156,6 +156,10 @@ type Rental<Handle> =
 
 type StopFailure = Readonly<{ cause: unknown }>;
 
+type StartAnswer<Session, Handle> =
+  | ProviderLeaseStart<Session, Handle>
+  | Readonly<{ status: 'rejected'; error: unknown }>;
+
 type Ended<Session, Handle> =
   | Readonly<{ status: 'stopped'; handle: Handle; session: Session | undefined }>
   | Readonly<{ status: 'nothing-rented' }>
@@ -342,10 +346,23 @@ class LeaseTable<Session, Handle, Request> {
     caller: ProviderLeaseBudget,
   ): Promise<Outcome<Session>> {
     const startedAt = Date.now();
-    let started: ProviderLeaseStart<Session, Handle> | undefined;
-    let rejection: unknown;
+    const answer = await this.callStart(entry, request, caller);
+    recordAnswer(entry, answer);
+    if (answer.status === 'ready' && !entry.releasing && entry.waiters > 0) {
+      entry.session = answer.session;
+      return { status: 'ready', session: answer.session };
+    }
+    return await this.endFailedStart(entry, this.startFailure(entry, answer, caller, startedAt));
+  }
+
+  /** The start's answer, with a rejection read as an answer that may have rented. */
+  private async callStart(
+    entry: LeaseEntry<Session, Handle, Request>,
+    request: Request,
+    caller: ProviderLeaseBudget,
+  ): Promise<StartAnswer<Session, Handle>> {
     try {
-      started = await this.driver.start(entry.lease, request, {
+      return await this.driver.start(entry.lease, request, {
         caller,
         deadline: entry.deadline,
         rented: (handle) => {
@@ -353,36 +370,31 @@ class LeaseTable<Session, Handle, Request> {
         },
       });
     } catch (error) {
-      rejection = error;
+      return { status: 'rejected', error };
     }
-    if (started === undefined) {
-      if (entry.rental.kind !== 'held') entry.rental = { kind: 'unknown' };
-    } else if (started.status === 'ready') {
-      entry.rental = { kind: 'held', handle: started.handle };
-    } else {
-      entry.rental =
-        started.rented === undefined ? { kind: 'none' } : { kind: 'held', handle: started.rented };
-    }
-    entry.answered = true;
-    entry.markAnswered();
-    let error: unknown;
-    if (started?.status === 'ready') {
-      if (!entry.releasing && entry.waiters > 0) {
-        entry.session = started.session;
-        return { status: 'ready', session: started.session };
-      }
-      error = entry.releasing
-        ? this.driver.releasing(entry.lease)
-        : this.driver.gaveUp(
-            entry.lease,
-            caller,
-            Math.max(0, entry.deadline - startedAt),
-            started.handle,
-          );
-    } else {
-      error = started === undefined ? rejection : started.error;
-    }
-    // A release, recovery, or drain already owns the teardown, and it waits on this answer.
+  }
+
+  /** Why a start that hands out no session failed, for the callers still waiting on it. */
+  private startFailure(
+    entry: LeaseEntry<Session, Handle, Request>,
+    answer: StartAnswer<Session, Handle>,
+    caller: ProviderLeaseBudget,
+    startedAt: number,
+  ): unknown {
+    if (answer.status !== 'ready') return answer.error;
+    if (entry.releasing) return this.driver.releasing(entry.lease);
+    const budgetMs = Math.max(0, entry.deadline - startedAt);
+    return this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle);
+  }
+
+  /**
+   * Tears down a start that hands out no session. A release, recovery, or drain that already owns the
+   * teardown waits on this answer, so the start only nudges it.
+   */
+  private async endFailedStart(
+    entry: LeaseEntry<Session, Handle, Request>,
+    error: unknown,
+  ): Promise<Outcome<Session>> {
     if (entry.releasing) {
       void this.teardown(entry).catch(() => undefined);
       return { status: 'failed', error };
@@ -459,37 +471,49 @@ class LeaseTable<Session, Handle, Request> {
   ): Promise<Ended<Session, Handle>> {
     for (;;) {
       await this.untilAnswered(entry);
-      if (entry.rental.kind === 'unknown') {
-        try {
-          const handle = await this.driver.findByLease(entry.lease);
-          if (entry.rental.kind === 'unknown') entry.rental = { kind: 'held', handle };
-        } catch (error) {
-          return { status: 'pending', handle: undefined, cause: error };
-        }
+      const unnamed = await this.nameRental(entry);
+      if (unnamed !== undefined) return unnamed;
+      const handle = entry.rental.kind === 'held' ? entry.rental.handle : undefined;
+      if (handle === undefined || entry.stopped === this.driver.handleKey(handle)) {
+        return this.finishTeardown(entry, handle);
       }
-      const rental = entry.rental;
-      if (rental.kind === 'held' && entry.stopped !== this.driver.handleKey(rental.handle)) {
-        const failure = await this.stop(entry, rental.handle);
-        if (failure !== undefined) {
-          return { status: 'pending', handle: rental.handle, cause: failure.cause };
-        }
-        // The start may have answered, or named another rental, while the stop ran.
-        continue;
-      }
-      const handle = rental.kind === 'held' ? rental.handle : undefined;
-      if (!entry.answered) {
-        // The start may still rent something, so the entry stays for the teardown its answer starts.
-        return {
-          status: 'pending',
-          handle,
-          cause: new Error('The provider start did not answer within its start timeout.'),
-        };
-      }
-      if (this.entries.get(entry.lease.leaseId) === entry) this.entries.delete(entry.lease.leaseId);
-      return handle === undefined
-        ? { status: 'nothing-rented' }
-        : { status: 'stopped', handle, session: entry.session };
+      const failure = await this.stop(entry, handle);
+      if (failure !== undefined) return { status: 'pending', handle, cause: failure.cause };
+      // The start may have answered, or named another rental, while the stop ran.
     }
+  }
+
+  /** Asks the provider for a rental this process may hold but cannot name. */
+  private async nameRental(
+    entry: LeaseEntry<Session, Handle, Request>,
+  ): Promise<Ended<Session, Handle> | undefined> {
+    if (entry.rental.kind !== 'unknown') return undefined;
+    try {
+      const handle = await this.driver.findByLease(entry.lease);
+      if (entry.rental.kind === 'unknown') entry.rental = { kind: 'held', handle };
+      return undefined;
+    } catch (error) {
+      return { status: 'pending', handle: undefined, cause: error };
+    }
+  }
+
+  /** Forgets an entry whose rentals are all stopped, unless its start may still rent something. */
+  private finishTeardown(
+    entry: LeaseEntry<Session, Handle, Request>,
+    handle: Handle | undefined,
+  ): Ended<Session, Handle> {
+    if (!entry.answered) {
+      // The entry stays for the teardown that the start's answer starts.
+      return {
+        status: 'pending',
+        handle,
+        cause: new Error('The provider start did not answer within its start timeout.'),
+      };
+    }
+    if (this.entries.get(entry.lease.leaseId) === entry) this.entries.delete(entry.lease.leaseId);
+    return handle === undefined
+      ? { status: 'nothing-rented' }
+      : { status: 'stopped', handle, session: entry.session };
   }
 
   /** Waits for the start's answer, at most `startTimeoutMs` after it was sent. */
@@ -558,4 +582,25 @@ class LeaseTable<Session, Handle, Request> {
       scope,
     );
   }
+}
+
+/** Records what the start's answer says it rented, and wakes any teardown waiting on it. */
+function recordAnswer<Session, Handle, Request>(
+  entry: LeaseEntry<Session, Handle, Request>,
+  answer: StartAnswer<Session, Handle>,
+): void {
+  switch (answer.status) {
+    case 'ready':
+      entry.rental = { kind: 'held', handle: answer.handle };
+      break;
+    case 'failed':
+      entry.rental =
+        answer.rented === undefined ? { kind: 'none' } : { kind: 'held', handle: answer.rented };
+      break;
+    case 'rejected':
+      if (entry.rental.kind !== 'held') entry.rental = { kind: 'unknown' };
+      break;
+  }
+  entry.answered = true;
+  entry.markAnswered();
 }
