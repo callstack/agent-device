@@ -475,6 +475,94 @@ test('a stop that outlives its budget is joined by the retry instead of sent twi
   assert.deepEqual(provider.stopped, ['session-1']);
 });
 
+test('a rental named while an earlier stop is still in flight waits for that stop to confirm', async () => {
+  const provider = fakeProvider({ startTimeoutMs: 30, stopTimeoutMs: 20 });
+  const allocating = provider.table.allocate(lease(), {});
+  const gaveUp = assert.rejects(allocating, reason('provider-not-ready'));
+  await settle();
+  provider.controls[0]!.rented({ id: 'A' });
+  const stopA = deferred<void>();
+  provider.queueStop(async () => await stopA.promise);
+
+  // A's stop outlives its budget, so the release reports A pending.
+  await assert.rejects(provider.table.release('lease-1'), (error: unknown) => {
+    assert.deepEqual((error as TableError).details.handles, ['A']);
+    return true;
+  });
+  await gaveUp;
+  // The start then answers with another rental. Its stop waits for A's, so B can never be the stop that
+  // lets the lease go while A is still unconfirmed.
+  provider.answerStart(0, ready('B'));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.deepEqual(provider.stopped, ['A']);
+
+  // A's stop fails: A is still owed, and the drain names it instead of reporting a clean shutdown.
+  stopA.reject(new Error('backend down'));
+  await settle();
+  provider.queueStop(refusedStop());
+  await assert.rejects(provider.table.shutdown(), (error: unknown) => {
+    assert.deepEqual((error as TableError).details.handles, ['A']);
+    return true;
+  });
+  // The retry stops A, then B, and only then forgets the lease.
+  assert.deepEqual(await provider.table.release('lease-1'), {
+    handle: { id: 'B' },
+    session: { id: 'B' },
+  });
+  assert.deepEqual(provider.stopped, ['A', 'A', 'A', 'B']);
+});
+
+test('a late answer that lands while a teardown is settling is still stopped', async () => {
+  // The answer lands at every microtask offset after the teardown's wait for it ran out, including the
+  // one between the teardown deciding `pending` and the teardown being cleared.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    for (let hops = 0; hops < 12; hops += 1) {
+      const provider = fakeProvider({ startTimeoutMs: 50 });
+      const allocating = provider.table.allocate(lease(), {}).catch(() => undefined);
+      await settle();
+      const releasing = provider.table.release('lease-1').catch(() => undefined);
+      await settle();
+      vi.advanceTimersByTime(50);
+      for (let hop = 0; hop < hops; hop += 1) await Promise.resolve();
+      provider.answerStart(0, ready('session-1'));
+      await releasing;
+      await allocating;
+      await settle();
+      await settle();
+      assert.deepEqual(provider.stopped, ['session-1'], `an answer ${hops} microtasks late`);
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a session goes only to callers still within their own budget', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const provider = fakeProvider();
+    const short = provider.table.allocate(lease(), {}, { deadline: Date.now() + 100 });
+    const long = provider.table.allocate(lease(), {});
+    const shortRefused = assert.rejects(short, reason('provider-not-ready'));
+    await settle();
+    // The short caller's deadline passes before its timer could run, and then the start answers.
+    vi.setSystemTime(Date.now() + 200);
+    provider.answerStart(0, ready('session-1'));
+    await shortRefused;
+    assert.deepEqual(await long, { id: 'session-1' });
+
+    // Reuse checks the same budget: a caller that already hung up is refused, and the session stays.
+    await assert.rejects(
+      provider.table.allocate(lease(), {}, { signal: AbortSignal.abort() }),
+      reason('request_canceled'),
+    );
+    assert.deepEqual(provider.table.live('lease-1'), { id: 'session-1' });
+    assert.deepEqual(provider.stopped, []);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('shutdown waits for an in-flight allocation, stops its device, and refuses new ones', async () => {
   const provider = fakeProvider();
   const allocating = provider.table.allocate(lease(), {});

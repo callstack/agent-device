@@ -36,16 +36,17 @@ export type ProviderLeaseStartControl<Handle> = Readonly<{
   deadline: number;
   /**
    * Publishes a rental as soon as the provider can stop it, before the start answers, so a release or a
-   * drain can stop a device whose start stalls. A later call replaces the handle. Do not publish a handle
-   * whose stop could arrive before the provider created the session it names.
+   * drain can stop a device whose start stalls. A later call with another handle adds a rental; the table
+   * stops every one it was told of. Do not publish a handle whose stop could arrive before the provider
+   * created the session it names.
    */
   rented(handle: Handle): void;
 }>;
 
 /**
  * What one start amounted to. A ready start hands over its session and the handle that stops it. A failed
- * start names in `rented` what it left under rent; omitting it says the provider rented nothing, which
- * also discards a handle published through `rented`. A start that rejects instead is read as one that may
+ * start names in `rented` what it left under rent; omitting it says the start rented nothing beyond what
+ * it published through `rented`, which the table still stops. A start that rejects instead is read as one that may
  * have rented, and the table stops the published handle or what `findByLease` names.
  */
 export type ProviderLeaseStart<Session, Handle> =
@@ -149,11 +150,13 @@ type Outcome<Session> =
   | Readonly<{ status: 'ready'; session: Session }>
   | Readonly<{ status: 'failed'; error: unknown }>;
 
-/** What this process knows a lease rented. `unknown` means it may have rented and must be found. */
-type Rental<Handle> =
-  | Readonly<{ kind: 'none' }>
-  | Readonly<{ kind: 'held'; handle: Handle }>
-  | Readonly<{ kind: 'unknown' }>;
+/** One rental an entry knows of, and the state of its stop. */
+type RentalRecord<Handle> = {
+  readonly handle: Handle;
+  stopped: boolean;
+  /** The stop in flight, which outlives a teardown that stopped waiting for it. */
+  stopping: Promise<StopFailure | undefined> | undefined;
+};
 
 type StopFailure = Readonly<{ cause: unknown }>;
 
@@ -187,12 +190,12 @@ class LeaseEntry<Session, Handle, Request> {
   readonly answer: Promise<void>;
   markAnswered: () => void = () => undefined;
   session: Session | undefined = undefined;
-  rental: Rental<Handle> = { kind: 'none' };
-  /** The rental whose stop the provider confirmed, by `handleKey`. */
-  stopped: string | undefined = undefined;
-  /** The stop in flight, which outlives a teardown that stopped waiting for it. */
-  stopping: Readonly<{ key: string; promise: Promise<StopFailure | undefined> }> | undefined =
-    undefined;
+  /** Every rental this lease named, by `handleKey`, in the order named; each stays until stopped. */
+  readonly rentals = new Map<string, RentalRecord<Handle>>();
+  /** The rental named last, which a report names for the lease. */
+  latest: Handle | undefined = undefined;
+  /** Whether the lease may hold a rental that nobody could name yet. */
+  unnamed = false;
   /** Callers still waiting for the start; one leaves the moment it gives up. */
   readonly waiters = new Set<Waiter>();
   /** Set once anything starts ending the lease; it never serves an allocation again. */
@@ -252,22 +255,35 @@ class LeaseTable<Session, Handle, Request> {
     const existing = this.entries.get(lease.leaseId);
     if (existing?.releasing) throw this.driver.releasing(lease);
     if (existing?.request !== undefined) options.requireJoinable?.(existing.request);
-    const caller: ProviderLeaseBudget = {
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
-    };
+    const caller = callerBudget(options);
     const timeoutAt = Date.now() + this.driver.startTimeoutMs;
     const deadline = Math.min(caller.deadline ?? timeoutAt, timeoutAt);
     // A caller whose budget is already spent never sends a start that nobody would wait for.
-    if (!existing && (caller.signal?.aborted || deadline <= Date.now())) {
+    if (!existing && budgetSpent(caller, deadline)) {
       throw this.driver.gaveUp(lease, caller, 0, undefined);
     }
     const entry = existing ?? this.rent(lease, request, caller, timeoutAt);
+    const budgetMs = Math.max(0, deadline - Date.now());
     const outcome = await this.join(entry, caller, deadline);
-    if (this.shuttingDown) throw this.driver.shuttingDown(lease);
+    return this.deliver(entry, outcome, caller, deadline, budgetMs);
+  }
+
+  /** Hands the session to one caller, or says why this caller does not get it. */
+  private deliver(
+    entry: LeaseEntry<Session, Handle, Request>,
+    outcome: Outcome<Session>,
+    caller: ProviderLeaseBudget,
+    deadline: number,
+    budgetMs: number,
+  ): Session {
+    if (this.shuttingDown) throw this.driver.shuttingDown(entry.lease);
     if (outcome.status === 'failed') throw outcome.error;
     // A release that started while this caller waited owns the device now.
-    if (entry.releasing) throw this.driver.releasing(lease);
+    if (entry.releasing) throw this.driver.releasing(entry.lease);
+    // Checked at delivery, on a fresh start and on reuse alike: the session stays for callers in budget.
+    if (budgetSpent(caller, deadline)) {
+      throw this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
+    }
     return outcome.session;
   }
 
@@ -329,7 +345,7 @@ class LeaseTable<Session, Handle, Request> {
     const entry = new LeaseEntry<Session, Handle, Request>(lease, undefined, Date.now());
     entry.answered = true;
     entry.markAnswered();
-    entry.rental = { kind: 'unknown' };
+    entry.unnamed = true;
     entry.releasing = true;
     this.entries.set(lease.leaseId, entry);
     return entry;
@@ -347,7 +363,7 @@ class LeaseTable<Session, Handle, Request> {
   ): Promise<Outcome<Session>> {
     const startedAt = Date.now();
     const answer = await this.callStart(entry, request);
-    recordAnswer(entry, answer);
+    recordAnswer(entry, answer, this.driver.handleKey);
     if (answer.status === 'ready') {
       // Recorded even when nobody takes it, so the teardown reports the device it stopped.
       entry.session = answer.session;
@@ -367,7 +383,9 @@ class LeaseTable<Session, Handle, Request> {
         signal: entry.abandon.signal,
         deadline: entry.answerBy,
         rented: (handle) => {
-          if (!entry.answered) entry.rental = { kind: 'held', handle };
+          if (entry.answered) return;
+          holdRental(entry, handle, this.driver.handleKey(handle));
+          if (entry.releasing) this.followUp(entry);
         },
       });
     } catch (error) {
@@ -397,7 +415,7 @@ class LeaseTable<Session, Handle, Request> {
     error: unknown,
   ): Promise<Outcome<Session>> {
     if (entry.releasing) {
-      void this.teardown(entry).catch(() => undefined);
+      this.followUp(entry);
       return { status: 'failed', error };
     }
     const ended = await this.teardown(entry);
@@ -425,13 +443,7 @@ class LeaseTable<Session, Handle, Request> {
   ): Promise<Outcome<Session>> {
     if (entry.session !== undefined) return { status: 'ready', session: entry.session };
     const budgetMs = Math.max(0, deadline - Date.now());
-    const giveUp = () =>
-      this.driver.gaveUp(
-        entry.lease,
-        caller,
-        budgetMs,
-        entry.rental.kind === 'held' ? entry.rental.handle : undefined,
-      );
+    const giveUp = () => this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), budgetMs);
     const signal = caller.signal
@@ -480,13 +492,14 @@ class LeaseTable<Session, Handle, Request> {
       await this.untilAnswered(entry);
       const unnamed = await this.nameRental(entry);
       if (unnamed !== undefined) return unnamed;
-      const handle = entry.rental.kind === 'held' ? entry.rental.handle : undefined;
-      if (handle === undefined || entry.stopped === this.driver.handleKey(handle)) {
-        return this.finishTeardown(entry, handle);
+      // One stop at a time, in the order the rentals were named, so a stop still in flight is never
+      // overtaken by a later rental that lets the entry go.
+      const next = [...entry.rentals.values()].find((rental) => !rental.stopped);
+      if (next === undefined) return this.finishTeardown(entry);
+      const failure = await this.stop(next);
+      if (failure !== undefined) {
+        return { status: 'pending', handle: next.handle, cause: failure.cause };
       }
-      const failure = await this.stop(entry, handle);
-      if (failure !== undefined) return { status: 'pending', handle, cause: failure.cause };
-      // The start may have answered, or named another rental, while the stop ran.
     }
   }
 
@@ -494,10 +507,11 @@ class LeaseTable<Session, Handle, Request> {
   private async nameRental(
     entry: LeaseEntry<Session, Handle, Request>,
   ): Promise<Ended<Session, Handle> | undefined> {
-    if (entry.rental.kind !== 'unknown') return undefined;
+    if (!entry.unnamed) return undefined;
     try {
       const handle = await this.driver.findByLease(entry.lease);
-      if (entry.rental.kind === 'unknown') entry.rental = { kind: 'held', handle };
+      holdRental(entry, handle, this.driver.handleKey(handle));
+      entry.unnamed = false;
       return undefined;
     } catch (error) {
       return { status: 'pending', handle: undefined, cause: error };
@@ -505,10 +519,8 @@ class LeaseTable<Session, Handle, Request> {
   }
 
   /** Forgets an entry whose rentals are all stopped, unless its start may still rent something. */
-  private finishTeardown(
-    entry: LeaseEntry<Session, Handle, Request>,
-    handle: Handle | undefined,
-  ): Ended<Session, Handle> {
+  private finishTeardown(entry: LeaseEntry<Session, Handle, Request>): Ended<Session, Handle> {
+    const handle = entry.latest;
     if (!entry.answered) {
       // The entry stays for the teardown that the start's answer starts.
       return {
@@ -521,6 +533,18 @@ class LeaseTable<Session, Handle, Request> {
     return handle === undefined
       ? { status: 'nothing-rented' }
       : { status: 'stopped', handle, session: entry.session };
+  }
+
+  /**
+   * Runs a teardown that looks at what the start just recorded. A teardown already in flight may have
+   * decided before the record, so another one follows it rather than joining it.
+   */
+  private followUp(entry: LeaseEntry<Session, Handle, Request>): void {
+    const current = entry.ending;
+    const next = current
+      ? current.then(async () => await this.teardown(entry))
+      : this.teardown(entry);
+    void next.catch(() => undefined);
   }
 
   /** Waits for the start's answer, at most `startTimeoutMs` after it was sent. */
@@ -537,24 +561,16 @@ class LeaseTable<Session, Handle, Request> {
     }
   }
 
-  /** Joins the stop in flight for this handle, or sends it, within `stopTimeoutMs`. */
-  private async stop(
-    entry: LeaseEntry<Session, Handle, Request>,
-    handle: Handle,
-  ): Promise<StopFailure | undefined> {
-    const key = this.driver.handleKey(handle);
-    let stopping = entry.stopping;
-    if (stopping?.key !== key) {
-      const promise = this.stopHandle(handle).then((failure) => {
-        if (failure === undefined) entry.stopped = key;
-        if (entry.stopping?.promise === promise) entry.stopping = undefined;
-        return failure;
-      });
-      stopping = { key, promise };
-      entry.stopping = stopping;
-    }
+  /** Joins this rental's stop in flight, or sends it, within `stopTimeoutMs`. */
+  private async stop(rental: RentalRecord<Handle>): Promise<StopFailure | undefined> {
+    rental.stopping ??= this.stopHandle(rental.handle).then((failure) => {
+      if (failure === undefined) rental.stopped = true;
+      rental.stopping = undefined;
+      return failure;
+    });
+    const stopping = rental.stopping;
     const limitMs = this.driver.stopTimeoutMs;
-    if (limitMs === undefined) return await stopping.promise;
+    if (limitMs === undefined) return await stopping;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const expired = new Promise<StopFailure>((resolve) => {
       timer = setTimeout(
@@ -564,7 +580,7 @@ class LeaseTable<Session, Handle, Request> {
       );
     });
     try {
-      return await Promise.race([stopping.promise, expired]);
+      return await Promise.race([stopping, expired]);
     } finally {
       clearTimeout(timer);
     }
@@ -595,21 +611,45 @@ class LeaseTable<Session, Handle, Request> {
 function recordAnswer<Session, Handle, Request>(
   entry: LeaseEntry<Session, Handle, Request>,
   answer: StartAnswer<Session, Handle>,
+  handleKey: (handle: Handle) => string,
 ): void {
   switch (answer.status) {
     case 'ready':
-      entry.rental = { kind: 'held', handle: answer.handle };
+      holdRental(entry, answer.handle, handleKey(answer.handle));
       break;
     case 'failed':
-      entry.rental =
-        answer.rented === undefined ? { kind: 'none' } : { kind: 'held', handle: answer.rented };
+      if (answer.rented !== undefined) holdRental(entry, answer.rented, handleKey(answer.rented));
       break;
     case 'rejected':
-      if (entry.rental.kind !== 'held') entry.rental = { kind: 'unknown' };
+      if (entry.rentals.size === 0) entry.unnamed = true;
       break;
   }
   entry.answered = true;
   entry.markAnswered();
+}
+
+/** Adds a rental the entry owes a stop, unless the same rental is already known. */
+function holdRental<Session, Handle, Request>(
+  entry: LeaseEntry<Session, Handle, Request>,
+  handle: Handle,
+  key: string,
+): void {
+  if (!entry.rentals.has(key))
+    entry.rentals.set(key, { handle, stopped: false, stopping: undefined });
+  entry.latest = handle;
+}
+
+/** The budget a caller named, without the fields it left unset. */
+function callerBudget(options: ProviderLeaseBudget): ProviderLeaseBudget {
+  return {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+  };
+}
+
+/** Whether a caller hung up or ran past its deadline. */
+function budgetSpent(caller: ProviderLeaseBudget, deadline: number): boolean {
+  return caller.signal?.aborted === true || Date.now() >= deadline;
 }
 
 /** Whether any caller still waits for the start within its own budget. */
