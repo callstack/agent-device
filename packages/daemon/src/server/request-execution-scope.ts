@@ -376,6 +376,8 @@ export async function createRequestExecutionScope(params: {
         try {
           const existingRef = sessionStore.lookup(sessionName);
           const session = existingRef?.session;
+          // A session can gain its lease while this request waits for the lock.
+          assertProviderLeaseRequestNamesSession(scopedReq, session);
           const boundedResources = boundedStep
             ? await import('../core/composite-resource-admission.ts')
             : undefined;
