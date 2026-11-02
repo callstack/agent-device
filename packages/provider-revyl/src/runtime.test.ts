@@ -209,15 +209,18 @@ test('a release that lands while the shared start is still running stops the dev
     (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
   );
 
+  const refused = assert.rejects(
+    first!,
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
+  );
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
   assert.deepEqual(stops(fixture), [
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
 
-  // The caller that rented the device is not made to carry the joiner's release: it still gets its
-  // answer, and the runtime holds no session a later shutdown would stop twice.
-  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await refused;
   await runtime.shutdown();
   assert.equal(stops(fixture).length, 1);
 });
@@ -405,9 +408,14 @@ test('a release that lands mid-start stops the session only once Revyl has made 
 
   // The release lands while the start is in flight. It waits for the answer rather than stopping the id it
   // only has from the lease, and that is what makes the stop below land after the session exists.
+  const refused = assert.rejects(
+    allocating!,
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
+  );
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
-  assert.equal((await allocating)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await refused;
 
   const answered = fixture.answeredPaths();
   const stopAt = answered.findIndex((path) => path.endsWith('/stop'));

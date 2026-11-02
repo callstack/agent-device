@@ -58,6 +58,10 @@ agent-device disconnect
 `close` ends the app on the device. `disconnect`, and any daemon shutdown, ends the Revyl session, so
 the device is returned. Revyl also releases an idle session on its own after its idle timeout.
 
+Once release starts, the lease refuses further device commands. If Revyl does not confirm the stop,
+agent-device reports the session id and keeps the release pending for retry. Check that session in
+Revyl and end it there if it remains running.
+
 ## What works on a Revyl session
 
 A Revyl session runs the commands that reach a device through Revyl's device actions:

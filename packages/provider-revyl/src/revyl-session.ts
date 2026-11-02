@@ -100,6 +100,7 @@ export async function startRevylSession(
   client: RevylClient,
   lease: DeviceLease,
   input: RevylStartRequestInput,
+  recordRent: (rented: RevylRentedSession) => void,
 ): Promise<RevylStart> {
   // The runtime issues the session id rather than reading it back, so a session this lease started
   // can be ended from the lease alone — including from a process that never started it.
@@ -121,6 +122,8 @@ export async function startRevylSession(
   }
   const runId = typeof started.workflow_run_id === 'string' ? started.workflow_run_id : undefined;
   const echoed = typeof started.session_id === 'string' ? started.session_id : undefined;
+  const rentedSessionId = echoed ?? sessionId;
+  recordRent({ sessionId: rentedSessionId, runId });
   if (runId && echoed && echoed !== sessionId) {
     // Every later stop addresses the session by the id the runtime issued, and an expired-lease
     // recovery in another process derives that same id from the lease. A backend that kept its own
@@ -146,7 +149,7 @@ export async function startRevylSession(
     // when it kept its own, so the end addresses the session the backend actually holds.
     return {
       status: 'failed',
-      rented: { sessionId: echoed ?? sessionId },
+      rented: { sessionId: rentedSessionId },
       error: new AppError(
         'COMMAND_FAILED',
         `Revyl did not start a ${input.platform} device: ${started.error ?? started.message ?? 'no workflow run was returned'}`,
