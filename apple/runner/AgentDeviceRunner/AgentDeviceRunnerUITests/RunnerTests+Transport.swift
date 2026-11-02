@@ -226,7 +226,7 @@ extension RunnerTests {
           command.commandId ?? ""
         )
       case .terminal(let outcome):
-        // Replayed successes need current occupancy, so stamp them after reading the stored outcome.
+        // jsonResponse stamps replayed successes with current occupancy.
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
           command.command.rawValue,
