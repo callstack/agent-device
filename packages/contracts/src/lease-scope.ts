@@ -98,11 +98,11 @@ type LeaseOptionsLike = {
 export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
   return new AppError(
     'INVALID_ARGS',
-    'A leased remote connection needs its session named: pass --session <name> or set AGENT_DEVICE_SESSION.',
+    'A leased remote connection needs its session named: pass --session <name>, set AGENT_DEVICE_SESSION, or send the session parameter.',
     {
       reason: 'REMOTE_SESSION_REQUIRED',
       ...(leaseProvider === undefined ? {} : { leaseProvider }),
-      hint: "Without a name, a command could reach another agent's connection on this machine.",
+      hint: "Without a name, a command could reach another agent's connection.",
     },
   );
 }

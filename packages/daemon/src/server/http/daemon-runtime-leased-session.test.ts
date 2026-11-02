@@ -87,8 +87,9 @@ test.each([
 ])('a %s session is refused before a provider lease is allocated', async (_label, session) => {
   expectSessionRequired(await allocate({ ...PROXY_SCOPE, ...session }));
 
-  const named = await allocate({ ...PROXY_SCOPE, session: 'agent-a' });
-  expect(named.result?.ok).toBe(true);
+  // Another client finds the device free, so the refused request left no lease behind.
+  const other = await allocate({ ...PROXY_SCOPE, clientId: 'client-b', session: 'agent-b' });
+  expect(other.result?.ok, JSON.stringify(other)).toBe(true);
 });
 
 test('an unnamed heartbeat is refused and the named lease stays usable', async () => {
@@ -121,7 +122,7 @@ test.each([
   ['shared', {}],
   ['tenant-isolated', { sessionIsolation: 'tenant' }],
 ])(
-  'an unnamed leased command is refused before dispatch in a %s daemon',
+  'an unnamed leased command is refused for its session in a %s daemon',
   async (_label, isolation) => {
     const leaseId = await allocateNamedLease('agent-a');
     const { backend: leaseBackend, ...scope } = PROXY_SCOPE;
@@ -147,7 +148,7 @@ test('a named leased command is not refused for its session', async () => {
     meta: { ...scope, leaseBackend, leaseId },
   });
 
-  expect(named.error?.data?.code, JSON.stringify(named)).toBeDefined();
+  expect(named.error?.data?.code, JSON.stringify(named)).toBe('DEVICE_NOT_FOUND');
   expect(named.error?.data?.details?.reason).not.toBe('REMOTE_SESSION_REQUIRED');
 });
 

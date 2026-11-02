@@ -357,6 +357,48 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
   }
 });
 
+test.for([
+  ['omitted', {}, true],
+  ['blank', { session: '  ' }, true],
+  ['named', { session: 'agent-a' }, undefined],
+] as const)(
+  'install_from_source records a session that is %s',
+  async ([_label, session, sessionOmitted], t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+
+    const received: DaemonRequest[] = [];
+    const server = await createDaemonHttpServer({
+      handleRequest: async (req) => {
+        received.push(req);
+        return { ok: true, data: {} };
+      },
+      env: process.env,
+      cwd: process.cwd(),
+    });
+
+    try {
+      const port = await listenOnLoopback(server);
+      await fetch(`http://127.0.0.1:${port}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'agent_device.install_from_source',
+          params: {
+            ...session,
+            platform: 'android',
+            source: { kind: 'url', url: 'https://example.com/app.apk' },
+          },
+        }),
+      });
+      assert.equal(received[0]?.internal?.sessionOmitted, sessionOmitted);
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);
+
 test('lease.allocate forwards retainOnClose to the handler as lease meta', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const received: DaemonRequest[] = [];

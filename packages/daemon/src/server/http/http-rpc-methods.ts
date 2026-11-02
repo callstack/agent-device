@@ -243,7 +243,7 @@ function toInstallFromSourceDaemonRequest(
   }
   return {
     token: resolveToken(params, headers),
-    session: readStringParam(params, 'session') ?? 'default',
+    ...requestSessionFields(readStringParam(params, 'session')),
     command: 'install_source',
     positionals: [],
     flags: { platform },
