@@ -44,11 +44,13 @@ const device: DeviceInfo = {
   booted: true,
 };
 
-const HELPER_RUNNER = `${ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.packageName}/.SnapshotInstrumentation`;
+const HELPER_PACKAGE = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.packageName;
+// The component as `am` names it in its refusal: fully qualified, not the `/.Class` short form.
+const HELPER_RUNNER = `${HELPER_PACKAGE}/${HELPER_PACKAGE}.SnapshotInstrumentation`;
 
-// What `am instrument -w` prints when the system refuses to start the instrumentation, as captured
-// from an Android 15 emulator: ActivityManagerService reports the refusal as status -1, and then
-// `am` throws INSTRUMENTATION_FAILED.
+// What `am instrument -w` printed, verbatim, when the system refused to start the uninstalled helper
+// on an Android 15 (API 35) emulator: ActivityManagerService reports the refusal as status -1, and
+// then `am` throws INSTRUMENTATION_FAILED. The live retry run on the same device printed the same.
 const REFUSED_STDOUT = [
   `INSTRUMENTATION_STATUS: Error=Unable to find instrumentation info for: ComponentInfo{${HELPER_RUNNER}}`,
   'INSTRUMENTATION_STATUS: id=ActivityManagerService',
