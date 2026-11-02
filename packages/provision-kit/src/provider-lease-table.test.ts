@@ -638,29 +638,18 @@ test('shutdown waits for an in-flight allocation, stops its device, and refuses 
   assert.equal(provider.controls.length, 1);
 });
 
-test('shutdown also ends a lease that a recovery opens while it drains', async () => {
+test('shutdown fences recovery: a lease it holds nothing for is left to the next daemon', async () => {
   const provider = fakeProvider();
   await allocated(provider);
   const stop = deferred<void>();
   provider.queueStop(async () => await stop.promise);
-  // The recovery's own stop fails, and so does the drain's retry of it.
-  provider.queueStop(refusedStop());
-  provider.queueStop(refusedStop());
 
   const shutdown = provider.table.shutdown();
-  await settle();
-  const recovery = assert.rejects(
-    provider.table.recover(lease('lease-2')),
-    reason('provider-cleanup-pending', 'recover'),
-  );
+  await assert.rejects(provider.table.recover(lease('lease-2')), reason('runtime-shutting-down'));
   stop.resolve();
-  await assert.rejects(shutdown, (error: unknown) => {
-    assert.ok(reason('provider-cleanup-pending', 'shutdown')(error));
-    assert.deepEqual((error as TableError).details.handles, ['found-lease-2']);
-    return true;
-  });
-  await recovery;
-  assert.deepEqual(provider.stopped, ['session-1', 'found-lease-2', 'found-lease-2']);
+  await shutdown;
+  assert.deepEqual(provider.found, [], 'a refused recovery searches for nothing');
+  assert.deepEqual(provider.stopped, ['session-1']);
 });
 
 test('shutdown reports what it could not stop and keeps it for a later release', async () => {

@@ -184,6 +184,13 @@ type Owed<Handle> = Readonly<{ handle: Handle | undefined; cause: unknown }>;
  */
 class LeaseEntry<Session, Handle, Request> {
   readonly lease: DeviceLease;
+  /** Which entry of its lease id this is; a later entry of the same lease id has a higher one. */
+  readonly generation: number;
+  /**
+   * `starting` until the start answers, `ready` once a waiting caller took its session, `ending` once
+   * anything ends the lease. Only `starting` → `ready`, and any phase → `ending`, are allowed.
+   */
+  phase: 'starting' | 'ready' | 'ending' = 'starting';
   /** What the start was asked for; absent for an entry a recovery opened. */
   readonly request: Request | undefined;
   /** When the start should have answered, and when a teardown stops waiting: `startTimeoutMs` after it was sent. */
@@ -204,15 +211,19 @@ class LeaseEntry<Session, Handle, Request> {
   unnamed = false;
   /** Callers still waiting for the start; one leaves the moment it gives up. */
   readonly waiters = new Set<Waiter>();
-  /** Set once anything starts ending the lease; it never serves an allocation again. */
-  releasing = false;
   /** Whether a teardown is already queued behind the one in flight. */
   followUpQueued = false;
   /** The one teardown in flight, joined by every release, recovery, and drain. */
   ending: Promise<Ended<Session, Handle>> | undefined = undefined;
 
-  constructor(lease: DeviceLease, request: Request | undefined, answerBy: number) {
+  constructor(
+    lease: DeviceLease,
+    generation: number,
+    request: Request | undefined,
+    answerBy: number,
+  ) {
     this.lease = lease;
+    this.generation = generation;
     this.request = request;
     this.answerBy = answerBy;
     this.answer = new Promise((resolve) => {
@@ -242,6 +253,7 @@ class LeaseTable<Session, Handle, Request> {
   /** An entry leaves only once nothing it rented is still rented. */
   private readonly entries = new Map<string, LeaseEntry<Session, Handle, Request>>();
   private shuttingDown = false;
+  private generations = 0;
   private readonly driver: ProviderLeaseDriver<Session, Handle, Request>;
 
   constructor(driver: ProviderLeaseDriver<Session, Handle, Request>) {
@@ -250,7 +262,12 @@ class LeaseTable<Session, Handle, Request> {
 
   live(leaseId: string): Session | undefined {
     const entry = this.entries.get(leaseId);
-    return entry?.releasing ? undefined : entry?.session;
+    return entry?.phase === 'ready' ? entry.session : undefined;
+  }
+
+  /** Whether this entry is still its lease id's entry; checked after every await before acting. */
+  private isCurrent(entry: LeaseEntry<Session, Handle, Request>): boolean {
+    return this.entries.get(entry.lease.leaseId)?.generation === entry.generation;
   }
 
   async allocate(
@@ -261,7 +278,7 @@ class LeaseTable<Session, Handle, Request> {
     // Nothing between these checks and the entry's registration awaits, so no teardown is missed.
     if (this.shuttingDown) throw this.driver.shuttingDown(lease);
     const existing = this.entries.get(lease.leaseId);
-    if (existing?.releasing) throw this.driver.releasing(lease);
+    if (existing?.phase === 'ending') throw this.driver.releasing(lease);
     if (existing?.request !== undefined) options.requireJoinable?.(existing.request);
     const caller = callerBudget(options);
     const timeoutAt = Date.now() + this.driver.startTimeoutMs;
@@ -287,7 +304,7 @@ class LeaseTable<Session, Handle, Request> {
     if (this.shuttingDown) throw this.driver.shuttingDown(entry.lease);
     if (outcome.status === 'failed') throw outcome.error;
     // A release that started while this caller waited owns the device now.
-    if (entry.releasing) throw this.driver.releasing(entry.lease);
+    if (entry.phase !== 'ready' || !this.isCurrent(entry)) throw this.driver.releasing(entry.lease);
     // Checked at delivery, on a fresh start and on reuse alike: the session stays for callers in budget.
     if (budgetSpent(caller, deadline)) {
       throw this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
@@ -308,28 +325,27 @@ class LeaseTable<Session, Handle, Request> {
   async recover(lease: DeviceLease): Promise<void> {
     const leaseId = lease.leaseId;
     // The daemon forgets a recovered lease once this resolves, so a rental still rented has to reject.
-    const entry = this.entries.get(leaseId) ?? this.recovering(lease);
+    let entry = this.entries.get(leaseId);
+    if (entry === undefined) {
+      // A drain that already started would not see a new entry, and the next daemon recovers the lease.
+      if (this.shuttingDown) throw this.driver.shuttingDown(lease);
+      entry = this.recovering(lease);
+    }
     const ended = await this.teardown(entry);
     if (ended.status === 'pending') throw this.pending(entry, ended, { route: 'recover', leaseId });
   }
 
   async shutdown(): Promise<void> {
+    // The fence: from here on, no allocation or recovery registers an entry, so this drain sees all.
     this.shuttingDown = true;
     const unconfirmed: ProviderUnconfirmedStop<Handle>[] = [];
-    const drained = new Set<LeaseEntry<Session, Handle, Request>>();
-    // A recovery or release can open an entry while the drain runs, so the drain repeats until it has
-    // ended every entry it finds.
-    for (;;) {
-      const entries = [...this.entries.values()].filter((entry) => !drained.has(entry));
-      if (entries.length === 0) break;
-      for (const entry of entries) drained.add(entry);
-      const ended = await Promise.all(entries.map(async (entry) => await this.teardown(entry)));
-      ended.forEach((outcome, index) => {
-        if (outcome.status !== 'pending') return;
-        const leaseId = entries[index]!.lease.leaseId;
-        for (const owed of outcome.owed) unconfirmed.push({ leaseId, ...owed });
-      });
-    }
+    const entries = [...this.entries.values()];
+    const ended = await Promise.all(entries.map(async (entry) => await this.teardown(entry)));
+    ended.forEach((outcome, index) => {
+      if (outcome.status !== 'pending') return;
+      const leaseId = entries[index]!.lease.leaseId;
+      for (const owed of outcome.owed) unconfirmed.push({ leaseId, ...owed });
+    });
     if (unconfirmed.length > 0) {
       throw this.driver.cleanupPending(unconfirmed, { route: 'shutdown' });
     }
@@ -342,7 +358,12 @@ class LeaseTable<Session, Handle, Request> {
     caller: ProviderLeaseBudget,
     answerBy: number,
   ): LeaseEntry<Session, Handle, Request> {
-    const entry = new LeaseEntry<Session, Handle, Request>(lease, request, answerBy);
+    const entry = new LeaseEntry<Session, Handle, Request>(
+      lease,
+      (this.generations += 1),
+      request,
+      answerBy,
+    );
     entry.start = this.runStart(entry, request, caller);
     this.entries.set(lease.leaseId, entry);
     return entry;
@@ -350,11 +371,16 @@ class LeaseTable<Session, Handle, Request> {
 
   /** Registers an entry for a lease this process holds nothing for, so every route joins its teardown. */
   private recovering(lease: DeviceLease): LeaseEntry<Session, Handle, Request> {
-    const entry = new LeaseEntry<Session, Handle, Request>(lease, undefined, Date.now());
+    const entry = new LeaseEntry<Session, Handle, Request>(
+      lease,
+      (this.generations += 1),
+      undefined,
+      Date.now(),
+    );
     entry.answered = true;
     entry.markAnswered();
     entry.unnamed = true;
-    entry.releasing = true;
+    entry.phase = 'ending';
     this.entries.set(lease.leaseId, entry);
     return entry;
   }
@@ -375,8 +401,11 @@ class LeaseTable<Session, Handle, Request> {
     if (answer.status === 'ready') {
       // Recorded even when nobody takes it, so the teardown reports the device it stopped.
       entry.session = answer.session;
-      if (!entry.releasing && stillWanted(entry))
+      // The answer may belong to an entry that ended, or was replaced, while the start ran.
+      if (entry.phase === 'starting' && this.isCurrent(entry) && stillWanted(entry)) {
+        entry.phase = 'ready';
         return { status: 'ready', session: answer.session };
+      }
     }
     return await this.endFailedStart(entry, this.startFailure(entry, answer, caller, startedAt));
   }
@@ -393,7 +422,7 @@ class LeaseTable<Session, Handle, Request> {
         rented: (handle) => {
           if (entry.answered) return;
           holdRental(entry, handle, this.driver.handleKey(handle));
-          if (entry.releasing) this.followUp(entry);
+          if (entry.phase === 'ending') this.followUp(entry);
         },
       });
     } catch (error) {
@@ -409,7 +438,7 @@ class LeaseTable<Session, Handle, Request> {
     startedAt: number,
   ): unknown {
     if (answer.status !== 'ready') return answer.error;
-    if (entry.releasing) return this.driver.releasing(entry.lease);
+    if (entry.phase === 'ending') return this.driver.releasing(entry.lease);
     const budgetMs = Math.max(0, entry.answerBy - startedAt);
     return this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle);
   }
@@ -422,7 +451,7 @@ class LeaseTable<Session, Handle, Request> {
     entry: LeaseEntry<Session, Handle, Request>,
     error: unknown,
   ): Promise<Outcome<Session>> {
-    if (entry.releasing) {
+    if (entry.phase === 'ending') {
       this.followUp(entry);
       return { status: 'failed', error };
     }
@@ -449,7 +478,7 @@ class LeaseTable<Session, Handle, Request> {
     caller: ProviderLeaseBudget,
     deadline: number,
   ): Promise<Outcome<Session>> {
-    if (entry.session !== undefined) return { status: 'ready', session: entry.session };
+    if (entry.phase === 'ready') return { status: 'ready', session: entry.session! };
     const budgetMs = Math.max(0, deadline - Date.now());
     const giveUp = () => this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
     const timeout = new AbortController();
@@ -494,7 +523,7 @@ class LeaseTable<Session, Handle, Request> {
    * allocations in the same step, and it is the only place a rental is stopped or an entry forgotten.
    */
   private teardown(entry: LeaseEntry<Session, Handle, Request>): Promise<Ended<Session, Handle>> {
-    entry.releasing = true;
+    entry.phase = 'ending';
     if (entry.ending) return entry.ending;
     const ending = this.runTeardown(entry).finally(() => {
       if (entry.ending === ending) entry.ending = undefined;
@@ -578,7 +607,7 @@ class LeaseTable<Session, Handle, Request> {
       const cause = new Error('The provider start did not answer within its start timeout.');
       return { status: 'pending', owed: [{ handle, cause }] };
     }
-    if (this.entries.get(entry.lease.leaseId) === entry) this.entries.delete(entry.lease.leaseId);
+    if (this.isCurrent(entry)) this.entries.delete(entry.lease.leaseId);
     return handle === undefined
       ? { status: 'nothing-rented' }
       : { status: 'stopped', handle, session: entry.session };
