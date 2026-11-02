@@ -463,7 +463,8 @@ test.each([
     });
     // The projection still reads one sessionless snapshot, because open/close/prepare/runtime
     // availability is a runtime fact. What the session owns is the appstate answer itself, so a
-    // snapshot that reports appstate unavailable must not remove the command.
+    // snapshot that reports appstate unavailable must not remove the command. The provider mode
+    // matters: it reports no live read for this device, not that the owner has no live session.
     const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(
       async (inspected: DeviceInfo) =>
         createAdmissionBinding(inspected, {
@@ -503,7 +504,30 @@ test.each([
   },
 );
 
-test('capabilities drops session-owned appstate once the owner holds no live session', async () => {
+const ownerWithNoLiveSession: InspectDeviceRuntimeFacts = async (inspected: DeviceInfo) => {
+  const { facts } = createAdmissionBinding(inspected, {
+    appLogAvailable: false,
+    networkAvailable: false,
+    providerMode: 'provider-runtime',
+  });
+  return {
+    ...facts,
+    operations: {
+      ...facts.operations,
+      ensureReady: { available: false, reason: 'owner-capability-missing' },
+      appState: { available: false, reason: 'owner-capability-missing' },
+    },
+  };
+};
+
+const ownerThatCannotBeInspected: InspectDeviceRuntimeFacts = async () => {
+  throw new Error('provider facts unavailable');
+};
+
+test.each([
+  ['holds no live session', ownerWithNoLiveSession],
+  ['cannot be inspected', ownerThatCannotBeInspected],
+])('capabilities drops session-owned appstate when the owner %s', async (_label, inspectFacts) => {
   const device: DeviceInfo = {
     platform: 'apple',
     appleOs: 'ios',
@@ -523,22 +547,6 @@ test('capabilities drops session-owned appstate once the owner holds no live ses
     appName: 'Settings',
     appBundleId: 'com.example.settings',
   });
-  const inspectFacts: InspectDeviceRuntimeFacts = async (inspected: DeviceInfo) => {
-    const { facts } = createAdmissionBinding(inspected, {
-      appLogAvailable: false,
-      networkAvailable: false,
-      providerMode: 'provider-runtime',
-    });
-    return {
-      ...facts,
-      operations: {
-        ...facts.operations,
-        ensureReady: { available: false, reason: 'owner-capability-missing' },
-        appState: { available: false, reason: 'owner-capability-missing' },
-      },
-    };
-  };
-
   const response = await withTargetDeviceResolutionScope(
     async () => [device],
     async () =>

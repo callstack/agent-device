@@ -258,6 +258,8 @@ test('serves provider-owned network from the canonical session app log without l
   expect(commandRun).not.toHaveBeenCalled();
 });
 
+const ANDROID_APP_STATE = { package: 'com.example.app', activity: '.MainActivity' };
+
 test.each([
   ['iOS simulator', device],
   [
@@ -275,6 +277,7 @@ test.each([
   const owner = createLimrunPlatformRuntimeOwner(
     limrunOwnerOptions({
       getInteractor: () => ({}) as never,
+      getAppState: async () => (runtimeDevice.platform === 'android' ? ANDROID_APP_STATE : {}),
     }),
   );
   const binding = await owner.bind({ device: runtimeDevice, intent: { kind: 'ordinary' }, scope });
@@ -319,10 +322,9 @@ test.each([
     id: runtimeDevice.id,
     booted: true,
   });
-  await expect(binding.operations.appState?.()).resolves.toEqual({
-    package: 'com.example.app',
-    activity: '.MainActivity',
-  });
+  await expect(binding.operations.appState?.()).resolves.toEqual(
+    runtimeDevice.platform === 'android' ? ANDROID_APP_STATE : {},
+  );
 });
 
 test('fails closed for a stale Android identity before exposing facts or binding operations', async () => {

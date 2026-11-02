@@ -17,7 +17,7 @@ export async function readLimrunAppState(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Limrun appstate requires an active provider session',
-      { reason: 'limrun_lease_not_live' },
+      { reason: 'owner-capability-missing' },
     );
   }
   if (session.platform === 'ios') {

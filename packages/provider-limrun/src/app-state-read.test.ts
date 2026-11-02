@@ -64,6 +64,6 @@ test('a provider session lost before the read is refused with a typed reason', a
   await expect(readLimrunAppState(undefined, liveSignal())).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message: 'Limrun appstate requires an active provider session',
-    details: { reason: 'limrun_lease_not_live' },
+    details: { reason: 'owner-capability-missing' },
   });
 });
