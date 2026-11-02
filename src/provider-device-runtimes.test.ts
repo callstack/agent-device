@@ -13,7 +13,7 @@ const limrun = vi.hoisted(() => ({
     status: { token: 'instance-token', apiUrl: 'https://ios.example' },
   })),
   iosList: vi.fn(async () => ({ getPaginatedItems: () => [] as { metadata: { id: string } }[] })),
-  iosDelete: vi.fn(async (_instanceId: string) => undefined),
+  iosDelete: vi.fn(async (_instanceId: string, _options?: { maxRetries: number }) => undefined),
   iosDisconnect: vi.fn(),
 }));
 
@@ -93,7 +93,10 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
     assert.deepEqual(limrun.iosList.mock.calls.at(-1), [
       { labelSelector: `provider=limrun,leaseId=${lease.leaseId}` },
     ]);
-    assert.deepEqual(limrun.iosDelete.mock.calls.at(-1), ['ios-instance-recovered']);
+    assert.deepEqual(limrun.iosDelete.mock.calls.at(-1), [
+      'ios-instance-recovered',
+      { maxRetries: 0 },
+    ]);
     assert.equal(fs.existsSync(pendingPath), false);
   } finally {
     dateNow.mockRestore();

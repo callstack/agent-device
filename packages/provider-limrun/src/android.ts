@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createAndroidInstanceClient,
@@ -16,6 +17,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   LimrunAdbCommandOptions,
   LimrunAdbCommandResult,
+  LimrunAdbExecutor,
   LimrunAdbProvider,
   LimrunPortReverseEndpoint,
   LimrunRuntimeDependencies,
@@ -42,6 +44,18 @@ type LimrunAndroidAdbSession = {
   adbTunnel?: LimrunAdbTunnel;
   adbSerial?: string;
   adbTunnelPromise?: Promise<string>;
+  /**
+   * Set once teardown has begun for this session, before it yields. The host ADB endpoint is
+   * process-wide, so neither a caller that kept an interactor from this session nor a tunnel this session had
+   * already started may leave one no owner can tear down any more.
+   */
+  adbTunnelRetired?: boolean;
+  /**
+   * Where teardown points this session's ADB route while it ends an endpoint: at that endpoint, whatever the
+   * session's own public route says about it. Only this session's cleanup sets it, and only for as long as it
+   * is dispatching, so no caller that kept an interactor can reach a serial that is on its way out.
+   */
+  adbReverseExecutor?: LimrunAdbExecutor;
   readonly dependencies: Pick<LimrunRuntimeDependencies, 'android' | 'host'>;
 };
 
@@ -85,9 +99,13 @@ export async function createLimrunAndroidSession(
       await createLimrunAndroidTextInjector(client)(request);
     },
   };
-  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec, {
-    noRebind: options.ownership === 'attached',
-  });
+  // The reverse manager has to outlive this session's own ADB route: its cleanup clears reverse mappings off a
+  // device the session is disconnecting, after retirement has closed that route to every caller. So it dispatches
+  // through a route of its own, which is the session's route until cleanup takes it over.
+  adbProvider.reverse = await dependencies.android.createPortReverse(
+    async (args, options) => await runLimrunAndroidReverseAdb(session, args, options),
+    { noRebind: options.ownership === 'attached' },
+  );
   return Object.assign(session, { adbProvider });
 }
 
@@ -150,21 +168,52 @@ export async function configureLimrunAndroidPortReverse(
 }
 
 export async function cleanupLimrunAndroidAdbTunnel(session: LimrunAndroidSession): Promise<void> {
-  await session.adbTunnelPromise?.catch(() => {});
-  const serial = session.adbSerial;
-  if (serial) {
-    await cleanupAndroidPortReverse(session);
-    await session.dependencies.host
-      .runAdb(session.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
-        allowFailure: true,
-        timeoutMs: 10_000,
-      })
-      .catch(() => {});
+  // Retire first, before yielding: the host ADB endpoint is process-wide, so from this step on no retained
+  // interactor can raise a tunnel, and a tunnel already in flight ends where it lands.
+  session.adbTunnelRetired = true;
+  // Cleanup keeps the serial it finds, or the one the in-flight start publishes while this step waits on it:
+  // a start answering into a retired session records its endpoint here first, because this cleanup is the only
+  // route left that can reach it.
+  const started = await session.adbTunnelPromise?.catch(() => undefined);
+  session.adbTunnelPromise = undefined;
+  const serial = session.adbSerial ?? started;
+  try {
+    if (serial) {
+      // Clearing this session's reverse mappings means reaching the device this cleanup is about to disconnect,
+      // and this session's public ADB route is closed from the step above. So its reverse manager is pointed at
+      // an executor of this cleanup's own, addressed at the serial being ended — a serial no retained caller can
+      // ask for.
+      session.adbReverseExecutor = async (args, options) =>
+        await runLimrunAndroidAdbAtSerial(session, serial, args, options);
+      // The teardown's marker covers this route and every dispatch this cleanup starts from it, including a
+      // reverse manager that answers a later request of its own inside the same await chain. A caller command
+      // that reaches this route through any other path carries no marker.
+      await limrunAdbTeardownScope.run(true, async () => {
+        await cleanupAndroidPortReverse(session);
+      });
+      await session.dependencies.host
+        .runAdb(session.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
+          allowFailure: true,
+          timeoutMs: 10_000,
+        })
+        .catch(() => {});
+    }
+  } finally {
+    session.adbReverseExecutor = undefined;
+    closeLimrunAndroidAdbTunnel(session);
   }
-  session.adbTunnel?.close();
+}
+
+/**
+ * Ends the tunnel this session holds, once. A tunnel that answered only after its session was retired
+ * lands here, because retirement alone cannot reach it; nothing else is left to end it.
+ */
+function closeLimrunAndroidAdbTunnel(session: LimrunAndroidSession): void {
+  const tunnel = session.adbTunnel;
+  if (tunnel === undefined) return;
   session.adbTunnel = undefined;
   session.adbSerial = undefined;
-  session.adbTunnelPromise = undefined;
+  tunnel.close();
 }
 
 async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise<void> {
@@ -189,25 +238,51 @@ async function runLimrunAndroidAdb(
   args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ): Promise<LimrunAdbCommandResult> {
-  const { invocation, result } = await executeLimrunAndroidAdb(session, args, options);
-  return await requireSuccessfulLimrunAndroidAdb(
-    invocation,
-    result,
-    options?.allowFailure,
-    session.dependencies,
-  );
+  const serial = await ensurePersistentAndroidAdbSerial(session);
+  return await runLimrunAndroidAdbAtSerial(session, serial, args, options);
 }
 
 /**
- * The tunnel serial is this provider's own addressing decision: it goes on the invocation's
- * target, so the command array the Android cluster handed over reaches the host unchanged.
+ * Whether one dispatch belongs to a session's teardown: true only for the dispatches that teardown itself
+ * started. A provider that hands a caller command to the reverse route — a reverse command queued inside an
+ * operation of its own — carries no marker, so the manager cannot have a caller's mapping bound at a serial
+ * that is on its way out. A marker set by one session never authorises another session's route.
+ *
+ * Requirement this rests on: the reverse manager must dispatch its caller's commands within the caller's
+ * async context. A manager that answered from work it scheduled outside this call (an internal queue drained
+ * by a timer, or a driver loop made at construction) would run the teardown's removals without this marker,
+ * and the mappings would survive the session they were made for.
  */
-async function executeLimrunAndroidAdb(
+const limrunAdbTeardownScope = new AsyncLocalStorage<boolean>();
+
+/**
+ * The reverse manager's own route to the device. It is the session's route while the session is live, and
+ * cleanup's route of its own once the session is retired: clearing reverse mappings means reaching the device
+ * that is about to be disconnected, and that has to stay possible after every caller of this session was
+ * refused. Only a dispatch that carries its session's teardown scope may use the teardown's executor, so no
+ * caller command is ever dispatched at the serial the teardown is ending.
+ */
+async function runLimrunAndroidReverseAdb(
   session: LimrunAndroidAdbSession,
   args: readonly string[],
   options?: LimrunAdbCommandOptions,
-): Promise<{ invocation: AndroidAdbInvocation; result: LimrunAdbCommandResult }> {
-  const serial = await ensurePersistentAndroidAdbSerial(session);
+): Promise<LimrunAdbCommandResult> {
+  const atSerial = limrunAdbTeardownScope.getStore() ? session.adbReverseExecutor : undefined;
+  if (atSerial !== undefined) return await atSerial(args, options);
+  return await runLimrunAndroidAdb(session, args, options);
+}
+
+/**
+ * Dispatches one command at a serial the caller already holds, which is where both of this provider's ADB routes
+ * end up. The tunnel serial is this provider's own addressing decision: it goes on the invocation's target, so
+ * the command array the Android cluster handed over reaches the host unchanged.
+ */
+async function runLimrunAndroidAdbAtSerial(
+  session: LimrunAndroidAdbSession,
+  serial: string,
+  args: readonly string[],
+  options?: LimrunAdbCommandOptions,
+): Promise<LimrunAdbCommandResult> {
   const invocation = session.dependencies.android.deviceAdbInvocation(serial, args);
   const result = await session.dependencies.host.runAdb(invocation, {
     allowFailure: options?.allowFailure,
@@ -216,7 +291,12 @@ async function executeLimrunAndroidAdb(
     timeoutMs: options?.timeoutMs ?? 30_000,
     signal: options?.signal,
   });
-  return { invocation, result };
+  return await requireSuccessfulLimrunAndroidAdb(
+    invocation,
+    result,
+    options?.allowFailure,
+    session.dependencies,
+  );
 }
 
 async function requireSuccessfulLimrunAndroidAdb(
@@ -236,6 +316,11 @@ async function requireSuccessfulLimrunAndroidAdb(
 }
 
 async function ensurePersistentAndroidAdbSerial(session: LimrunAndroidAdbSession): Promise<string> {
+  // Retirement is checked before any serial is read, including one this session cached: a caller that kept an
+  // interactor from a session whose cleanup answered is refused the same as one that arrives first. The serial
+  // of a session being torn down is that teardown's alone, and its reverse manager reaches it through the
+  // executor it was handed, not through this route.
+  if (session.adbTunnelRetired) throw alreadyCleanedUp(session);
   if (session.adbSerial) return session.adbSerial;
   const pending = session.adbTunnelPromise ?? startAndroidAdbTunnel(session);
   session.adbTunnelPromise = pending;
@@ -250,9 +335,27 @@ async function ensurePersistentAndroidAdbSerial(session: LimrunAndroidAdbSession
 async function startAndroidAdbTunnel(session: LimrunAndroidAdbSession): Promise<string> {
   const tunnel = await session.client.startAdbTunnel();
   const serial = `${tunnel.address.address}:${tunnel.address.port}`;
+  // Nothing between this call's start and the publication below lets a second tunnel be raised, so a session
+  // retired while this tunnel was being raised records it all the same: its cleanup is the one route that can
+  // still reach it, and it is awaiting this promise. Refusal alone would leave the endpoint on the host with
+  // nobody left to disconnect it.
   session.adbTunnel = tunnel;
   session.adbSerial = serial;
+  if (session.adbTunnelRetired) throw alreadyCleanedUp(session);
   return serial;
+}
+
+function alreadyCleanedUp(session: LimrunAndroidAdbSession): AppError {
+  return new AppError(
+    'SESSION_NOT_FOUND',
+    `Limrun ADB tunnel for instance '${session.instanceId}' was already cleaned up`,
+    {
+      reason: 'limrun_adb_tunnel_cleaned_up',
+      // The tunnel is gone whether the instance's delete confirmed or is still held for retry, so the hint
+      // sends the caller to a new lease, and to Limrun only for the state where a release would refuse again.
+      hint: `This interactor's ADB tunnel is closed for lease '${session.lease.leaseId}'. Open a new lease. If this lease's release was refused as an unconfirmed delete, ask Limrun to delete the instance first.`,
+    },
+  );
 }
 
 function tcpEndpoint(port: number): LimrunPortReverseEndpoint {

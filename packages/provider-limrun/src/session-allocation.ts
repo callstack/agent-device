@@ -3,6 +3,7 @@ import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts
 import { AppError } from '@agent-device/kernel/errors';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
+import { LIMRUN_SINGLE_ATTEMPT } from './client-options.ts';
 import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
@@ -67,89 +68,99 @@ export async function resolvePreinstalledAppId(
 
 export async function allocateLimrunIosSession(
   params: SessionAllocationParams,
+  onRent: (instanceId: string) => void,
 ): Promise<LimrunIosSession> {
-  const instance = (await params.limrun.iosInstances.create({
-    wait: true,
-    metadata: params.metadata,
-    spec: {
-      ...(params.region ? { region: params.region } : {}),
-      ...(params.app
-        ? {
-            initialAssets: [
-              {
-                kind: 'App' as const,
-                source: 'AssetID' as const,
-                assetId: params.app.id,
-                launchMode: 'RelaunchIfRunning' as const,
-              },
-            ],
-          }
-        : {}),
-    },
-  })) as LimrunInstance;
-  try {
-    if (!instance.status.apiUrl) {
-      throw new AppError('COMMAND_FAILED', 'Limrun iOS instance did not expose apiUrl');
-    }
-    return await createLimrunIosSession(
-      {
-        lease: params.lease,
-        instanceId: instance.metadata.id,
-        ownership: 'created',
-        device: buildLimrunDevice('ios', params.lease, instance.metadata.id),
-        apiUrl: instance.status.apiUrl,
-        token: instance.status.token,
+  const instance = (await params.limrun.iosInstances.create(
+    {
+      wait: true,
+      metadata: params.metadata,
+      spec: {
+        ...(params.region ? { region: params.region } : {}),
+        ...(params.app
+          ? {
+              initialAssets: [
+                {
+                  kind: 'App' as const,
+                  source: 'AssetID' as const,
+                  assetId: params.app.id,
+                  launchMode: 'RelaunchIfRunning' as const,
+                },
+              ],
+            }
+          : {}),
       },
-      params.dependencies,
-    );
-  } catch (error) {
-    await params.limrun.iosInstances.delete(instance.metadata.id).catch(() => {});
-    throw error;
+    },
+    // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
+    // this call again: a second create would rent a second instance nobody is standing beside.
+    LIMRUN_SINGLE_ATTEMPT,
+  )) as LimrunInstance;
+  const instanceId = instance.metadata.id;
+  // Rented from this step: the caller's owner records the instance here, before any session is built on it,
+  // so its disposal can always end it — including when the endpoint check or the session below fails.
+  onRent(instanceId);
+  if (!instance.status.apiUrl) {
+    throw new AppError('COMMAND_FAILED', 'Limrun iOS instance did not expose apiUrl');
   }
+  return await createLimrunIosSession(
+    {
+      lease: params.lease,
+      instanceId,
+      ownership: 'created',
+      device: buildLimrunDevice('ios', params.lease, instanceId),
+      apiUrl: instance.status.apiUrl,
+      token: instance.status.token,
+    },
+    params.dependencies,
+  );
 }
 
 export async function allocateLimrunAndroidSession(
   params: SessionAllocationParams,
+  onRent: (instanceId: string) => void,
 ): Promise<LimrunAndroidSession> {
-  const instance = (await params.limrun.androidInstances.create({
-    wait: true,
-    metadata: params.metadata,
-    spec: {
-      ...(params.region ? { region: params.region } : {}),
-      ...(params.app
-        ? {
-            initialAssets: [
-              {
-                kind: 'App' as const,
-                source: 'AssetIDs' as const,
-                assetIds: [params.app.id],
-              },
-            ],
-          }
-        : {}),
-    },
-  })) as LimrunInstance;
-  try {
-    if (!instance.status.apiUrl || !instance.status.adbWebSocketUrl) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Limrun Android instance did not expose API and ADB websocket endpoints',
-      );
-    }
-    return await createLimrunAndroidSession(
-      {
-        lease: params.lease,
-        instanceId: instance.metadata.id,
-        ownership: 'created',
-        device: buildLimrunDevice('android', params.lease, instance.metadata.id),
-        apiUrl: instance.status.apiUrl,
-        token: instance.status.token,
-        adbUrl: instance.status.adbWebSocketUrl,
+  const instance = (await params.limrun.androidInstances.create(
+    {
+      wait: true,
+      metadata: params.metadata,
+      spec: {
+        ...(params.region ? { region: params.region } : {}),
+        ...(params.app
+          ? {
+              initialAssets: [
+                {
+                  kind: 'App' as const,
+                  source: 'AssetIDs' as const,
+                  assetIds: [params.app.id],
+                },
+              ],
+            }
+          : {}),
       },
-      params.dependencies,
+    },
+    // Limrun may have created this instance even though its answer was lost, so the SDK must not POST
+    // this call again: a second create would rent a second instance nobody is standing beside.
+    LIMRUN_SINGLE_ATTEMPT,
+  )) as LimrunInstance;
+  const instanceId = instance.metadata.id;
+  // Rented from this step: the caller's owner records the instance here, before any session is built on it,
+  // so its disposal can always end it — including when an endpoint is missing or the session below fails.
+  onRent(instanceId);
+  if (!instance.status.apiUrl || !instance.status.adbWebSocketUrl) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Limrun Android instance did not expose API and ADB websocket endpoints',
     );
-  } catch (error) {
-    await params.limrun.androidInstances.delete(instance.metadata.id).catch(() => {});
-    throw error;
   }
+  return await createLimrunAndroidSession(
+    {
+      lease: params.lease,
+      instanceId,
+      ownership: 'created',
+      device: buildLimrunDevice('android', params.lease, instanceId),
+      apiUrl: instance.status.apiUrl,
+      token: instance.status.token,
+      adbUrl: instance.status.adbWebSocketUrl,
+    },
+    params.dependencies,
+  );
 }

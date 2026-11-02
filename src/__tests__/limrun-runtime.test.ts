@@ -52,7 +52,7 @@ const limrunMockState = vi.hoisted(() => {
     iosList: vi.fn<() => Promise<LimrunInstancePage>>(async () => ({
       getPaginatedItems: () => [],
     })),
-    iosDelete: vi.fn(async () => undefined),
+    iosDelete: vi.fn(async (_instanceId: string, _options?: { maxRetries: number }) => undefined),
     androidCreate: vi.fn(async () => ({
       metadata: { id: 'android-instance-1' },
       status: {
@@ -64,7 +64,9 @@ const limrunMockState = vi.hoisted(() => {
     androidList: vi.fn<() => Promise<LimrunInstancePage>>(async () => ({
       getPaginatedItems: () => [],
     })),
-    androidDelete: vi.fn(async () => undefined),
+    androidDelete: vi.fn(
+      async (_instanceId: string, _options?: { maxRetries: number }) => undefined,
+    ),
   };
 });
 
@@ -254,7 +256,9 @@ test('Limrun reclaims a labeled iOS instance without an in-memory session', asyn
     assert.deepEqual(limrunMockState.iosList.mock.calls, [
       [{ labelSelector: 'provider=limrun,leaseId=lease-recovered-ios' }],
     ]);
-    assert.deepEqual(limrunMockState.iosDelete.mock.calls, [['ios-instance-recovered']]);
+    assert.deepEqual(limrunMockState.iosDelete.mock.calls, [
+      ['ios-instance-recovered', { maxRetries: 0 }],
+    ]);
   } finally {
     await runtime.shutdown();
   }
@@ -692,7 +696,7 @@ test('Limrun deletes iOS instance when post-create validation fails', async () =
     const allocateLease = runtime.leaseLifecycle.allocate;
     if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
     await assert.rejects(() => allocateLease(lease), /did not expose apiUrl/);
-    assert.deepEqual(limrunMockState.iosDelete.mock.calls[0], ['ios-instance-missing-api']);
+    assert.equal(limrunMockState.iosDelete.mock.calls[0]?.[0], 'ios-instance-missing-api');
   } finally {
     await runtime.shutdown();
   }
@@ -724,7 +728,7 @@ test('Limrun deletes Android instance when post-create validation fails', async 
     const allocateLease = runtime.leaseLifecycle.allocate;
     if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
     await assert.rejects(() => allocateLease(lease), /did not expose API and ADB/);
-    assert.deepEqual(limrunMockState.androidDelete.mock.calls[0], ['android-instance-missing-adb']);
+    assert.equal(limrunMockState.androidDelete.mock.calls[0]?.[0], 'android-instance-missing-adb');
   } finally {
     await runtime.shutdown();
   }
@@ -754,7 +758,19 @@ test('Limrun keeps session tracked when release fails so release can be retried'
     await allocateLease(lease);
     limrunMockState.androidDelete.mockRejectedValueOnce(new Error('temporary delete failure'));
 
-    await assert.rejects(() => releaseLease(lease), /temporary delete failure/);
+    // An unconfirmed delete is reported as such, with the instance still held, rather than as a release.
+    await assert.rejects(
+      () => releaseLease(lease),
+      (error: unknown) => {
+        const details = (error as AppError).details;
+        return (
+          error instanceof AppError &&
+          details?.reason === 'limrun_instance_delete_unconfirmed' &&
+          details.limrunInstanceId === 'android-instance-1' &&
+          details.cause === 'temporary delete failure'
+        );
+      },
+    );
     assert.deepEqual(await releaseLease(lease), { limrunInstanceId: 'android-instance-1' });
   } finally {
     await runtime.shutdown();
@@ -897,7 +913,10 @@ test('Limrun instance access wins over the API key for its platform only', async
   assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
   assert.equal(limrunMockState.iosDelete.mock.calls.length, 0);
   assert.equal(limrunMockState.androidCreate.mock.calls.length, 1);
-  assert.deepEqual(limrunMockState.androidDelete.mock.calls, [['android-instance-1']]);
+  assert.deepEqual(
+    limrunMockState.androidDelete.mock.calls.map(([instanceId]) => instanceId),
+    ['android-instance-1'],
+  );
 });
 
 test('Limrun without an API key refuses operations that need one', async () => {
