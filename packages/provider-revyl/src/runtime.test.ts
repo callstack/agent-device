@@ -20,6 +20,17 @@ afterEach(async () => {
   await Promise.all(openBackends.splice(0).map((fixture) => fixture.close()));
 });
 
+/** Asserts an allocation failed with this typed reason. */
+async function refusedWith(
+  allocation: Promise<unknown> | undefined,
+  reason: string,
+): Promise<void> {
+  await assert.rejects(
+    async () => await allocation,
+    (error: unknown) => error instanceof AppError && error.details?.reason === reason,
+  );
+}
+
 /** Stops the fixture recorded, which is what every lifecycle assertion reads. */
 function stops(fixture: RevylFixtureBackend): string[] {
   return fixture.paths().filter((path) => path.includes('/stop'));
@@ -192,22 +203,17 @@ test('a canceled joiner reports its own cancellation while the shared start runs
 });
 
 test('a joiner keeps the device when the caller that started it hangs up mid-readiness', async () => {
-  // The start belongs to every caller that joined it, so the first caller's cancellation answers only
-  // that caller: readiness goes on, and the caller still waiting gets the device.
+  // The first caller's cancellation answers only that caller: readiness goes on for the one still waiting.
   const fixture = await backend({ healthDelayMs: 200 });
   const runtime = fixture.createRuntime();
   const lease = revylLease('ios');
   const controller = new AbortController();
   const first = runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
-  const firstCanceled = assert.rejects(
-    async () => await first,
-    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
-  );
+  const firstCanceled = refusedWith(first, 'request_canceled');
   const joining = runtime.leaseLifecycle!.allocate!(lease);
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
   controller.abort();
   await firstCanceled;
-
   assert.equal((await joining)?.providerSessionId, revylSessionIdForLease('lease-1'));
   assert.deepEqual(stops(fixture), []);
   await runtime.shutdown();
@@ -224,11 +230,7 @@ test('a release that lands while the shared start is still running stops the dev
   const first = runtime.leaseLifecycle?.allocate?.(lease);
   // The release owns the device once it starts, so the caller still waiting is refused rather than handed
   // a session that is being stopped.
-  const firstRefused = assert.rejects(
-    async () => await first,
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
-  );
+  const firstRefused = refusedWith(first, 'provider-lease-releasing');
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
 
   const controller = new AbortController();
@@ -245,7 +247,6 @@ test('a release that lands while the shared start is still running stops the dev
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
 
-  // The runtime holds no session a later shutdown would stop twice.
   await firstRefused;
   await runtime.shutdown();
   assert.equal(stops(fixture).length, 1);
@@ -420,6 +421,22 @@ test('shutdown waits for a start already in flight and releases the device it re
   );
 });
 
+test('a release during a stalled readiness stops the device at once', async () => {
+  // `start_device` answered, so the session exists and is published; readiness then stalls.
+  const fixture = await backend({ healthDelayMs: 10_000 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const allocating = runtime.leaseLifecycle!.allocate!(lease);
+  const refused = refusedWith(allocating, 'provider-lease-releasing');
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
+  const releasedAt = Date.now();
+  const released = await runtime.leaseLifecycle!.release!(lease);
+  assert.ok(Date.now() - releasedAt < 2_000, 'the release does not wait out readiness');
+  assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await refused;
+  assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+});
+
 test('a release that lands mid-start stops the session only once Revyl has made it', async () => {
   // Revyl creates the session when it answers `start_device`, not when it is asked. A `/stop` sent inside
   // that gap names a session Revyl never had, and Revyl's 404 is exactly what a stop reads as "already
@@ -430,18 +447,13 @@ test('a release that lands mid-start stops the session only once Revyl has made 
   const lease = revylLease('ios');
 
   const allocating = runtime.leaseLifecycle?.allocate?.(lease);
-  const refused = assert.rejects(
-    async () => await allocating,
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
-  );
+  const refused = refusedWith(allocating, 'provider-lease-releasing');
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
 
   // The release lands while the start is in flight. It waits for the answer rather than stopping the id it
   // only has from the lease, and that is what makes the stop below land after the session exists.
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
-  // The release reports the device the start rented, not only the session id.
   assert.equal(released?.revylRunId, 'run-1');
   await refused;
 

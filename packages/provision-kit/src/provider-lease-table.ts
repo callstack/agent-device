@@ -23,7 +23,7 @@ export type ProviderLeaseAllocateOptions<Request> = ProviderLeaseBudget &
 
 export type ProviderLeaseStartControl<Handle> = Readonly<{
   /**
-   * Aborts when no caller still waits for the start before it answers, so the provider can abandon it.
+   * Aborts when no caller still waits for the start before it answers, or the lease starts ending.
    * No single caller's signal or deadline reaches the start: it runs for every caller that joins it.
    */
   signal: AbortSignal;
@@ -432,8 +432,9 @@ class LeaseTable<Session, Handle, Request> {
     caller: ProviderLeaseBudget,
     startedAt: number,
   ): unknown {
-    if (answer.status !== 'ready') return answer.error;
+    // A lease that is ending is why the callers get nothing, whatever the aborted start answered.
     if (entry.phase === 'ending') return this.driver.releasing(entry.lease);
+    if (answer.status !== 'ready') return answer.error;
     const budgetMs = Math.max(0, entry.answerBy - startedAt);
     return this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle);
   }
@@ -519,6 +520,8 @@ class LeaseTable<Session, Handle, Request> {
    */
   private teardown(entry: LeaseEntry<Session, Handle, Request>): Promise<Ended<Session, Handle>> {
     entry.phase = 'ending';
+    // No caller can take this start's device any more, so the provider may stop working on it.
+    if (!entry.answered) entry.abandon.abort();
     if (entry.ending) return entry.ending;
     const ending = this.runTeardown(entry).finally(() => {
       if (entry.ending === ending) entry.ending = undefined;

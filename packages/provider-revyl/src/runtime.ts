@@ -198,7 +198,7 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     if (released === undefined) return undefined;
     return released.session
       ? allocationResult(released.session)
-      : { providerSessionId: released.handle.sessionId };
+      : { revylRunId: released.handle.runId, providerSessionId: released.handle.sessionId };
   }
 
   private sessionForDevice(device: DeviceInfo): RevylSession | undefined {
@@ -226,9 +226,10 @@ function createRevylLeaseDriver(
         appUrl: request.appUrl,
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
-        // The table aborts this only once no caller waits; Revyl bounds `start_device` and readiness with
-        // its own budgets, which `REVYL_ALLOCATION_TIMEOUT_MS` covers.
+        // The table aborts this once no caller waits or the lease is ending; Revyl bounds `start_device`
+        // and readiness with its own budgets, which `REVYL_ALLOCATION_TIMEOUT_MS` covers.
         signal: control.signal,
+        onRented: control.rented,
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;

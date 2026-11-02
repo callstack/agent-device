@@ -63,6 +63,8 @@ export type RevylStartRequestInput = Readonly<{
   signal?: AbortSignal;
   /** Epoch-ms deadline the caller has for the whole allocation; it outranks the runtime's own. */
   deadline?: number;
+  /** Told the session once `start_device` answered with it, the first moment Revyl holds it. */
+  onRented?: (rented: RevylRentedSession) => void;
 }>;
 
 /**
@@ -158,6 +160,7 @@ export async function startRevylSession(
       ),
     };
   }
+  input.onRented?.({ runId, sessionId });
   // Revyl may have answered a run for a start whose caller has already hung up. The device is rented
   // either way, so the answer still reports it as what is owed an end.
   if (input.signal?.aborted) {

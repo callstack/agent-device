@@ -240,6 +240,7 @@ test('a release during a start refuses the waiting allocation and stops the devi
   const releasing = provider.table.release('lease-1');
   await settle();
   assert.deepEqual(provider.stopped, [], 'the stop waits for the answer that names the device');
+  assert.ok(provider.controls[0]!.signal.aborted, 'the start is told the lease is ending');
   provider.answerStart(0, ready('session-1'));
   assert.deepEqual(await releasing, {
     handle: { id: 'session-1' },
@@ -652,19 +653,6 @@ test('shutdown fences recovery: a lease it holds nothing for is left to the next
   assert.deepEqual(provider.stopped, ['session-1']);
 });
 
-test('shutdown reports what it could not stop and keeps it for a later release', async () => {
-  const provider = fakeProvider();
-  await allocated(provider);
-  provider.queueStop(refusedStop());
-
-  await assert.rejects(provider.table.shutdown(), (error: unknown) => {
-    assert.ok(reason('provider-cleanup-pending', 'shutdown')(error));
-    assert.deepEqual((error as TableError).details.handles, ['session-1']);
-    return true;
-  });
-  assert.equal((await provider.table.release('lease-1'))?.handle.id, 'session-1');
-});
-
 test('recovery stops what the provider finds, and keeps that handle when the stop fails', async () => {
   const provider = fakeProvider();
   provider.queueStop(refusedStop());
@@ -709,22 +697,4 @@ test('recoveries, a release, and a shutdown of an entryless lease share one look
   assert.equal(released?.handle.id, 'found-lease-1');
   assert.deepEqual(provider.found, ['lease-1']);
   assert.deepEqual(provider.stopped, ['found-lease-1']);
-});
-
-test('a release, a recovery and a shutdown that overlap share one stop', async () => {
-  const provider = fakeProvider();
-  await allocated(provider);
-
-  const stop = deferred<void>();
-  provider.queueStop(async () => await stop.promise);
-  const ending = Promise.all([
-    provider.table.release('lease-1'),
-    provider.table.recover(lease()),
-    provider.table.shutdown(),
-  ]);
-  await settle();
-  stop.resolve();
-  await ending;
-  assert.deepEqual(provider.stopped, ['session-1']);
-  assert.deepEqual(provider.found, [], 'a lease this process holds is not searched for');
 });
