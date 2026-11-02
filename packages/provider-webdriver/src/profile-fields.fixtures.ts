@@ -40,3 +40,15 @@ export function consumedProfileFields({ fields }: ProviderProfileFieldDeclaratio
     .filter((field) => fields[field] === 'consumed')
     .sort();
 }
+
+/** A hub that reads none of the profile fields, so every one of them is refused. */
+export function refuseAllProfileFields(provider: string): ProviderProfileFieldDeclaration {
+  const consumed = consumeAllProfileFields(provider);
+  return {
+    provider,
+    label: consumed.label,
+    fields: Object.fromEntries(
+      (Object.keys(consumed.fields) as ProviderProfileField[]).map((field) => [field, 'refused']),
+    ) as Record<ProviderProfileField, 'refused'>,
+  };
+}

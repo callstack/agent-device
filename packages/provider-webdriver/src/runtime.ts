@@ -103,6 +103,12 @@ export type CloudWebDriverRuntimeOptions = {
   capabilityOverrides?: CloudWebDriverCapabilityOverrides;
   /** Profile fields this provider reads; any field it refuses fails lease allocation. */
   profileFields: ProviderProfileFieldDeclaration;
+  /**
+   * Budget for a prepared session's `cleanup` on disposal and on a failed create, and for `listArtifacts`
+   * during teardown. Defaults to 30,000 ms. This budget does not bound `prepareSession`; release and
+   * shutdown still wait for preparation to finish.
+   */
+  providerCallbackTimeoutMs?: number;
 };
 
 export function createCloudWebDriverRuntime(
