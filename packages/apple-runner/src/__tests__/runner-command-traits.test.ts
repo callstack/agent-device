@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { test } from 'vitest';
+import { readRunnerRequestFixture } from '@agent-device/test-kit';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
   isReadOnlyRunnerCommand,
@@ -9,6 +10,7 @@ import {
   RUNNER_COMMAND_TRAITS,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
+import { readSwiftInlineCommands } from './runner-swift-settlement-fixtures.ts';
 
 const RUNNER_COMMANDS = Object.keys(RUNNER_COMMAND_TRAITS) as Array<RunnerCommand['command']>;
 
@@ -68,10 +70,6 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
 });
 
 test('alert actions match the native read-only golden table', () => {
-  // The fixture's `query` column records whether the alert request changes anything — `get` is the
-  // one action that is side-effect-free — and each side consumes it under its own name: `readOnly`
-  // for this daemon trait, retry eligibility for the Apple runner, which no longer classifies
-  // commands by read-only-ness at all.
   const cases = JSON.parse(
     fs.readFileSync(
       new URL('../../../../contracts/fixtures/alert-command-traits.json', import.meta.url),
@@ -85,6 +83,25 @@ test('alert actions match the native read-only golden table', () => {
   for (const { name, command, query } of cases) {
     assert.deepEqual(readRunnerCommandTraits(command), { ...defaults(), readOnly: query }, name);
     assert.equal(isReadOnlyRunnerCommand(command), query, name);
+  }
+});
+
+test('queued command read-only traits match the Swift parity fixture', () => {
+  const cases = JSON.parse(
+    fs.readFileSync(
+      new URL('../../../../contracts/fixtures/runner-command-read-only.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Array<{ command: RunnerCommand; readOnly: boolean }>;
+  const inline = new Set(readSwiftInlineCommands());
+  const queued = new Set(
+    readRunnerRequestFixture()
+      .map(({ request }) => String(request.command))
+      .filter((command) => !inline.has(command)),
+  );
+  assert.deepEqual(new Set(cases.map(({ command }) => command.command)), queued);
+  for (const { command, readOnly } of cases) {
+    assert.equal(readRunnerCommandTraits(command).readOnly, readOnly, JSON.stringify(command));
   }
 });
 

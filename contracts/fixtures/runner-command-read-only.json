@@ -1,0 +1,239 @@
+[
+  {
+    "command": {
+      "command": "actionButton"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "activate"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "alert"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "appState"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "appSwitcher"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "backInApp"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "backSystem"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "desktopScroll"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "drag"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "findText"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "gesture"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "gestureViewport"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "home"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "keyboardDismiss"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "keyboardReturn"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "longPress"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "mouseClick"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "pasteboardWrite"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "querySelector"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "readText"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "recordStart"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "recordStop"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "remotePress"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "rotate"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "screenshot"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "scroll"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "sequence"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "shutdown"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "snapshot"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "swipe"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "tap"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "targetReset"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "terminate"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "type"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "volumeDown"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "volumeUp"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "alert",
+      "action": "get"
+    },
+    "readOnly": true
+  },
+  {
+    "command": {
+      "command": "alert",
+      "action": "accept"
+    },
+    "readOnly": false
+  },
+  {
+    "command": {
+      "command": "alert",
+      "action": "dismiss"
+    },
+    "readOnly": false
+  }
+]

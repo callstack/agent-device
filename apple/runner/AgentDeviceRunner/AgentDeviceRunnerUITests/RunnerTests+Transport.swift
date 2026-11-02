@@ -94,6 +94,9 @@ extension RunnerTests {
       receiveRequest(inbound, over: connection)
       return
     }
+    // Closing here ends the request's deadline bookkeeping: the armed work item refuses a closed inbound,
+    // so from this point the completion below is the only writer for this connection, whichever admission
+    // verdict the journal gives.
     inbound.close()
     let body = inbound.buffer.subdata(in: head.bodyOffset..<bodyEnd)
     let remainder = Data(inbound.buffer.suffix(from: bodyEnd))
@@ -203,46 +206,69 @@ extension RunnerTests {
         completion((jsonResponse(status: 200, response: response), false))
         return
       }
-      // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to
-      // the in-flight execution and receive its response instead of piling a second execution
-      // onto the main queue behind it (#1105 capture pileup).
-      if attachToInFlightCommandIfNeeded(command: command, completion: completion) {
-        return
+      // The journal decides here, at the one route an inbound request takes, whether this send may run
+      // the command at all, and when the answer is to join an execution it registers this send for that
+      // execution's answer in the same operation. That is what keeps one `commandId` to one execution: a
+      // command that already finished is answered from the journal, so a repeat that arrives after its
+      // answer was delivered cannot drive the device a second time, and a send told to join can never be
+      // left behind by a delivery that went out first.
+      let admission = commandJournal.accept(command: command) { [weak self] executionToken in
+        self?.registerJoiner(for: executionToken, completion: completion)
       }
-      NSLog(
-        "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
-        command.command.rawValue,
-        command.commandId ?? ""
-      )
-      enqueueAccepted(command: command) { result in
-        switch result {
-        case .success(let response):
-          NSLog(
-            "AGENT_DEVICE_RUNNER_COMMAND_COMPLETED command=%@ commandId=%@ ok=%d",
-            command.command.rawValue,
-            command.commandId ?? "",
-            response.ok ? 1 : 0
-          )
-          self.deliverCommandResult(
-            command: command,
-            result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
-            completion: completion
-          )
-        case .failure(let error):
-          NSLog(
-            "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
-            command.command.rawValue,
-            command.commandId ?? "",
-            String(describing: error)
-          )
-          self.deliverCommandResult(
-            command: command,
-            result: (
-              self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
-              false
-            ),
-            completion: completion
-          )
+      switch admission {
+      case .join:
+        // Re-sends of a still-executing commandId (the daemon's transport retry loop) were registered
+        // onto the in-flight execution above and receive its response instead of piling a second
+        // execution onto the main queue behind it (#1105 capture pileup).
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
+      case .terminal(let outcome):
+        // jsonResponse stamps replayed successes with current occupancy.
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
+        completion((jsonResponse(status: 200, response: outcome), false))
+      case .execute(let executionToken):
+        NSLog(
+          "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
+          command.command.rawValue,
+          command.commandId ?? ""
+        )
+        enqueueAdmittedExecution(command: command) { result in
+          switch result {
+          case .success(let response):
+            NSLog(
+              "AGENT_DEVICE_RUNNER_COMMAND_COMPLETED command=%@ commandId=%@ ok=%d",
+              command.command.rawValue,
+              command.commandId ?? "",
+              response.ok ? 1 : 0
+            )
+            self.deliverCommandResult(
+              executionToken: executionToken,
+              result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
+              completion: completion
+            )
+          case .failure(let error):
+            NSLog(
+              "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
+              command.command.rawValue,
+              command.commandId ?? "",
+              String(describing: error)
+            )
+            self.deliverCommandResult(
+              executionToken: executionToken,
+              result: (
+                self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
+                false
+              ),
+              completion: completion
+            )
+          }
         }
       }
     } catch {
@@ -274,13 +300,13 @@ extension RunnerTests {
     }
   }
 
-  /// Journal-accepts `command` and executes it on `commandExecutionQueue`; `completion` runs on that
-  /// queue.
-  func enqueueAccepted(
+  /// Executes an already-admitted `command` on `commandExecutionQueue`; `completion` runs on that
+  /// queue. Admission is not this function's decision: the route asked the journal for the verdict
+  /// before calling it, so nothing here can re-admit a spent `commandId`.
+  func enqueueAdmittedExecution(
     command: Command,
     completion: @escaping @Sendable (Result<Response, Error>) -> Void
   ) {
-    commandJournal.accept(command: command)
     commandExecutionQueue.async {
       completion(Result { try self.executeAccepted(command: command) })
     }
@@ -288,42 +314,34 @@ extension RunnerTests {
 
   // MARK: - In-Flight Command Coalescing
 
-  /// Returns true when this send duplicated a still-executing commandId and was attached as a
-  /// waiter of the in-flight execution. Otherwise marks the commandId in flight and returns
-  /// false so the caller enqueues the (single) execution.
-  func attachToInFlightCommandIfNeeded(
-    command: Command,
+  /// Records this send as a waiter of the in-flight execution the journal just settled it onto, so the
+  /// execution's own delivery answers it. The journal calls this while it holds its own lock and after it
+  /// checked that the entry is still running, which is what makes the two indivisible: the transition that
+  /// closes an entry needs that lock, and one close drains this list only after it has closed the entry, so
+  /// no send can be recorded here for a delivery that already went out. The key is the execution's identity
+  /// rather than the `commandId`, because a refused-before-dispatch id is claimed again and the sends of
+  /// that execution must not join the refusal that freed the id. Takes only `inFlightCommandLock`, and
+  /// never the journal's, so nothing here can re-enter the journal.
+  func registerJoiner(
+    for executionToken: Int,
     completion: @escaping @Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
-  ) -> Bool {
-    guard let commandId = command.commandId?.trimmedNonEmpty else { return false }
+  ) {
     inFlightCommandLock.lock()
-    if inFlightCommandIds.contains(commandId) {
-      inFlightCommandWaiters[commandId, default: []].append(completion)
-      inFlightCommandLock.unlock()
-      NSLog(
-        "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
-        command.command.rawValue,
-        commandId
-      )
-      return true
-    }
-    inFlightCommandIds.insert(commandId)
+    inFlightCommandWaiters[executionToken, default: []].append(completion)
     inFlightCommandLock.unlock()
-    return false
   }
 
+  /// Answers the send that owns this execution, and every send the journal settled onto it. No send can
+  /// join after the close that runs before this delivery, so the list this drains is exactly the sends that
+  /// joined the execution whose work produced `result`.
   func deliverCommandResult(
-    command: Command,
+    executionToken: Int,
     result: (response: RunnerHttpResponse, shouldFinish: Bool),
     completion: ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void
   ) {
-    var waiters: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void] = []
-    if let commandId = command.commandId?.trimmedNonEmpty {
-      inFlightCommandLock.lock()
-      inFlightCommandIds.remove(commandId)
-      waiters = inFlightCommandWaiters.removeValue(forKey: commandId) ?? []
-      inFlightCommandLock.unlock()
-    }
+    inFlightCommandLock.lock()
+    let waiters = inFlightCommandWaiters.removeValue(forKey: executionToken) ?? []
+    inFlightCommandLock.unlock()
     completion(result)
     for waiter in waiters {
       waiter(result)
@@ -357,30 +375,11 @@ extension RunnerTests {
     Response(ok: false, error: ErrorPayload(code: code, message: message, hint: hint))
   }
 
-  /// Turns a thrown command error into its wire response. The execution-watchdog timeout keeps its
-  /// own typed code so the daemon records the runner as main-thread-occupied from the stalling
-  /// command itself, not only from a later `RUNNER_BUSY` refusal (#2552); every other throw stays the
-  /// generic `COMMAND_FAILED`.
+  /// Turns a thrown command error into its wire response, under the one error body the journal's failure
+  /// record uses, so the answer a resend reads from the journal cannot disagree with the answer the caller
+  /// lost.
   func commandFailedResponse(from error: Error) -> Response {
-    let nsError = error as NSError
-    if nsError.domain == RunnerErrorDomain.general,
-      nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
-    {
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: RunnerWireErrorCode.mainThreadTimeout,
-          message: nsError.localizedDescription,
-          hint:
-            "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."
-        )
-      )
-    }
-    return errorResponse(
-      code: "COMMAND_FAILED",
-      message: error.localizedDescription,
-      hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
-    )
+    Response(ok: false, error: RunnerTests.thrownErrorPayload(for: error))
   }
 
   /// Present on every response so the daemon can refuse a runner build that predates the token.

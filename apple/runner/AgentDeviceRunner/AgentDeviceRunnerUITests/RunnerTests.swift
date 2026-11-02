@@ -44,6 +44,25 @@ final class RunnerTests: XCTestCase {
     static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
+    /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
+    /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
+    /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
+    /// reached the device — and its hint sends the caller to observe the screen instead of resending.
+    static let commandAlreadyFinished = "COMMAND_ALREADY_FINISHED"
+  }
+
+  /// A replayed failure must carry the same code and recovery hint as its live reply.
+  static func thrownErrorPayload(for error: Error) -> ErrorPayload {
+    let nsError = error as NSError
+    let abandoned = nsError.domain == RunnerErrorDomain.general
+      && nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
+    return ErrorPayload(
+      code: abandoned ? RunnerWireErrorCode.mainThreadTimeout : "COMMAND_FAILED",
+      message: error.localizedDescription,
+      hint: abandoned
+        ? "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."
+        : "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
+    )
   }
 
   static let springboardBundleId = "com.apple.springboard"
@@ -104,11 +123,13 @@ final class RunnerTests: XCTestCase {
   var firstInteractionWindow: FirstInteractionWindow?
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
-  // Coalesces duplicate transport sends of the same commandId onto the single in-flight
-  // execution instead of enqueueing them again behind it (#1105 capture pileup).
   let inFlightCommandLock = NSLock()
-  var inFlightCommandIds: Set<String> = []
-  var inFlightCommandWaiters: [String: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
+  /// Waits of an execution whose `commandId` is in flight, keyed by the execution's identity so the one
+  /// execution answers every send that joined it (#1105 capture pileup). The journal owns which execution
+  /// is in flight and mints the identity; this holds only the sends that attached to it. A `commandId` the
+  /// runner refused before dispatch is claimed again, and the key is what keeps that new execution's sends
+  /// from being answered by the delivery of the refusal that freed the id.
+  var inFlightCommandWaiters: [Int: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
   // Tracks main-queue work abandoned by the execution watchdog (runMainThreadWork). While any is
   // outstanding the main thread is occupied: new main-thread commands fail fast as busy instead
   // of queueing behind work that cannot be cancelled, capture plans skip XCTest-backed tiers,

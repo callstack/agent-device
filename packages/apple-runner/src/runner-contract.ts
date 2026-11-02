@@ -39,6 +39,14 @@ export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
  */
 export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
 
+/**
+ * The runner's own code for refusing a repeat of a `commandId` it already finished, when that
+ * command's classification keeps no response body to replay. The command journal answers this; no
+ * command ran for the repeat. It is therefore silent about the runner's main thread, and a caller
+ * must not read it as drained occupancy ({@link runnerMainThreadOccupancyReport}).
+ */
+export const COMMAND_ALREADY_FINISHED_RUNNER_CODE = 'COMMAND_ALREADY_FINISHED';
+
 /** The longest readiness preflight a ready runner session pays before a conservative command. */
 export const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 

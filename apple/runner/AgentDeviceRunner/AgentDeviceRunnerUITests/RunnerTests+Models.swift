@@ -108,19 +108,23 @@ struct CommandTraits {
   let convertsRecordedFailure: Bool
   /// Whether the journal may store this command's response JSON, subject to its byte limit.
   let retainsJournalResponseJson: Bool
+  /// Whether a finished command may execute again under the same id after a lost reply.
+  let isReadOnly: Bool
 
   init(
     isInteraction: Bool = false,
     retryOnSessionLoss: Bool = false,
     launchPolicy: CommandLaunchPolicy,
     convertsRecordedFailure: Bool = false,
-    retainsJournalResponseJson: Bool
+    retainsJournalResponseJson: Bool,
+    isReadOnly: Bool
   ) {
     self.isInteraction = isInteraction
     self.retryOnSessionLoss = retryOnSessionLoss
     self.launchPolicy = launchPolicy
     self.convertsRecordedFailure = convertsRecordedFailure
     self.retainsJournalResponseJson = retainsJournalResponseJson
+    self.isReadOnly = isReadOnly
   }
 }
 
@@ -131,7 +135,8 @@ fileprivate extension CommandTraits {
     isInteraction: true,
     launchPolicy: .mayLaunch,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// Mutations the runner performs without the element-interaction preflight. NOTE: `mouseClick`
@@ -139,7 +144,8 @@ fileprivate extension CommandTraits {
   /// bespoke macOS activation, so classifying it needs a macOS smoke check first (tracked as a
   /// follow-up).
   static let appMutation = CommandTraits(
-    launchPolicy: .mayLaunch, convertsRecordedFailure: true, retainsJournalResponseJson: true
+    launchPolicy: .mayLaunch, convertsRecordedFailure: true, retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// Reads of the session app: replayable after session invalidation, and refused rather than
@@ -147,7 +153,8 @@ fileprivate extension CommandTraits {
   static func appRead(retainsJournalResponseJson: Bool) -> CommandTraits {
     CommandTraits(
       retryOnSessionLoss: true, launchPolicy: .existingApp,
-      retainsJournalResponseJson: retainsJournalResponseJson
+      retainsJournalResponseJson: retainsJournalResponseJson,
+      isReadOnly: true
     )
   }
 
@@ -158,7 +165,8 @@ fileprivate extension CommandTraits {
   static let selectorResolution = CommandTraits(
     launchPolicy: .existingApp,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: true
   )
 
   /// Reads the runner answers from its own capture and state, so preparation never brings an app
@@ -166,17 +174,18 @@ fileprivate extension CommandTraits {
   static func runnerCaptureRead(retainsJournalResponseJson: Bool) -> CommandTraits {
     CommandTraits(
       retryOnSessionLoss: true, launchPolicy: .noApp,
-      retainsJournalResponseJson: retainsJournalResponseJson
+      retainsJournalResponseJson: retainsJournalResponseJson,
+      isReadOnly: true
     )
   }
 
   /// The runner's own lifecycle: no session app is brought forward, and no mutation is proven.
-  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
+  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true, isReadOnly: false)
 
   /// Device state the runner sets from its own process, such as the pasteboard: no app is brought
   /// forward, since the state belongs to the device rather than to the session app, and no UI
   /// mutation is proven.
-  static let deviceState = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
+  static let deviceState = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true, isReadOnly: false)
 
   /// Commands hosted by the surface that already has focus, which no activation may cancel. A
   /// hardware press belongs to the system rather than to the session app, and an alert answers from
@@ -184,14 +193,16 @@ fileprivate extension CommandTraits {
   static let presentedSurfaceMutation = CommandTraits(
     launchPolicy: .presentedSurface,
     convertsRecordedFailure: true,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: false
   )
 
   /// `alert get` changes nothing, so it is the one alert action that may be replayed.
   static let presentedSurfaceQuery = CommandTraits(
     retryOnSessionLoss: true,
     launchPolicy: .presentedSurface,
-    retainsJournalResponseJson: true
+    retainsJournalResponseJson: true,
+    isReadOnly: true
   )
 }
 

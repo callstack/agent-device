@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
   TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
@@ -13,12 +15,14 @@ import {
   isRetryableRunnerError,
   isRunnerBusyError,
   resolveRunnerFatalErrorReason,
+  runnerMainThreadOccupancyReport,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
   shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
 import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
+import { requireSwiftThrownErrorWireCode } from './runner-swift-settlement-fixtures.ts';
 
 const TAP = { command: 'tap' } as const;
 const SNAPSHOT = { command: 'snapshot' } as const;
@@ -455,6 +459,65 @@ test('only the typed RUNNER_BUSY refusal reads as busy', () => {
   );
   assert.equal(isRunnerBusyError(commandFailed('RUNNER_BUSY')), false);
   assert.equal(isRunnerBusyError(new Error('RUNNER_BUSY')), false);
+});
+
+// --- main-thread occupancy (runnerMainThreadOccupancyReport) ---
+
+/** The AppError `buildRunnerResponseError` publishes for one runner wire code: its own details plus
+ * the structured payload that makes the reply an answer. */
+function runnerReplyFailure(runnerCode: string): AppError {
+  const classified = classifyRunnerReportedError(runnerCode);
+  return new AppError(classified.code, 'runner error', {
+    ...classified.details,
+    runner: { ok: false, error: { code: runnerCode, message: 'runner error' } },
+  });
+}
+
+// Pins the daemon-side literal, in the repo's style for these codes. The cross-language tie — that the
+// Swift runner really encodes this string — is the test below, which reads the Swift declaration.
+test('the journal refusal of a finished commandId reports nothing about main-thread occupancy', () => {
+  assert.equal(COMMAND_ALREADY_FINISHED_RUNNER_CODE, 'COMMAND_ALREADY_FINISHED');
+  // The published shape, not only the runner detail: this code travels under its own name the way
+  // `NO_TEXT_INPUT_AT_POINT` does, rather than staying `COMMAND_FAILED` like the diagnostic codes,
+  // because no caller policy reads it — the runner will not re-run the command, whatever an earlier
+  // send of that id did.
+  const refusal = classifyRunnerReportedError(COMMAND_ALREADY_FINISHED_RUNNER_CODE);
+  assert.equal(refusal.code, 'COMMAND_ALREADY_FINISHED');
+  assert.equal(refusal.details.dispatched, 'unknown');
+  assert.equal(refusal.details.retriable, undefined);
+  const refusalError = new AppError(refusal.code, 'already finished', {
+    ...refusal.details,
+    runner: { ok: false, error: { code: COMMAND_ALREADY_FINISHED_RUNNER_CODE, message: 'x' } },
+  });
+  assert.equal(isRetryableRunnerError(refusalError), false);
+  assert.equal(isRunnerBusyError(refusalError), false);
+  assert.equal(runnerMainThreadOccupancyReport(refusalError), 'silent');
+  // Without the structured runner payload there is no answer at all, which is also silent.
+  assert.equal(runnerMainThreadOccupancyReport(commandFailed('boom')), 'silent');
+});
+
+test('occupancy reads the busy refusal and the stalling timeout as occupied, and a served failure as drained', () => {
+  assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('RUNNER_BUSY')), 'occupied');
+  assert.equal(
+    runnerMainThreadOccupancyReport(runnerReplyFailure('MAIN_THREAD_TIMEOUT')),
+    'occupied',
+  );
+  assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('ELEMENT_NOT_FOUND')), 'drained');
+});
+
+test('the runner declares the wire codes the daemon reads for occupancy', () => {
+  const swift = requireSwiftThrownErrorWireCode();
+
+  assert.equal(
+    swift.timeoutCode,
+    MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+    'the runner must encode the watchdog timeout under the code the daemon keys occupancy on',
+  );
+  assert.equal(
+    swift.finishedCode,
+    COMMAND_ALREADY_FINISHED_RUNNER_CODE,
+    'the runner must encode its finished-id refusal under the code the daemon reads as silent',
+  );
 });
 
 // --- runner that predates the listener token ---

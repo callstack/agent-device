@@ -14,6 +14,8 @@ Accepted
 - Invalidate dead cached runner processes without graceful `shutdown`.
 - After `RUNNER_BUSY`, resend only read-only commands, under their busy-specific budget.
 - After `RUNNER_BUSY` on a mutating command, return the refusal to the caller without a resend.
+- For each journaled send, let the runner's command journal decide whether it executes, joins the running execution, or is answered from the recorded outcome. Inside the same decision, register a joining send for that answer.
+- Within the closed-id retention window, never execute a dispatched non-read `commandId` twice. Never evict a journal entry whose execution has not finished. After a dispatched non-read entry is pruned, keep its id in that window. The kept fact is released only by a memory safety valve; see the admission rule below for its bound.
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 
@@ -113,6 +115,34 @@ Neither path sends a status probe, because a structured reply already answered "
 This bypass is in `runner-lifecycle.ts`.
 The same trait already decides the startup-preflight skip above.
 Thus, it is the single place for a change to that classification.
+
+`RunnerCommandJournal` owns command admission, and the transport asks it once per journaled request. Inline `status` and `uptime` probes bypass admission.
+Its verdict is `execute`, `join`, or `terminal`:
+
+- `execute` claims the `commandId`, and that send owns the one execution.
+- `join` means an execution is claimed and unfinished. The journal registers that send as a waiter of the execution in the same locked operation, which keeps a transport retry from stacking a second execution behind the first (#1105). Settling and registering are one operation because a close between them left the send waiting on a delivery that had already gone out. Each claim carries an execution identity the journal mints, and the transport keys its waiters by it: an id refused before dispatch is claimed again, and the delivery of that refusal must not answer the sends of the execution that follows.
+- `terminal` means a non-read execution ended after dispatch. The runner answers with the outcome it recorded, which may be a failure, and the command never runs again.
+
+After the last fast `RUNNER_BUSY` or `RUNNER_WEDGED` check, the journal marks dispatch. A finished non-read entry with that mark spends its `commandId`.
+A refusal before that point closed its entry as `failed` but dispatched nothing, so the `commandId` stays reusable and the read-only busy resend above can still run under it.
+Answering a closed `commandId` uses the retained response, then the retained error, then the typed `COMMAND_ALREADY_FINISHED` refusal for a command whose own classification retains no body.
+That refusal is a structured failure the daemon does not retry. Its dispatch disclosure stays `unknown`: the runner will not re-run the command, and only the runner knows whether an earlier send of that id reached the device.
+That refusal also reports nothing about the runner's main thread. The journal wrote it without executing, so the runner may be idle or mid-drain and the refusal cannot say which. The daemon's occupancy rule has three readings, occupied, drained, and this one, silent, and only the first two write `runnerMainThreadBusy`; a repeat refused while abandoned work drains must leave that report standing, because retention and handoff act on it.
+
+Pruning drops only closed entries, so a queued or executing command always stays queryable.
+When a closed non-read entry that dispatched is pruned, the journal keeps its id in a separate closed-id window, because a bare id carries no outcome body.
+A resend inside that window is answered with the typed refusal; `status` still answers `notAccepted` for it, because only the entry can report an outcome.
+For a command whose answer the daemon lost, that reading keeps the charge: recovery cannot settle a charge on a state it cannot read as terminal, so it stops the runner instead of handing it on, which is the safe half of the trade the window makes.
+An id the runner refused before dispatch is left free, which is what the read-only busy resend depends on.
+`status` answers `notAccepted` only for an id the journal does not hold.
+The daemon cannot read `notAccepted` as a safe terminal state, so evicting a running command would push it to invalidate a session whose runner is still executing that command.
+The closed-id window holds 4096 ids, 64x the entry window, and it is a memory safety valve, not an admission boundary. Its residual bound, accepted here: within one runner process, a spent id is refused for the whole window, and the valve releases only the oldest id, so a resend arriving more than 4096 completed dispatches after a command can re-execute it. The resends this bound speaks of are lost-response resends of a dispatched command: a read-only `RUNNER_BUSY` resend reuses a `commandId` the runner refused before dispatch, and such an id never enters the window, so no chain of refusals can consume it. A runner restart starts a new journal, which answers `notAccepted` for every id; a replay across a runner replacement is governed by charge settlement, not by this window.
+A watermark over issued ids was rejected: the daemon mints `commandId` as a random UUID per request, reuses one id across retries and across runner generations, and persists nothing, so no ordering exists to compare.
+Eviction on a daemon resend deadline was rejected: the daemon holds no per-id "never resend after this instant" value — its resend budgets are attempt counts and per-exchange timeouts redrawn per attempt, and a restart-and-replay can legitimately post the same id minutes later — so a deadline-based rule would need a wire-contract change this change does not make.
+
+`CommandTraits.isReadOnly` is declared by `appRead`, `runnerCaptureRead`, `presentedSurfaceQuery`, and `selectorResolution`. It is independent of `retryOnSessionLoss` and response retention. When a read entry finishes, `accept` claims it again instead of answering from its recorded outcome, even if that outcome was a failure. Pruning a read leaves no closed-id marker. Reads therefore never spend their ids, and a lost-response resend of `snapshot` captures the screen again. Admission uses the recorded entry's trait, so renaming a spent mutation to a read cannot bypass its marker or retained outcome.
+
+Rejected: keeping the transport's own in-flight id set beside the journal. Two records of one lifecycle drifted: the set was cleared when the answer was delivered while the journal still held the entry, so a repeat arriving in that window was admitted and executed again.
 
 If `close` would retain a runner for reuse and that occupancy is set, `close` first stops the runner.
 `close` awaits the stop, so the lease is released before the next request.

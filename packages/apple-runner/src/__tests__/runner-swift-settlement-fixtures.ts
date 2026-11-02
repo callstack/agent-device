@@ -19,6 +19,10 @@ const SWIFT_JOURNAL = path.resolve(
   here,
   '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift',
 );
+const SWIFT_RUNNER = path.resolve(
+  here,
+  '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
+);
 
 /** `inlineResponse(for:)`'s switch arms, up to the `default:` where queued commands begin. */
 const INLINE_SWITCH =
@@ -124,4 +128,50 @@ export function requireLifecycleSettlementRows(
     lifecycleState,
     settlesCharge: expectations[lifecycleState]!,
   }));
+}
+
+/** The string values `RunnerWireErrorCode` declares, keyed by the Swift member name. */
+function readSwiftWireErrorCodes(): Record<string, string> {
+  const swift = fs.readFileSync(SWIFT_RUNNER, 'utf8');
+  const declaration = swift.match(/enum RunnerWireErrorCode \{([\s\S]*?)\n {2}\}/);
+  const body = declaration?.[1];
+  assert.ok(
+    body !== undefined,
+    'RunnerTests.swift must declare RunnerWireErrorCode with a body. The daemon keys behavior on ' +
+      'these codes, so a runner that stops naming them in one place breaks the tie here first.',
+  );
+  const codes: Record<string, string> = {};
+  for (const [, member, value] of body.matchAll(/static let (\w+) = "([A-Z0-9_]+)"/g)) {
+    codes[member!] = value!;
+  }
+  assert.ok(
+    Object.keys(codes).length > 0,
+    'RunnerWireErrorCode declares no `static let NAME = "CODE"` row this reader can parse',
+  );
+  return codes;
+}
+
+/** The Swift wire-code declarations the daemon uses for occupancy. */
+export function requireSwiftThrownErrorWireCode(): {
+  /** The Swift member whose value the daemon's occupancy verdict keys on. */
+  timeoutCode: string;
+  /** The bodyless journal refusal whose occupancy report must stay silent. */
+  finishedCode: string;
+} {
+  const codes = readSwiftWireErrorCodes();
+  const timeoutCode = codes['mainThreadTimeout'];
+  assert.ok(
+    timeoutCode !== undefined,
+    'RunnerWireErrorCode must declare mainThreadTimeout: the daemon reads this code to record the ' +
+      "runner's main thread as still draining, on the live reply and on a journal replay alike.",
+  );
+  const finishedCode = codes['commandAlreadyFinished'];
+  assert.ok(
+    finishedCode !== undefined,
+    'RunnerWireErrorCode must declare commandAlreadyFinished: the daemon reads this code as silent about main-thread occupancy.',
+  );
+  return {
+    timeoutCode,
+    finishedCode,
+  };
 }
