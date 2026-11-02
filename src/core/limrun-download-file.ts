@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from '@agent-device/provider-limrun';
 
 const RESPONSE_BODY_PREVIEW_BYTES = 500;
@@ -15,12 +15,13 @@ const RESPONSE_BODY_PREVIEW_BYTES = 500;
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
+  const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
   try {
     await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
     const response = await fetch(options.url, {
       method: 'GET',
       headers: options.headers,
-      signal: timeout,
+      signal,
     });
     if (!response.ok) throw await httpFailure(response, options);
     if (!response.body) {
@@ -31,10 +32,23 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await pipeline(
       Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
       fs.createWriteStream(options.destinationPath),
-      { signal: timeout },
+      { signal },
     );
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
+    if (options.signal?.aborted && signal.reason === options.signal.reason) {
+      const reason: unknown = options.signal.reason;
+      if (reason instanceof AppError) throw reason;
+      if (reason instanceof Error && reason.name === 'TimeoutError') {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Limrun download deadline expired',
+          { url: options.url },
+          reason,
+        );
+      }
+      throw createRequestCanceledError(undefined, reason);
+    }
     throw downloadFailure(error, options, timeout);
   }
 }

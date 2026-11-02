@@ -247,3 +247,33 @@ export async function withRequestDeadline(
     clearRequestAbortRegistration(ownedRegistration);
   }
 }
+
+/** Cancels the wait; the caller supplies any operation-specific stop and error handling. */
+export async function awaitWithSignal<T>(
+  pending: Promise<T>,
+  signal?: AbortSignal,
+  onAbort: () => unknown = () => signal?.reason,
+): Promise<T> {
+  if (!signal) return await pending;
+  return await new Promise<T>((resolve, reject) => {
+    const aborted = () => {
+      try {
+        reject(onAbort());
+      } catch (error) {
+        reject(error);
+      }
+    };
+    signal.addEventListener('abort', aborted, { once: true });
+    if (signal.aborted) aborted();
+    void pending.then(
+      (value) => {
+        signal.removeEventListener('abort', aborted);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', aborted);
+        reject(error);
+      },
+    );
+  });
+}

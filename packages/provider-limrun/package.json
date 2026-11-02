@@ -17,6 +17,7 @@
     }
   },
   "devDependencies": {
+    "@agent-device/platform-apple": "workspace:*",
     "@limrun/api": "^0.68.1"
   }
 }

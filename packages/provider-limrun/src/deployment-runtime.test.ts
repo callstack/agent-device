@@ -31,7 +31,9 @@ test.each([
     expect(operation).toMatchObject({ available: false });
   }
   expect(facts.deployApp).toMatchObject({ reason: 'owner-capability-missing' });
-  expect(facts.sendPushNotification).toMatchObject({ reason: 'unsupported-provider-mode' });
+  expect(facts.sendPushNotification).toMatchObject({
+    reason: device.platform === 'apple' ? 'owner-capability-missing' : 'unsupported-provider-mode',
+  });
 });
 
 test.each([
@@ -66,8 +68,12 @@ test.each([
         androidDeployment: { ...base.androidDeployment, prepareArtifact: materializeAndroid },
       },
       ownsDevice: () => true,
-      deployApp,
-      deployMaterializedApp,
+      bindDeployment: async () => ({
+        deployApp,
+        deployMaterializedApp,
+        materializeAppSource: device.platform === 'apple' ? materializeApple : materializeAndroid,
+        uninstallApp: async () => ({ wasInstalled: false as const }),
+      }),
     };
     const facts = limrunAppDeploymentFacts(options, device);
     const operations = createLimrunAppDeploymentOperations(
@@ -79,7 +85,7 @@ test.each([
     for (const fact of [facts.deployApp, facts.materializeAppSource, facts.deployMaterializedApp]) {
       expect(fact).toEqual({ available: true });
     }
-    expect(facts.sendPushNotification).toMatchObject({ available: false });
+    expect(facts.sendPushNotification).toMatchObject({ available: device.platform === 'apple' });
     await operations.deployApp?.({
       app: 'com.example.app',
       appPath: '/tmp/app',
@@ -130,8 +136,15 @@ test.each([
       {
         host: unusedLimrunRuntimeHost(),
         ownsDevice: () => true,
-        deployApp,
-        deployMaterializedApp,
+        bindDeployment: async (_device, signal) => ({
+          uninstallApp: async () => ({ wasInstalled: false as const }),
+          materializeAppSource: async () => ({
+            installablePath: '/tmp/app',
+            cleanup: async () => {},
+          }),
+          deployApp: (input) => deployApp(_device, input, signal),
+          deployMaterializedApp: (input) => deployMaterializedApp(_device, input, signal),
+        }),
       },
       limrunIosDevice,
       controller.signal,

@@ -302,6 +302,9 @@ function limrunDependencies(): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test',
     android: {
+      bindDeployment: async () => {
+        throw new Error('Unexpected deployment binding');
+      },
       createInteractor: () => ({}) as never,
       createPortReverse: async () => ({
         ensure: async () => {},

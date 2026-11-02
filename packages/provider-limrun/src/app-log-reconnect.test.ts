@@ -39,6 +39,17 @@ import type {
   LimrunRuntimeDependencies,
 } from './runtime-dependencies.ts';
 
+const iosDependencies = {
+  ios: {
+    createAppLogReader: ({
+      client,
+    }: Parameters<LimrunRuntimeDependencies['ios']['createAppLogReader']>[0]) => ({
+      readLogs: async (app: string, limit: number) => client.appLogTail(app, limit),
+      [Symbol.asyncDispose]: async () => {},
+    }),
+  },
+} as unknown as LimrunRuntimeDependencies;
+
 test('reattaches an owned Limrun instance without persisting credentials', async () => {
   const get = vi.fn(async () => ({
     metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
@@ -60,7 +71,7 @@ test('reattaches an owned Limrun instance without persisting credentials', async
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
     signal,
   });
   expect(get).toHaveBeenCalledWith('instance-a', { timeout: 5_000, maxRetries: 0, signal });
@@ -92,7 +103,7 @@ test('fails closed when the instance labels do not match the descriptor lease', 
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
   });
   expect(outcome).toEqual({ status: 'ownership-lost' });
 });
@@ -117,7 +128,7 @@ test('reports an owned instance whose status carries no control token as missing
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
   });
   expect(outcome).toEqual({ status: 'missing' });
   expect(createIosInstanceClient).not.toHaveBeenCalled();
@@ -149,7 +160,7 @@ test('disconnects the Android instance client when tunnel acquisition fails', as
         appBundleId: 'com.example.app',
         outputPath: '/sessions/one/app.log',
       },
-      dependencies: {} as LimrunRuntimeDependencies,
+      dependencies: iosDependencies,
     }),
   ).rejects.toThrow('tunnel failed');
   expect(androidClient.disconnect).toHaveBeenCalledOnce();
@@ -265,7 +276,7 @@ test('reattaches app logs to the attached instance the descriptor names', async 
   const outcome = await reconnectLimrunAppLogReader({
     instances: { ios: ATTACHED_ACCESS },
     descriptor: attachedDescriptor(),
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
   });
   expect(vi.mocked(createIosInstanceClient)).toHaveBeenLastCalledWith({
     ...ATTACHED_ACCESS,
@@ -276,7 +287,7 @@ test('reattaches app logs to the attached instance the descriptor names', async 
   const replaced = await reconnectLimrunAppLogReader({
     instances: { ios: { ...ATTACHED_ACCESS, apiUrl: 'https://another-instance.example/api' } },
     descriptor: attachedDescriptor(),
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
   });
   expect(replaced).toEqual({ status: 'ownership-lost' });
 });
@@ -290,7 +301,7 @@ test('reattaches a created instance through the organization API while another i
     limrun: { iosInstances: { get } } as never,
     instances: { ios: ATTACHED_ACCESS },
     descriptor: attachedDescriptor('ios_created_instance', 'created'),
-    dependencies: {} as LimrunRuntimeDependencies,
+    dependencies: iosDependencies,
   });
   expect(get).toHaveBeenCalledOnce();
   expect(outcome.status).toBe('opened');
@@ -304,7 +315,7 @@ test('does not connect once the reconnect request is aborted', async () => {
     reconnectLimrunAppLogReader({
       instances: { ios: ATTACHED_ACCESS },
       descriptor: attachedDescriptor(),
-      dependencies: {} as LimrunRuntimeDependencies,
+      dependencies: iosDependencies,
       signal: controller.signal,
     }),
   ).rejects.toThrow();

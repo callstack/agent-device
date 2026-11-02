@@ -7,6 +7,7 @@ import {
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import {
+  awaitWithSignal,
   clearRequestAbortRegistration,
   clearRequestCanceled,
   markRequestCanceled,
@@ -16,6 +17,21 @@ import {
   throwIfRequestCanceled,
   withRequestDeadline,
 } from './request-cancel.ts';
+
+test.each(['before', 'after'] as const)(
+  'a throwing abort callback rejects when cancellation occurs %s listener registration',
+  async (timing) => {
+    const controller = new AbortController();
+    const failure = new Error('operation stop failed');
+    if (timing === 'before') controller.abort();
+    const pending = awaitWithSignal(new Promise<never>(() => {}), controller.signal, () => {
+      throw failure;
+    });
+    const rejected = assert.rejects(pending, (error) => error === failure);
+    if (timing === 'after') controller.abort();
+    await rejected;
+  },
+);
 
 test('an early live request remains cancelable after more than 50,000 registrations', () => {
   const requestId = 'early-live-request';

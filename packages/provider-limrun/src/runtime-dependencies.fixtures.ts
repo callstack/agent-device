@@ -1,3 +1,4 @@
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
@@ -25,6 +26,9 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
   return {
     clientVersion: 'test-version',
     android: {
+      bindDeployment: async () => {
+        throw new Error('Unexpected deployment binding');
+      },
       createInteractor: () => ({}) as Interactor,
       createPortReverse: async () => ({
         ensure: async () => {},
@@ -55,7 +59,11 @@ export function stubLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       downloadFile: async () => undefined,
     },
     ios: {
-      applySimctlSetting: async () => undefined,
+      createAppLogReader: ({ client }) => ({
+        readLogs: async (app, limit) => client.appLogTail(app, limit),
+        [Symbol.asyncDispose]: async () => {},
+      }),
+      createRunner: async () => testIosRunner,
       resolveAppAlias: async (app) => app,
       readBundleAppName: async () => undefined,
     },

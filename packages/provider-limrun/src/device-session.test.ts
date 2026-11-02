@@ -1,3 +1,4 @@
+import { testIosRunner } from './ios-runner.fixtures.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
@@ -29,6 +30,9 @@ const downloadFile = vi.fn(async (_options: LimrunFileDownload) => undefined);
 const TEST_DEPENDENCIES = {
   clientVersion: 'test-version',
   android: {
+    bindDeployment: async () => {
+      throw new Error('Unexpected deployment binding');
+    },
     createInteractor: () => ({}) as Interactor,
     createPortReverse: async () => ({
       ensure: async () => undefined,
@@ -64,7 +68,13 @@ const TEST_DEPENDENCIES = {
     downloadFile,
   },
   ios: {
-    applySimctlSetting: vi.fn(async () => undefined),
+    createAppLogReader: ({ client }) => ({
+      readLogs: async (app, limit) => client.appLogTail(app, limit),
+      [Symbol.asyncDispose]: async () => {},
+    }),
+    createRunner: async () => {
+      return testIosRunner;
+    },
     resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },
@@ -135,7 +145,7 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.equal('client' in session, false);
 });
 
-test('iOS remote install waits for eventually consistent app inventory', async () => {
+test('iOS remote install bypasses stale digest caching and waits for app inventory', async () => {
   const staleApps = IOS_APPS.slice(0, 1);
   const installedApps = [...staleApps, IOS_APPS[1]];
   const listApps = vi
@@ -163,7 +173,7 @@ test('iOS remote install waits for eventually consistent app inventory', async (
   assert.equal(listApps.mock.calls.length, 3);
   assert.deepEqual(installApp.mock.calls[0], [
     'https://assets.example/example.zip',
-    { md5: 'example-md5', launchMode: 'RelaunchIfRunning' },
+    { launchMode: 'RelaunchIfRunning' },
   ]);
 });
 
@@ -231,6 +241,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
 function iosSession(client: Record<string, unknown>): LimrunIosSession {
   return {
     platform: 'ios',
+    runner: testIosRunner,
     lease: lease('ios-instance'),
     instanceId: 'ios-instance',
     device: device('ios'),

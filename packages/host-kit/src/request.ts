@@ -1,4 +1,5 @@
 export {
+  awaitWithSignal,
   cancelAllRequests,
   clearRequestAbortRegistration,
   clearRequestCanceled,

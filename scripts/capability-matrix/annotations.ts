@@ -164,6 +164,11 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
         commands: ['keyboard'],
         link: docs('commands', 'keyboard'),
         cells: {
+          'limrun-ios': {
+            text: 'Dismiss and enter; status unsupported',
+            admits: ['keyboardDismiss', 'keyboardEnter'],
+            refuses: ['keyboardStatus'],
+          },
           'ios-sim': {
             text: 'Dismiss and enter; status unsupported',
             admits: ['keyboardDismiss', 'keyboardEnter'],
@@ -457,6 +462,9 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
           'ios-device': {
             text: 'Models with an Action Button only',
           },
+          'limrun-ios': {
+            text: 'Models with an Action Button only',
+          },
         },
       },
       {
@@ -506,11 +514,6 @@ export const MATRIX_SECTIONS: readonly MatrixSection[] = [
           },
           'harmonyos-device': {
             text: 'Clear app state only; other settings and reads unsupported',
-            admits: ['setSetting'],
-            refuses: ['readSetting'],
-          },
-          'limrun-ios': {
-            text: 'Set only; no reads',
             admits: ['setSetting'],
             refuses: ['readSetting'],
           },
