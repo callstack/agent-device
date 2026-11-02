@@ -71,7 +71,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:ac4268cba9ffdfee7e92429b1a49e48570154d735eed62bfca36d1e2759cec43",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:b3c5b170c70dcd3bd8d8c9aa15873482e0aec88466b385bb00624f35001f63af",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
@@ -257,8 +257,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:ac4268cba9ffdfee7e92429b1a49e48570154d735eed62bfca36d1e2759cec43",
-      "rationale": "Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload."
+      "digest": "sha256:b3c5b170c70dcd3bd8d8c9aa15873482e0aec88466b385bb00624f35001f63af",
+      "rationale": "Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload. A response that has finished writing is not cancelled by its normal close event, so successful pipeline completion keeps its existing success semantics. Caller cancellation is normalized to the existing request_canceled error instead of forwarding caller-supplied reasons. The disconnected HTTP response is already closed and receives no new payload; artifact expiry and download deadlines keep their existing reasons."
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
@@ -298,7 +298,7 @@
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
       "digest": "sha256:08d3fd203cd7e47814cf8c50f710e86bee28ac2818dbf93910ae49725b97468a",
-      "rationale": "Implementation-only HTTP error repair under ADR 0006: setup failures use the shared streamed failure helper. Before headers, it emits the existing REST JSON error shape with an error status; after headers, it destroys the incomplete transfer. Successful diagnostics remain 200 with the same NDJSON bytes. Released clients reject error statuses before reading diagnostic records, so no successful response parser or request requirement changes."
+      "rationale": "#2198 context: asks isTenantAddressableSessionName instead of applying the prefix rule locally. Same UNAUTHORIZED code, same 'Session is outside this tenant' message and same 401 body for the attested-tenant case the rule still refuses; the only difference a peer can observe is that an unattested tenant now gets the 200 + ndjson record it already knows how to read instead of a 401 it could not act on. Implementation-only HTTP error repair under ADR 0006: setup failures use the shared streamed failure helper. Before headers, it emits the existing REST JSON error shape with an error status; after headers, it destroys the incomplete transfer. Successful diagnostics remain 200 with the same NDJSON bytes. Released clients reject error statuses before reading diagnostic records, so no successful response parser or request requirement changes."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
