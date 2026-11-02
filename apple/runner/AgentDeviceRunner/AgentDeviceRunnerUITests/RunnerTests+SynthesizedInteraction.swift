@@ -531,11 +531,18 @@ extension RunnerTests {
   /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
   /// resolved window `fallback`, which names its panel (ADR 0025). When the device's only screen
   /// will not report its size, `fallback` is the basis only while the app provably fills that
-  /// screen; otherwise this is nil and the gesture refuses before it dispatches. An unknown
-  /// orientation keeps `fallback`, which a turn that does not rotate never reads.
+  /// screen; otherwise this is nil and the gesture refuses before it dispatches. Portrait and an
+  /// unknown orientation keep the axes, so they read no box and keep `fallback` without a read.
   @MainActor
   func synthesizedRotationFrame(app: XCUIApplication, fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return fallback }
+    switch interfaceOrientation {
+    case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight,
+      RunnerInterfaceOrientation.portraitUpsideDown:
+      break
+    default:
+      return fallback
+    }
     guard let portraitSize = soleDisplayPortraitSize() else {
       let fillsScreen = appFillsSoleScreen(app)
       NSLog(

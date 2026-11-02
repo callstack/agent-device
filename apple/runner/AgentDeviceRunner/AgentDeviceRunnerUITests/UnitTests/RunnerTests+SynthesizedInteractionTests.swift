@@ -54,6 +54,25 @@ extension RunnerTests {
     return { method_setImplementation(target, original) }
   }
 
+  /// Turns the device to landscape until the host app's interface follows, so a synthesized turn
+  /// needs its display box; the returned closure turns it back to portrait.
+  @MainActor
+  private func rotateHostAppToLandscape() throws -> () -> Void {
+    XCUIDevice.shared.orientation = .landscapeLeft
+    let restore = { XCUIDevice.shared.orientation = .portrait }
+    let landscape = [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight]
+    let deadline = Date().addingTimeInterval(5)
+    while !landscape.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))),
+      Date() < deadline
+    {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+    let turned = landscape.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)))
+    if !turned { restore() }
+    _ = try XCTUnwrap(turned ? true : nil, "the host app did not turn to landscape")
+    return restore
+  }
+
   /// Installs `RunnerCompatibilityModeScreenStub` until the returned closure restores UIKit.
   private func simulateCompatibilityModeScreen() throws -> () -> Void {
     let getters = [
@@ -249,9 +268,10 @@ extension RunnerTests {
       height: max(appFrame.width, appFrame.height)
     )
     XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
-    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt.
+    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt. Only the turns
+    // that move the axes read the box.
     let expectations = [
-      (RunnerInterfaceOrientation.portrait, screen),
+      (RunnerInterfaceOrientation.portraitUpsideDown, screen),
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
     ]
     for (orientation, expected) in expectations {
@@ -269,23 +289,23 @@ extension RunnerTests {
   func testSoleDisplaySizeIsReadOncePerCommandAndAFailedReadIsNotKept() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let portrait = RunnerInterfaceOrientation.portrait
+    let landscape = RunnerInterfaceOrientation.landscapeRight
     mainOwned.soleDisplayPortraitSize = nil
-    let measured = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait))
+    let measured = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape))
     XCTAssertNotEqual(measured, placedWindow)
 
     let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
     // Nothing between the install and the restore throws, so the restore always runs.
     let restoreAXRuntime = try simulateUnreadableSystemApplication()
-    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait), measured)
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
     _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
     XCTAssertNotEqual(
-      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait),
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape),
       measured,
       "the next command must read the size again rather than reuse the kept one"
     )
     restoreAXRuntime()
-    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait), measured)
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
   }
 
   /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
@@ -300,6 +320,8 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
+    let restoreOrientation = try rotateHostAppToLandscape()
+    defer { restoreOrientation() }
     let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
     let context = try XCTUnwrap(
       SynthesizedCoordinateContext(validating: resolved.frame, resolvedWindow: resolved.window, accessibilityHealth: .healthy)
@@ -335,6 +357,8 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
+    let restoreOrientation = try rotateHostAppToLandscape()
+    defer { restoreOrientation() }
     let window = try XCTUnwrap(resolveRunnerWindowElement(app: app)).window
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let context = try XCTUnwrap(
@@ -351,6 +375,11 @@ extension RunnerTests {
 
     XCTAssertNil(
       synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+    )
+    XCTAssertEqual(
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      placedWindow,
+      "a portrait turn keeps the axes, so it reads no box and must not refuse"
     )
     let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .unsupported(let message, _)? = outcome else {
