@@ -360,6 +360,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 {
   // The mapper expands keypaths with extra attributes that are disproportionately expensive for
   // the AX server to compute on large trees. Keep only what is consumed here.
+  // `hasKeyboardFocus` is not requested: the mapper adds no attribute for it, and the snapshot
+  // answers it anyway (#4112).
   return [self attributesForKeyPaths:@[
     @"elementType",
     @"identifier",
@@ -752,8 +754,9 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   result[@"frame"] = [self frameValueForSnapshot:snapshot];
   result[@"enabled"] = [self boolNumberForKey:@"enabled" snapshot:snapshot defaultValue:YES];
   result[@"selected"] = [self boolNumberForKey:@"selected" snapshot:snapshot defaultValue:NO];
-  result[@"focused"] = @([[self boolNumberForKey:@"hasKeyboardFocus" snapshot:snapshot defaultValue:NO] boolValue]
-                         || [[self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO] boolValue]);
+  BOOL keyboardFocused = [[self boolNumberForKey:@"hasKeyboardFocus" snapshot:snapshot defaultValue:NO] boolValue];
+  BOOL engineFocused = [[self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO] boolValue];
+  result[@"focused"] = @(keyboardFocused || engineFocused);
 
   NSMutableArray *children = [NSMutableArray array];
   if (depth < maxDepth) {
