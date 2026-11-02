@@ -124,7 +124,7 @@ export async function captureAndroidSnapshotWithHelper(
 
 /**
  * The one-shot run failed because the system never started the helper: `am instrument` reported
- * `INSTRUMENTATION_FAILED`, so the helper did not run and printed nothing.
+ * `INSTRUMENTATION_FAILED`, so no helper code ran on the device.
  */
 export function isAndroidSnapshotHelperStartFailure(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
