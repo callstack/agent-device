@@ -1,5 +1,7 @@
+import { resolveAppleToolProvider } from '../core/tool-provider.ts';
 import type {
   AppDeploymentInput,
+  AppDeploymentInstaller,
   AppDeploymentResult,
   AppDeploymentRuntimeOperations,
   AppUninstallInput,
@@ -64,18 +66,20 @@ export function createAppleAppDeploymentOperations(params: {
   host: PlatformRuntimeHost;
   device: DeviceInfo;
   signal: AbortSignal;
+  install?: AppDeploymentInstaller;
 }): Partial<AppDeploymentRuntimeOperations> {
   const { host, device, signal } = params;
+  const install = params.install;
   const facts = appleAppDeploymentFacts(device);
   return Object.freeze({
     ...(facts.deployApp.available
       ? {
           deployApp: async (input: AppDeploymentInput) =>
-            await deployAppleApp(host, device, input, signal),
+            await deployAppleApp(host, device, input, signal, install),
           materializeAppSource: async (input: MaterializeAppSourceInput) =>
             await host.appleDeployment.prepareArtifact(input, { signal }),
           deployMaterializedApp: async (input: DeployMaterializedAppInput) =>
-            await deployPreparedAppleApp(host, device, input, signal),
+            await deployPreparedAppleApp(host, device, input, signal, install),
           uninstallApp: async (input: AppUninstallInput) =>
             await uninstallResolvedAppleApp(host, device, input, signal),
         }
@@ -96,6 +100,7 @@ async function deployAppleApp(
   device: DeviceInfo,
   input: AppDeploymentInput,
   signal: AbortSignal,
+  install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
   // Preserve reinstall's established partial-failure boundary: the old route resolved and
   // removed the selected app before it materialized the replacement artifact. That ordering is
@@ -109,7 +114,8 @@ async function deployAppleApp(
         { appIdentifierHint: input.app, signal },
       );
       try {
-        await installAppleApp(host, device, artifact.installablePath, signal);
+        if (install) await install(artifact, signal);
+        else await installAppleApp(host, device, artifact.installablePath, signal);
         return { bundleId, launchTarget: bundleId };
       } finally {
         await artifact.cleanup();
@@ -122,7 +128,7 @@ async function deployAppleApp(
     { appIdentifierHint: input.app, signal },
   );
   try {
-    return await deployPreparedAppleApp(host, device, { artifact }, signal);
+    return await deployPreparedAppleApp(host, device, { artifact }, signal, install);
   } finally {
     await artifact.cleanup();
   }
@@ -156,7 +162,9 @@ async function deployPreparedAppleApp(
   device: DeviceInfo,
   input: DeployMaterializedAppInput,
   signal: AbortSignal,
+  install?: AppDeploymentInstaller,
 ): Promise<AppDeploymentResult> {
+  if (install) return await install(input.artifact, signal);
   await installAppleApp(host, device, input.artifact.installablePath, signal);
   return {
     ...(input.artifact.bundleId ? { bundleId: input.artifact.bundleId } : {}),
@@ -235,15 +243,20 @@ async function pushAppleNotification(
   });
   try {
     await payload.writeText(`${JSON.stringify(input.payload)}\n`);
-    await runAppleTool(
-      host,
-      {
-        tool: 'simctl',
-        args: scopeSimctlArgsForDevice(device, ['push', device.id, input.appId, payload.path]),
-      },
-      signal,
-      'Apple push notification failed',
-    );
+    const staged = await resolveAppleToolProvider().simulatorFiles.stageFile(payload.path, signal);
+    try {
+      await runAppleTool(
+        host,
+        {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(device, ['push', device.id, input.appId, staged.path]),
+        },
+        signal,
+        'Apple push notification failed',
+      );
+    } finally {
+      await staged[Symbol.asyncDispose]();
+    }
   } finally {
     await payload[Symbol.asyncDispose]();
   }

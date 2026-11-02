@@ -50,7 +50,7 @@ import {
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
   screenshotIos,
-  resolveSimulatorRunnerScreenshotCandidatePaths,
+  resolveRunnerScreenshotFilePaths,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
@@ -491,28 +491,18 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
   }
 });
 
-test('resolveSimulatorRunnerScreenshotCandidatePaths includes tmp-based and basename fallbacks', () => {
-  const containerPath = '/tmp/container';
-  const candidates = resolveSimulatorRunnerScreenshotCandidatePaths(
-    containerPath,
-    '/var/mobile/Containers/Data/Application/abc/tmp/screenshot-1.png',
-  );
-  assert.equal(candidates.includes(path.join(containerPath, 'tmp', 'screenshot-1.png')), true);
-  assert.equal(
-    candidates.includes('/var/mobile/Containers/Data/Application/abc/tmp/screenshot-1.png'),
-    true,
-  );
+test('resolveRunnerScreenshotFilePaths preserves the runner path and handles legacy absolute paths', () => {
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('/private/var/mobile/tmp/fallback.png'), [
+    '/private/var/mobile/tmp/fallback.png',
+    'tmp/fallback.png',
+  ]);
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('tmp/current.png'), ['tmp/current.png']);
 });
 
-test('resolveSimulatorRunnerScreenshotCandidatePaths handles empty runner path', () => {
-  assert.deepEqual(resolveSimulatorRunnerScreenshotCandidatePaths('/tmp/container', '   '), []);
+test('resolveRunnerScreenshotFilePaths handles an empty runner path', () => {
+  assert.deepEqual(resolveRunnerScreenshotFilePaths('   '), []);
 });
 
-// Production `simctl` answers an installed app that owns no data container with exit 0 and the
-// literal `(null)` on stdout. The runner container loop reads that as the tool's "no container"
-// answer — the same rule clear-app-state refuses on — and never hands the sentinel to the host
-// filesystem as a path. Without the shared classifier, the thrown wrap below carries a copy ENOENT
-// from a candidate path built on `(null)` instead.
 test('captureScreenshotViaRunner treats a (null) data-container answer as no container', async () => {
   const tmpDir = await mkdtempForTest('agent-device-runner-null-container-');
   const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-null-container' };

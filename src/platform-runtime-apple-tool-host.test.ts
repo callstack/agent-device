@@ -10,7 +10,7 @@ import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 test('Apple tool host uses a full scoped provider when local xcrun is unavailable', async () => {
   const whichCommand = vi.fn(async () => true);
   const run = vi.fn(async () => ({ stdout: 'devices', stderr: '', exitCode: 0 }));
-  const provider: AppleToolProvider = {
+  const provider: AppleToolProvider = createLocalAppleToolProvider({
     runCommand: async () => {
       throw new Error('local command fallback is unavailable');
     },
@@ -21,7 +21,7 @@ test('Apple tool host uses a full scoped provider when local xcrun is unavailabl
       },
     },
     devicectl: { run },
-  };
+  });
   const host = createAppleToolHost();
   const signal = new AbortController().signal;
 

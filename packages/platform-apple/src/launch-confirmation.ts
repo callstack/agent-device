@@ -221,12 +221,24 @@ export async function answerSimulatorLaunchConfirmation(
   interactor: Promise<Interactor>,
   signal: AbortSignal,
   deadlineAtMs: number | undefined,
+  resolveUrlOwner?: (
+    device: DeviceInfo,
+    url: string,
+    signal: AbortSignal,
+  ) => Promise<string | undefined>,
 ): Promise<LaunchConfirmationAttempt> {
   const settled: Readonly<{ interactor: Interactor }> | LaunchConfirmationAttempt =
     await interactor.then((resolved) => ({ interactor: resolved }), unreadable('runner'));
   if ('outcome' in settled) return settled;
   return await answerLaunchConfirmation(
-    createLaunchConfirmationPort(device, confirmation, settled.interactor, signal, deadlineAtMs),
+    createLaunchConfirmationPort(
+      device,
+      confirmation,
+      settled.interactor,
+      signal,
+      deadlineAtMs,
+      resolveUrlOwner,
+    ),
   );
 }
 
@@ -236,6 +248,11 @@ export function createLaunchConfirmationPort(
   interactor: Pick<Interactor, 'awaitAlert' | 'readAlert' | 'acceptAlert'>,
   signal: AbortSignal,
   deadlineAtMs: number | undefined,
+  resolveUrlOwner?: (
+    device: DeviceInfo,
+    url: string,
+    signal: AbortSignal,
+  ) => Promise<string | undefined>,
 ): LaunchConfirmationPort {
   const awaitAlert = interactor.awaitAlert?.bind(interactor);
   const readAlert = interactor.readAlert?.bind(interactor);
@@ -253,10 +270,12 @@ export function createLaunchConfirmationPort(
       ),
     readAlert: async () => await alertIfPresent(readAlert(target)),
     acceptAlert: async () => await acceptAlert(target),
-    resolveUrlOwner: async () =>
-      await resolveIosSimulatorDeepLinkBundleId(device, url, {
-        timeoutMs: URL_OWNER_LOOKUP_TIMEOUT_MS,
-        signal,
-      }),
+    resolveUrlOwner: resolveUrlOwner
+      ? () => resolveUrlOwner(device, url, signal)
+      : async () =>
+          await resolveIosSimulatorDeepLinkBundleId(device, url, {
+            timeoutMs: URL_OWNER_LOOKUP_TIMEOUT_MS,
+            signal,
+          }),
   });
 }

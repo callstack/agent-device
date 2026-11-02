@@ -2,7 +2,7 @@ import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/dev
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
-import { runSimctlForDevice } from './simctl.ts';
+import { runSimctlForDevice } from './simctl-execution.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import type { AppleRunnerCommandOptions } from '@agent-device/apple-runner';
 

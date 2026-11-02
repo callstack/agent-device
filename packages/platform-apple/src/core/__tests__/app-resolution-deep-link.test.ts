@@ -53,15 +53,17 @@ const SCHEME_PROBES = [
 
 function createSchemeTool(
   fixture: SchemeFixture,
-  options: { failFirstProbes?: number } = {},
+  options: { failFirstAppAProbe?: boolean } = {},
 ): { handle: (args: string[]) => FakeAppleToolResponse; probeCount: () => number } {
   let probeCount = 0;
+  let failedAppA = false;
 
   const respondToPlutil = (plistPath: string): FakeAppleToolResponse => {
     const probe = SCHEME_PROBES.find((candidate) => plistPath.endsWith(candidate.suffix));
     if (!probe) return '{}';
     probeCount += 1;
-    if (options.failFirstProbes !== undefined && probeCount <= options.failFirstProbes) {
+    if (options.failFirstAppAProbe && plistPath === fixture.plistA && !failedAppA) {
+      failedAppA = true;
       return { stdout: '', exitCode: 1 };
     }
     return probe.schemesJson;
@@ -97,7 +99,7 @@ test('resolveIosSimulatorDeepLinkBundleId memoizes per-app url-scheme probes', a
 
 test('a failed url-scheme probe is retried on the next lookup instead of cached', async () => {
   const fixture = await makeSchemeFixture();
-  const tool = createSchemeTool(fixture, { failFirstProbes: 1 });
+  const tool = createSchemeTool(fixture, { failFirstAppAProbe: true });
 
   await withFakeAppleTool(tool.handle, async () => {
     const duringFailure = await resolveIosSimulatorDeepLinkBundleId(

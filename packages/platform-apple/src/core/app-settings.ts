@@ -18,20 +18,14 @@ import {
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '@agent-device/kernel/errors';
-import {
-  ensureHostDirectory,
-  readHostDirectory,
-  removeHostPath,
-} from '@agent-device/host-kit/host-file';
-import path from 'node:path';
-import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { resolveIosApp } from './app-resolution.ts';
-import { buildSimctlArgsForDevice, readSimctlContainerPath, runSimctlForDevice } from './simctl.ts';
+import { buildSimctlArgsForDevice } from './simctl.ts';
+import { runSimctlForDevice } from './simctl-execution.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
@@ -39,7 +33,7 @@ import {
   withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
-import { runXcrun } from './tool-provider.ts';
+import { resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
 
 const MACOS_HOST_SETTINGS = ['appearance', 'permission'] as const satisfies readonly SettingName[];
 
@@ -294,7 +288,7 @@ async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
   env: Readonly<EnvMap>,
-): Promise<{ bundleId: string; containerPath: string }> {
+): Promise<{ bundleId: string; containerPath?: string }> {
   if (!isIosFamily(device) || device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -306,18 +300,13 @@ async function clearIosSimulatorAppState(
   await ensureBootedSimulator(device);
   await closeIosApp(device, bundleId, undefined, env);
 
-  const result = requireExecSuccess(
-    await runSimctlForDevice(device, ['get_app_container', device.id, bundleId, 'data'], {
-      allowFailure: true,
-    }),
-    `simctl get_app_container failed for ${bundleId}`,
-  );
-
-  // `simctl` answers an app with no data container by exiting 0 and printing nothing or the literal
-  // `(null)` — a system app is installed and running with nothing to delete. Both are the tool's own
-  // "no container" answer, refused here rather than handed to the host filesystem as a path.
-  const containerPath = readSimctlContainerPath(result.stdout);
-  if (containerPath === undefined) {
+  const container = await resolveAppleToolProvider().simulatorFiles.openContainer({
+    device,
+    bundleId,
+    containerType: 'data',
+    timeoutMs: 15_000,
+  });
+  if (!container) {
     throw new AppError('UNSUPPORTED_OPERATION', iosNoDataContainerMessage(bundleId), {
       reason: IOS_NO_DATA_CONTAINER_REASON,
       appBundleId: bundleId,
@@ -325,20 +314,16 @@ async function clearIosSimulatorAppState(
       hint: IOS_NO_DATA_CONTAINER_HINT,
     });
   }
-
-  const entries = await readHostDirectory(containerPath);
+  const entries = await container.list();
   await Promise.all(
     entries
       .filter((entry) => entry !== CONTAINER_MANAGER_METADATA_FILE)
-      .map((entry) => removeHostPath(path.join(containerPath, entry))),
+      .map((entry) => container.remove(entry)),
   );
   await Promise.all(
-    FRESH_INSTALL_DATA_DIRECTORIES.map((directory) =>
-      ensureHostDirectory(path.join(containerPath, directory)),
-    ),
+    FRESH_INSTALL_DATA_DIRECTORIES.map((directory) => container.ensureDirectory(directory)),
   );
-
-  return { bundleId, containerPath };
+  return { bundleId, ...(container.path ? { containerPath: container.path } : {}) };
 }
 
 function parseMacOsPermissionTarget(value: string | undefined): MacOsPermissionTarget {

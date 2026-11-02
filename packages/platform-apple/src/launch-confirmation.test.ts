@@ -9,7 +9,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 import { IOS_APP_LAUNCH_TIMEOUT_MS } from './core/config.ts';
-import { type AppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
+import {
+  type AppleToolProvider,
+  withAppleToolProvider,
+  createLocalAppleToolProvider,
+} from './core/tool-provider.ts';
 import {
   answerLaunchConfirmation,
   answerSimulatorLaunchConfirmation,
@@ -242,11 +246,13 @@ function wedgedCoreSimulator(
       );
     });
   return {
-    whichCommand: async () => true,
-    runCommand: async (cmd, args, options) =>
-      answered(`${cmd} ${args.at(-1)}`) ?? (await hang(options)),
-    simctl: { run: async (args, options) => answered(args[0] ?? '') ?? (await hang(options)) },
-    devicectl: { run: async (_args, options) => await hang(options) },
+    ...createLocalAppleToolProvider({
+      whichCommand: async () => true,
+      runCommand: async (cmd, args, options) =>
+        answered(`${cmd} ${args.at(-1)}`) ?? (await hang(options)),
+      simctl: { run: async (args, options) => answered(args[0] ?? '') ?? (await hang(options)) },
+      devicectl: { run: async (_args, options) => await hang(options) },
+    }),
     spawns: () => spawns,
   };
 }
@@ -735,4 +741,22 @@ test('abandoned accepts stop once the request cannot hold another press', async 
     await expect(answerLaunchConfirmation(device)).resolves.toEqual(STILL_PRESENT);
     expect(acceptAlert).toHaveBeenCalledTimes(2);
   });
+});
+
+test('forwarded launch confirmation uses its provider URL resolver without reading local app containers', async () => {
+  const local = vi.mocked(resolveIosSimulatorDeepLinkBundleId);
+  local.mockClear();
+  const signal = new AbortController().signal;
+  const resolveOwner = vi.fn(async () => undefined);
+  const port = createLaunchConfirmationPort(
+    simulator,
+    { appBundleId: 'com.example.app', url: 'example://home' },
+    { awaitAlert: async () => ({}), readAlert: async () => ({}), acceptAlert: async () => ({}) },
+    signal,
+    undefined,
+    resolveOwner,
+  );
+  await expect(port.resolveUrlOwner()).resolves.toBeUndefined();
+  expect(resolveOwner).toHaveBeenCalledWith(simulator, 'example://home', signal);
+  expect(local).not.toHaveBeenCalled();
 });

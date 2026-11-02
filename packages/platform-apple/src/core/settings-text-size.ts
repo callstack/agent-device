@@ -7,7 +7,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { runSimctlForDevice } from './simctl.ts';
+import { runSimctlForDevice } from './simctl-execution.ts';
 import { ensureBootedSimulator } from './simulator.ts';
 
 /** `simctl ui <device> content_size` reads and writes the ladder's names verbatim. */

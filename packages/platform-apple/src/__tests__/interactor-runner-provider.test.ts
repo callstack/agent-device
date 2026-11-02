@@ -11,6 +11,7 @@ import { test } from 'vitest';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 import { createAppleInteractor } from '../interactor.ts';
+import { createAppleRunnerRuntime } from '../runner-runtime.ts';
 import {
   recordingRunnerProvider,
   runnerResultFor,
@@ -119,19 +120,44 @@ test('the runner/local partition covers the full provider-backed interactor surf
   assert.deepEqual(Object.keys(interactor).sort(), classified);
 });
 
-test('provider-backed interactor routes runner-command methods through the injected transport', async () => {
-  const calls: RecordedRunnerCall[] = [];
-  const interactor = createAppleInteractor(
+test('provider runtime binding preserves every shared runner interaction command and result', async () => {
+  const localCalls: RecordedRunnerCall[] = [];
+  const remoteCommands: Record<string, unknown>[] = [];
+  const context = { appBundleId: 'com.example.app', requestId: 'http-parity' };
+  const host = createLiveTestHostEnvironment();
+  const local = createAppleInteractor(
     IOS_SIMULATOR,
-    { appBundleId: 'com.example.app' },
-    createLiveTestHostEnvironment(),
-    recordingRunnerProvider(calls),
+    context,
+    host,
+    recordingRunnerProvider(localCalls),
   );
+  const http = createAppleRunnerRuntime({
+    device: IOS_SIMULATOR,
+    host,
+    provider: {
+      hasLiveSession: () => true,
+      runCommand: async (_device, command) => {
+        remoteCommands.push(JSON.parse(JSON.stringify(command)));
+        return runnerResultFor(command);
+      },
+    },
+  });
+  const remote = http.createInteractor(context);
   for (const [method, { invoke, runnerCommand }] of Object.entries(RUNNER_TRANSPORT_METHODS)) {
-    calls.length = 0;
-    await invoke(interactor);
-    assert.ok(calls.length >= 1, `${method} never reached the injected runner transport`);
-    assert.equal(calls[0]!.command.command, runnerCommand, `${method} sent a different command`);
+    localCalls.length = 0;
+    remoteCommands.length = 0;
+    const expected = await invoke(local);
+    const actual = await invoke(remote);
+    assert.ok(localCalls.length >= 1, `${method} never reached the runner`);
+    assert.equal(localCalls[0]!.command.command, runnerCommand);
+    assert.deepEqual(
+      remoteCommands.map(({ commandId: _id, ...command }) => command),
+      JSON.parse(
+        JSON.stringify(localCalls.map(({ command: { commandId: _id, ...command } }) => command)),
+      ),
+      method,
+    );
+    assert.deepEqual(actual, expected, method);
   }
 });
 
@@ -491,4 +517,28 @@ test('snapshot forwards either forceable preferredBackend into the emitted runne
   assert.equal(snapshots.length, 2);
   assert.equal(snapshots[0]?.command.preferredBackend, 'tree');
   assert.equal(snapshots[1]?.command.preferredBackend, undefined);
+});
+
+test('app-scoped reads inherit the bound target and preserve explicit overrides', async () => {
+  const calls: RecordedRunnerCall[] = [];
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    { appBundleId: 'com.example.bound' },
+    createLiveTestHostEnvironment(),
+    recordingRunnerProvider(calls),
+  );
+  const reads = [
+    (appBundleId?: string) => interactor.findText!('Ready', { appBundleId }),
+    (appBundleId?: string) => interactor.readTextAtPoint!({ x: 10, y: 20 }, { appBundleId }),
+    (appBundleId?: string) => interactor.readAlert!({ appBundleId }),
+    (appBundleId?: string) => interactor.awaitAlert!({ appBundleId }),
+    (appBundleId?: string) => interactor.acceptAlert!({ appBundleId }),
+    (appBundleId?: string) => interactor.dismissAlert!({ appBundleId }),
+  ];
+  for (const read of reads) {
+    await read();
+    assert.equal(calls.at(-1)?.command.appBundleId, 'com.example.bound');
+    await read('com.example.override');
+    assert.equal(calls.at(-1)?.command.appBundleId, 'com.example.override');
+  }
 });
