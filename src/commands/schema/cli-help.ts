@@ -78,7 +78,7 @@ Command shape:
   Command lines only -- no prose, numbering, fences, pipes, or grep/head/tail/jq; raw output carries refs/hints for the next step. Order: subcommand, positionals, flags: agent-device open com.example.app --session checkout --platform android --relaunch
   Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle. Fall back to one command at a time when a step is uncertain (ambiguous match, network-backed result, unseen screen).
   Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with ~s<n> (press @e12~s4); every platform rejects a stale pinned ref -- refresh with snapshot -i or use a selector.
-  close = agent-device close; when you finish with a local simulator or emulator, run close --shutdown unless the device must stay up for more work. App back is back; system back is back --system. Single taps are press/click; gesture tap touches 2 to 5 points at once. type never takes --settle: run type, then diff snapshot to verify. Known flow: batch --steps-file ./steps.json (help batch).
+  close = agent-device close; if your session booted a local simulator or emulator, use close --shutdown, unless the user asks to keep it running. App back is back; system back is back --system. Single taps are press/click; gesture tap touches 2 to 5 points at once. type never takes --settle: run type, then diff snapshot to verify. Known flow: batch --steps-file ./steps.json (help batch).
   Gestures: scroll/swipe for lists/flicks; gesture pan|fling|pinch|rotate|transform|tap|drag for multi-touch. Shapes and platform quirks: help gestures.
 
 Bootstrap:

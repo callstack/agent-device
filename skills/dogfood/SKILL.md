@@ -22,6 +22,6 @@ Read current CLI guidance:
 agent-device help dogfood
 ```
 
-Loop: open app -> snapshot -i + screenshot -> explore flows -> capture evidence per issue -> close (`close --shutdown` on a local simulator or emulator).
+Loop: open app -> snapshot -i + screenshot -> explore flows -> capture evidence per issue -> close (`close --shutdown` if your session booted a local simulator or emulator, unless the user asks to keep it running).
 
 Target app is required; infer platform or ask. Findings must come from runtime behavior, not source reads. Let `help dogfood` provide exact report shape, evidence commands, and current workflow guidance.
