@@ -186,6 +186,34 @@ To free a device:
   claim, and reports the release in `warnings`. `device release --stale` never checks for a
   reboot, so it keeps refusing a claim whose owner is live.
 
+## Hold a device while an external command runs
+
+Tools like `xcrun simctl install` or `expo run:ios` install without going through a session, so they
+ignore claims. To keep other sessions off the device while one runs, claim it first with an app-less
+`open` on a uniquely named session, and run the command only if the claim succeeds:
+
+```bash
+udid=<udid>
+claim="build-$$"
+agent-device open --platform ios --udid "$udid" --session "$claim" --timeout 600000 || exit
+trap 'agent-device close --session "$claim"' EXIT
+xcrun simctl install "$udid" ./App.app
+```
+
+- `|| exit` stops the script when another session holds the device (`DEVICE_IN_USE`), so the command
+  never runs unfenced. Add `--wait <ms>` to `open` to queue for the device instead.
+- The script exits with the command's status, as long as the command is the last line. To run
+  more after it, save `status=$?` and finish with `exit "$status"`.
+- The `trap` closes the session whether the command succeeds or fails. Add `--shutdown` to `close` to
+  shut the simulator or emulator down afterwards.
+- `open` without an app boots the device if needed and claims it, so the first call on a cold
+  simulator can take minutes.
+- This is a session claim, not a claim owned by your process. If the shell dies without running its
+  `trap` (for example `kill -9`), the session keeps the device until you run
+  `agent-device close --session <name>`. Find the name with `agent-device session list`.
+  The tool itself is not stopped from touching the device; only other agent-device sessions are
+  fenced off.
+
 ## Notes
 
 - `open <app>` in an existing session switches the active app and updates the session's bundle id.
