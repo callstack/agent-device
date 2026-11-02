@@ -38,12 +38,15 @@ final class RunnerTests: XCTestCase {
   /// channel, so the runner cannot tell whether an input is there.
   /// `ALERT_BUTTON_NOT_FOUND` is the alert button choice refusing before any activation, so it
   /// discloses dispatched: no.
+  /// `ALERT_UNRESOLVED` is a visible blocking system modal whose host could not be read: a prompt
+  /// is on screen, so it must never read as absence. It activates nothing, so dispatched: no.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
     static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
     static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
+    static let alertUnresolved = "ALERT_UNRESOLVED"
     /// Refuses a repeat of a `commandId` the runner already finished, when that command's own
     /// classification keeps no response body to replay. Nothing ran for the repeat, but the daemon's
     /// dispatch disclosure stays `unknown` — only the runner knows whether an earlier send of that id
@@ -237,7 +240,7 @@ final class RunnerTests: XCTestCase {
   /// out-of-process sheet the tier cannot read. Production builds compile none of this.
   var privateAXAcquisitionOverrideForTesting: (() -> SnapshotAcquisition?)?
   var blockingSystemModalPresenceOverrideForTesting: Bool?
-  var alertResolutionOverrideForTesting: (@MainActor (Date) -> RunnerAlert?)?
+  var alertResolutionOverrideForTesting: (@MainActor (Date) -> AlertResolution)?
   var alertButtonHittabilityProbeOverrideForTesting: (@MainActor (Date) -> Bool)?
   // Unit-test-only seam for the in-place surface probe (`presentedSystemSurfaceHost`): a registered
   // host is an out-of-process XPC service that only comes up because some app presented it, and

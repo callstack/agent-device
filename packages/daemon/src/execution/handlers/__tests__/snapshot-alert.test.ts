@@ -102,6 +102,25 @@ test('alert accept adds a scoped-snapshot hint after retrying alert-not-found fa
   expect((thrown as AppError).details?.hint).toMatch(/scoped snapshot/i);
 });
 
+test('alert get reports a visible prompt the runner could not read, never as absence', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+  mockRunnerCommand.mockRejectedValue(
+    new AppError('ALERT_UNRESOLVED', 'a system prompt is visible', {
+      runnerErrorCode: 'ALERT_UNRESOLVED',
+      dispatched: 'no',
+      hint: 'Inspect it with screenshot, then snapshot -i.',
+    }),
+  );
+
+  await expect(handleSnapshotCommands(sessionName, sessionStore, ['get'])).rejects.toMatchObject({
+    code: 'ALERT_UNRESOLVED',
+    details: { dispatched: 'no', hint: expect.stringMatching(/screenshot/) },
+  });
+  expect(mockRunnerCommand).toHaveBeenCalledOnce();
+});
+
 test('alert dismiss retries a typed absence whatever the message says', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';

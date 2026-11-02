@@ -420,7 +420,7 @@ Overlays and busy RN UIs:
     agent-device screenshot
     agent-device press 124 817
     agent-device snapshot -i
-  Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.
+  Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert but a sheet is visible, alert did not recognize it: use snapshot -i and press @ref on the visible button.
 
 React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.

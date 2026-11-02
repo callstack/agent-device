@@ -241,3 +241,26 @@ test('a mutating command meets RUNNER_BUSY once, with no status probe and no res
   assert.deepEqual(sentCommands(), ['tap']);
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
 });
+
+test('a read-only alert get answered ALERT_UNRESOLVED is sent once and reported as itself', async () => {
+  // A structured reply proves the runner answered, so the read resend reserved for RUNNER_BUSY and
+  // transport failures must not spend it: the prompt it saw is reported, never retried as absence.
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
+    buildRunnerResponseError({
+      ok: false,
+      error: { code: 'ALERT_UNRESOLVED', message: 'a system prompt is visible' },
+    }),
+  );
+
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'alert', action: 'get' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'ALERT_UNRESOLVED');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+
+  assert.deepEqual(sentCommands(), ['alert']);
+});

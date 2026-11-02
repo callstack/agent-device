@@ -167,9 +167,7 @@ extension RunnerTests {
     XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     // Resolution is a pure read; a contended hosted simulator can spend far more than the 10 s
     // command timeout on it, so it runs under the sibling fixtures' resolution allowance.
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
     XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
 
     let response = handleAlert(
@@ -194,9 +192,7 @@ extension RunnerTests {
       app.terminate()
     }
     XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance))
-    )
+    let alert = try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
 
     let response = handleAlert(
       alert,

@@ -856,7 +856,7 @@ extension RunnerTests {
       alertResolutionOverrideForTesting = { _ in
         _ = releaseResolution.wait(timeout: .now() + 2)
         resolutionExited.fulfill()
-        return nil
+        return .absent
       }
       defer {
         releaseResolution.signal()
