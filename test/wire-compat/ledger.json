@@ -71,7 +71,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:15ad1dc0bbdf1a54060836f5fcb2144c45532c9328db4ce1ea2a326e1b88aef2",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:54b5a8817237d38502f8ae56d8e754217c811520110deb3f2637264e68534f98",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
@@ -257,8 +257,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:15ad1dc0bbdf1a54060836f5fcb2144c45532c9328db4ce1ea2a326e1b88aef2",
-      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. A setup error clears artifact-only headers before writing the existing JSON error. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field."
+      "digest": "sha256:54b5a8817237d38502f8ae56d8e754217c811520110deb3f2637264e68534f98",
+      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. The handler waits for file readiness before setting headers and starting the pipeline, so open errors use the existing JSON error response. Setup errors clear artifact-only headers first. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete streaming reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field."
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
