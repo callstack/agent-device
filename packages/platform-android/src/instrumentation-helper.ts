@@ -313,20 +313,32 @@ function appendLine(value: string | undefined, line: string): string | undefined
   return next.length > MESSAGE_FIELD_MAX_CHARS ? value : next;
 }
 
+// The status code `ActivityManagerService` reports for an instrumentation it refused to start.
+// The snapshot helper itself only reports 1 (a chunk) and 2 (session ready).
+const SYSTEM_REFUSED_START_STATUS_CODE = -1;
+
 /**
- * A run `am instrument` refused to start: it exited, reported `INSTRUMENTATION_FAILED`, and carries
- * nothing a started instrumentation prints (a status or result code, an abort) or a signal ends.
+ * Whether a run is a start the system refused, and nothing else. All of these hold:
+ * - `am instrument` reported `INSTRUMENTATION_FAILED`;
+ * - the process exited with a non-zero code, and no signal ended it;
+ * - its only status is the system's refusal report: status code -1 with an `Error` message;
+ * - it has no result code, abort, `shortMsg`, `longMsg` or stack, which only a started
+ *   instrumentation prints;
+ * - no field was withheld.
  */
-export function isRefusedInstrumentationStart(result: unknown): boolean {
-  if (typeof result !== 'object' || result === null) return false;
-  const run: Partial<Record<keyof AndroidInstrumentationExitResult, unknown>> = result;
+export function isRefusedInstrumentationStart(result: AndroidInstrumentationExitResult): boolean {
   return (
-    typeof run.failed === 'string' &&
-    typeof run.exitCode === 'number' &&
-    run.signal === undefined &&
-    run.statusCode === undefined &&
-    run.resultCode === undefined &&
-    run.aborted === undefined
+    result.failed !== undefined &&
+    result.exitCode !== null &&
+    result.exitCode !== 0 &&
+    result.signal === undefined &&
+    result.statusCode === SYSTEM_REFUSED_START_STATUS_CODE &&
+    result.resultCode === undefined &&
+    result.aborted === undefined &&
+    result.shortMsg === undefined &&
+    result.longMsg === undefined &&
+    result.stack === undefined &&
+    result.withheldFields === undefined
   );
 }
 

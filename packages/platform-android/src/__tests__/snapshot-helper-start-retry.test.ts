@@ -18,7 +18,7 @@ vi.mock('../adb.ts', async (importOriginal) => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutorResult, AndroidAdbProvider } from '../adb-executor.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
@@ -26,6 +26,7 @@ import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-l
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import {
   ANDROID_HELPER_INSTALLED_VERSION_PROBE,
+  createSessionProvider,
   androidHelperInstrumentationOutput,
   androidHelperRuntimeProbeResult,
   FakeAndroidProcess,
@@ -44,11 +45,25 @@ const device: DeviceInfo = {
 
 const HELPER_RUNNER = `${ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.packageName}/.SnapshotInstrumentation`;
 
-// What `am instrument` prints when the system could not start the instrumentation at all.
+// What `am instrument -w` prints when the system refuses to start the instrumentation, as captured
+// from an Android 15 emulator: ActivityManagerService reports the refusal as status -1, and then
+// `am` throws INSTRUMENTATION_FAILED.
+const REFUSED_STDOUT = [
+  `INSTRUMENTATION_STATUS: Error=Unable to find instrumentation info for: ComponentInfo{${HELPER_RUNNER}}`,
+  'INSTRUMENTATION_STATUS: id=ActivityManagerService',
+  'INSTRUMENTATION_STATUS_CODE: -1',
+  '',
+].join('\n');
+const REFUSED_STDERR = [
+  `android.util.AndroidException: INSTRUMENTATION_FAILED: ${HELPER_RUNNER}`,
+  '\tat com.android.commands.am.Instrument.run(Instrument.java:543)',
+  '\tat com.android.commands.am.Am.runInstrument(Am.java:213)',
+  '',
+].join('\n');
 const INSTRUMENTATION_FAILED_RUN: AndroidAdbExecutorResult = {
   exitCode: 1,
-  stdout: '',
-  stderr: `android.util.AndroidException: INSTRUMENTATION_FAILED: ${HELPER_RUNNER}\n`,
+  stdout: REFUSED_STDOUT,
+  stderr: REFUSED_STDERR,
 };
 
 const CAPTURED_RUN: AndroidAdbExecutorResult = {
@@ -68,17 +83,21 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
+type OneShotRun = AndroidAdbExecutorResult | AppError;
+
 /**
- * A device right after boot (#4109): the helper is installed and current, the persistent session
- * exits before it is ready, and each one-shot run answers with the next of `oneShotRuns`.
+ * A device whose helper is installed and current. Its persistent session either exits before it is
+ * ready, refused like the one-shot run (#4109), or becomes ready and then fails its capture. Each
+ * one-shot run answers with the next of `oneShotRuns`; an `AppError` is thrown as the executor does.
  */
-function freshlyBootedHelper(oneShotRuns: AndroidAdbExecutorResult[]): {
-  provider: AndroidAdbProvider;
-  calls: (readonly string[])[];
-} {
+function freshlyBootedHelper(
+  oneShotRuns: OneShotRun[],
+  session: 'exits-before-ready' | 'ready-then-fails' = 'exits-before-ready',
+): { provider: AndroidAdbProvider; calls: (readonly string[])[] } {
   bindAndroidAdbTestHost();
   const calls: (readonly string[])[] = [];
   const runs = [...oneShotRuns];
+  const failingSession = createSessionProvider({ calls: [], responseMode: 'malformed' });
   return {
     calls,
     provider: {
@@ -86,13 +105,17 @@ function freshlyBootedHelper(oneShotRuns: AndroidAdbExecutorResult[]): {
         calls.push(args);
         if (args.includes('--show-versioncode')) return ANDROID_HELPER_INSTALLED_VERSION_PROBE;
         if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
-        if (args.includes('instrument')) return runs.shift() ?? CAPTURED_RUN;
-        return { exitCode: 0, stdout: '', stderr: '' };
+        if (!isOneShotRun(args)) return { exitCode: 0, stdout: '', stderr: '' };
+        const run = runs.shift() ?? CAPTURED_RUN;
+        if (run instanceof AppError) throw run;
+        return run;
       },
-      spawn: () => {
+      spawn: (args, options) => {
+        if (session === 'ready-then-fails') return failingSession.spawn!(args, options);
         const process = new FakeAndroidProcess();
         setImmediate(() => {
-          process.stderr.write(INSTRUMENTATION_FAILED_RUN.stderr);
+          process.stdout.write(REFUSED_STDOUT);
+          process.stderr.write(REFUSED_STDERR);
           process.emitExit(1, null);
         });
         return process;
@@ -115,24 +138,109 @@ async function snapshotRejection(provider: AndroidAdbProvider) {
   assert.fail('expected the snapshot to fail');
 }
 
-test('a helper the system failed to start gets one more start after a runtime reset', async () => {
-  const { provider, calls } = freshlyBootedHelper([INSTRUMENTATION_FAILED_RUN]);
+// Only a start the system refused, before any session was ready, gets a second start. Every other
+// row differs from that refusal in one respect and fails on its first run.
+const startFailures: {
+  name: string;
+  run: OneShotRun;
+  session?: 'ready-then-fails';
+  retried: boolean;
+}[] = [
+  { name: 'a start the system refused', run: INSTRUMENTATION_FAILED_RUN, retried: true },
+  {
+    name: 'a refused start after a session was ready',
+    run: INSTRUMENTATION_FAILED_RUN,
+    session: 'ready-then-fails',
+    retried: false,
+  },
+  {
+    name: 'a run that exited 0',
+    run: { ...INSTRUMENTATION_FAILED_RUN, exitCode: 0 },
+    retried: false,
+  },
+  {
+    name: 'a run a signal ended',
+    run: { ...INSTRUMENTATION_FAILED_RUN, signal: 'SIGKILL' },
+    retried: false,
+  },
+  {
+    name: 'a run the command budget ended',
+    run: new AppError('COMMAND_FAILED', 'adb command timed out', {
+      timeoutMs: 30_000,
+      exitCode: 1,
+      stdout: REFUSED_STDOUT,
+      stderr: REFUSED_STDERR,
+    }),
+    retried: false,
+  },
+  {
+    name: 'a run that aborted',
+    run: {
+      ...INSTRUMENTATION_FAILED_RUN,
+      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_ABORTED: System has crashed.\n`,
+    },
+    retried: false,
+  },
+  {
+    name: 'a run whose abort message was withheld',
+    run: {
+      ...INSTRUMENTATION_FAILED_RUN,
+      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_ABORTED: <node text="private" />\n`,
+    },
+    retried: false,
+  },
+  {
+    name: 'a run that started and printed',
+    run: {
+      ...INSTRUMENTATION_FAILED_RUN,
+      stdout: 'INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n',
+    },
+    retried: false,
+  },
+  {
+    name: 'a run with a result message',
+    run: {
+      ...INSTRUMENTATION_FAILED_RUN,
+      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_RESULT: shortMsg=Process crashed.\n`,
+    },
+    retried: false,
+  },
+  {
+    name: 'the refusal words outside the startup-failure envelope',
+    run: {
+      exitCode: 1,
+      stdout: `INSTRUMENTATION_RESULT: shortMsg=INSTRUMENTATION_FAILED: ${HELPER_RUNNER}\n`,
+      stderr: '',
+    },
+    retried: false,
+  },
+];
 
-  const snapshot = await snapshotAndroid(device, {
-    helperAdb: provider,
-    helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+for (const row of startFailures) {
+  test(`${row.name} ${row.retried ? 'gets one more start after a runtime reset' : 'is not started again'}`, async () => {
+    const { provider, calls } = freshlyBootedHelper([row.run], row.session);
+
+    if (!row.retried) {
+      const error = await snapshotRejection(provider);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(calls.filter(isOneShotRun).length, 1);
+      return;
+    }
+    const snapshot = await snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    });
+    assert.ok(snapshot.nodes.some((node) => node.label === 'after retry'));
+    const oneShotRuns = calls.flatMap((args, index) => (isOneShotRun(args) ? [index] : []));
+    assert.equal(oneShotRuns.length, 2);
+    assert.ok(
+      calls.slice(oneShotRuns[0], oneShotRuns[1]).some(isAndroidHelperRuntimeForceStop),
+      'the helper runtime is reset before the second start',
+    );
   });
+}
 
-  assert.ok(snapshot.nodes.some((node) => node.label === 'after retry'));
-  const oneShotRuns = calls.flatMap((args, index) => (isOneShotRun(args) ? [index] : []));
-  assert.equal(oneShotRuns.length, 2);
-  assert.ok(
-    calls.slice(oneShotRuns[0], oneShotRuns[1]).some(isAndroidHelperRuntimeForceStop),
-    'the helper runtime is reset before the second start',
-  );
-});
-
-test('a helper the system fails to start twice reports the start failure', async () => {
+test('a helper the system refuses to start twice reports the refusal', async () => {
   const { provider, calls } = freshlyBootedHelper([
     INSTRUMENTATION_FAILED_RUN,
     INSTRUMENTATION_FAILED_RUN,
@@ -142,35 +250,13 @@ test('a helper the system fails to start twice reports the start failure', async
 
   assert.equal(calls.filter(isOneShotRun).length, 2);
   assert.equal(error.code, 'COMMAND_FAILED');
-  assert.deepEqual(error.details?.instrumentation, { exitCode: 1, failed: HELPER_RUNNER });
-});
-
-test('a helper that started and then exited early is not started again', async () => {
-  const earlyExits: AndroidAdbExecutorResult[] = [
-    { exitCode: 1, stdout: 'INSTRUMENTATION_ABORTED: System has crashed.\n', stderr: '' },
-    // The same words without the startup-failure envelope are a message, not a failed start.
-    {
-      exitCode: 1,
-      stdout: `INSTRUMENTATION_RESULT: shortMsg=INSTRUMENTATION_FAILED: ${HELPER_RUNNER}\n`,
-      stderr: '',
-    },
-    // A run that started and printed is not a refused start, whatever line its stderr also holds.
-    {
-      exitCode: 1,
-      stdout: 'INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n',
-      stderr: INSTRUMENTATION_FAILED_RUN.stderr,
-    },
-  ];
-  for (const run of earlyExits) {
-    await resetAndroidSnapshotHelperSessions();
-    resetAndroidSnapshotHelperInstallCache();
-    const { provider, calls } = freshlyBootedHelper([run]);
-
-    const error = await snapshotRejection(provider);
-
-    assert.equal(calls.filter(isOneShotRun).length, 1, run.stdout);
-    assert.equal(error.code, 'COMMAND_FAILED');
-  }
+  assert.equal(error.details?.androidSnapshotHelperStartRefused, true);
+  assert.deepEqual(error.details?.instrumentation, {
+    exitCode: 1,
+    statusCode: -1,
+    failed: HELPER_RUNNER,
+    error: `Unable to find instrumentation info for: ComponentInfo{${HELPER_RUNNER}}`,
+  });
 });
 
 // The reset before the second start is a force-stop and then a settle delay; a cancellation in either

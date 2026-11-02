@@ -123,16 +123,11 @@ export async function captureAndroidSnapshotWithHelper(
 }
 
 /**
- * The one-shot run failed because the system never started the helper: `am instrument` refused the
- * start, so no helper code ran on the device and the helper reported nothing.
+ * The one-shot run exited on its own after the system refused to start the helper (see
+ * `isRefusedInstrumentationStart`), so no helper code ran on the device.
  */
 export function isAndroidSnapshotHelperStartFailure(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    error.code === 'COMMAND_FAILED' &&
-    error.details?.helper === undefined &&
-    isRefusedInstrumentationStart(error.details?.instrumentation)
-  );
+  return error instanceof AppError && error.details?.androidSnapshotHelperStartRefused === true;
 }
 
 /**
@@ -282,6 +277,11 @@ function readAndroidSnapshotHelperOutput(
         stderr: result.stderr,
         exitCode: result.exitCode,
         instrumentation,
+        // Read only here, where adb returned the run's own exit: a deadline or a host failure throws
+        // before this point, so it can never read as a refused start.
+        ...(isRefusedInstrumentationStart(instrumentation)
+          ? { androidSnapshotHelperStartRefused: true }
+          : {}),
         ...androidCaptureFailureReasonDetail(
           androidCaptureFailureReasonFromExitCode(result.exitCode),
         ),

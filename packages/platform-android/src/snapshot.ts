@@ -43,7 +43,6 @@ import {
 } from './snapshot-helper-types.ts';
 import {
   captureAndroidSnapshotWithHelper,
-  captureAndroidSnapshotWithHelperSession,
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
   stopAndroidSnapshotHelperSession,
@@ -53,7 +52,11 @@ import {
   type AndroidSnapshotHelperInstallResult,
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
-import { getLiveAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
+import {
+  acquireAndroidSnapshotHelperSession,
+  getLiveAndroidSnapshotHelperSession,
+} from './snapshot-helper-session-lifecycle.ts';
+import { captureFromAndroidSnapshotHelperSession } from './snapshot-helper-session.ts';
 import { isAndroidSnapshotHelperNotCurrentError } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
@@ -481,10 +484,18 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   });
   captureOptions.idleWait = params.idleWait;
   let sessionCapture: AndroidSnapshotHelperOutput | undefined;
+  // A helper that reached a ready session was started, so a refused start after it is not #4109.
+  let sessionReady = false;
   try {
     await withDiagnosticTimer(
       ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
-      async () => (sessionCapture = await captureAndroidSnapshotWithHelperSession(captureOptions)),
+      async () => {
+        const acquired = await acquireAndroidSnapshotHelperSession(captureOptions);
+        sessionReady = acquired !== undefined;
+        if (acquired) {
+          sessionCapture = await captureFromAndroidSnapshotHelperSession(acquired, captureOptions);
+        }
+      },
       () => ({
         packageName: artifact.manifest.packageName,
         version: artifact.manifest.version,
@@ -523,9 +534,10 @@ async function captureAndroidUiHierarchyFromHelper(params: {
   } catch (error) {
     signal?.throwIfAborted();
     // Right after a boot or a `/data` restore, the system can refuse to start a current helper
-    // once and start it on the next run (#4109). A refused start ran nothing on the device, so it
-    // gets exactly one more start after a runtime reset; any other failure is the answer.
-    if (!isAndroidSnapshotHelperStartFailure(error)) throw error;
+    // once and start it on the next run (#4109). When no session was ready and the system refused
+    // the one-shot start, nothing ran on the device, so the helper gets exactly one more start
+    // after a runtime reset. Any other failure is the answer.
+    if (sessionReady || !isAndroidSnapshotHelperStartFailure(error)) throw error;
     emitDiagnostic({
       level: 'warn',
       phase: 'android_snapshot_helper_start_retry',
