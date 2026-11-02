@@ -256,6 +256,7 @@ test('a caller that aborts mid-start is answered at once, and the late device is
   await settle();
   controller.abort();
   await assert.rejects(allocating, reason('request_canceled'));
+  assert.ok(provider.controls[0]!.signal.aborted, 'a start nobody waits for is abandoned');
   assert.deepEqual(provider.stopped, [], 'nothing is named until the start answers');
 
   provider.answerStart(0, ready('session-1'));
@@ -297,13 +298,26 @@ test('a caller whose budget is already spent sends no start', async () => {
   assert.equal(provider.controls.length, 0);
 });
 
-test('a joiner still waiting keeps the device when the caller that started it gives up', async () => {
+test('a joiner still waiting keeps the device when the caller that started it hangs up', async () => {
   const provider = fakeProvider();
   const controller = new AbortController();
   const first = provider.table.allocate(lease(), {}, { signal: controller.signal });
   const joining = provider.table.allocate(lease(), {});
   controller.abort();
   await assert.rejects(first, reason('request_canceled'));
+  assert.equal(provider.controls[0]!.signal.aborted, false, 'the start still has a caller');
+
+  provider.answerStart(0, ready('session-1'));
+  assert.deepEqual(await joining, { id: 'session-1' });
+  assert.deepEqual(provider.stopped, []);
+});
+
+test("a joiner still waiting keeps the device when the first caller's deadline passes", async () => {
+  const provider = fakeProvider();
+  const first = provider.table.allocate(lease(), {}, { deadline: Date.now() + 10 });
+  const joining = provider.table.allocate(lease(), {});
+  await assert.rejects(first, reason('provider-not-ready'));
+  assert.equal(provider.controls[0]!.signal.aborted, false, 'the start still has a caller');
 
   provider.answerStart(0, ready('session-1'));
   assert.deepEqual(await joining, { id: 'session-1' });
@@ -318,10 +332,10 @@ test('allocation is bounded by the earlier of the caller deadline and the provid
   const shorter = provider.table.allocate(lease('lease-2'), {}, { deadline: callerDeadline });
   const after = Date.now();
   await settle();
-  const [timeoutBound, deadlineBound] = provider.controls.map((control) => control.deadline);
-  assert.ok(timeoutBound! >= before + 40 && timeoutBound! <= after + 40);
-  assert.equal(deadlineBound, callerDeadline);
-  assert.deepEqual(provider.controls[0]!.caller, {}, 'the start sees the budget the caller asked');
+  // The start answers to the provider's own timeout; no caller's deadline reaches it.
+  for (const control of provider.controls) {
+    assert.ok(control.deadline >= before + 40 && control.deadline <= after + 40);
+  }
 
   await assert.rejects(shorter, (error: unknown) => {
     assert.ok(reason('provider-not-ready')(error));
@@ -338,7 +352,8 @@ test('allocation is bounded by the earlier of the caller deadline and the provid
     return true;
   });
 
-  // The device a start names after every caller gave up is stopped, never handed out.
+  // Every caller gave up, so both starts are told to abandon, and what they name is stopped.
+  assert.ok(provider.controls.every((control) => control.signal.aborted));
   provider.answerStart(0, ready('session-1'));
   provider.answerStart(1, ready('session-2'));
   await settle();

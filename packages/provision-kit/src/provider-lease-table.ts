@@ -28,12 +28,11 @@ export type ProviderLeaseAllocateOptions<Request> = ProviderLeaseBudget &
 
 export type ProviderLeaseStartControl<Handle> = Readonly<{
   /**
-   * The budget of the caller that registered the start, as it asked. Its deadline bounds the provider's
-   * own work. Its signal belongs to that caller alone: the start runs for every caller that joins it, so
-   * a provider that ends the start on that signal takes the device from callers still waiting.
+   * Aborts when no caller still waits for the start before it answers, so the provider can abandon it.
+   * No single caller's signal or deadline reaches the start: it runs for every caller that joins it.
    */
-  caller: ProviderLeaseBudget;
-  /** Epoch-ms by which the start should answer: the caller's deadline, cut to `startTimeoutMs`. */
+  signal: AbortSignal;
+  /** Epoch-ms by which the start should answer: `startTimeoutMs` after it was sent. */
   deadline: number;
   /**
    * Publishes a rental as soon as the provider can stop it, before the start answers, so a release or a
@@ -178,10 +177,10 @@ class LeaseEntry<Session, Handle, Request> {
   readonly lease: DeviceLease;
   /** What the start was asked for; absent for an entry a recovery opened. */
   readonly request: Request | undefined;
-  /** The deadline handed to the start: the starting caller's deadline, cut to `startTimeoutMs`. */
-  readonly deadline: number;
-  /** When a teardown stops waiting for the start to answer: `startTimeoutMs` after it was sent. */
+  /** When the start should have answered, and when a teardown stops waiting: `startTimeoutMs` after it was sent. */
   readonly answerBy: number;
+  /** Aborted once no caller waits for the start before it answers. */
+  readonly abandon = new AbortController();
   /** Settles once the start answered and, for a start that failed, once its teardown settled. */
   start: Promise<Outcome<Session>> = Promise.resolve({ status: 'failed', error: undefined });
   answered = false;
@@ -201,15 +200,9 @@ class LeaseEntry<Session, Handle, Request> {
   /** The one teardown in flight, joined by every release, recovery, and drain. */
   ending: Promise<Ended<Session, Handle>> | undefined = undefined;
 
-  constructor(
-    lease: DeviceLease,
-    request: Request | undefined,
-    deadline: number,
-    answerBy: number,
-  ) {
+  constructor(lease: DeviceLease, request: Request | undefined, answerBy: number) {
     this.lease = lease;
     this.request = request;
-    this.deadline = deadline;
     this.answerBy = answerBy;
     this.answer = new Promise((resolve) => {
       this.markAnswered = resolve;
@@ -269,7 +262,7 @@ class LeaseTable<Session, Handle, Request> {
     if (!existing && (caller.signal?.aborted || deadline <= Date.now())) {
       throw this.driver.gaveUp(lease, caller, 0, undefined);
     }
-    const entry = existing ?? this.rent(lease, request, caller, deadline, timeoutAt);
+    const entry = existing ?? this.rent(lease, request, caller, timeoutAt);
     const outcome = await this.join(entry, caller, deadline);
     if (this.shuttingDown) throw this.driver.shuttingDown(lease);
     if (outcome.status === 'failed') throw outcome.error;
@@ -323,10 +316,9 @@ class LeaseTable<Session, Handle, Request> {
     lease: DeviceLease,
     request: Request,
     caller: ProviderLeaseBudget,
-    deadline: number,
     answerBy: number,
   ): LeaseEntry<Session, Handle, Request> {
-    const entry = new LeaseEntry<Session, Handle, Request>(lease, request, deadline, answerBy);
+    const entry = new LeaseEntry<Session, Handle, Request>(lease, request, answerBy);
     entry.start = this.runStart(entry, request, caller);
     this.entries.set(lease.leaseId, entry);
     return entry;
@@ -334,12 +326,7 @@ class LeaseTable<Session, Handle, Request> {
 
   /** Registers an entry for a lease this process holds nothing for, so every route joins its teardown. */
   private recovering(lease: DeviceLease): LeaseEntry<Session, Handle, Request> {
-    const entry = new LeaseEntry<Session, Handle, Request>(
-      lease,
-      undefined,
-      Date.now(),
-      Date.now(),
-    );
+    const entry = new LeaseEntry<Session, Handle, Request>(lease, undefined, Date.now());
     entry.answered = true;
     entry.markAnswered();
     entry.rental = { kind: 'unknown' };
@@ -359,7 +346,7 @@ class LeaseTable<Session, Handle, Request> {
     caller: ProviderLeaseBudget,
   ): Promise<Outcome<Session>> {
     const startedAt = Date.now();
-    const answer = await this.callStart(entry, request, caller);
+    const answer = await this.callStart(entry, request);
     recordAnswer(entry, answer);
     if (answer.status === 'ready') {
       // Recorded even when nobody takes it, so the teardown reports the device it stopped.
@@ -374,12 +361,11 @@ class LeaseTable<Session, Handle, Request> {
   private async callStart(
     entry: LeaseEntry<Session, Handle, Request>,
     request: Request,
-    caller: ProviderLeaseBudget,
   ): Promise<StartAnswer<Session, Handle>> {
     try {
       return await this.driver.start(entry.lease, request, {
-        caller,
-        deadline: entry.deadline,
+        signal: entry.abandon.signal,
+        deadline: entry.answerBy,
         rented: (handle) => {
           if (!entry.answered) entry.rental = { kind: 'held', handle };
         },
@@ -398,7 +384,7 @@ class LeaseTable<Session, Handle, Request> {
   ): unknown {
     if (answer.status !== 'ready') return answer.error;
     if (entry.releasing) return this.driver.releasing(entry.lease);
-    const budgetMs = Math.max(0, entry.deadline - startedAt);
+    const budgetMs = Math.max(0, entry.answerBy - startedAt);
     return this.driver.gaveUp(entry.lease, caller, budgetMs, answer.handle);
   }
 
@@ -457,12 +443,17 @@ class LeaseTable<Session, Handle, Request> {
       entry.waiters.add(waiter);
       if (signal.aborted) throw giveUp();
       const gaveUp = new Promise<never>((_, reject) => {
-        onAbort = () => reject(giveUp());
+        onAbort = () => {
+          entry.waiters.delete(waiter);
+          abandonIfUnwanted(entry);
+          reject(giveUp());
+        };
         signal.addEventListener('abort', onAbort, { once: true });
       });
       return await Promise.race([entry.start, gaveUp]);
     } finally {
       entry.waiters.delete(waiter);
+      abandonIfUnwanted(entry);
       clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
     }
@@ -630,4 +621,11 @@ function stillWanted<Session, Handle, Request>(
     if (!waiter.signal?.aborted && now < waiter.deadline) return true;
   }
   return false;
+}
+
+/** Signals the provider to abandon a start that no caller still waits for. */
+function abandonIfUnwanted<Session, Handle, Request>(
+  entry: LeaseEntry<Session, Handle, Request>,
+): void {
+  if (!entry.answered && !stillWanted(entry)) entry.abandon.abort();
 }

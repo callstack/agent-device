@@ -12,11 +12,10 @@ export function resolveRevylRuntimeInstance(
     backendUrl?: string;
   }>,
 ): string {
-  return providerRuntimeInstance({
-    provider: REVYL_PROVIDER,
+  return providerRuntimeInstance(REVYL_PROVIDER, [
     // The origin the client actually calls: `https://backend.revyl.ai/` and
     // `https://backend.revyl.ai` are one account, and must not become two owner identities.
-    backendUrl: resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL),
-    apiKey: options.apiKey,
-  });
+    ['backendUrl', resolveRevylBackendUrl(options.backendUrl ?? REVYL_DEFAULT_BACKEND_URL)],
+    ['apiKey', options.apiKey],
+  ]);
 }

@@ -16,11 +16,10 @@ export function resolveLimrunRuntimeInstance(options: {
     if (!explicit) throw new TypeError('Limrun runtimeInstance must be a non-empty string');
     return explicit;
   }
-  return providerRuntimeInstance({
-    provider: 'limrun',
-    region: options.region?.trim().toLowerCase() || 'default',
-    apiKey: options.apiKey,
-    attachedIos: options.instances?.ios?.apiUrl,
-    attachedAndroid: options.instances?.android?.apiUrl,
-  });
+  return providerRuntimeInstance('limrun', [
+    ['region', options.region?.trim().toLowerCase() || 'default'],
+    ['apiKey', options.apiKey],
+    ['attachedIos', options.instances?.ios?.apiUrl],
+    ['attachedAndroid', options.instances?.android?.apiUrl],
+  ]);
 }

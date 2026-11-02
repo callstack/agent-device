@@ -5,6 +5,7 @@ import {
   localRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeInstance,
+  type ProviderRuntimePrincipalField,
   providerRuntimeOwner,
   runtimeOwnerKey,
   sameRuntimeOwner,
@@ -214,13 +215,12 @@ function testBinding(
   };
 }
 
-const LIMRUN_PRINCIPAL = {
-  provider: 'limrun',
-  region: 'eu',
-  apiKey: 'secret-key',
-  attachedIos: undefined,
-  attachedAndroid: undefined,
-} as const;
+const LIMRUN_PRINCIPAL: readonly ProviderRuntimePrincipalField[] = [
+  ['region', 'eu'],
+  ['apiKey', 'secret-key'],
+  ['attachedIos', undefined],
+  ['attachedAndroid', undefined],
+];
 
 /**
  * The digest is durable: a provider descriptor written before this release names the instance its
@@ -228,23 +228,44 @@ const LIMRUN_PRINCIPAL = {
  */
 test('providerRuntimeInstance keeps the digest durable descriptors carry', () => {
   assert.equal(
-    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+    providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL),
     'principal-1426b5849137d86f197cdb796882e8f619e8be77eda1b424144502e1da55af29',
   );
   // The salt carries the provider, so one set of credentials is a different account elsewhere.
   assert.notEqual(
-    providerRuntimeInstance({ ...LIMRUN_PRINCIPAL, provider: 'other-provider' }),
-    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+    providerRuntimeInstance('other-provider', LIMRUN_PRINCIPAL),
+    providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL),
   );
   // The provider is normalized as `providerRuntimeOwner` normalizes it, so one account cannot
   // arrive as two owners through spelling.
   assert.equal(
-    providerRuntimeInstance({ ...LIMRUN_PRINCIPAL, provider: ' limrun ' }),
-    providerRuntimeInstance(LIMRUN_PRINCIPAL),
+    providerRuntimeInstance(' limrun ', LIMRUN_PRINCIPAL),
+    providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL),
+  );
+  // An unset fact is the same account as an absent one, never a second instance.
+  assert.equal(
+    providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL.slice(0, 2)),
+    providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL),
   );
   // No secret is readable from what travels into diagnostics and durable state.
-  assert.ok(!providerRuntimeInstance(LIMRUN_PRINCIPAL).includes('secret-key'));
-  assert.throws(() => providerRuntimeInstance({ provider: '   ' }), /non-empty provider principal/);
+  assert.ok(!providerRuntimeInstance('limrun', LIMRUN_PRINCIPAL).includes('secret-key'));
+});
+
+test('providerRuntimeInstance refuses a principal that cannot name one account', () => {
+  assert.throws(() => providerRuntimeInstance('   ', LIMRUN_PRINCIPAL), /non-empty provider/);
+  assert.throws(
+    () => providerRuntimeInstance('limrun', [['apiKey', undefined]]),
+    /at least one fact/,
+  );
+  assert.throws(
+    () =>
+      providerRuntimeInstance('limrun', [
+        ['apiKey', 'a'],
+        ['apiKey', 'b'],
+      ]),
+    /empty or repeated/,
+  );
+  assert.throws(() => providerRuntimeInstance('limrun', [['provider', 'x']]), /empty or repeated/);
 });
 
 test('unavailableFact freezes the cell and omits hint when none is given', () => {

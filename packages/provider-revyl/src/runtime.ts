@@ -226,9 +226,9 @@ function createRevylLeaseDriver(
         appUrl: request.appUrl,
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
-        // The starting caller's signal is not passed on: callers that joined still want the device, and
-        // the table stops it if nobody does once it is ready.
-        ...(control.caller.deadline === undefined ? {} : { deadline: control.caller.deadline }),
+        // The table aborts this only once no caller waits; Revyl bounds `start_device` and readiness with
+        // its own budgets, which `REVYL_ALLOCATION_TIMEOUT_MS` covers.
+        signal: control.signal,
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;

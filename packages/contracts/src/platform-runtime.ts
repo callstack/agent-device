@@ -87,25 +87,44 @@ const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
 const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
 
 /**
+ * One fact of a provider principal: its name, and its value, or `undefined` when this account has
+ * none. An unset fact is left out of the digest, exactly as an absent one.
+ */
+export type ProviderRuntimePrincipalField = readonly [name: string, value: string | undefined];
+
+/**
  * The runtime-owner instance for one provider account, for `providerRuntimeOwner`. The principal is
- * the set of facts that decide which devices one runtime rents (credentials, region, attached
+ * the ordered list of facts that decide which devices one runtime rents (credentials, region, attached
  * endpoints): two runtimes with the same principal share one owner. It is hashed, not carried,
  * because the instance travels into diagnostics and durable envelopes.
  *
- * The principal serializes in its own field order. Only `provider` is normalized, as
- * `providerRuntimeOwner` normalizes it, and the salt derives from it, so one set of credentials
- * is a different instance under another provider.
+ * The order of the facts is part of the digest, so a provider declares them in one place and pins the
+ * result. `provider` is normalized as `providerRuntimeOwner` normalizes it, and the salt derives from
+ * it, so one set of credentials is a different instance under another provider.
  */
 export function providerRuntimeInstance(
-  principal: Readonly<Record<string, unknown> & Readonly<{ provider: string }>>,
+  provider: string,
+  principal: readonly ProviderRuntimePrincipalField[],
 ): string {
-  const provider = principal.provider.trim();
-  if (provider.length === 0) {
-    throw new TypeError('Provider runtime instance requires a non-empty provider principal');
+  const normalizedProvider = provider.trim();
+  if (normalizedProvider.length === 0) {
+    throw new TypeError('Provider runtime instance requires a non-empty provider');
+  }
+  const facts: Record<string, string> = { provider: normalizedProvider };
+  const names = new Set(['provider']);
+  for (const [name, value] of principal) {
+    if (name.length === 0 || names.has(name)) {
+      throw new TypeError(`Provider runtime principal field '${name}' is empty or repeated`);
+    }
+    names.add(name);
+    if (value !== undefined) facts[name] = value;
+  }
+  if (Object.keys(facts).length === 1) {
+    throw new TypeError('Provider runtime principal needs at least one fact with a value');
   }
   const fingerprint = scryptSync(
-    JSON.stringify({ ...principal, provider }),
-    `agent-device:${provider}-runtime-owner:v1`,
+    JSON.stringify(facts),
+    `agent-device:${normalizedProvider}-runtime-owner:v1`,
     RUNTIME_INSTANCE_KEY_LENGTH_BYTES,
     { N: RUNTIME_INSTANCE_SCRYPT_COST, r: 8, p: 1, maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY },
   );
