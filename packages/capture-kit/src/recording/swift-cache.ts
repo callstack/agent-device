@@ -16,6 +16,9 @@ import {
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;
+// swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
+// SIGKILL or SIGTERM leaves them compiling with no parent.
+const SWIFTC_STOP = { signal: 'SIGINT', graceMs: 2_000 } as const;
 const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
 
 /**
@@ -198,6 +201,7 @@ async function ensureSwiftExecutable(params: {
         await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
           signal: params.signal,
+          kill: SWIFTC_STOP,
           env: buildSwiftToolEnv(params.host.env),
         });
         fs.renameSync(tempExecutablePath, params.executablePath);

@@ -190,7 +190,10 @@ test('a canceled compile kills swiftc through its signal and leaves no temp outp
   cancel.abort();
 
   await expect(compiled).rejects.toSatisfy(isRequestCanceledError);
-  expect(mockRunCmd.mock.calls[0]![2]?.signal).toBe(cancel.signal);
+  expect(mockRunCmd.mock.calls[0]![2]).toMatchObject({
+    signal: cancel.signal,
+    kill: { signal: 'SIGINT' },
+  });
   expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
 });
 
