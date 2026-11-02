@@ -525,8 +525,8 @@ extension RunnerTests {
   /// the field a software keyboard is typing into holds `hasKeyboardFocus` instead, which the
   /// text-entry readiness check already consults. Both an element and its snapshot answer the two
   /// keys through KVC, so one reader serves the XCTest producers (recursive tree, query sweep,
-  /// collapsed tabs); a key the object lacks reads as false. The private-AX bridge is not among
-  /// them: the AX server declares no keyboard-focus attribute, so it reads `hasFocus` alone.
+  /// collapsed tabs); a key the object lacks reads as false. The private-AX bridge reads the same
+  /// two keys in `dictionaryForSnapshot:`; `ios-focus-witness.json` pins both.
   func focusBool(_ object: NSObject) -> Bool {
     return kvcBool(object, forKey: "hasKeyboardFocus") || kvcBool(object, forKey: "hasFocus")
   }

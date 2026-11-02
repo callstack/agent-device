@@ -752,7 +752,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   result[@"frame"] = [self frameValueForSnapshot:snapshot];
   result[@"enabled"] = [self boolNumberForKey:@"enabled" snapshot:snapshot defaultValue:YES];
   result[@"selected"] = [self boolNumberForKey:@"selected" snapshot:snapshot defaultValue:NO];
-  result[@"focused"] = [self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO];
+  result[@"focused"] = @([[self boolNumberForKey:@"hasKeyboardFocus" snapshot:snapshot defaultValue:NO] boolValue]
+                         || [[self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO] boolValue]);
 
   NSMutableArray *children = [NSMutableArray array];
   if (depth < maxDepth) {
