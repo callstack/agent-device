@@ -11,12 +11,17 @@ import {
 } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import { createLeaseSessionEnd } from '../../../server/request-execution-scope.ts';
+import { handleLeaseCommands } from '../../handlers/lease.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
-import { dispatchApplicationLifecycleEffect } from '../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import {
+  clearRuntimeHintsFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -142,7 +147,7 @@ test.each([
         device,
         shutdownRequested: false,
         hasScreenRecording: false,
-        hasLease: false,
+        leaseWillEnd: false,
       });
       expect(finalizations).toEqual([
         expect.objectContaining({ retainRunner: retainExecutionHost, shutdownTarget: false }),
@@ -204,9 +209,56 @@ test('close hands the session app and surface to the platform finalization', asy
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
-test('close of a leased session tells the platform that a lease holds the device', async () => {
+test.each([false, true])(
+  'close reports whether a lease with retainOnClose=%s will end',
+  async (retainOnClose) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = 'ios-leased-simulator-session';
+    const leaseRegistry = new LeaseRegistry();
+    const lease = leaseRegistry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'ios-simulator',
+      deviceKey: 'ios:sim-1',
+      clientId: 'client-a',
+      retainOnClose,
+    });
+    publishSession(sessionStore, sessionName, IOS_SIMULATOR, {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        deviceKey: lease.deviceKey,
+        clientId: lease.clientId,
+        expiresAt: lease.expiresAt,
+      },
+    });
+
+    const { response, finalizations, platformResourceCleanup } = await closeSession({
+      sessionStore,
+      sessionName,
+      retainExecutionHost: retainOnClose,
+      leaseRegistry,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseWillEnd: !retainOnClose }),
+    );
+    expect(finalizations).toEqual([expect.objectContaining({ retainRunner: retainOnClose })]);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    expect(sessionStore.listRetainedExecutionHosts(lease.leaseId)).toEqual(
+      retainOnClose
+        ? [expect.objectContaining({ address: sessionName, device: IOS_SIMULATOR })]
+        : [],
+    );
+  },
+);
+
+test('releasing a retained client lease stops the host after close retired its session', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'ios-leased-simulator-session';
+  const sessionName = 'retained-host-release';
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
@@ -214,32 +266,128 @@ test('close of a leased session tells the platform that a lease holds the device
     leaseBackend: 'ios-simulator',
     deviceKey: 'ios:sim-1',
     clientId: 'client-a',
+    retainOnClose: true,
+  });
+  const leaseScope = {
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.backend,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  };
+  publishSession(sessionStore, sessionName, IOS_SIMULATOR, { lease: leaseScope });
+  const closed = await closeSession({
+    sessionStore,
+    sessionName,
+    retainExecutionHost: true,
+    leaseRegistry,
+  });
+  expect(closed.response?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  const cleanup = vi.fn(async () => {});
+  const teardown = vi.fn(async () => {});
+  const ender = createLeaseSessionEnd({
+    env: sessionStore.host.env,
+    sessionStore,
+    executionLocks: new Map(),
+    teardownSession: teardown,
+    cleanupSessionlessExecutionHost: cleanup,
+  });
+
+  const released = await handleLeaseCommands({
+    host: sessionStore.host,
+    req: {
+      token: 't',
+      command: 'lease_release',
+      session: sessionName,
+      positionals: [],
+      meta: leaseScope,
+    },
+    sessionName,
+    sessionStore,
+    leaseRegistry,
+    endSessionsForLease: async (leaseId) => await ender.end(leaseId, 'LEASE_RELEASED'),
+  });
+
+  expect(released?.ok).toBe(true);
+  expect(leaseRegistry.listActiveLeases()).toEqual([]);
+  expect(teardown).not.toHaveBeenCalled();
+  expect(cleanup).toHaveBeenCalledExactlyOnceWith(IOS_SIMULATOR);
+  expect(sessionStore.listRetainedExecutionHosts(lease.leaseId)).toEqual([]);
+});
+
+test('a lease scope mismatch still closes the app and runner before returning a retriable release error', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-close-mismatched-lease';
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:sim-1',
+    clientId: 'client-a',
+    retainOnClose: true,
   });
   publishSession(sessionStore, sessionName, IOS_SIMULATOR, {
+    appBundleId: 'com.example.app',
     lease: {
       leaseId: lease.leaseId,
       tenantId: lease.tenantId,
       runId: lease.runId,
       leaseBackend: lease.backend,
       deviceKey: lease.deviceKey,
-      clientId: lease.clientId,
+      clientId: 'client-b',
       expiresAt: lease.expiresAt,
     },
   });
+  sessionStore.setRuntimeHints(sessionName, { platform: 'ios', metroHost: '127.0.0.1' });
 
   const { response, finalizations, platformResourceCleanup } = await closeSession({
     sessionStore,
     sessionName,
     retainExecutionHost: false,
+    positionals: ['com.example.app'],
     leaseRegistry,
   });
 
-  expect(response?.ok).toBe(true);
+  expect(platformResourceCleanup.stopSnapshotHelper).toHaveBeenCalledWith(IOS_SIMULATOR);
+  expect(mockDispatch).toHaveBeenCalledWith(
+    IOS_SIMULATOR,
+    'close',
+    ['com.example.app'],
+    undefined,
+    expect.any(Object),
+  );
+  expect(clearRuntimeHintsFixture).toHaveBeenCalledWith({
+    device: IOS_SIMULATOR,
+    appId: 'com.example.app',
+    values: expect.objectContaining({ metroHost: '127.0.0.1' }),
+  });
   expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
-    expect.objectContaining({ hasLease: true }),
+    expect.objectContaining({ leaseWillEnd: true }),
   );
   expect(finalizations).toEqual([expect.objectContaining({ retainRunner: false })]);
-  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNAUTHORIZED',
+      details: { reason: 'LEASE_SCOPE_MISMATCH', session: sessionName },
+      retriable: true,
+    },
+  });
+  expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(lease.leaseId);
+  expect(
+    leaseRegistry.getLease({
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+    }),
+  ).toMatchObject({ retainOnClose: true });
 });
 
 test('an app-only close terminates the app without finalizing or ending the session', async () => {
