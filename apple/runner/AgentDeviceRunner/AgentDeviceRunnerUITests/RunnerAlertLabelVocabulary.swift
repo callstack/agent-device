@@ -37,55 +37,46 @@ extension RunnerAlertLabelVocabulary {
   /// preferred language the app localizes into, so every preferred language takes part.
   static let system = fromSystemStrings(languages: Locale.preferredLanguages)
 
-  /// The string tables that word the system permission prompts: notifications, privacy access
-  /// (including App Tracking Transparency), and location.
-  private static let promptStringTables = [
-    ("/System/Library/PrivateFrameworks/UserNotificationsServer.framework", "Localizable"),
-    ("/System/Library/PrivateFrameworks/TCC.framework", "Localizable"),
-    ("/System/Library/Frameworks/CoreLocation.framework", "locationd")
-  ]
-
-  /// Pairs each English prompt string with the same key's value in each of `languages`. Every
-  /// table must read, or none counts: a missing table could hide the translation that makes a
-  /// label in another table claim both actions.
+  /// Pairs each English prompt string with the same key's value in each of `languages`.
   static func fromSystemStrings(languages: [String]) -> RunnerAlertLabelVocabulary {
-    // The simulated OS, taken from where this process's Foundation loaded; the simulator process
-    // would otherwise read the host's /System.
-    let foundationPath = "/System/Library/Frameworks/Foundation.framework"
-    guard let foundation = Bundle(identifier: "com.apple.Foundation")?.bundlePath, foundation.hasSuffix(foundationPath)
-    else { return unavailable(source: foundationPath, languages: languages) }
-    let root = String(foundation.dropLast(foundationPath.count))
+    composed(
+      permission: RunnerSystemPromptStrings.read(RunnerSystemPromptStrings.promptTables, languages: languages),
+      launchConfirmation: RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages),
+      languages: languages
+    )
+  }
+
+  /// Every permission table must read, or none of them counts: a missing table could hide the
+  /// translation that makes a label in another table claim both actions. The launch confirmation's
+  /// table is independent of them. Only its open and cancel labels are taken, so they stay when the
+  /// permission read fails, and the permission vocabulary stays whole when that table is missing.
+  static func composed(
+    permission: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
+    launchConfirmation: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
+    languages: [String]
+  ) -> RunnerAlertLabelVocabulary {
+    var tables: [RunnerSystemPromptStrings] = []
+    switch permission {
+    case .failure(let failure):
+      RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary", languages: languages)
+    case .success(let read):
+      tables = read
+    }
+    switch launchConfirmation {
+    case .failure(let failure):
+      RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary-launch-confirmation", languages: languages)
+    case .success(let read):
+      tables += read.map { $0.limited(to: RunnerSystemPromptStrings.launchConfirmationLabelKeys) }
+    }
     var translations: [(english: String, localized: String)] = []
-    for (path, table) in promptStringTables {
-      guard let bundle = Bundle(path: root + path),
-        let english = strings(in: bundle, table: table, localization: "en")
-      else { return unavailable(source: path, languages: languages) }
-      let localizations = Set(languages.compactMap {
-        Bundle.preferredLocalizations(from: bundle.localizations, forPreferences: [$0]).first
-      }).subtracting(["en"])
-      for localization in localizations {
-        guard let localized = strings(in: bundle, table: table, localization: localization)
-        else { return unavailable(source: "\(path) \(localization)", languages: languages) }
-        for (key, value) in english {
-          if let translation = localized[key] { translations.append((english: value, localized: translation)) }
+    for table in tables {
+      for strings in table.localized.values {
+        for (key, value) in table.english {
+          if let translation = strings[key] { translations.append((english: value, localized: translation)) }
         }
       }
     }
     return RunnerAlertLabelVocabulary(translations: translations)
-  }
-
-  private static func unavailable(source: String, languages: [String]) -> RunnerAlertLabelVocabulary {
-    NSLog(
-      "AGENT_DEVICE_RUNNER_ALERT_VOCABULARY_UNAVAILABLE source=%@ languages=%@",
-      source, languages.joined(separator: ",")
-    )
-    return .english
-  }
-
-  private static func strings(in bundle: Bundle, table: String, localization: String) -> [String: String]? {
-    guard let url = bundle.url(forResource: table, withExtension: "strings", subdirectory: nil, localization: localization)
-    else { return nil }
-    return NSDictionary(contentsOf: url) as? [String: String]
   }
 }
 #else

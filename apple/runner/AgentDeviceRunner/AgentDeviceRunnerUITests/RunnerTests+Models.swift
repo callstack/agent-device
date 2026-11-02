@@ -456,6 +456,9 @@ struct DataPayload: Codable {
   var text: String?
   var found: Bool?
   var items: [String]?
+  /// Set on an alert read that is SpringBoard's `Open in “<App>”?` launch confirmation, in the
+  /// device's language; absent otherwise.
+  var launchConfirmationPrompt: Bool?
   var nodes: [PresentedNode]?
   var truncated: Bool?
   var qualityPayload: SnapshotQualityPayload? = nil

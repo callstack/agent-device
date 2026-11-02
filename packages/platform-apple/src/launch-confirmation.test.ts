@@ -73,15 +73,16 @@ function port(
 }
 
 test.each([
-  ['curly', 'Open in “Example App”?'],
-  ['straight', 'Open in "Example App"?'],
-  ['localized-name', 'Open in “Beispiel-App”?'],
+  ['English', 'Open in “Example App”?', ['Cancel', 'Open']],
+  ['French', 'Ouvrir dans «\u00A0Modèle RN\u00A0»\u00A0?', ['Annuler', 'Ouvrir']],
+  ['Japanese', '“テスト”で開きますか?', ['キャンセル', '開く']],
 ])(
-  'accepts a confirmation (%s title) when the URL owner is the session app',
-  async (_case, message) => {
+  'accepts a %s confirmation the runner marked when the URL owner is the session app',
+  async (_language, message, items) => {
     const { port: device, acceptAlert } = port(async () => ({
       message,
-      items: ['Cancel', 'Open'],
+      items,
+      launchConfirmationPrompt: true,
     }));
 
     await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'accepted' });
@@ -143,7 +144,7 @@ test('an alert that is not a launch confirmation is left for the caller and repo
   });
 });
 
-test('a launch confirmation in another language is left on screen and reported', async () => {
+test('a launch-like alert the runner did not mark is left on screen and reported', async () => {
   const { port: device, acceptAlert } = port(async () => ({
     message: 'In „Beispiel-App“ öffnen?',
     items: ['Abbrechen', 'Öffnen'],
@@ -580,9 +581,9 @@ test('a confirmed persistent prompt reports its observed outcome without an acce
   });
 });
 
-test('a matching launch title with other buttons is left unanswered on the first read', async () => {
+test('a launch title the runner did not mark is left unanswered on the first read', async () => {
   const { port: device, acceptAlert } = port(async () => ({
-    ...CONFIRMATION,
+    message: CONFIRMATION.message,
     items: ['Cancel', 'Continue'],
   }));
   await expect(answerLaunchConfirmation(device)).resolves.toMatchObject({

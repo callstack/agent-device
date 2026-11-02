@@ -36,14 +36,6 @@ export type LaunchConfirmationAttempt =
 export type LaunchConfirmationStep = 'alert-read' | 'alert-accept' | 'url-owner' | 'runner';
 
 /**
- * SpringBoard's English title for a URL it holds until the user confirms the app that will open
- * it. The runner reports an alert only as its localized title and button labels, and a name match
- * is unsafe (a permission alert names the app too), so a Simulator in another language is not
- * recognized; the unrecognized alert is reported instead.
- */
-const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
-
-/**
  * One shared deadline for the URL-owner lookup (the app listing and every Info.plist read). The
  * alert read and accept are each bounded by the runner's `DEFAULT_ALERT_TIMEOUT_MS`; the lookup gets
  * the same bound, well inside `IOS_APP_LAUNCH_TIMEOUT_MS`, so a wedged CoreSimulator leaves the open
@@ -190,17 +182,14 @@ function accepted(): LaunchConfirmationAttempt {
   return { outcome: 'accepted' };
 }
 
+/**
+ * The runner marks SpringBoard's `Open in “<App>”?` prompt, for a URL it holds until the user
+ * confirms the app that will open it, by the OS's own wording of its title and buttons in the
+ * device's language. A title or button match here is unsafe: a permission alert names the app too.
+ * An alert the runner did not mark is reported as unrecognized.
+ */
 function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
-  const title = alert['message'];
-  const buttons = alert['items'];
-  return (
-    typeof title === 'string' &&
-    LAUNCH_CONFIRMATION_TITLE.test(title) &&
-    Array.isArray(buttons) &&
-    buttons.length === 2 &&
-    buttons.includes('Cancel') &&
-    buttons.includes('Open')
-  );
+  return alert['launchConfirmationPrompt'] === true;
 }
 
 /** A failed step leaves the open unanswered; the failure is reported, not thrown. */
