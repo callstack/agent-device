@@ -199,6 +199,13 @@ test('a release that lands while the shared start is still running stops the dev
   const runtime = fixture.createRuntime();
   const lease = revylLease('ios');
   const first = runtime.leaseLifecycle?.allocate?.(lease);
+  // The release owns the device once it starts, so the caller still waiting is refused rather than handed
+  // a session that is being stopped.
+  const firstRefused = assert.rejects(
+    async () => await first,
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
+  );
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
 
   const controller = new AbortController();
@@ -215,9 +222,8 @@ test('a release that lands while the shared start is still running stops the dev
     `POST /api/v1/execution/device/sessions/${revylSessionIdForLease('lease-1')}/stop`,
   ]);
 
-  // The caller that rented the device is not made to carry the joiner's release: it still gets its
-  // answer, and the runtime holds no session a later shutdown would stop twice.
-  assert.equal((await first)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  // The runtime holds no session a later shutdown would stop twice.
+  await firstRefused;
   await runtime.shutdown();
   assert.equal(stops(fixture).length, 1);
 });
@@ -401,13 +407,18 @@ test('a release that lands mid-start stops the session only once Revyl has made 
   const lease = revylLease('ios');
 
   const allocating = runtime.leaseLifecycle?.allocate?.(lease);
+  const refused = assert.rejects(
+    async () => await allocating,
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'provider-lease-releasing',
+  );
   await waitFor(() => fixture.paths().some((path) => path.endsWith('/start_device')));
 
   // The release lands while the start is in flight. It waits for the answer rather than stopping the id it
   // only has from the lease, and that is what makes the stop below land after the session exists.
   const released = await runtime.leaseLifecycle!.release!(lease);
   assert.equal(released?.providerSessionId, revylSessionIdForLease('lease-1'));
-  assert.equal((await allocating)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  await refused;
 
   const answered = fixture.answeredPaths();
   const stopAt = answered.findIndex((path) => path.endsWith('/stop'));

@@ -6,9 +6,10 @@ import type { DeviceLease } from '@agent-device/contracts/device';
  * A provider rents a billed device per lease. The bookkeeping around that rental is the same for every
  * provider, and each rule is one a provider gets wrong on its own: a second allocation of one lease rents a
  * second device nobody can release; a session forgotten before its stop is confirmed stays billed; a drain
- * that skips a start still in flight misses the device that start rents; and a caller that stopped waiting
- * leaves a device whose only handle is the answer still to come. This table owns those rules. The provider
- * supplies start, stop, find-by-lease, and the errors it reports in its own words.
+ * that skips a start still in flight misses the device that start rents; an allocation that wins a race
+ * with a release is handed a device that is being stopped; and a caller that stopped waiting leaves a
+ * device whose only handle is the answer still to come. This table owns those rules. The provider supplies
+ * start, stop, find-by-lease, and the errors it reports in its own words.
  *
  * Keep this module free of value imports: provider runtimes load it on their construction path.
  */
@@ -16,58 +17,96 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 /** One caller's patience: the signal it cancels with, and the epoch-ms instant it stops waiting. */
 export type ProviderLeaseBudget = Readonly<{ signal?: AbortSignal; deadline?: number }>;
 
-/** A budget the table has bounded by the provider's own start timeout, so it always has a deadline. */
-export type ProviderLeaseBoundedBudget = Readonly<{ signal?: AbortSignal; deadline: number }>;
+export type ProviderLeaseAllocateOptions<Request> = ProviderLeaseBudget &
+  Readonly<{
+    /**
+     * Refuses to join a start made for `started` when this allocation asks for something else. Throw the
+     * refusal; the table calls this before the allocation joins anything.
+     */
+    requireJoinable?(started: Request): void;
+  }>;
+
+export type ProviderLeaseStartControl<Handle> = Readonly<{
+  /**
+   * The budget of the caller that registered the start, as it asked. The start runs for every caller that
+   * joins it, so this caller's signal and deadline bound the provider's own work.
+   */
+  caller: ProviderLeaseBudget;
+  /** Epoch-ms by which the start should answer: the caller's deadline, cut to `startTimeoutMs`. */
+  deadline: number;
+  /**
+   * Publishes a rental as soon as the provider can stop it, before the start answers, so a release or a
+   * drain can stop a device whose start stalls. A later call replaces the handle. Do not publish a handle
+   * whose stop could arrive before the provider created the session it names.
+   */
+  rented(handle: Handle): void;
+}>;
 
 /**
  * What one start amounted to. A ready start hands over its session and the handle that stops it. A failed
- * start names in `rented` what it left under rent, or omits it when the provider refused the start
- * outright. A start reports what it rented and never stops it itself: the table holds the only handle.
+ * start names in `rented` what it left under rent; omitting it says the provider rented nothing, which
+ * also discards a handle published through `rented`. A start that rejects instead is read as one that may
+ * have rented, and the table stops the published handle or what `findByLease` names.
  */
 export type ProviderLeaseStart<Session, Handle> =
   | Readonly<{ status: 'ready'; session: Session; handle: Handle }>
   | Readonly<{ status: 'failed'; error: unknown; rented?: Handle }>;
 
-/** Which route found a stop unconfirmed, so the provider reports it with the matching details. */
+/** Which route found a rental still rented, so the provider reports it with the matching details. */
 export type ProviderLeaseCleanupScope =
   | Readonly<{ route: 'start' | 'release' | 'recover'; leaseId: string }>
   | Readonly<{ route: 'shutdown' }>;
 
-/** A rented session whose stop the provider did not confirm, and the stop's own failure. */
-export type ProviderUnconfirmedStop<Handle> = Readonly<{ handle: Handle; cause: unknown }>;
+/**
+ * A rental that stays rented, and why. `handle` is absent when the provider could not name the rental,
+ * because the start never answered or `findByLease` failed.
+ */
+export type ProviderUnconfirmedStop<Handle> = Readonly<{
+  leaseId: string;
+  handle: Handle | undefined;
+  cause: unknown;
+}>;
 
 export type ProviderLeaseDriver<Session, Handle, Request> = Readonly<{
-  /** The longest one allocation may take. The caller's deadline wins when it is earlier. */
+  /**
+   * The longest one start may take to answer. It cuts each caller's wait, and it is how long a teardown
+   * waits for a start whose caller already gave up, since only that answer may name the rental.
+   */
   startTimeoutMs: number;
   /**
-   * Rents the lease's device within `budget`. A rejection is read as a start that may have rented, and
-   * the table stops what {@link findByLease} names for the lease.
+   * How long one teardown waits for a stop to answer. A stop that outlives it is reported as unconfirmed,
+   * and the next teardown joins the same stop instead of sending a second one. Unset waits for the answer.
    */
+  stopTimeoutMs?: number;
   start(
     lease: DeviceLease,
     request: Request,
-    budget: ProviderLeaseBoundedBudget,
+    control: ProviderLeaseStartControl<Handle>,
   ): Promise<ProviderLeaseStart<Session, Handle>>;
-  /** Stops one rented session. Resolves only once the provider confirmed the device is no longer rented. */
+  /** Stops one rental. Resolves only once the provider confirmed the device is no longer rented. */
   stop(handle: Handle): Promise<void>;
+  /** Identifies a rental, so one rental is stopped once whichever route named it. */
+  handleKey(handle: Handle): string;
   /**
-   * Names what a lease rented when this process holds no entry for it, as after a daemon restart.
-   * Rejects when the provider cannot name it, so the daemon keeps the lease pending.
+   * Names what a lease rented when the table cannot, as after a daemon restart or a start that rejected.
+   * Rejects when the provider cannot name it, which keeps the lease pending for a later retry.
    */
   findByLease(lease: DeviceLease): Promise<Handle>;
   /** The error for an allocation that arrives or finishes while the runtime shuts down. */
   shuttingDown(lease: DeviceLease): Error;
+  /** The error for an allocation of a lease that a release, a recovery, or a failed start is ending. */
+  releasing(lease: DeviceLease): Error;
   /**
-   * The error for a caller that stopped waiting: its signal aborted, or its `budget.deadline` passed.
-   * `budgetMs` is the wait it was granted, and `rented` the session it leaves behind when one is known.
+   * The error for a caller that stopped waiting: its signal aborted, or its wait ran out. `caller` is the
+   * budget it asked for, and `budgetMs` the wait it was granted after `startTimeoutMs` cut it.
    */
   gaveUp(
     lease: DeviceLease,
-    budget: ProviderLeaseBoundedBudget,
+    caller: ProviderLeaseBudget,
     budgetMs: number,
     rented: Handle | undefined,
   ): Error;
-  /** The error for sessions that stay rented because their stop was not confirmed. */
+  /** The error for rentals that stay rented because their stop was not confirmed. */
   cleanupPending(
     unconfirmed: readonly ProviderUnconfirmedStop<Handle>[],
     scope: ProviderLeaseCleanupScope,
@@ -82,26 +121,26 @@ export type ProviderLeaseReleased<Session, Handle> = Readonly<{
 }>;
 
 export type ProviderLeaseTable<Session, Handle, Request> = Readonly<{
-  /** The ready session a lease holds in this process. */
+  /** The ready session a lease holds in this process, while nothing is ending it. */
   live(leaseId: string): Session | undefined;
   /**
-   * The request the lease's entry was started for, so a provider can refuse a joining allocation that
-   * asks for something else. Call it right before `allocate`, with no await between them.
+   * Rents one device per lease id. A lease that is starting is joined, and one that is ready is reused.
+   * Each caller waits within its own budget. A ready device is stopped instead of handed out when no
+   * caller is still waiting for it. A lease that something is ending is refused with `releasing`.
    */
-  requestOf(leaseId: string): Request | undefined;
+  allocate(
+    lease: DeviceLease,
+    request: Request,
+    options?: ProviderLeaseAllocateOptions<Request>,
+  ): Promise<Session>;
   /**
-   * Rents one device per lease id. A lease that is already starting is joined, and one that is ready is
-   * reused. Each caller waits within its own budget; a caller that gives up leaves the start running.
-   */
-  allocate(lease: DeviceLease, request: Request, budget?: ProviderLeaseBudget): Promise<Session>;
-  /**
-   * Stops the lease's session and forgets it once the stop is confirmed. Resolves `undefined` when this
-   * process holds nothing for the lease. Rejects, keeping the session for a retry, when the stop fails.
+   * Ends the lease and forgets it once every rental is confirmed stopped. Resolves `undefined` when this
+   * process holds nothing for the lease. Rejects, keeping the lease for a retry, when a rental stays.
    */
   release(leaseId: string): Promise<ProviderLeaseReleased<Session, Handle> | undefined>;
   /** Ends an expired lease, from its entry when this process has one and from `findByLease` otherwise. */
   recover(lease: DeviceLease): Promise<void>;
-  /** Refuses new allocations, waits for every start, and stops every session. Rejects with what stays rented. */
+  /** Refuses new allocations, then ends every lease. Rejects with what stays rented. */
   shutdown(): Promise<void>;
 }>;
 
@@ -109,33 +148,63 @@ type Outcome<Session> =
   | Readonly<{ status: 'ready'; session: Session }>
   | Readonly<{ status: 'failed'; error: unknown }>;
 
+/** What this process knows a lease rented. `unknown` means it may have rented and must be found. */
+type Rental<Handle> =
+  | Readonly<{ kind: 'none' }>
+  | Readonly<{ kind: 'held'; handle: Handle }>
+  | Readonly<{ kind: 'unknown' }>;
+
 type StopFailure = Readonly<{ cause: unknown }>;
 
-type Ended<Session, Handle> = ProviderLeaseReleased<Session, Handle> &
-  Readonly<{ failure: StopFailure | undefined }>;
+type Ended<Session, Handle> =
+  | Readonly<{ status: 'stopped'; handle: Handle; session: Session | undefined }>
+  | Readonly<{ status: 'nothing-rented' }>
+  | Readonly<{ status: 'pending'; handle: Handle | undefined; cause: unknown }>;
 
 /**
- * One lease's place in the table, from the moment its start is sent until the provider confirms the stop
- * of what that start rented.
+ * One lease's place in the table, from the moment its start is sent, or its recovery begins, until every
+ * rental it knows of is confirmed stopped.
  */
 class LeaseEntry<Session, Handle, Request> {
-  readonly request: Request;
-  /** Settles once the start answered and the stop a failed start owed has settled with it. */
-  readonly start: Promise<Outcome<Session>>;
+  readonly lease: DeviceLease;
+  /** What the start was asked for; absent for an entry a recovery opened. */
+  readonly request: Request | undefined;
+  /** The deadline handed to the start: the starting caller's deadline, cut to `startTimeoutMs`. */
+  readonly deadline: number;
+  /** When a teardown stops waiting for the start to answer: `startTimeoutMs` after it was sent. */
+  readonly answerBy: number;
+  /** Settles once the start answered and, for a start that failed, once its teardown settled. */
+  start: Promise<Outcome<Session>> = Promise.resolve({ status: 'failed', error: undefined });
+  answered = false;
+  readonly answer: Promise<void>;
+  markAnswered: () => void = () => undefined;
   session: Session | undefined = undefined;
-  /** What this entry has to stop; absent while the start has not answered, or when it rented nothing. */
-  owed: Handle | undefined = undefined;
-  stopConfirmed = false;
-  /** The one stop in flight, joined by every concurrent caller and cleared once it settles. */
-  stopping: Promise<StopFailure | undefined> | undefined = undefined;
+  rental: Rental<Handle> = { kind: 'none' };
+  /** The rental whose stop the provider confirmed, by `handleKey`. */
+  stopped: string | undefined = undefined;
+  /** The stop in flight, which outlives a teardown that stopped waiting for it. */
+  stopping: Readonly<{ key: string; promise: Promise<StopFailure | undefined> }> | undefined =
+    undefined;
+  /** Callers still waiting for the start. */
+  waiters = 0;
+  /** Set once anything starts ending the lease; it never serves an allocation again. */
+  releasing = false;
+  /** The one teardown in flight, joined by every release, recovery, and drain. */
+  ending: Promise<Ended<Session, Handle>> | undefined = undefined;
 
-  /** `start` may write this entry's fields but must not await them: `this.start` is unset while it runs. */
   constructor(
-    request: Request,
-    start: (entry: LeaseEntry<Session, Handle, Request>) => Promise<Outcome<Session>>,
+    lease: DeviceLease,
+    request: Request | undefined,
+    deadline: number,
+    answerBy: number,
   ) {
+    this.lease = lease;
     this.request = request;
-    this.start = start(this);
+    this.deadline = deadline;
+    this.answerBy = answerBy;
+    this.answer = new Promise((resolve) => {
+      this.markAnswered = resolve;
+    });
   }
 }
 
@@ -144,10 +213,12 @@ export function createProviderLeaseTable<Session, Handle, Request>(
 ): ProviderLeaseTable<Session, Handle, Request> {
   const table = new LeaseTable(driver);
   return Object.freeze({
-    live: (leaseId: string) => table.entries.get(leaseId)?.session,
-    requestOf: (leaseId: string) => table.entries.get(leaseId)?.request,
-    allocate: async (lease: DeviceLease, request: Request, budget?: ProviderLeaseBudget) =>
-      await table.allocate(lease, request, budget),
+    live: (leaseId: string) => table.live(leaseId),
+    allocate: async (
+      lease: DeviceLease,
+      request: Request,
+      options?: ProviderLeaseAllocateOptions<Request>,
+    ) => await table.allocate(lease, request, options),
     release: async (leaseId: string) => await table.release(leaseId),
     recover: async (lease: DeviceLease) => await table.recover(lease),
     shutdown: async () => await table.shutdown(),
@@ -155,8 +226,8 @@ export function createProviderLeaseTable<Session, Handle, Request>(
 }
 
 class LeaseTable<Session, Handle, Request> {
-  /** An entry leaves only once its stop is confirmed, or when its start rented nothing. */
-  readonly entries = new Map<string, LeaseEntry<Session, Handle, Request>>();
+  /** An entry leaves only once nothing it rented is still rented. */
+  private readonly entries = new Map<string, LeaseEntry<Session, Handle, Request>>();
   private shuttingDown = false;
   private readonly driver: ProviderLeaseDriver<Session, Handle, Request>;
 
@@ -164,225 +235,308 @@ class LeaseTable<Session, Handle, Request> {
     this.driver = driver;
   }
 
+  live(leaseId: string): Session | undefined {
+    const entry = this.entries.get(leaseId);
+    return entry?.releasing ? undefined : entry?.session;
+  }
+
   async allocate(
     lease: DeviceLease,
     request: Request,
-    budget: ProviderLeaseBudget = {},
+    options: ProviderLeaseAllocateOptions<Request> = {},
   ): Promise<Session> {
-    // Nothing between this check and the entry's registration awaits, so shutdown cannot miss a start.
+    // Nothing between these checks and the entry's registration awaits, so no teardown is missed.
     if (this.shuttingDown) throw this.driver.shuttingDown(lease);
-    const bounded = this.bound(budget);
-    const entry = this.entries.get(lease.leaseId) ?? this.rent(lease, request, bounded);
-    const outcome = await this.join(lease, entry, bounded);
-    // Shutdown already owns the entry, so a runtime that is going away hands out no session.
+    const existing = this.entries.get(lease.leaseId);
+    if (existing?.releasing) throw this.driver.releasing(lease);
+    if (existing?.request !== undefined) options.requireJoinable?.(existing.request);
+    const caller: ProviderLeaseBudget = {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+    };
+    const timeoutAt = Date.now() + this.driver.startTimeoutMs;
+    const deadline = Math.min(caller.deadline ?? timeoutAt, timeoutAt);
+    const entry = existing ?? this.rent(lease, request, caller, deadline, timeoutAt);
+    const outcome = await this.join(entry, caller, deadline);
     if (this.shuttingDown) throw this.driver.shuttingDown(lease);
     if (outcome.status === 'failed') throw outcome.error;
+    // A release that started while this caller waited owns the device now.
+    if (entry.releasing) throw this.driver.releasing(lease);
     return outcome.session;
   }
 
   async release(leaseId: string): Promise<ProviderLeaseReleased<Session, Handle> | undefined> {
     const entry = this.entries.get(leaseId);
     if (!entry) return undefined;
-    const ended = await this.end(leaseId, entry);
-    if (ended === undefined) return undefined;
-    if (ended.failure !== undefined) {
-      throw this.pending(ended.handle, ended.failure, { route: 'release', leaseId });
-    }
-    return { handle: ended.handle, session: ended.session };
+    const ended = await this.teardown(entry);
+    if (ended.status === 'pending') throw this.pending(entry, ended, { route: 'release', leaseId });
+    return ended.status === 'stopped'
+      ? { handle: ended.handle, session: ended.session }
+      : undefined;
   }
 
   async recover(lease: DeviceLease): Promise<void> {
     const leaseId = lease.leaseId;
-    const entry = this.entries.get(leaseId);
-    if (entry) {
-      const ended = await this.end(leaseId, entry);
-      if (ended?.failure !== undefined) {
-        throw this.pending(ended.handle, ended.failure, { route: 'recover', leaseId });
-      }
-      return;
-    }
-    // The daemon forgets a recovered lease once this resolves, so an unconfirmed stop has to reject.
-    const handle = await this.driver.findByLease(lease);
-    const failure = await this.stopHandle(handle);
-    if (failure !== undefined) throw this.pending(handle, failure, { route: 'recover', leaseId });
+    // The daemon forgets a recovered lease once this resolves, so a rental still rented has to reject.
+    const entry = this.entries.get(leaseId) ?? this.recovering(lease);
+    const ended = await this.teardown(entry);
+    if (ended.status === 'pending') throw this.pending(entry, ended, { route: 'recover', leaseId });
   }
 
-  /**
-   * Awaits every entry, including starts whose callers gave up, because each of them may still name a
-   * device. A failed stop keeps its entry, so a later release retries the same session.
-   */
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
     const ended = await Promise.all(
-      [...this.entries].map(async ([leaseId, entry]) => await this.end(leaseId, entry)),
+      [...this.entries.values()].map(async (entry) => ({
+        entry,
+        ended: await this.teardown(entry),
+      })),
     );
-    const unconfirmed = ended.flatMap((outcome) =>
-      outcome?.failure === undefined
-        ? []
-        : [{ handle: outcome.handle, cause: outcome.failure.cause }],
+    const unconfirmed = ended.flatMap(({ entry, ended: outcome }) =>
+      outcome.status === 'pending'
+        ? [{ leaseId: entry.lease.leaseId, handle: outcome.handle, cause: outcome.cause }]
+        : [],
     );
     if (unconfirmed.length > 0) {
       throw this.driver.cleanupPending(unconfirmed, { route: 'shutdown' });
     }
   }
 
-  /** The caller's budget, cut to the provider's own start timeout. */
-  private bound(budget: ProviderLeaseBudget): ProviderLeaseBoundedBudget {
-    const timeoutAt = Date.now() + this.driver.startTimeoutMs;
-    return {
-      ...(budget.signal === undefined ? {} : { signal: budget.signal }),
-      deadline: budget.deadline === undefined ? timeoutAt : Math.min(budget.deadline, timeoutAt),
-    };
-  }
-
   /** Registers the entry before the first await, so a concurrent allocation or release finds it. */
   private rent(
     lease: DeviceLease,
     request: Request,
-    budget: ProviderLeaseBoundedBudget,
+    caller: ProviderLeaseBudget,
+    deadline: number,
+    answerBy: number,
   ): LeaseEntry<Session, Handle, Request> {
-    const entry = new LeaseEntry<Session, Handle, Request>(request, (target) =>
-      this.runStart(target, lease, budget),
+    const entry = new LeaseEntry<Session, Handle, Request>(lease, request, deadline, answerBy);
+    entry.start = this.runStart(entry, request, caller);
+    this.entries.set(lease.leaseId, entry);
+    return entry;
+  }
+
+  /** Registers an entry for a lease this process holds nothing for, so every route joins its teardown. */
+  private recovering(lease: DeviceLease): LeaseEntry<Session, Handle, Request> {
+    const entry = new LeaseEntry<Session, Handle, Request>(
+      lease,
+      undefined,
+      Date.now(),
+      Date.now(),
     );
+    entry.answered = true;
+    entry.markAnswered();
+    entry.rental = { kind: 'unknown' };
+    entry.releasing = true;
     this.entries.set(lease.leaseId, entry);
     return entry;
   }
 
   /**
-   * Runs the start and stops what a start that did not become ready rented, before its failure reaches
-   * any caller. A ready answer after the starting caller's budget passed is not handed out either.
+   * Runs the start and records what it rented. A ready device goes to the callers still waiting; one
+   * nobody waits for, or one a release already owns, is stopped instead. A failed start is torn down
+   * before its failure reaches any caller.
    */
   private async runStart(
     entry: LeaseEntry<Session, Handle, Request>,
-    lease: DeviceLease,
-    budget: ProviderLeaseBoundedBudget,
+    request: Request,
+    caller: ProviderLeaseBudget,
   ): Promise<Outcome<Session>> {
     const startedAt = Date.now();
-    let started: ProviderLeaseStart<Session, Handle>;
+    let started: ProviderLeaseStart<Session, Handle> | undefined;
+    let rejection: unknown;
     try {
-      started = await this.driver.start(lease, entry.request, budget);
+      started = await this.driver.start(entry.lease, request, {
+        caller,
+        deadline: entry.deadline,
+        rented: (handle) => {
+          if (!entry.answered) entry.rental = { kind: 'held', handle };
+        },
+      });
     } catch (error) {
-      started = await this.unansweredStart(lease, error);
+      rejection = error;
     }
-    if (started.status === 'ready') {
-      if (!budget.signal?.aborted && Date.now() < budget.deadline) {
+    if (started === undefined) {
+      if (entry.rental.kind !== 'held') entry.rental = { kind: 'unknown' };
+    } else if (started.status === 'ready') {
+      entry.rental = { kind: 'held', handle: started.handle };
+    } else {
+      entry.rental =
+        started.rented === undefined ? { kind: 'none' } : { kind: 'held', handle: started.rented };
+    }
+    entry.answered = true;
+    entry.markAnswered();
+    let error: unknown;
+    if (started?.status === 'ready') {
+      if (!entry.releasing && entry.waiters > 0) {
         entry.session = started.session;
-        entry.owed = started.handle;
         return { status: 'ready', session: started.session };
       }
-      started = {
-        status: 'failed',
-        rented: started.handle,
-        error: this.driver.gaveUp(
-          lease,
-          budget,
-          Math.max(0, budget.deadline - startedAt),
-          started.handle,
-        ),
-      };
+      error = entry.releasing
+        ? this.driver.releasing(entry.lease)
+        : this.driver.gaveUp(
+            entry.lease,
+            caller,
+            Math.max(0, entry.deadline - startedAt),
+            started.handle,
+          );
+    } else {
+      error = started === undefined ? rejection : started.error;
     }
-    const rented = started.rented;
-    if (rented === undefined) {
-      entry.stopConfirmed = true;
-      this.close(lease.leaseId, entry);
-      return { status: 'failed', error: started.error };
+    // A release, recovery, or drain already owns the teardown, and it waits on this answer.
+    if (entry.releasing) {
+      void this.teardown(entry).catch(() => undefined);
+      return { status: 'failed', error };
     }
-    entry.owed = rented;
-    const failure = await this.stopOwed(entry, rented);
-    if (failure === undefined) {
-      entry.stopConfirmed = true;
-      this.close(lease.leaseId, entry);
-      return { status: 'failed', error: started.error };
-    }
-    // What is still billed outranks why the start failed, so the report names the session to end.
+    const ended = await this.teardown(entry);
+    if (ended.status !== 'pending') return { status: 'failed', error };
+    // What is still billed outranks why the start failed, so the report names the rental to end.
+    const leaseId = entry.lease.leaseId;
     return {
       status: 'failed',
       error: this.driver.cleanupPending(
-        [{ handle: rented, cause: failure.cause }],
-        { route: 'start', leaseId: lease.leaseId },
-        started.error,
+        [{ leaseId, handle: ended.handle, cause: ended.cause }],
+        { route: 'start', leaseId },
+        error,
       ),
     };
   }
 
   /**
-   * A start that rejected may have rented, so the lease's own handle is what this entry owes. A provider
-   * that cannot name it leaves the table nothing to stop, and the caller hears the start's failure.
-   */
-  private async unansweredStart(
-    lease: DeviceLease,
-    error: unknown,
-  ): Promise<ProviderLeaseStart<Session, Handle>> {
-    try {
-      return { status: 'failed', error, rented: await this.driver.findByLease(lease) };
-    } catch {
-      return { status: 'failed', error };
-    }
-  }
-
-  /**
    * Waits for the entry's start within this caller's budget. A caller that gives up stops nothing: the
-   * device belongs to every caller still waiting, and the entry stops what the start rents.
+   * device belongs to every caller still waiting.
    */
   private async join(
-    lease: DeviceLease,
     entry: LeaseEntry<Session, Handle, Request>,
-    budget: ProviderLeaseBoundedBudget,
+    caller: ProviderLeaseBudget,
+    deadline: number,
   ): Promise<Outcome<Session>> {
     if (entry.session !== undefined) return { status: 'ready', session: entry.session };
-    const joinedAt = Date.now();
-    const signal = budget.signal
-      ? AbortSignal.any([
-          budget.signal,
-          AbortSignal.timeout(Math.max(0, budget.deadline - joinedAt)),
-        ])
-      : AbortSignal.timeout(Math.max(0, budget.deadline - joinedAt));
+    const budgetMs = Math.max(0, deadline - Date.now());
     const giveUp = () =>
-      this.driver.gaveUp(lease, budget, Math.max(0, budget.deadline - joinedAt), entry.owed);
-    if (signal.aborted) throw giveUp();
+      this.driver.gaveUp(
+        entry.lease,
+        caller,
+        budgetMs,
+        entry.rental.kind === 'held' ? entry.rental.handle : undefined,
+      );
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), budgetMs);
+    const signal = caller.signal
+      ? AbortSignal.any([caller.signal, timeout.signal])
+      : timeout.signal;
     let onAbort = (): void => undefined;
-    const gaveUp = new Promise<never>((_, reject) => {
-      onAbort = () => reject(giveUp());
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
+    entry.waiters += 1;
     try {
+      if (signal.aborted) throw giveUp();
+      const gaveUp = new Promise<never>((_, reject) => {
+        onAbort = () => reject(giveUp());
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
       return await Promise.race([entry.start, gaveUp]);
     } finally {
+      entry.waiters -= 1;
+      clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
     }
   }
 
   /**
-   * Waits for the entry's start, stops what it owes, and closes it once the stop is confirmed. Every route
-   * that ends a device comes through here, so an unconfirmed stop stays for the next caller to retry.
+   * The one teardown of an entry, joined by every route that ends it. It fences the entry against
+   * allocations in the same step, and it is the only place a rental is stopped or an entry forgotten.
    */
-  private async end(
-    leaseId: string,
+  private teardown(entry: LeaseEntry<Session, Handle, Request>): Promise<Ended<Session, Handle>> {
+    entry.releasing = true;
+    if (entry.ending) return entry.ending;
+    const ending = this.runTeardown(entry).finally(() => {
+      if (entry.ending === ending) entry.ending = undefined;
+    });
+    entry.ending = ending;
+    return ending;
+  }
+
+  private async runTeardown(
     entry: LeaseEntry<Session, Handle, Request>,
-  ): Promise<Ended<Session, Handle> | undefined> {
-    await entry.start;
-    const handle = entry.owed;
-    if (handle === undefined) return undefined;
-    const failure = entry.stopConfirmed ? undefined : await this.stopOwed(entry, handle);
-    if (failure === undefined) {
-      entry.stopConfirmed = true;
-      this.close(leaseId, entry);
+  ): Promise<Ended<Session, Handle>> {
+    for (;;) {
+      await this.untilAnswered(entry);
+      if (entry.rental.kind === 'unknown') {
+        try {
+          const handle = await this.driver.findByLease(entry.lease);
+          if (entry.rental.kind === 'unknown') entry.rental = { kind: 'held', handle };
+        } catch (error) {
+          return { status: 'pending', handle: undefined, cause: error };
+        }
+      }
+      const rental = entry.rental;
+      if (rental.kind === 'held' && entry.stopped !== this.driver.handleKey(rental.handle)) {
+        const failure = await this.stop(entry, rental.handle);
+        if (failure !== undefined) {
+          return { status: 'pending', handle: rental.handle, cause: failure.cause };
+        }
+        // The start may have answered, or named another rental, while the stop ran.
+        continue;
+      }
+      const handle = rental.kind === 'held' ? rental.handle : undefined;
+      if (!entry.answered) {
+        // The start may still rent something, so the entry stays for the teardown its answer starts.
+        return {
+          status: 'pending',
+          handle,
+          cause: new Error('The provider start did not answer within its start timeout.'),
+        };
+      }
+      if (this.entries.get(entry.lease.leaseId) === entry) this.entries.delete(entry.lease.leaseId);
+      return handle === undefined
+        ? { status: 'nothing-rented' }
+        : { status: 'stopped', handle, session: entry.session };
     }
-    return { handle, session: entry.session, failure };
   }
 
-  private close(leaseId: string, entry: LeaseEntry<Session, Handle, Request>): void {
-    if (this.entries.get(leaseId) === entry) this.entries.delete(leaseId);
+  /** Waits for the start's answer, at most `startTimeoutMs` after it was sent. */
+  private async untilAnswered(entry: LeaseEntry<Session, Handle, Request>): Promise<void> {
+    if (entry.answered) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, Math.max(0, entry.answerBy - Date.now()));
+    });
+    try {
+      await Promise.race([entry.answer, expired]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  private stopOwed(
+  /** Joins the stop in flight for this handle, or sends it, within `stopTimeoutMs`. */
+  private async stop(
     entry: LeaseEntry<Session, Handle, Request>,
     handle: Handle,
   ): Promise<StopFailure | undefined> {
-    entry.stopping ??= this.stopHandle(handle).finally(() => {
-      entry.stopping = undefined;
+    const key = this.driver.handleKey(handle);
+    let stopping = entry.stopping;
+    if (stopping?.key !== key) {
+      const promise = this.stopHandle(handle).then((failure) => {
+        if (failure === undefined) entry.stopped = key;
+        if (entry.stopping?.promise === promise) entry.stopping = undefined;
+        return failure;
+      });
+      stopping = { key, promise };
+      entry.stopping = stopping;
+    }
+    const limitMs = this.driver.stopTimeoutMs;
+    if (limitMs === undefined) return await stopping.promise;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<StopFailure>((resolve) => {
+      timer = setTimeout(
+        () =>
+          resolve({ cause: new Error(`The provider stop did not answer within ${limitMs} ms.`) }),
+        limitMs,
+      );
     });
-    return entry.stopping;
+    try {
+      return await Promise.race([stopping.promise, expired]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async stopHandle(handle: Handle): Promise<StopFailure | undefined> {
@@ -394,7 +548,14 @@ class LeaseTable<Session, Handle, Request> {
     }
   }
 
-  private pending(handle: Handle, failure: StopFailure, scope: ProviderLeaseCleanupScope): Error {
-    return this.driver.cleanupPending([{ handle, cause: failure.cause }], scope);
+  private pending(
+    entry: LeaseEntry<Session, Handle, Request>,
+    ended: Extract<Ended<Session, Handle>, { status: 'pending' }>,
+    scope: ProviderLeaseCleanupScope,
+  ): Error {
+    return this.driver.cleanupPending(
+      [{ leaseId: entry.lease.leaseId, handle: ended.handle, cause: ended.cause }],
+      scope,
+    );
   }
 }

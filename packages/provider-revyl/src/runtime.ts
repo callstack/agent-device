@@ -34,6 +34,7 @@ import {
 } from './revyl-session.ts';
 import {
   createProviderLeaseTable,
+  type ProviderLeaseCleanupScope,
   type ProviderLeaseDriver,
   type ProviderLeaseTable,
 } from '@agent-device/provision-kit/provider-lease-table';
@@ -170,9 +171,11 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
       ...(this.options.deviceModel === undefined ? {} : { deviceModel: this.options.deviceModel }),
       ...(this.options.osVersion === undefined ? {} : { osVersion: this.options.osVersion }),
     });
-    const started = this.leases.requestOf(lease.leaseId);
-    if (started) requireSameRevylStartRequest(lease.leaseId, started, request);
-    return allocationResult(await this.leases.allocate(lease, request, revylCallerBudget(context)));
+    const session = await this.leases.allocate(lease, request, {
+      ...revylCallerBudget(context),
+      requireJoinable: (started) => requireSameRevylStartRequest(lease.leaseId, started, request),
+    });
+    return allocationResult(session);
   }
 
   /**
@@ -207,13 +210,15 @@ function revylLeaseDriver(
 ): ProviderLeaseDriver<RevylSession, RevylRentedSession, RevylStartRequest> {
   return {
     startTimeoutMs: REVYL_START_TIMEOUT_MS,
-    start: async (lease, request, budget) => {
+    // A session is created when `start_device` answers, not when it is sent, so the issued id is never
+    // published before that answer: a stop sent earlier reads as "already gone" and leaves the device.
+    start: async (lease, request, control) => {
       const started = await startRevylSession(client, lease, {
         platform: revylLeasePlatform(lease),
         appUrl: request.appUrl,
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
-        ...budget,
+        ...control.caller,
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;
@@ -227,26 +232,45 @@ function revylLeaseDriver(
         if (!isRevylSessionGone(error)) throw error;
       }
     },
+    handleKey: (handle) => handle.sessionId,
     findByLease: async (lease) => ({ sessionId: revylSessionIdForLease(lease.leaseId) }),
     shuttingDown: (lease) => shuttingDownDuring(lease.leaseId, 'allocate'),
-    gaveUp: (lease, budget, budgetMs, rented) =>
+    releasing: (lease) =>
+      new AppError('COMMAND_FAILED', `Revyl lease ${lease.leaseId} is being released.`, {
+        reason: 'provider-lease-releasing',
+        leaseId: lease.leaseId,
+        hint: 'Connect again to rent a device under a new lease.',
+      }),
+    gaveUp: (lease, caller, budgetMs, rented) =>
       revylCallerGaveUp(
         revylLeasePlatform(lease),
-        budget,
+        caller,
         budgetMs,
         rented?.sessionId ?? revylSessionIdForLease(lease.leaseId),
       ),
     cleanupPending: (unconfirmed, scope, cause) =>
       revylCleanupPending(
-        unconfirmed.map((stop) => ({ ...stop.handle, failure: errorMessage(stop.cause) })),
-        scope.route === 'shutdown'
-          ? { operation: 'shutdown' }
-          : scope.route === 'start'
-            ? {}
-            : { leaseId: scope.leaseId },
+        unconfirmed.map((stop) => ({
+          ...(stop.handle ?? { sessionId: revylSessionIdForLease(stop.leaseId) }),
+          failure: errorMessage(stop.cause),
+        })),
+        revylCleanupDetails(scope),
         cause,
       ),
   };
+}
+
+/** Which lease or drain a cleanup report belongs to; a failed start's report names its session only. */
+function revylCleanupDetails(scope: ProviderLeaseCleanupScope): Record<string, unknown> {
+  switch (scope.route) {
+    case 'shutdown':
+      return { operation: 'shutdown' };
+    case 'start':
+      return {};
+    case 'release':
+    case 'recover':
+      return { leaseId: scope.leaseId };
+  }
 }
 
 /** The platform of a lease the runtime already admitted as Revyl's. */

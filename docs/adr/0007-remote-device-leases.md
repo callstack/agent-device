@@ -4,7 +4,7 @@
 
 Accepted
 
-Decision history: 2026-10-21, a `macos-app` lease session takes its app device's claim instead of no claim, so exclusion against whole-Mac and same-app sessions also holds across daemons (ADR 0035, #3323). 2026-11-02, cloud provider runtimes serve their lease lifecycle from one shared lease table instead of a table of their own (#4102).
+Decision history: 2026-10-21, a `macos-app` lease session takes its app device's claim instead of no claim, so exclusion against whole-Mac and same-app sessions also holds across daemons (ADR 0035, #3323). 2026-11-02, the Revyl provider runtime serves its lease lifecycle from a shared lease table instead of a table of its own (#4102).
 
 ## Rules at a glance
 
@@ -13,6 +13,7 @@ Decision history: 2026-10-21, a `macos-app` lease session takes its app device's
 - Do not mutate lease ownership before the lock. Scope resolution may happen before the lock.
 - Generated connection profiles must strip daemon and Metro bearer tokens.
 - A session cannot outlive its lease. Lease-end teardown clears the session's device claim even when the device no longer answers.
+- A cloud provider runtime forgets a rented device only after the provider confirmed its stop, and it refuses to allocate a lease that it is ending.
 - Report each lease that a request ended once, at response level. A client never sends a release after such a request.
 - Admitted work that is still wanted preserves its lease. If the client hung up, the request neither defers expiry past that cancellation nor renews the lease.
 - Before admission, send lease heartbeats for as long as a client phase runs, for example an artifact upload. Renew under the window that the caller named, or else under the lease's existing window.
@@ -161,19 +162,19 @@ The lease cannot expire during that allocation.
 If a successful allocation is still wanted by its requester, the inactivity TTL starts from the moment allocation completed.
 A requester that hung up preserves nothing, and its allocation is released as before.
 
-A cloud provider runtime serves allocation, release, expired-lease recovery, and shutdown from one shared lease table, `@agent-device/provision-kit/provider-lease-table`.
-The provider supplies only start, stop, find-by-lease, and the errors that it reports.
+The Revyl provider runtime serves allocation, release, expired-lease recovery, and shutdown from a shared lease table, `@agent-device/provision-kit/provider-lease-table`.
+The provider supplies its start timeout, an optional stop timeout, start, stop, find-by-lease, a key that identifies a rental, and the errors that it reports.
 The table owns the rules that decide whether a billed device is still rented:
 
 - One lease id has at most one start. Overlapping allocations join it, and a ready session is reused.
-- Each caller waits until the earlier of its own deadline and the provider's start timeout. A caller that gives up stops nothing, because other callers can still wait for the same device.
-- If a start does not become ready, the table stops what that start rented before any caller sees the failure. This includes a ready answer that arrives after the deadline of its start.
-- A release forgets a session only after the provider confirmed its stop. A stop that fails keeps the session for the next release. Concurrent release, recovery, and shutdown share one stop.
-- Shutdown refuses new allocations, waits for every start, and stops every session. It reports the sessions whose stop failed with `provider-cleanup-pending`.
-- Expired-lease recovery stops what find-by-lease names for a lease that this process does not hold. If the provider cannot name or stop it, recovery throws, and the daemon keeps the lease pending.
+- Each caller waits until the earlier of its own deadline and the start timeout. A caller that gives up stops nothing. A ready device goes to the callers still waiting, and it is stopped when no caller waits.
+- A start can publish its rental before it answers. A teardown waits for the answer for at most the start timeout, then stops the published rental and keeps the lease pending until the answer arrives.
+- Release, recovery, a failed start, and shutdown each end a lease through one teardown that all of them join. The teardown fences the lease in the same step: from then on, an allocation of the lease is refused, including an allocation that was already waiting.
+- A teardown forgets a lease only after the provider confirmed the stop of every rental that it knows. A failed or late stop keeps the lease for the next teardown, which joins the stop still in flight. Shutdown reports what stays rented with `provider-cleanup-pending`.
+- If a start fails without an answer, or a recovery finds no entry, the teardown asks find-by-lease. If the provider cannot name the rental, the lease stays pending, and the next teardown asks again.
 
 A table in each provider was rejected: each provider derived the same rules again, and most review findings on the second provider (#4092) were about that bookkeeping.
-Contracts was rejected as the home, because the table is lifecycle mechanics and not wire vocabulary.
+Contracts was rejected as the home, because the table is lifecycle mechanics and not wire vocabulary. Capture-kit was rejected, because renting a device prepares it for execution, which ADR 0019 gives to provision-kit.
 Open gap: Limrun keeps its own lease ownership until it moves onto the table (#4102).
 
 ## Client-side work that precedes admission
