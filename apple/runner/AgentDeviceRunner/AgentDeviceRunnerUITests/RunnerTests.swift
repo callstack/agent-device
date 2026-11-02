@@ -60,6 +60,8 @@ final class RunnerTests: XCTestCase {
   var listener: NWListener?
   var listenerToken: RunnerListenerToken?
   var doneExpectation: XCTestExpectation?
+  var transportConnections: [ObjectIdentifier: NWConnection] = [:]
+  let shutdownResponseWrites = DispatchGroup()
   let transportQueue = DispatchQueue(label: "agent-device.runner.transport")
   let commandExecutionQueue = DispatchQueue(label: "agent-device.runner.commands")
   let app = XCUIApplication()
@@ -106,7 +108,7 @@ final class RunnerTests: XCTestCase {
   // execution instead of enqueueing them again behind it (#1105 capture pileup).
   let inFlightCommandLock = NSLock()
   var inFlightCommandIds: Set<String> = []
-  var inFlightCommandWaiters: [String: [@Sendable ((data: Data, shouldFinish: Bool)) -> Void]] = [:]
+  var inFlightCommandWaiters: [String: [@Sendable ((response: RunnerHttpResponse, shouldFinish: Bool)) -> Void]] = [:]
   // Tracks main-queue work abandoned by the execution watchdog (runMainThreadWork). While any is
   // outstanding the main thread is occupied: new main-thread commands fail fast as busy instead
   // of queueing behind work that cannot be cancelled, capture plans skip XCTest-backed tiers,
@@ -245,6 +247,11 @@ final class RunnerTests: XCTestCase {
 
   override func setUp() {
     continueAfterFailure = true
+  }
+
+  override func tearDown() {
+    transportQueue.sync { closeTransport() }
+    super.tearDown()
   }
 
   /// The XCTest fetch wordings whose recorded issue carries the AX server's own error text: the

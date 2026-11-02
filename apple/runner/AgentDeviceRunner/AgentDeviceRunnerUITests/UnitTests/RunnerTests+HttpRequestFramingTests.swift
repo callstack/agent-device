@@ -24,8 +24,28 @@ extension RunnerTests {
     let head = framingHead(authenticatedPost + ["Content-Length: 2"], body: "{}")
     XCTAssertEqual(
       admit(authenticatedPost + ["Content-Length: 2"], body: "{}"),
-      .admitted(RunnerHttpAdmittedHead(bodyOffset: head.count - 2, contentLength: 2))
+      .admitted(RunnerHttpAdmittedHead(bodyOffset: head.count - 2, contentLength: 2, keepsConnectionAlive: true))
     )
+  }
+
+  func testHttpFramingResolvesConnectionPersistence() {
+    let cases: [(String, [String], Bool)] = [
+      ("HTTP/1.1", [], true),
+      ("HTTP/1.1", ["Connection: close"], false),
+      ("HTTP/1.1", ["Connection: upgrade, CLOSE"], false),
+      ("HTTP/1.1", ["Connection: keep-alive", "connection: Close"], false),
+      ("HTTP/1.0", [], false),
+      ("HTTP/1.0", ["Connection: Keep-Alive"], true),
+      ("HTTP/1.0", ["Connection: keep-alive, close"], false),
+    ]
+    for (version, connection, expected) in cases {
+      let verdict = admit(["POST /command \(version)", authenticatedPost[1], "Content-Length: 0"] + connection)
+      guard case .admitted(let head) = verdict else {
+        XCTFail("unexpected refusal: \(verdict)")
+        continue
+      }
+      XCTAssertEqual(head.keepsConnectionAlive, expected, "\(version) \(connection)")
+    }
   }
 
   func testHttpFramingWaitsForTheWholeHead() {
@@ -87,7 +107,7 @@ extension RunnerTests {
       guard firstVerdict == .incomplete else { continue }
       XCTAssertEqual(
         RunnerHttpRequestFraming.admitHead(request, token: framingListenerToken, alreadyScanned: split),
-        .admitted(RunnerHttpAdmittedHead(bodyOffset: request.count, contentLength: 0)),
+        .admitted(RunnerHttpAdmittedHead(bodyOffset: request.count, contentLength: 0, keepsConnectionAlive: true)),
         "split at \(split)"
       )
     }

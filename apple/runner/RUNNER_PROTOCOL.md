@@ -8,9 +8,15 @@ The Apple runner speaks a small internal HTTP+JSON protocol between the TypeScri
 - Content type: `application/json`
 - Request body: one JSON command object
 - Response body: one JSON envelope
-- One request per connection; every response carries `Connection: close`.
+- HTTP/1.1 connections persist by default. `Connection: close` ends them after the response.
+- HTTP/1.0 connections persist only when the request includes `Connection: keep-alive`.
+- Pipelined requests run in order. Each request repeats token, route, and length validation.
+- Shutdown and framing or authentication refusals close the connection. Shutdown closes other open connections after all coalesced shutdown responses finish sending.
 
 The daemon sends to `http://127.0.0.1:<port>/command` for simulator and macOS runners. A physical device is reached over usbmux when cabled, otherwise at its CoreDevice tunnel address; it is never dialed at this Mac's loopback.
+
+Loopback and CoreDevice tunnel requests use the global `fetch` connection pool to reuse TCP
+connections. The usbmux transport sends `Connection: close` and opens a connection per request.
 
 ### Listener binding
 
@@ -57,6 +63,11 @@ A request must arrive within 30 s, or it is answered `408`. The clock starts whe
 accepted, except for a loopback peer, whose clock starts at its first byte: the simulator listener
 watch holds an idle loopback connection to observe the runner's lifetime. Each refusal closes only
 its own connection; the listener keeps serving.
+
+After a response, a reusable connection may idle for 30 s before it closes silently. The next
+request gets a fresh 30 s arrival deadline starting at its first byte. Already-buffered requests
+start that deadline when processing advances to them. The initial unused loopback listener watch
+remains exempt from idle expiry. Command execution time does not consume the arrival or idle budget.
 
 A runner reply without `X-Agent-Device-Runner-Auth: required` is session-fatal on the host: the
 session is invalidated, which stops the runner, and the command is neither resent nor replayed.

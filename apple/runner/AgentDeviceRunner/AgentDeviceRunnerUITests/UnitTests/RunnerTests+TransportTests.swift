@@ -199,24 +199,276 @@ extension RunnerTests {
 
   /// Sends raw bytes and returns the status the runner answered with.
   private func rawTransportStatus(port: NWEndpoint.Port, request: String) throws -> Int? {
-    let connection = NWConnection(host: .ipv4(.loopback), port: port, using: .tcp)
-    let answered = expectation(description: "raw response")
-    final class Box: @unchecked Sendable { var data = Data() }
-    let box = Box()
-    connection.start(queue: .global())
-    connection.send(content: Data(request.utf8), completion: .contentProcessed { _ in })
-    func read() {
-      connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, done, error in
-        if let data { box.data.append(data) }
-        if done || error != nil { answered.fulfill() } else { read() }
+    let socket = TransportSocket(port: port)
+    defer { socket.connection.cancel() }
+    try socket.send(request)
+    let status = try socket.response().status
+    try socket.expectEOF()
+    return status
+  }
+
+  func testHttpConnectionServesSequentialRequestsAndCommandErrors() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let socket = try TransportSocket(port: XCTUnwrap(listener.port))
+    defer { socket.connection.cancel() }
+    for (payload, status) in [(#"{"command":"uptime"}"#, 200), ("not-json", 400), (#"{"command":"uptime"}"#, 200)] {
+      try socket.send(rawCommand(payload))
+      let response = try socket.response()
+      XCTAssertEqual(response.status, status)
+      XCTAssertTrue(response.head.contains("Connection: keep-alive"))
+      XCTAssertTrue(response.head.contains("X-Agent-Device-Runner-Auth: required"))
+      XCTAssertEqual(try response.envelope().ok, status == 200)
+    }
+  }
+
+  func testHttpConnectionPreservesPipelinedRequestsAndResponseOrder() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let socket = try TransportSocket(port: XCTUnwrap(listener.port))
+    defer { socket.connection.cancel() }
+    let queued = rawCommand(#"{"command":"appState","commandId":"pipeline-first"}"#)
+    let inline = rawCommand(#"{"command":"uptime"}"#)
+    // The inline command must not overtake queued work, and a partial third head must survive.
+    try socket.send(queued + inline + String(inline.prefix(13)))
+    let first = try socket.response()
+    XCTAssertEqual(first.status, 200)
+    XCTAssertFalse(try first.envelope().ok)
+    XCTAssertEqual(try first.envelope().error?.message, "appState requires appBundleId")
+    let second = try socket.response()
+    XCTAssertNotNil(try second.envelope().data?.currentUptimeMs)
+    try socket.send(String(inline.dropFirst(13)))
+    let third = try socket.response()
+    XCTAssertEqual(third.status, 200)
+    XCTAssertNotNil(try third.envelope().data?.currentUptimeMs)
+  }
+
+  func testHttpConnectionAuthenticatesEveryRequestAndClosesOnRefusal() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let socket = TransportSocket(port: port)
+    defer { socket.connection.cancel() }
+    try socket.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try socket.response().status, 200)
+    try socket.send(
+      rawCommand(#"{"command":"appState","commandId":"unauthorized-followup"}"#, token: "wrong")
+        + rawCommand(#"{"command":"appState","commandId":"after-refusal"}"#)
+    )
+    let denied = try socket.response()
+    XCTAssertEqual(denied.status, 401)
+    XCTAssertEqual(try denied.envelope().error?.code, "UNAUTHORIZED")
+    XCTAssertTrue(denied.head.contains("Connection: close"))
+    try socket.expectEOF()
+    for id in ["unauthorized-followup", "after-refusal"] {
+      XCTAssertEqual(commandJournal.status(normalizedCommandId: id).lifecycleState, RunnerCommandLifecycleState.notAccepted.rawValue)
+    }
+    let other = TransportSocket(port: port)
+    defer { other.connection.cancel() }
+    try other.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try other.response().status, 200)
+  }
+
+  func testHttpConnectionRefusesMalformedFollowupBeforeReadingItsBody() throws {
+    try withWarmTransportSocket { socket in
+      try socket.send("POST /command HTTP/1.1\r\nX-Agent-Device-Runner-Token: \(Self.transportToken)\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\n")
+      XCTAssertEqual(try socket.response().status, 411)
+      try socket.expectEOF()
+    }
+  }
+
+  func testHttpPartialFollowupGetsAnArrivalDeadline() throws {
+    try withWarmTransportSocket { socket in
+      let request = rawCommand(#"{"command":"uptime"}"#)
+      try socket.send(String(request.dropLast(2)))
+      let timedOut = try socket.response(timeout: Self.requestTimeout + 3)
+      XCTAssertEqual(timedOut.status, 408)
+      XCTAssertTrue(timedOut.head.contains("Connection: close"))
+      try socket.expectEOF()
+    }
+  }
+
+  private func withWarmTransportSocket(_ body: (TransportSocket) throws -> Void) throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let socket = try TransportSocket(port: XCTUnwrap(listener.port))
+    defer { socket.connection.cancel() }
+    try socket.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try socket.response().status, 200)
+    try body(socket)
+  }
+
+  func testHttpConnectionClosesForHttp10AndExplicitClose() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    for (version, headers) in [("HTTP/1.0", ""), ("HTTP/1.1", "Connection: keep-alive\r\nConnection: CLOSE\r\n")] {
+      let socket = try TransportSocket(port: XCTUnwrap(listener.port))
+      defer { socket.connection.cancel() }
+      try socket.send(rawCommand(#"{"command":"uptime"}"#, version: version, headers: headers)
+        + rawCommand(#"{"command":"appState","commandId":"after-close"}"#))
+      let response = try socket.response()
+      XCTAssertEqual(response.status, 200)
+      XCTAssertTrue(response.head.contains("Connection: close"))
+      try socket.expectEOF()
+      XCTAssertEqual(commandJournal.status(normalizedCommandId: "after-close").lifecycleState, RunnerCommandLifecycleState.notAccepted.rawValue)
+    }
+  }
+
+  func testHttp10ConnectionReusesWhenExplicitlyRequested() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let socket = try TransportSocket(port: XCTUnwrap(listener.port))
+    defer { socket.connection.cancel() }
+    for _ in 0..<2 {
+      try socket.send(rawCommand(#"{"command":"uptime"}"#, version: "HTTP/1.0", headers: "Connection: keep-alive\r\n"))
+      XCTAssertEqual(try socket.response().status, 200)
+    }
+  }
+
+  func testHttpShutdownClosesOtherConnectionsAndDropsPipelineTail() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let idle = TransportSocket(port: port)
+    let shutdown = TransportSocket(port: port)
+    defer { idle.connection.cancel(); shutdown.connection.cancel() }
+    try idle.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try idle.response().status, 200)
+    try shutdown.send(rawCommand(#"{"command":"shutdown"}"#)
+      + rawCommand(#"{"command":"appState","commandId":"after-shutdown"}"#))
+    let response = try shutdown.response()
+    XCTAssertEqual(response.status, 200)
+    XCTAssertTrue(response.head.contains("Connection: close"))
+    try shutdown.expectEOF()
+    try idle.expectEOF()
+    XCTAssertEqual(commandJournal.status(normalizedCommandId: "after-shutdown").lifecycleState, RunnerCommandLifecycleState.notAccepted.rawValue)
+  }
+
+  func testCoalescedShutdownDeliversEveryResponseBeforeClosingTransport() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let sockets = (0..<32).map { _ in TransportSocket(port: port) }
+    defer { sockets.forEach { $0.connection.cancel() } }
+
+    let releaseCommand = DispatchSemaphore(value: 0)
+    commandExecutionQueue.async { releaseCommand.wait() }
+    defer { releaseCommand.signal() }
+    for socket in sockets {
+      try socket.send(rawCommand(#"{"command":"shutdown","commandId":"shared-shutdown"}"#))
+    }
+    let deadline = Date().addingTimeInterval(3)
+    var waiterCount = 0
+    repeat {
+      inFlightCommandLock.lock()
+      waiterCount = inFlightCommandWaiters["shared-shutdown"]?.count ?? 0
+      inFlightCommandLock.unlock()
+      if waiterCount == sockets.count - 1 { break }
+      Thread.sleep(forTimeInterval: 0.01)
+    } while Date() < deadline
+    XCTAssertEqual(waiterCount, sockets.count - 1)
+    releaseCommand.signal()
+
+    for socket in sockets {
+      let reply = try socket.response()
+      XCTAssertEqual(reply.status, 200)
+      XCTAssertTrue(try reply.envelope().ok)
+      XCTAssertTrue(reply.head.contains("Connection: close"))
+      try socket.expectEOF()
+    }
+  }
+
+  func testHttpIdleExpiryPreservesUnusedLoopbackListenerWatch() throws {
+    let listener = try startTransportListener()
+    defer { listener.cancel() }
+    let port = try XCTUnwrap(listener.port)
+    let watch = TransportSocket(port: port)
+    let used = TransportSocket(port: port)
+    defer { watch.connection.cancel(); used.connection.cancel() }
+    try used.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try used.response().status, 200)
+    try used.expectEOF(timeout: Self.connectionIdleTimeout + 3)
+    try watch.send(rawCommand(#"{"command":"uptime"}"#))
+    XCTAssertEqual(try watch.response().status, 200)
+  }
+
+  private func rawCommand(
+    _ payload: String,
+    token: String = RunnerTests.transportToken,
+    version: String = "HTTP/1.1",
+    headers: String = ""
+  ) -> String {
+    "POST /command \(version)\r\nX-Agent-Device-Runner-Token: \(token)\r\nContent-Length: \(payload.utf8.count)\r\n\(headers)\r\n\(payload)"
+  }
+
+  private final class TransportSocket: @unchecked Sendable {
+    let connection: NWConnection
+    var buffer = Data()
+    var ended = false
+    var error: Error?
+
+    init(port: NWEndpoint.Port) {
+      connection = NWConnection(host: .ipv4(.loopback), port: port, using: .tcp)
+      connection.start(queue: DispatchQueue(label: "agent-device.test.http-client"))
+    }
+
+    func send(_ text: String) throws {
+      let sent = XCTestExpectation(description: "raw request sent")
+      connection.send(content: Data(text.utf8), completion: .contentProcessed { error in
+        self.error = error
+        sent.fulfill()
+      })
+      guard XCTWaiter.wait(for: [sent], timeout: 3) == .completed else { throw SocketError.timedOut }
+      if let error { throw error }
+    }
+
+    struct Reply {
+      let head: String
+      let body: Data
+      var status: Int? { Int(head.split(separator: " ")[1]) }
+      func envelope() throws -> Response { try JSONDecoder().decode(Response.self, from: body) }
+    }
+
+    enum SocketError: Error { case timedOut, prematureEOF, missingLength }
+
+    func response(timeout: TimeInterval = 3) throws -> Reply {
+      while true {
+        if let split = buffer.range(of: Data("\r\n\r\n".utf8)) {
+          let head = String(decoding: buffer[..<split.lowerBound], as: UTF8.self)
+          let lengthLine = head.components(separatedBy: "\r\n").first { $0.lowercased().hasPrefix("content-length:") }
+          guard let lengthLine, let length = Int(lengthLine.dropFirst("Content-Length:".count).trimmingCharacters(in: .whitespaces)) else {
+            throw SocketError.missingLength
+          }
+          let end = split.upperBound + length
+          if buffer.count >= end {
+            let body = Data(buffer[split.upperBound..<end])
+            buffer = Data(buffer.suffix(from: end))
+            return Reply(head: head, body: body)
+          }
+        }
+        if ended { throw SocketError.prematureEOF }
+        try read(timeout: timeout)
       }
     }
-    read()
-    wait(for: [answered], timeout: 3)
-    connection.cancel()
-    let statusLine = String(decoding: box.data, as: UTF8.self).split(separator: "\r\n").first ?? ""
-    let parts = statusLine.split(separator: " ")
-    return parts.count > 1 ? Int(parts[1]) : nil
+
+    func expectEOF(timeout: TimeInterval = 3) throws {
+      XCTAssertTrue(buffer.isEmpty, "unexpected response after close")
+      if !ended { try read(timeout: timeout) }
+      XCTAssertTrue(ended, "connection must close")
+      XCTAssertTrue(buffer.isEmpty, "unexpected bytes after close")
+    }
+
+    private func read(timeout: TimeInterval) throws {
+      let received = XCTestExpectation(description: "raw response bytes")
+      connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { data, _, done, error in
+        if let data { self.buffer.append(data) }
+        self.ended = done
+        self.error = error
+        received.fulfill()
+      }
+      guard XCTWaiter.wait(for: [received], timeout: timeout) == .completed else { throw SocketError.timedOut }
+      if let error { throw error }
+    }
   }
 
   func testDuplicateCommandIdCoalescesOntoInFlightExecution() throws {
@@ -225,8 +477,8 @@ extension RunnerTests {
       from: Data(#"{"command":"snapshot","commandId":"snapshot-coalesce"}"#.utf8)
     )
     final class Delivered {
-      var primaryData: Data?
-      var waiterData: Data?
+      var primaryData: RunnerHttpResponse?
+      var waiterData: RunnerHttpResponse?
     }
     let delivered = Delivered()
     defer {
@@ -236,21 +488,21 @@ extension RunnerTests {
 
     XCTAssertFalse(
       attachToInFlightCommandIfNeeded(command: command) { result in
-        delivered.primaryData = result.data
+        delivered.primaryData = result.response
       }
     )
     XCTAssertTrue(
       attachToInFlightCommandIfNeeded(command: command) { result in
-        delivered.waiterData = result.data
+        delivered.waiterData = result.response
       }
     )
 
-    let result = Data("single-result".utf8)
+    let result = RunnerHttpResponse(status: 200, body: "single-result")
     deliverCommandResult(
       command: command,
       result: (result, false)
     ) { result in
-      delivered.primaryData = result.data
+      delivered.primaryData = result.response
     }
 
     XCTAssertEqual(delivered.primaryData, result)

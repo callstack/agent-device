@@ -51,6 +51,7 @@ enum RunnerHttpRequestRejection: Equatable {
 struct RunnerHttpAdmittedHead: Equatable {
   let bodyOffset: Int
   let contentLength: Int
+  let keepsConnectionAlive: Bool
 }
 
 enum RunnerHttpHeadVerdict: Equatable {
@@ -121,10 +122,16 @@ enum RunnerHttpRequestFraming {
     else {
       return .rejected(.bodyTooLarge)
     }
+    let connectionOptions = (headers["connection"] ?? []).flatMap {
+      $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+    }
+    let keepsConnectionAlive = !connectionOptions.contains("close")
+      && (requestLine[2] == "HTTP/1.1" || connectionOptions.contains("keep-alive"))
     return .admitted(
       RunnerHttpAdmittedHead(
         bodyOffset: terminator.upperBound - buffer.startIndex,
-        contentLength: contentLength
+        contentLength: contentLength,
+        keepsConnectionAlive: keepsConnectionAlive
       )
     )
   }
