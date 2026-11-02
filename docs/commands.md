@@ -756,6 +756,7 @@ Platform support:
 - `settings appearance` sets macOS appearance, iOS simulator appearance, or Android night mode.
 - `settings location set <lat> <lon>` sets coordinates on iOS simulators and Android emulators.
 - A target that does not serve a setting refuses it with `UNSUPPORTED_OPERATION` and `error.details.reason` (for example `unsupported-platform-leaf`) before anything changes. A request that names an app the change cannot take is refused first, with `INVALID_ARGS` and `setting_app_not_consumed`. `settings --help` describes where each setting runs.
+- On an iOS simulator, `settings wifi` and `settings airplane` wait for screenshots and other status bar writes. The request timeout includes this wait (90 seconds for a standalone CLI request). Once the write starts, its status bar command has a separate 10-second timeout. A request or write that times out may already have changed the bar; check the bar before relying on it. Cancelling while still queued guarantees nothing was written.
 
 Device settings:
 
@@ -1039,7 +1040,8 @@ agent-device record stop                # Stop active recording
 - `--overlay-refs` takes a fresh snapshot and burns visible `@eN` refs and their rectangles into the PNG. With `--scale`, refs are drawn at the final size, so avoid scales where labels become unreadable. In `--json` mode each ref also has a screenshot-space `center` for `press <x> <y>` fallback.
 - `--crop-on <selector>` crops the capture to the frame the selector resolves on the same screen. It works only on iOS simulators, Android emulators, and physical iPhones. A physical iPhone crop is verified only in portrait using CoreDevice/devicectl; the XCTest backend and runner fallback are not accepted. Physical iPads remain rejected for crop, and landscape iPhone crop remains unverified. It needs exactly one framed node, cannot be combined with `--overlay-refs` or `--fullscreen`, and warns when the frame is clipped. The crop is re-encoded, so do not byte-compare it with an older crop.
 - `--fullscreen` on macOS applies only to app sessions. Other surfaces (`desktop`, `menubar`, `frontmost-app`) always capture the main display and refuse `--fullscreen` with `INVALID_ARGS`.
-- `--normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for reusable baselines.
+- `--normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for reusable baselines. Each status-bar read or preparation command has a 10-second timeout. Each restore command has a 30-second timeout, so clearing and reapplying overrides can take up to 60 seconds. The request timeout includes the wait and can expire before these steps finish.
+- On an iOS simulator, a screenshot waits until no other screenshot or `settings wifi` / `settings airplane` write is using that simulator's status bar, so overlapping captures cannot see each other's temporary chrome. A request you cancel while it is waiting fails with the cancellation instead of capturing.
 - On single-display iOS simulators and Android devices, the result may report `displayRotation` (`portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`). It is absent when the device returns no reading in time, on other targets, and on multi-display devices such as foldables. The saved image is always upright.
 
 **Screenshot diffs**
