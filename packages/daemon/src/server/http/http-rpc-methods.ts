@@ -44,10 +44,19 @@ const SUPPORTED_RPC_METHODS = new Set([
   ...Object.keys(LEASE_RPC_METHOD_TO_COMMAND),
 ]);
 
+function requestSessionFields(
+  session: string | undefined,
+): Pick<DaemonRequest, 'session' | 'internal'> {
+  return {
+    session: session ?? 'default',
+    ...(session?.trim() ? {} : { internal: { sessionOmitted: true } }),
+  };
+}
+
 function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders): DaemonRequest {
   return {
     token: resolveToken(params as Record<string, unknown>, headers),
-    session: params.session ?? 'default',
+    ...requestSessionFields(params.session),
     command: params.command ?? '',
     positionals: params.positionals ?? [],
     input: params.input,
@@ -155,7 +164,7 @@ function toLeaseDaemonRequest(
 ): DaemonRequest {
   return {
     token: resolveToken(params, headers),
-    session: readStringParam(params, 'session') ?? 'default',
+    ...requestSessionFields(readStringParam(params, 'session')),
     command,
     positionals: [],
     flags: command === 'lease_allocate' ? readLeaseAllocateProviderFlags(params) : undefined,

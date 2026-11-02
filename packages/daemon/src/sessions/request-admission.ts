@@ -15,7 +15,10 @@ import {
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from '../core/lease-context.ts';
-import { leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
+import {
+  leaseScopeToHeartbeatRequest,
+  remoteSessionRequiredError,
+} from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
@@ -167,6 +170,23 @@ function hasSessionlessLeaseAdmissionExemption(
     exemption?.kind === 'provider-app-catalog' &&
     providerAppCatalog?.supports(exemption.provider) === true
   );
+}
+
+/**
+ * An unnamed session resolves to whichever connection holds the default name, so a request that
+ * would allocate, use or release a provider lease has to name the session it means. Naming a
+ * provider alone is not that: a sessionless catalog read holds no lease. A request that names only
+ * a lease id passes here too, because the registry's owner scope refuses it for omitting the
+ * provider.
+ */
+export function assertProviderLeaseRequestNamesSession(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+): void {
+  if (!req.internal?.sessionOmitted) return;
+  const { leaseProvider, leaseId } = resolveRequestOrSessionLeaseScope(req, session);
+  if (!leaseProvider) return;
+  if (leaseId || req.command === 'lease_allocate') throw remoteSessionRequiredError(leaseProvider);
 }
 
 export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {

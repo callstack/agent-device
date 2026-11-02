@@ -215,7 +215,12 @@ function parseSocketDaemonRequest(line: string): DaemonRequest {
   if (isRecord(request.meta)) {
     request.meta = { ...request.meta, devicePin: readDevicePin(request.meta.devicePin) };
   }
-  return request as DaemonRequest;
+  const session = request.session;
+  return (
+    typeof session === 'string' && session.trim()
+      ? request
+      : { ...request, internal: { sessionOmitted: true } }
+  ) as DaemonRequest;
 }
 
 export function listenNetServer(server: net.Server): Promise<number> {
