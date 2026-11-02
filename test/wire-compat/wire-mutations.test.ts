@@ -142,8 +142,8 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'session intake: an unnamed request stops being marked as unnamed',
-    file: 'packages/daemon/src/server/http/http-rpc-methods.ts',
-    name: 'requestSessionFields',
+    file: 'packages/daemon/src/core/request-session-intake.ts',
+    name: 'resolveRequestSessionAtIntake',
     from: 'internal: { sessionOmitted: true }',
     to: 'internal: {}',
   },

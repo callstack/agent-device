@@ -5,6 +5,7 @@ import { resolveSessionIsolationMode } from '../core/config.ts';
 import { tenantScopedSessionName } from '../core/session-tenant-scope.ts';
 import {
   isAppLeaseAllowed,
+  ignoresSessionLease,
   isLeaseAdmissionExempt,
   isHumanControlMutation,
   resolveSessionlessLeaseAdmissionExemption,
@@ -173,19 +174,6 @@ function hasSessionlessLeaseAdmissionExemption(
 }
 
 /**
- * These use neither the lease nor the device of the session they resolve, so only a lease they carry
- * counts. Any other command acts through that session and stays refused.
- */
-const COMMANDS_THAT_NEVER_READ_THE_SESSION: ReadonlySet<string> = new Set([
-  'session_list',
-  'devices',
-  'lease_allocate',
-  'lease_heartbeat',
-  'lease_release',
-  'release_materialized_paths',
-]);
-
-/**
  * An unnamed session resolves to whichever connection holds the default name, so a request that
  * would allocate, use or release a provider lease has to name the session it means. Naming a
  * provider alone is not that: a sessionless catalog read holds no lease. A request that names only
@@ -197,7 +185,7 @@ export function assertProviderLeaseRequestNamesSession(
   session: SessionState | undefined,
 ): void {
   if (!req.internal?.sessionOmitted) return;
-  const { leaseProvider, leaseId } = COMMANDS_THAT_NEVER_READ_THE_SESSION.has(req.command)
+  const { leaseProvider, leaseId } = ignoresSessionLease(req.command)
     ? resolveLeaseScope(req)
     : resolveRequestOrSessionLeaseScope(req, session);
   if (!leaseProvider) return;

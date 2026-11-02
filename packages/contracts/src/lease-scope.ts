@@ -657,9 +657,14 @@ function buildLeaseRpcParams(
   command: LeaseRpcCommand,
   options: { includeTokenParam: boolean },
 ): Record<string, unknown> {
-  return leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
-    includeTokenParam: options.includeTokenParam,
-    token: req.token,
-    session: req.session,
-  });
+  return {
+    ...leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+      includeTokenParam: options.includeTokenParam,
+      token: req.token,
+      session: req.session,
+    }),
+    ...(req.meta?.sessionExplicit === undefined
+      ? {}
+      : { sessionExplicit: req.meta.sessionExplicit }),
+  };
 }

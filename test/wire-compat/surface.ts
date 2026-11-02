@@ -258,11 +258,14 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'isCommandRpcMethod',
         'methodToDaemonRequest',
         'parseCommandRpcParams',
-        'requestSessionFields',
         'toDaemonRequest',
         'toLeaseDaemonRequest',
         'toInstallFromSourceDaemonRequest',
         'toReleaseMaterializedPathsDaemonRequest',
+      ),
+      ...from(
+        'packages/daemon/src/core/request-session-intake.ts',
+        'resolveRequestSessionAtIntake',
       ),
       // Consumer side: the payload the client actually puts on the wire. A
       // client-only change here breaks an older daemon just as surely.

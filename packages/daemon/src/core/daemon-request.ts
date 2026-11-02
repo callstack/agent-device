@@ -47,9 +47,8 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
   /**
-   * The caller sent a missing or blank session, and the transport that received the request named
-   * the default one. Set only at intake, because the defaulted name cannot be told apart from a
-   * chosen one afterwards.
+   * The caller named no session. Set only by `resolveRequestSessionAtIntake`, because the defaulted
+   * name cannot be told apart from a chosen one afterwards.
    */
   sessionOmitted?: true;
   /**
