@@ -33,6 +33,22 @@ extension RunnerTests {
     return max(0.001, timeoutMs / 1000)
   }
 
+  /// The alert answer for a blocking system modal. Nil means no modal is on screen, so the active
+  /// app's own alert surfaces are read next.
+  static func alertResolution(
+    forSystemModal resolution: BlockingSystemModalResolution,
+    resolved: (ResolvedBlockingSystemModal) -> AlertResolution
+  ) -> AlertResolution? {
+    switch resolution {
+    case .resolved(let modal):
+      return resolved(modal)
+    case .unresolved:
+      return .unresolved
+    case .absent:
+      return nil
+    }
+  }
+
   @MainActor
   func resolveAlert(app activeApp: XCUIApplication, deadline: Date) -> AlertResolution {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
@@ -41,19 +57,19 @@ extension RunnerTests {
     }
 #endif
 #if !os(macOS)
-    switch resolveBlockingSystemModal(deadline: deadline) {
-    case .resolved(let modal):
-      return runnerAlert(
-        root: modal.root,
-        ownerApp: modal.ownerApp,
-        actions: modal.actions,
-        source: .blockingSystemModal,
-        window: modal.window
-      )
-    case .unresolved:
-      return .unresolved
-    case .absent:
-      break
+    if let resolution = Self.alertResolution(
+      forSystemModal: resolveBlockingSystemModal(deadline: deadline),
+      resolved: { modal in
+        runnerAlert(
+          root: modal.root,
+          ownerApp: modal.ownerApp,
+          actions: modal.actions,
+          source: .blockingSystemModal,
+          window: modal.window
+        )
+      }
+    ) {
+      return resolution
     }
 #endif
     let state = activeApp.state
