@@ -6,9 +6,15 @@ import {
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type { JsonObject } from '@agent-device/contracts/client';
+import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
+import {
+  completedDurableCaptureError,
+  withDurableCaptureResourceFence,
+  type DurableCaptureOpenResourceFenceLease,
+} from './fence.ts';
 import type {
   DurableCaptureFinishIntent,
   DurableCaptureRecordDefinition,
@@ -30,18 +36,26 @@ export async function finishLiveDurableCapture<
 ): Promise<C> {
   const active = params.binding.read();
   if (!active) throw new AppError('INVALID_ARGS', definition.messages.noActive);
+  let cleanupPending = false;
   try {
     const result = await finishDurableCaptureHandle(definition, {
       handle: active.handle,
       fence: active.envelope.fence,
       resourcePath,
       intent: params.intent,
+      onCleanupPending: () => {
+        cleanupPending = true;
+      },
     });
-    params.binding.clear(active);
+    if (!cleanupPending) params.binding.clear(active);
     return result;
   } catch (error) {
     const record = definition.store.read(resourcePath);
-    if (record.status === 'decoded' && record.envelope.lifecycle === 'completed') {
+    if (
+      !cleanupPending &&
+      record.status === 'decoded' &&
+      record.envelope.lifecycle === 'completed'
+    ) {
       params.binding.clear(active);
     }
     throw error;
@@ -56,17 +70,47 @@ export async function finishDurableCaptureHandle<
   definition: DurableCaptureRecordDefinition<K, C>,
   params: {
     handle: H;
-    fence: DurableCaptureResourceFenceLease<K>['envelope']['fence'];
+    fence: ResourceOwnershipFence;
     resourcePath: string;
     intent: DurableCaptureFinishIntent;
+    onCleanupPending?(outcome: Extract<CleanupOutcome, { status: 'cleanup-pending' }>): void;
   },
 ): Promise<C> {
   return await withDurableCaptureResourceFence({
     store: definition.store,
     resourcePath: params.resourcePath,
     expected: params.fence,
+    // The record this fence found committed already holds an outcome. A finish arriving after that is
+    // not a failure to report: it is a caller that needs what the first finish produced, and the record
+    // is the only place it can come from. A queued teardown finish that had to be refused this way
+    // reported the session's export as an unreleased resource.
+    onCompleted: async ({ envelope }) => {
+      let cleanup: CleanupOutcome;
+      try {
+        cleanup = await params.handle.forceCleanup();
+      } catch (error) {
+        cleanup = {
+          status: 'cleanup-pending',
+          reason: 'cleanup-unconfirmed',
+          message: errorMessage(error),
+        };
+      }
+      if (!isConfirmedCleanup(cleanup)) {
+        params.onCleanupPending?.(cleanup);
+        emitDiagnostic({
+          level: 'warn',
+          phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_terminal_cleanup_pending`,
+          data: { resourcePath: params.resourcePath, cleanup },
+        });
+        if (params.intent === 'disposal') throw cleanupPendingError(definition, cleanup);
+      }
+      const replayed = await definition.completionFromMetadata?.(envelope.metadata);
+      if (replayed !== undefined) return replayed;
+      if (!isConfirmedCleanup(cleanup)) throw cleanupPendingError(definition, cleanup);
+      throw completedDurableCaptureError(definition.store);
+    },
     run: async (lease) => {
-      markCompleting(lease);
+      markCompletingDurableCapture(lease);
       const progress = createStopProgress(lease);
       let finishOutcome: FinishOutcome<C>;
       try {
@@ -89,7 +133,7 @@ export async function finishDurableCaptureHandle<
 
 async function respondToFailedFinish<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  lease: DurableCaptureResourceFenceLease<K>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
   params: { handle: H; resourcePath: string },
   finishError: unknown,
   intent: DurableCaptureFinishIntent,
@@ -131,7 +175,7 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
 }
 
 function persistCleanupPendingBestEffort<K extends string>(
-  lease: DurableCaptureResourceFenceLease<K>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
   cleanupError: unknown,
 ): unknown | undefined {
   try {
@@ -199,8 +243,13 @@ export async function forceCleanupLiveDurableCapture<
     store: definition.store,
     resourcePath: params.resourcePath,
     expected: active.envelope.fence,
+    // The record is settled, but the handle this caller captured is still a native resource of its
+    // own: a commit through another entry point (recovery, or a finish this caller never saw) leaves
+    // it live here. Signal it and report what it answers, without letting it touch the record — a
+    // kind whose cleanup is already done after its own commit answers confirmed.
+    onCompleted: async () => await active.handle.forceCleanup(),
     run: async (lease) => {
-      markCompleting(lease);
+      markCompletingDurableCapture(lease);
       const result = await active.handle.forceCleanup();
       transitionCleanupOutcome(lease, result);
       return result;
@@ -210,8 +259,39 @@ export async function forceCleanupLiveDurableCapture<
   params.binding.clear(active);
 }
 
+/**
+ * Removes what a persisted record points at when its native resource could not be reattached, and
+ * journals that removal.
+ *
+ * The cleanup is destructive, so it runs inside the fence's `run`, not before it: acquiring recovery
+ * authority can take long enough for another caller to commit the record, and removal that arrives
+ * after that commit has nothing left to remove. The terminal branch therefore answers `already-missing`
+ * — what a committed record states about its own descriptor, since the commit that produced it confirmed
+ * its cleanup — and removes nothing.
+ */
+export async function cleanupDurableCaptureDescriptor<K extends string>(
+  definition: DurableCaptureRecordDefinition<K, unknown>,
+  params: {
+    envelope: DurableResourceEnvelope<K>;
+    resourcePath: string;
+    cleanup(): Promise<CleanupOutcome>;
+  },
+): Promise<CleanupOutcome> {
+  return await withDurableCaptureResourceFence({
+    store: definition.store,
+    resourcePath: params.resourcePath,
+    expected: params.envelope.fence,
+    onCompleted: () => ({ status: 'already-missing' as const }),
+    run: async (lease) => {
+      const outcome = await params.cleanup();
+      transitionCleanupOutcome(lease, outcome);
+      return outcome;
+    },
+  });
+}
+
 export function transitionCleanupOutcome<K extends string>(
-  lease: DurableCaptureResourceFenceLease<K>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: CleanupOutcome,
 ): void {
   lease.transition(isConfirmedCleanup(outcome) ? 'completed' : 'open', {
@@ -246,6 +326,7 @@ function cleanupPendingError(
       `${capitalizeDurableCaptureLabel(definition.displayName)} cleanup could not be confirmed`,
     {
       reason: outcome.reason,
+      cleanupStatus: outcome.status,
       retriable: outcome.reason !== 'ownership-fence-lost',
       hint: definition.messages.cleanupPendingHint,
     },
@@ -254,7 +335,7 @@ function cleanupPendingError(
 
 export function transitionFinishOutcome<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  lease: DurableCaptureResourceFenceLease<K>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
   outcome: FinishOutcome<C>,
 ): void {
   if (outcome.status === 'completed') {
@@ -277,7 +358,7 @@ export function transitionFinishOutcome<K extends string, C>(
  * record and the next attempt reads them instead of redoing durable work.
  */
 function createStopProgress<K extends string>(
-  lease: DurableCaptureResourceFenceLease<K>,
+  lease: DurableCaptureOpenResourceFenceLease<K>,
 ): DurableCaptureProgress {
   return Object.freeze({
     learned: lease.envelope.metadata,
@@ -287,7 +368,14 @@ function createStopProgress<K extends string>(
   });
 }
 
-function markCompleting<K extends string>(lease: DurableCaptureResourceFenceLease<K>): void {
+/**
+ * The fact that an attempt is in flight, journaled into a record this fence found open. Recovery
+ * reads it to tell an abandoned attempt from one that never started, so it belongs to every entry
+ * that drives a record toward completion, not to one of them.
+ */
+export function markCompletingDurableCapture<K extends string>(
+  lease: DurableCaptureOpenResourceFenceLease<K>,
+): void {
   lease.transition('open', {
     metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completing' },
   });

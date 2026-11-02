@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { isCompletedDurableCaptureError } from '@agent-device/capture-kit/durable-capture';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -122,7 +123,9 @@ export function sessionResourceStopSteps(params: {
 }): SessionCleanupStep[] {
   const { ref, sessionStore, platformCleanup } = params;
   const session = sessionStore.resolveCurrent(ref) ?? ref.session;
-  return [
+  // The session's durable-capture stops. Each one can be refused by a record that committed while the
+  // step was queued, and that refusal settles: the stopping belongs to the commit, not to this step.
+  const durableCaptureStops: SessionCleanupStep[] = [
     // Finalize any still-active recording BEFORE the Apple runner is stopped: the runner supplies
     // gesture-telemetry for overlay finalization, and signalling the recorder first prevents a
     // leaked `simctl recordVideo` child (and its 0-byte, slot-holding mp4) when a session is torn
@@ -133,11 +136,33 @@ export function sessionResourceStopSteps(params: {
       : []),
     { step: 'audio_probe', run: () => finishSessionAudioProbe({ ref, sessionStore }) },
     { step: 'perf_capture', run: () => stopSessionPerfCapture({ ref, sessionStore }) },
+  ];
+  return [
+    ...durableCaptureStops.map(settleCommittedRecordStop),
+    // The snapshot helper owns no durable record, so its failures stay its own.
     {
       step: 'platform_snapshot_helper',
       run: () => stopSessionSnapshotHelper(session, platformCleanup),
     },
   ];
+}
+
+/**
+ * Makes one cleanup step settle when the durable record it stopped against answers that the record is
+ * already completed. That refusal means the resource was released by the stop that committed the
+ * record; reporting it as unreleased would send an operator after a resource that is already gone.
+ */
+function settleCommittedRecordStop(step: SessionCleanupStep): SessionCleanupStep {
+  return {
+    ...step,
+    run: async () => {
+      try {
+        await step.run();
+      } catch (error) {
+        if (!isCompletedDurableCaptureError(error)) throw error;
+      }
+    },
+  };
 }
 
 type SessionResourceTeardownRequest = {

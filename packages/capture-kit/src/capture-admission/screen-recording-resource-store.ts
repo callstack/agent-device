@@ -6,3 +6,10 @@ export const screenRecordingResourceStore = createDurableCaptureResourceStore({
   fileName: 'screen-recording.resource.json',
   displayName: 'screen recording',
 });
+
+/**
+ * The metadata key this record stores a finished recording's stop response under, beside the
+ * mechanics' own facts. The writer is the kind's `completionMetadata`, the reader is
+ * `screen-recording-stop-recovery.ts`; both name this key so a replay cannot miss what was written.
+ */
+export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';

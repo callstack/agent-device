@@ -3,7 +3,10 @@ import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { withDurableCaptureResourceFence } from './fence.ts';
+import {
+  withDurableCaptureResourceFence,
+  type DurableCaptureOpenResourceFenceLease,
+} from './fence.ts';
 import { createDurableCaptureResourceStore } from './store.ts';
 
 const store = createDurableCaptureResourceStore({
@@ -20,6 +23,7 @@ test('rejects a stale fence before its side effect', async () => {
       store,
       resourcePath,
       expected: { token: 'stale', generation: 1 },
+      onCompleted: () => undefined,
       run: sideEffect,
     }),
   ).rejects.toMatchObject({ details: { reason: 'ownership-fence-lost' } });
@@ -41,6 +45,7 @@ test('serializes validation, native work, and transition for one resource path',
     store,
     resourcePath,
     expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
     run: async (lease) => {
       order.push('first-start');
       started();
@@ -53,6 +58,7 @@ test('serializes validation, native work, and transition for one resource path',
     store,
     resourcePath,
     expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
     run: async () => {
       order.push('second');
     },
@@ -65,6 +71,168 @@ test('serializes validation, native work, and transition for one resource path',
   expect(store.read(resourcePath)).toMatchObject({
     status: 'decoded',
     envelope: { metadata: { phase: 'completing' } },
+  });
+});
+
+/**
+ * A caller that captured the same live resource presents the same fence, so serialization alone lets
+ * it drive a record its predecessor already committed. Both facts here have to hold: the caller that
+ * arrives second is answered without a lease, and the record stays as its predecessor left it.
+ */
+test('a caller holding the same fence cannot write a record an earlier caller committed', async () => {
+  const resourcePath = makeRecord();
+  let release!: () => void;
+  let started!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const firstHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const first = withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+      started();
+      // Holds the fence, and the record its run committed, until the second caller is queued.
+      await firstHeld;
+    },
+  });
+  const late = vi.fn(async () => undefined);
+  const second = withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: (lease) => lease.envelope.metadata?.phase,
+    run: late,
+  });
+  await firstStarted;
+  release();
+  expect(await second).toBe('completed');
+  await first;
+  expect(late).not.toHaveBeenCalled();
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+});
+
+/**
+ * A released lease must not publish while a later run holds the still-open record. The later run's
+ * own lease must remain usable after that refusal and commit the record successfully.
+ */
+test('a lease released with its run cannot write an open record held by a later run', async () => {
+  const resourcePath = makeRecord();
+  let escape!: DurableCaptureOpenResourceFenceLease<'screen-recording'>;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      escape = lease;
+    },
+  });
+
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      const before = store.read(resourcePath);
+      expect(before).toMatchObject({ status: 'decoded', envelope: { lifecycle: 'open' } });
+      let escapedError: unknown;
+      try {
+        escape.transition('open', { metadata: { phase: 'escaped-write' } });
+      } catch (error) {
+        escapedError = error;
+      }
+      expect(escapedError).toMatchObject({
+        details: { reason: 'ownership-fence-lost' },
+        message: 'Screen recording resource fence was released with its run',
+      });
+      expect(store.read(resourcePath)).toEqual(before);
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+    },
+  });
+
+  expect(() => escape.transition('open', { metadata: { phase: 'completing' } })).toThrow();
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+});
+
+/**
+ * The reviewer's probe: an escaped lease invoked while the committing run still holds the fence. Its
+ * cached `open` view must not publish, or the manifest that run just committed is overwritten.
+ */
+test('an escaped lease cannot overwrite the record the committing run is writing', async () => {
+  const resourcePath = makeRecord();
+  let escape!: DurableCaptureOpenResourceFenceLease<'screen-recording'>;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      escape = lease;
+    },
+  });
+
+  let escapeWrite: unknown;
+  await withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+      // The escaped lease is invoked with the committed record already published.
+      try {
+        escape.transition('open', { metadata: { phase: 'completing' } });
+        escapeWrite = 'published';
+      } catch (error) {
+        escapeWrite = error;
+      }
+    },
+  });
+
+  expect(escapeWrite).toMatchObject({ details: { reason: 'resource-already-completed' } });
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+});
+
+/** A stop's progress port writes into the record it holds. A commit ends what it may still write. */
+test('a progress write that reaches a committed record cannot reopen it', async () => {
+  const resourcePath = makeRecord();
+  let late!: () => void;
+  const held = new Promise<void>((resolve) => {
+    late = resolve;
+  });
+  const first = withDurableCaptureResourceFence({
+    store,
+    resourcePath,
+    expected: { token: 'current', generation: 1 },
+    onCompleted: () => undefined,
+    run: async (lease) => {
+      lease.transition('completed', { metadata: { phase: 'completed' } });
+      late();
+      // The stop's own progress port, driven after its record already committed.
+      lease.transition('open', { metadata: { phase: 'completing' } });
+    },
+  });
+  await held;
+  await expect(first).rejects.toMatchObject({ details: { reason: 'resource-already-completed' } });
+  expect(store.read(resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
 });
 

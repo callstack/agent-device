@@ -21,7 +21,10 @@ import type {
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
-import { screenRecordingResourceStore } from './screen-recording-resource-store.ts';
+import {
+  SCREEN_RECORDING_COMPLETION_METADATA_KEY,
+  screenRecordingResourceStore,
+} from './screen-recording-resource-store.ts';
 
 export const screenRecordingDurableResource = createDurableCaptureResource<
   'screen-recording',
@@ -32,6 +35,12 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
   displayName: 'screen recording',
   store: screenRecordingResourceStore,
   completionMetadata: encodeScreenRecordingCompletionMetadata,
+  // The manifest holds the whole stop response this kind wrote, so a caller that reaches the committed
+  // record is served the same export the first stop was answered with. That answer is a cold path: the
+  // record has to be read before anyone can be refused or served, so the reader is reached on demand
+  // rather than added to what importing this kind evaluates.
+  completionFromMetadata: async (metadata) =>
+    (await import('./screen-recording-stop-recovery.ts')).readReplayableStoredCompletion(metadata),
   // ADR 0024 rule 6: the next stop re-collects the native artifact a failed export left behind, and
   // forced cleanup would delete exactly that. Disposal belongs to teardown and start rollback.
   failedFinishPolicy: 'preserve-retry-material',
@@ -61,13 +70,6 @@ export function finishLiveScreenRecording(params: {
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);
 }
-
-/**
- * The manifest key holding a finished recording's stop response. The completion is stored as the one
- * object `record stop` returned, so a replay cannot lose a field on its way through the manifest;
- * `screen-recording-stop-recovery.ts` reads it back and serves it.
- */
-export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
 
 export function encodeScreenRecordingCompletionMetadata(
   completion: ScreenRecordingCompletion,

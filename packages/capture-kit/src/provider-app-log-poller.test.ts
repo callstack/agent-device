@@ -122,18 +122,18 @@ describe('provider app-log poller', () => {
   test('still disposes the output when reader cleanup rejects', async () => {
     const sleeps = deferredSleeps();
     let outputDisposed = false;
+    const onOutputDispose = vi.fn(() => {
+      outputDisposed = true;
+    });
+    const dispose = vi.fn(async () => {}).mockRejectedValueOnce(new Error('reader cleanup failed'));
     const reader = providerReader({
-      [Symbol.asyncDispose]: async () => {
-        throw new Error('reader cleanup failed');
-      },
+      [Symbol.asyncDispose]: dispose,
     });
     const handle = await startProviderAppLogPoller(
       pollerOptions(reader, {
         writes: [],
         sleeps,
-        onOutputDispose: () => {
-          outputDisposed = true;
-        },
+        onOutputDispose,
       }),
     );
     await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
@@ -146,6 +146,10 @@ describe('provider app-log poller', () => {
     });
     expect(outputDisposed).toBe(true);
     expect(handle.inspect().state).toBe('failed');
+    await handle[Symbol.asyncDispose]();
+    await handle[Symbol.asyncDispose]();
+    expect(dispose).toHaveBeenCalledTimes(2);
+    expect(onOutputDispose).toHaveBeenCalledOnce();
   });
 
   test('abandons a read that ignores its signal once the budget elapses', async () => {

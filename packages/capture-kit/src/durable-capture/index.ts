@@ -22,4 +22,5 @@ export type {
   DurableCaptureRecoverySummary,
 } from './recovery.ts';
 export type { DurableCaptureRecoveryControl } from './recovery-authority.ts';
+export { isCompletedDurableCaptureError } from './fence.ts';
 export type { DurableCaptureResourceRecord, DurableCaptureResourceStore } from './store.ts';

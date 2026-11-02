@@ -28,6 +28,9 @@ export const TEST_CAPTURE_KIND = 'test-capture';
 
 export type TestCaptureCompletion = Readonly<{ outputPath: string; completedAt: number }>;
 
+/** Where this test kind stores its completion so a later caller of the same record can be answered. */
+export const TEST_CAPTURE_COMPLETION_METADATA_KEY = 'completion';
+
 export type TestCaptureHandle = AsyncDisposable &
   Readonly<{
     finish(): Promise<FinishOutcome<TestCaptureCompletion>>;
@@ -56,9 +59,24 @@ export function createTestCaptureDefinition(
     store,
     failedFinishPolicy,
     completionMetadata: (completion) => ({
-      outputPath: completion.outputPath,
-      completedAt: completion.completedAt,
+      [TEST_CAPTURE_COMPLETION_METADATA_KEY]: {
+        outputPath: completion.outputPath,
+        completedAt: completion.completedAt,
+      },
     }),
+    completionFromMetadata: (metadata) => {
+      const stored = metadata?.[TEST_CAPTURE_COMPLETION_METADATA_KEY];
+      if (
+        typeof stored !== 'object' ||
+        stored === null ||
+        Array.isArray(stored) ||
+        typeof (stored as Record<string, unknown>).outputPath !== 'string' ||
+        typeof (stored as Record<string, unknown>).completedAt !== 'number'
+      ) {
+        return undefined;
+      }
+      return stored as unknown as TestCaptureCompletion;
+    },
     messages: {
       noActive: 'no test capture active',
       cleanupPendingHint: 'Keep the test capture manifest for exact-owner recovery.',

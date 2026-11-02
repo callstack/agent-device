@@ -8,6 +8,27 @@ import { deferred, processFixture } from './app-log-pid-process.fixtures.ts';
 import { createPidScopedAppLogProcess } from './app-log-pid-process.ts';
 
 describe('PID-scoped app-log process lifecycle', () => {
+  test('retries output disposal after an unconfirmed finish', async () => {
+    const output = outputFixture();
+    output.dispose.mockRejectedValueOnce(new Error('Close unavailable'));
+    const started =
+      processFixture(deferred<{ stdout: string; stderr: string; exitCode: number }>());
+    const handle = await createPidScopedAppLogProcess({
+      host: hostFixture(output.sink),
+      backend: 'android',
+      outputPath: '/tmp/app.log',
+      pidPath: '/tmp/pid',
+      processStart: async () => started.process,
+      setupSignal: new AbortController().signal,
+      resolvePid: async () => '123',
+      command: () => ({ kind: 'host', request: { executable: 'adb', args: ['logcat'] } }),
+      cleanupFailureMessage: 'cleanup failed',
+    });
+    await expect(handle.finish()).resolves.toMatchObject({ status: 'cleanup-pending' });
+    await handle[Symbol.asyncDispose]();
+    await handle[Symbol.asyncDispose]();
+    expect(output.dispose).toHaveBeenCalledTimes(2);
+  });
   test('cleans a later process that resolves after finish begins', async () => {
     const initialExit = deferred<{ stdout: string; stderr: string; exitCode: number }>();
     const laterExit = deferred<{ stdout: string; stderr: string; exitCode: number }>();

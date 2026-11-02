@@ -278,18 +278,20 @@ function createAppleProcessHandle(
       state = 'failed';
     },
   );
+  const cleanupSteps = new Set([
+    async () => await backgroundProcess.terminate(),
+    async () => await backgroundProcess.wait.then(() => undefined),
+    async () => await backgroundProcess[Symbol.asyncDispose](),
+    async () => await output[Symbol.asyncDispose](),
+  ]);
   let finishPromise:
     | Promise<FinishOutcome<{ backend: LogBackend; outputPath: string; completedAt: number }>>
     | undefined;
   const finish = async () =>
     (finishPromise ??= (async () => {
-      const failures = await cleanupInOrder([
-        async () => await backgroundProcess.terminate(),
-        async () => await backgroundProcess.wait.then(() => undefined),
-        async () => await backgroundProcess[Symbol.asyncDispose](),
-        async () => await output[Symbol.asyncDispose](),
-      ]);
+      const failures = await cleanupInOrder(cleanupSteps);
       if (failures.length > 0) {
+        finishPromise = undefined;
         state = 'failed';
         return {
           status: 'cleanup-pending',
@@ -309,11 +311,12 @@ function createAppleProcessHandle(
   });
 }
 
-async function cleanupInOrder(steps: readonly (() => Promise<void>)[]): Promise<unknown[]> {
+async function cleanupInOrder(steps: Set<() => Promise<void>>): Promise<unknown[]> {
   const failures: unknown[] = [];
   for (const step of steps) {
     try {
       await step();
+      steps.delete(step);
     } catch (error) {
       failures.push(error);
     }

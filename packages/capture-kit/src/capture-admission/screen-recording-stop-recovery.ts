@@ -20,8 +20,8 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DurableCaptureResourceRecord } from '../durable-capture/index.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
-  screenRecordingDurableResource,
-} from './screen-recording-session-resource.ts';
+  screenRecordingResourceStore,
+} from './screen-recording-resource-store.ts';
 
 /**
  * What a `record stop` owes a session, decided from the durable recording manifest alone.
@@ -56,7 +56,7 @@ export function resolveScreenRecordingStopRecovery(
   if (record.status !== 'decoded') return { kind: 'none' };
   assertManifestBelongsToRequest(params, record.envelope);
   if (record.envelope.lifecycle !== 'completed') return { kind: 'open', resourcePath };
-  const completion = readStoredCompletion(record.envelope.metadata);
+  const completion = readReplayableStoredCompletion(record.envelope.metadata);
   if (completion === undefined) {
     emitDiagnostic({
       level: 'warn',
@@ -65,7 +65,6 @@ export function resolveScreenRecordingStopRecovery(
     });
     return { kind: 'none' };
   }
-  if (!fs.existsSync(completion.outPath)) return { kind: 'none' };
   return { kind: 'completed', completion };
 }
 
@@ -94,11 +93,10 @@ function readSessionManifest(params: ScreenRecordingManifestParams): Readonly<{
   resourcePath: string;
   record: DurableCaptureResourceRecord<'screen-recording'>;
 }> {
-  const resourcePath = screenRecordingDurableResource.resourcePath(
-    params.sessionStore,
-    params.sessionName,
+  const resourcePath = screenRecordingResourceStore.resolvePath(
+    params.sessionStore.resolveSessionDir(params.sessionName),
   );
-  return { resourcePath, record: screenRecordingDurableResource.store.read(resourcePath) };
+  return { resourcePath, record: screenRecordingResourceStore.read(resourcePath) };
 }
 
 function assertManifestBelongsToRequest(
@@ -122,12 +120,17 @@ function assertManifestBelongsToRequest(
 }
 
 /**
- * The stop response the manifest stored, or nothing when it is not a whole one. The envelope store
- * has already bounded this metadata to frozen plain JSON, so what recovery still has to establish is
- * that the stored response answers correctly: the path it serves, the caller-side paths a remote
+ * The stop response the manifest stored, or nothing when it cannot be served. The envelope store
+ * has already bounded this metadata to frozen plain JSON, so what this reader still has to establish
+ * is that the stored response answers correctly: the path it serves, the caller-side paths a remote
  * download is named after, and the duration the response subtracts.
+ *
+ * It owns the surviving-file check on top of that, because every caller is answered with the path the
+ * record names: two reach this reader — a stop whose response never reached its caller, and a finish
+ * that reached the record after another caller committed it — and neither may hand over a file that is
+ * gone. A caller never receives a path it cannot download.
  */
-function readStoredCompletion(
+export function readReplayableStoredCompletion(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletion | undefined {
   const stored = metadata?.[SCREEN_RECORDING_COMPLETION_METADATA_KEY];
@@ -139,7 +142,8 @@ function readStoredCompletion(
   ) {
     return undefined;
   }
-  return stored as unknown as ScreenRecordingCompletion;
+  const completion = stored as unknown as ScreenRecordingCompletion;
+  return fs.existsSync(completion.outPath) ? completion : undefined;
 }
 
 /** The values a stop response computes on rather than repeats. */

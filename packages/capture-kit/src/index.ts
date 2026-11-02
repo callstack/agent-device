@@ -10,6 +10,7 @@ export {
 export { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 export { createHostAudioProbeCaptureOperations } from './audio-probe-runtime.ts';
 export { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
+export { createRetryableCleanup } from '@agent-device/contracts/durable-resource';
 export { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';
 export { createScreenRecordingCompletion } from './screen-recording-completion.ts';
 export { assertScreenRecordingOptionsSupported } from './screen-recording-options.ts';

@@ -8,6 +8,7 @@ import {
   type CleanupOutcome,
   type FinishOutcome,
   isConfirmedCleanup,
+  createRetryableCleanup,
 } from '@agent-device/contracts/durable-resource';
 
 type AppLogLiveHandleImplementation = Readonly<{
@@ -21,17 +22,10 @@ export function createAppLogLiveHandle(
   implementation: AppLogLiveHandleImplementation,
 ): AppLogLiveHandle {
   let finish: Promise<FinishOutcome<AppLogCompletion>> | undefined;
-  let cleanup: Promise<CleanupOutcome> | undefined;
-  let disposal: Promise<void> | undefined;
-  const forceCleanup = (): Promise<CleanupOutcome> => (cleanup ??= implementation.forceCleanup());
   return Object.freeze({
     inspect: () => implementation.inspect(),
     finish: () => (finish ??= implementation.finish()),
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedCleanup);
-      await disposal;
-    },
+    ...createRetryableCleanup(() => implementation.forceCleanup(), assertConfirmedCleanup),
   });
 }
 

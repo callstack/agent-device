@@ -13,10 +13,14 @@ import {
   type DurableCaptureRecoveryAuthority,
   type DurableCaptureRecoveryControl,
 } from './recovery-authority.ts';
-import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
+import { withDurableCaptureResourceFence } from './fence.ts';
 import type { DurableCaptureRecordDefinition } from './definition.ts';
 import { durableCaptureDiagnosticPrefix } from './labels.ts';
-import { transitionCleanupOutcome } from './transitions.ts';
+import {
+  cleanupDurableCaptureDescriptor,
+  markCompletingDurableCapture,
+  transitionCleanupOutcome,
+} from './transitions.ts';
 
 const DEFAULT_RECOVERY_DEADLINE_MS = 5_000;
 
@@ -162,8 +166,12 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           store: params.definition.store,
           resourcePath,
           expected: envelope.fence,
+          // The record committed between selection and this fence. The handle recovery reattached is
+          // still this process's native resource, so the terminal branch signals it too; only the
+          // record's own facts are off limits to it.
+          onCompleted: async () => await handle.forceCleanup(),
           run: async (lease) => {
-            markCompleting(lease);
+            markCompletingDurableCapture(lease);
             const outcome = await handle.forceCleanup();
             transitionCleanupOutcome(lease, outcome);
             return outcome;
@@ -189,12 +197,10 @@ async function settleRecoveryAuthority<K extends string, H extends LiveResourceH
           });
           return false;
         }
-        const cleanup = await authority.control.cleanup(envelope);
-        await withDurableCaptureResourceFence({
-          store: params.definition.store,
+        const cleanup = await cleanupDurableCaptureDescriptor(params.definition, {
+          envelope,
           resourcePath,
-          expected: envelope.fence,
-          run: async (lease) => transitionCleanupOutcome(lease, cleanup),
+          cleanup: () => authority.control.cleanup(envelope),
         });
         return isConfirmedCleanup(cleanup);
       }
@@ -214,17 +220,14 @@ async function transitionTerminal<K extends string, H extends LiveResourceHandle
     store: params.definition.store,
     resourcePath,
     expected: envelope.fence,
+    // Whoever committed this record terminalized it first, and its facts are the ones a caller is
+    // served. Recovery does not overwrite a committed manifest with its own observation.
+    onCompleted: () => undefined,
     run: async (lease) => {
       lease.transition('completed', {
         metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completed', ...metadata },
       });
     },
-  });
-}
-
-function markCompleting<K extends string>(lease: DurableCaptureResourceFenceLease<K>): void {
-  lease.transition('open', {
-    metadata: { ...(lease.envelope.metadata ?? {}), phase: 'completing' },
   });
 }
 

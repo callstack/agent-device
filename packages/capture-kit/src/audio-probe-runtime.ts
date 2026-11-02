@@ -16,6 +16,7 @@ import type {
 } from '@agent-device/contracts/audio-probe-runtime-host';
 import {
   isConfirmedCleanup,
+  createRetryableCleanup,
   type CleanupOutcome,
   type FinishOutcome,
   type ReattachOutcome,
@@ -111,8 +112,6 @@ function createHostAudioProbeLiveHandle(
   process: HostAudioCaptureProcess,
 ): AudioProbeLiveHandle {
   let finish: Promise<FinishOutcome<AudioProbeCompletion>> | undefined;
-  let cleanup: Promise<CleanupOutcome> | undefined;
-  let disposal: Promise<void> | undefined;
   // The terminal result must stay observed: without it, a helper that dies after publishing a
   // `running` checkpoint would read as running forever and stop would fabricate a normal
   // completion. Only a terminal `stopped` publication outranks an observed exit — the helper
@@ -139,13 +138,13 @@ function createHostAudioProbeLiveHandle(
         result: finalizeStatus(snapshot, beforeStop, 'stopped'),
       } as const;
     })());
-  const forceCleanup = () =>
-    (cleanup ??= finish
+  const clean = () =>
+    finish
       ? finish.then(
           async () => ({ status: 'cleaned' }) as const,
           async () => await terminateForCleanup(process),
         )
-      : terminateForCleanup(process));
+      : terminateForCleanup(process);
   return Object.freeze({
     inspect: () => snapshot,
     status: async () => {
@@ -155,11 +154,7 @@ function createHostAudioProbeLiveHandle(
       return status ?? finalizeStatus(snapshot, undefined, 'not-started');
     },
     finish: finishProbe,
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedAudioProbeCleanup);
-      await disposal;
-    },
+    ...createRetryableCleanup(clean, assertConfirmedAudioProbeCleanup),
   });
 }
 

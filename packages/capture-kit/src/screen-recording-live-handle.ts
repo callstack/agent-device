@@ -4,6 +4,7 @@ import {
   type DurableCaptureProgress,
   type FinishOutcome,
   isConfirmedCleanup,
+  createRetryableCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type {
   RecordingGestureEvent,
@@ -34,23 +35,21 @@ export function createScreenRecordingLiveHandle(
 ): ScreenRecordingLiveHandle {
   let snapshot = freezeSnapshot(initial);
   let finish: Promise<FinishOutcome<ScreenRecordingCompletion>> | undefined;
-  let finishRequested = false;
-  let cleanup: Promise<CleanupOutcome> | undefined;
-  let disposal: Promise<void> | undefined;
+  let terminalRequested = false;
   // Once a finish or a cleanup has been asked for, the recording no longer accepts telemetry.
-  const terminal = (): boolean => finishRequested || cleanup !== undefined;
+  const terminal = (): boolean => terminalRequested;
   const finishRecording = (progress?: DurableCaptureProgress) => {
     // Only a finished recording stays memoized. A finish the host refused has to be re-driven
     // by the next `record stop`, which is how a recording recovers without a daemon restart.
-    finishRequested = true;
+    terminalRequested = true;
     finish ??= implementation.finish(snapshot, progress).catch((error: unknown) => {
       finish = undefined;
       throw error;
     });
     return finish;
   };
-  const forceCleanup = () =>
-    (cleanup ??= finish
+  const clean = () =>
+    finish
       ? finish.then(
           async (outcome) =>
             outcome.status === 'completed'
@@ -58,7 +57,7 @@ export function createScreenRecordingLiveHandle(
               : await implementation.forceCleanup(snapshot),
           async () => await implementation.forceCleanup(snapshot),
         )
-      : implementation.forceCleanup(snapshot));
+      : implementation.forceCleanup(snapshot);
   return Object.freeze({
     inspect: () => snapshot,
     appendGestureEvents: (events: readonly RecordingGestureEvent[]) => {
@@ -84,11 +83,10 @@ export function createScreenRecordingLiveHandle(
       snapshot = freezeSnapshot({ ...snapshot, invalidatedReason });
     },
     finish: finishRecording,
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup().then(assertConfirmedCleanup);
-      await disposal;
-    },
+    ...createRetryableCleanup(() => {
+      terminalRequested = true;
+      return clean();
+    }, assertConfirmedCleanup),
   });
 }
 

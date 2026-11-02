@@ -82,6 +82,48 @@ function fakeHost(overrides: Partial<HostSystemAudioCaptureHost> = {}): HostSyst
   });
 }
 
+test('a host audio handle retries failed termination and disposes only once after confirmation', async () => {
+  await withStatusDir(async (dir) => {
+    const statusPath = path.join(dir, 'audio-probe.json');
+    let attempts = 0;
+    let exit!: (result: HostCommandResult) => void;
+    const wait = new Promise<HostCommandResult>((resolve) => {
+      exit = resolve;
+    });
+    const host = fakeHost({
+      start: async () => {
+        await fs.writeFile(
+          statusPath,
+          JSON.stringify({ state: 'running', rmsDbfs: [], peakDbfs: [], sampleCount: 0 }),
+        );
+        return {
+          marker,
+          wait,
+          terminate: async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error('Termination unavailable');
+            exit({ stdout: '', stderr: '', exitCode: 0 });
+          },
+        };
+      },
+    });
+    const started = await startHostAudioProbe({
+      host,
+      device,
+      owner,
+      input: { sessionId: 's1', statusPath, durationMs: 1000, bucketMs: 500, fence },
+    });
+    const handle = started.pendingHandle.transfer();
+    await assert.rejects(
+      async () => await handle[Symbol.asyncDispose](),
+      /Termination unavailable/,
+    );
+    await handle[Symbol.asyncDispose]();
+    await handle[Symbol.asyncDispose]();
+    assert.equal(attempts, 2);
+  });
+});
+
 test('descriptor codec round-trips and rejects malformed bodies', () => {
   const encoded = encodeDurableDescriptor(hostAudioProbeDescriptorCodec, descriptorBody);
   const decoded = hostAudioProbeDescriptorCodec.decode(encoded.body);
