@@ -35,7 +35,25 @@ private final class RunnerCompatibilityModeScreenStub: NSObject {
   @objc var nativeScale: CGFloat { 2 }
 }
 
+/// Answers like an AXRuntime whose system application cannot be read, so the display size is unknown.
+private final class RunnerUnreadableSystemApplicationStub: NSObject {
+  @objc class func systemApplication() -> AnyObject? { nil }
+}
+
 extension RunnerTests {
+  /// Installs `RunnerUnreadableSystemApplicationStub` on AXRuntime's `AXElement` until the returned
+  /// closure restores it.
+  private func simulateUnreadableSystemApplication() throws -> () -> Void {
+    // The bridge loads AXRuntime on its first read.
+    _ = RunnerSystemApplicationScreenSize()
+    let element: AnyClass = try XCTUnwrap(NSClassFromString("AXElement"))
+    let selector = NSSelectorFromString("systemApplication")
+    let target = try XCTUnwrap(class_getClassMethod(element, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(RunnerUnreadableSystemApplicationStub.self, selector))
+    let original = method_setImplementation(target, method_getImplementation(stub))
+    return { method_setImplementation(target, original) }
+  }
+
   /// Installs `RunnerCompatibilityModeScreenStub` until the returned closure restores UIKit.
   private func simulateCompatibilityModeScreen() throws -> () -> Void {
     let getters = [
@@ -234,11 +252,44 @@ extension RunnerTests {
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
     ]
     for (orientation, expected) in expectations {
-      let frame = synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: orientation)
+      let frame = try XCTUnwrap(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: orientation))
       XCTAssertEqual(frame.origin, .zero)
       XCTAssertEqual(frame.width, expected.width, accuracy: 0.5)
       XCTAssertEqual(frame.height, expected.height, accuracy: 0.5)
     }
+  }
+
+  /// #4091: when the device's only screen will not report its size, a placed window's smaller box is
+  /// no basis to turn about either (#3899), so a tap through a resolved window refuses before it
+  /// dispatches instead of landing off target.
+  @MainActor
+  func testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    app.launch()
+    mainOwned.app = app
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let window = try XCTUnwrap(resolveRunnerWindowElement(app: app)).window
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let context = try XCTUnwrap(
+      SynthesizedCoordinateContext(validating: placedWindow, resolvedWindow: window, accessibilityHealth: .healthy)
+    )
+    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    defer { restoreAXRuntime() }
+
+    XCTAssertNil(
+      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+    )
+    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .unsupported(let message, _)? = outcome else {
+      return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
+    }
+    guard case .unsupported(let refusal, _) = Self.unmeasuredSoleDisplayOutcome(gesture: "tap") else {
+      return XCTFail("the unmeasured-display outcome must be a refusal")
+    }
+    XCTAssertEqual(message, refusal)
   }
 #endif
 
