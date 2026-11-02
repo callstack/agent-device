@@ -2,9 +2,7 @@ import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import { bridgeProcessExited } from './process.ts';
 import {
-  assertSnapshotBridgeEnvelope,
-  assertSnapshotBridgeTargetIdentity,
-  bridgeFailureFromEnvelope,
+  acceptSnapshotBridgeEnvelope,
   parseSnapshotBridgeEnvelope,
   SnapshotBridgeFrameDecoder,
   type SnapshotBridgeEnvelope,
@@ -92,16 +90,11 @@ export async function roundTripSnapshotBridge(
           throw snapshotSourceError('transport-failure', 'bridge-data-invalid');
         const body = decoder.push(chunk);
         if (body) {
-          const envelope = parseSnapshotBridgeEnvelope(body);
-          assertSnapshotBridgeEnvelope(envelope, input.requestId);
-          assertSnapshotBridgeTargetIdentity(envelope, {
+          const envelope = acceptSnapshotBridgeEnvelope(parseSnapshotBridgeEnvelope(body), {
+            requestId: input.requestId,
             pid: input.expectedPid,
             generation: input.expectedGeneration,
           });
-          if (envelope.ok !== true) bridgeFailureFromEnvelope(envelope);
-          if (typeof envelope.truncated !== 'boolean') {
-            throw snapshotSourceError('malformed-tree', 'truncated-invalid');
-          }
           finishResolve(envelope);
           return;
         }
