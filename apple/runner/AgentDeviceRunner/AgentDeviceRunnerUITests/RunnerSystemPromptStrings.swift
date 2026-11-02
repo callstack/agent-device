@@ -17,19 +17,20 @@ struct RunnerSystemPromptStrings {
 
   /// SpringBoard's launch confirmation. It is read apart from `promptTables`, so a runtime without
   /// it keeps the permission prompts' vocabulary.
-  /// The only keys of that table the alert vocabulary takes, so another key of an undocumented
-  /// table cannot join the accept or dismiss labels.
-  static let launchConfirmationLabelKeys: Set<String> = ["SCHEME_APPROVAL_OPEN_BUTTON", "SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON"]
-
   static let launchConfirmationTable = (
     path: "/System/Library/Frameworks/CoreServices.framework",
     table: "SchemeApproval"
   )
 
+  /// The only keys of the launch confirmation table that the alert vocabulary takes, so another key
+  /// of an undocumented table cannot join the accept or dismiss labels.
+  static let launchConfirmationLabelKeys: Set<String> = ["SCHEME_APPROVAL_OPEN_BUTTON", "SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON"]
+
   /// Reads `tables` from the simulated OS, or names the source that did not read. The simulated OS
   /// is taken from where this process's Foundation loaded; the simulator process would otherwise
   /// read the host's /System. A table reads in every preferred language or not at all, because a
-  /// missing translation could hide the one that makes a label claim both actions.
+  /// missing translation could hide the one that makes a label claim both actions. The read fails
+  /// as a whole when any listed table fails, so pass tables that must stand or fall together.
   static func read(
     _ tables: [(path: String, table: String)],
     languages: [String]
