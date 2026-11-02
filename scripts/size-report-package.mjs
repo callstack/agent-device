@@ -7,6 +7,8 @@ export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridgeRuntime.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.m',
+  'apple/snapshot-bridge/SnapshotBridgeSurfaceHosts.h',
+  'apple/snapshot-bridge/SnapshotBridgeSurfaceHosts.m',
   'apple/snapshot-bridge/ForegroundApplicationGeometry.h',
 ]);
 

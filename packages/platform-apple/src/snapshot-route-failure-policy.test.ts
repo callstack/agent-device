@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { bridgeFailureDisposition } from './snapshot-route-failure-policy.ts';
 
 // Each expectation below is written out, never read back from the production table: a test that
@@ -32,6 +33,45 @@ describe('capture-scoped screen refusals', () => {
       scope: 'capture',
       code: 'bridge-preparation-pending',
       consequence: 'bridge-preparation',
+    });
+  });
+});
+
+describe('surface host refusals', () => {
+  // The guest refuses while a registered host process runs for the Simulator (#2751). Both refusals
+  // describe the screen, so neither retires the generation, and each names what it found.
+  test('a present refusal names the registered host whose executable the guest found', () => {
+    const host = IOS_SYSTEM_SURFACE_HOSTS[1]!;
+    expect(
+      bridgeFailureDisposition({
+        kind: 'unsupported',
+        code: 'system-surface-host-present',
+        details: { surfaceHostExecutable: host.processExecutable },
+      }),
+    ).toEqual({
+      scope: 'capture',
+      code: 'system-surface-host-present',
+      consequence: 'system-surface-host',
+      surfaceHost: host,
+    });
+  });
+
+  test.for([
+    ['an unverified refusal', 'system-surface-host-unverified', undefined],
+    ['a present refusal naming no executable', 'system-surface-host-present', undefined],
+    [
+      'a present refusal naming an unregistered executable',
+      'system-surface-host-present',
+      { surfaceHostExecutable: 'Other.app/Other' },
+    ],
+  ] as const)('%s proves no host, so it is unverified', ([_label, code, details]) => {
+    expect(
+      bridgeFailureDisposition({ kind: 'unsupported', code, ...(details ? { details } : {}) }),
+    ).toEqual({
+      scope: 'capture',
+      code,
+      consequence: 'system-surface-host',
+      surfaceHost: 'unverified',
     });
   });
 });

@@ -1,6 +1,6 @@
 {
   "protocolVersion": 1,
-  "sourceVersion": "agent-device-simulator-ax-v1.9.0",
+  "sourceVersion": "agent-device-simulator-ax-v1.10.0",
   "requestKeys": [
     "verb",
     "requestId",
@@ -12,7 +12,9 @@
     "maxNodes",
     "maxDurationMs",
     "maxResponseBytes",
-    "nativeLevelsHint"
+    "nativeLevelsHint",
+    "surfaceHostExecutables",
+    "simulatorUdid"
   ],
   "responseKeys": [
     "protocolVersion",
@@ -27,7 +29,8 @@
     "recovery",
     "error_kind",
     "error_code",
-    "error"
+    "error",
+    "surfaceHostExecutable"
   ],
   "attributeKeys": [
     "XC_kAXXCAttributeElementType",

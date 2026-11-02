@@ -74,6 +74,9 @@ export function createSimulatorSnapshotSource(
             limits,
             maxDepth,
             nativeLevelsHint: decision.nativeLevels,
+            ...(request.surfaceHostExecutables
+              ? { surfaceHostExecutables: request.surfaceHostExecutables }
+              : {}),
             deadline,
           });
           remainingSnapshotSourceMs(deadline, 'snapshot-decode-deadline');

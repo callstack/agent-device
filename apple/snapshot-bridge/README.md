@@ -17,9 +17,11 @@ UTF-8 JSON object
 ```
 
 The host owns all target identity, bounds, deadlines, and lifecycle decisions.
-The guest returns only a bounded raw tree, the target pid, truncation, and
-protocol/source versions. It does not expose an HTTP route or a public CLI
-surface.
+A successful response carries only a bounded raw tree, the target pid,
+truncation, and protocol/source versions. A refusal carries the target pid, a
+typed error kind and code, and, for a running surface host, the
+`surfaceHostExecutable` it found. It does not expose an HTTP route or a public
+CLI surface.
 
 The private API is intentionally pinned to the idb v1.5.2-compatible shape.
 See `LICENSE.idb` for attribution.
@@ -49,6 +51,23 @@ resolution. Secondary owners such as the return-to-app status-bar control do
 not replace the native primary owner. An ownership refusal is evidence about
 the screen, so the route sends only that capture to XCTest and keeps the app
 generation on the bridge.
+
+## System surface hosts
+
+A registered system surface host, such as `SafariViewService` for a web sign-in
+sheet, presents out of the app's process. While its sheet is up, the app stays
+the primary owner, so the ownership check passes over the occluded app tree.
+When a request names `surfaceHostExecutables` and `simulatorUdid`, the reader
+reads the process table in place before acquisition, and again after an
+acquisition that returned a tree. If a process of a named executable carries
+this Simulator's `SIMULATOR_UDID` and its executable path ends with the named
+executable, it returns the typed refusal
+`system-surface-host-present` with `surfaceHostExecutable`, without the app
+tree. If it cannot read the process table or place a matching process, it
+returns `system-surface-host-unverified`. The host sends that capture to
+XCTest and keeps the app generation on the bridge, because both refusals are
+evidence about the screen. The host omits the check when a ready runner already
+reported every host off screen.
 
 ## Window placement
 
