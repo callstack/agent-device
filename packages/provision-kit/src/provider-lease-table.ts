@@ -3,13 +3,8 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 /**
  * The lease table one cloud device provider runtime serves its lease lifecycle from.
  *
- * A provider rents a billed device per lease. The bookkeeping around that rental is the same for every
- * provider, and each rule is one a provider gets wrong on its own: a second allocation of one lease rents a
- * second device nobody can release; a session forgotten before its stop is confirmed stays billed; a drain
- * that skips a start still in flight misses the device that start rents; an allocation that wins a race
- * with a release is handed a device that is being stopped; and a caller that stopped waiting leaves a
- * device whose only handle is the answer still to come. This table owns those rules. The provider supplies
- * start, stop, find-by-lease, and the errors it reports in its own words.
+ * A provider rents a billed device per lease. This table owns the rules that decide whether that device
+ * is still rented (ADR 0007); the provider supplies start, stop, find-by-lease, and its own errors.
  *
  * Keep this module free of value imports: provider runtimes load it on their construction path.
  */
@@ -544,6 +539,9 @@ class LeaseTable<Session, Handle, Request> {
       const owed = await this.stopRentals(entry, tried);
       if (owed === 'progress') continue;
       if (owed.length > 0) return { status: 'pending', owed };
+      // The start may have recorded a rental while the stops above were awaited; look again before
+      // forgetting the lease.
+      if (entry.unnamed || [...entry.rentals.values()].some((rental) => !rental.stopped)) continue;
       return this.finishTeardown(entry);
     }
   }

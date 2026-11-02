@@ -57,11 +57,17 @@ async function run(seed: number): Promise<void> {
   const table = createProviderLeaseTable<Session, Handle, unknown>({
     startTimeoutMs: 50,
     stopTimeoutMs: 20,
-    start: async (target) =>
+    start: async (target, _request, control) =>
       await new Promise((resolve, reject) => {
         const id = `${target.leaseId}#${(devices += 1)}`;
         lastDevice.set(target.leaseId, id);
         starts.push({ id, resolve, reject });
+        // Some starts publish their device before they answer, as a provider that names it early does.
+        if (next() < 0.3) {
+          rented.add(id);
+          owned.add(id);
+          control.rented({ id });
+        }
       }),
     stop: async ({ id }) => {
       const inFlight = (stopsInFlight.get(id) ?? 0) + 1;
@@ -86,7 +92,10 @@ async function run(seed: number): Promise<void> {
     releasing: () => new Error('releasing'),
     gaveUp: () => new Error('gave up'),
     cleanupPending: (unconfirmed) =>
-      Object.assign(new Error('pending'), { ids: unconfirmed.map((stop) => stop.handle?.id) }),
+      Object.assign(new Error('pending'), {
+        ids: unconfirmed.map((stop) => stop.handle?.id),
+        unnamed: unconfirmed.flatMap((stop) => (stop.handle ? [] : [stop.leaseId])),
+      }),
   });
 
   const allocate = (leaseId: string): void => {
@@ -106,7 +115,8 @@ async function run(seed: number): Promise<void> {
     if (start === undefined) return;
     const kind = next();
     const handle = { id: start.id };
-    if (kind < 0.85) {
+    // A device the start already published is the one the answer names; it is not rented twice.
+    if (kind < 0.85 && !owned.has(start.id)) {
       rented.add(start.id);
       owned.add(start.id);
     }
@@ -128,9 +138,13 @@ async function run(seed: number): Promise<void> {
       () => {
         if (stillRented().length > 0) fail(`shutdown resolved with ${stillRented().join(', ')}`);
       },
-      (error: { ids?: string[] }) => {
+      (error: { ids?: string[]; unnamed?: string[] }) => {
+        // A device is reported by its id, or by its lease when the report could not name it yet.
         for (const id of stillRented()) {
-          if (!error.ids?.includes(id)) fail(`shutdown left ${id} rented and unreported`);
+          const leaseId = id.split('#')[0]!;
+          if (!error.ids?.includes(id) && !error.unnamed?.includes(leaseId)) {
+            fail(`shutdown left ${id} rented and unreported`);
+          }
         }
       },
     );
