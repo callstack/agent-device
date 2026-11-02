@@ -65,16 +65,33 @@ test('without DEVELOPER_DIR the host selection link names the Xcode, and a moved
   assert.deepEqual(readFingerprint(), FINGERPRINT_B);
 });
 
-test('a selection link whose Xcode is gone fails instead of reading another Xcode', () => {
+test('a selection link whose Xcode is gone falls back to the default Xcode, as xcode-select -p does', () => {
+  // #4145: an uninstalled Xcode leaves the link dangling; Apple's tools then use the default Xcode.
   appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
   appleSelectionLink.target = path.join(mkdtempForTestSync('deleted-xcode-'), 'Xcode.app');
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
+  assert.deepEqual(readFingerprint(), FINGERPRINT_B);
+  assert.equal(readRunnerXcodeVersion(), '27.0');
+});
+
+test('without DEVELOPER_DIR or a selection link the default Xcode names the fingerprint', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
+  assert.deepEqual(readFingerprint(), FINGERPRINT_B);
+});
+
+test('a selection link whose Xcode this process cannot read fails instead of reading the default Xcode', () => {
+  appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+  appleSelectionLink.target = xcodeA;
+  appleSelectionLink.targetErrorCode = 'EACCES';
+  appleSelectionLink.defaultDeveloperDir = xcodeB;
   assert.throws(
     readFingerprint,
     (error: unknown) =>
       error instanceof AppError &&
       error.details?.reason === 'apple_toolchain_unreadable' &&
       error.details?.file === XCODE_SELECT_LINK_PATH &&
-      error.details?.detail === 'dangling selection link',
+      error.details?.detail === 'EACCES',
   );
 });
 
