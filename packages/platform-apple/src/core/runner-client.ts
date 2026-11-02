@@ -29,7 +29,7 @@ export async function runAppleRunnerCommand(
   command: RunnerCommand,
   options: AppleRunnerCommandOptions = {},
 ): Promise<Record<string, unknown>> {
-  if (command.litPanel || !runnerCommandResolvesSurface(command)) {
+  if (!runnerCommandResolvesSurface(command)) {
     return await runHostBoundAppleRunnerCommand(device, command, options);
   }
   const { resolveRunnerRequestLitPanel } = await import('../foldable/runner-panel.ts');

@@ -347,7 +347,8 @@ extension RunnerTests {
               app: app,
               hint: hint,
               captureDeadline: deadline,
-              treeCaptureSliceBudgetOverride: step.treeCaptureSliceBudgetOverride
+              treeCaptureSliceBudgetOverride: step.treeCaptureSliceBudgetOverride,
+              litPanelSurface: target.litPanelSurface
             )
           else {
             return (nil, .completed)

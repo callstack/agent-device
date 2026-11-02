@@ -2,12 +2,33 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  /// Runs `command` against its prepared app. An element read that cannot search the lit panel
+  /// throws its refusal, which answers the request (ADR 0025).
   @MainActor
   func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
     activeAppBundleId: String? = nil,
     alertDeadline: Date? = nil
+  ) throws -> Response {
+    do {
+      return try executePrepared(
+        command: command,
+        activeApp: activeApp,
+        activeAppBundleId: activeAppBundleId,
+        alertDeadline: alertDeadline
+      )
+    } catch let refusal as RunnerAppScreenCaptureFailure {
+      return refusal.response
+    }
+  }
+
+  @MainActor
+  private func executePrepared(
+    command: Command,
+    activeApp: XCUIApplication,
+    activeAppBundleId: String?,
+    alertDeadline: Date?
   ) throws -> Response {
     var activeApp = activeApp
     mainOwned.soleDisplayPortraitSize = nil
@@ -16,12 +37,6 @@ extension RunnerTests {
     }
     // A screenshot resolves its own surface, the target app and then the system surface.
     if command.command != .screenshot, let refusal = bookRequestLitPanelSurface(app: activeApp) {
-      return refusal.response
-    }
-    // An element read whose lit-panel window list cannot be read refuses instead of finding nothing.
-    if command.command == .readText || command.selectorKey != nil,
-      let refusal = litPanelWindowsRefusal(app: activeApp)
-    {
       return refusal.response
     }
     switch command.command {
@@ -45,7 +60,7 @@ extension RunnerTests {
         } else {
           expectedPoint = nil
         }
-        let match = findElement(
+        let match = try findElement(
           app: activeApp,
           selectorKey: selectorKey,
           selectorValue: selectorValue,
@@ -163,7 +178,7 @@ extension RunnerTests {
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
-          textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
+          textInput = try coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
           textInput = nil
           // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.
@@ -416,11 +431,11 @@ extension RunnerTests {
       }
       return Response(ok: true, data: DataPayload(message: "remote pressed"))
     case .type:
-      var response: Response?
+      var outcome: Result<Response, Error>?
       withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
-        response = executeTypeCommand(activeApp: activeApp, command: command)
+        outcome = Result { try executeTypeCommand(activeApp: activeApp, command: command) }
       }
-      return response ?? Response(ok: false, error: ErrorPayload(message: "type produced no response"))
+      return try outcome?.get() ?? Response(ok: false, error: ErrorPayload(message: "type produced no response"))
     case .swipe:
       guard let direction = command.direction else {
         return Response(ok: false, error: ErrorPayload(message: "swipe requires direction"))
@@ -441,18 +456,18 @@ extension RunnerTests {
       guard let text = command.text else {
         return Response(ok: false, error: ErrorPayload(message: "findText requires text"))
       }
-      let found = findElement(app: activeApp, text: text) != nil
+      let found = try findElement(app: activeApp, text: text) != nil
       return Response(ok: true, data: DataPayload(found: found))
     case .querySelector:
       guard let selectorKey = command.selectorKey, let selectorValue = command.selectorValue else {
         return Response(ok: false, error: ErrorPayload(message: "querySelector requires selectorKey and selectorValue"))
       }
-      return queryElement(app: activeApp, selectorKey: selectorKey, selectorValue: selectorValue)
+      return try queryElement(app: activeApp, selectorKey: selectorKey, selectorValue: selectorValue)
     case .readText:
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "readText requires x and y"))
       }
-      guard let text = readTextAt(app: activeApp, x: x, y: y) else {
+      guard let text = try readTextAt(app: activeApp, x: x, y: y) else {
         return Response(ok: false, error: ErrorPayload(message: "readText did not resolve text"))
       }
       return Response(ok: true, data: DataPayload(text: text))

@@ -21,9 +21,7 @@ extension RunnerTests {
         if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
           return .response(refusal.response)
         }
-        if self.requestLitPanel != nil,
-          let refusal = Self.litPanelBackendPinRefusal(Self.presentationOptions(from: command).preferredBackend)
-        {
+        if self.requestLitPanel != nil, let refusal = Self.litPanelBackendPinRefusal(command) {
           return .response(refusal)
         }
         var target = context.observation == nil
@@ -33,7 +31,7 @@ extension RunnerTests {
             bundleId: command.appBundleId?.trimmedNonEmpty,
             processIdentifier: Self.processIdentifier(of: context.app)
           )
-        target.litPanelSurface = self.requestLitPanel == nil ? nil : self.litPanelState.surface
+        target.litPanelSurface = self.litPanelState.surface
         return .capture(
           target,
           systemSurface: context.systemSurface,
@@ -173,17 +171,25 @@ extension RunnerTests {
 
   /// A multi-panel snapshot runs only the tree backend, the one that proves which panel a window is
   /// on, so a pin to another backend is refused as a request. It never reaches the capture plan and
-  /// leaves the cached target alone.
-  static func litPanelBackendPinRefusal(_ preferredBackend: String?) -> Response? {
-    guard let pinned = preferredBackend, pinned != SnapshotBackendKind.recursiveTree.rawValue else {
+  /// leaves the cached target alone. `customActions` without a pin implies the private-ax pin, so
+  /// the refusal names it.
+  static func litPanelBackendPinRefusal(_ command: Command) -> Response? {
+    guard let pinned = presentationOptions(from: command).preferredBackend,
+      pinned != SnapshotBackendKind.recursiveTree.rawValue
+    else {
       return nil
     }
+    let impliedByCustomActions = command.preferredBackend == nil
     return Response(
       ok: false,
       error: ErrorPayload(
         code: "UNSUPPORTED_OPERATION",
-        message: "a multi-panel snapshot runs only the tree backend, so the \(pinned) backend cannot be pinned",
-        hint: "Snapshot without a backend pin: only the tree backend proves which panel a window is on (ADR 0025)."
+        message: impliedByCustomActions
+          ? "a multi-panel snapshot runs only the tree backend, so customActions, which only the \(pinned) backend reads, cannot be served"
+          : "a multi-panel snapshot runs only the tree backend, so the \(pinned) backend cannot be pinned",
+        hint: impliedByCustomActions
+          ? "Snapshot without customActions: only the tree backend proves which panel a window is on (ADR 0025)."
+          : "Snapshot without a backend pin: only the tree backend proves which panel a window is on (ADR 0025)."
       )
     )
   }

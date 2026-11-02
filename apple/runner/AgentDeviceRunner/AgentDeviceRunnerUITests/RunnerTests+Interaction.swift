@@ -166,9 +166,9 @@ extension RunnerTests {
 #endif
   }
 
-  func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
+  func findElement(app: XCUIApplication, text: String) throws -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
-    return elementQueries(app: app, matching: .any)
+    return try elementQueries(app: app, matching: .any)
       .lazy
       .map { $0.matching(predicate).firstMatch }
       .first { $0.exists }
@@ -181,7 +181,7 @@ extension RunnerTests {
     allowNonHittableFallback: Bool = false,
     expectedPoint: CGPoint? = nil,
     rawMatchPolicy: DirectSelectorRawMatchPolicy = .rejectDistinctMatches
-  ) -> SelectorElementMatch {
+  ) throws -> SelectorElementMatch {
     let value = selectorValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
@@ -200,7 +200,7 @@ extension RunnerTests {
       return SelectorElementMatch(element: nil, isAmbiguous: false, usedNonHittableFallback: false)
     }
 
-    let matches = elementQueries(app: app, matching: .any)
+    let matches = try elementQueries(app: app, matching: .any)
       .flatMap { $0.matching(predicate).allElementsBoundByIndex }
       .filter(\.exists)
     let facts = matches.map { element in
@@ -292,13 +292,13 @@ extension RunnerTests {
     resolveRunnerWindow(app: app).frame
   }
 
-  func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) -> Response {
+  func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
     // querySelector is a read — it backs get/is/wait and the offscreen-refusal
     // double-check, none of which mutate. The fail-closed raw-match rule exists
     // to stop a mutation acting on an unseen duplicate; applying it here would
     // instead turn a decorative non-hittable duplicate into an AMBIGUOUS_MATCH
     // for readers that previously resolved the hittable element.
-    let match = findElement(
+    let match = try findElement(
       app: app,
       selectorKey: selectorKey,
       selectorValue: selectorValue,
@@ -360,9 +360,9 @@ extension RunnerTests {
     return left.elementType.rawValue < right.elementType.rawValue
   }
 
-  func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
+  func readTextAt(app: XCUIApplication, x: Double, y: Double) throws -> String? {
     let point = CGPoint(x: x, y: y)
-    let textInputCandidates = textInputCandidatesAt(app: app, point: point, contentTranslation: liveContentTranslation(app: app))
+    let textInputCandidates = try textInputCandidatesAt(app: app, point: point, contentTranslation: liveContentTranslation(app: app))
       .map(\.element)
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
@@ -370,7 +370,7 @@ extension RunnerTests {
       }
     }
 
-    let candidates = elementQueries(app: app, matching: .any)
+    let candidates = try elementQueries(app: app, matching: .any)
       .flatMap { $0.allElementsBoundByIndex }
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)

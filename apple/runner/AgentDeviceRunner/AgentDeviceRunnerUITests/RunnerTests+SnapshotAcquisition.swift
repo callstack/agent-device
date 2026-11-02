@@ -36,7 +36,8 @@ extension RunnerTests {
     app: XCUIApplication,
     hint: CaptureHint,
     captureDeadline: Date = .distantFuture,
-    treeCaptureSliceBudgetOverride: TimeInterval? = nil
+    treeCaptureSliceBudgetOverride: TimeInterval? = nil,
+    litPanelSurface: LitPanelSurface? = nil
   ) throws -> SnapshotTraversalContext? {
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
@@ -64,7 +65,8 @@ extension RunnerTests {
       rootSnapshot: rootSnapshot,
       rootReadDuration: rootReadDuration,
       viewport: viewport,
-      keyboardBand: keyboardBand
+      keyboardBand: keyboardBand,
+      litPanelSurface: litPanelSurface
     )
   }
 

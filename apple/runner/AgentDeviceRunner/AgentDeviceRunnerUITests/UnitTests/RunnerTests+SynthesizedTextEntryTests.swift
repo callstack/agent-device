@@ -77,7 +77,7 @@ extension RunnerTests {
       ])
     )
     let failuresBeforeType = currentXCTestFailureCount()
-    let response = executeTypeCommand(activeApp: app, command: command)
+    let response = try executeTypeCommand(activeApp: app, command: command)
     XCTAssertFalse(didRecordXCTestFailure(since: failuresBeforeType))
     return response
   }
@@ -226,7 +226,7 @@ extension RunnerTests {
       let label = "\(testCase.seed.count) characters, all select-alls dropped"
       let seeded = try replaceSynthesizedFieldText(field, text: testCase.seed, commandId: "seed-\(testCase.seed.count)")
       XCTAssertTrue(seeded.ok, String(describing: seeded.error))
-      let result = typeTextReliably(
+      let result = try typeTextReliably(
         app: app,
         target: TextEntryTarget(
           element: nil,
@@ -324,7 +324,7 @@ extension RunnerTests {
     ]
 
     for (handle, inputAtRefreshPoint) in found {
-      let result = typeTextReliably(
+      let result = try typeTextReliably(
         app: app,
         target: TextEntryTarget(
           element: nil,
@@ -357,7 +357,7 @@ extension RunnerTests {
     XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
     let neighbourFrame = neighbour.frame
 
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: nil,
@@ -392,7 +392,7 @@ extension RunnerTests {
     let neighbourFrame = neighbour.frame
     let failures = currentXCTestFailureCount()
 
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: nil,
@@ -453,7 +453,7 @@ extension RunnerTests {
     textInputProbeBlindForTesting = true
 
     let frame = textField.frame
-    guard case .unavailable(.emptyTree) = probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none) else {
+    guard case .unavailable(.emptyTree) = try probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none) else {
       return XCTFail("A blind tree must be unavailable to every probe caller")
     }
 

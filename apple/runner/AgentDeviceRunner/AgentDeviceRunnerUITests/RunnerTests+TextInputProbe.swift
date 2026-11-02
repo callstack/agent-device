@@ -20,18 +20,19 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double, contentTranslation: TextEntryContentTranslation) -> ResolvedTextEntryInput? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
+  func textInputAt(app: XCUIApplication, x: Double, y: Double, contentTranslation: TextEntryContentTranslation) throws -> ResolvedTextEntryInput? {
+    try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
   }
 
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> [ResolvedTextEntryInput] {
-    safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: { false })
+  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) throws -> [ResolvedTextEntryInput] {
+    let queries = try textInputQueries(app: app)
+    return safely("TEXT_INPUT_AT_POINT", []) {
+      queryTextInputs(queries: queries, point: point, contentTranslation: contentTranslation, shouldStop: { false })
     }
   }
 
-  func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: liveContentTranslation(app: app)) {
+  func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) throws -> XCUIElement? {
+    switch try probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: liveContentTranslation(app: app)) {
     case .matches(let inputs):
       return inputs.first?.element
     case .absent:
@@ -58,8 +59,8 @@ extension RunnerTests {
     x: Double,
     y: Double,
     contentTranslation: TextEntryContentTranslation
-  ) -> CoordinateTextInputResolution {
-    switch probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
+  ) throws -> CoordinateTextInputResolution {
+    switch try probeTextInputs(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation) {
     case .matches(let inputs):
       guard let input = inputs.first, let identity = input.identity else { return .unavailable }
       return .input(TextInputAtPoint(element: input.element, identity: identity))
@@ -93,14 +94,15 @@ extension RunnerTests {
     return read
   }
 
-  func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) -> TextInputProbeOutcome {
+  func probeTextInputs(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) throws -> TextInputProbeOutcome {
+    let queries = try textInputQueries(app: app)
     switch containingTextInputProbeIssues(fallback: TextInputProbeOutcome.unavailable(.emptyTree), { shouldStop in
       var treeReadable = app.descendants(matching: .any).firstMatch.exists
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if textInputProbeBlindForTesting { treeReadable = false }
 #endif
       guard treeReadable else { return .unavailable(.emptyTree) }
-      let inputs = queryTextInputs(app: app, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
+      let inputs = queryTextInputs(queries: queries, point: point, contentTranslation: contentTranslation, shouldStop: shouldStop)
       return inputs.isEmpty ? .absent : .matches(inputs)
     }) {
     case .success(let outcome):
@@ -171,15 +173,21 @@ extension RunnerTests {
     return true
   }
 
+  /// The text-input queries of a read at a point. They are resolved before the read's issue
+  /// containment, so a lit-panel refusal answers the request instead of reading as no input.
+  private func textInputQueries(app: XCUIApplication) throws -> [XCUIElementQuery] {
+    let inputTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
+    return try inputTypes.flatMap { try elementQueries(app: app, matching: $0) }
+  }
+
   private func queryTextInputs(
-    app: XCUIApplication,
+    queries: [XCUIElementQuery],
     point: CGPoint,
     contentTranslation: TextEntryContentTranslation,
     shouldStop: () -> Bool
   ) -> [ResolvedTextEntryInput] {
     var inputs: [ResolvedTextEntryInput] = []
-    let inputTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
-    for query in inputTypes.flatMap({ elementQueries(app: app, matching: $0) }) {
+    for query in queries {
       if shouldStop() { break }
       let candidates = query.allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS

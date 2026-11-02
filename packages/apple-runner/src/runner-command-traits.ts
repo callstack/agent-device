@@ -94,7 +94,8 @@ export const RUNNER_COMMAND_TRAITS = {
 
 /**
  * Whether the runner resolves a screen for the command: a window to book a gesture on, a viewport,
- * or a display to sample. Such a request for a multi-panel device names the lit panel (ADR 0025).
+ * a display to sample, or windows to search for an element. Such a request for a multi-panel device
+ * names the lit panel (ADR 0025). This table is the one list of lit-panel-scoped commands.
  */
 const RUNNER_COMMAND_RESOLVES_SURFACE = {
   tap: true,
@@ -106,8 +107,8 @@ const RUNNER_COMMAND_RESOLVES_SURFACE = {
   swipe: true,
   scroll: true,
   desktopScroll: false,
-  findText: false,
-  querySelector: false,
+  findText: true,
+  querySelector: true,
   readText: true,
   snapshot: true,
   screenshot: true,

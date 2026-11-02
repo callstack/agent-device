@@ -733,7 +733,7 @@ extension RunnerTests {
     defer { tearDownSynthesizedReplacementField() }
     let synthesizer = RecordingTextEntrySynthesizer()
     let frame = field.frame
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: app,
       target: TextEntryTarget(
         element: nil,
@@ -778,10 +778,10 @@ extension RunnerTests {
   // `_XCTestCaseInterruptionException`, which XCTest records as a test failure even when production
   // code catches it. Springboard is always running, so the query resolves to no input at the point.
   @MainActor
-  func testSynthesizedReplacementTypesNothingWhenItCannotReadTheFieldBack() {
+  func testSynthesizedReplacementTypesNothingWhenItCannotReadTheFieldBack() throws {
     let synthesizer = RecordingTextEntrySynthesizer()
     let failures = currentXCTestFailureCount()
-    let result = typeTextReliably(
+    let result = try typeTextReliably(
       app: springboard,
       target: TextEntryTarget(
         element: nil,
@@ -809,8 +809,8 @@ extension RunnerTests {
   // fail closed: it used to fall through to the vacuous-typing early return and report
   // `verified: true` for a clear that never ran.
   @MainActor
-  func testEmptyReplacementWithoutResolvableTargetFailsClosed() {
-    let result = typeTextReliably(
+  func testEmptyReplacementWithoutResolvableTargetFailsClosed() throws {
+    let result = try typeTextReliably(
       app: springboard,
       target: TextEntryTarget(element: nil, refreshPoint: nil, prefersFocusedElement: false, contentTranslation: .none),
       text: "",

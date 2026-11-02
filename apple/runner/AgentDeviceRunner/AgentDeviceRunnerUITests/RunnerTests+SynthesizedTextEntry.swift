@@ -326,7 +326,7 @@ extension RunnerTests {
   @MainActor
   func runSynthesizedReplacementRoute(
     _ request: SynthesizedReplacementRequest
-  ) -> SynthesizedReplacementRouteOutcome {
+  ) throws -> SynthesizedReplacementRouteOutcome {
 #if os(iOS)
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
     let plan = Self.synthesizedTextPlan(
@@ -418,7 +418,7 @@ extension RunnerTests {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
       guard let point = request.target.refreshPoint else { return .notApplicable }
       return .fallback(
-        focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
+        try focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
       )
     }
     // The private synthesize call returns at post time, not commit time, and this route never

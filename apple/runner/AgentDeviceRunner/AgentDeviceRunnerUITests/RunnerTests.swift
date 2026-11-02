@@ -203,6 +203,9 @@ final class RunnerTests: XCTestCase {
   /// Simulates an app tree read that returns no descendants without an issue or exception.
   var textInputProbeBlindForTesting = false
 
+  /// Simulates a lit-panel window list the XCTest runtime cannot answer.
+  var litPanelWindowListUnanswerableForTesting = false
+
   static let injectedTapFailureFlagPathForTesting =
     "/tmp/agent-device-inject-tap-recorded-failure-for-testing"
 

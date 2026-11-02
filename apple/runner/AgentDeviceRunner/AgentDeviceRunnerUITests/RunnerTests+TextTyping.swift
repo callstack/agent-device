@@ -13,7 +13,7 @@ extension RunnerTests {
     xCTestChannelPenalized: Bool = false,
     synthesizer: any TextEntrySynthesizing,
     commandId: String? = nil
-  ) -> TextEntryResult {
+  ) throws -> TextEntryResult {
     let totalStartedAt = Date()
     let resolve = { (target: TextEntryTarget) in self.resolveTextEntryInput(app: app, target: target) }
     var reader = TextEntryReader(target: target, resolve: resolve)
@@ -58,7 +58,7 @@ extension RunnerTests {
         xCTestChannelPenalized: xCTestChannelPenalized
       )
     {
-      switch runSynthesizedReplacementRoute(
+      switch try runSynthesizedReplacementRoute(
         SynthesizedReplacementRequest(
           app: app,
           target: target,

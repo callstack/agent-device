@@ -6,6 +6,7 @@ import XCTest
 // its command, so `recordStart` reads the panel once and carries it.
 struct LitPanelSurface {
   let app: XCUIApplication
+  let displayID: UInt
   let window: XCUIElement
   let frame: CGRect
 }
@@ -14,8 +15,7 @@ struct LitPanelSurface {
 final class RunnerLitPanelState {
   var panel: RunnerLitPanel?
   var surface: LitPanelSurface?
-  /// Nil elements: the window list could not be read.
-  var windows: (app: XCUIApplication, elements: [XCUIElement]?)?
+  var windows: (app: XCUIApplication, elements: [XCUIElement])?
 }
 
 extension RunnerTests {
@@ -54,33 +54,31 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    litPanelState.surface = LitPanelSurface(app: app, window: element, frame: frame)
+    litPanelState.surface = LitPanelSurface(app: app, displayID: litPanel.displayID, window: element, frame: frame)
     return nil
   }
 
   /// Where an element read searches: the application, or on a lit-panel request only the windows
-  /// proven on the lit display, so a dark-panel element can never answer. An unreadable window list
-  /// searches nothing; `litPanelWindowsRefusal` says so before the read.
-  func elementSearchRoots(app: XCUIApplication) -> [XCUIElement] {
-    guard requestLitPanel != nil else { return [app] }
-    return litPanelWindows(app: app) ?? []
-  }
-
-  /// Why an element read on a lit-panel request cannot search, or nil when it can.
-  func litPanelWindowsRefusal(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
-    guard requestLitPanel != nil, litPanelWindows(app: app) == nil else { return nil }
-    return .unresolvedScreen
-  }
-
-  private func litPanelWindows(app: XCUIApplication) -> [XCUIElement]? {
-    guard let litPanel = requestLitPanel else { return nil }
+  /// proven on the lit display, so a dark-panel element can never answer. A lit-panel window list
+  /// that cannot be read throws `APP_SCREEN_UNRESOLVED`, so no read can mistake it for no match.
+  func elementSearchRoots(app: XCUIApplication) throws -> [XCUIElement] {
+    guard let litPanel = requestLitPanel else { return [app] }
     if let cached = litPanelState.windows, cached.app === app { return cached.elements }
-    let windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap { $0 as? XCUIElement }
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    let unanswerable = litPanelWindowListUnanswerableForTesting
+#else
+    let unanswerable = false
+#endif
+    guard !unanswerable,
+      let windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap({ $0 as? XCUIElement })
+    else {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
     litPanelState.windows = (app, windows)
     return windows
   }
 
-  func elementQueries(app: XCUIApplication, matching type: XCUIElement.ElementType) -> [XCUIElementQuery] {
-    elementSearchRoots(app: app).map { $0.descendants(matching: type) }
+  func elementQueries(app: XCUIApplication, matching type: XCUIElement.ElementType) throws -> [XCUIElementQuery] {
+    try elementSearchRoots(app: app).map { $0.descendants(matching: type) }
   }
 }

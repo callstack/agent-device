@@ -31,6 +31,8 @@ extension RunnerTests {
      * (#2660). Nil only where the platform has no iOS keyboard to measure.
      */
     let keyboardBand: RunnerKeyboardBandFact?
+    /// The lit panel's window the request booked; set only on a multi-panel request (ADR 0025).
+    var litPanelSurface: LitPanelSurface? = nil
   }
 
   struct SnapshotEvaluation {
@@ -211,8 +213,8 @@ extension RunnerTests {
       index: 0,
       parentIndex: nil
     )
-    publishLitPanelRoot(&root)
-    let rootChildren = try litPanelRootChildren(context.rootSnapshot)
+    Self.publishLitPanelRoot(&root, surface: context.litPanelSurface)
+    let rootChildren = try Self.litPanelRootChildren(context.rootSnapshot, surface: context.litPanelSurface)
     var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
       appendCollapsedTabFallbackNodes(
@@ -296,19 +298,20 @@ extension RunnerTests {
 
   /// The application's frame names one panel, so a lit-panel snapshot's root, raw or regular, is the
   /// booked window's box (ADR 0025).
-  func publishLitPanelRoot(_ root: inout RawAXNode) {
-    if requestLitPanel != nil, let surface = litPanelState.surface {
+  static func publishLitPanelRoot(_ root: inout RawAXNode, surface: LitPanelSurface?) {
+    if let surface {
       root.rect = SnapshotRect(surface.frame)
     }
   }
 
   /// A multi-panel device lists windows on both panels under one application, so a lit-panel
   /// snapshot descends only into the windows proven on the lit display, and refuses when none is.
-  func litPanelRootChildren(_ root: XCUIElementSnapshot) throws -> [XCUIElementSnapshot] {
-    guard let litPanel = requestLitPanel else { return root.children }
-    let lit = Self.windowsOnLitDisplay(root.children, litDisplayID: litPanel.displayID) {
-      Self.snapshotDisplayID($0)
-    }
+  static func litPanelRootChildren(
+    _ root: XCUIElementSnapshot,
+    surface: LitPanelSurface?
+  ) throws -> [XCUIElementSnapshot] {
+    guard let surface else { return root.children }
+    let lit = windowsOnLitDisplay(root.children, litDisplayID: surface.displayID) { snapshotDisplayID($0) }
     if lit.isEmpty {
       throw RunnerAppScreenCaptureFailure.unresolvedScreen
     }
@@ -482,10 +485,10 @@ extension RunnerTests {
       context.rootSnapshot,
       depth: 0,
       parentIndex: nil,
-      children: try litPanelRootChildren(context.rootSnapshot)
+      children: try Self.litPanelRootChildren(context.rootSnapshot, surface: context.litPanelSurface)
     )
     if !nodes.isEmpty {
-      publishLitPanelRoot(&nodes[0])
+      Self.publishLitPanelRoot(&nodes[0], surface: context.litPanelSurface)
     }
     return SnapshotAcquisition(
       hint: hint,

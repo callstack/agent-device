@@ -54,7 +54,7 @@ extension RunnerTests {
     )
 
     let readsBefore = try XCTUnwrap(Int(valueReads.label))
-    let response = executeTypeCommand(activeApp: app, command: fill)
+    let response = try executeTypeCommand(activeApp: app, command: fill)
     let readsAfter = try XCTUnwrap(Int(valueReads.label))
 
     XCTAssertTrue(response.ok, String(describing: response.error))
@@ -76,14 +76,14 @@ extension RunnerTests {
     let valueReads = app.staticTexts["agent-device-text-entry-value-reads"]
     let frame = field.frame
     let point = CGPoint(x: frame.midX, y: frame.midY)
-    func countingReads<T>(_ body: () -> T) throws -> (T, Int) {
+    func countingReads<T>(_ body: () throws -> T) throws -> (T, Int) {
       let before = try XCTUnwrap(Int(valueReads.label))
-      let value = body()
+      let value = try body()
       return (value, try XCTUnwrap(Int(valueReads.label)) - before)
     }
     let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false, contentTranslation: .none)
 
-    let (lookup, lookupReads) = try countingReads { textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none) }
+    let (lookup, lookupReads) = try countingReads { try textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none) }
     let (input, resolutionReads) = try countingReads { resolveTextEntryInput(app: app, target: target) }
 
     XCTAssertEqual(lookup?.snapshot?.identifier, "agent-device-hardware-keyboard-input")
@@ -146,7 +146,7 @@ extension RunnerTests {
 
     let readsBefore = try XCTUnwrap(Int(valueReads.label))
     let fillStartedAt = Date()
-    let response = executeTypeCommand(activeApp: app, command: fill)
+    let response = try executeTypeCommand(activeApp: app, command: fill)
     let readsAfter = try XCTUnwrap(Int(valueReads.label))
 
     try XCTSkipUnless(

@@ -104,7 +104,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
+  func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) throws -> TextEntryTarget {
     let contentTranslation = liveContentTranslation(app: app)
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)
@@ -136,7 +136,7 @@ extension RunnerTests {
     }
 
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
-    let input = textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
+    let input = try textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).

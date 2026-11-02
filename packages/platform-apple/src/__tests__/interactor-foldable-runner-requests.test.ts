@@ -60,6 +60,11 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     DUO_SIMULATOR,
     (i) => i.readTextAtPoint!({ x: 10, y: 20 }, { appBundleId: APP }),
   ],
+  // An element search reads only the lit panel's windows, so the dark panel's duplicate cannot answer.
+  'ios-foldable.interactor-find-text.lit-panel': [
+    DUO_SIMULATOR,
+    (i) => i.findText!('Search', { appBundleId: APP }),
+  ],
   // A request that resolves no screen carries no panel: alert, lifecycle, readiness and clipboard
   // traffic must stay byte-for-byte the request it was.
   'ios-foldable.alert.get': [DUO_SIMULATOR, (i) => i.readAlert!({ appBundleId: APP })],

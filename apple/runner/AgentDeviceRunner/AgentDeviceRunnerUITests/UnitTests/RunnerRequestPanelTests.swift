@@ -48,11 +48,18 @@ extension RunnerTests {
     XCTAssertEqual(queuedLater, 3)
   }
 
-  func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() {
-    XCTAssertEqual(Self.litPanelBackendPinRefusal("private-ax")?.error?.code, "UNSUPPORTED_OPERATION")
-    XCTAssertEqual(Self.litPanelBackendPinRefusal("queries")?.error?.code, "UNSUPPORTED_OPERATION")
-    XCTAssertNil(Self.litPanelBackendPinRefusal("tree"))
-    XCTAssertNil(Self.litPanelBackendPinRefusal(nil))
+  func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() throws {
+    func refusal(_ fields: String) throws -> ErrorPayload? {
+      try Self.litPanelBackendPinRefusal(runnerCommandFixture(#"{"command":"snapshot"\#(fields)}"#))?.error
+    }
+    XCTAssertEqual(try refusal(#","preferredBackend":"private-ax""#)?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertEqual(try refusal(#","preferredBackend":"queries""#)?.code, "UNSUPPORTED_OPERATION")
+    XCTAssertNil(try refusal(#","preferredBackend":"tree""#))
+    XCTAssertNil(try refusal(""))
+    let implied = try XCTUnwrap(refusal(#","customActions":true"#))
+    XCTAssertEqual(implied.code, "UNSUPPORTED_OPERATION")
+    XCTAssertTrue(implied.message.contains("customActions"), implied.message)
+    XCTAssertFalse(implied.hint?.contains("backend pin") ?? true, implied.hint ?? "")
   }
 
   /// Decoded from JSON, so a renamed wire field fails here.
@@ -109,6 +116,38 @@ extension RunnerTests {
     XCTAssertFalse(fellBack, "no read in the request may fall back to the app")
   }
 
+  /// The app's window is booked on the lit panel, and then its window list stops answering: an
+  /// element read refuses with the typed code instead of finding nothing, and a coordinate `type`
+  /// refuses before it taps a point with no target.
+  @MainActor
+  func testElementReadsRefuseWhenTheLitPanelWindowListIsUnanswerable() throws {
+    app.launch()
+    mainOwned.app = app
+    defer {
+      litPanelWindowListUnanswerableForTesting = false
+      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let window = app.windows.firstMatch
+    var displayID: UInt = 0
+    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
+    let frame = window.frame
+    let panel = #""litPanel":{"displayId":\#(displayID),"widthPt":\#(frame.width),"heightPt":\#(frame.height)}"#
+    for json in [
+      #"{"command":"readText","x":\#(frame.midX),"y":\#(frame.midY),\#(panel)}"#,
+      #"{"command":"type","text":"x","x":\#(frame.midX),"y":\#(frame.midY),\#(panel)}"#,
+    ] {
+      let command = try runnerCommandFixture(json)
+      setRequestLitPanel(from: command)
+      XCTAssertNil(bookRequestLitPanelSurface(app: app), "the window is on the lit panel")
+      litPanelWindowListUnanswerableForTesting = true
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      litPanelWindowListUnanswerableForTesting = false
+      XCTAssertEqual(response.error?.code, "APP_SCREEN_UNRESOLVED", json)
+    }
+  }
+
   /// With a lit panel named, selector and point reads search only the windows on that display; the
   /// launched app's windows are all on another one, so neither read may answer.
   @MainActor
@@ -117,18 +156,18 @@ extension RunnerTests {
     _ = try responseWithTheAppOffTheLitPanel(
       #"{"command":"tap","x":1,"y":1,"litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
     ) { _ in
-      found.named = findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
+      found.named = try findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
         .element != nil
       let unnamed = try runnerCommandFixture(#"{"command":"tap"}"#)
       setRequestLitPanel(from: unnamed)
-      let match = findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
+      let match = try findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
       found.unnamed = match.element != nil
       if let frame = match.element?.frame {
-        found.text = readTextAt(app: app, x: frame.midX, y: frame.midY)
+        found.text = try readTextAt(app: app, x: frame.midX, y: frame.midY)
         setRequestLitPanel(from: try runnerCommandFixture(
           #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
         ))
-        found.namedText = readTextAt(app: app, x: frame.midX, y: frame.midY)
+        found.namedText = try readTextAt(app: app, x: frame.midX, y: frame.midY)
       }
       return Response(ok: true)
     }
