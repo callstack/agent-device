@@ -1,0 +1,27 @@
+{
+  "description": "Focus facts every runner snapshot producer must report as `focused`. The XCTest producers read focusBool and the private-AX bridge reads dictionaryForSnapshot; both take the same two KVC keys. The field a software keyboard types into holds hasKeyboardFocus, not hasFocus. An absent key reads as false.",
+  "cases": [
+    {
+      "name": "keyboard focus alone",
+      "hasFocus": false,
+      "hasKeyboardFocus": true,
+      "focused": true
+    },
+    {
+      "name": "focus engine focus alone",
+      "hasFocus": true,
+      "hasKeyboardFocus": false,
+      "focused": true
+    },
+    { "name": "both focus facts", "hasFocus": true, "hasKeyboardFocus": true, "focused": true },
+    {
+      "name": "neither focus fact",
+      "hasFocus": false,
+      "hasKeyboardFocus": false,
+      "focused": false
+    },
+    { "name": "keyboard focus key absent", "hasFocus": true, "focused": true },
+    { "name": "focus key absent", "hasKeyboardFocus": true, "focused": true },
+    { "name": "both keys absent", "focused": false }
+  ]
+}
