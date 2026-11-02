@@ -100,6 +100,8 @@ export type DaemonIdleReapController = {
    */
   noteActivity: () => void;
   cancel: () => void;
+  /** Permanently stops idle reap, including activity that settles during shutdown. */
+  close: () => void;
   readonly idleMs: number;
 };
 
@@ -123,6 +125,7 @@ export function createDaemonIdleReap(params: {
   ownership?: DaemonRuntimeOwnership;
 }): DaemonIdleReapController {
   const idleMs = resolveDaemonIdleReapMs(params.env, params.ownership);
+  let phase: 'open' | 'closed' = 'open';
   let timer: NodeJS.Timeout | undefined;
 
   const isIdleNow = (): boolean =>
@@ -139,13 +142,13 @@ export function createDaemonIdleReap(params: {
 
   const schedule = (): void => {
     cancel();
-    if (idleMs <= 0) return;
+    if (phase === 'closed' || idleMs <= 0) return;
     timer = setTimeout(() => {
       timer = undefined;
       // Re-check at fire time instead of trusting the scheduling snapshot: a
       // session open or new request must never lose a race against a
       // previously scheduled reap.
-      if (!isIdleNow()) return;
+      if (phase === 'closed' || !isIdleNow()) return;
       if (params.hasRetainedLeases()) {
         schedule();
         return;
@@ -157,11 +160,20 @@ export function createDaemonIdleReap(params: {
   };
 
   const noteActivity = (): void => {
+    if (phase === 'closed') return;
     if (isIdleNow()) schedule();
     else cancel();
   };
 
-  return { noteActivity, cancel, idleMs };
+  return {
+    noteActivity,
+    cancel,
+    close: () => {
+      phase = 'closed';
+      cancel();
+    },
+    idleMs,
+  };
 }
 
 /**
@@ -170,6 +182,8 @@ export function createDaemonIdleReap(params: {
  * Embedded runtimes refuse replacement because their host owns close().
  */
 export type DaemonLifecycleAdmission = Readonly<{
+  /** Closes admission when any owner starts draining the runtime. */
+  close(): void;
   /**
    * Puts the lifecycle request and the closed admission it leaves behind in front of `handler`: a
    * lifecycle request gets its verdict, and any other request gets the shutting-down refusal once a
@@ -256,6 +270,9 @@ export function createDaemonLifecycleAdmission(params: {
   };
 
   return {
+    close: () => {
+      admitting = false;
+    },
     admit: (handler) => async (req) => {
       if (req.command === DAEMON_QUIESCE_COMMAND) return leave(req);
       return admitting ? await handler(req) : daemonShuttingDownResponse();

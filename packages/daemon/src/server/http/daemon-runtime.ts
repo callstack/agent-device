@@ -52,7 +52,6 @@ import type { SessionRef } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
   createDaemonLifecycleAdmission,
-  daemonShuttingDownResponse,
 } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
@@ -451,7 +450,6 @@ async function startDaemonRuntimeOnHost(
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
   // `close` is defined below but only invoked asynchronously by the timer,
   // well after this closure captures it.
-  let shuttingDown = false;
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
   // Who owns this process decides what it publishes and which lifecycle request it answers. A host
   // that starts the runtime passes `embedded`; the daemon executable leaves it detached.
@@ -468,7 +466,7 @@ async function startDaemonRuntimeOnHost(
   });
 
   rollback.onRollback(() => {
-    idleReap.cancel();
+    idleReap.close();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
   });
@@ -491,7 +489,6 @@ async function startDaemonRuntimeOnHost(
   });
 
   const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
-    if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
     const dispatch = runtimeState.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
@@ -727,11 +724,11 @@ async function startDaemonRuntimeOnHost(
   };
 
   const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
-    idleReap.cancel();
+    lifecycleAdmission.close();
+    idleReap.close();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
     clearInterval(leaseExpirySweep);
-    shuttingDown = true;
     stopMetadataLossWatch();
     // Cancellation and the listener close run together: a connection held by a request that ignores
     // cancellation is force-closed at the same budget the drain gives it.

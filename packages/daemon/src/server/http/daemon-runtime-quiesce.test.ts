@@ -22,17 +22,31 @@ const probe = vi.hoisted(() => ({
   held: undefined as Promise<void> | undefined,
   entered: undefined as (() => void) | undefined,
   diagnosticFailure: undefined as Error | undefined,
+  handleRequest: undefined as import('../../core/daemon-request.ts').DaemonInvokeFn | undefined,
+  idleReaps: 0,
 }));
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
   return {
     ...actual,
     emitDiagnostic: (...args: Parameters<typeof actual.emitDiagnostic>) => {
+      if (args[0].phase === 'daemon_idle_reap') probe.idleReaps += 1;
       if (probe.diagnosticFailure) {
         if (args[0].phase === 'daemon_fatal') throw probe.diagnosticFailure;
         throw new Error('secondary diagnostic failure');
       }
       return actual.emitDiagnostic(...args);
+    },
+  };
+});
+
+vi.mock('./transport.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./transport.ts')>();
+  return {
+    ...actual,
+    createSocketServer: (handler: import('../../core/daemon-request.ts').DaemonInvokeFn) => {
+      probe.handleRequest = handler;
+      return actual.createSocketServer(handler);
     },
   };
 });
@@ -104,6 +118,9 @@ afterEach(() => {
   probe.store = undefined;
   probe.registry = undefined;
   probe.diagnosticFailure = undefined;
+  probe.handleRequest = undefined;
+  probe.idleReaps = 0;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -252,6 +269,83 @@ test('a daemon with a request in flight refuses to quiesce and keeps serving', a
     release();
     await running.catch(() => {});
     await daemon.runtime.close();
+  }
+});
+
+test('request completion after close never re-arms idle reap', async () => {
+  vi.useFakeTimers();
+  const daemon = await bootDaemon({ idleTimeoutMs: 80 });
+  let release: () => void = () => {};
+  const entered = new Promise<void>((resolve) => {
+    probe.entered = resolve;
+  });
+  probe.held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const running = daemon.runtime.run(() =>
+    probe.handleRequest!({
+      token: daemon.runtime.token,
+      session: 'default',
+      command: 'session_list',
+      positionals: [],
+    }),
+  );
+  await entered;
+
+  try {
+    const closing = daemon.runtime.close();
+    release();
+    expect((await running).ok).toBe(true);
+    await vi.runOnlyPendingTimersAsync();
+    expect((await closing).requests).toEqual({ drained: 1, abandoned: 0 });
+    await vi.advanceTimersByTimeAsync(81);
+    expect(probe.idleReaps).toBe(0);
+  } finally {
+    release();
+    await running;
+    await vi.runOnlyPendingTimersAsync();
+    await daemon.runtime.close();
+  }
+});
+
+test('quiesce during an external close reports draining while a request is still running', async () => {
+  const daemon = await bootDaemon();
+  let release: () => void = () => {};
+  const entered = new Promise<void>((resolve) => {
+    probe.entered = resolve;
+  });
+  probe.held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const running = daemon.runtime.run(() =>
+    probe.handleRequest!({
+      token: daemon.runtime.token,
+      session: 'default',
+      command: 'session_list',
+      positionals: [],
+    }),
+  );
+  await entered;
+  const closing = daemon.runtime.close();
+
+  try {
+    const response = await daemon.runtime.run(() =>
+      probe.handleRequest!(
+        buildDaemonLifecycleRequest({
+          token: daemon.runtime.token,
+          fence: {
+            pid: daemon.runtime.identity.pid,
+            processStartTime: daemon.runtime.identity.startTime,
+          },
+          requestId: 'quiesce-during-external-close',
+        }),
+      ),
+    );
+    expect(response).toEqual({ ok: true, data: { outcome: 'draining' } });
+  } finally {
+    release();
+    await running;
+    await closing;
   }
 });
 
