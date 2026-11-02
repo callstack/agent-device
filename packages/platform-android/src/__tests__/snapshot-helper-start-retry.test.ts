@@ -20,6 +20,10 @@ vi.mock('../adb.ts', async (importOriginal) => {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutorResult, AndroidAdbProvider } from '../adb-executor.ts';
+import {
+  isRefusedInstrumentationStart,
+  readInstrumentationExitResult,
+} from '../instrumentation-helper.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
@@ -138,9 +142,73 @@ async function snapshotRejection(provider: AndroidAdbProvider) {
   assert.fail('expected the snapshot to fail');
 }
 
-// Only a start the system refused, before any session was ready, gets a second start. Every other
-// row differs from that refusal in one respect and fails on its first run.
-const startFailures: {
+// One row per condition of a refused start: each row is the captured refusal with exactly that
+// condition broken, so dropping the condition from the predicate flips its rows and no others.
+const refusal = { exitCode: 1, stdout: REFUSED_STDOUT, stderr: REFUSED_STDERR };
+const refusalRows: {
+  breaks: string;
+  run: { exitCode: number | null; stdout: string; stderr: string; signal?: string };
+}[] = [
+  { breaks: 'nothing', run: refusal },
+  {
+    breaks: 'the INSTRUMENTATION_FAILED envelope',
+    run: { ...refusal, stderr: REFUSED_STDERR.split('\n').slice(1).join('\n') },
+  },
+  { breaks: 'an exit status', run: { ...refusal, exitCode: null } },
+  { breaks: 'a non-zero exit', run: { ...refusal, exitCode: 0 } },
+  { breaks: 'no signal', run: { ...refusal, signal: 'SIGKILL' } },
+  {
+    breaks: 'the system reporter',
+    run: { ...refusal, stdout: REFUSED_STDOUT.replace('id=ActivityManagerService', 'id=Other') },
+  },
+  {
+    breaks: 'the refusal status code',
+    run: {
+      ...refusal,
+      stdout: REFUSED_STDOUT.replace('STATUS_CODE: -1', 'STATUS_CODE: -2'),
+    },
+  },
+  ...[
+    [
+      'a trailing helper status',
+      'INSTRUMENTATION_STATUS: agentDeviceProtocol=1\nINSTRUMENTATION_STATUS: payloadBase64=PHg+\n',
+    ],
+    ['a malformed trailing result', 'INSTRUMENTATION_RESULT: invalid\n'],
+    ['a trailing result message', 'INSTRUMENTATION_RESULT: shortMsg=Process crashed.\n'],
+    ['a trailing abort', 'INSTRUMENTATION_ABORTED: System has crashed.\n'],
+    ['a trailing withheld abort', 'INSTRUMENTATION_ABORTED: <node text="private" />\n'],
+    ['a trailing plain line', 'plain output\n'],
+  ].map(([what, trailer]) => ({
+    breaks: `the refusal-only stdout (${what})`,
+    run: { ...refusal, stdout: `${REFUSED_STDOUT}${trailer}` },
+  })),
+  {
+    breaks: 'the refusal-only stdout (an earlier helper status)',
+    run: {
+      ...refusal,
+      stdout: `INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n${REFUSED_STDOUT}`,
+    },
+  },
+  {
+    breaks: 'the refusal-only stdout (no Error record)',
+    run: { ...refusal, stdout: REFUSED_STDOUT.split('\n').slice(1).join('\n') },
+  },
+];
+
+test('a refused start is told apart from every run that breaks one of its conditions', () => {
+  const misclassified = refusalRows
+    .filter(
+      (row) =>
+        isRefusedInstrumentationStart(readInstrumentationExitResult(row.run)) !==
+        (row.breaks === 'nothing'),
+    )
+    .map((row) => row.breaks);
+  assert.deepEqual(misclassified, []);
+});
+
+// The two conditions that live outside the run's parsed result: the run came back from adb on its
+// own, and no session was ready for the capture.
+const captureRows: {
   name: string;
   run: OneShotRun;
   session?: 'ready-then-fails';
@@ -154,16 +222,6 @@ const startFailures: {
     retried: false,
   },
   {
-    name: 'a run that exited 0',
-    run: { ...INSTRUMENTATION_FAILED_RUN, exitCode: 0 },
-    retried: false,
-  },
-  {
-    name: 'a run a signal ended',
-    run: { ...INSTRUMENTATION_FAILED_RUN, signal: 'SIGKILL' },
-    retried: false,
-  },
-  {
     name: 'a run the command budget ended',
     run: new AppError('COMMAND_FAILED', 'adb command timed out', {
       timeoutMs: 30_000,
@@ -173,63 +231,9 @@ const startFailures: {
     }),
     retried: false,
   },
-  {
-    name: 'a run that aborted',
-    run: {
-      ...INSTRUMENTATION_FAILED_RUN,
-      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_ABORTED: System has crashed.\n`,
-    },
-    retried: false,
-  },
-  {
-    name: 'a run whose abort message was withheld',
-    run: {
-      ...INSTRUMENTATION_FAILED_RUN,
-      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_ABORTED: <node text="private" />\n`,
-    },
-    retried: false,
-  },
-  {
-    name: 'a run that started and printed',
-    run: {
-      ...INSTRUMENTATION_FAILED_RUN,
-      stdout: 'INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n',
-    },
-    retried: false,
-  },
-  {
-    name: 'a run with a result message',
-    run: {
-      ...INSTRUMENTATION_FAILED_RUN,
-      stdout: `${REFUSED_STDOUT}INSTRUMENTATION_RESULT: shortMsg=Process crashed.\n`,
-    },
-    retried: false,
-  },
-  {
-    name: 'a failed start without the system refusal record',
-    run: { ...INSTRUMENTATION_FAILED_RUN, stdout: 'INSTRUMENTATION_STATUS_CODE: -1\n' },
-    retried: false,
-  },
-  {
-    name: 'a refusal record after another status report',
-    run: {
-      ...INSTRUMENTATION_FAILED_RUN,
-      stdout: `INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n${REFUSED_STDOUT}`,
-    },
-    retried: false,
-  },
-  {
-    name: 'the refusal words outside the startup-failure envelope',
-    run: {
-      exitCode: 1,
-      stdout: `INSTRUMENTATION_RESULT: shortMsg=INSTRUMENTATION_FAILED: ${HELPER_RUNNER}\n`,
-      stderr: '',
-    },
-    retried: false,
-  },
 ];
 
-for (const row of startFailures) {
+for (const row of captureRows) {
   test(`${row.name} ${row.retried ? 'gets one more start after a runtime reset' : 'is not started again'}`, async () => {
     const { provider, calls } = freshlyBootedHelper([row.run], row.session);
 
