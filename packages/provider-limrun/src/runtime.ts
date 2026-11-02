@@ -573,6 +573,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         // Whatever the create made is now ended, or was never made, so this owner holds nothing and the
         // lease is free again. An unconfirmed delete keeps the owner so its outcome can be retried.
         if (outcome.cleanup !== 'uncertain') this.closeOwner(owner);
+        else if (outcome.creationPending) {
+          void owner.creation.then(() => this.take(owner, by)).catch(() => undefined);
+        }
       }
       reportDisposal(outcome);
     };
@@ -604,11 +607,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     deleteInstance: async (platform, instanceId) =>
       await this.deleteCreatedInstance(platform, instanceId),
     endCapture: async (owner) => await this.capturesInstance?.end(owner),
-    // The one route that may free a lease without a take is the disposal that had already refused its
-    // caller: what it ends leaves nothing for a later allocation of that lease to be owed.
-    ownerHoldsNothing: (owner) => {
-      this.closeOwner(owner);
-    },
   };
 
   /** One instance delete. `undefined` is Limrun's confirmation that the instance is gone. */

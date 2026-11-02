@@ -186,13 +186,15 @@ function defaultPort(url: URL | null): number | undefined {
 }
 
 /** What one lease's capture came to once it was written or refused. */
-export type SettledNetworkCapture =
+export type SettledNetworkCapture = (
   | Readonly<{ phase: 'written'; harPath: string; failures: LimrunNetworkFailures }>
   | Readonly<{
       phase: 'unavailable';
       reason: 'capture-dir-unset' | 'tunnel-in-use' | 'tunnel-start-failed' | 'har-write-failed';
       message?: string;
-    }>;
+    }>
+) &
+  Readonly<{ closeFailure?: string }>;
 
 /** What one lease has in capture terms: what it is capturing now, or what its capture came to. */
 export type NetworkCapture =
@@ -228,6 +230,17 @@ const NETWORK_ARTIFACT_NAME = 'Network traffic (HAR on the daemon host)';
 
 /** What `artifacts` answers for one lease's capture record. */
 export function networkArtifacts(capture: SettledNetworkCapture): CloudArtifactsResult {
+  const artifacts = captureRecordArtifacts(capture);
+  if (capture.closeFailure === undefined) return artifacts;
+  return {
+    ...artifacts,
+    message: [artifacts.message, `Capture close failed: ${capture.closeFailure}`]
+      .filter((message) => message !== undefined)
+      .join('; '),
+  };
+}
+
+function captureRecordArtifacts(capture: SettledNetworkCapture): CloudArtifactsResult {
   if (capture.phase === 'unavailable') {
     return {
       provider: LIMRUN_PROVIDER,

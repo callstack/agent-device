@@ -203,11 +203,20 @@ async function endCapture(
   record: (leaseId: string, capture: SettledNetworkCapture) => SettledNetworkCapture,
 ): Promise<SettledNetworkCapture> {
   const { writeCaptureRecord } = await import('./network-har.ts');
+  let settled: SettledNetworkCapture;
+  let closeFailure: string | undefined;
   try {
-    return record(leaseId, await writeCaptureRecord(capture));
+    settled = await writeCaptureRecord(capture);
   } finally {
-    if (capture.phase === 'capturing') capture.capture.close();
+    if (capture.phase === 'capturing') {
+      try {
+        capture.capture.close();
+      } catch (error) {
+        closeFailure = errorMessage(error);
+      }
+    }
   }
+  return record(leaseId, closeFailure === undefined ? settled : { ...settled, closeFailure });
 }
 
 function hostsToCapture(hostList: unknown): string[] {

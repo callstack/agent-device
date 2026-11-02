@@ -1,4 +1,5 @@
 import { test, vi, expect } from 'vitest';
+import fs from 'node:fs';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createLimrunRuntime } from './runtime.ts';
 import { stubLimrunRuntimeDependencies } from './runtime-dependencies.fixtures.ts';
@@ -16,6 +17,9 @@ import { watchUnhandledRejections } from './lifecycle.fixtures.ts';
 const state = vi.hoisted(() => ({
   /** Instance deletes this runtime asked Limrun for; each waits for its case to answer it. */
   deletes: [] as Array<{ instanceId: string; report: () => void }>,
+  creates: 0,
+  createGate: undefined as Promise<void> | undefined,
+  autoDelete: false,
   disconnects: 0,
   /** Made to throw by the case whose session disconnect refuses while its delete is still owed. */
   disconnectThrows: false,
@@ -28,18 +32,23 @@ vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly iosInstances = { create: vi.fn(), list: vi.fn(), delete: vi.fn() };
     readonly androidInstances = {
-      create: async () => ({
-        metadata: { id: 'android-instance-1' },
-        status: {
-          token: 'instance-token',
-          apiUrl: 'https://android.example',
-          adbWebSocketUrl: 'wss://adb.example',
-        },
-      }),
+      create: async () => {
+        state.creates += 1;
+        await state.createGate;
+        return {
+          metadata: { id: 'android-instance-1' },
+          status: {
+            token: 'instance-token',
+            apiUrl: 'https://android.example',
+            adbWebSocketUrl: 'wss://adb.example',
+          },
+        };
+      },
       list: vi.fn(async () => ({ getPaginatedItems: () => [] })),
       // Every delete waits for its case to answer it, so a release can be held at its delete while the
       // local teardown it started beside has long since refused.
       delete: vi.fn(async (instanceId: string) => {
+        if (state.autoDelete) return;
         let report!: () => void;
         const answered = new Promise<void>((answeredNow) => {
           report = answeredNow;
@@ -103,7 +112,9 @@ test('a local teardown that refuses beside a pending delete is reported, not loo
     expect(record.limrunInstanceId).toBe('android-instance-1');
     const warnings = warningsOf(record);
     expect(warnings.map((warning) => warning.code)).toEqual(['LIMRUN_TEARDOWN_INCOMPLETE']);
-    expect(String(warnings[0]?.message)).toContain('Local teardown refused to finish');
+    expect(String(warnings[0]?.message)).toBe(
+      'Local teardown refused to finish: instance client refused to disconnect',
+    );
     await rejections.assertIsSilent();
   } finally {
     rejections.stop();
@@ -181,8 +192,18 @@ test('a capture close that refuses still leaves the delete it ran beside answere
       expect(record.limrunInstanceId).toBe('android-instance-1');
       expect(state.captureCloses - captureClosesBefore).toBe(1);
       expect(warningsOf(record).map((warning) => warning.message)).toEqual([
-        'Capture record refused to be written',
+        'Capture close failed: capture tunnel refused to close',
       ]);
+      const harPath = `${harDir}/${lease.leaseId}.har`;
+      expect(record).toMatchObject({
+        cloudArtifacts: { status: 'ready', cloudArtifacts: [{ url: harPath }] },
+      });
+      expect(fs.existsSync(harPath)).toBe(true);
+      const listed = await runtime.cloudArtifacts?.listCloudArtifacts?.({ leaseId: lease.leaseId });
+      expect(listed).toMatchObject({
+        status: 'ready',
+        message: expect.stringContaining('capture tunnel refused to close'),
+      });
       await rejections.assertIsSilent();
     } finally {
       reportDelete?.();
@@ -193,6 +214,77 @@ test('a capture close that refuses still leaves the delete it ran beside answere
     state.deletes.length = 0;
     state.captureCloseThrows = false;
     await runtime.shutdown();
+  }
+});
+
+test('a late create with failed local cleanup is freed by the normal take with confirmed deletion', async () => {
+  await import('./lease-release.ts');
+  const createsBefore = state.creates;
+  state.deletes.length = 0;
+  state.disconnectThrows = true;
+  let reportCreate!: () => void;
+  state.createGate = new Promise<void>((resolve) => {
+    reportCreate = resolve;
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-late-failed-local');
+  const allocating = Promise.resolve(runtime.leaseLifecycle.allocate?.(lease)).catch(
+    (error: unknown) => error,
+  );
+  try {
+    await vi.waitFor(() => expect(state.creates - createsBefore).toBe(1));
+    const expired = Promise.resolve(runtime.leaseLifecycle.release?.(lease)).catch(
+      (error: unknown) => error,
+    );
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(130_000);
+    expect(await expired).toMatchObject({
+      details: { reason: 'limrun_instance_delete_unconfirmed' },
+    });
+    reportCreate();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.deletes).toHaveLength(1);
+    let answered = false;
+    const joining = Promise.resolve(runtime.leaseLifecycle.allocate?.(lease))
+      .catch((error: unknown) => error)
+      .then((answer) => {
+        answered = true;
+        return answer;
+      });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answered).toBe(false);
+    const release = runtime.leaseLifecycle.release?.(lease);
+    state.deletes[0]?.report();
+    await vi.advanceTimersByTimeAsync(0);
+    const record = (await release) as Record<string, unknown>;
+    expect(record.limrunInstanceId).toBe('android-instance-1');
+    expect(warningsOf(record)).toMatchObject([
+      {
+        code: 'LIMRUN_TEARDOWN_INCOMPLETE',
+        message: 'Local teardown refused to finish: instance client refused to disconnect',
+      },
+    ]);
+    expect(await joining).toMatchObject({
+      details: {
+        reason: 'limrun_lease_released_mid_allocation',
+        hint: expect.stringContaining('was ended by the release'),
+      },
+    });
+    await allocating;
+    state.disconnectThrows = false;
+    state.createGate = undefined;
+    await runtime.leaseLifecycle.allocate?.(lease);
+    expect(state.creates - createsBefore).toBe(2);
+  } finally {
+    reportCreate();
+    state.createGate = undefined;
+    state.disconnectThrows = false;
+    state.autoDelete = true;
+    state.deletes.forEach(({ report }) => report());
+    vi.useRealTimers();
+    await runtime.shutdown();
+    state.autoDelete = false;
+    state.deletes.length = 0;
   }
 });
 

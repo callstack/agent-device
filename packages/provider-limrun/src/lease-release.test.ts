@@ -37,11 +37,9 @@ test('a create that answers late joins the delete its disposal already started',
     });
     return { failure: undefined, cause: undefined };
   });
-  const freed: string[] = [];
   const host: LimrunDisposalHost = {
     deleteInstance: deleteHost,
     endCapture: async () => undefined,
-    ownerHoldsNothing: (owner) => freed.push(owner.lease.leaseId),
   };
   let reportCreate!: () => void;
   const creation = new Promise<LimrunCreateOutcome>((resolve) => {
@@ -63,19 +61,18 @@ test('a create that answers late joins the delete its disposal already started',
     // The create answers now. The end it owes is this disposal's, and it joins the request Limrun already
     // has for this instance rather than sending a second one.
     reportCreate();
+    const retaken = disposeLimrunLeaseOwner(host, owner);
     await vi.advanceTimersByTimeAsync(0);
     expect(deleteHost).toHaveBeenCalledOnce();
 
     // The one request confirming is enough: the joined end records the instance as deleted.
     reportDelete();
     await vi.advanceTimersByTimeAsync(DISPOSAL_SETTLE_WAIT_MS);
+    await expect(retaken).resolves.toMatchObject({ cleanup: 'confirmed' });
   } finally {
     vi.useRealTimers();
   }
   expect(owner.deletedInstanceId).toBe('android-instance-1');
-  // The instance is gone and the host resources are down, so this owner's lease is given back: the route
-  // that ends this instance had already refused its caller, and that caller is not coming back to be told.
-  expect(freed).toEqual(['lease-release-join']);
 });
 
 /**
@@ -91,7 +88,6 @@ test("a refused delete reports its own error as the refusal's cause", async () =
       cause: refusal,
     }),
     endCapture: async () => undefined,
-    ownerHoldsNothing: () => {},
   };
   const owner = ownerWithRentedInstance(
     Promise.resolve<LimrunCreateOutcome>({ status: 'failed', error: new Error('boot failed') }),
@@ -263,24 +259,17 @@ test('a take-refusal for an unconfirmed delete does not call the instance ended'
 });
 
 /**
- * The disposal's join for a capture record contains the destination tunnel's own open budget: a capture end
- * that spends almost all of that handshake and still comes to in time is answered for without a warning,
- * because the join is longer than the work inside it.
- */
-/**
  * A late route that could not give the instance back must keep the lease held: the next release, recovery or
  * shutdown is the route that retries the delete, and only it can tell its caller the instance is gone.
  */
-test('a late end that Limrun refused does not give the lease back', async () => {
+test('a late create whose delete Limrun refused keeps disposal uncertain', async () => {
   await import('./lifecycle-budget.ts');
-  const freed: string[] = [];
   const host: LimrunDisposalHost = {
     deleteInstance: async () => ({
       failure: 'Limrun refused to delete the instance',
       cause: undefined,
     }),
     endCapture: async () => undefined,
-    ownerHoldsNothing: (owner) => freed.push(owner.lease.leaseId),
   };
   let reportCreate!: () => void;
   const creation = new Promise<LimrunCreateOutcome>((resolve) => {
@@ -294,14 +283,23 @@ test('a late end that Limrun refused does not give the lease back', async () => 
     await expect(disposal).resolves.toMatchObject({ cleanup: 'uncertain' });
     // The create answers after that, and the end it owes is refused by Limrun as well: the lease stays held.
     reportCreate();
+    const retaken = disposeLimrunLeaseOwner(host, owner);
     await vi.advanceTimersByTimeAsync(DISPOSAL_SETTLE_WAIT_MS);
+    await expect(retaken).resolves.toMatchObject({
+      cleanup: 'uncertain',
+      failure: 'Limrun refused to delete the instance',
+    });
   } finally {
     vi.useRealTimers();
   }
   expect(owner.deletedInstanceId).toBeUndefined();
-  expect(freed).toEqual([]);
 });
 
+/**
+ * The disposal's join for a capture record contains the destination tunnel's own open budget: a capture end
+ * that spends almost all of that handshake and still comes to in time is answered for without a warning,
+ * because the join is longer than the work inside it.
+ */
 test('a capture end that spends its tunnel budget is still joined in time', async () => {
   await import('./lifecycle-budget.ts');
   const host: LimrunDisposalHost = {
@@ -313,7 +311,6 @@ test('a capture end that spends its tunnel budget is still joined in time', asyn
       });
       return { phase: 'written', harPath: '/tmp/late.har', failures: { count: 0, truncated: 0 } };
     },
-    ownerHoldsNothing: () => {},
   };
   const owner = ownerWithRentedInstance(
     // A create that failed but named the instance (rentedInstanceId is set by the fixture): the disposal
@@ -336,6 +333,48 @@ test('a capture end that spends its tunnel budget is still joined in time', asyn
   }
   expect(settled?.cleanup).toBe('confirmed');
   expect(settled?.failure).toBeUndefined();
+});
+
+test('a rejected capture report preserves its error without changing confirmed deletion', async () => {
+  const refusal = new Error('HAR inspection refused');
+  const owner = ownerWithRentedInstance(
+    Promise.resolve({ status: 'failed', error: new Error('boot failed') }),
+  );
+  const host: LimrunDisposalHost = {
+    deleteInstance: async () => ({ failure: undefined, cause: undefined }),
+    endCapture: async () => {
+      throw refusal;
+    },
+  };
+  const outcome = await disposeLimrunLeaseOwner(host, owner);
+  expect(outcome.cleanup).toBe('confirmed');
+  expect(outcome.failure).toBe('Capture record refused to be written: HAR inspection refused');
+});
+
+test('an unanswered create does not make a confirmed instance delete uncertain', async () => {
+  await import('./lifecycle-budget.ts');
+  let reportCreate!: () => void;
+  const creation = new Promise<LimrunCreateOutcome>((resolve) => {
+    reportCreate = () => resolve({ status: 'failed', error: new Error('boot failed') });
+  });
+  const owner = ownerWithRentedInstance(creation);
+  const host: LimrunDisposalHost = {
+    deleteInstance: async () => ({ failure: undefined, cause: undefined }),
+    endCapture: async () => undefined,
+  };
+  vi.useFakeTimers();
+  try {
+    const disposal = disposeLimrunLeaseOwner(host, owner);
+    await vi.advanceTimersByTimeAsync(CREATE_ANSWER_WAIT_MS + DISPOSAL_SETTLE_WAIT_MS);
+    await expect(disposal).resolves.toMatchObject({
+      cleanup: 'confirmed',
+      instanceId: 'android-instance-1',
+    });
+  } finally {
+    reportCreate();
+    await vi.advanceTimersByTimeAsync(0);
+    vi.useRealTimers();
+  }
 });
 
 function captureReject(raise: () => Promise<unknown>): Promise<AppError> {

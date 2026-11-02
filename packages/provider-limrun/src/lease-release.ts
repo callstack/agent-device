@@ -63,13 +63,6 @@ export type LimrunDisposalHost = Readonly<{
   deleteInstance(platform: LimrunPlatform, instanceId: string): Promise<LimrunDeleteResult>;
   /** Ends one lease's capture and answers with its record, for a runtime that has captured something. */
   endCapture(owner: LimrunLeaseOwner): Promise<SettledNetworkCapture | undefined>;
-  /**
-   * Tells the runtime this owner stands for nothing any more, so its lease may be allocated again. Only a
-   * route that finished ending the instance and put down the host resources may say this, and only the
-   * runtime's own take answers for a lease that is over; this is for the route whose disposal had already
-   * refused its caller, and whose caller will never come back to be told the instance is gone.
-   */
-  ownerHoldsNothing(owner: LimrunLeaseOwner): void;
 }>;
 
 /**
@@ -130,16 +123,20 @@ function captureRecordOutcome(
   joined: LimrunBudgetOutcome<SettledNetworkCapture | undefined>,
   outstanding: (work: string, budgetMs: number) => string,
 ): string | undefined {
-  if (joined.ok) return undefined;
+  if (joined.ok) {
+    return joined.value?.closeFailure === undefined
+      ? undefined
+      : `Capture close failed: ${joined.value.closeFailure}`;
+  }
   return 'rejected' in joined
-    ? 'Capture record refused to be written'
+    ? `Capture record refused to be written: ${errorMessage(joined.error)}`
     : outstanding('Capture record', CAPTURE_RECORD_BUDGET_MS);
 }
 
 /**
- * Ends what a disposal holds when the create it waited for never answered. Nothing is known to be running, so
- * the lease is kept held and refused rather than given back — and the create is watched, because whatever it
- * eventually names belongs to this disposal and to no other route: a daemon close promises no next pass.
+ * Ends what a disposal can name after creation outlives its wait. The lease stays held until the runtime
+ * re-takes it after creation settles. A known instance is deleted now; the re-take joins that delete and the
+ * memoized local teardown before the runtime decides whether the lease is free.
  */
 async function disposeUnansweredCreate(
   host: LimrunDisposalHost,
@@ -154,18 +151,11 @@ async function disposeUnansweredCreate(
     `Instance create for lease '${owner.lease.leaseId}'`,
     CREATE_ANSWER_BUDGET_MS,
   );
-  // Observed on both branches: this continuation outlives every budget, so a failure of it must not reach
-  // the process as an unhandled rejection.
-  owner.creation.then(
-    () => {
-      void endWhatTheCreateNamed(host, owner).catch(() => undefined);
-    },
-    () => undefined,
-  );
   const instanceId = owner.rentedInstanceId;
   if (instanceId === undefined) {
     return {
       cleanup: 'uncertain',
+      creationPending: true,
       instanceId: undefined,
       failure: outstanding,
       cause: undefined,
@@ -180,35 +170,12 @@ async function disposeUnansweredCreate(
   const stuck = await awaitLocalTeardown(releaseOwnerResources(owner));
   return {
     cleanup: instance.cleanup,
+    creationPending: true,
     instanceId,
     failure: joinOutcomeFailures(instance.failure, stuck ?? outstanding),
     cause: instance.cause,
     capture: await capture,
   };
-}
-
-/**
- * Ends what a create answered for after its disposal had refused its caller: the instance it rented, if that is
- * still owed, and every host resource the session it built holds. Nothing else is left to do this — the lease
- * was refused to its caller, and no later route is promised.
- */
-async function endWhatTheCreateNamed(
-  host: LimrunDisposalHost,
-  owner: LimrunLeaseOwner,
-): Promise<void> {
-  const instanceId = owner.rentedInstanceId;
-  let owed = false;
-  if (instanceId !== undefined && owner.deletedInstanceId !== instanceId) {
-    const ended = await endInstance(host, owner, instanceId);
-    // Limrun has not given this instance back: the lease stays held for the next route, which is the one
-    // that will retry the delete and tell its caller what came of it.
-    owed = ended.cleanup === 'uncertain';
-  }
-  const stuck = await awaitLocalTeardown(releaseOwnerResources(owner));
-  // The instance is gone, or was never this runtime's to delete, and nothing local refuses: this owner
-  // stands for nothing, so the lease may be allocated again. No take will give it back the usual way — the
-  // disposal that took it had already refused its caller, and that caller is not coming back.
-  if (!owed && stuck === undefined) host.ownerHoldsNothing(owner);
 }
 
 /**
@@ -369,7 +336,7 @@ async function awaitLocalTeardown(local: Promise<void>): Promise<string | undefi
   const ended = await awaitLimrunWithinBudget(local, LOCAL_TEARDOWN_BUDGET_MS);
   if (ended.ok) return undefined;
   return 'rejected' in ended
-    ? 'Local teardown refused to finish'
+    ? `Local teardown refused to finish: ${errorMessage(ended.error)}`
     : workOutstandingFailure('Local teardown', LOCAL_TEARDOWN_BUDGET_MS);
 }
 

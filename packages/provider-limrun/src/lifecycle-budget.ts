@@ -17,7 +17,7 @@
 export type LimrunBudgetOutcome<T> =
   | Readonly<{ ok: true; value: T }>
   | Readonly<{ ok: false; expired: true }>
-  | Readonly<{ ok: false; rejected: true }>;
+  | Readonly<{ ok: false; rejected: true; error: unknown }>;
 
 /**
  * Waits for `work` within `budgetMs`, unref'd so a daemon close is never held open by the timer alone.
@@ -30,7 +30,7 @@ export async function awaitLimrunWithinBudget<T>(
 ): Promise<LimrunBudgetOutcome<T>> {
   const settled = Promise.resolve(work).then(
     (value): LimrunBudgetOutcome<T> => ({ ok: true, value }),
-    (): LimrunBudgetOutcome<T> => ({ ok: false, rejected: true }),
+    (error: unknown): LimrunBudgetOutcome<T> => ({ ok: false, rejected: true, error }),
   );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
