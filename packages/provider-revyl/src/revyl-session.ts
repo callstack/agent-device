@@ -18,11 +18,13 @@ import type {
 /** How long Revyl may take to assign a worker and connect the device before the start is given up on. */
 const READY_TIMEOUT_MS = 240_000;
 /**
- * The longest one allocation may take: `start_device`'s own answer budget, then readiness measured
- * from that answer, and a margin so the lease table's cap never cuts readiness Revyl still allows.
+ * Covers the time between `start_device` answering and readiness starting its own clock, and the last
+ * readiness poll's interval, so the lease table's cap never cuts readiness that Revyl still allows.
  */
+const READY_ANSWER_MARGIN_MS = 10_000;
+/** The longest one allocation may take: `start_device`'s own answer budget, then readiness. */
 export const REVYL_ALLOCATION_TIMEOUT_MS =
-  REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS + 10_000;
+  REVYL_START_DEVICE_TIMEOUT_MS + READY_TIMEOUT_MS + READY_ANSWER_MARGIN_MS;
 /** Revyl's worker answers `health` with 503 until the device is attached; the CLI polls on that beat. */
 const READY_POLL_INTERVAL_MS = 2_000;
 /** Revyl releases an idle session on its own; this is the lease the runtime asks for. */

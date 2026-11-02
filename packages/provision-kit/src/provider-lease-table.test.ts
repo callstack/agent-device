@@ -518,7 +518,7 @@ test('a rental named while an earlier stop is still in flight waits for that sto
   // The start then answers with another rental. Its stop waits for A's, so B can never be the stop that
   // lets the lease go while A is still unconfirmed.
   provider.answerStart(0, ready('B'));
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await settle();
   assert.deepEqual(provider.stopped, ['A']);
 
   // A's stop fails: A is still owed, and the drain names it instead of reporting a clean shutdown.

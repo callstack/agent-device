@@ -102,7 +102,7 @@ export type ProviderRuntimePrincipalField = readonly [name: string, value: strin
  * result. `provider` is normalized as `providerRuntimeOwner` normalizes it, and the salt derives from
  * it, so one set of credentials is a different instance under another provider.
  *
- * The digest is a synchronous, memory-hard scrypt (about 64 MB, tens of milliseconds): derive it once
+ * The digest is a synchronous, memory-hard scrypt (about 16 MiB, tens of milliseconds): derive it once
  * when a runtime is built, never on a request path.
  */
 export function providerRuntimeInstance(
