@@ -251,6 +251,23 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
   return cached;
 }
 
+CGSize RunnerSystemApplicationScreenSize(void) {
+  Class<AgentDeviceForegroundElement> element = RunnerForegroundElementClass();
+  if (element == Nil || ![element respondsToSelector:@selector(systemApplication)]) {
+    return CGSizeZero;
+  }
+  __block CGRect screen = CGRectNull;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    id<AgentDeviceForegroundElement> systemApp = [element systemApplication];
+    if (systemApp == nil || ![systemApp respondsToSelector:@selector(frame)]) return;
+    screen = [systemApp frame];
+  }];
+  if (exception != nil || !AgentDeviceForegroundFrameIsMeasurable(screen)) {
+    return CGSizeZero;
+  }
+  return screen.size;
+}
+
 // One contained probe: it checks each selector before sending it and reads the target pid and both
 // frames inside one exception scope, so any failed read answers Unknown. The target pid comes from
 // the existing runner owner for that read (RunnerAXSnapshotBridge).

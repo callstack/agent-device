@@ -71,6 +71,14 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
   NSUInteger *displayID
 );
 
+// The device screen's size in points, read off the AXRuntime system application, which always
+// fills the screen. It does not depend on the runner process's own `UIScreen`, which the generated
+// runner app, having no launch screen, can read in compatibility mode (768x1024 on an iPad). Any
+// failed read answers `CGSizeZero`.
+#if TARGET_OS_IOS
+FOUNDATION_EXPORT CGSize RunnerSystemApplicationScreenSize(void);
+#endif
+
 // What the full-screen proof concluded. The decision is a function of these values, so a test
 // supplies them directly instead of restating the device rule.
 typedef NS_ENUM(NSUInteger, RunnerFullScreenEvidence) {

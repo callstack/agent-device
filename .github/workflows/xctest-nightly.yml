@@ -150,8 +150,9 @@ jobs:
           '
 
       # The iPad leg runs a named selection: the smallest set that can execute the off-phone half of
-      # the sole-screen rule — the admission boundary itself, one hostile-tree command that must
-      # reach synthesis, and `back`'s route witness.
+      # the sole-screen rule — the admission boundary itself, the display box a synthesized turn
+      # swaps (#4091 reported it off on iPads), one hostile-tree command that must reach synthesis,
+      # and `back`'s route witness.
       # Geometry and error cases live in the host-runnable evidence matrix instead. `xcodebuild`
       # exits 0 when a selection matches nothing, so the reporter below asserts the executed count
       # against this lane's reach (`XCTEST_LANE=nightly-ipad`, derived by check:xctest-selection).
@@ -169,6 +170,7 @@ jobs:
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=$UDID" \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSoleScreenDisplayIDIsNamedOnlyForAnAppThatFillsItsScreen \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testLongPressOnAnUnserializableTreeIsSynthesizedOnTheSoleScreen \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryTapsThroughTheRouteThatOpens \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testInAppBackAfterARejectedQueryWithUnprovableForegroundTapsThroughTheWindow \

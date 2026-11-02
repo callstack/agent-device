@@ -510,13 +510,12 @@ extension RunnerTests {
 
   private func soleDisplayFrame(interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return nil }
-    let screen = UIScreen.main
-    let scale = screen.nativeScale
-    guard scale > 0 else { return nil }
+    // Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091).
+    let screen = RunnerSystemApplicationScreenSize()
     return Self.soleScreenReferenceFrame(
       nativePortraitSize: CGSize(
-        width: screen.nativeBounds.width / scale,
-        height: screen.nativeBounds.height / scale
+        width: min(screen.width, screen.height),
+        height: max(screen.width, screen.height)
       ),
       interfaceOrientation: interfaceOrientation
     )

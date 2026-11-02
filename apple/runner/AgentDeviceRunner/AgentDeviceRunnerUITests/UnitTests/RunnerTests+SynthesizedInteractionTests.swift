@@ -26,7 +26,32 @@ private final class RunnerCoordinatePressCounter: NSObject {
   }
 }
 
+/// Answers like the runner process's `UIScreen` in iPad compatibility mode, which the generated runner
+/// app (no launch screen) can run in: 768x1024 whatever the device (#4091).
+private final class RunnerCompatibilityModeScreenStub: NSObject {
+  @objc var bounds: CGRect { CGRect(x: 0, y: 0, width: 768, height: 1024) }
+  @objc var nativeBounds: CGRect { CGRect(x: 0, y: 0, width: 1536, height: 2048) }
+  @objc var nativeScale: CGFloat { 2 }
+}
+
 extension RunnerTests {
+  /// Installs `RunnerCompatibilityModeScreenStub` until the returned closure restores UIKit.
+  private func simulateCompatibilityModeScreen() throws -> () -> Void {
+    let getters = [
+      #selector(getter: UIScreen.bounds),
+      #selector(getter: UIScreen.nativeBounds),
+      #selector(getter: UIScreen.nativeScale),
+    ]
+    let originals = try getters.map { getter in
+      let target = try XCTUnwrap(class_getInstanceMethod(UIScreen.self, getter))
+      let stub = try XCTUnwrap(class_getInstanceMethod(RunnerCompatibilityModeScreenStub.self, getter))
+      return (target, method_setImplementation(target, method_getImplementation(stub)))
+    }
+    return {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+    }
+  }
+
   /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
   private func simulateUnserializableAppTree() throws -> () -> Void {
     let swaps: [(Method?, Method?)] = [
@@ -181,10 +206,24 @@ extension RunnerTests {
   }
 
   /// #3899: a synthesized turn swaps the display's side lengths, never a placed window's smaller box.
+  /// #4091: the display is the one the launched host app fills, not the runner process's own
+  /// `UIScreen`, which the generated runner app (no launch screen) reads in compatibility mode.
+  @MainActor
   func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    app.launch()
+    let appFrame = app.frame
+    let restoreUIKit = try simulateCompatibilityModeScreen()
+    defer {
+      restoreUIKit()
+      app.terminate()
+    }
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let screen = UIScreen.main.fixedCoordinateSpace.bounds.size
+    let screen = CGSize(
+      width: min(appFrame.width, appFrame.height),
+      height: max(appFrame.width, appFrame.height)
+    )
+    XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
     XCTAssertEqual(
       synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       CGRect(origin: .zero, size: screen)
