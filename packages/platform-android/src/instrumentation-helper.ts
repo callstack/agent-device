@@ -270,39 +270,53 @@ function createInstrumentationOutput() {
       fields[open] = appendLine(fields[open], checked(open, line, cut));
     }
   };
+  const readCodeRecord = (kind: string, value: number) => {
+    if (kind === 'CODE') {
+      resultRecords = true;
+      fields.resultCode ??= value;
+      return;
+    }
+    readStatusEnd(value);
+    fields.statusCode = value;
+  };
+  const readAbortedRecord = (message: string, cut: boolean) => {
+    if (fields.aborted !== undefined) return;
+    // The abort message is one line; whatever follows it is not part of it.
+    fields.aborted = checked('aborted', message, cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+  };
+  /** Notes which report a value record belongs to, for `systemRefusal`. */
+  const noteValueRecord = (line: string, key: string, value: string) => {
+    if (!line.startsWith('INSTRUMENTATION_STATUS:')) {
+      resultRecords = true;
+      return;
+    }
+    statusKeys.add(key);
+    if (key === 'id') reportedBySystem = value === SYSTEM_REFUSAL_REPORTER;
+  };
+  /** Answers the message field a value record opens, if any. */
+  const readMessageRecord = (key: string, value: string, cut: boolean) => {
+    const field = messageFieldOf(key);
+    if (!field || fields[field] !== undefined) return undefined;
+    fields[field] = checked(field, value, cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+    return field;
+  };
   /** Reads one protocol record; answers the message field whose value it opens, if any. */
   const readProtocolRecord = (line: string, cut: boolean): MessageField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
-      if (!Number.isSafeInteger(value)) return undefined;
-      if (code[1] === 'CODE') {
-        resultRecords = true;
-        fields.resultCode ??= value;
-      } else {
-        readStatusEnd(value);
-        fields.statusCode = value;
-      }
+      if (Number.isSafeInteger(value)) readCodeRecord(code[1]!, value);
       return undefined;
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
-      if (fields.aborted !== undefined) return undefined;
-      // The abort message is one line; whatever follows it is not part of it.
-      fields.aborted = checked('aborted', aborted[1] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+      readAbortedRecord(aborted[1] ?? '', cut);
       return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
-    if (record && line.startsWith('INSTRUMENTATION_STATUS:')) {
-      statusKeys.add(record[1]!);
-      if (record[1] === 'id') reportedBySystem = record[2] === SYSTEM_REFUSAL_REPORTER;
-    } else if (record) {
-      resultRecords = true;
-    }
-    const field = record ? messageFieldOf(record[1]!) : undefined;
-    if (!field || fields[field] !== undefined) return undefined;
-    fields[field] = checked(field, record![2] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
-    return field;
+    if (!record) return undefined;
+    noteValueRecord(line, record[1]!, record[2] ?? '');
+    return readMessageRecord(record[1]!, record[2] ?? '', cut);
   };
   const stdout = createLineAssembler(readStdoutLine);
   const stderr = createLineAssembler(readFailed);
