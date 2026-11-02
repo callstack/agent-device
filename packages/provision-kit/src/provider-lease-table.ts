@@ -538,7 +538,18 @@ class LeaseTable<Session, Handle, Request> {
       tried.set(rental, { handle: rental.handle, cause: failure.cause });
       if (rental.stopping !== undefined) break;
     }
-    return [...tried.entries()].filter(([rental]) => !rental.stopped).map(([, owed]) => owed);
+    // Every rental still rented is reported, including one that waits behind a stop still in flight.
+    return [...entry.rentals.values()]
+      .filter((rental) => !rental.stopped)
+      .map(
+        (rental) =>
+          tried.get(rental) ?? {
+            handle: rental.handle,
+            cause: new Error(
+              'The stop waits for an earlier stop of this lease that is still in flight.',
+            ),
+          },
+      );
   }
 
   /** Asks the provider for a rental this process may hold but cannot name. */

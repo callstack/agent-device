@@ -520,23 +520,28 @@ test('a rental named while an earlier stop is still in flight waits for that sto
   provider.answerStart(0, ready('B'));
   await settle();
   assert.deepEqual(provider.stopped, ['A']);
+  // B waits behind A, and the report still names both rentals the lease holds.
+  await assert.rejects(provider.table.release('lease-1'), (error: unknown) => {
+    assert.deepEqual((error as TableError).details.handles, ['A', 'B']);
+    return true;
+  });
+  assert.deepEqual(provider.stopped, ['A']);
 
   // A's stop settles unconfirmed. That no longer holds B back, and A stays owed.
   stopA.reject(new Error('backend down'));
   await settle();
-  await settle();
-  assert.deepEqual(provider.stopped, ['A', 'B']);
   provider.queueStop(refusedStop());
   await assert.rejects(provider.table.shutdown(), (error: unknown) => {
     assert.deepEqual((error as TableError).details.handles, ['A']);
     return true;
   });
+  assert.deepEqual(provider.stopped, ['A', 'A', 'B']);
   // The retry confirms A, and only then is the lease let go.
   assert.deepEqual(await provider.table.release('lease-1'), {
     handle: { id: 'B' },
     session: { id: 'B' },
   });
-  assert.deepEqual(provider.stopped, ['A', 'B', 'A', 'A']);
+  assert.deepEqual(provider.stopped, ['A', 'A', 'B', 'A']);
 });
 
 test('every rental a teardown could not stop is reported, and none is left unstopped', async () => {
