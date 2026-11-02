@@ -170,7 +170,10 @@ type StartAnswer<Session, Handle> =
 type Ended<Session, Handle> =
   | Readonly<{ status: 'stopped'; handle: Handle; session: Session | undefined }>
   | Readonly<{ status: 'nothing-rented' }>
-  | Readonly<{ status: 'pending'; handle: Handle | undefined; cause: unknown }>;
+  | Readonly<{ status: 'pending'; owed: readonly Owed<Handle>[] }>;
+
+/** A rental still rented after a teardown, and why; `handle` is absent when nobody could name it. */
+type Owed<Handle> = Readonly<{ handle: Handle | undefined; cause: unknown }>;
 
 /**
  * One lease's place in the table, from the moment its start is sent, or its recovery begins, until every
@@ -200,6 +203,8 @@ class LeaseEntry<Session, Handle, Request> {
   readonly waiters = new Set<Waiter>();
   /** Set once anything starts ending the lease; it never serves an allocation again. */
   releasing = false;
+  /** Whether a teardown is already queued behind the one in flight. */
+  followUpQueued = false;
   /** The one teardown in flight, joined by every release, recovery, and drain. */
   ending: Promise<Ended<Session, Handle>> | undefined = undefined;
 
@@ -319,7 +324,7 @@ class LeaseTable<Session, Handle, Request> {
       ended.forEach((outcome, index) => {
         if (outcome.status !== 'pending') return;
         const leaseId = entries[index]!.lease.leaseId;
-        unconfirmed.push({ leaseId, handle: outcome.handle, cause: outcome.cause });
+        for (const owed of outcome.owed) unconfirmed.push({ leaseId, ...owed });
       });
     }
     if (unconfirmed.length > 0) {
@@ -425,7 +430,7 @@ class LeaseTable<Session, Handle, Request> {
     return {
       status: 'failed',
       error: this.driver.cleanupPending(
-        [{ leaseId, handle: ended.handle, cause: ended.cause }],
+        ended.owed.map((owed) => ({ leaseId, ...owed })),
         { route: 'start', leaseId },
         error,
       ),
@@ -498,19 +503,42 @@ class LeaseTable<Session, Handle, Request> {
   private async runTeardown(
     entry: LeaseEntry<Session, Handle, Request>,
   ): Promise<Ended<Session, Handle>> {
+    // Each rental is tried at most once per teardown; a later teardown retries what stays owed.
+    const tried = new Map<RentalRecord<Handle>, Owed<Handle>>();
     for (;;) {
       await this.untilAnswered(entry);
       const unnamed = await this.nameRental(entry);
       if (unnamed !== undefined) return unnamed;
-      // One stop at a time, in the order the rentals were named, so a stop still in flight is never
-      // overtaken by a later rental that lets the entry go.
-      const next = [...entry.rentals.values()].find((rental) => !rental.stopped);
-      if (next === undefined) return this.finishTeardown(entry);
-      const failure = await this.stop(next);
-      if (failure !== undefined) {
-        return { status: 'pending', handle: next.handle, cause: failure.cause };
-      }
+      const owed = await this.stopRentals(entry, tried);
+      if (owed === 'progress') continue;
+      if (owed.length > 0) return { status: 'pending', owed };
+      return this.finishTeardown(entry);
     }
+  }
+
+  /**
+   * Stops the entry's rentals in the order they were named and collects every one still rented. A stop
+   * still in flight is never overtaken: a later rental waits for it. A stop that settled unconfirmed does
+   * not hold the rest back. Returns `progress` after a confirmed stop, so the caller looks again at a
+   * start that may have answered or named another rental meanwhile.
+   */
+  private async stopRentals(
+    entry: LeaseEntry<Session, Handle, Request>,
+    tried: Map<RentalRecord<Handle>, Owed<Handle>>,
+  ): Promise<readonly Owed<Handle>[] | 'progress'> {
+    for (const rental of entry.rentals.values()) {
+      if (rental.stopped) continue;
+      const earlier = tried.get(rental);
+      if (earlier !== undefined) {
+        if (rental.stopping !== undefined) break;
+        continue;
+      }
+      const failure = await this.stop(rental);
+      if (failure === undefined) return 'progress';
+      tried.set(rental, { handle: rental.handle, cause: failure.cause });
+      if (rental.stopping !== undefined) break;
+    }
+    return [...tried.entries()].filter(([rental]) => !rental.stopped).map(([, owed]) => owed);
   }
 
   /** Asks the provider for a rental this process may hold but cannot name. */
@@ -524,7 +552,7 @@ class LeaseTable<Session, Handle, Request> {
       entry.unnamed = false;
       return undefined;
     } catch (error) {
-      return { status: 'pending', handle: undefined, cause: error };
+      return { status: 'pending', owed: [{ handle: undefined, cause: error }] };
     }
   }
 
@@ -533,11 +561,8 @@ class LeaseTable<Session, Handle, Request> {
     const handle = entry.latest;
     if (!entry.answered) {
       // The entry stays for the teardown that the start's answer starts.
-      return {
-        status: 'pending',
-        handle,
-        cause: new Error('The provider start did not answer within its start timeout.'),
-      };
+      const cause = new Error('The provider start did not answer within its start timeout.');
+      return { status: 'pending', owed: [{ handle, cause }] };
     }
     if (this.entries.get(entry.lease.leaseId) === entry) this.entries.delete(entry.lease.leaseId);
     return handle === undefined
@@ -551,10 +576,19 @@ class LeaseTable<Session, Handle, Request> {
    */
   private followUp(entry: LeaseEntry<Session, Handle, Request>): void {
     const current = entry.ending;
-    const next = current
-      ? current.then(async () => await this.teardown(entry))
-      : this.teardown(entry);
-    void next.catch(() => undefined);
+    if (current === undefined) {
+      void this.teardown(entry).catch(() => undefined);
+      return;
+    }
+    // One queued teardown sees everything recorded before it runs, so more are never chained.
+    if (entry.followUpQueued) return;
+    entry.followUpQueued = true;
+    void current
+      .then(async () => {
+        entry.followUpQueued = false;
+        return await this.teardown(entry);
+      })
+      .catch(() => undefined);
   }
 
   /** Waits for the start's answer, at most `startTimeoutMs` after it was sent. */
@@ -611,7 +645,7 @@ class LeaseTable<Session, Handle, Request> {
     scope: ProviderLeaseCleanupScope,
   ): Error {
     return this.driver.cleanupPending(
-      [{ leaseId: entry.lease.leaseId, handle: ended.handle, cause: ended.cause }],
+      ended.owed.map((owed) => ({ leaseId: entry.lease.leaseId, ...owed })),
       scope,
     );
   }

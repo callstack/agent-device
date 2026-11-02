@@ -521,20 +521,44 @@ test('a rental named while an earlier stop is still in flight waits for that sto
   await settle();
   assert.deepEqual(provider.stopped, ['A']);
 
-  // A's stop fails: A is still owed, and the drain names it instead of reporting a clean shutdown.
+  // A's stop settles unconfirmed. That no longer holds B back, and A stays owed.
   stopA.reject(new Error('backend down'));
   await settle();
+  await settle();
+  assert.deepEqual(provider.stopped, ['A', 'B']);
   provider.queueStop(refusedStop());
   await assert.rejects(provider.table.shutdown(), (error: unknown) => {
     assert.deepEqual((error as TableError).details.handles, ['A']);
     return true;
   });
-  // The retry stops A, then B, and only then forgets the lease.
+  // The retry confirms A, and only then is the lease let go.
   assert.deepEqual(await provider.table.release('lease-1'), {
     handle: { id: 'B' },
     session: { id: 'B' },
   });
-  assert.deepEqual(provider.stopped, ['A', 'A', 'A', 'B']);
+  assert.deepEqual(provider.stopped, ['A', 'B', 'A', 'A']);
+});
+
+test('every rental a teardown could not stop is reported, and none is left unstopped', async () => {
+  const provider = fakeProvider();
+  const allocating = provider.table.allocate(lease(), {});
+  await settle();
+  provider.controls[0]!.rented({ id: 'A' });
+  provider.queueStop(refusedStop());
+  provider.queueStop(refusedStop());
+  provider.answerStart(0, { status: 'failed', error: new Error('not ready'), rented: { id: 'B' } });
+  // A's stop failing does not leave B unstopped, and the report names both.
+  await assert.rejects(allocating, (error: unknown) => {
+    assert.deepEqual((error as TableError).details.handles, ['A', 'B']);
+    return true;
+  });
+  provider.queueStop(refusedStop());
+  provider.queueStop(refusedStop());
+  await assert.rejects(provider.table.shutdown(), (error: unknown) => {
+    assert.deepEqual((error as TableError).details.handles, ['A', 'B']);
+    return true;
+  });
+  assert.deepEqual(provider.stopped, ['A', 'B', 'A', 'B']);
 });
 
 test('a late answer that lands while a teardown is settling is still stopped', async () => {

@@ -18,8 +18,9 @@ import type {
 /** How long Revyl may take to assign a worker and connect the device before the start is given up on. */
 const READY_TIMEOUT_MS = 240_000;
 /**
- * Covers the time between `start_device` answering and readiness starting its own clock, and the last
- * readiness poll's interval, so the lease table's cap never cuts readiness that Revyl still allows.
+ * Covers the time between `start_device` answering and readiness starting its own clock, and timer
+ * jitter, so the lease table's cap never cuts readiness that Revyl still allows. Readiness clamps every
+ * poll and sleep to its own deadline, so no poll interval needs room here.
  */
 const READY_ANSWER_MARGIN_MS = 10_000;
 /** The longest one allocation may take: `start_device`'s own answer budget, then readiness. */
