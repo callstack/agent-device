@@ -225,21 +225,14 @@ extension RunnerTests {
           command.command.rawValue,
           command.commandId ?? ""
         )
-      case .terminal(let outcome, let answersShutdown):
-        // Which answer ends the runner is the journal's fact, not this request's: a caller may reuse a
-        // spent `commandId` under another command name, and what it receives is still the recorded
-        // command's outcome. `finish()` guards its own expectation against being fulfilled twice, so a
-        // shutdown that several sends receive is harmless.
-        // `jsonResponse` stamps the outcome it is given, so a replayed success reports the main thread's
-        // occupancy NOW rather than the occupancy the recorded answer was written under — the stored body
-        // is kept unstamped for exactly this reason. That is what lets a replayed answer settle a stale
-        // busy report on the daemon side; the journal itself observed nothing.
+      case .terminal(let outcome):
+        // Replayed successes need current occupancy, so stamp them after reading the stored outcome.
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ALREADY_FINISHED command=%@ commandId=%@",
           command.command.rawValue,
           command.commandId ?? ""
         )
-        completion((jsonResponse(status: 200, response: outcome), answersShutdown))
+        completion((jsonResponse(status: 200, response: outcome), false))
       case .execute(let executionToken):
         NSLog(
           "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",

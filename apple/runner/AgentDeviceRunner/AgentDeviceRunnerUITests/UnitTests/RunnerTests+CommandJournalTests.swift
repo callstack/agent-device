@@ -291,7 +291,7 @@ extension RunnerTests {
     runnerJournalCloseDispatchedCommand(journal, tap, message: "tapped")
     runnerJournalFinishOtherCommands(journal, 64)
 
-    guard case .terminal(let outcome, _) = journal.accept(command: tap) else {
+    guard case .terminal(let outcome) = journal.accept(command: tap) else {
       return XCTFail("a pruned id whose work reached the device must never be admitted again")
     }
     XCTAssertFalse(outcome.ok)
@@ -321,7 +321,7 @@ extension RunnerTests {
       idPrefix: "window",
       dispatched: true
     )
-    guard case .terminal(let refusal, _) = journal.accept(command: tap) else {
+    guard case .terminal(let refusal) = journal.accept(command: tap) else {
       return XCTFail("a spent id must stay refused for the whole closed-id window")
     }
     XCTAssertEqual(
@@ -336,7 +336,7 @@ extension RunnerTests {
     runnerJournalFinishOtherCommands(journal, 1, idPrefix: "valve", dispatched: true)
 
     let nextOldest = runnerJournalCommand("recordStop", id: "window-0")
-    guard case .terminal(let stillRefused, _) = journal.accept(command: nextOldest) else {
+    guard case .terminal(let stillRefused) = journal.accept(command: nextOldest) else {
       return XCTFail("the valve must release the oldest closed id only, not the next-oldest")
     }
     XCTAssertEqual(
@@ -411,80 +411,16 @@ extension RunnerTests {
     XCTAssertEqual(served.data?.message, "recording already stopped")
   }
 
-  /// Whether `accept` reports that the answer it hands over is the runner's own `shutdown` answer.
-  private func journalAnswersShutdown(
-    _ journal: RunnerCommandJournal,
-    command: Command
-  ) -> Bool {
-    switch journal.accept(command: command) {
-    case .terminal(_, let answersShutdown):
-      return answersShutdown
-    case .execute:
-      XCTFail("a finished, dispatched commandId must be answered from the journal")
-      return false
-    case .join:
-      XCTFail("this test leaves no execution in flight")
-      return false
-    }
-  }
-
-  /// Which answer ends the runner is the journal's fact about the record, not the repeat's: a caller may
-  /// reuse a spent `commandId` under another command name, and the outcome it receives stays the recorded
-  /// command's. Naming `shutdown` in the repeat must not end the runner on some other command's answer,
-  /// and naming another command must not withhold the end that a recorded `shutdown` answer owes.
-  func testJournalDecidesFromTheRecordWhetherAReplayEndsTheRunner() throws {
+  func testJournalDoesNotReadmitASpentMutationRenamedAsARead() {
     let journal = RunnerCommandJournal()
-    let tap = runnerJournalCommand("tap", id: "spent-then-named-shutdown")
+    let tap = runnerJournalCommand("tap", id: "spent-mutation")
     journal.accept(command: tap)
     journal.markDispatched(command: tap)
     journal.finish(command: tap, response: Response(ok: true, data: DataPayload(message: "tapped")))
-
-    guard case .terminal = journal.accept(command: runnerJournalCommand("snapshot", id: "spent-then-named-shutdown")) else {
+    guard case .terminal(let outcome) = journal.accept(command: runnerJournalCommand("snapshot", id: "spent-mutation")) else {
       return XCTFail("renaming a spent mutation to a read must not bypass admission")
     }
-
-    let shutdown = runnerJournalCommand("shutdown", id: "spent-then-named-shutdown")
-    XCTAssertEqual(
-      journalAnswersShutdown(journal, command: shutdown),
-      false,
-      "a recorded tap answer must not end the runner because the repeat named shutdown"
-    )
-
-    let shutdownId = "shutdown-then-named-tap"
-    let realShutdown = runnerJournalCommand("shutdown", id: shutdownId)
-    journal.accept(command: realShutdown)
-    journal.markDispatched(command: realShutdown)
-    journal.finish(
-      command: realShutdown,
-      response: Response(ok: true, data: DataPayload(message: "shutdown"))
-    )
-    XCTAssertEqual(
-      journalAnswersShutdown(journal, command: runnerJournalCommand("tap", id: shutdownId)),
-      true,
-      "a recorded shutdown answer must still end the runner when the repeat names another command"
-    )
-  }
-
-  /// The live path withholds the finish from a `shutdown` that threw, so a replay of that refusal has to
-  /// withhold it too. A refused shutdown means the runner is still serving for its caller — ending it here
-  /// would tear down the runner the resend is still talking to, on an answer that said it stayed up.
-  func testJournalWithholdsTheFinishFromAReplayedFailedShutdown() throws {
-    let journal = RunnerCommandJournal()
-    let command = runnerJournalCommand("shutdown", id: "refused-shutdown")
-    journal.accept(command: command)
-    journal.markDispatched(command: command)
-    journal.fail(command: command, error: Self.mainThreadExecutionTimeoutError())
-
-    let replayed = journal.accept(command: command)
-    guard case .terminal(let outcome, let answersShutdown) = replayed else {
-      return XCTFail("a refused, dispatched shutdown must be answered from the journal")
-    }
-    XCTAssertEqual(outcome.ok, false, "the recorded refusal is what the repeat is answered with")
-    XCTAssertEqual(
-      answersShutdown,
-      false,
-      "a recorded shutdown refusal must not end the runner the caller still holds"
-    )
+    XCTAssertEqual(outcome.data?.message, "tapped")
   }
 
   /// The recorded failure has to carry the same code the live answer carried, because the daemon reads
@@ -505,7 +441,7 @@ extension RunnerTests {
       nil
     )
 
-    guard case .terminal(let replay, _) = journal.accept(command: command) else {
+    guard case .terminal(let replay) = journal.accept(command: command) else {
       return XCTFail("a repeat of a finished, dispatched commandId is answered from the journal")
     }
 

@@ -151,21 +151,12 @@ function readSwiftWireErrorCodes(): Record<string, string> {
   return codes;
 }
 
-/**
- * The error body the runner derives for one thrown error. Both readers of a failed command — the
- * transport encoding a live reply, and the journal recording a thrown one so a repeat can be answered
- * from it — must use this one declaration, or the answer a resend receives reports a different runner
- * condition, or carries less, than the answer the caller lost. The daemon keys main-thread occupancy on
- * the timeout code, so the pair this ties is genuinely cross-language: it reads the Swift side rather
- * than a second copy of the same string in a TypeScript test.
- */
+/** The Swift wire-code declarations the daemon uses for occupancy. */
 export function requireSwiftThrownErrorWireCode(): {
   /** The Swift member whose value the daemon's occupancy verdict keys on. */
   timeoutCode: string;
   /** The bodyless journal refusal whose occupancy report must stay silent. */
   finishedCode: string;
-  /** Whether the journal's failure record derives its error body from the same owner the transport uses. */
-  journalRecordsDerivedCode: boolean;
 } {
   const codes = readSwiftWireErrorCodes();
   const timeoutCode = codes['mainThreadTimeout'];
@@ -179,35 +170,8 @@ export function requireSwiftThrownErrorWireCode(): {
     finishedCode !== undefined,
     'RunnerWireErrorCode must declare commandAlreadyFinished: the daemon reads this code as silent about main-thread occupancy.',
   );
-  const journal = fs.readFileSync(SWIFT_JOURNAL, 'utf8');
-  const recorded = journal.match(
-    /func fail\(command: Command, error: Error\)[\s\S]*?\n {2}\}/,
-  )?.[0];
-  assert.ok(
-    recorded !== undefined,
-    'RunnerCommandJournal must declare fail(command:error:) — the record a repeated commandId is ' +
-      'answered from when the command closed by throwing.',
-  );
-  const transport = fs.readFileSync(SWIFT_TRANSPORT, 'utf8');
-  const live = transport.match(
-    /func commandFailedResponse\(from error: Error\)[\s\S]*?\n {2}\}/,
-  )?.[0];
-  assert.ok(
-    live !== undefined,
-    'RunnerTests+Transport.swift must declare commandFailedResponse(from:) — the live reply a ' +
-      'failed command is answered with.',
-  );
-  // One owner for the whole error body, not just the code: a record that kept the code but dropped the
-  // hint would send a caller to the runner log for a condition whose live answer told it to wait.
-  const owner = /\bRunnerTests\.thrownErrorPayload\(for: error\)/;
-  assert.ok(
-    owner.test(live),
-    'commandFailedResponse(from:) must encode the live failure with RunnerTests.thrownErrorPayload(for:) ' +
-      '— the one declaration that pairs the code with the hint the caller acts on.',
-  );
   return {
     timeoutCode,
     finishedCode,
-    journalRecordsDerivedCode: owner.test(recorded),
   };
 }

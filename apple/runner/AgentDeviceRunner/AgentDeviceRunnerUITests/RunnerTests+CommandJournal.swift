@@ -30,11 +30,7 @@ struct RunnerCommandJournalEntry {
   /// on the device and its terminal entry must not close the id: the read-only busy resend carries the
   /// same `commandId` (ADR 0005).
   var dispatched = false
-  /// Which execution of this `commandId` the record belongs to, minted when the id was claimed. The
-  /// transport answers joiners from it, so a delivery reaches only the sends that joined the execution that
-  /// closed. It has to outlive the entry's close: an id the runner refused before dispatch is claimed
-  /// again, and the sends of that new execution must not be answered by the delivery of the refusal that
-  /// freed the id.
+  /// Distinguishes joiners when the same id is claimed again before an earlier delivery finishes.
   let executionToken: Int
   let isReadOnly: Bool
 }
@@ -48,12 +44,8 @@ enum RunnerCommandAdmission {
   /// execution, the one `executionToken` names. `accept(command:registeringJoin:)` has already
   /// registered the send it gave this verdict.
   case join(executionToken: Int)
-  /// Non-read execution finished after dispatch: the caller answers from the journal and
-  /// never executes this command again. `answersShutdown` says whether the answer being handed over is
-  /// the runner's own successful `shutdown` answer, which the caller owes the runner's end. Neither the
-  /// repeat's request nor the command name alone can answer that: a caller may reuse a spent `commandId`
-  /// under another command name, and the live path withholds the finish from a `shutdown` that threw.
-  case terminal(outcome: Response, answersShutdown: Bool)
+  /// Replays the recorded outcome without executing the command.
+  case terminal(outcome: Response)
 }
 
 /// The runner's one command-lifecycle record: what it holds for a `commandId`, whether that id may run,
@@ -107,8 +99,7 @@ final class RunnerCommandJournal {
         // The record that named this id is gone, so all this refusal can promise is that the id is
         // spent — it is no command's answer, and so never the runner's own.
         return .terminal(
-          outcome: alreadyFinishedRefusal(command: command, commandId: commandId, outcomeDropped: true),
-          answersShutdown: false
+          outcome: alreadyFinishedRefusal(command: command, commandId: commandId, outcomeDropped: true)
         )
       }
       return claim(command: command, commandId: commandId)
@@ -124,14 +115,7 @@ final class RunnerCommandJournal {
     guard entry.dispatched, !entry.isReadOnly else {
       return claim(command: command, commandId: commandId)
     }
-    let outcome = recordedOutcome(for: entry)
-    // Only a recorded `shutdown` that succeeded ends the runner. The live path withholds that finish from
-    // a `shutdown` that threw, so replaying its refusal must not stop a runner whose caller is still
-    // holding it for another command.
-    return .terminal(
-      outcome: outcome,
-      answersShutdown: entry.command == CommandType.shutdown.rawValue && outcome.ok
-    )
+    return .terminal(outcome: recordedOutcome(for: entry))
   }
 
   /// Callers hold the journal's lock, including for commands without an id.
@@ -259,11 +243,6 @@ final class RunnerCommandJournal {
       // Only dispatched non-read commands spend their ids. Reads and pre-dispatch refusals leave
       // no marker, so resends can execute after the outcome is pruned (ADR 0005).
       if let entry = entries[removable], entry.dispatched, !entry.isReadOnly {
-        // The two closed-id structures stay one-to-one, and nothing here needs a duplicate check to keep
-        // them that way: an id enters `closedCommandIds` only in this branch, and an id whose entry this
-        // journal no longer holds can be claimed again only once the marker is gone — which the valve
-        // below does by removing the id from both structures together. So a second close of a released id
-        // finds an id in neither structure, and one still marked can never have an entry to prune.
         closedCommandIds.insert(removable)
         closedOrder.append(removable)
         while closedOrder.count > Self.closedCommandIdSafetyValve {
@@ -312,8 +291,6 @@ final class RunnerCommandJournal {
     commandName: String,
     outcomeDropped: Bool
   ) -> Response {
-    // Two whole messages rather than one sentence spliced into another: which record is gone is the
-    // fact the caller acts on, so each variant has to read as a sentence on its own.
     let reason =
       outcomeDropped
       ? "The runner already finished \(commandName) with id \(commandId). That command's recorded outcome has since been dropped from the journal, so there is no response to replay."

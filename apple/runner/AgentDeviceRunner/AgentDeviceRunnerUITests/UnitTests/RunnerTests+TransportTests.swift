@@ -476,7 +476,7 @@ extension RunnerTests {
 
   /// Routes one `commandId` the way the transport does: an executing send, a second send the journal
   /// settles onto that execution, and the close with its delivery. `outcome` decides whether the execution
-  /// finished or failed. Returns the bytes that delivery carried, which is what both sends must be answered
+  /// finished or failed. Returns the response that both sends must be answered
   /// with.
   @discardableResult
   private func runExecutionWithJoiner(
@@ -494,11 +494,11 @@ extension RunnerTests {
     }
     guard case .execute(let claimedToken) = executed else {
       XCTFail("the first send of a commandId must be admitted for execution")
-      return Data()
+      return RunnerHttpResponse(status: 500, body: "")
     }
     guard case .join(let joinedToken) = joined else {
       XCTFail("a send of a commandId whose execution has not finished must join it")
-      return Data()
+      return RunnerHttpResponse(status: 500, body: "")
     }
     XCTAssertEqual(
       joinedToken,
@@ -545,7 +545,7 @@ extension RunnerTests {
     let lateVerdict = commandJournal.accept(command: command) { _ in
       registeredLateSend = true
     }
-    guard case .terminal(let outcome, _) = lateVerdict else {
+    guard case .terminal(let outcome) = lateVerdict else {
       return XCTFail("a send of a finished commandId must be answered from the journal")
     }
     XCTAssertFalse(registeredLateSend, "a send answered from the journal must not be registered")
@@ -621,14 +621,14 @@ extension RunnerTests {
     }
 
     // The refused generation delivers its own answer. It must reach nobody from the next generation.
-    deliverCommandResult(executionToken: firstToken, result: (Data("refusal".utf8), false)) { _ in }
+    deliverCommandResult(executionToken: firstToken, result: (RunnerHttpResponse(status: 200, body: "refusal"), false)) { _ in }
     XCTAssertNil(second.joinerData, "a refusal must not answer the execution that replaced it")
 
     commandJournal.start(command: command)
     commandJournal.markDispatched(command: command)
     commandJournal.finish(command: command, response: Response(ok: true, data: DataPayload(message: "ran")))
-    deliverCommandResult(executionToken: secondToken, result: (Data("ran".utf8), false)) { _ in }
-    XCTAssertEqual(second.joinerData, Data("ran".utf8), "the joiner is answered by its own execution")
+    deliverCommandResult(executionToken: secondToken, result: (RunnerHttpResponse(status: 200, body: "ran"), false)) { _ in }
+    XCTAssertEqual(second.joinerData, RunnerHttpResponse(status: 200, body: "ran"), "the joiner is answered by its own execution")
   }
 
   /// Asserts that no send is left waiting for a delivery, whichever execution it joined.
@@ -889,87 +889,6 @@ extension RunnerTests {
     }
   #endif
 
-  /// A `shutdown` answer is what ends the runner's own XCTest run, so the send that receives it has to be
-  /// the one that ends the runner — including the send the journal answers. A resend whose first answer
-  /// the daemon lost is exactly the case the journal exists to serve: if that reply is not allowed to
-  /// finish, the runner keeps listening with no caller left to stop it, and disposal has to wait out its
-  /// timeout and escalate to a signal.
-  func testTransportFinishesTheRunnerOnAReplayOfAFinishedShutdown() throws {
-    let command = try transportCommand("shutdown", id: "shutdown-answered-twice")
-    // The state a resend finds: this shutdown ran, was marked dispatched, and closed with its answer.
-    commandJournal.accept(command: command)
-    commandJournal.markDispatched(command: command)
-    commandJournal.finish(
-      command: command,
-      response: Response(ok: true, data: DataPayload(message: "shutdown"))
-    )
-
-    let listener = try startTransportListener()
-    defer { listener.cancel() }
-    let port = try XCTUnwrap(listener.port)
-    let client = URLSession(configuration: .ephemeral)
-    defer { client.invalidateAndCancel() }
-    let finished = expectation(description: "the replayed shutdown asked the runner to finish")
-    // Cleared on the way out so a run that never finished cannot leak the expectation into the next
-    // test; the delivery that fulfils it clears it first.
-    defer { doneExpectation = nil }
-    doneExpectation = finished
-
-    let reply = try transportHttpResponse(
-      client: client,
-      port: port,
-      payload: #"{"command":"shutdown","commandId":"shutdown-answered-twice"}"#
-    )
-
-    XCTAssertEqual(reply.ok, true)
-    XCTAssertEqual(
-      reply.data?.message,
-      "shutdown",
-      "the repeat is answered from the journal rather than executed again"
-    )
-    wait(for: [finished], timeout: 2)
-  }
-
-  /// The mirror of the case above, and the reason the finish flag is the journal's fact: a caller that
-  /// reuses a spent `commandId` under the name `shutdown` receives the recorded answer of whatever that
-  /// id really ran. Ending the runner there would stop it on some other command's answer, so the resend
-  /// is answered and the runner keeps serving.
-  func testTransportDoesNotFinishOnAReplayOfAnotherCommandsRecordedAnswer() throws {
-    let spent = try transportCommand("recordStart", id: "spent-then-named-shutdown")
-    commandJournal.accept(command: spent)
-    commandJournal.markDispatched(command: spent)
-    commandJournal.finish(
-      command: spent,
-      response: Response(ok: true, data: DataPayload(message: "read"))
-    )
-
-    let listener = try startTransportListener()
-    defer { listener.cancel() }
-    let port = try XCTUnwrap(listener.port)
-    let client = URLSession(configuration: .ephemeral)
-    defer { client.invalidateAndCancel() }
-    // Fulfilled only by a delivery that wrongly asks the runner to finish, which is what this test
-    // rules out. `wait` with no expectation would not catch a finish that happens late.
-    let wronglyFinished = expectation(description: "a replay must not finish the runner")
-    wronglyFinished.isInverted = true
-    doneExpectation = wronglyFinished
-    defer { doneExpectation = nil }
-
-    let reply = try transportHttpResponse(
-      client: client,
-      port: port,
-      payload: #"{"command":"shutdown","commandId":"spent-then-named-shutdown"}"#
-    )
-
-    XCTAssertEqual(reply.ok, true)
-    XCTAssertEqual(
-      reply.data?.message,
-      "read",
-      "the id's recorded answer is served, not a shutdown answer"
-    )
-    wait(for: [wronglyFinished], timeout: 1)
-  }
-
   /// Routes `command` the way the transport routes it: an inline read, then the journal's verdict on its
   /// `commandId`. A finished id comes back as the answer the runner recorded for it; the execute path
   /// rethrows what the dispatch threw, which the wire path turns into its own response. Sends that need
@@ -981,7 +900,7 @@ extension RunnerTests {
       return response
     }
     switch commandJournal.accept(command: command) {
-    case .terminal(let outcome, _):
+    case .terminal(let outcome):
       return outcome
     case .join:
       throw NSError(

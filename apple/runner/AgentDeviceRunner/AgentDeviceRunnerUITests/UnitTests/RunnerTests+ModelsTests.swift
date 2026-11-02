@@ -48,6 +48,27 @@ extension RunnerTests {
     XCTAssertEqual(orphaned, [], "CommandType cases with no production request")
   }
 
+  func testQueuedReadOnlyTraitsMatchTheDaemonParityFixture() throws {
+    let rows = try XCTUnwrap(
+      runnerContractFixture("runner-command-read-only.json") as? [[String: Any]]
+    )
+    var covered = Set<CommandType>()
+    for row in rows {
+      let request = try XCTUnwrap(row["command"] as? [String: Any])
+      let name = String(describing: request)
+      let command = try decodeProductionRunnerRequest(request, name)
+      let readOnly = try XCTUnwrap(row["readOnly"] as? Bool, name)
+      XCTAssertNil(inlineResponse(for: command), name)
+      XCTAssertEqual(command.traits.isReadOnly, readOnly, name)
+      covered.insert(command.command)
+    }
+    let queued = try Set(CommandType.allCases.filter { type in
+      let command = try runnerCommandFixture(#"{"command":"\#(type.rawValue)"}"#)
+      return inlineResponse(for: command) == nil
+    })
+    XCTAssertEqual(covered, queued, "every queued CommandType needs parity coverage")
+  }
+
   func testEveryRunnerRequestFieldHasAProductionRequest() throws {
     let entries = try productionRunnerRequests()
     let requests = entries.map(\.request)
@@ -81,6 +102,16 @@ extension RunnerTests {
   }
 
   private func productionRunnerRequests() throws -> [(name: String, request: [String: Any])] {
+    let entries = try XCTUnwrap(runnerContractFixture("runner-requests.json") as? [[String: Any]])
+    return try entries.map { entry in
+      (
+        name: try XCTUnwrap(entry["name"] as? String),
+        request: try XCTUnwrap(entry["request"] as? [String: Any], "\(entry["name"] ?? "?")")
+      )
+    }
+  }
+
+  private func runnerContractFixture(_ name: String) throws -> Any {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -88,16 +119,8 @@ extension RunnerTests {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("contracts/fixtures/runner-requests.json")
-    let entries = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [[String: Any]]
-    )
-    return try entries.map { entry in
-      (
-        name: try XCTUnwrap(entry["name"] as? String),
-        request: try XCTUnwrap(entry["request"] as? [String: Any], "\(entry["name"] ?? "?")")
-      )
-    }
+      .appendingPathComponent("contracts/fixtures/\(name)")
+    return try JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL))
   }
 
   private func decodeProductionRunnerRequest(_ request: [String: Any], _ name: String) throws

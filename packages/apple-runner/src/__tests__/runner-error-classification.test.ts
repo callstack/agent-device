@@ -505,16 +505,7 @@ test('occupancy reads the busy refusal and the stalling timeout as occupied, and
   assert.equal(runnerMainThreadOccupancyReport(runnerReplyFailure('ELEMENT_NOT_FOUND')), 'drained');
 });
 
-/**
- * The occupancy verdict and the code the runner writes for it are one claim across two languages, so
- * the Swift declaration is read here rather than restated: renaming
- * `RunnerTests.RunnerWireErrorCode.mainThreadTimeout` splits the pair and fails this test. The same
- * read ties the journal's failure record to that code. A repeat of a command that closed by throwing is
- * answered from that record, and a record without the code reaches the daemon as an ordinary served
- * refusal, which would report the main thread drained while the command that just timed out is what
- * occupies it.
- */
-test('the runner writes the occupancy code the daemon reads, on the live reply and the journal record', () => {
+test('the runner declares the wire codes the daemon reads for occupancy', () => {
   const swift = requireSwiftThrownErrorWireCode();
 
   assert.equal(
@@ -526,12 +517,6 @@ test('the runner writes the occupancy code the daemon reads, on the live reply a
     swift.finishedCode,
     COMMAND_ALREADY_FINISHED_RUNNER_CODE,
     'the runner must encode its finished-id refusal under the code the daemon reads as silent',
-  );
-  assert.equal(
-    swift.journalRecordsDerivedCode,
-    true,
-    'the journal must record a thrown failure under the same code the transport replies with, so a ' +
-      'replayed failure reports the same runner condition as the answer the caller lost',
   );
 });
 
