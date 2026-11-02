@@ -12,7 +12,7 @@ import {
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
   readInstrumentationExitResult,
-  type AndroidInstrumentationExitResult,
+  isRefusedInstrumentationStart,
 } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
@@ -123,15 +123,16 @@ export async function captureAndroidSnapshotWithHelper(
 }
 
 /**
- * The one-shot run failed because the system never started the helper: `am instrument` reported
- * `INSTRUMENTATION_FAILED`, so no helper code ran on the device.
+ * The one-shot run failed because the system never started the helper: `am instrument` refused the
+ * start, so no helper code ran on the device and the helper reported nothing.
  */
 export function isAndroidSnapshotHelperStartFailure(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const instrumentation = error.details?.instrumentation as
-    | AndroidInstrumentationExitResult
-    | undefined;
-  return instrumentation?.failed !== undefined;
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.helper === undefined &&
+    isRefusedInstrumentationStart(error.details?.instrumentation)
+  );
 }
 
 /**

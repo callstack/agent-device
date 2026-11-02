@@ -154,6 +154,12 @@ test('a helper that started and then exited early is not started again', async (
       stdout: `INSTRUMENTATION_RESULT: shortMsg=INSTRUMENTATION_FAILED: ${HELPER_RUNNER}\n`,
       stderr: '',
     },
+    // A run that started and printed is not a refused start, whatever line its stderr also holds.
+    {
+      exitCode: 1,
+      stdout: 'INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n',
+      stderr: INSTRUMENTATION_FAILED_RUN.stderr,
+    },
   ];
   for (const run of earlyExits) {
     await resetAndroidSnapshotHelperSessions();
@@ -185,12 +191,12 @@ for (const cancelPoint of ['force-stop', 'settle delay'] as const) {
         setImmediate(cancel);
         return { exitCode: 0, stdout: '', stderr: '' };
       }
-      // A force-stop that hangs ends only through the signal it was given.
-      cancel();
+      // A force-stop that hangs ends only through the signal it was given; the cancellation lands
+      // once it is in flight and listening.
       return await new Promise((_resolve, reject) => {
         const signal = options?.signal;
-        if (signal?.aborted) reject(signal.reason);
         signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        setImmediate(cancel);
       });
     };
 

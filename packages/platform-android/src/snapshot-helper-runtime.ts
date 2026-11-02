@@ -36,6 +36,8 @@ export async function resetAndroidSnapshotHelperRuntime(
 ): Promise<void> {
   await stopAndroidSnapshotHelperRuntime({ adb, packageName, ...(signal ? { signal } : {}) });
   await sleep(HELPER_RUNTIME_RESET_DELAY_MS, signal);
+  // A cancelled reset may have cut the force-stop or the settle short, so it does not report one.
+  if (signal?.aborted) return;
   emitDiagnostic({
     level: 'debug',
     phase: 'android_snapshot_helper_runtime_reset',

@@ -313,6 +313,23 @@ function appendLine(value: string | undefined, line: string): string | undefined
   return next.length > MESSAGE_FIELD_MAX_CHARS ? value : next;
 }
 
+/**
+ * A run `am instrument` refused to start: it exited, reported `INSTRUMENTATION_FAILED`, and carries
+ * nothing a started instrumentation prints (a status or result code, an abort) or a signal ends.
+ */
+export function isRefusedInstrumentationStart(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) return false;
+  const run: Partial<Record<keyof AndroidInstrumentationExitResult, unknown>> = result;
+  return (
+    typeof run.failed === 'string' &&
+    typeof run.exitCode === 'number' &&
+    run.signal === undefined &&
+    run.statusCode === undefined &&
+    run.resultCode === undefined &&
+    run.aborted === undefined
+  );
+}
+
 export function readInstrumentationExitResult(run: {
   stdout: string;
   stderr: string;
