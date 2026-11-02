@@ -17,13 +17,16 @@ export function createLeaseClient(
   const control = async (positionals: string[], options?: InternalRequestOptions) =>
     await execute(INTERNAL_COMMANDS.humanControl, positionals, options);
   return {
-    allocate: async (options) =>
-      normalizeLease(
-        await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
-          ...options,
-          leaseId: options.leaseId,
-        }),
-      ),
+    allocate: async (options) => {
+      const data = await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
+        ...options,
+        leaseId: options.leaseId,
+      });
+      return {
+        ...normalizeLease(data),
+        ...(typeof data.reused === 'boolean' ? { created: !data.reused } : {}),
+      };
+    },
     heartbeat: async (options) =>
       normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
     release: async (options) => {
@@ -94,9 +97,6 @@ function normalizeLease(data: Record<string, unknown>): Lease {
     leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
     clientId: readOptionalString(rawLease, 'clientId'),
     deviceKey: readOptionalString(rawLease, 'deviceKey'),
-    // Only an allocate answers `reused`; every other read, and any daemon older than the field,
-    // omits it, and the caller keeps `created` unset rather than guessing who made the lease.
-    ...(typeof data.reused === 'boolean' ? { created: !data.reused } : {}),
     ...withLeaseDevice(readLeaseDevice(rawLease.device)),
     ...(rawLease.retainOnClose === true ? { retainOnClose: true } : {}),
     createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,

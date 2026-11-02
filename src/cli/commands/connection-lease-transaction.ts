@@ -76,6 +76,17 @@ export function createLeaseLedger(): LeaseLedger {
 
   return {
     track(lease) {
+      if (owned !== undefined) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Release or transfer the tracked lease before another allocation.',
+          {
+            reason: 'LEASE_LEDGER_OVERWRITE',
+            leaseId: owned.leaseId,
+            trackedLeaseId: lease.leaseId,
+          },
+        );
+      }
       owned = lease;
     },
     end,

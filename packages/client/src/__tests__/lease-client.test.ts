@@ -129,6 +129,40 @@ test('allocate sends the lease id named on the call, never the configured one', 
   assert.equal(lease.leaseId, 'abcdef0123456789');
 });
 
+test.each([
+  { operation: 'allocate', reused: false, created: true },
+  { operation: 'allocate', reused: true, created: false },
+  { operation: 'heartbeat', reused: false, created: undefined },
+  { operation: 'heartbeat', reused: true, created: undefined },
+] as const)(
+  '$operation reads creation evidence only from an allocate response (reused=$reused)',
+  async ({ operation, reused, created }) => {
+    const client = createAgentDeviceClient(
+      {},
+      {
+        transport: async () => ({
+          ok: true,
+          data: {
+            reused,
+            lease: {
+              leaseId: 'lease-a',
+              tenantId: 'tenant-a',
+              runId: 'run-a',
+              backend: 'ios-instance',
+            },
+          },
+        }),
+      },
+    );
+    const lease = await client.leases[operation]({
+      tenant: 'tenant-a',
+      runId: 'run-a',
+      leaseId: 'lease-a',
+    });
+    assert.equal(lease.created, created);
+  },
+);
+
 for (const operation of ['allocate', 'heartbeat'] as const) {
   const validLease = {
     leaseId: 'lease-a',
