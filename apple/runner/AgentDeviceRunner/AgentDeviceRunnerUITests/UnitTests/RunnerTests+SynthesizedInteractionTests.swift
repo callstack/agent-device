@@ -262,10 +262,11 @@ extension RunnerTests {
     }
   }
 
-  /// The display size costs one AXRuntime read, so the runner keeps the first successful answer and
-  /// later gestures take it even while AXRuntime would fail; a failed read is not kept.
+  /// The display size costs one AXRuntime read, so a command keeps its first successful answer and
+  /// later gestures take it even while AXRuntime would fail. The next command reads again, because
+  /// display scaling can change the size, and a failed read is not kept.
   @MainActor
-  func testSoleDisplaySizeIsReadOnceAndAFailedReadIsNotKept() throws {
+  func testSoleDisplaySizeIsReadOncePerCommandAndAFailedReadIsNotKept() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let portrait = RunnerInterfaceOrientation.portrait
@@ -273,10 +274,11 @@ extension RunnerTests {
     let measured = try XCTUnwrap(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
     XCTAssertNotEqual(measured, placedWindow)
 
+    let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
     // Nothing between the install and the restore throws, so the restore always runs.
     let restoreAXRuntime = try simulateUnreadableSystemApplication()
     XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)
-    mainOwned.soleDisplayPortraitSize = nil
+    _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
     XCTAssertNil(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
     restoreAXRuntime()
     XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)

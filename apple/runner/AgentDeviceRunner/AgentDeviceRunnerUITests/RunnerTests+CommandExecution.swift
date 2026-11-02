@@ -10,6 +10,7 @@ extension RunnerTests {
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
+    mainOwned.soleDisplayPortraitSize = nil
     if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
