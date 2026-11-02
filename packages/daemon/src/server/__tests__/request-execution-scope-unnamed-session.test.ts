@@ -95,7 +95,7 @@ test.each(['snapshot', 'artifacts', 'events', 'logs', 'doctor', 'capabilities'])
   },
 );
 
-test('an unnamed command queued behind an open is refused once that open leaves a provider lease', async () => {
+test('an unnamed command is refused when the session gains a provider lease after the first check', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
   const dispatch = vi.fn(async () => 'ran');

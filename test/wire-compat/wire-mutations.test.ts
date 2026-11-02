@@ -141,6 +141,13 @@ const MUTATIONS: readonly WireMutation[] = [
     to: '',
   },
   {
+    breakClass: 'session intake: an unnamed request stops being marked as unnamed',
+    file: 'packages/daemon/src/server/http/http-rpc-methods.ts',
+    name: 'requestSessionFields',
+    from: 'internal: { sessionOmitted: true }',
+    to: 'internal: {}',
+  },
+  {
     breakClass: 'response serialization: the RPC envelope stops being newline-framed',
     file: 'packages/daemon-contracts/src/request-progress-protocol.ts',
     name: 'serializeDaemonRpcResponseEnvelope',

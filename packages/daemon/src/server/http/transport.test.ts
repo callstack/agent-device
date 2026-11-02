@@ -248,12 +248,12 @@ test('socket transport refuses a non-string positional before dispatch', async (
 });
 
 test.for([
-  ['omitted', undefined, true],
-  ['blank', '  ', true],
-  ['named', 'agent-a', undefined],
+  ['omitted', undefined, 'default', true],
+  ['blank', '  ', 'default', true],
+  ['named', 'agent-a', 'agent-a', undefined],
 ] as const)(
   'the socket records a session that is %s',
-  async ([_label, session, sessionOmitted], t) => {
+  async ([_label, session, resolvedSession, sessionOmitted], t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
 
     const observedRequests: DaemonRequest[] = [];
@@ -270,6 +270,8 @@ test.for([
         1,
       );
       client.destroy();
+      assert.equal(observedRequests.length, 1);
+      assert.equal(observedRequests[0]?.session, resolvedSession);
       assert.equal(observedRequests[0]?.internal?.sessionOmitted, sessionOmitted);
     } finally {
       await closeLoopbackServer(server);
