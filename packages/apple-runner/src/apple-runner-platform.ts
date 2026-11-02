@@ -10,13 +10,27 @@ import {
 import { readHostCpuArchSync } from './host.ts';
 import type { AppleSdkName } from './runner-toolchain-identity.ts';
 
+/** The snapshot bridge's shared full-screen rule, which the runner's event bridge also reads. */
+const SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME = 'ForegroundApplicationGeometry.h';
+
 /**
- * The snapshot bridge's shared full-screen rule, named once. The bridge's runtime includes it and
- * the runner's UITests target compiles against it through HEADER_SEARCH_PATHS, so its bytes change
- * both compiled binaries. It sits with the constants this package shares: the bridge cache identity
- * and the runner fingerprint both read it without either subtree entering the other's graph.
+ * The snapshot bridge reader, named once. The guest bridge compiles these files with its socket
+ * server, and the runner's UITests target includes them through HEADER_SEARCH_PATHS to serve the
+ * same reader on its transport, so their bytes change both compiled binaries. It sits with the
+ * constants this package shares: the bridge cache identity and the runner fingerprint both read it
+ * without either subtree entering the other's graph.
  */
-export const SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME = 'ForegroundApplicationGeometry.h';
+export const SHARED_SNAPSHOT_BRIDGE_READER_FILENAMES = [
+  'SnapshotBridgeRequest.h',
+  'SnapshotBridgeRequest.m',
+  'SnapshotBridgeRuntime.h',
+  'SnapshotBridgeRuntime.m',
+  'SnapshotBridgeCapture.h',
+  'SnapshotBridgeCapture.m',
+  'SnapshotBridgeSurfaceHosts.h',
+  'SnapshotBridgeSurfaceHosts.m',
+  SHARED_FOREGROUND_GEOMETRY_HEADER_FILENAME,
+] as const;
 
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
 

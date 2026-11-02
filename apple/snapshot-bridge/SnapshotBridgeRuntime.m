@@ -86,6 +86,14 @@ static NSDictionary *_Nullable rectDictionary(CGRect rect)
   return @{ @"X" : x, @"Y" : y, @"Width" : width, @"Height" : height };
 }
 
+// Nothing can stop an XPC call that the accessibility server never answers. The guest bridge process
+// ends itself when a read outlives its budget, and its host starts a new one. A process that serves the
+// reader for other work, such as the XCTest runner, must not end itself: it defines this macro as 0
+// before it includes this file, and abandons the read instead.
+#ifndef SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS
+#define SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS 1
+#endif
+
 @interface SnapshotWatchdogState : NSObject
 @property(atomic) BOOL completed;
 @end
@@ -106,7 +114,9 @@ static dispatch_source_t startRequestWatchdog(NSUInteger durationMs, SnapshotWat
       DISPATCH_TIME_FOREVER,
       0);
   dispatch_source_set_event_handler(watchdog, ^{
+#if SNAPSHOT_BRIDGE_WATCHDOG_ENDS_PROCESS
     if (!state.completed) kill(getpid(), SIGKILL);
+#endif
   });
   dispatch_resume(watchdog);
   return watchdog;

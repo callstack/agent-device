@@ -24,6 +24,8 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   await writeFile(sourceFile, 'native source v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRequest.h'), 'native runtime v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRequest.m'), 'native runtime v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header v1');

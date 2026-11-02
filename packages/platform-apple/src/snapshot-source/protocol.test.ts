@@ -162,6 +162,8 @@ test('wire vocabulary guard keeps TS and Objective-C literals aligned', async ()
   const native = await Promise.all(
     [
       'SnapshotBridge.m',
+      'SnapshotBridgeRequest.h',
+      'SnapshotBridgeRequest.m',
       'SnapshotBridgeRuntime.m',
       'SnapshotBridgeRuntime.h',
       'SnapshotBridgeCapture.h',
