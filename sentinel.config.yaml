@@ -2,3 +2,6 @@ version: 1.0
 
 user_settings:
   reviewers: [thymikee]
+
+  min_severity: minor
+  report_floor: corroborated-minor
