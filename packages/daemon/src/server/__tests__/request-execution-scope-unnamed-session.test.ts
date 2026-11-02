@@ -70,29 +70,51 @@ function publishProviderLeasedDefaultSession(
   );
 }
 
-test('an unnamed command cannot reach the provider lease another caller left on the default session', async () => {
+test.each(['snapshot', 'artifacts', 'events', 'logs'])(
+  'an unnamed %s cannot reach the provider lease another caller left on the default session',
+  async (command) => {
+    const sessionStore = makeSessionStore('agent-device-request-scope-');
+    const leaseRegistry = new LeaseRegistry();
+    publishProviderLeasedDefaultSession(sessionStore, leaseRegistry);
+    const dispatch = vi.fn(async () => 'ran');
+
+    const run = async () => {
+      const scope = await createTestRequestScope({
+        req: makeRequest({ command, internal: { sessionOmitted: true } }),
+        sessionStore,
+        leaseRegistry,
+      });
+      return await scope.runLocked(dispatch);
+    };
+
+    await expect(run()).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      details: { reason: 'REMOTE_SESSION_REQUIRED', leaseProvider: 'proxy' },
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  },
+);
+
+test('an unnamed command queued behind an open is refused once that open leaves a provider lease', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
-  publishProviderLeasedDefaultSession(sessionStore, leaseRegistry);
   const dispatch = vi.fn(async () => 'ran');
+  const scope = await createTestRequestScope({
+    req: makeRequest({ internal: { sessionOmitted: true } }),
+    sessionStore,
+    leaseRegistry,
+  });
 
-  const run = async () => {
-    const scope = await createTestRequestScope({
-      req: makeRequest({ command: 'snapshot', internal: { sessionOmitted: true } }),
-      sessionStore,
-      leaseRegistry,
-    });
-    return await scope.runLocked(dispatch);
-  };
+  publishProviderLeasedDefaultSession(sessionStore, leaseRegistry);
 
-  await expect(run()).rejects.toMatchObject({
+  await expect(scope.runLocked(dispatch)).rejects.toMatchObject({
     code: 'INVALID_ARGS',
     details: { reason: 'REMOTE_SESSION_REQUIRED', leaseProvider: 'proxy' },
   });
   expect(dispatch).not.toHaveBeenCalled();
 });
 
-test.each(['session_list', 'devices'])(
+test.each(['session_list', 'devices', 'capabilities', 'doctor'])(
   'an unnamed %s still answers while the default session holds a provider lease',
   async (command) => {
     const sessionStore = makeSessionStore('agent-device-request-scope-');
