@@ -28,6 +28,7 @@ export AWS_REGION=us-west-2
 Connect with the Device Farm project, the device, and an optional app upload:
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-android
 agent-device connect aws-device-farm \
   --platform android \
   --aws-project-arn arn:aws:devicefarm:us-west-2:<account-id>:project:<project-id> \
@@ -49,13 +50,14 @@ agent-device also accepts `AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN`, `AGENT_DEV
 
 ## Run a session from the CLI
 
-Every `connect` without `--session` creates a new connection, and the printed next steps include its generated `--session`. Keep that flag on every command when several processes or CI jobs share a host; the active connection is safe only for one sequential workflow. To replace a named connection, run `connect ... --session <name> --force`. `--force` without `--session` creates a new connection and leaves existing sessions untouched.
+Name the session once with `AGENT_DEVICE_SESSION`, as below, or pass `--session <name>` to every command, including `connect`. A command that names no session fails with `REMOTE_SESSION_REQUIRED`. To replace a named connection, run `connect ... --session <name> --force`.
 
 ```bash
 export AWS_REGION=us-west-2
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_SESSION_TOKEN=...
+export AGENT_DEVICE_SESSION=checkout-android
 
 agent-device connect aws-device-farm \
   --platform android \

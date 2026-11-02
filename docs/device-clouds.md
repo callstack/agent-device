@@ -28,9 +28,12 @@ Every provider runs through the local `agent-device` daemon. `connect` checks yo
 Every provider follows the same steps:
 
 1. Put provider credentials in CI secrets or another non-interactive credential source.
-2. Run `agent-device connect <provider>` with the provider selectors.
-3. Follow the printed next command to install or open the app.
-4. Run normal device commands, then `agent-device close` and `agent-device disconnect`.
+2. Set `AGENT_DEVICE_SESSION` to a name for this agent or CI job.
+3. Run `agent-device connect <provider>` with the provider selectors.
+4. Follow the printed next command to install or open the app.
+5. Run normal device commands, then `agent-device close` and `agent-device disconnect`.
+
+Every command on a provider connection must name its session, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, before it leases anything, instead of using the connection that another agent or job on the same machine saved last. This includes `connect` itself.
 
 Each provider accepts only its own provider flags (`--provider-*` and `--aws-*`). A flag the provider does not use fails with `INVALID_ARGS` naming the flag, whether you pass it to `connect`, `client.leases.allocate()`, or a remote-config profile, so no setting is silently dropped.
 

@@ -26,10 +26,11 @@ By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you want 
 
 ## Connect from the agent machine
 
-On the machine running the agent, connect to the public tunnel URL with the `/agent-device` base path and the printed token. The connection profile stores only routing metadata, never the token, so export the token once and every command in the shell picks it up:
+On the machine running the agent, connect to the public tunnel URL with the `/agent-device` base path and the printed token. The connection profile stores only routing metadata, never the token, so export the token once and every command in the shell picks it up. Name the session the same way:
 
 ```bash
 export AGENT_DEVICE_DAEMON_AUTH_TOKEN=<token>
+export AGENT_DEVICE_SESSION=checkout-agent
 agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device
 agent-device devices --platform ios
 agent-device open MyApp --platform ios
@@ -37,6 +38,8 @@ agent-device snapshot --platform ios
 agent-device close
 agent-device disconnect
 ```
+
+Every command on a proxy connection must name its session, with `AGENT_DEVICE_SESSION`, `--session <name>`, or a `session` in your config. The same applies to every device-cloud connection. A command that names none fails with `INVALID_ARGS` and `details.reason: "REMOTE_SESSION_REQUIRED"`, and sends nothing to the proxy. It never falls back to the connection that another agent on the same machine saved last. This includes `connect proxy` and `open --remote-config <file>` with a proxy profile. The client and run that the proxy leases under come from the session name, so two agents with different names never share a lease.
 
 `--daemon-auth-token <token>` works instead of the environment variable, but it authenticates only the command you pass it to. Later commands need the token again through the environment variable, a `daemonAuthToken` entry in your remote config profile, or the flag on each command.
 
@@ -46,7 +49,7 @@ Without `--udid` or `--serial`, `open` does not pick the device on the agent mac
 
 `open` names each new lease with an id it makes (32 lowercase hex characters) and sends it with the allocation, so a host in front of the daemon knows the lease id before the daemon allocates. A direct `agent_device.lease.allocate` RPC can pass `leaseId` (16 to 128 hex characters) the same way; repeating the id of a live lease returns that lease when the retry carries the same tenant, run, client, lease backend, and provider, and either names no device or the device the lease binds, so a retry after a lost reply does not allocate a second one. A retry without `ttlMs` keeps the lease's window. A retry that changes any of those fields is refused like any other reused id. The id identifies the lease: one run can hold several leases. Any other id this daemon has already given a lease, active or ended, is refused with `INVALID_ARGS` and reason `LEASE_ID_IN_USE`, and without one the daemon makes the id. Use the id the reply carries: a run that already holds a lease gets that lease back, and an older daemon ignores the requested id.
 
-Several agents can share one proxy when each follows the same `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent holds the device until it closes its session or its lease expires.
+Several agents can share one proxy, and one machine, when each names its own session and follows the same `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent holds the device until it closes its session or its lease expires.
 
 Do not put the proxy endpoint, token, tenant, or provider fields in `./agent-device.json`: repository
 configuration accepts only project-safe automation defaults. Set the endpoint and token with `connect proxy`, user

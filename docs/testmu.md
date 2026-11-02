@@ -28,6 +28,7 @@ export LT_ACCESS_KEY=...
 Connect with the platform, exact device name and OS version, and the app to test:
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-android
 agent-device connect testmu \
   --platform android \
   --device "Galaxy S22 Ultra 5G" \
@@ -88,6 +89,7 @@ for virtual devices: `connect` checks the device/OS pair against the real-device
 agent-device uploads a local path or URL through the real-device upload API.
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-real
 agent-device connect testmu \
   --provider-device-type real \
   --platform ios \
@@ -120,6 +122,7 @@ agent-device connect testmu \
 ```bash
 export LT_USERNAME=...
 export LT_ACCESS_KEY=...
+export AGENT_DEVICE_SESSION=checkout-ios
 
 agent-device connect testmu \
   --platform ios \

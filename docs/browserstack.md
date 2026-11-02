@@ -14,6 +14,7 @@ export BROWSERSTACK_ACCESS_KEY=...
 Connect with the platform, exact device and OS version, and app to test:
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-android
 agent-device connect browserstack \
   --platform android \
   --device "Google Pixel 8" \
@@ -61,6 +62,7 @@ agent-device sends these values to BrowserStack as `bstack:options` capabilities
 ```bash
 export BROWSERSTACK_USERNAME=...
 export BROWSERSTACK_ACCESS_KEY=...
+export AGENT_DEVICE_SESSION=checkout-android
 
 agent-device connect browserstack \
   --platform android \

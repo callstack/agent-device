@@ -1116,9 +1116,10 @@ agent-device trace stop session.trace
 
 ## Remote Metro workflow
 
-When the cloud control plane owns the connection profile, `connect` discovers it:
+When the cloud control plane owns the connection profile, `connect` discovers it. Name the session once, because every command on a cloud connection must name it:
 
 ```bash
+export AGENT_DEVICE_SESSION=checkout-ios
 agent-device connect
 agent-device open com.example.myapp --relaunch
 agent-device snapshot -i
@@ -1161,7 +1162,7 @@ agent-device disconnect --remote-config ./agent-device.remote.json
 - `connect` fetches the cloud connection profile; `connect --remote-config <path>` uses a local profile with the host, tenant/run, and optional session, platform, lease backend, and Metro settings. Both save connection state and defer the device lease and Metro preparation until a command needs them (including a `batch` step that opens an app). Direct-provider profiles need their provider credentials when `connect` runs. Cloud profiles must be a JSON object at `connection.remoteConfigProfile`; the older `connection.remoteConfig` string is rejected.
 - Cloud auth: `connect` refreshes a stored CLI session into a short-lived `adc_agent_...` token. Without a session, interactive shells start login; CI and non-interactive shells fail with API-token setup instructions. `--no-login` disables implicit login. Use `adc_live_...` service tokens for CI. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`; login never stores an `adc_live_...` token.
 - `AGENT_DEVICE_CLOUD_BASE_URL` is the bridge/control-plane API origin, not necessarily the dashboard; its `/api-keys` route may redirect to the dashboard.
-- `connect` without `--session` always creates a fresh remote session and prints the generated `--session`. Concurrent processes must pass that value on every command; the active-connection fallback is only for one sequential workflow. To replace a connection, pass `--session <name> --force`; `--force` without a session adds a connection without releasing the previous one.
+- Every command on a connection with a lease provider (the cloud, `connect proxy`, a device cloud, or a `leaseProvider` in the profile), including `connect`, must name its session with `--session`, `AGENT_DEVICE_SESSION`, or config, or it fails with `REMOTE_SESSION_REQUIRED`. Each session on such a profile leases under its own client and run, derived from the session name, unless the profile names a lease the host issued. For any other profile, `connect` without `--session` creates a fresh remote session and prints the generated `--session`, and commands without one fall back to the most recent connection on the machine, which is safe only for one sequential workflow. To replace a connection, pass `--session <name> --force`.
 - After `connect`, normal commands (`install-from-source`, `open`, `snapshot`, `press`, `screenshot`, and others) reuse the connection state. `connection status` shows `leaseId=pending` until the first platform-bound command allocates the lease. Explicit flags override connected defaults; `open` with explicit remote flags but no saved runtime hints warns that React Native apps may launch without Metro hints.
 - End with `disconnect` (or `disconnect --remote-config <path>`) to release the lease and stop the Metro companion owned by the connection. It does not stop your Metro server.
 - `metroProxyBaseUrl` is the bridge origin; do not add `/api/metro/...` paths. The bridge supplies iOS wildcard HTTPS hints and Android runtime routes. `metroPublicBaseUrl` is only needed for direct, non-bridge bundle hints. `metro prepare --remote-config ...` is an inspection/debug path that can write `--runtime-file <path>`.
