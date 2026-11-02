@@ -32,7 +32,7 @@ vi.mock('../screenshot-status-bar.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../screenshot-status-bar.ts')>();
   return {
     ...actual,
-    prepareSimulatorStatusBarForScreenshot: vi.fn(actual.prepareSimulatorStatusBarForScreenshot),
+    withNormalizedSimulatorStatusBar: vi.fn(actual.withNormalizedSimulatorStatusBar),
   };
 });
 
@@ -45,10 +45,6 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 const runnerActual =
   await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
-const screenshotStatusBarActual = await vi.importActual<
-  typeof import('../screenshot-status-bar.ts')
->('../screenshot-status-bar.ts');
-
 import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
@@ -57,7 +53,11 @@ import {
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
-import { prepareSimulatorStatusBarForScreenshot } from '../screenshot-status-bar.ts';
+import {
+  invalidateSimulatorStatusBarOverrideCache,
+  withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
+} from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner-client.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
@@ -65,14 +65,13 @@ import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
-import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockOpenIosSimulatorApp = vi.mocked(openIosSimulatorApp);
-const mockPrepareStatusBarForScreenshot = vi.mocked(prepareSimulatorStatusBarForScreenshot);
+const mockWithNormalizedStatusBar = vi.mocked(withNormalizedSimulatorStatusBar);
 
 // The wire key and a real measured capture come from the cross-language golden table, so this
 // consumer suite cannot spell a shape the Swift encoder disagrees with (#2728).
@@ -92,9 +91,7 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockImplementation(runnerActual.runAppleRunnerCommand);
   mockEnsureBootedSimulator.mockImplementation(simulatorActual.ensureBootedSimulator);
   mockOpenIosSimulatorApp.mockImplementation(simulatorActual.openIosSimulatorApp);
-  mockPrepareStatusBarForScreenshot.mockImplementation(
-    screenshotStatusBarActual.prepareSimulatorStatusBarForScreenshot,
-  );
+  mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => await capture());
 });
 
 async function waitForFileText(filePath: string, attempts = 20): Promise<string> {
@@ -145,7 +142,6 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
     ensureBootedCalls += 1;
   });
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
   mockRetryWithPolicy.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
       stderr: 'Timeout waiting for screen surfaces',
@@ -168,7 +164,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
-        prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+        withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
@@ -193,7 +189,6 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
   await fs.writeFile(runnerImage, 'runner-timeout', 'utf8');
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
   mockRetryWithPolicy.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
       args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
@@ -216,7 +211,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
-        prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+        withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
@@ -231,13 +226,19 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
   }
 });
 
-test('captureSimulatorScreenshotWithFallback continues when status bar preparation fails', async () => {
-  mockPrepareStatusBarForScreenshot.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'status_bar override failed'),
-  );
+test('captureSimulatorScreenshotWithFallback runs the capture inside status bar normalization', async () => {
+  const steps: string[] = [];
+  mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => {
+    steps.push('normalize');
+    const captured = await capture();
+    steps.push('restore');
+    return captured;
+  });
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockRetryWithPolicy.mockResolvedValue(undefined);
+  mockRetryWithPolicy.mockImplementation(async () => {
+    steps.push('capture');
+  });
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     env: process.env,
 
@@ -245,14 +246,12 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
     normalizeStatusBar: true,
     deps: { normalizeDensity: async () => {} },
   });
-  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
-  assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
+  assert.deepEqual(steps, ['normalize', 'capture', 'restore']);
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('captureSimulatorScreenshotWithFallback can skip session-backed simulator boot probe', async () => {
   mockEnsureBootedSimulator.mockRejectedValue(new Error('should not probe boot state'));
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
   mockRetryWithPolicy.mockResolvedValue(undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
@@ -270,7 +269,6 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
 
 test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after shutdown screenshot failure', async () => {
   const ensureBooted = vi.fn(async () => {});
-  const prepareStatusBarForScreenshot = vi.fn(async () => async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
     captureAttempts += 1;
@@ -290,7 +288,6 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
     skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted,
-      prepareStatusBarForScreenshot,
       captureWithRetry,
       normalizeDensity: async () => {},
       captureWithRunner,
@@ -306,7 +303,6 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
 
 test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped-check boot recovery', async () => {
   const ensureBooted = vi.fn(async () => {});
-  const prepareStatusBarForScreenshot = vi.fn(async () => async () => {});
   let captureAttempts = 0;
   const captureWithRetry = vi.fn(async () => {
     captureAttempts += 1;
@@ -330,7 +326,6 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
     skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted,
-      prepareStatusBarForScreenshot,
       captureWithRetry,
       normalizeDensity: async () => {},
       captureWithRunner,
@@ -344,108 +339,56 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
   assert.equal(captureWithRunner.mock.calls.length, 1);
 });
 
-test('captureSimulatorScreenshotWithFallback ignores status bar restore failures', async () => {
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {
-    throw new AppError('COMMAND_FAILED', 'status_bar clear failed');
-  });
+test('captureSimulatorScreenshotWithFallback skips status bar normalization by default', async () => {
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockResolvedValue(undefined);
+
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     env: process.env,
 
     appBundleId: 'com.example.app',
-    normalizeStatusBar: true,
     deps: { normalizeDensity: async () => {} },
   });
-  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
+
+  assert.equal(mockWithNormalizedStatusBar.mock.calls.length, 0);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
-function statusBarItemSummary(event: {
-  level: string;
-  phase: string;
-  data?: Record<string, unknown>;
-}) {
-  return {
-    level: event.level,
-    phase: event.phase,
-    deviceId: event.data?.deviceId,
-    exitCode: event.data?.exitCode,
-  };
-}
-
-test('captureSimulatorScreenshotWithFallback logs a status bar preparation failure', async () => {
+test('captureSimulatorScreenshotWithFallback keeps the runner fallback inside the normalization window', async () => {
+  const steps: string[] = [];
+  mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => {
+    steps.push('normalize');
+    const captured = await capture();
+    steps.push('restore');
+    return captured;
+  });
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockRetryWithPolicy.mockResolvedValue(undefined);
-  mockPrepareStatusBarForScreenshot.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'status_bar override failed', { exitCode: 69 }),
+  mockRetryWithPolicy.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
+      args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
+      timeoutMs: 20_000,
+    }),
   );
 
-  const events = await statusBarDiagnosticEvents(async () => {
-    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
-      env: process.env,
-      appBundleId: 'com.example.app',
-      normalizeStatusBar: true,
-      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
-    });
-  });
-
-  assert.deepEqual(events.map(statusBarItemSummary), [
-    {
-      level: 'warn',
-      phase: 'ios_screenshot_status_bar_prepare_failed',
-      deviceId: 'sim-1',
-      exitCode: 69,
-    },
-  ]);
-});
-
-test('captureSimulatorScreenshotWithFallback logs a status bar restoration failure', async () => {
-  mockEnsureBootedSimulator.mockResolvedValue(undefined);
-  mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockRetryWithPolicy.mockResolvedValue(undefined);
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {
-    throw new AppError('COMMAND_FAILED', 'status_bar clear failed', { exitCode: 70 });
-  });
-
-  const events = await statusBarDiagnosticEvents(async () => {
-    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
-      env: process.env,
-      appBundleId: 'com.example.app',
-      normalizeStatusBar: true,
-      deps: { normalizeDensity: async () => {}, resolveCaptureTarget: async () => ({}) },
-    });
-  });
-
-  assert.deepEqual(events.map(statusBarItemSummary), [
-    {
-      level: 'warn',
-      phase: 'ios_screenshot_status_bar_restore_failed',
-      deviceId: 'sim-1',
-      exitCode: 70,
-    },
-  ]);
-});
-
-test('captureSimulatorScreenshotWithFallback skips status bar normalization by default', async () => {
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
-  mockEnsureBootedSimulator.mockResolvedValue(undefined);
-  mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockRetryWithPolicy.mockResolvedValue(undefined);
-
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     env: process.env,
-
     appBundleId: 'com.example.app',
-    deps: { normalizeDensity: async () => {} },
+    normalizeStatusBar: true,
+    deps: {
+      normalizeDensity: async () => {},
+      resolveCaptureTarget: async () => ({}),
+      shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+      captureWithRunner: async () => {
+        steps.push('runner fallback capture');
+        return undefined;
+      },
+    },
   });
 
-  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 0);
-  assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
+  assert.deepEqual(steps, ['normalize', 'runner fallback capture', 'restore']);
 });
 
 test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before using runner', async () => {
@@ -467,7 +410,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
         await fs.writeFile(runnerImage, 'diag-fallback', 'utf8');
         mockEnsureBootedSimulator.mockResolvedValue(undefined);
         mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-        mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
+        mockWithNormalizedStatusBar.mockImplementation(async (_device, capture) => await capture());
         mockRetryWithPolicy.mockRejectedValue(
           new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
             args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
@@ -487,7 +430,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
           appBundleId: 'com.example.app',
           deps: {
             ensureBooted: ensureBootedSimulator,
-            prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+            withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
             captureWithRetry: captureSimulatorScreenshotWithRetry,
             normalizeDensity: async () => {},
             captureWithRunner: captureScreenshotViaRunner,
@@ -518,7 +461,6 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
   await fs.writeFile(runnerImage, 'default-fallback', 'utf8');
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
-  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
   mockRetryWithPolicy.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
       args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
@@ -676,6 +618,149 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
     assert.deepEqual(metadata, MEASURED_CAPTURE.metadata);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
   } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// Both capture legs of one request run inside the status bar window, and the runner leg takes that
+// same window for itself. This drives the real normalization around the real runner fallback, with
+// only the tools faked, so the nesting is exercised rather than assumed.
+test('captureSimulatorScreenshotWithFallback keeps the real runner fallback inside its own status bar window', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-normalized-runner-fallback-');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-1' };
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'fallback-window.png');
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-window-image', 'utf8');
+  const timeline: string[] = [];
+  const steps: string[] = [];
+
+  // The file's mock of the status bar owner stands in for the plain pass-through by default; this
+  // case needs the real transaction, so it restores the implementation `vi.fn` was created with.
+  mockWithNormalizedStatusBar.mockReset();
+  invalidateSimulatorStatusBarOverrideCache(device);
+  mockRetryWithPolicy.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'Detected file type from extension: PNG', {
+      stderr: 'Timeout waiting for screen surfaces',
+      exitCode: 60,
+    }),
+  );
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    steps.push('runner');
+    timeline.push('runner');
+    return { message: 'tmp/fallback-window.png' };
+  });
+  mockRunCmd.mockImplementation(async (cmd, args) => {
+    const argv = [cmd, ...(args ?? [])].join(' ');
+    if (argv.includes('status_bar')) {
+      timeline.push(`status_bar:${/status_bar\s+\S+\s+(\S+)/.exec(argv)?.[1]}`);
+      return {
+        exitCode: 0,
+        stdout: 'Current Status Bar Overrides:\n=============================\n',
+        stderr: '',
+      };
+    }
+    if (argv.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected command: ${argv}`);
+  });
+
+  try {
+    const outPath = path.join(tmpDir, 'out.png');
+    await captureSimulatorScreenshotWithFallback(device, outPath, {
+      env: process.env,
+      normalizeStatusBar: true,
+      skipIosSimulatorBootCheck: true,
+      deps: {
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        normalizeDensity: async () => {},
+        captureWithRunner: captureScreenshotViaRunner,
+        shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+        resolveCaptureTarget: async () => ({}),
+      },
+    });
+
+    assert.deepEqual(steps, ['runner']);
+    assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-window-image');
+    // The window belongs to the request: it opens before either capture and closes after the
+    // runner capture, and the runner leg re-enters that window instead of opening its own.
+    assert.deepEqual(timeline, [
+      'status_bar:list',
+      'status_bar:override',
+      'runner',
+      'status_bar:clear',
+    ]);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('captureScreenshotViaRunner waits for a held simulator status bar', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-runner-bar-window-');
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'held.png');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-held' };
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-image', 'utf8');
+
+  let releaseHolder!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseHolder = resolve;
+  });
+  let releaseRunnerCommand!: () => void;
+  const runnerCommandReleased = new Promise<void>((resolve) => {
+    releaseRunnerCommand = resolve;
+  });
+  let releaseHolderGate!: () => void;
+  const holderEntered = new Promise<void>((resolve) => {
+    releaseHolderGate = resolve;
+  });
+
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    await runnerCommandReleased;
+    return { message: 'tmp/held.png' };
+  });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  const holder = withSimulatorStatusBarHeld(device, async () => {
+    releaseHolderGate();
+    await held;
+  });
+
+  try {
+    await holderEntered;
+    const outPath = path.join(tmpDir, 'out.png');
+    const runnerCapture = captureScreenshotViaRunner(
+      device,
+      outPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      mockRunAppleRunnerCommand.mock.calls.length,
+      0,
+      'a runner capture must wait while another capture holds the status bar',
+    );
+
+    releaseHolder();
+    await holder;
+    await new Promise((resolve) => setImmediate(resolve));
+    releaseRunnerCommand();
+    await runnerCapture;
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+    assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
+  } finally {
+    releaseHolder();
+    releaseRunnerCommand();
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });

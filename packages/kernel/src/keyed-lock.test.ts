@@ -312,6 +312,40 @@ test('heldKeyedLockKeys lists only the locks of the map held by the current cont
   });
 });
 
+test('heldKeyedLockKeys reports exactly the keys withKeyedLock would re-enter for that context', async () => {
+  // A caller may decide behaviour from `heldKeyedLockKeys` before calling `withKeyedLock`, as the
+  // iOS status bar owner does. Both must answer from the same scan of the current context, or a
+  // caller that reads "held" could be queued behind, or reject at the boundary of, its own lock.
+  // Each reported key re-enters here while the frames that report it are still open, which a queued
+  // task could not do.
+  const locks = new Map<string, Promise<unknown>>();
+  const reEntered: string[] = [];
+  await withKeyedLock(locks, 'host', async () => {
+    await withKeyedLock(locks, 'host:app', async () => {
+      for (const key of heldKeyedLockKeys(locks)) {
+        await withKeyedLock(locks, key, async () => {
+          reEntered.push(key);
+        });
+      }
+    });
+  });
+  assert.deepEqual(reEntered.sort(), ['host', 'host:app']);
+
+  const holderReEntered: string[] = [];
+  await withKeyedLockHolder(async (holder) => {
+    const taking = holder.hold(locks, 'device:app');
+    // While the hold is still being taken it already reads as held, and a nested step must not queue
+    // behind it, so the report and the re-entry are both checked before anything is awaited.
+    assert.deepEqual(heldKeyedLockKeys(locks), ['device:app']);
+    await withKeyedLock(locks, 'device:app', async () => {
+      holderReEntered.push('device:app');
+    });
+    await taking;
+  });
+  assert.deepEqual(holderReEntered, ['device:app']);
+  assert.equal(locks.size, 0);
+});
+
 test('a scope wanting a key its enclosing holder is still taking re-enters it once taken', async () => {
   const locks = new Map<string, Promise<unknown>>();
   let releaseOwner: () => void = () => {};

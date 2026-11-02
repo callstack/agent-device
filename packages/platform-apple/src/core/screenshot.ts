@@ -28,8 +28,8 @@ import {
   type AppleRunnerCommandOptions,
 } from '@agent-device/apple-runner';
 import {
-  emitSimulatorStatusBarDiagnostic,
-  prepareSimulatorStatusBarForScreenshot,
+  withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
@@ -44,7 +44,24 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
-  prepareStatusBarForScreenshot: (device: DeviceInfo) => Promise<() => Promise<void>>;
+  /**
+   * Runs `capture` while it owns the simulator's status bar: normalized to the deterministic state,
+   * with the caller's overrides restored afterwards. One capture per simulator at a time.
+   */
+  withNormalizedStatusBar: <T>(
+    device: DeviceInfo,
+    capture: () => Promise<T>,
+    signal?: AbortSignal,
+  ) => Promise<T>;
+  /**
+   * Runs `capture` while it owns the simulator's status bar, without changing the bar. It still
+   * waits: a capture that normalizes shows the deterministic state while it is in flight.
+   */
+  withStatusBarHeld: <T>(
+    device: DeviceInfo,
+    capture: () => Promise<T>,
+    signal?: AbortSignal,
+  ) => Promise<T>;
   resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
@@ -89,7 +106,8 @@ type SimulatorScreenshotFlowOptions = {
 
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
-  prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+  withNormalizedStatusBar: withNormalizedSimulatorStatusBar,
+  withStatusBarHeld: withSimulatorStatusBarHeld,
   resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
@@ -154,15 +172,7 @@ export async function captureSimulatorScreenshotWithFallback(
     await deps.captureWithRetry(device, outPath, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
-  let restoreStatusBar = async () => {};
-  if (options.normalizeStatusBar === true) {
-    try {
-      restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
-    } catch (error) {
-      emitSimulatorStatusBarDiagnostic(device, 'prepare_failed', error);
-    }
-  }
-  try {
+  const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
     try {
       await captureAndNormalize();
       return captureFacts;
@@ -199,11 +209,11 @@ export async function captureSimulatorScreenshotWithFallback(
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
     return captureFacts;
-  } finally {
-    await restoreStatusBar().catch((error) =>
-      emitSimulatorStatusBarDiagnostic(device, 'restore_failed', error),
-    );
-  }
+  };
+
+  const holdStatusBar =
+    options.normalizeStatusBar === true ? deps.withNormalizedStatusBar : deps.withStatusBarHeld;
+  return await holdStatusBar(device, captureWithFallback, options.runnerOptions?.signal);
 }
 
 export async function captureSimulatorScreenshotWithRetry(
@@ -239,6 +249,26 @@ export async function captureSimulatorScreenshotWithRetry(
   );
 }
 
+/** The runner renders this target's screen the way `simctl io screenshot` does, through the simulator. */
+function capturesThroughSimulatorStatusBar(device: DeviceInfo): boolean {
+  return device.kind === 'simulator' && !isMacOs(device);
+}
+
+/** The runner reaches this target through the physical-device control rather than the runner app. */
+function capturesThroughPhysicalDeviceControl(device: DeviceInfo): boolean {
+  return device.kind === 'device' && !isMacOs(device);
+}
+
+/**
+ * Captures through the runner backend. An iOS simulator's runner capture renders the same screen a
+ * simctl capture does, so it takes the same status bar reservation: while another capture
+ * normalizes the bar, this one would otherwise copy an image of the temporary 9:41 overrides. This
+ * reservation covers the runner capture alone; the density normalization the fallback flow applies
+ * afterwards is covered by that flow's own hold, and a direct call here performs no density step.
+ * It re-enters when the caller already holds it, as the simctl fallback does, and an already-aborted
+ * request does not reject that re-entry at the lock boundary — see `withSimulatorStatusBarHeld`. The
+ * runner command keeps the request's signal.
+ */
 export async function captureScreenshotViaRunner(
   device: DeviceInfo,
   outPath: string,
@@ -247,7 +277,33 @@ export async function captureScreenshotViaRunner(
   runnerOptions: AppleRunnerCommandOptions | undefined,
   env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
-  if (device.kind === 'device' && !isMacOs(device)) {
+  if (!capturesThroughSimulatorStatusBar(device)) {
+    return await captureRunnerScreenshot(
+      device,
+      outPath,
+      appBundleId,
+      fullscreen,
+      runnerOptions,
+      env,
+    );
+  }
+  return await withSimulatorStatusBarHeld(
+    device,
+    async () =>
+      await captureRunnerScreenshot(device, outPath, appBundleId, fullscreen, runnerOptions, env),
+    runnerOptions?.signal,
+  );
+}
+
+async function captureRunnerScreenshot(
+  device: DeviceInfo,
+  outPath: string,
+  appBundleId: string | undefined,
+  fullscreen: boolean | undefined,
+  runnerOptions: AppleRunnerCommandOptions | undefined,
+  env: Readonly<EnvMap>,
+): Promise<RunnerScreenCaptureMetadata | undefined> {
+  if (capturesThroughPhysicalDeviceControl(device)) {
     await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
       appBundleId,
       fullscreen,

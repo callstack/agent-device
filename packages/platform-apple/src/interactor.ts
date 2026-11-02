@@ -231,7 +231,7 @@ export function createAppleInteractor(
     readClipboard: () => readIosClipboardText(device),
     writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
     setSetting: (setting, state, appId, options) =>
-      setIosSetting(device, setting, state, appId, options, env),
+      setIosSetting(device, setting, state, appId, options, env, runnerOpts.signal),
     readSetting: (setting) => readIosSetting(device, setting),
     readAlert: (options) => readAppleAlert(device, runnerOpts, options, env),
     awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options, env),
@@ -513,8 +513,9 @@ async function runAppleScreenshot(
     return {};
   }
   if (options.captureBackend === 'runner') {
-    // Runner capture returns the XCTest surface as-is; density and simulator
-    // status-bar normalization belong only to the simctl capture pipeline.
+    // Runner capture returns the XCTest surface as-is; density normalization belongs only to the
+    // simctl capture pipeline. Of this branch's targets, only an iOS simulator capture waits for a
+    // status bar window: physical-device and macOS captures take none.
     await captureScreenshotViaRunner(
       device,
       outPath,

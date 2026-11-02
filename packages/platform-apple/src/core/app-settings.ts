@@ -35,6 +35,8 @@ import { buildSimctlArgsForDevice, readSimctlContainerPath, runSimctlForDevice }
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
+  STATUS_BAR_COMMAND_TIMEOUT_MS,
+  withSimulatorStatusBarHeld,
 } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { runXcrun } from './tool-provider.ts';
@@ -66,6 +68,7 @@ export async function setIosSetting(
   appBundleId: string | undefined,
   options: SettingOptions | undefined,
   env: Readonly<EnvMap>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | void> {
   if (isMacOs(device)) return await setMacOsHostSetting(setting, state, options, env);
   requireSimulatorDevice(device, 'settings');
@@ -104,35 +107,65 @@ export async function setIosSetting(
     case 'wifi': {
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';
-      await runSimctlForDevice(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
-      invalidateSimulatorStatusBarOverrideCache(device);
+      // The write waits for the simulator's status bar window: a capture restores the bar it
+      // snapshotted, so a write that landed inside that window would be reverted by that restore.
+      await withSimulatorStatusBarHeld(
+        device,
+        async () => {
+          // Dropped before the command, not after it: a write that hits its deadline may still have
+          // reached `simctl`, so no answer about the bar survives the attempt either way.
+          invalidateSimulatorStatusBarOverrideCache(device);
+          await runSimctlForDevice(
+            device,
+            ['status_bar', device.id, 'override', '--wifiMode', mode],
+            { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
+          );
+        },
+        signal,
+      );
       return;
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
-      if (enabled) {
-        await runSimctlForDevice(device, [
-          'status_bar',
-          device.id,
-          'override',
-          '--dataNetwork',
-          'hide',
-          '--wifiMode',
-          'failed',
-          '--wifiBars',
-          '0',
-          '--cellularMode',
-          'failed',
-          '--cellularBars',
-          '0',
-          '--operatorName',
-          '',
-        ]);
-        invalidateSimulatorStatusBarOverrideCache(device);
-      } else {
-        await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
-        rememberClearedStatusBarOverrides(device);
-      }
+      // Same reason as `wifi`: the write waits for the capture window so a restore cannot undo it,
+      // and the command is bounded so a wedged `simctl` cannot hold the simulator's captures.
+      await withSimulatorStatusBarHeld(
+        device,
+        async () => {
+          // Dropped before the command, as for `wifi`: a write that hits its deadline may still have
+          // reached `simctl`, so no answer about the bar survives the attempt.
+          invalidateSimulatorStatusBarOverrideCache(device);
+          if (enabled) {
+            await runSimctlForDevice(
+              device,
+              [
+                'status_bar',
+                device.id,
+                'override',
+                '--dataNetwork',
+                'hide',
+                '--wifiMode',
+                'failed',
+                '--wifiBars',
+                '0',
+                '--cellularMode',
+                'failed',
+                '--cellularBars',
+                '0',
+                '--operatorName',
+                '',
+              ],
+              { timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS },
+            );
+          } else {
+            await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], {
+              timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
+            });
+            rememberClearedStatusBarOverrides(device);
+          }
+        },
+        signal,
+      );
       return;
     }
     case 'faceid':

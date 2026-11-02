@@ -2,6 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import { heldKeyedLockKeys, withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
@@ -57,44 +58,130 @@ const CELLULAR_MODE_BY_CODE: Record<number, string> = {
 
 const devicesKnownWithoutStatusBarOverrides = new Set<string>();
 
-export async function prepareSimulatorStatusBarForScreenshot(
-  device: DeviceInfo,
-): Promise<() => Promise<void>> {
-  let previousOverrides: RestorableStatusBarOverrides | null = null;
-  let canRestorePreviousOverrides = false;
-  if (hasKnownClearedStatusBarOverrides(device)) {
-    canRestorePreviousOverrides = true;
-  } else {
-    try {
-      previousOverrides = await readSimulatorStatusBarOverrides(device);
-      canRestorePreviousOverrides = true;
-    } catch (error) {
-      emitSimulatorStatusBarDiagnostic(device, 'snapshot_failed', error);
-    }
-  }
+/** One entry per simulator whose status bar a capture is holding right now. */
+const simulatorStatusBarTransactions = new Map<string, Promise<unknown>>();
 
+/** Bounds one `simctl status_bar` step so a wedged tool cannot hold a simulator's captures. */
+export const STATUS_BAR_COMMAND_TIMEOUT_MS = 10_000;
+
+/**
+ * Budget for the restore specifically. Leaving the normalization on the simulator is the failure
+ * this owner exists to prevent, so the restore is given the longer deadline; it is still bounded,
+ * because an untimed wedged tool would hold the simulator's captures forever. It applies to each
+ * restore command, so one stuck `clear` followed by one stuck `override` can hold this simulator's
+ * captures for twice this budget.
+ */
+const STATUS_BAR_RESTORE_TIMEOUT_MS = 30_000;
+
+/** What the simulator's status bar held before a capture normalized it. */
+type StatusBarOverrideSnapshot = {
+  /** False when the tool refused to answer, so nothing here is safe to restore to. */
+  canRestore: boolean;
+  overrides: RestorableStatusBarOverrides | null;
+};
+
+/**
+ * Runs `capture` with the simulator status bar normalized, then restores the overrides the
+ * simulator held before this call. One simulator handles one of these at a time: the normalization
+ * is temporary state, so a capture that overlapped another would snapshot it and later hand it back
+ * as though the caller had set it. A status bar problem never decides whether `capture` runs or
+ * what it returns.
+ *
+ * `signal` cancels the wait for the simulator only. It is not handed to the status bar commands: a
+ * request that gives up must not leave the normalization behind, so the restore runs to its budget
+ * instead — {@link STATUS_BAR_COMMAND_TIMEOUT_MS} per setup command and the longer
+ * {@link STATUS_BAR_RESTORE_TIMEOUT_MS} per restore command, so even a wedged `simctl` cannot hold
+ * the simulator forever.
+ */
+export async function withNormalizedSimulatorStatusBar<T>(
+  device: DeviceInfo,
+  capture: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  return await withKeyedLock(
+    simulatorStatusBarTransactions,
+    statusBarSimulatorKey(device),
+    async () => {
+      const snapshot = await snapshotSimulatorStatusBarOverrides(device);
+      await normalizeSimulatorStatusBar(device, snapshot);
+      try {
+        return await capture();
+      } finally {
+        await restoreSimulatorStatusBarOverrides(
+          device,
+          snapshot.canRestore ? snapshot.overrides : null,
+        ).catch((error) => emitSimulatorStatusBarDiagnostic(device, 'restore_failed', error));
+      }
+    },
+    signal,
+  );
+}
+
+/**
+ * Reserves one simulator's status bar while `capture` runs, without changing the bar. A capture that
+ * does not normalize still has to wait: while another capture normalizes the bar, this one would
+ * otherwise take its screenshot of the temporary 9:41 overrides.
+ *
+ * `signal` cancels waiting for another capture. It is dropped when the caller already holds this
+ * simulator's window: that caller is the one who gave up, not an obstacle, so a leg of its own work
+ * is not rejected at the lock boundary and the window still restores what it normalized. The leg
+ * keeps the request's signal, so a request that has given up still stops as early as it can.
+ */
+export async function withSimulatorStatusBarHeld<T>(
+  device: DeviceInfo,
+  capture: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const key = statusBarSimulatorKey(device);
+  const holdsOwnWindow = heldKeyedLockKeys(simulatorStatusBarTransactions).includes(key);
+  return await withKeyedLock(
+    simulatorStatusBarTransactions,
+    key,
+    capture,
+    holdsOwnWindow ? undefined : signal,
+  );
+}
+
+async function snapshotSimulatorStatusBarOverrides(
+  device: DeviceInfo,
+): Promise<StatusBarOverrideSnapshot> {
+  if (hasKnownClearedStatusBarOverrides(device)) {
+    return { canRestore: true, overrides: null };
+  }
   try {
-    if (!canRestorePreviousOverrides || previousOverrides) {
+    return { canRestore: true, overrides: await readSimulatorStatusBarOverrides(device) };
+  } catch (error) {
+    emitSimulatorStatusBarDiagnostic(device, 'snapshot_failed', error);
+    return { canRestore: false, overrides: null };
+  }
+}
+
+async function normalizeSimulatorStatusBar(
+  device: DeviceInfo,
+  snapshot: StatusBarOverrideSnapshot,
+): Promise<void> {
+  try {
+    if (!snapshot.canRestore || snapshot.overrides) {
       await clearSimulatorStatusBarOverride(device);
     }
     await applySimulatorStatusBarOverrideArgs(device, DETERMINISTIC_SCREENSHOT_STATUS_BAR_ARGS);
   } catch (error) {
     emitSimulatorStatusBarDiagnostic(device, 'prepare_failed', error);
   }
-
-  return async () => {
-    await restoreSimulatorStatusBarOverrides(
-      device,
-      canRestorePreviousOverrides ? previousOverrides : null,
-    );
-  };
 }
 
 async function restoreSimulatorStatusBarOverrides(
   device: DeviceInfo,
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
-  await clearSimulatorStatusBarOverride(device);
+  // Only a restore that ran to the end may change the known-cleared answer, and this covers the
+  // simulator the answer already says is cleared. A `clear` that fails leaves the normalization on
+  // the bar, and that answer is the one that fixes it: the next capture skips the read, so it cannot
+  // adopt the leftover as the caller's state, and its own restore clears the bar. Reading the bar
+  // after a failed clear would do the opposite — adopt the leftover and hand it back on every later
+  // capture. When the snapshot held the caller's own overrides, a failed `clear` cannot return them:
+  // that recovery needs the snapshot itself and is tracked separately.
+  await clearSimulatorStatusBarOverride(device, STATUS_BAR_RESTORE_TIMEOUT_MS);
   if (!overrides) {
     rememberClearedStatusBarOverrides(device);
     return;
@@ -102,23 +189,24 @@ async function restoreSimulatorStatusBarOverrides(
   await applySimulatorStatusBarOverrideArgs(
     device,
     buildRestorableStatusBarOverrideArgs(overrides),
+    STATUS_BAR_RESTORE_TIMEOUT_MS,
   );
   invalidateSimulatorStatusBarOverrideCache(device);
 }
 
 export function invalidateSimulatorStatusBarOverrideCache(device: DeviceInfo): void {
-  devicesKnownWithoutStatusBarOverrides.delete(statusBarOverrideCacheKey(device));
+  devicesKnownWithoutStatusBarOverrides.delete(statusBarSimulatorKey(device));
 }
 
 export function rememberClearedStatusBarOverrides(device: DeviceInfo): void {
-  devicesKnownWithoutStatusBarOverrides.add(statusBarOverrideCacheKey(device));
+  devicesKnownWithoutStatusBarOverrides.add(statusBarSimulatorKey(device));
 }
 
 function hasKnownClearedStatusBarOverrides(device: DeviceInfo): boolean {
-  return devicesKnownWithoutStatusBarOverrides.has(statusBarOverrideCacheKey(device));
+  return devicesKnownWithoutStatusBarOverrides.has(statusBarSimulatorKey(device));
 }
 
-function statusBarOverrideCacheKey(device: DeviceInfo): string {
+function statusBarSimulatorKey(device: DeviceInfo): string {
   return `${device.platform}:${device.kind}:${device.id}`;
 }
 
@@ -128,22 +216,27 @@ async function readSimulatorStatusBarOverrides(
   const result = requireExecSuccess(
     await runSimctlForDevice(device, ['status_bar', device.id, 'list'], {
       allowFailure: true,
+      timeoutMs: STATUS_BAR_COMMAND_TIMEOUT_MS,
     }),
     'Failed to read simulator status bar overrides',
   );
   return parseSimulatorStatusBarOverrides(result.stdout);
 }
 
-async function clearSimulatorStatusBarOverride(device: DeviceInfo): Promise<void> {
-  await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
+async function clearSimulatorStatusBarOverride(
+  device: DeviceInfo,
+  timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
+): Promise<void> {
+  await runSimctlForDevice(device, ['status_bar', device.id, 'clear'], { timeoutMs });
 }
 
 async function applySimulatorStatusBarOverrideArgs(
   device: DeviceInfo,
   args: string[],
+  timeoutMs = STATUS_BAR_COMMAND_TIMEOUT_MS,
 ): Promise<void> {
   if (args.length === 0) return;
-  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args]);
+  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args], { timeoutMs });
 }
 
 function parseSimulatorStatusBarOverrides(output: string): RestorableStatusBarOverrides | null {
@@ -236,9 +329,10 @@ function isCellularDataNetworkType(value: string | undefined): boolean {
 
 /**
  * Records one best-effort status bar step that failed, under `ios_screenshot_status_bar_<phase>`.
- * A status bar problem never decides a screenshot's outcome, so callers swallow the error.
+ * A status bar problem never decides a screenshot's outcome, so every caller of this swallows the
+ * error and the transaction still runs the capture.
  */
-export function emitSimulatorStatusBarDiagnostic(
+function emitSimulatorStatusBarDiagnostic(
   device: DeviceInfo,
   phase: 'snapshot_failed' | 'prepare_failed' | 'restore_failed',
   error: unknown,

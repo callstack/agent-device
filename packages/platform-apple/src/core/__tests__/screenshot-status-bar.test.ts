@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   invalidateSimulatorStatusBarOverrideCache,
-  prepareSimulatorStatusBarForScreenshot,
+  withNormalizedSimulatorStatusBar,
+  withSimulatorStatusBarHeld,
 } from '../screenshot-status-bar.ts';
-import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
+import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 import { statusBarDiagnosticEvents } from './screenshot-diagnostic-log.ts';
 
@@ -21,8 +22,14 @@ Cell Mode: 2, Cell Bars: 0
 Operator Name: No Service
 Battery State: 1, Battery Level: 42, Not Charging: 0`;
 
+const NORMALIZE_ARGS =
+  '--time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100';
+
+const RESTORE_ARGS =
+  '--dataNetwork hide --wifiMode failed --wifiBars 0 --cellularMode failed --cellularBars 0 --operatorName No Service';
+
 function statusBarScript(listResponse: () => string | { stderr: string; exitCode: number }) {
-  return (args: string[]) => {
+  return (args: string[]): FakeAppleToolResponse | undefined => {
     if (args[0] !== 'simctl' || args[1] !== 'status_bar') {
       return { stderr: `unexpected xcrun args: ${args.join(' ')}`, exitCode: 1 };
     }
@@ -32,47 +39,84 @@ function statusBarScript(listResponse: () => string | { stderr: string; exitCode
   };
 }
 
+/** The caller's step that the status bar surrounds; the status bar tests do not exercise it. */
+async function capture(): Promise<string> {
+  return 'captured';
+}
+
 beforeEach(() => {
   invalidateSimulatorStatusBarOverrideCache(IOS_TEST_SIMULATOR);
 });
 
-test('prepareSimulatorStatusBarForScreenshot restores prior visible overrides', async () => {
+test('withNormalizedSimulatorStatusBar restores prior visible overrides', async () => {
   await withFakeAppleTool(
     statusBarScript(() => STATUS_BAR_OVERRIDES_LISTING),
     async ({ calls }) => {
-      const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-      await restore();
+      const captured = await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
 
+      assert.equal(captured, 'captured');
       assert.deepEqual(
         calls.map((args) => args.join(' ')),
         [
           'simctl status_bar sim-1 list',
           'simctl status_bar sim-1 clear',
-          'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
           'simctl status_bar sim-1 clear',
-          'simctl status_bar sim-1 override --dataNetwork hide --wifiMode failed --wifiBars 0 --cellularMode failed --cellularBars 0 --operatorName No Service',
+          `simctl status_bar sim-1 override ${RESTORE_ARGS}`,
         ],
       );
     },
   );
 });
 
-test('prepareSimulatorStatusBarForScreenshot skips known redundant status bar commands', async () => {
+test('a capture leg nested in its own status bar window keeps it after the request aborts', async () => {
+  // The sequence this pins: a normalized capture whose simctl leg fails falls back to the runner
+  // leg while the window is still held. The request may abort in between; the leg the caller is
+  // already inside must still run, and must not queue behind, or be rejected by, the window that
+  // caller holds.
+  const abortController = new AbortController();
   await withFakeAppleTool(
     statusBarScript(() => 'Current Status Bar Overrides:\n============================='),
     async ({ calls }) => {
-      const restoreFirst = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-      await restoreFirst();
-      const restoreSecond = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-      await restoreSecond();
+      const captured = await withNormalizedSimulatorStatusBar(
+        IOS_TEST_SIMULATOR,
+        async () => {
+          abortController.abort(new Error('caller gave up'));
+          return await withSimulatorStatusBarHeld(
+            IOS_TEST_SIMULATOR,
+            capture,
+            abortController.signal,
+          );
+        },
+        abortController.signal,
+      );
+
+      assert.equal(captured, 'captured', 'the leg inside the window must run');
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [
+          'simctl status_bar sim-1 list',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
+          'simctl status_bar sim-1 clear',
+        ],
+        'the window must still restore once the aborted leg finishes',
+      );
+    },
+  );
+});
+
+test('withNormalizedSimulatorStatusBar still normalizes when snapshotting current overrides fails', async () => {
+  await withFakeAppleTool(
+    statusBarScript(() => ({ stderr: 'list failed', exitCode: 1 })),
+    async ({ calls }) => {
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
 
       assert.deepEqual(
         calls.map((args) => args.join(' ')),
         [
           'simctl status_bar sim-1 list',
-          'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
           'simctl status_bar sim-1 clear',
-          'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
           'simctl status_bar sim-1 clear',
         ],
       );
@@ -80,19 +124,20 @@ test('prepareSimulatorStatusBarForScreenshot skips known redundant status bar co
   );
 });
 
-test('prepareSimulatorStatusBarForScreenshot still normalizes when snapshotting current overrides fails', async () => {
+test('withNormalizedSimulatorStatusBar skips the snapshot read for back-to-back captures of a cleared status bar', async () => {
   await withFakeAppleTool(
-    statusBarScript(() => ({ stderr: 'list failed', exitCode: 1 })),
+    statusBarScript(() => 'Current Status Bar Overrides:\n============================='),
     async ({ calls }) => {
-      const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-      await restore();
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
 
       assert.deepEqual(
         calls.map((args) => args.join(' ')),
         [
           'simctl status_bar sim-1 list',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
           'simctl status_bar sim-1 clear',
-          'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
+          `simctl status_bar sim-1 override ${NORMALIZE_ARGS}`,
           'simctl status_bar sim-1 clear',
         ],
       );
@@ -105,8 +150,7 @@ test('a failed status bar snapshot logs snapshot_failed with the tool failure', 
     await withFakeAppleTool(
       statusBarScript(() => ({ stderr: 'list failed', exitCode: 1 })),
       async () => {
-        const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-        await restore();
+        await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
       },
     );
   });
@@ -128,7 +172,104 @@ test('a failed status bar snapshot logs snapshot_failed with the tool failure', 
   ]);
 });
 
-test('a failed status bar override logs prepare_failed and the step stays best-effort', async () => {
+test('a failed status bar restore logs restore_failed and keeps the capture result', async () => {
+  const events = await statusBarDiagnosticEvents(async () => {
+    await withFakeAppleTool(
+      (args) => {
+        if (args[3] === 'list') return STATUS_BAR_OVERRIDES_LISTING;
+        if (args[3] === 'clear') {
+          return new AppError('COMMAND_FAILED', 'clear rejected', {
+            exitCode: 8,
+            stderr: 'clear rejected',
+          });
+        }
+        return '';
+      },
+      async () => {
+        assert.equal(
+          await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture),
+          'captured',
+        );
+      },
+    );
+  });
+
+  assert.deepEqual(events, [
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_prepare_failed',
+      data: {
+        platform: 'apple',
+        deviceKind: 'simulator',
+        deviceId: 'sim-1',
+        errorCode: 'COMMAND_FAILED',
+        reason: 'clear rejected',
+        exitCode: 8,
+        stderr: 'clear rejected',
+      },
+    },
+    {
+      level: 'warn',
+      phase: 'ios_screenshot_status_bar_restore_failed',
+      data: {
+        platform: 'apple',
+        deviceKind: 'simulator',
+        deviceId: 'sim-1',
+        errorCode: 'COMMAND_FAILED',
+        reason: 'clear rejected',
+        exitCode: 8,
+        stderr: 'clear rejected',
+      },
+    },
+  ]);
+});
+
+test('a failed status bar restore keeps the known-cleared answer so the next capture re-clears', async () => {
+  // A restore whose `clear` fails leaves the deterministic bar on the simulator. Reading the bar
+  // then would make the next capture adopt that normalization as the caller's state and hand it back
+  // forever, so the answer that says "this bar is cleared" survives: the next capture skips the read
+  // and its own restore clears the leftover.
+  const CLEARED_LISTING = 'Current Status Bar Overrides:\n=============================';
+  let clearAttempts = 0;
+  await withFakeAppleTool(
+    (args) => {
+      if (args[3] === 'list') return CLEARED_LISTING;
+      if (args[3] === 'clear') {
+        clearAttempts += 1;
+        if (clearAttempts === 1) return '';
+        return new AppError('COMMAND_FAILED', 'clear timed out', {
+          exitCode: 1,
+          stderr: 'clear timed out',
+        });
+      }
+      return '';
+    },
+    async ({ calls }) => {
+      // First capture: a clean restore earns the known-cleared answer.
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      calls.length = 0;
+      // Second capture: its restore fails and leaves the deterministic bar on the simulator.
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+      assert.match(calls[0]?.join(' ') ?? '', /^simctl status_bar sim-1 override/);
+      assert.equal(
+        calls.some((args) => args[3] === 'list'),
+        false,
+        'a failed restore must not send the next capture to read the leftover back',
+      );
+      calls.length = 0;
+
+      await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [`simctl status_bar sim-1 override ${NORMALIZE_ARGS}`, 'simctl status_bar sim-1 clear'],
+        'the next capture must trust the cleared answer and clear the leftover, never read it back',
+      );
+    },
+  );
+});
+
+test('a failed status bar override logs prepare_failed and the capture still runs', async () => {
   const events = await statusBarDiagnosticEvents(async () => {
     await withFakeAppleTool(
       (args) => {
@@ -143,8 +284,8 @@ test('a failed status bar override logs prepare_failed and the step stays best-e
         return '';
       },
       async ({ calls }) => {
-        const restore = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
-        await restore();
+        const captured = await withNormalizedSimulatorStatusBar(IOS_TEST_SIMULATOR, capture);
+        assert.equal(captured, 'captured');
         assert.equal(calls.at(-1)?.join(' '), 'simctl status_bar sim-1 clear');
       },
     );
