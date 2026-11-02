@@ -11,6 +11,7 @@ import {
 } from '../resources/artifact-tracking.ts';
 import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
+import { responseDisconnectSignal } from './http/response-disconnect-signal.ts';
 
 type DownloadableArtifactHttpRoute =
   | { kind: 'inventory' }
@@ -83,12 +84,7 @@ async function handleArtifactDownload(
     return;
   }
 
-  const controller = new AbortController();
-  const cancel = () => {
-    if (!res.writableFinished) controller.abort();
-  };
-  res.once('close', cancel);
-  if (res.destroyed) cancel();
+  const signal = responseDisconnectSignal(req, res);
   try {
     const auth = await authorize({
       req,
@@ -104,7 +100,7 @@ async function handleArtifactDownload(
       artifactId,
       auth.tenantId,
       options.hostEnv,
-      controller.signal,
+      signal,
     );
     const { stream } = artifact;
     const closed = finished(stream, { cleanup: true }).catch(() => {});
@@ -153,8 +149,6 @@ async function handleArtifactDownload(
     }
   } catch (error) {
     failStreamedHttpResponse(res, error);
-  } finally {
-    res.removeListener('close', cancel);
   }
 }
 

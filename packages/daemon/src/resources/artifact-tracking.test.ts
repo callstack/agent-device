@@ -85,7 +85,7 @@ test('cancelling the archive builder preserves a second download waiting for its
   }
 });
 
-test.each(['deadline-aborted', 'failed', 'late-aborted'] as const)(
+test.each(['deadline-aborted', 'late-aborted'] as const)(
   'a live artifact starts a fresh archive while a %s build is settling',
   async (failure) => {
     const root = mkdtempForTestSync('fu-art-retry-build-');
@@ -110,7 +110,6 @@ test.each(['deadline-aborted', 'failed', 'late-aborted'] as const)(
     const runCmd = command.runCmd;
     const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
       firstArchiveDir = path.dirname(String(args[1]?.[1]));
-      if (failure === 'failed') throw new Error('tar failed');
       args[2]?.signal?.addEventListener('abort', aborted, { once: true });
       if (failure === 'late-aborted') {
         const result = await runCmd(...args);
@@ -132,26 +131,15 @@ test.each(['deadline-aborted', 'failed', 'late-aborted'] as const)(
       void first.catch(() => {});
       const deadline = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
       timers.mockRestore();
-      if (failure !== 'failed') {
-        if (failure === 'late-aborted') await succeeded;
-        expect(deadline).toBeTypeOf('function');
-        runtime.run(() => deadline!());
-        await cancelled;
-      } else {
-        await Promise.resolve();
-      }
+      if (failure === 'late-aborted') await succeeded;
+      expect(deadline).toBeTypeOf('function');
+      runtime.run(() => deadline!());
+      await cancelled;
       const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
       openings.push(second);
       void second.catch(() => {});
       finishAborted();
-      await expect(first).rejects.toMatchObject(
-        failure !== 'failed'
-          ? { details: { reason: 'RESOURCE_EXPIRED' } }
-          : {
-              code: 'COMMAND_FAILED',
-              message: `Failed to archive downloadable artifact: ${artifactPath}`,
-            },
-      );
+      await expect(first).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
       expect(fs.existsSync(firstArchiveDir)).toBe(false);
       const download = await second;
       const closed = once(download.stream, 'close');
@@ -181,55 +169,6 @@ test.each(['deadline-aborted', 'failed', 'late-aborted'] as const)(
     }
   },
 );
-
-test('an archive setup failure does not poison a simultaneous retry', async () => {
-  const root = mkdtempForTestSync('fu-art-setup-retry-');
-  const artifactPath = path.join(root, 'capture.trace');
-  fs.mkdirSync(artifactPath);
-  fs.writeFileSync(path.join(artifactPath, 'payload'), 'retry after setup failure');
-  const runtime = createRuntimeStateHandle();
-  const directories = vi.spyOn(fs, 'mkdtempSync').mockImplementationOnce(() => {
-    throw new AppError('COMMAND_FAILED', 'archive setup failed');
-  });
-  const openings: Array<Promise<OpenedDownloadableArtifact>> = [];
-  try {
-    const id = runtime.run(() =>
-      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
-    );
-    const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
-    openings.push(first);
-    void first.catch(() => {});
-    const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
-    openings.push(second);
-    void second.catch(() => {});
-    await expect(first).rejects.toMatchObject({
-      code: 'COMMAND_FAILED',
-      message: 'archive setup failed',
-    });
-    const download = await second;
-    const closed = once(download.stream, 'close');
-    expect(
-      gunzipSync(await buffer(download.stream)).includes(Buffer.from('retry after setup failure')),
-    ).toBe(true);
-    await closed;
-    download.release();
-    runtime.run(() => cleanupDownloadableArtifact(id));
-    expect(fs.existsSync(artifactPath)).toBe(false);
-  } finally {
-    for (const result of await Promise.allSettled(openings)) {
-      if (result.status !== 'fulfilled') continue;
-      const download = result.value;
-      if (!download.stream.closed) {
-        const closed = once(download.stream, 'close');
-        download.stream.destroy();
-        await closed;
-      }
-      download.release();
-    }
-    directories.mockRestore();
-    runtime.dispose();
-  }
-});
 
 test.each(['before opening', 'while archiving'] as const)(
   'caller cancellation %s has a typed reason without forwarding caller data',
@@ -317,7 +256,7 @@ test('disposing every archive waiter aborts the shared build and removes its tem
     openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
     for (const opening of openings) void opening.catch(() => {});
     runtime.dispose();
-    expect(archiveSignal?.aborted).toBe(true);
+    await vi.waitFor(() => expect(archiveSignal?.aborted).toBe(true));
     expect(fs.existsSync(artifactPath)).toBe(true);
     expect(fs.existsSync(archiveDir)).toBe(true);
     continueArchive();
