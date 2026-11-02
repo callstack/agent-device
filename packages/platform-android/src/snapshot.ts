@@ -531,7 +531,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       phase: 'android_snapshot_helper_start_retry',
       data: { instrumentation: normalizeError(error).details?.instrumentation },
     });
-    await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName);
+    await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName, signal);
     signal?.throwIfAborted();
     return await captureOneShot();
   }

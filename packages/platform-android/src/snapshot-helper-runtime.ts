@@ -28,12 +28,14 @@ export async function retireAndroidSnapshotHelperAfterContentFailure(params: {
   }
 }
 
+/** A cancelled `signal` ends the reset early; the caller decides what a cancellation answers. */
 export async function resetAndroidSnapshotHelperRuntime(
   adb: AndroidAdbExecutor,
   packageName: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await stopAndroidSnapshotHelperRuntime({ adb, packageName });
-  await sleep(HELPER_RUNTIME_RESET_DELAY_MS);
+  await stopAndroidSnapshotHelperRuntime({ adb, packageName, ...(signal ? { signal } : {}) });
+  await sleep(HELPER_RUNTIME_RESET_DELAY_MS, signal);
   emitDiagnostic({
     level: 'debug',
     phase: 'android_snapshot_helper_runtime_reset',

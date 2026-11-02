@@ -1,9 +1,20 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
+// Time does not pass on its own: a wait without a signal ends at once, and a cancellable wait ends
+// only when its signal aborts, so a wait that ignores the caller's cancellation is observable.
 vi.mock('../adb.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../adb.ts')>();
-  return { ...actual, sleep: vi.fn(async () => {}) };
+  return {
+    ...actual,
+    sleep: vi.fn(
+      async (_ms: number, signal?: AbortSignal) =>
+        await new Promise<void>((resolve) => {
+          if (!signal || signal.aborted) return resolve();
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        }),
+    ),
+  };
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -156,25 +167,41 @@ test('a helper that started and then exited early is not started again', async (
   }
 });
 
-test('a capture cancelled during the reset before the second start does not start the helper again', async () => {
-  const { provider, calls } = freshlyBootedHelper([INSTRUMENTATION_FAILED_RUN]);
-  const controller = new AbortController();
-  const exec = provider.exec;
-  provider.exec = async (args, options) => {
-    // The runtime reset that follows the refused one-shot start, not the session's own cleanup.
-    if (isAndroidHelperRuntimeForceStop(args) && calls.some(isOneShotRun)) {
-      controller.abort(new Error('wait deadline exceeded'));
-    }
-    return await exec(args, options);
-  };
+// The reset before the second start is a force-stop and then a settle delay; a cancellation in either
+// ends the capture there.
+for (const cancelPoint of ['force-stop', 'settle delay'] as const) {
+  test(`a capture cancelled during the reset's ${cancelPoint} rejects without starting the helper again`, async () => {
+    const { provider, calls } = freshlyBootedHelper([INSTRUMENTATION_FAILED_RUN]);
+    const controller = new AbortController();
+    const cancel = () => controller.abort(new Error('wait deadline exceeded'));
+    const exec = provider.exec;
+    provider.exec = async (args, options) => {
+      // The reset that follows the refused one-shot start, not the session's own cleanup.
+      if (!isAndroidHelperRuntimeForceStop(args) || !calls.some(isOneShotRun)) {
+        return await exec(args, options);
+      }
+      calls.push(args);
+      if (cancelPoint === 'settle delay') {
+        setImmediate(cancel);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      // A force-stop that hangs ends only through the signal it was given.
+      cancel();
+      return await new Promise((_resolve, reject) => {
+        const signal = options?.signal;
+        if (signal?.aborted) reject(signal.reason);
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    };
 
-  await assert.rejects(
-    snapshotAndroid(device, {
-      helperAdb: provider,
-      helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-      signal: controller.signal,
-    }),
-    /wait deadline exceeded/,
-  );
-  assert.equal(calls.filter(isOneShotRun).length, 1);
-});
+    await assert.rejects(
+      snapshotAndroid(device, {
+        helperAdb: provider,
+        helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+        signal: controller.signal,
+      }),
+      /wait deadline exceeded/,
+    );
+    assert.equal(calls.filter(isOneShotRun).length, 1);
+  });
+}
