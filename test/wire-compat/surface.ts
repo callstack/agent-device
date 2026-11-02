@@ -238,6 +238,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'isCommandRpcMethod',
         'methodToDaemonRequest',
         'parseCommandRpcParams',
+        'requestSessionFields',
         'toDaemonRequest',
         'toLeaseDaemonRequest',
         'toInstallFromSourceDaemonRequest',

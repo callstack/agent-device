@@ -14,6 +14,7 @@ export async function runBatchCommands(
       internal: {
         ...step.internal,
         ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
+        ...(req.internal?.sessionOmitted ? { sessionOmitted: true } : {}),
         executionPlan: { remainingSteps: context.remainingSteps },
       },
     });
