@@ -155,3 +155,26 @@ test('a helper that started and then exited early is not started again', async (
     assert.equal(error.code, 'COMMAND_FAILED');
   }
 });
+
+test('a capture cancelled during the reset before the second start does not start the helper again', async () => {
+  const { provider, calls } = freshlyBootedHelper([INSTRUMENTATION_FAILED_RUN]);
+  const controller = new AbortController();
+  const exec = provider.exec;
+  provider.exec = async (args, options) => {
+    // The runtime reset that follows the refused one-shot start, not the session's own cleanup.
+    if (isAndroidHelperRuntimeForceStop(args) && calls.some(isOneShotRun)) {
+      controller.abort(new Error('wait deadline exceeded'));
+    }
+    return await exec(args, options);
+  };
+
+  await assert.rejects(
+    snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      signal: controller.signal,
+    }),
+    /wait deadline exceeded/,
+  );
+  assert.equal(calls.filter(isOneShotRun).length, 1);
+});
