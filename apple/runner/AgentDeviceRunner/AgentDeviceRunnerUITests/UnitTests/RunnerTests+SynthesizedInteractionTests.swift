@@ -27,7 +27,8 @@ private final class RunnerCoordinatePressCounter: NSObject {
 }
 
 /// Answers like the runner process's `UIScreen` in iPad compatibility mode, which the generated runner
-/// app (no launch screen) can run in: 768x1024 whatever the device (#4091).
+/// app (no launch screen) can run in: 768x1024 whatever the device (#4091). It replaces the getters a
+/// runner-process screen read takes: `bounds`, and `nativeBounds` over `nativeScale`.
 private final class RunnerCompatibilityModeScreenStub: NSObject {
   @objc var bounds: CGRect { CGRect(x: 0, y: 0, width: 768, height: 1024) }
   @objc var nativeBounds: CGRect { CGRect(x: 0, y: 0, width: 1536, height: 2048) }
@@ -42,10 +43,14 @@ extension RunnerTests {
       #selector(getter: UIScreen.nativeBounds),
       #selector(getter: UIScreen.nativeScale),
     ]
-    let originals = try getters.map { getter in
-      let target = try XCTUnwrap(class_getInstanceMethod(UIScreen.self, getter))
-      let stub = try XCTUnwrap(class_getInstanceMethod(RunnerCompatibilityModeScreenStub.self, getter))
-      return (target, method_setImplementation(target, method_getImplementation(stub)))
+    let resolved = try getters.map { getter in
+      (
+        try XCTUnwrap(class_getInstanceMethod(UIScreen.self, getter)),
+        try XCTUnwrap(class_getInstanceMethod(RunnerCompatibilityModeScreenStub.self, getter))
+      )
+    }
+    let originals = resolved.map { target, stub in
+      (target, method_setImplementation(target, method_getImplementation(stub)))
     }
     return {
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
@@ -162,13 +167,13 @@ extension RunnerTests {
     let portrait = CGSize(width: 402, height: 874)
     for orientation in [RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown] {
       XCTAssertEqual(
-        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        Self.soleScreenReferenceFrame(portraitSize: portrait, interfaceOrientation: orientation),
         CGRect(x: 0, y: 0, width: 402, height: 874)
       )
     }
     for orientation in [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight] {
       XCTAssertEqual(
-        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        Self.soleScreenReferenceFrame(portraitSize: portrait, interfaceOrientation: orientation),
         CGRect(x: 0, y: 0, width: 874, height: 402)
       )
     }
@@ -212,12 +217,11 @@ extension RunnerTests {
   func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     app.launch()
+    defer { app.terminate() }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the host app's frame is the display only while it fills it")
     let appFrame = app.frame
     let restoreUIKit = try simulateCompatibilityModeScreen()
-    defer {
-      restoreUIKit()
-      app.terminate()
-    }
+    defer { restoreUIKit() }
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let screen = CGSize(
       width: min(appFrame.width, appFrame.height),
@@ -238,13 +242,13 @@ extension RunnerTests {
   func testSoleScreenReferenceFrameRefusesAnUnknownOrientationOrAnEmptyScreen() {
     XCTAssertNil(
       Self.soleScreenReferenceFrame(
-        nativePortraitSize: CGSize(width: 402, height: 874),
+        portraitSize: CGSize(width: 402, height: 874),
         interfaceOrientation: RunnerInterfaceOrientation.unknown
       )
     )
     XCTAssertNil(
       Self.soleScreenReferenceFrame(
-        nativePortraitSize: .zero,
+        portraitSize: .zero,
         interfaceOrientation: RunnerInterfaceOrientation.portrait
       )
     )

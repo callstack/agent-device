@@ -263,6 +263,14 @@ CGSize RunnerSystemApplicationScreenSize(void) {
     screen = [systemApp frame];
   }];
   if (exception != nil || !AgentDeviceForegroundFrameIsMeasurable(screen)) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=system-app frame=(%g,%g %gx%g) raised=%@",
+      screen.origin.x,
+      screen.origin.y,
+      screen.size.width,
+      screen.size.height,
+      exception != nil ? @"yes" : @"no"
+    );
     return CGSizeZero;
   }
   return screen.size;

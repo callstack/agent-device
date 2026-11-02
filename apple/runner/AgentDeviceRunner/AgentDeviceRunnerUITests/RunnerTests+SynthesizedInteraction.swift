@@ -513,7 +513,7 @@ extension RunnerTests {
     // Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091).
     let screen = RunnerSystemApplicationScreenSize()
     return Self.soleScreenReferenceFrame(
-      nativePortraitSize: CGSize(
+      portraitSize: CGSize(
         width: min(screen.width, screen.height),
         height: max(screen.width, screen.height)
       ),
@@ -525,7 +525,7 @@ extension RunnerTests {
   /// The screen in the app's interface orientation, anchored at the origin like a window frame. An
   /// unknown orientation cannot say which way to lay the screen, so it names no frame.
   static func soleScreenReferenceFrame(
-    nativePortraitSize size: CGSize,
+    portraitSize size: CGSize,
     interfaceOrientation: Int
   ) -> CGRect? {
     guard size.width > 0, size.height > 0 else { return nil }
