@@ -5,6 +5,7 @@ import {
   type overlayRecordingTouches,
 } from '@agent-device/capture-kit/recording-overlay';
 import { Deadline } from '@agent-device/host-kit/retry';
+import { AppError } from '@agent-device/kernel/errors';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 
 const video = vi.hoisted(() => ({
@@ -78,6 +79,24 @@ test('names the retry and the escape for a recording that never became playable'
       hint: expect.stringContaining('close this session'),
     },
   });
+});
+
+test('a validator compile that outlasts the budget reaches the caller as its own retriable error', async () => {
+  const compileTimeout = new AppError('COMMAND_FAILED', 'The video validator did not compile', {
+    reason: 'video_validator_compile_timeout',
+    retriable: true,
+  });
+  video.playable.mockRejectedValueOnce(compileTimeout);
+
+  await expect(
+    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+      outputPath: '/tmp/capture.mp4',
+      showTouches: false,
+      gestureEvents: [],
+      targetLabel: 'test recording',
+    }),
+  ).rejects.toBe(compileTimeout);
+  expect(telemetry).not.toHaveBeenCalled();
 });
 
 test('burns touches into a playable recording without a warning', async () => {

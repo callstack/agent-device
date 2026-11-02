@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -49,8 +49,9 @@ type SharedValidatorCompile = {
 
 // A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
 // Callers share one compile, and each waits for it only within its own budget. The last caller to
-// stop waiting cancels an unfinished compile: nothing owns `swiftc` once its requests end, so a
-// daemon that exits would leave it running.
+// stop waiting cancels an unfinished compile: that kills this process's `swiftc`, or stops waiting
+// for another process's compile. Nothing owns `swiftc` once its requests end, so a daemon that
+// exits would leave it running.
 const videoValidatorCompiles = new Map<string, SharedValidatorCompile>();
 
 export async function waitForStableFile(
@@ -85,9 +86,9 @@ export async function waitForStableFile(
 }
 
 /**
- * Whether the file is a playable video. With a `deadline`, the validator, including a cold compile,
- * runs until the deadline instead of its own fixed bounds, and a deadline that passes before the
- * validator runs reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time.
+ * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
+ * deadline instead of its own fixed bound, and a validator run the deadline cuts short or leaves no
+ * time for reads as not playable, like a poll in `waitForPlayableVideo` that runs out of time.
  */
 export async function isPlayableVideo(
   filePath: string,
@@ -105,16 +106,22 @@ export async function isPlayableVideo(
       host,
       deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
     );
-    if (deadline?.isExpired()) return false;
+    const runTimeoutMs = Math.min(
+      VALIDATOR_RUN_TIMEOUT_MS,
+      deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
+    );
+    // `runCmd` reads a timeout of 0 as none.
+    if (runTimeoutMs <= 0) return false;
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
-      // `runCmd` reads a timeout of 0 as none.
-      timeoutMs: Math.max(
-        1,
-        Math.min(VALIDATOR_RUN_TIMEOUT_MS, deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS),
-      ),
+      timeoutMs: runTimeoutMs,
       env: buildSwiftToolEnv(host.env),
+    }).catch((error: unknown) => {
+      // The deadline, not the validator's own bound, cut this run short.
+      if (runTimeoutMs < VALIDATOR_RUN_TIMEOUT_MS && isCommandTimeoutError(error)) return undefined;
+      throw error;
     });
+    if (!result) return false;
     if (result.exitCode === 0) {
       return true;
     }
@@ -220,16 +227,15 @@ export async function waitForPlayableVideo(
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  for (let attempt = 1; ; attempt += 1) {
     if (await isPlayableVideo(filePath, options.host, options.deadline)) {
       return true;
     }
-    if (options.deadline?.isExpired()) {
+    if (attempt >= attempts || options.deadline?.isExpired()) {
       return false;
     }
     await sleep(pollMs);
   }
-  return await isPlayableVideo(filePath, options.host, options.deadline);
 }
 
 function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boolean {

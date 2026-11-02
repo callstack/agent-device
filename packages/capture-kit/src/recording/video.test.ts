@@ -11,7 +11,8 @@ import { Deadline } from '@agent-device/host-kit/retry';
 import { compileSwiftSourceText } from './swift-cache.ts';
 import { hasVideoContainer, isPlayableVideo, waitForPlayableVideo } from './video.ts';
 
-vi.mock('@agent-device/host-kit/command', () => ({
+vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
+  ...(await importOriginal()),
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
 vi.mock('./swift-cache.ts', () => ({
@@ -179,6 +180,39 @@ test('the validator run after a compile stays inside the caller deadline', async
   expect(withDeadline).toBeGreaterThan(0);
   expect(withDeadline).toBeLessThanOrEqual(5_000);
   expect(withoutDeadline).toBe(10_000);
+});
+
+test('a validator run the caller deadline cuts short reads as not playable', async () => {
+  const mp4 = writeFixture('run-cut-short.mp4', Buffer.concat([ftyp, moov]));
+  const host = { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: '/cache/run-cut-short' }, cwd: directory };
+  const timedOut = (timeoutMs: number) =>
+    new AppError('COMMAND_FAILED', `validator timed out after ${timeoutMs}ms`, { timeoutMs });
+  vi.mocked(runCmd).mockImplementation(async (_cmd, _args, options) => {
+    throw timedOut(options!.timeoutMs!);
+  });
+  try {
+    await expect(isPlayableVideo(mp4, host, Deadline.fromTimeoutMs(5))).resolves.toBe(false);
+    // Without a deadline, the validator's own bound is a failure to report, not a verdict.
+    await expect(isPlayableVideo(mp4, host)).rejects.toMatchObject({
+      details: { timeoutMs: 10_000 },
+    });
+  } finally {
+    vi.mocked(runCmd).mockReset();
+    vi.mocked(runCmd).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  }
+});
+
+test('waiting for a playable video checks it once per attempt', async () => {
+  const mp4 = writeFixture('never-plays.mp4', Buffer.concat([ftyp, moov]));
+  vi.mocked(runCmd).mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' });
+  try {
+    await expect(
+      waitForPlayableVideo(mp4, { host: createTestHost(), pollMs: 0, attempts: 2 }),
+    ).resolves.toBe(false);
+    expect(runCmd).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.mocked(runCmd).mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  }
 });
 
 test('reaches the semantic validator with an MP4 container whose last box runs past the file', async () => {
