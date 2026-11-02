@@ -48,7 +48,7 @@ extension RunnerAlertLabelVocabulary {
 
   /// Every permission table must read, or none counts: a missing table could hide the translation
   /// that makes a label in another table claim both actions. The launch confirmation's table only
-  /// adds its own open and cancel labels, so without it the permission vocabulary stays whole.
+  /// adds its own open and cancel labels (only those two keys are taken), so without it the permission vocabulary stays whole.
   static func composed(
     permission: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
     launchConfirmation: Result<[RunnerSystemPromptStrings], RunnerSystemPromptStrings.UnavailableSource>,
@@ -66,7 +66,7 @@ extension RunnerAlertLabelVocabulary {
     case .failure(let failure):
       RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary-launch-confirmation", languages: languages)
     case .success(let read):
-      tables += read
+      tables += read.map { $0.limited(to: RunnerSystemPromptStrings.launchConfirmationLabelKeys) }
     }
     var translations: [(english: String, localized: String)] = []
     for table in tables {

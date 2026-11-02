@@ -17,6 +17,10 @@ struct RunnerSystemPromptStrings {
 
   /// SpringBoard's launch confirmation. It is read apart from `promptTables`, so a runtime without
   /// it keeps the permission prompts' vocabulary.
+  /// The only keys of that table the alert vocabulary takes, so another key of an undocumented
+  /// table cannot join the accept or dismiss labels.
+  static let launchConfirmationLabelKeys: Set<String> = ["SCHEME_APPROVAL_OPEN_BUTTON", "SCHEME_APPROVAL_DO_NOT_OPEN_BUTTON"]
+
   static let launchConfirmationTable = (
     path: "/System/Library/Frameworks/CoreServices.framework",
     table: "SchemeApproval"
@@ -50,6 +54,14 @@ struct RunnerSystemPromptStrings {
       read.append(RunnerSystemPromptStrings(english: english, localized: localized))
     }
     return .success(read)
+  }
+
+  /// This table restricted to `keys`.
+  func limited(to keys: Set<String>) -> RunnerSystemPromptStrings {
+    RunnerSystemPromptStrings(
+      english: english.filter { keys.contains($0.key) },
+      localized: localized.mapValues { $0.filter { keys.contains($0.key) } }
+    )
   }
 
   struct UnavailableSource: Error {

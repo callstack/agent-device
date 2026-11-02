@@ -134,7 +134,10 @@ extension RunnerTests {
   /// launch confirmation's own labels are lost.
   func testMissingSchemeApprovalTableKeepsThePermissionVocabulary() {
     let permission = RunnerSystemPromptStrings(english: ["DENY": "Don’t Allow"], localized: ["fr": ["DENY": "Refuser"]])
-    let launch = RunnerSystemPromptStrings(english: ["OPEN": "Open"], localized: ["fr": ["OPEN": "Ouvrir"]])
+    let launch = RunnerSystemPromptStrings(
+      english: ["SCHEME_APPROVAL_OPEN_BUTTON": "Open", "SCHEME_APPROVAL_OTHER": "Continue"],
+      localized: ["fr": ["SCHEME_APPROVAL_OPEN_BUTTON": "Ouvrir", "SCHEME_APPROVAL_OTHER": "Poursuivre"]]
+    )
     let missing = RunnerSystemPromptStrings.UnavailableSource(source: "CoreServices.framework")
 
     let without = RunnerAlertLabelVocabulary.composed(
@@ -147,6 +150,10 @@ extension RunnerTests {
       permission: .success([permission]), launchConfirmation: .success([launch]), languages: ["fr"]
     )
     XCTAssertEqual(RunnerAlertButtonChoice.buttonIndex(for: ["Annuler", "Ouvrir"], action: "accept", vocabulary: with), 1)
+    XCTAssertNil(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Refuser", "Poursuivre"], action: "accept", vocabulary: with),
+      "a key of the table other than its open and cancel labels adds no label"
+    )
 
     let noPermission = RunnerAlertLabelVocabulary.composed(
       permission: .failure(missing), launchConfirmation: .success([launch]), languages: ["fr"]
