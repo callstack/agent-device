@@ -266,6 +266,22 @@ test('providerRuntimeInstance refuses a principal that cannot name one account',
     /empty or repeated/,
   );
   assert.throws(() => providerRuntimeInstance('limrun', [['provider', 'x']]), /empty or repeated/);
+  // A repeated name is refused even when one of the two is unset.
+  assert.throws(
+    () =>
+      providerRuntimeInstance('limrun', [
+        ['apiKey', undefined],
+        ['apiKey', 'b'],
+      ]),
+    /empty or repeated/,
+  );
+  // JSON would move an integer-like name ahead of the declared order.
+  assert.throws(() => providerRuntimeInstance('limrun', [['1', 'x']]), /must not be an integer/);
+  // `__proto__` is an ordinary fact, never a prototype that drops it from the digest.
+  assert.notEqual(
+    providerRuntimeInstance('limrun', [['__proto__', 'a']]),
+    providerRuntimeInstance('limrun', [['__proto__', 'b']]),
+  );
 });
 
 test('unavailableFact freezes the cell and omits hint when none is given', () => {

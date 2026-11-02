@@ -101,6 +101,9 @@ export type ProviderRuntimePrincipalField = readonly [name: string, value: strin
  * The order of the facts is part of the digest, so a provider declares them in one place and pins the
  * result. `provider` is normalized as `providerRuntimeOwner` normalizes it, and the salt derives from
  * it, so one set of credentials is a different instance under another provider.
+ *
+ * The digest is a synchronous, memory-hard scrypt (about 64 MB, tens of milliseconds): derive it once
+ * when a runtime is built, never on a request path.
  */
 export function providerRuntimeInstance(
   provider: string,
@@ -110,11 +113,17 @@ export function providerRuntimeInstance(
   if (normalizedProvider.length === 0) {
     throw new TypeError('Provider runtime instance requires a non-empty provider');
   }
-  const facts: Record<string, string> = { provider: normalizedProvider };
+  // No prototype, so a field named `__proto__` is an own key like any other.
+  const facts: Record<string, string> = Object.create(null) as Record<string, string>;
+  facts.provider = normalizedProvider;
   const names = new Set(['provider']);
   for (const [name, value] of principal) {
     if (name.length === 0 || names.has(name)) {
       throw new TypeError(`Provider runtime principal field '${name}' is empty or repeated`);
+    }
+    // JSON orders integer-like keys first, which would break the declared field order.
+    if (/^\d+$/.test(name)) {
+      throw new TypeError(`Provider runtime principal field '${name}' must not be an integer`);
     }
     names.add(name);
     if (value !== undefined) facts[name] = value;

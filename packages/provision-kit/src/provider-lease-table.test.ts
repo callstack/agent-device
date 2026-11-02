@@ -298,6 +298,31 @@ test('a caller whose budget is already spent sends no start', async () => {
   assert.equal(provider.controls.length, 0);
 });
 
+test('a caller that arrives after the start was abandoned is refused, and a later one starts afresh', async () => {
+  const provider = fakeProvider();
+  const controller = new AbortController();
+  const first = provider.table.allocate(lease(), {}, { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(first, reason('request_canceled'));
+  assert.ok(provider.controls[0]!.signal.aborted);
+
+  // Joining would only hand this caller the provider's answer to the abandonment.
+  await assert.rejects(provider.table.allocate(lease(), {}), reason('lease-releasing'));
+  provider.answerStart(0, {
+    status: 'failed',
+    error: new Error('abandoned'),
+    rented: { id: 'r1' },
+  });
+  await settle();
+  await settle();
+  assert.deepEqual(provider.stopped, ['r1']);
+
+  const fresh = provider.table.allocate(lease(), {});
+  await settle();
+  provider.answerStart(1, ready('session-2'));
+  assert.deepEqual(await fresh, { id: 'session-2' });
+});
+
 test('a joiner still waiting keeps the device when the caller that started it hangs up', async () => {
   const provider = fakeProvider();
   const controller = new AbortController();

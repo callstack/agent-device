@@ -446,29 +446,39 @@ class LeaseTable<Session, Handle, Request> {
     const giveUp = () => this.driver.gaveUp(entry.lease, caller, budgetMs, entry.latest);
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), budgetMs);
-    const signal = caller.signal
-      ? AbortSignal.any([caller.signal, timeout.signal])
-      : timeout.signal;
+    // Listened to directly rather than through `AbortSignal.any`, so a long-lived caller signal keeps no
+    // link to this entry once the wait is over.
+    const signals = caller.signal ? [caller.signal, timeout.signal] : [timeout.signal];
     const waiter: Waiter = { deadline, signal: caller.signal };
     let onAbort = (): void => undefined;
     try {
       entry.waiters.add(waiter);
-      if (signal.aborted) throw giveUp();
+      if (signals.some((signal) => signal.aborted)) throw giveUp();
       const gaveUp = new Promise<never>((_, reject) => {
         onAbort = () => {
           entry.waiters.delete(waiter);
-          abandonIfUnwanted(entry);
+          this.abandonIfUnwanted(entry);
           reject(giveUp());
         };
-        signal.addEventListener('abort', onAbort, { once: true });
+        for (const signal of signals) signal.addEventListener('abort', onAbort, { once: true });
       });
       return await Promise.race([entry.start, gaveUp]);
     } finally {
       entry.waiters.delete(waiter);
-      abandonIfUnwanted(entry);
+      this.abandonIfUnwanted(entry);
       clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
+      for (const signal of signals) signal.removeEventListener('abort', onAbort);
     }
+  }
+
+  /**
+   * Abandons a start that no caller still waits for. The lease is fenced and torn down in the same step,
+   * so a caller that arrives later is refused rather than joining a start that is being given up.
+   */
+  private abandonIfUnwanted(entry: LeaseEntry<Session, Handle, Request>): void {
+    if (entry.answered || entry.abandon.signal.aborted || stillWanted(entry)) return;
+    entry.abandon.abort();
+    void this.teardown(entry).catch(() => undefined);
   }
 
   /**
@@ -661,11 +671,4 @@ function stillWanted<Session, Handle, Request>(
     if (!waiter.signal?.aborted && now < waiter.deadline) return true;
   }
   return false;
-}
-
-/** Signals the provider to abandon a start that no caller still waits for. */
-function abandonIfUnwanted<Session, Handle, Request>(
-  entry: LeaseEntry<Session, Handle, Request>,
-): void {
-  if (!entry.answered && !stillWanted(entry)) entry.abandon.abort();
 }
