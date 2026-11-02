@@ -824,17 +824,8 @@ async function loadLimrunPlatformRuntime(
       }));
     },
     getAppState: async (device, signal) => {
-      signal.throwIfAborted();
-      const session = runtime.getDeviceSession(device);
-      if (session?.platform !== 'android') {
-        throw new AppError(
-          'UNSUPPORTED_OPERATION',
-          'Limrun Android appstate requires an active provider session',
-        );
-      }
-      const state = await session.getForegroundApp(signal);
-      signal.throwIfAborted();
-      return { package: state?.appId, activity: state?.activity };
+      const { readLimrunAppState } = await import('./app-state-read.ts');
+      return await readLimrunAppState(runtime.getDeviceSession(device), signal);
     },
     deployApp: async (device, input, signal, operationDrain) =>
       await runtime.installApp(

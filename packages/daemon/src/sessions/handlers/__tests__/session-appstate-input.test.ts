@@ -30,6 +30,7 @@ import {
   narrowDeviceBinding,
   type DeviceBinding,
   type RuntimeFacts,
+  type RuntimeOperationUnavailability,
 } from '@agent-device/contracts/platform-runtime';
 import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
@@ -437,20 +438,20 @@ test('appstate on iOS keeps the session answer, with no state, when no runner is
   }
 });
 
-test('appstate on iOS keeps the session answer, with no state, when the runner cannot read one', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'sim';
+function publishIosSession(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
   sessionStore.publish(sessionName, {
     ...makeSession(sessionName, IOS_SESSION_DEVICE),
     appBundleId: 'dev.e2e.benchmark',
     appName: 'Benchmark',
   });
   mockResolveTargetDevice.mockResolvedValue(IOS_SESSION_DEVICE);
-  const runtime = appleAppStateRuntime(async () => {
-    throw new AppError('COMMAND_FAILED', 'runner is busy');
-  });
+}
 
-  const response = await handleSessionCommands({
+async function appStateWith(runtime: ReturnType<typeof appleAppStateRuntime>) {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'sim';
+  publishIosSession(sessionStore, sessionName);
+  return await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
@@ -461,11 +462,55 @@ test('appstate on iOS keeps the session answer, with no state, when the runner c
     invoke: noopInvoke,
     ...runtime,
   });
+}
 
-  expect(response?.ok).toBe(true);
-  if (response && response.ok) {
-    expect(response.data?.appName).toBe('Benchmark');
-    expect(response.data?.source).toBe('session');
-    expect(response.data).not.toHaveProperty('state');
-  }
+function runtimeWithAppStateFact(
+  fact: RuntimeOperationUnavailability,
+): ReturnType<typeof appleAppStateRuntime> {
+  return {
+    ...appleAppStateRuntime(async () => ({})),
+    inspectFacts: async (device) => {
+      const base = await mockInspectDeviceRuntimeFacts(device);
+      return { ...base, operations: { ...base.operations, appState: fact } };
+    },
+  };
+}
+
+test('appstate on iOS fails with the read error when the runtime read fails', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'runner is busy', { reason: 'runner_busy' });
+
+  await expect(
+    appStateWith(
+      appleAppStateRuntime(async () => {
+        throw failure;
+      }),
+    ),
+  ).rejects.toBe(failure);
 });
+
+test('appstate on iOS is refused when the owner holds no live session for the device', async () => {
+  const response = await appStateWith(
+    runtimeWithAppStateFact({
+      available: false,
+      reason: 'owner-capability-missing',
+      hint: 'Limrun requires a matching live provider session for this device.',
+    }),
+  );
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'owner-capability-missing' },
+    },
+  });
+});
+
+test.each(['unsupported-provider-mode', 'unsupported-platform-leaf'] as const)(
+  'appstate on iOS keeps the session answer when the owner reports %s',
+  async (reason) => {
+    const response = await appStateWith(runtimeWithAppStateFact({ available: false, reason }));
+
+    expect(response).toMatchObject({ ok: true, data: { source: 'session', appName: 'Benchmark' } });
+  },
+);
