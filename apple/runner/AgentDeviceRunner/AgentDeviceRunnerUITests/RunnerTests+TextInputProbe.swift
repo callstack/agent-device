@@ -20,10 +20,6 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double, contentTranslation: TextEntryContentTranslation) throws -> ResolvedTextEntryInput? {
-    try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
-  }
-
   func textInputCandidatesAt(app: XCUIApplication, point: CGPoint, contentTranslation: TextEntryContentTranslation) throws -> [ResolvedTextEntryInput] {
     let queries = try textInputQueries(app: app)
     return safely("TEXT_INPUT_AT_POINT", []) {
@@ -173,8 +169,7 @@ extension RunnerTests {
     return true
   }
 
-  /// The text-input queries of a read at a point. They are resolved before the read's issue
-  /// containment, so a lit-panel refusal answers the request instead of reading as no input.
+  /// Resolved before the probe's issue containment, so a lit-panel refusal is not read as no input.
   private func textInputQueries(app: XCUIApplication) throws -> [XCUIElementQuery] {
     let inputTypes: [XCUIElement.ElementType] = [.textField, .secureTextField, .searchField, .textView]
     return try inputTypes.flatMap { try elementQueries(app: app, matching: $0) }

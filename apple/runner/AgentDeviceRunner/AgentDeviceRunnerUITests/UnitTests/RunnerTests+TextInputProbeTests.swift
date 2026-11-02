@@ -174,7 +174,7 @@ extension RunnerTests {
     }
     XCTExpectFailure("Required read and later issue belong to their caller", options: options) {
       textInputProbeIssueForTesting = expected
-      _ = try? textInputAt(app: app, x: point.x, y: point.y, contentTranslation: .none)
+      _ = try? textInputCandidatesAt(app: app, point: point, contentTranslation: .none)
       _ = try? probeTextInputs(app: app, point: point, contentTranslation: .none)
       record(expected)
     }

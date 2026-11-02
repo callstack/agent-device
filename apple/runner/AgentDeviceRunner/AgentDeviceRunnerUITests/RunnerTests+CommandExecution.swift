@@ -2,8 +2,7 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  /// Runs `command` against its prepared app. An element read that cannot search the lit panel
-  /// throws its refusal, which answers the request (ADR 0025).
+  /// Runs `command` against its prepared app; a thrown lit-panel refusal answers it (ADR 0025).
   @MainActor
   func executeOnMainPrepared(
     command: Command,

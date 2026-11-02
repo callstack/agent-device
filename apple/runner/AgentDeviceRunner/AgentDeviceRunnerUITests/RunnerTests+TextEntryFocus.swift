@@ -136,7 +136,7 @@ extension RunnerTests {
     }
 
     let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
-    let input = try textInputAt(app: app, x: x, y: y, contentTranslation: contentTranslation)
+    let input = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).
