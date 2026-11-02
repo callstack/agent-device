@@ -71,20 +71,20 @@
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:54b5a8817237d38502f8ae56d8e754217c811520110deb3f2637264e68534f98",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:ac4268cba9ffdfee7e92429b1a49e48570154d735eed62bfca36d1e2759cec43",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
     "packages/daemon/src/server/downloadable-artifact-http.ts#resolveDownloadableArtifactHttpRoute": "sha256:9fcdc9619e8d378e8f04ef7b3584863af446e855702ddce83a16ec194a6d98af",
     "packages/daemon/src/server/http-errors.ts#NormalizedHttpError": "sha256:2c2111802fe5f193acbeacc454de9cfab82bc8e4274b896f485e19a14f5518cf",
-    "packages/daemon/src/server/http-errors.ts#failStreamedHttpResponse": "sha256:e4f4dbb80a2213395220dfe448ff4453cc0402a755a66fe4203a7adf6fda4948",
+    "packages/daemon/src/server/http-errors.ts#failStreamedHttpResponse": "sha256:3e6b642cb41b88ab1e6f3269ebd14918f912cbecf09f40e9b591fdd28a2ba489",
     "packages/daemon/src/server/http-errors.ts#sendRestJsonError": "sha256:aef588e77ea73eb3cf6e94ec2f2c98a434fcaaeb96de6973a43c442b704694ad",
     "packages/daemon/src/server/http-errors.ts#statusCodeForNormalizedError": "sha256:39aa61eed8459527d7077e31e23be4fe0275021ed99c70ad692538091db91125",
     "packages/daemon/src/server/http-request-target.ts#decodeUriSegment": "sha256:b37622771ea4e61d1a9820169dbdc5809b5c38889bfad79277d7b22f3c3f1ef1",
     "packages/daemon/src/server/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
     "packages/daemon/src/server/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
-    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:32c3d100176dd99ecbb61f8050d05b1cda64b7be1944a2cd16633e83fa78660b",
+    "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:08d3fd203cd7e47814cf8c50f710e86bee28ac2818dbf93910ae49725b97468a",
     "packages/daemon/src/server/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "packages/daemon-contracts/src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -257,8 +257,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:54b5a8817237d38502f8ae56d8e754217c811520110deb3f2637264e68534f98",
-      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 uses a bounded, abortable Node pipeline and validates the declared byte length, with idempotent reader release after completion or failed setup. The handler waits for file readiness before setting headers and starting the pipeline, so open errors use the existing JSON error response. Setup errors clear artifact-only headers first. Successful status codes, headers and artifact bytes retain their existing contracts. Failed or incomplete streaming reads close the HTTP transfer instead of hanging; released clients already treat an interrupted download as failure. Routes, authorization and error JSON shapes are unchanged, so no peer must parse a new payload or send a new field."
+      "digest": "sha256:ac4268cba9ffdfee7e92429b1a49e48570154d735eed62bfca36d1e2759cec43",
+      "rationale": "Implementation-only follow-up to #4165 under ADR 0006: response close cancels artifact preparation and streaming through an internal AbortSignal. Shared builds continue for other downloads. The existing streamed failure helper now owns the same pre-header JSON error and post-header connection destruction. Successful status, headers, bytes, routes and authorization retain their existing contracts; disconnected clients receive no new payload."
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
@@ -297,8 +297,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/request-diagnostics-http.ts#handleRequestDiagnostics",
-      "digest": "sha256:32c3d100176dd99ecbb61f8050d05b1cda64b7be1944a2cd16633e83fa78660b",
-      "rationale": "#2198 context: asks isTenantAddressableSessionName instead of applying the prefix rule locally. Same UNAUTHORIZED code, same 'Session is outside this tenant' message and same 401 body for the attested-tenant case the rule still refuses; the only difference a peer can observe is that an unattested tenant now gets the 200 + ndjson record it already knows how to read instead of a 401 it could not act on."
+      "digest": "sha256:08d3fd203cd7e47814cf8c50f710e86bee28ac2818dbf93910ae49725b97468a",
+      "rationale": "Implementation-only HTTP error repair under ADR 0006: setup failures use the shared streamed failure helper. Before headers, it emits the existing REST JSON error shape with an error status; after headers, it destroys the incomplete transfer. Successful diagnostics remain 200 with the same NDJSON bytes. Released clients reject error statuses before reading diagnostic records, so no successful response parser or request requirement changes."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
@@ -497,8 +497,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/http-errors.ts#failStreamedHttpResponse",
-      "digest": "sha256:e4f4dbb80a2213395220dfe448ff4453cc0402a755a66fe4203a7adf6fda4948",
-      "rationale": "Passes the whole normalized error to the details-aware status mapper instead of its code; the plain-text body is unchanged. A gone resource now answers 404 instead of 500: COMMAND_FAILED with details.reason RESOURCE_EXPIRED (an artifact, upload ticket, uploaded artifact or materialized path id the TTL registry no longer holds) maps to 404. The mapper also takes over the DEVICE_IN_USE human_control_active 423 rule, which statusCodeForDaemonError applied only to a failed response a /rpc handler returned. The rule now also reaches the REST routes and thrown /rpc failures, which answered 500: a PUT /admin/leases/<id> refused during a human-control hold, or a non-streamed /rpc call whose handler throws human_control_active, now answers 423. /admin/* is host-only on the loopback port and the proxy never forwards it, and the host already reads 423 for the same refusal on a returned /rpc failure. No released client branches on 404 versus 500 for these routes: downloadRemoteArtifactFromUrl treats any status >= 400 alike, the upload client fails any non-2xx and decides retries from a typed stream detail rather than the status, the /rpc client parses the JSON-RPC error envelope whatever the status and only special-cases 409, and the proxy passes the status through. The error code, message and JSON-RPC error data a peer parses are unchanged, so a protocol 2 peer reports the same failure it did before."
+      "digest": "sha256:3e6b642cb41b88ab1e6f3269ebd14918f912cbecf09f40e9b591fdd28a2ba489",
+      "rationale": "Compatible HTTP error repair under ADR 0006: both streamed routes use the existing REST JSON error shape before headers, removing stale length and attachment headers. Previously a diagnostics stream open failure could retain its successful-response length and leave the error body incomplete. The helper ignores closed responses and still destroys incomplete transfers after headers. Released artifact and diagnostics clients reject non-success status codes before treating a body as downloaded bytes; routes, successful responses and authorization are unchanged, so older peers still fail clearly without a protocol bump."
     }
   ]
 }
