@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { once } from 'node:events';
 import { Transform } from 'node:stream';
 import { finished, pipeline } from 'node:stream/promises';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -97,6 +98,9 @@ async function handleArtifactDownload(
     const { stream } = artifact;
     const closed = finished(stream, { cleanup: true }).catch(() => {});
     try {
+      artifact.signal.throwIfAborted();
+      if (stream.errored) throw stream.errored;
+      if (stream.pending) await once(stream, 'ready', { signal: artifact.signal });
       res.statusCode = 200;
       res.setHeader('content-type', artifact.mimeType);
       res.setHeader('content-length', String(artifact.sizeBytes));

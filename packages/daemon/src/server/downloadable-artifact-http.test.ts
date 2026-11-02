@@ -18,6 +18,7 @@ function deferred() {
 }
 
 type DownloadFixture = {
+  url: string;
   source: string;
   runtime: ReturnType<typeof createRuntimeStateHandle>;
   streams: fs.ReadStream[];
@@ -72,6 +73,7 @@ async function withDownloadFixture(
   let outcome: 'pending' | 'complete' | 'failed' = 'pending';
   try {
     await run({
+      url: `http://127.0.0.1:${port}/artifacts/${id}`,
       source,
       runtime,
       streams,
@@ -163,6 +165,22 @@ test.each(['destroyed', 'truncated', 'errored'] as const)(
     );
   },
 );
+
+test('an artifact open failure returns a complete JSON error before streaming starts', async () => {
+  await withDownloadFixture(
+    async (fixture) => {
+      const response = await fetch(fixture.url, {
+        headers: { authorization: 'Bearer fu-art-secret' },
+      });
+      expect(response.status).toBe(500);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      expect(await response.json()).toMatchObject({ ok: false });
+      fixture.expire();
+      await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+    },
+    (stream) => fs.unlinkSync(String(stream.path)),
+  );
+});
 
 test.each(['deadline', 'runtime disposal'] as const)(
   '%s cancels an active download and removes its files',
