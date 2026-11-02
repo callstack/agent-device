@@ -73,6 +73,41 @@ extension RunnerTests {
     return restore
   }
 
+  /// The state both AX-failure tap tests start from: the host app launched and turned to landscape,
+  /// a tap context on its resolved window (measured at `windowFrame` when given), and AXRuntime's
+  /// display read failing with no kept size. The returned cleanup undoes every step.
+  @MainActor
+  private func launchLandscapeWithUnreadableDisplay(
+    windowFrame: CGRect? = nil
+  ) throws -> (context: SynthesizedCoordinateContext, cleanup: () -> Void) {
+    var cleanups: [() -> Void] = []
+    let cleanup = { for step in cleanups.reversed() { step() } }
+    do {
+      app.launch()
+      mainOwned.app = app
+      cleanups.append {
+        self.invalidateCachedTarget(reason: "unit_test_cleanup")
+        self.app.terminate()
+      }
+      cleanups.append(try rotateHostAppToLandscape())
+      let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
+      let context = try XCTUnwrap(
+        SynthesizedCoordinateContext(
+          validating: windowFrame ?? resolved.frame,
+          resolvedWindow: resolved.window,
+          accessibilityHealth: .healthy
+        )
+      )
+      cleanups.append(try simulateUnreadableSystemApplication())
+      // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
+      mainOwned.soleDisplayPortraitSize = nil
+      return (context, cleanup)
+    } catch {
+      cleanup()
+      throw error
+    }
+  }
+
   /// Installs `RunnerCompatibilityModeScreenStub` until the returned closure restores UIKit.
   private func simulateCompatibilityModeScreen() throws -> () -> Void {
     let getters = [
@@ -314,21 +349,8 @@ extension RunnerTests {
   @MainActor
   func testTapTurnsAboutTheWindowWhenTheSoleDisplayCannotBeMeasuredOnAFullScreenApp() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
-    app.launch()
-    mainOwned.app = app
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let restoreOrientation = try rotateHostAppToLandscape()
-    defer { restoreOrientation() }
-    let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
-    let context = try XCTUnwrap(
-      SynthesizedCoordinateContext(validating: resolved.frame, resolvedWindow: resolved.window, accessibilityHealth: .healthy)
-    )
-    let restoreAXRuntime = try simulateUnreadableSystemApplication()
-    defer { restoreAXRuntime() }
-    mainOwned.soleDisplayPortraitSize = nil
+    let (context, cleanup) = try launchLandscapeWithUnreadableDisplay()
+    defer { cleanup() }
     try XCTSkipUnless(
       soleScreenRouteIsOpen(for: app),
       "without AXRuntime an iPad cannot prove the app fills the screen; the refusal test covers it"
@@ -336,8 +358,8 @@ extension RunnerTests {
 
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     XCTAssertEqual(
-      synthesizedRotationFrame(app: app, fallback: resolved.frame, interfaceOrientation: orientation),
-      resolved.frame
+      synthesizedRotationFrame(app: app, fallback: context.referenceFrame, interfaceOrientation: orientation),
+      context.referenceFrame
     )
     let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .performed? = outcome else {
@@ -351,23 +373,9 @@ extension RunnerTests {
   @MainActor
   func testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
-    app.launch()
-    mainOwned.app = app
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let restoreOrientation = try rotateHostAppToLandscape()
-    defer { restoreOrientation() }
-    let window = try XCTUnwrap(resolveRunnerWindowElement(app: app)).window
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let context = try XCTUnwrap(
-      SynthesizedCoordinateContext(validating: placedWindow, resolvedWindow: window, accessibilityHealth: .healthy)
-    )
-    let restoreAXRuntime = try simulateUnreadableSystemApplication()
-    defer { restoreAXRuntime() }
-    // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
-    mainOwned.soleDisplayPortraitSize = nil
+    let (context, cleanup) = try launchLandscapeWithUnreadableDisplay(windowFrame: placedWindow)
+    defer { cleanup() }
     try XCTSkipIf(
       soleScreenRouteIsOpen(for: app),
       "an app proven full-screen turns about its window; the full-screen test covers it"
