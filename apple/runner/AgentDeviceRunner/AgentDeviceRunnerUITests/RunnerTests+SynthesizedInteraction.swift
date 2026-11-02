@@ -506,7 +506,7 @@ extension RunnerTests {
   /// anything else (a windowed iPad, a multi-screen foldable) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    guard appFillsSoleScreen(app) else { return nil }
+    guard soleScreenRouteAdmits(app) else { return nil }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let frame = soleDisplayPortraitSize().flatMap {
       Self.soleScreenReferenceFrame(portraitSize: $0, interfaceOrientation: orientation)
@@ -518,10 +518,10 @@ extension RunnerTests {
     return frame
   }
 
-  /// The rule `RunnerResolveSoleScreen` owns: an iPhone by its idiom, an iPad only on the
-  /// fills-screen proof.
+  /// The sole-screen admission rule `RunnerResolveSoleScreen` owns: an iPhone by its idiom, an iPad
+  /// only on the fills-screen proof.
   @MainActor
-  private func appFillsSoleScreen(_ app: XCUIApplication) -> Bool {
+  private func soleScreenRouteAdmits(_ app: XCUIApplication) -> Bool {
     var resolvedScreen: AnyObject?
     var resolvedDisplayID: UInt = 0
     return RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil
@@ -532,7 +532,8 @@ extension RunnerTests {
   /// resolved window `fallback`, which names its panel (ADR 0025). When the device's only screen
   /// will not report its size, `fallback` is the basis only while the app provably fills that
   /// screen; otherwise this is nil and the gesture refuses before it dispatches. Portrait and an
-  /// unknown orientation keep the axes, so they read no box and keep `fallback` without a read.
+  /// unknown orientation leave the point as it is, so they keep `fallback` without a read; landscape
+  /// swaps the box's sides and upside-down mirrors the point across them, so both read it.
   @MainActor
   func synthesizedRotationFrame(app: XCUIApplication, fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return fallback }
@@ -544,12 +545,12 @@ extension RunnerTests {
       return fallback
     }
     guard let portraitSize = soleDisplayPortraitSize() else {
-      let fillsScreen = appFillsSoleScreen(app)
+      let routeAdmits = soleScreenRouteAdmits(app)
       NSLog(
         "AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=rotation-basis basis=%@",
-        fillsScreen ? "window" : "refused"
+        routeAdmits ? "window" : "refused"
       )
-      return fillsScreen ? fallback : nil
+      return routeAdmits ? fallback : nil
     }
     return Self.soleScreenReferenceFrame(portraitSize: portraitSize, interfaceOrientation: interfaceOrientation)
       ?? fallback
