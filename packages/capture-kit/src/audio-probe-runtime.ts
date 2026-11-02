@@ -1,4 +1,3 @@
-import { createRetryableCleanup } from './durable-resource-cleanup.ts';
 import fs from 'node:fs/promises';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -17,6 +16,7 @@ import type {
 } from '@agent-device/contracts/audio-probe-runtime-host';
 import {
   isConfirmedCleanup,
+  createRetryableCleanup,
   type CleanupOutcome,
   type FinishOutcome,
   type ReattachOutcome,

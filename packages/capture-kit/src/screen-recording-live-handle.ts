@@ -1,10 +1,10 @@
-import { createRetryableCleanup } from './durable-resource-cleanup.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   type CleanupOutcome,
   type DurableCaptureProgress,
   type FinishOutcome,
   isConfirmedCleanup,
+  createRetryableCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type {
   RecordingGestureEvent,

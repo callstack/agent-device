@@ -1,4 +1,3 @@
-import { createRetryableCleanup } from './durable-resource-cleanup.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogCompletion,
@@ -9,6 +8,7 @@ import {
   type CleanupOutcome,
   type FinishOutcome,
   isConfirmedCleanup,
+  createRetryableCleanup,
 } from '@agent-device/contracts/durable-resource';
 
 type AppLogLiveHandleImplementation = Readonly<{
