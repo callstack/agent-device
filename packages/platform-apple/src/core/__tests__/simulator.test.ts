@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ensureBootedSimulator,
   openIosSimulatorApp,
+  setSimulatorBootHook,
   wasSimulatorRecentlyObservedBooted,
 } from '../simulator.ts';
 import { IOS_BOOT_TIMEOUT_MS, IOS_SIMULATOR_SHOW_TIMEOUT_MS } from '../config.ts';
@@ -341,4 +342,41 @@ test('ensureBootedSimulator stops at the boot deadline instead of starting anoth
   );
 
   assert.equal(booted, true);
+});
+
+test('ensureBootedSimulator runs the bound boot hook instead of booting a shut-down simulator', async () => {
+  mockRunCmdResponses({
+    'xcrun simctl list devices -j': simulatorStateSequence('Shutdown', 'Booted'),
+  });
+  const run = vi.fn(async () => ({
+    command: ['stim', 'revive'],
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  }));
+  setSimulatorBootHook({ run, leftDeviceDown: () => new AppError('COMMAND_FAILED', 'left down') });
+  try {
+    await ensureBootedSimulator(IOS_TEST_SIMULATOR);
+  } finally {
+    setSimulatorBootHook(undefined);
+  }
+
+  assert.equal(run.mock.calls.length, 1);
+  assert.equal(wasSimulatorRecentlyObservedBooted(IOS_TEST_SIMULATOR), true);
+});
+
+test('ensureBootedSimulator refuses without booting when the boot hook leaves the simulator shut down', async () => {
+  mockRunCmdResponses({
+    'xcrun simctl list devices -j': simulatorStateSequence('Shutdown'),
+  });
+  const hookRun = { command: ['stim', 'revive', '--json'], exitCode: 1, stdout: '', stderr: '' };
+  const leftDown = new AppError('COMMAND_FAILED', 'left down');
+  const leftDeviceDown = vi.fn(() => leftDown);
+  setSimulatorBootHook({ run: async () => hookRun, leftDeviceDown });
+  try {
+    await assert.rejects(ensureBootedSimulator(IOS_TEST_SIMULATOR), (error) => error === leftDown);
+  } finally {
+    setSimulatorBootHook(undefined);
+  }
+  assert.deepEqual(leftDeviceDown.mock.calls, [[hookRun, IOS_TEST_SIMULATOR]]);
 });

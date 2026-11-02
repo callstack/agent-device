@@ -324,6 +324,71 @@ function simctlVerb(args: readonly string[]): string {
   return args.find((arg) => ['list', 'boot', 'bootstatus', 'shutdown'].includes(arg)) ?? '';
 }
 
+function hookHost(
+  states: string[],
+  hookRun: PlatformRuntimeHost['deviceReadiness']['bootHook']['run'],
+) {
+  const leftDown = new Error('boot hook left the device down');
+  const leftDeviceDown = vi.fn(() => leftDown as never);
+  const calls: string[][] = [];
+  const run: PlatformRuntimeHost['appleTools']['run'] = vi.fn(async (request) => {
+    calls.push([...request.args]);
+    const state = request.args.includes('list') ? (states.shift() ?? 'Shutdown') : null;
+    return {
+      stdout: state ? JSON.stringify({ devices: { ios: [{ udid: 'sim-1', state }] } }) : '',
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const base = platformRuntimeHostFixture();
+  const host = {
+    ...base,
+    appleTools: { isXcrunAvailable: async () => true, run },
+    deviceReadiness: { ...base.deviceReadiness, bootHook: { run: hookRun, leftDeviceDown } },
+  } satisfies PlatformRuntimeHost;
+  return {
+    host,
+    leftDown,
+    leftDeviceDown,
+    booted: () => calls.some((args) => args.includes('boot')),
+  };
+}
+
+test('a boot hook restores a shut-down simulator instead of a simctl boot', async () => {
+  const hookRun = vi.fn(async () => ({
+    command: ['stim', 'revive'],
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  }));
+  const { host, booted } = hookHost(['Shutdown', 'Booted'], hookRun);
+
+  const ready = await ensureAppleReady(host, simulator(), new AbortController().signal);
+
+  expect(ready.booted).toBe(true);
+  expect(hookRun).toHaveBeenCalledOnce();
+  expect(booted()).toBe(false);
+});
+
+test('a boot hook that leaves the simulator shut down refuses with its run and never boots it', async () => {
+  const hookRun = {
+    command: ['stim', 'revive', '--json'],
+    exitCode: 1,
+    stdout: '{"code":"STIM_NO_METRO"}',
+    stderr: '',
+  };
+  const { host, leftDown, leftDeviceDown, booted } = hookHost(
+    ['Shutdown', 'Shutdown'],
+    async () => hookRun,
+  );
+
+  await expect(ensureAppleReady(host, simulator(), new AbortController().signal)).rejects.toBe(
+    leftDown,
+  );
+  expect(leftDeviceDown).toHaveBeenCalledWith(hookRun, simulator());
+  expect(booted()).toBe(false);
+});
+
 function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
     platform: 'apple',

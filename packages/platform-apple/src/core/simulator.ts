@@ -4,6 +4,8 @@ import { execFailureDetails, requireExecSuccess } from '@agent-device/host-kit/c
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
+import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 
 import {
@@ -58,6 +60,22 @@ export async function openIosSimulatorApp(options: SimulatorCommandOptions = {})
   });
 }
 
+type SimulatorBootHookSlot = { hook: DeviceReadinessRuntimeHost['bootHook'] | undefined };
+
+const BOOT_HOOK_SLOT = Symbol('appleSimulatorBootHook');
+const bootHookSlot = (): SimulatorBootHookSlot =>
+  runtimeSlot(BOOT_HOOK_SLOT, (): SimulatorBootHookSlot => ({ hook: undefined }));
+
+/**
+ * Binds the operator's boot hook for every simulator boot this runtime makes. Root composition
+ * calls it once per runtime; without it, a shut-down simulator is booted with `simctl boot`.
+ */
+export function setSimulatorBootHook(
+  hook: DeviceReadinessRuntimeHost['bootHook'] | undefined,
+): void {
+  bootHookSlot().hook = hook;
+}
+
 export async function ensureBootedSimulator(
   device: DeviceInfo,
   options: SimulatorCommandOptions = {},
@@ -68,6 +86,16 @@ export async function ensureBootedSimulator(
     ? 'Booted'
     : await getSimulatorState(device, options.signal);
   if (state === 'Booted') {
+    markSimulatorBooted(device);
+    return;
+  }
+
+  const bootHook = bootHookSlot().hook;
+  const hookRun = await bootHook?.run(device, options.signal);
+  if (bootHook && hookRun) {
+    if ((await getSimulatorState(device, options.signal)) !== 'Booted') {
+      throw bootHook.leftDeviceDown(hookRun, device);
+    }
     markSimulatorBooted(device);
     return;
   }

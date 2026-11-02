@@ -45,7 +45,17 @@ export async function ensureAppleReady(
 
   const recentlyObservedBooted = await readRecentBootObservation(host, device);
   const state = recentlyObservedBooted ? 'Booted' : await simulatorState(host, device, signal);
-  if (state !== 'Booted') {
+  const hookRun =
+    state === 'Booted'
+      ? null
+      : await host.deviceReadiness.bootHook.run(device, signal, {
+          deadlineAtMs: options.deadlineAtMs,
+        });
+  if (hookRun) {
+    if ((await simulatorState(host, device, signal)) !== 'Booted') {
+      throw host.deviceReadiness.bootHook.leftDeviceDown(hookRun, device);
+    }
+  } else if (state !== 'Booted') {
     options.onColdBootStart?.();
     host.deviceReadiness.appleAutomation.keepHot(device);
     await bootSimulator(host, device, signal, options.deadlineAtMs);

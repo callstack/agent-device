@@ -156,6 +156,9 @@ export async function composeDaemonRuntimeDeps(
     const { setAppleRunnerHostEnvironment } =
       await import('@agent-device/platform-apple/runner-owner');
     setAppleRunnerHostEnvironment(host);
+    const { setSimulatorBootHook } = await import('@agent-device/platform-apple/simulator');
+    const { createDeviceBootHook } = await import('./platform-runtime-device-boot-hook.ts');
+    setSimulatorBootHook(createDeviceBootHook(host));
     return Object.freeze({
       ownedProcessRecords,
       hostDiagnostics,

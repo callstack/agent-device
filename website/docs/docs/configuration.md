@@ -130,6 +130,20 @@ Only the variables below, and those documented on command pages, are supported. 
 | Install/update and platform helpers | `AGENT_DEVICE_NO_UPDATE_NOTIFIER`, `AGENT_DEVICE_MACOS_HELPER_BIN`, `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION` | Public operator controls |
 | macOS app backend | `AGENT_DEVICE_MACOS_APP_BACKEND`, `AGENT_DEVICE_MACOS_GHOST_CURSOR` | Public operator controls, read by the daemon. `native` drives macOS app sessions through the macOS helper instead of XCTest; see [Desktop targets](/docs/commands#desktop-targets). Unset or `xctest` uses the runner. The drawn agent pointer adds about 0.3 s to each native click, fill, type, and scroll; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns it off. Restart the daemon after changing either value. |
 
+## Device boot hook
+
+A tool that owns device lifecycle, such as a dev environment manager that admits devices, boots them and shuts them down when idle, can take over booting from agent-device. Put `boot-hook.json` in the daemon state directory (`AGENT_DEVICE_STATE_DIR`, or `~/.agent-device` by default):
+
+```json
+{ "command": ["stim", "revive", "--json"], "cwd": "/path/to/app" }
+```
+
+When a command finds its iOS simulator or Android emulator shut down, agent-device runs `command` instead of booting the device itself. `command` is an argument vector, run without a shell. `cwd` is an absolute directory and defaults to the daemon's working directory. The hook's environment adds `AGENT_DEVICE_BOOT_HOOK_PLATFORM` (`ios` or `android`), `AGENT_DEVICE_BOOT_HOOK_DEVICE_ID` (the UDID, or the AVD name of a stopped emulator) and `AGENT_DEVICE_BOOT_HOOK_DEVICE_NAME`. The hook runs for at most 5 minutes. A `--timeout` on `boot` or `open` shortens that, and an Android emulator boot always stays within its startup budget (120 seconds by default). When the time is up it gets `SIGTERM`, then `SIGKILL` 10 seconds later; `boot` and `open` do the same when the request is cancelled. Its stderr goes to the request diagnostics.
+
+agent-device then reads the device state again, also when the hook ran out of time or could not start. When the device is still not booted, the command fails with `COMMAND_FAILED` and `details.reason: boot_hook_left_device_down`, and the message quotes the hook's output or says why it did not finish. agent-device never falls back to booting the device itself while a hook is configured, because that would bypass the tool that admits devices. Without the file, agent-device boots devices as before. The file is read each time a boot would happen, so a running daemon picks up a new or removed hook. A file with unknown keys, an empty `command` or a relative `cwd` fails with `INVALID_ARGS` and `details.reason: invalid_boot_hook`.
+
+Whoever can write the state directory controls the hook, which runs with the daemon's privileges.
+
 ## Command-specific defaults
 
 A command-specific key applies only to commands that support it, so one config file works across all commands. For example:

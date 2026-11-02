@@ -9,10 +9,19 @@ import {
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
+import { runCmd } from '@agent-device/host-kit/command';
+import { ensureBootedSimulator } from '@agent-device/platform-apple/simulator';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { createRuntimeStateHandle, runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import { resolveRunnerAppBundleId } from '@agent-device/platform-apple/runner/operations';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
+
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
+  return { ...actual, runCmd: vi.fn(actual.runCmd) };
+});
 
 const ports = vi.hoisted(() => ({
   inventoryGateways: vi.fn(async (): Promise<object> => ({})),
@@ -244,4 +253,53 @@ test('the composed daemon route configures interactors from its host, not from t
       );
     },
   );
+});
+
+test("each composition binds its state directory's boot hook to the simulator boots of its runtime", async () => {
+  const commands: string[] = [];
+  const states = new Map<string, string>();
+  vi.mocked(runCmd).mockImplementation(async (cmd, args) => {
+    commands.push([cmd, ...args].join(' '));
+    const udid = args.at(-1) ?? '';
+    if (args.includes('list')) {
+      const devices = [...states].map(([id, state]) => ({ udid: id, state }));
+      return { exitCode: 0, stdout: JSON.stringify({ devices: { ios: devices } }), stderr: '' };
+    }
+    if (args.includes('boot')) states.set(udid, 'Booted');
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+  const compose = async (name: string, hook: boolean) => {
+    const baseDir = mkdtempForTestSync(`agent-device-daemon-composition-hook-${name}-`);
+    if (hook) {
+      fs.writeFileSync(
+        path.join(baseDir, 'boot-hook.json'),
+        JSON.stringify({ command: ['revive-hook'] }),
+      );
+    }
+    await createDaemonRuntimeDeps({
+      host: createTestHostEnvironment({ env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir } }),
+      baseDir,
+      sessionsDir: `${baseDir}/sessions`,
+      assertShutdownAllowed: undefined,
+      resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
+      resolveSessionArtifacts: () => {
+        throw new Error('unused');
+      },
+      openWebSessionNames: () => [],
+    });
+  };
+  const hooked = createRuntimeStateHandle();
+  const plain = createRuntimeStateHandle();
+  await hooked.run(() => compose('hooked', true));
+  await plain.run(() => compose('plain', false));
+  states.set('hooked-sim', 'Shutdown').set('plain-sim', 'Shutdown');
+
+  await expect(
+    hooked.run(() => ensureBootedSimulator({ ...IOS_SIMULATOR, id: 'hooked-sim' })),
+  ).rejects.toMatchObject({ details: { reason: 'boot_hook_left_device_down' } });
+  await plain.run(() => ensureBootedSimulator({ ...IOS_SIMULATOR, id: 'plain-sim' }));
+
+  expect(commands).toContain('revive-hook');
+  expect(commands.some((command) => command.includes('boot hooked-sim'))).toBe(false);
+  expect(commands.some((command) => command.includes('boot plain-sim'))).toBe(true);
 });

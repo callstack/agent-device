@@ -44,7 +44,15 @@ async function ensureEmulatorReady(
   const available = await host.deviceReadiness.androidEmulator.discover(request, signal);
   const selected = requireAvailableAvd(available, device.name, input.serial);
 
-  const existing = isRunningEmulator(selected) ? selected : undefined;
+  const hookStarted = isRunningEmulator(selected)
+    ? undefined
+    : await startedByBootHook(
+        host,
+        selected,
+        { request, serial: input.serial, deadlineAtMs },
+        signal,
+      );
+  const existing = isRunningEmulator(selected) ? selected : hookStarted;
   const launchedPid = existing
     ? undefined
     : await host.deviceReadiness.androidEmulator.launch(
@@ -56,7 +64,10 @@ async function ensureEmulatorReady(
     const discovered =
       existing ??
       (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
-    await waitForBoot(host, discovered.id, deadlineAtMs, signal);
+    const bootDeadline = hookStarted
+      ? Math.max(deadlineAtMs, host.clock.now() + POLL_MS)
+      : deadlineAtMs;
+    await waitForBoot(host, discovered.id, bootDeadline, signal);
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -68,6 +79,28 @@ async function ensureEmulatorReady(
     signal.throwIfAborted();
     throw error;
   }
+}
+
+async function startedByBootHook(
+  host: AndroidReadinessHost,
+  avd: DeviceInfo,
+  target: Readonly<{
+    request: ReturnType<typeof inventoryRequest>;
+    serial: string | undefined;
+    deadlineAtMs: number;
+  }>,
+  signal: AbortSignal,
+): Promise<DeviceInfo | undefined> {
+  const hookRun = await host.deviceReadiness.bootHook.run(avd, signal, {
+    deadlineAtMs: target.deadlineAtMs,
+  });
+  if (!hookRun) return undefined;
+  const devices = await host.deviceReadiness.androidEmulator.discover(target.request, signal);
+  const started = findByAvdName(devices, avd.name, target.serial);
+  if (!started || !isRunningEmulator(started)) {
+    throw host.deviceReadiness.bootHook.leftDeviceDown(hookRun, avd);
+  }
+  return started;
 }
 
 async function prepareAndroidEmulatorToolchain(host: AndroidReadinessHost): Promise<void> {

@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { inertAudioProbeHost } from '@agent-device/host-kit/audio-probe-fixtures';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
@@ -28,6 +29,10 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
         discover: async () => [],
         launch: async () => 1,
         terminate: async () => {},
+      },
+      bootHook: {
+        run: async () => null,
+        leftDeviceDown: () => new AppError('COMMAND_FAILED', 'boot hook left the device down'),
       },
     },
     localInteractors: { resolve: async () => ({}) as Interactor },

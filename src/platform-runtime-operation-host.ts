@@ -23,6 +23,7 @@ import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createApplePhysicalReadinessHost } from './platform-runtime-apple-physical-readiness.ts';
 import { createAppleAutomationKeepHotHost } from './platform-runtime-apple-automation-keep-hot.ts';
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
+import { createDeviceBootHook } from './platform-runtime-device-boot-hook.ts';
 import { createDeviceShutdownRuntimeHost } from './platform-runtime-device-shutdown-host.ts';
 import { createAppleAppDeploymentExecutor } from './platform-runtime-apple-deployment-executor.ts';
 import { createAndroidAppDeploymentExecutor } from './platform-runtime-android-deployment-executor.ts';
@@ -115,6 +116,7 @@ export function createPlatformRuntimeHost(options: {
       applePhysical: createApplePhysicalReadinessHost(),
       appleAutomation: createAppleAutomationKeepHotHost(),
       androidEmulator: createAndroidEmulatorHost(),
+      bootHook: createDeviceBootHook(host),
     }),
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands },
