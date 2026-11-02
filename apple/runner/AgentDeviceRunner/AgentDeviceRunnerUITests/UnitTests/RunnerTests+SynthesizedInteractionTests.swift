@@ -74,13 +74,15 @@ extension RunnerTests {
   }
 
   /// The state the AX-failure tap tests start from: the host app launched (turned to landscape when
-  /// asked), a tap context on its resolved window (measured at `windowFrame` when given), and
-  /// AXRuntime's display read failing with no kept size. The returned cleanup undoes every step.
+  /// asked), a tap context on its resolved window (measured at `windowFrame` when given) or, when
+  /// the window query is rejected, an unserializable tree and no context, and AXRuntime's display
+  /// read failing with no kept size. The returned cleanup undoes every step.
   @MainActor
   private func launchWithUnreadableDisplay(
     landscape: Bool,
-    windowFrame: CGRect? = nil
-  ) throws -> (context: SynthesizedCoordinateContext, cleanup: () -> Void) {
+    windowFrame: CGRect? = nil,
+    windowQueryRejected: Bool = false
+  ) throws -> (context: SynthesizedCoordinateContext?, cleanup: () -> Void) {
     var cleanups: [() -> Void] = []
     let cleanup = { for step in cleanups.reversed() { step() } }
     do {
@@ -91,15 +93,19 @@ extension RunnerTests {
         self.app.terminate()
       }
       if landscape { cleanups.append(try rotateHostAppToLandscape()) }
-      let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
-      let context = try XCTUnwrap(
-        SynthesizedCoordinateContext(
-          validating: windowFrame ?? resolved.frame,
-          resolvedWindow: resolved.window,
-          accessibilityHealth: .healthy
+      var context: SynthesizedCoordinateContext?
+      if !windowQueryRejected {
+        let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
+        context = try XCTUnwrap(
+          SynthesizedCoordinateContext(
+            validating: windowFrame ?? resolved.frame,
+            resolvedWindow: resolved.window,
+            accessibilityHealth: .healthy
+          )
         )
-      )
+      }
       cleanups.append(try simulateUnreadableSystemApplication())
+      if windowQueryRejected { cleanups.append(try simulateUnserializableAppTree()) }
       // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
       mainOwned.soleDisplayPortraitSize = nil
       return (context, cleanup)
@@ -363,6 +369,45 @@ extension RunnerTests {
     }
   }
 
+  /// #4091: with the window query rejected (a tree XCTest cannot serialize) and the display
+  /// unreadable there is no box at all. A portrait turn leaves the point as it is, so an admitted sole
+  /// screen still takes the tap as given.
+  @MainActor
+  func testWindowlessPortraitTapDispatchesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: false, windowQueryRejected: true)
+    defer { cleanup() }
+    try XCTSkipUnless(
+      soleScreenRouteIsOpen(for: app),
+      "without AXRuntime an iPad cannot admit the sole-screen route; the landscape test covers refusal"
+    )
+    XCTAssertEqual(
+      Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)),
+      RunnerInterfaceOrientation.portrait
+    )
+
+    let outcome = synthesizedTapAt(app: app, x: 40, y: 40)
+    guard case .performed? = outcome else {
+      return XCTFail("expected a window-less portrait tap to be dispatched, got \(String(describing: outcome))")
+    }
+  }
+
+  /// #4091: a landscape turn needs the box, and with the window query rejected no window can stand in
+  /// for an unreadable display, so the tap refuses before it dispatches instead of falling back to the
+  /// runner's own `UIScreen`.
+  @MainActor
+  func testWindowlessLandscapeTapRefusesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowQueryRejected: true)
+    defer { cleanup() }
+
+    let outcome = synthesizedTapAt(app: app, x: 40, y: 40)
+    guard case .unsupported(let message, _)? = outcome else {
+      return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
+    }
+    XCTAssertEqual(message, "synthesized coordinate tap could not resolve an app window with a finite screen frame")
+  }
+
   /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
   /// proves full-screen (an iPhone by its idiom) has a window that is the display, so its tap still
   /// turns about that window and is dispatched.
@@ -377,9 +422,10 @@ extension RunnerTests {
     )
 
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let windowFrame = try XCTUnwrap(context).referenceFrame
     XCTAssertEqual(
-      synthesizedRotationFrame(app: app, fallback: context.referenceFrame, interfaceOrientation: orientation),
-      context.referenceFrame
+      synthesizedRotationFrame(app: app, fallback: windowFrame, interfaceOrientation: orientation),
+      windowFrame
     )
     let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .performed? = outcome else {
