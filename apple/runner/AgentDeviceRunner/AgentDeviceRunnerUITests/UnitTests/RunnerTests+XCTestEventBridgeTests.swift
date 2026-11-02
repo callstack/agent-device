@@ -303,6 +303,17 @@ extension RunnerTests {
     XCTAssertEqual(resolveLitPanelWindow([]).failure, .unresolvedWindow, "no window at all")
   }
 
+  /// An unread window list is not an app without windows: it must not reach the system-surface
+  /// fallback, which only `UnresolvedWindow` takes.
+  func testLitPanelWindowRefusesAWindowListItCannotRead() {
+    var window: AnyObject?
+    var frame = CGRect.null
+    let failure = RunnerResolveLitPanelWindow(
+      DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel, &window, &frame)
+    XCTAssertEqual(failure, .unresolvedScreen)
+    XCTAssertNil(window)
+  }
+
   /// A window the walk could not place may itself be the panel's surface, so a full-panel window
   /// read after it is not booked.
   func testLitPanelWindowRefusesAFullPanelWindowReadAfterAnUnplacedOne() {

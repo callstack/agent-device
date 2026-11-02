@@ -46,9 +46,9 @@ typedef struct {
 #define AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS 8
 
 // Resolves the window on `litPanel`: the first window on that display whose frame is the panel's
-// box either way up, else the largest window on that display. An unplaced window, or a list past
-// the cap with no full-panel window in it, is `UnresolvedScreen`. Windows that are all on another
-// display are `OffLitPanel`; no window at all is `UnresolvedWindow`.
+// box either way up, else the largest window on that display. An unreadable list, an unplaced
+// window, or a list past the cap with no full-panel window in it, is `UnresolvedScreen`. Windows
+// that are all on another display are `OffLitPanel`; no window at all is `UnresolvedWindow`.
 FOUNDATION_EXPORT RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
   id application,
   RunnerLitPanel litPanel,

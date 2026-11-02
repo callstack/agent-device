@@ -244,9 +244,10 @@ static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
   *window = nil;
   *windowFrame = CGRectNull;
   *screen = nil;
+  // An unread list is not an app without windows, so it never reaches the system-surface fallback.
   NSArray *windows = RunnerCopyWindowList(application);
   if (windows == nil) {
-    return RunnerApplicationScreenFailureUnresolvedWindow;
+    return RunnerApplicationScreenFailureUnresolvedScreen;
   }
   // A window the walk could not place may be the panel's surface, so it refuses every booking. A
   // list past the cap refuses only when no full-panel window was found before it.

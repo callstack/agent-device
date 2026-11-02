@@ -172,6 +172,26 @@ test('a surface command probes the panel table within its own timeout', async ()
   assert.ok(sentTimeoutMs > 0 && sentTimeoutMs < 1_200, 'the runner gets what the read left');
 });
 
+test('a panel read that spends the whole request budget refuses instead of sending', async () => {
+  mockPanelTable.mockImplementation(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return { ok: true as const, payload: IPHONE_DUO_CLOSED };
+  });
+  const device = simulator({ name: 'iPhone Duo' });
+  const calls: RecordedRunnerCall[] = [];
+  await assert.rejects(
+    withAppleRunnerProvider(recordingRunnerProvider(calls), { deviceId: device.id }, () =>
+      runAppleRunnerCommand(device, { command: 'tap', x: 10, y: 20, timeoutMs: 20 }),
+    ),
+    (error: AppError) => {
+      assert.equal(error.details?.reason, 'panel-table-unreadable');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(calls.length, 0, 'a request with no time left never reaches the runner');
+});
+
 test('a known multi-panel device refuses a surface command when its panel table goes unread', async () => {
   const device = simulator({ name: 'iPhone Duo' });
   const calls: RecordedRunnerCall[] = [];
