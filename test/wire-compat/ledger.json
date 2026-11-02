@@ -71,7 +71,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:9f51e86c19cd4f5d8097f1c5ce38dc1daa795b803a6afc89d16cd556371ea037",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:dada24ddd55e0852300cab779f69ba3f742940346f9b6c3478fc04346ae66c3e",
     "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
@@ -257,8 +257,8 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:9f51e86c19cd4f5d8097f1c5ce38dc1daa795b803a6afc89d16cd556371ea037",
-      "rationale": "#3753 threads the daemon runtime's host environment into the directory-archive spawn instead of the module reading process.env. Request parsing, authorization, response framing, headers, and cleanup are unchanged; no peer-visible field moves."
+      "digest": "sha256:dada24ddd55e0852300cab779f69ba3f742940346f9b6c3478fc04346ae66c3e",
+      "rationale": "Implementation-only daemon changes under ADR 0006: #3753 passes the runtime host environment into archiving; #4165 holds reader ownership through stream close, defers cleanup while readers remain, and destroys the acquired stream if HTTP setup throws. Request parsing, authorization, status codes, response headers, error JSON, and archive framing are unchanged, so released peers parse the same payloads."
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
