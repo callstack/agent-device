@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { finished } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -17,6 +18,7 @@ import {
 // --- Downloadable artifact tracking ---
 
 const ARTIFACT_CLEANUP_TIMEOUT_MS = 15 * 60 * 1000;
+const ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS = 15 * 60 * 1000;
 
 const DOWNLOADABLE_ARTIFACT_RESOURCE: TenantOwnedResourceKind = {
   label: 'Artifact',
@@ -32,6 +34,17 @@ type DirectoryArchive = {
   sizeBytes: number;
 };
 
+type ArtifactSourceCleanup = {
+  remainingEntries: number;
+  deleteAfterDownload: boolean;
+};
+
+type ArtifactDownload = {
+  controller: AbortController;
+  stream?: fs.ReadStream;
+  release: () => void;
+};
+
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
@@ -39,10 +52,13 @@ type ArtifactEntry = {
   fileName?: string;
   displayRotation?: DeviceRotation;
   sessionName?: string;
-  deleteAfterDownload: boolean;
+  sourceCleanup: ArtifactSourceCleanup;
   createdAt: number;
   directoryArchive?: DirectoryArchive;
   directoryArchivePromise?: Promise<DirectoryArchive>;
+  archiveAbortController?: AbortController;
+  activeDownloads: Set<ArtifactDownload>;
+  cleanupRequested: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -57,10 +73,9 @@ const artifactTracking = (): ArtifactTrackingState =>
     ARTIFACT_TRACKING_SLOT,
     (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
     (state) => {
-      for (const entry of state.artifacts.values()) {
-        clearTimeout(entry.timer);
-        cleanupDirectoryArchive(entry);
-        if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
+      for (const [id, entry] of state.artifacts) {
+        requestArtifactCleanup(state.artifacts, id, entry);
+        for (const download of entry.activeDownloads) cancelArtifactDownload(id, entry, download);
       }
       for (const entry of state.uploads.values()) {
         clearTimeout(entry.timer);
@@ -85,11 +100,18 @@ export type DownloadableArtifactRegistration = {
 
 export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
 
-export type PreparedDownloadableArtifact = {
+type PreparedDownloadableArtifact = {
   artifactPath: string;
   fileName?: string;
   mimeType: string;
   sizeBytes: number;
+};
+
+export type OpenedDownloadableArtifact = PreparedDownloadableArtifact & {
+  stream: fs.ReadStream;
+  signal: AbortSignal;
+  /** Release ownership after the download pipeline settles, including failure. */
+  release: () => void;
 };
 
 /**
@@ -106,6 +128,12 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     cleanupDownloadableArtifact(artifactId);
   }, ARTIFACT_CLEANUP_TIMEOUT_MS);
   timer.unref();
+  const sourceCleanup = findArtifactSourceCleanup(params.artifactPath) ?? {
+    remainingEntries: 0,
+    deleteAfterDownload: true,
+  };
+  sourceCleanup.remainingEntries += 1;
+  sourceCleanup.deleteAfterDownload &&= params.deleteAfterDownload !== false;
   pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
@@ -113,7 +141,9 @@ export function trackDownloadableArtifact(params: DownloadableArtifactRegistrati
     fileName: params.fileName,
     ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     ...(params.sessionName !== undefined ? { sessionName: params.sessionName } : {}),
-    deleteAfterDownload: params.deleteAfterDownload !== false,
+    sourceCleanup,
+    activeDownloads: new Set(),
+    cleanupRequested: false,
     createdAt,
     timer,
   });
@@ -125,25 +155,79 @@ function findTrackedArtifactId(
   tenantId: string | undefined,
 ): string | undefined {
   for (const [artifactId, entry] of pendingArtifacts()) {
-    if (entry.artifactPath === artifactPath && entry.tenantId === tenantId) return artifactId;
+    if (
+      !entry.cleanupRequested &&
+      entry.artifactPath === artifactPath &&
+      entry.tenantId === tenantId
+    )
+      return artifactId;
   }
   return undefined;
 }
 
-export async function prepareDownloadableArtifact(
+function findArtifactSourceCleanup(artifactPath: string): ArtifactSourceCleanup | undefined {
+  for (const entry of pendingArtifacts().values()) {
+    if (entry.artifactPath === artifactPath) return entry.sourceCleanup;
+  }
+  return undefined;
+}
+
+export async function openDownloadableArtifact(
   artifactId: string,
   tenantId: string | undefined,
   hostEnv: NodeJS.ProcessEnv,
-): Promise<PreparedDownloadableArtifact> {
+): Promise<OpenedDownloadableArtifact> {
+  const artifacts = pendingArtifacts();
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
-  const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
-  if (!payload) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Artifact path is not a regular file or directory: ${entry.artifactPath}`,
-    );
+  const download: ArtifactDownload = {
+    controller: new AbortController(),
+    release: () => {
+      if (!entry.activeDownloads.delete(download)) return;
+      clearTimeout(deadline);
+      if (entry.cleanupRequested) requestArtifactCleanup(artifacts, artifactId, entry);
+    },
+  };
+  entry.activeDownloads.add(download);
+  const deadline = setTimeout(
+    () => cancelArtifactDownload(artifactId, entry, download),
+    ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
+  );
+  deadline.unref();
+  try {
+    const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
+    download.controller.signal.throwIfAborted();
+    if (!payload) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Artifact path is not a regular file or directory: ${entry.artifactPath}`,
+      );
+    }
+    const stream = fs.createReadStream(payload.artifactPath);
+    download.stream = stream;
+    return { ...payload, stream, signal: download.controller.signal, release: download.release };
+  } catch (error) {
+    download.release();
+    throw error;
   }
-  return payload;
+}
+
+function cancelArtifactDownload(
+  artifactId: string,
+  entry: ArtifactEntry,
+  download: ArtifactDownload,
+): void {
+  if (!entry.activeDownloads.has(download)) return;
+  const reason = expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  download.controller.abort(reason);
+  if (!download.stream) {
+    if ([...entry.activeDownloads].every(({ controller }) => controller.signal.aborted)) {
+      entry.archiveAbortController?.abort(reason);
+    }
+    return;
+  }
+  const closed = finished(download.stream, { cleanup: true }).catch(() => {});
+  download.stream.destroy();
+  void closed.then(download.release);
 }
 
 export async function listDownloadableArtifacts(
@@ -161,7 +245,7 @@ export async function listDownloadableArtifacts(
       continue;
     }
     const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
-    if (!payload) continue;
+    if (!payload || entry.cleanupRequested) continue;
     artifacts.push({
       id,
       ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
@@ -201,6 +285,9 @@ function readDownloadableArtifactEntry(
     tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
   );
+  if (entry.cleanupRequested) {
+    throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
+  }
   let stat: fs.Stats;
   try {
     stat = fs.statSync(entry.artifactPath);
@@ -275,6 +362,8 @@ async function createDirectoryArchive(
     path.join(os.tmpdir(), `agent-device-download-${crypto.randomUUID()}-`),
   );
   const archivePath = path.join(tempDir, fileName);
+  const controller = new AbortController();
+  entry.archiveAbortController = controller;
   try {
     await runCmd(
       'tar',
@@ -287,27 +376,30 @@ async function createDirectoryArchive(
         path.basename(entry.artifactPath),
       ],
       {
+        signal: controller.signal,
+        timeoutMs: ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
         env: {
           ...hostEnv,
           COPYFILE_DISABLE: '1',
         },
       },
     );
+    controller.signal.throwIfAborted();
     const archive = {
       archivePath,
       tempDir,
       fileName,
       sizeBytes: fs.statSync(archivePath).size,
     };
-    // The artifact may be consumed or expire while tar is still archiving.
-    if (pendingArtifacts().get(artifactId) !== entry) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    // Inventory can expire while tar is still archiving.
+    if (entry.cleanupRequested && entry.activeDownloads.size === 0) {
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
     entry.directoryArchive = archive;
     return archive;
   } catch (error) {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    if (controller.signal.aborted) throw controller.signal.reason;
     if (error instanceof AppError) throw error;
     throw new AppError(
       'COMMAND_FAILED',
@@ -315,6 +407,8 @@ async function createDirectoryArchive(
       { artifactPath: entry.artifactPath },
       error instanceof Error ? error : undefined,
     );
+  } finally {
+    if (entry.archiveAbortController === controller) entry.archiveAbortController = undefined;
   }
 }
 
@@ -325,8 +419,7 @@ function archiveFilename(fileName: string): string {
 }
 
 function canReadArtifact(entry: ArtifactEntry, tenantId: string | undefined): boolean {
-  if (!entry.tenantId) return true;
-  return entry.tenantId === tenantId;
+  return !entry.cleanupRequested && (!entry.tenantId || entry.tenantId === tenantId);
 }
 
 function safeArtifactFilename(fileName: string | undefined, fallback: string): string {
@@ -345,12 +438,29 @@ function hasUnsafeFilenameCharacter(fileName: string): boolean {
 }
 
 export function cleanupDownloadableArtifact(artifactId: string): void {
-  const entry = pendingArtifacts().get(artifactId);
+  const artifacts = pendingArtifacts();
+  const entry = artifacts.get(artifactId);
   if (!entry) return;
+  requestArtifactCleanup(artifacts, artifactId, entry);
+}
+
+function requestArtifactCleanup(
+  artifacts: Map<string, ArtifactEntry>,
+  artifactId: string,
+  entry: ArtifactEntry,
+): void {
+  entry.cleanupRequested = true;
   clearTimeout(entry.timer);
-  pendingArtifacts().delete(artifactId);
+  if (entry.activeDownloads.size > 0 || artifacts.get(artifactId) !== entry) return;
+  entry.archiveAbortController?.abort(
+    expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId),
+  );
+  artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
-  if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
+  entry.sourceCleanup.remainingEntries -= 1;
+  if (entry.sourceCleanup.remainingEntries === 0 && entry.sourceCleanup.deleteAfterDownload) {
+    removeBestEffort(entry.artifactPath);
+  }
 }
 
 function removeBestEffort(targetPath: string): void {

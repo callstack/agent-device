@@ -1,13 +1,15 @@
-import fs from 'node:fs';
 import http from 'node:http';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { once } from 'node:events';
+import { Transform } from 'node:stream';
+import { finished, pipeline } from 'node:stream/promises';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import {
   cleanupDownloadableArtifact,
   listDownloadableArtifacts,
-  prepareDownloadableArtifact,
+  openDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
-import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
+import { sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
 
 type DownloadableArtifactHttpRoute =
@@ -92,44 +94,60 @@ async function handleArtifactDownload(
     });
     if (!auth) return;
 
-    const artifact = await prepareDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
-    const retainArtifactAfterDownload = options.retainArtifacts === true;
-    const stream = fs.createReadStream(artifact.artifactPath);
-    res.statusCode = 200;
-    res.setHeader('content-type', artifact.mimeType);
-    res.setHeader('content-length', String(artifact.sizeBytes));
-    if (artifact.fileName) {
-      res.setHeader(
-        'content-disposition',
-        `attachment; filename="${artifact.fileName.replace(/"/g, '')}"`,
-      );
-    }
-    stream.on('error', (error) => {
-      failStreamedHttpResponse(res, error);
-    });
-    let didCleanupArtifact = false;
-    const cleanupCompletedDownload = () => {
-      if (didCleanupArtifact || retainArtifactAfterDownload) return;
-      didCleanupArtifact = true;
-      cleanupDownloadableArtifact(artifactId);
-    };
-    // Consume before the final chunk is written to the client: fetch treats a
-    // download as complete once content-length bytes arrive, which can happen
-    // before this stream emits 'end' (that needs one more threadpool read).
-    let bytesSent = 0;
-    stream.on('data', (chunk: string | Buffer) => {
-      bytesSent += chunk.length;
-      if (bytesSent >= artifact.sizeBytes) cleanupCompletedDownload();
-    });
-    stream.on('end', cleanupCompletedDownload);
-    res.on('finish', cleanupCompletedDownload);
-    res.on('close', () => {
-      if (res.writableFinished) {
-        cleanupCompletedDownload();
+    const artifact = await openDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
+    const { stream } = artifact;
+    const closed = finished(stream, { cleanup: true }).catch(() => {});
+    try {
+      artifact.signal.throwIfAborted();
+      if (stream.errored) throw stream.errored;
+      if (stream.pending) await once(stream, 'ready', { signal: artifact.signal });
+      res.statusCode = 200;
+      res.setHeader('content-type', artifact.mimeType);
+      res.setHeader('content-length', String(artifact.sizeBytes));
+      if (artifact.fileName) {
+        res.setHeader(
+          'content-disposition',
+          `attachment; filename="${artifact.fileName.replace(/"/g, '')}"`,
+        );
       }
-    });
-    stream.pipe(res);
+      let bytesRead = 0;
+      const checked = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          bytesRead += chunk.length;
+          if (bytesRead >= artifact.sizeBytes && options.retainArtifacts !== true) {
+            cleanupDownloadableArtifact(artifactId);
+          }
+          callback(null, chunk);
+        },
+        flush(callback) {
+          if (bytesRead !== artifact.sizeBytes) {
+            callback(
+              new AppError('COMMAND_FAILED', 'Artifact read did not match its declared size', {
+                reason: 'artifact_size_mismatch',
+                expectedBytes: artifact.sizeBytes,
+                actualBytes: bytesRead,
+              }),
+            );
+            return;
+          }
+          if (options.retainArtifacts !== true) cleanupDownloadableArtifact(artifactId);
+          callback();
+        },
+      });
+      await pipeline(stream, checked, res, { signal: artifact.signal });
+    } finally {
+      stream.destroy();
+      await closed;
+      artifact.release();
+    }
   } catch (error) {
+    if (res.destroyed) return;
+    if (res.headersSent) {
+      res.destroy(error instanceof Error ? error : undefined);
+      return;
+    }
+    res.removeHeader('content-length');
+    res.removeHeader('content-disposition');
     sendRestJsonError(res, normalizeError(error));
   }
 }

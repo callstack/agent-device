@@ -688,7 +688,7 @@ test.each(
         );
         expect(reportDownload.status).toBe(200);
         expect(await reportDownload.text()).toBe('generated-report');
-      } else expect(fs.existsSync(output)).toBe(false);
+      } else await vi.waitFor(() => expect(fs.existsSync(output)).toBe(false));
     });
   },
 );
@@ -837,7 +837,7 @@ test.each(['./capture.log', undefined])(
       });
       expect(download.status).toBe(200);
       expect(await download.text()).toContain('generated-trace');
-      expect(fs.existsSync(output)).toBe(false);
+      await vi.waitFor(() => expect(fs.existsSync(output)).toBe(false));
     });
   },
 );
@@ -930,7 +930,7 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
         expect(download.status).toBe(200);
         const archive = gunzipSync(Buffer.from(await download.arrayBuffer()));
         expect(archive.includes(Buffer.from('tenant-a-private-marker'))).toBe(false);
-        expect(fs.existsSync(secondPath)).toBe(false);
+        await vi.waitFor(() => expect(fs.existsSync(secondPath)).toBe(false));
         expect(fs.readFileSync(path.join(firstPath, 'private-a.txt'), 'utf8')).toBe(
           'tenant-a-private-marker',
         );
@@ -947,8 +947,10 @@ test('remote suite artifacts belong to fresh tenant/session invocations despite 
           expect(own.status).toBe(200);
           await own.arrayBuffer();
         }
-        expect(fs.existsSync(firstPath)).toBe(false);
-        expect(fs.existsSync(registrations[2]!.path)).toBe(false);
+        await vi.waitFor(() => {
+          expect(fs.existsSync(firstPath)).toBe(false);
+          expect(fs.existsSync(registrations[2]!.path)).toBe(false);
+        });
       },
       env,
     );
