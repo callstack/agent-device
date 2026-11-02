@@ -144,11 +144,6 @@ export type AndroidInstrumentationExitResult = {
    * attribute-like assignment, a payload record) or because a line of it was cut at the line limit.
    */
   withheldFields?: Array<MessageField | 'aborted'>;
-  /**
-   * Stdout held the system's refusal to start the run and nothing else: a status holding just an
-   * `Error` and `id=ActivityManagerService`, then status code -1, and no other line.
-   */
-  systemRefusal?: true;
 };
 
 const LINE_MAX_CHARS = 4_096;
@@ -233,7 +228,7 @@ function createInstrumentationOutput() {
   > = {};
   let open: MessageField | undefined;
   const withheld = new Set<MessageField | 'aborted'>();
-  // Every non-blank stdout line by kind and key, never by value, for `systemRefusal`.
+  // Every non-blank stdout line by kind and key, never by value, for `isSystemRefusal`.
   const stdoutShape: string[] = [];
   let reportedBySystem = false;
   /** A line the limit cut cannot be proven clean, so its field is withheld like a marked one. */
@@ -328,13 +323,16 @@ function createInstrumentationOutput() {
         ...(error !== undefined ? { error: error.trimEnd() } : {}),
         ...(stack !== undefined ? { stack: stack.trimEnd() } : {}),
         ...(withheld.size > 0 ? { withheldFields: [...withheld].sort() } : {}),
-        ...(SYSTEM_REFUSAL_SHAPES.has(stdoutShape.join(',')) &&
-        reportedBySystem &&
-        fields.statusCode === SYSTEM_REFUSAL_STATUS_CODE
-          ? { systemRefusal: true as const }
-          : {}),
       };
     },
+    /**
+     * Stdout held the system's refusal to start the run and nothing else: a status holding just an
+     * `Error` and `id=ActivityManagerService`, then status code -1, and no other line.
+     */
+    isSystemRefusal: () =>
+      SYSTEM_REFUSAL_SHAPES.has(stdoutShape.join(',')) &&
+      reportedBySystem &&
+      fields.statusCode === SYSTEM_REFUSAL_STATUS_CODE,
   };
 }
 
@@ -362,32 +360,42 @@ function appendLine(value: string | undefined, line: string): string | undefined
 }
 
 /**
- * Whether a run is a start the system refused, and nothing else. All of these hold:
+ * Whether a finished run is a start the system refused, and nothing else. All of these hold:
  * - `am instrument` reported `INSTRUMENTATION_FAILED`;
  * - the process exited with a non-zero code;
  * - no signal ended it;
- * - its stdout is the system's refusal report and nothing else (`systemRefusal`).
+ * - its stdout is the system's refusal report and nothing else.
  */
-export function isRefusedInstrumentationStart(result: AndroidInstrumentationExitResult): boolean {
+export function isRefusedInstrumentationStart(run: InstrumentationRun): boolean {
+  const output = readInstrumentationOutput(run);
+  const result = output.result(run.exitCode, run.signal, true);
   return (
     result.failed !== undefined &&
     result.exitCode !== null &&
     result.exitCode !== 0 &&
     result.signal === undefined &&
-    result.systemRefusal === true
+    output.isSystemRefusal()
   );
 }
 
-export function readInstrumentationExitResult(run: {
+type InstrumentationRun = {
   stdout: string;
   stderr: string;
   exitCode: number | null | undefined;
   signal?: string | null;
-}): AndroidInstrumentationExitResult {
+};
+
+function readInstrumentationOutput(run: InstrumentationRun) {
   const output = createInstrumentationOutput();
   output.writeStdout(run.stdout);
   output.writeStderr(run.stderr);
-  return output.result(run.exitCode, run.signal, true);
+  return output;
+}
+
+export function readInstrumentationExitResult(
+  run: InstrumentationRun,
+): AndroidInstrumentationExitResult {
+  return readInstrumentationOutput(run).result(run.exitCode, run.signal, true);
 }
 
 /** The exit of a spawned helper process and what it printed. */

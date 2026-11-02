@@ -20,10 +20,7 @@ vi.mock('../adb.ts', async (importOriginal) => {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutorResult, AndroidAdbProvider } from '../adb-executor.ts';
-import {
-  isRefusedInstrumentationStart,
-  readInstrumentationExitResult,
-} from '../instrumentation-helper.ts';
+import { isRefusedInstrumentationStart } from '../instrumentation-helper.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
@@ -197,11 +194,7 @@ const refusalRows: {
 
 test('a refused start is told apart from every run that breaks one of its conditions', () => {
   const misclassified = refusalRows
-    .filter(
-      (row) =>
-        isRefusedInstrumentationStart(readInstrumentationExitResult(row.run)) !==
-        (row.breaks === 'nothing'),
-    )
+    .filter((row) => isRefusedInstrumentationStart(row.run) !== (row.breaks === 'nothing'))
     .map((row) => row.breaks);
   assert.deepEqual(misclassified, []);
 });
@@ -273,7 +266,6 @@ test('a helper the system refuses to start twice reports the refusal', async () 
     statusCode: -1,
     failed: HELPER_RUNNER,
     error: `Unable to find instrumentation info for: ComponentInfo{${HELPER_RUNNER}}`,
-    systemRefusal: true,
   });
 });
 

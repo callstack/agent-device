@@ -2,6 +2,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { sleep } from './adb.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
+import type { AndroidSnapshotHelperOutput } from './snapshot-helper-types.ts';
 import { stopAndroidSnapshotHelperRuntime } from './snapshot-helper-retirement.ts';
 import { isAndroidSnapshotHelperStartFailure } from './snapshot-helper-capture.ts';
 import { stopAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
@@ -53,13 +54,13 @@ export async function resetAndroidSnapshotHelperRuntime(params: {
  * this capture and the system refused the start, nothing ran on the device, so the helper gets
  * exactly one more start after a runtime reset. Any other failure is the answer.
  */
-export async function captureRetryingRefusedAndroidSnapshotHelperStart<Output>(params: {
-  capture: () => Promise<Output>;
+export async function captureRetryingRefusedAndroidSnapshotHelperStart(params: {
+  capture: () => Promise<AndroidSnapshotHelperOutput>;
   sessionReady: boolean;
   adb: AndroidAdbExecutor;
   packageName: string;
   signal?: AbortSignal;
-}): Promise<Output> {
+}): Promise<AndroidSnapshotHelperOutput> {
   try {
     return await params.capture();
   } catch (error) {

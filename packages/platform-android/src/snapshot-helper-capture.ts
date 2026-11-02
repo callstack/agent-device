@@ -279,7 +279,7 @@ function readAndroidSnapshotHelperOutput(
         instrumentation,
         // Read only here, where adb returned the run's own exit: a deadline or a host failure throws
         // before this point, so it can never read as a refused start.
-        ...(isRefusedInstrumentationStart(instrumentation)
+        ...(isRefusedInstrumentationStart(result)
           ? { androidSnapshotHelperStartRefused: true }
           : {}),
         ...androidCaptureFailureReasonDetail(

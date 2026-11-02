@@ -513,12 +513,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       phase: 'android_snapshot_helper_session_fallback',
       data: { reason: normalizeError(error).message },
     });
-    await resetAndroidSnapshotHelperRuntime({
-      adb,
-      packageName: artifact.manifest.packageName,
-      signal,
-    });
-    signal?.throwIfAborted();
+    await resetAndroidSnapshotHelperRuntime({ adb, packageName: artifact.manifest.packageName });
   }
   const captureOneShot = async () =>
     await withDiagnosticTimer(
