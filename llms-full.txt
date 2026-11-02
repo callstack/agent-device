@@ -5197,6 +5197,7 @@ try {
 * A start that never becomes ready reports `provider-not-ready` or `provider-start-failed` and stops the run it started, so a failed `open` does not leave a rented device. Retry, then check that Revyl has a device of the requested model and OS version.
 * `snapshot` on iOS can fail with HTTP 500 while the simulator’s accessibility service briefly returns nothing. The plugin retries the read; if it still fails, run `snapshot` again.
 * A device that Revyl released while your session was open reports `provider-session-gone`. Run `close` and `open` again to rent a fresh one.
+* An `open` still waiting for its device when its lease is released reports `provider-lease-releasing`. That lease is ending; run `open` again, which allocates a new lease and rents a fresh device. An `open` that names no deadline stops waiting for a device after 370 s.
 
 # Run Maestro flows
 
