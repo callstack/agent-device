@@ -266,6 +266,15 @@ final class RunnerTests: XCTestCase {
 
   // MARK: - XCTest Entry
 
+#if os(macOS)
+  // Xcode 27.2 aborts in CGS_REQUIRE_INIT on the first synthesized event unless the process is
+  // connected to the window server; the UI-test runner has no NSApplication to do it (#4142).
+  override class func setUp() {
+    super.setUp()
+    MainActor.assumeIsolated { _ = NSApplication.shared }
+  }
+
+#endif
   override func setUp() {
     continueAfterFailure = true
   }
