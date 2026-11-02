@@ -212,6 +212,7 @@ Its workspace compliance includes `check:affected` selection, R11/R13 package en
 >   - Host toolchain readiness probes.
 >   - Device boot-failure classification.
 >   - App-resolution caches.
+>   - The lease table that cloud device provider runtimes rent devices through (ADR 0007).
 >   Platform packages may import provision-kit.
 >   Provision-kit may not import a platform package.
 >   Capture-kit may not import provision-kit.

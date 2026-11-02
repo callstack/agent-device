@@ -578,6 +578,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/provision-kit/install-source-config',
     '@agent-device/provision-kit/install-source-network',
     '@agent-device/provision-kit/install-source-network-transport',
+    '@agent-device/provision-kit/provider-lease-table',
     '@agent-device/provision-kit/toolchain-probe',
   ]);
   assert.deepEqual([...provisionKitPackage.workspaceDependencies].sort(), [
