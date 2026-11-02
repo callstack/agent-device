@@ -1,35 +1,32 @@
 # Open or update a PR
 
-A request to open or ship a PR authorizes these steps after validation:
-
-- Branch creation.
-- Commits.
-- Push.
-- PR creation.
-
-Apply authorization already given. Merging and releasing need separate authorization.
+After validation, a request to open or ship a PR authorizes branch creation, commits, push, and PR creation. Merging and releasing need separate authorization.
 
 ## Validate
 
 Follow [validation](testing.md).
 Record the `check:affected --run --head` receipt in the PR body. A serialized gate stage can validate the pushed head instead.
-For unresolved failures, follow the blocked-validation table.
 An authorized incomplete draft can record a blocker. A blocker is not a pass.
 Push once per review round. Each push restarts CI. Drafts skip device lanes.
 
 For device-facing changes, follow [device verification](device-verification.md).
-Prove the changed route ran live. Fixtures and adjacent routes do not replace this evidence.
 Report missing devices or commands.
 
 - Published: the branch is pushed, the PR is open, and validation status is recorded at a named commit.
-- Merge-ready: required checks pass at the actual head, with live evidence for device-facing changes.
+- Merge-ready: required checks pass at the head, with live evidence for device-facing changes.
 
 Do not wait for CI merely to report publication.
-Do not claim that skipped integration or coverage passed.
+Do not report skipped integration or coverage as passed.
+
+## New public package
+
+A new public package under `packages/` needs a safe transition on npm before its PR merges.
+First, the maintainer publishes an empty placeholder version, for example `0.0.0`, under a dist-tag other than `latest`.
+Then the maintainer configures the npm trusted publisher for the release workflow.
+Only after these steps does the PR remove `"private": true`.
 
 ## Self-review
 
-Commit the change.
 Give an independent reviewer the worktree, the merge-base SHA, the head SHA, and the task requirements.
 In the first review, do not supply an implementation summary.
 Review that SHA range with AGENTS.md and [review guidance](review.md).
@@ -57,7 +54,7 @@ After a rebase, validate the new head. Keep old evidence attributed to its origi
 
 ## PR body
 
-Use ready-for-review by default. When requested or intentionally incomplete, use draft.
+Use ready-for-review by default. Use draft when requested or incomplete.
 Keep the body below 250 words:
 
 - `## Summary`: include:
