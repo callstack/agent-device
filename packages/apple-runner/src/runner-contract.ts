@@ -488,17 +488,26 @@ const RUNNER_TOKEN_BYTES = 24;
 export const RUNNER_TOKEN_UNSUPPORTED_REASON = 'runner_token_unsupported';
 
 /** How to reach one runner generation: its listener port and the token it requires. */
-export type RunnerEndpoint = Readonly<{ port: number; token: string }>;
+export type RunnerEndpoint = Readonly<{
+  port: number;
+  token: string;
+  /** A provider's authenticated forwarding route; omitted for local and USB runners. */
+  http?: Readonly<{ url: string; headers?: Readonly<Record<string, string>> }>;
+}>;
 
 export function mintRunnerToken(): string {
   return crypto.randomBytes(RUNNER_TOKEN_BYTES).toString('base64url');
 }
 
 /** What the runner reads at launch to open its listener; see `RunnerTests+Environment.swift`. */
-export function runnerListenerEnv(endpoint: RunnerEndpoint): Record<string, string> {
+export function runnerListenerEnv(
+  endpoint: RunnerEndpoint,
+  bindAddress?: string,
+): Record<string, string> {
   return {
     AGENT_DEVICE_RUNNER_PORT: String(endpoint.port),
     AGENT_DEVICE_RUNNER_TOKEN: endpoint.token,
+    ...(bindAddress ? { AGENT_DEVICE_RUNNER_BIND_IP: bindAddress } : {}),
   };
 }
 

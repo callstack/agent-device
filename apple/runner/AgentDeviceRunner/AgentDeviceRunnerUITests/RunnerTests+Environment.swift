@@ -9,6 +9,7 @@ import Network
 struct RunnerListenerConfiguration {
   let port: NWEndpoint.Port
   let token: RunnerListenerToken
+  let bindAddress: IPv4Address?
 
   static func fromEnvironment(
     _ environment: [String: String] = ProcessInfo.processInfo.environment
@@ -20,6 +21,11 @@ struct RunnerListenerConfiguration {
     else {
       return nil
     }
-    return RunnerListenerConfiguration(port: port, token: token)
+    var bindAddress: IPv4Address?
+    if let rawAddress = environment["AGENT_DEVICE_RUNNER_BIND_IP"] {
+      guard let address = IPv4Address(rawAddress), address != .any else { return nil }
+      bindAddress = address
+    }
+    return RunnerListenerConfiguration(port: port, token: token, bindAddress: bindAddress)
   }
 }

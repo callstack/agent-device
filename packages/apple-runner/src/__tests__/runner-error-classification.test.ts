@@ -540,3 +540,24 @@ test('a runner that does not require the token is session-fatal and never retrie
     assert.equal(shouldRebuildCachedRunnerArtifact(refusal), false);
   }
 });
+
+test('forwarding recovery requires the typed gateway failure, never matching prose', () => {
+  const message = 'Runner HTTP forwarding is unavailable';
+  const typed = new AppError('COMMAND_FAILED', message, {
+    reason: 'runner_forwarding_unavailable',
+    status: 502,
+  });
+  assert.equal(isRetryableRunnerError(typed), true);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(typed, { command: 'tap' }), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(typed), false);
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      new AppError('COMMAND_FAILED', message, {
+        ...typed.details,
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+  assert.equal(isRetryableRunnerError(new AppError('COMMAND_FAILED', message)), false);
+});

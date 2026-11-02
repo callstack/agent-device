@@ -9,7 +9,8 @@ import {
   runAppleToolCommand,
   runXcrun,
 } from './host.ts';
-import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import type { RunnerLaunchObservation } from './runner-launcher.ts';
+import type { ExecResult, ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerSessionXctestrunPathCleanupPattern } from './runner-artifact-env.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
@@ -20,6 +21,7 @@ import {
   currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
   withRunnerLeaseLock,
+  type RunnerLease,
   type RunnerLeaseCleanupAdapter,
   type RunnerXcodebuildCleanupTarget,
 } from './runner-lease.ts';
@@ -29,7 +31,11 @@ import {
   runnerPrepProcessChildren,
   runnerPrepProcessChildrenWithoutLiveOwner,
 } from './runner-xctestrun.ts';
-import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
+import {
+  advanceRunnerSessionState,
+  type RunnerProcessHandle,
+  type RunnerSession,
+} from './runner-session-types.ts';
 
 export const RUNNER_INVALIDATE_WAIT_TIMEOUT_MS = 1_000;
 
@@ -50,6 +56,7 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
 
 export type RunnerDisposalOptions = {
   graceful?: boolean;
+  abort?: boolean;
   waitTimeoutMs?: number;
   /**
    * The caller already executes inside {@link withRunnerLeaseLock} for this
@@ -59,33 +66,35 @@ export type RunnerDisposalOptions = {
   leaseLockHeld?: boolean;
 };
 
-export async function disposeRunnerSession(
+export function disposeRunnerSession(
   session: RunnerSession,
   options: RunnerDisposalOptions = {},
+): Promise<void> {
+  if (session.disposal) return session.disposal;
+  const disposal = disposeRunnerGeneration(session, options);
+  session.disposal = disposal;
+  void disposal.catch(() => {
+    session.disposal = undefined;
+  });
+  return disposal;
+}
+
+async function disposeRunnerGeneration(
+  session: RunnerSession,
+  options: RunnerDisposalOptions,
 ): Promise<void> {
   // From here the session is going away: it still owns the lease and the process is still up, so
   // it can answer a request, and it must not be chosen for new work while it is being taken down.
   session.retention?.cancel();
   session.listenerWatch?.close();
   advanceRunnerSessionState(session, 'draining');
-  let processExitHandled = false;
-  if (options.graceful !== false) {
-    processExitHandled = await shutdownRunnerSessionGracefully(session);
-  } else if (isMacOs(session.device)) {
-    await interruptMacOsRunnerSessions([session]);
-    await cleanupRunnerSessionResources(session, options);
-    return;
-  } else {
-    await killRunnerProcessTree(session.child.pid, 'SIGTERM');
-  }
-
-  if (!processExitHandled) {
+  const graceful = options.graceful !== false && (await shutdownRunnerSessionGracefully(session));
+  if (graceful) {
     await waitForRunnerProcessExit(session, options.waitTimeoutMs ?? RUNNER_STOP_WAIT_TIMEOUT_MS);
-    if (isRunnerProcessTreeAlive(session.child.pid)) {
-      await killRunnerProcessTree(session.child.pid, 'SIGKILL');
-    }
   }
-  await cleanupRunnerSessionResources(session, options);
+  await session.launch.terminate({ ...options, graceful });
+  await session.launch.cleanup(options);
+  advanceRunnerSessionState(session, 'stopped');
 }
 
 export async function cleanupOwnedIosRunnerLease(deviceId: string): Promise<void> {
@@ -95,26 +104,21 @@ export async function cleanupOwnedIosRunnerLease(deviceId: string): Promise<void
 export async function abortRunnerSessionsAndPrepProcesses(
   activeSessions: readonly RunnerSession[],
 ): Promise<void> {
-  const prepProcesses = runnerPrepProcessChildren();
-  const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
-  const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
-  for (const session of activeSessions) {
-    session.retention?.cancel();
-    session.listenerWatch?.close();
-    advanceRunnerSessionState(session, 'draining');
-  }
-  await signalRunnerSessions(otherSessions, 'SIGINT');
-  await signalRunnerPrepProcesses(prepProcesses, 'SIGINT');
-  await signalRunnerSessions(otherSessions, 'SIGTERM');
-  await signalRunnerPrepProcesses(prepProcesses, 'SIGTERM');
-  await signalRunnerSessions(otherSessions, 'SIGKILL');
-  await signalRunnerPrepProcesses(prepProcesses, 'SIGKILL');
-  await interruptMacOsRunnerSessions(macOsSessions);
-  await Promise.allSettled(
-    activeSessions.map(async (session) => {
-      await cleanupRunnerSessionResources(session);
-    }),
-  );
+  const results = await Promise.allSettled([
+    ...activeSessions.map((session) =>
+      disposeRunnerSession(session, { graceful: false, abort: true }),
+    ),
+    (async () => {
+      const prep = runnerPrepProcessChildren();
+      for (const signal of ['SIGINT', 'SIGTERM', 'SIGKILL'] as const) {
+        await signalRunnerPrepProcesses(prep, signal);
+      }
+    })(),
+  ]);
+  const failures = results
+    .filter((result) => result.status === 'rejected')
+    .map((result) => result.reason);
+  if (failures.length) throw new AggregateError(failures, 'Runner launchers failed to terminate');
 }
 
 /**
@@ -155,6 +159,11 @@ async function stopPrepProcessList(
 }
 
 async function shutdownRunnerSessionGracefully(session: RunnerSession): Promise<boolean> {
+  const exited = new AbortController();
+  void session.launch.finished.then(
+    () => exited.abort(),
+    () => exited.abort(),
+  );
   try {
     await waitForRunner(
       session.device,
@@ -164,41 +173,39 @@ async function shutdownRunnerSessionGracefully(session: RunnerSession): Promise<
       } as RunnerCommand),
       undefined,
       RUNNER_SHUTDOWN_TIMEOUT_MS,
+      undefined,
+      exited.signal,
     );
-    return false;
+    return true;
   } catch {
-    if (isMacOs(session.device)) {
-      await interruptMacOsRunnerSessions([session]);
-      return true;
-    } else {
-      await killRunnerProcessTree(session.child.pid, 'SIGTERM');
-      return false;
-    }
+    return false;
   }
+}
+
+export function waitForRunnerLaunchExit(
+  finished: Promise<unknown>,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    const exited = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    void finished.then(exited, exited);
+  });
 }
 
 async function waitForRunnerProcessExit(
   session: RunnerSession,
   waitTimeoutMs: number,
 ): Promise<boolean> {
-  let timeout: NodeJS.Timeout | undefined;
-  try {
-    const exited = await Promise.race([
-      session.testPromise.then(
-        () => true,
-        () => true,
-      ),
-      new Promise<boolean>((resolve) => {
-        timeout = setTimeout(() => resolve(false), waitTimeoutMs);
-      }),
-    ]);
-    return exited || !isRunnerProcessTreeAlive(session.child.pid);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
+  return session.launch.waitForExit(waitTimeoutMs);
 }
 
-async function interruptMacOsRunnerSessions(sessions: readonly RunnerSession[]): Promise<void> {
+async function interruptMacOsRunnerSessions(
+  sessions: readonly LocalRunnerLaunchResources[],
+): Promise<void> {
   if (sessions.length === 0) return;
 
   // CONSERVATIVE: XCTest disables the host screen saver while macOS UI automation runs and
@@ -222,24 +229,22 @@ async function interruptMacOsRunnerSessions(sessions: readonly RunnerSession[]):
  * exit — the escalation step signals exactly these.
  */
 async function runnerSessionsWithRunningProcesses(
-  sessions: readonly RunnerSession[],
+  sessions: readonly LocalRunnerLaunchResources[],
   waitTimeoutMs: number,
-): Promise<RunnerSession[]> {
+): Promise<LocalRunnerLaunchResources[]> {
   const exited = await Promise.all(
-    sessions.map(async (session) => await waitForRunnerProcessExit(session, waitTimeoutMs)),
+    sessions.map(async (session) => await waitForLocalRunnerProcessExit(session, waitTimeoutMs)),
   );
   return sessions.filter((_, index) => !exited[index]);
 }
 
-async function cleanupRunnerSessionResources(
-  session: RunnerSession,
+async function cleanupLocalRunnerResources(
+  session: LocalRunnerLaunchResources,
   options: Pick<RunnerDisposalOptions, 'leaseLockHeld'> = {},
 ): Promise<void> {
   await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
-  // The session's own resources are gone: no lease, no temp files.
-  advanceRunnerSessionState(session, 'stopped');
 }
 
 /**
@@ -253,7 +258,7 @@ async function cleanupRunnerSessionResources(
  * and an unreleased own lease turns stale once this process exits.
  */
 async function settleOwnedRunnerDeviceState(
-  session: RunnerSession,
+  session: LocalRunnerLaunchResources,
   options: Pick<RunnerDisposalOptions, 'leaseLockHeld'>,
 ): Promise<void> {
   const settle = async () => {
@@ -283,9 +288,9 @@ async function settleOwnedRunnerDeviceState(
   }
 }
 
-function runnerLeaseOwnedElsewhere(session: RunnerSession): boolean {
+function runnerLeaseOwnedElsewhere(session: LocalRunnerLaunchResources): boolean {
   const onDiskToken = currentRunnerLeaseOwnerToken(session.deviceId);
-  return onDiskToken !== null && onDiskToken !== session.lease?.ownerToken;
+  return onDiskToken !== null && onDiskToken !== session.lease.ownerToken;
 }
 
 async function terminateRunnerSimulatorApps(device: DeviceInfo): Promise<void> {
@@ -325,7 +330,7 @@ export function isRunnerProcessAlive(pid: number | undefined): boolean {
 }
 
 async function signalRunnerSessions(
-  activeSessions: readonly RunnerSession[],
+  activeSessions: readonly LocalRunnerLaunchResources[],
   signal: 'SIGINT' | 'SIGTERM' | 'SIGKILL',
 ): Promise<void> {
   await Promise.allSettled(
@@ -387,4 +392,71 @@ async function killRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarg
       });
     }
   }
+}
+
+export type LocalRunnerLaunchResources = {
+  device: DeviceInfo;
+  deviceId: string;
+  sessionId: string;
+  child: RunnerProcessHandle;
+  testPromise: Promise<ExecResult>;
+  output?: Promise<void>;
+  xctestrunPath: string;
+  jsonPath: string;
+  lease: RunnerLease;
+  endOutputObservation?: () => void;
+  readLogTail?: (maxBytes: number) => string;
+  runnerLogPath?: string;
+};
+
+export function observeLocalRunnerLaunch(
+  local: LocalRunnerLaunchResources,
+): RunnerLaunchObservation & { local: LocalRunnerLaunchResources } {
+  const finished = local.testPromise.then(
+    () => {},
+    () => {},
+  );
+  return {
+    local,
+    get exited() {
+      return local.child.exitCode !== null;
+    },
+    finished,
+    output: local.output ?? finished,
+    isRunning: () => isRunnerProcessAlive(local.child.pid),
+    waitForExit: (timeoutMs) => waitForLocalRunnerProcessExit(local, timeoutMs),
+    terminate: async (options = {}) => {
+      if (options.graceful) {
+        if (isRunnerProcessTreeAlive(local.child.pid))
+          await killRunnerProcessTree(local.child.pid, 'SIGKILL');
+      } else if (isMacOs(local.device)) {
+        await interruptMacOsRunnerSessions([local]);
+      } else if (options.abort) {
+        for (const signal of ['SIGINT', 'SIGTERM', 'SIGKILL'] as const)
+          await killRunnerProcessTree(local.child.pid, signal);
+      } else {
+        await killRunnerProcessTree(local.child.pid, 'SIGTERM');
+        await waitForLocalRunnerProcessExit(
+          local,
+          options.waitTimeoutMs ?? RUNNER_STOP_WAIT_TIMEOUT_MS,
+        );
+        if (isRunnerProcessTreeAlive(local.child.pid))
+          await killRunnerProcessTree(local.child.pid, 'SIGKILL');
+      }
+    },
+    cleanup: (options) => cleanupLocalRunnerResources(local, options),
+    readLogTail: (maxBytes) => local.readLogTail?.(maxBytes) ?? '',
+    earlyExitError: async (port, logPath, startupDeviceStates) => {
+      const { buildLocalRunnerEarlyExitError } = await import('./runner-startup-transport.ts');
+      return buildLocalRunnerEarlyExitError({ ...local, startupDeviceStates }, port, logPath);
+    },
+  };
+}
+
+async function waitForLocalRunnerProcessExit(
+  local: LocalRunnerLaunchResources,
+  waitTimeoutMs: number,
+): Promise<boolean> {
+  const exited = await waitForRunnerLaunchExit(local.testPromise, waitTimeoutMs);
+  return exited || !isRunnerProcessTreeAlive(local.child.pid);
 }

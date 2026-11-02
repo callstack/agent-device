@@ -1,3 +1,4 @@
+import { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import {
   AppError,
   createRequestCanceledError,
@@ -9,6 +10,7 @@ import {
   addRunnerStartWaiter,
   cancelRunnerStartWaiter,
   createRunnerPhaseBudget,
+  requireRunnerPhaseRemainingMs,
   markRunnerStartRetryPending,
   releaseRunnerStartWaiter,
   type RunnerPhaseBudget,
@@ -191,4 +193,32 @@ function emitDetachedRunnerStartFailed(error: unknown): void {
       error: error instanceof Error ? error.message : String(error),
     },
   });
+}
+
+/**
+ * What the launched runner has to answer its first command, measured from launch. An explicit
+ * `startupTimeoutMs` bounds the whole start, readiness included, so readiness gets what is left of
+ * it. A defaulted start keeps the runner's own readiness window ({@link RUNNER_STARTUP_TIMEOUT_MS}):
+ * the default budget is sized for a cold build, and a runner that never answers must not be joined
+ * for the rest of it. Neither exceeds what the start budget has left.
+ */
+export function resolveRunnerLaunchReadinessMs(budget: RunnerStartBudget): number {
+  const remainingMs = Math.floor(budget.phase.deadline?.remainingMs() ?? budget.timeoutMs);
+  return budget.explicit ? remainingMs : Math.min(RUNNER_STARTUP_TIMEOUT_MS, remainingMs);
+}
+
+/**
+ * What the xctestrun build may spend: the rest of the start budget, which an explicit
+ * `buildTimeoutMs` can only shorten. The build is the one step with no ceiling of its own, so a
+ * start with no caller left is still ended by the clock it opened (#2894). Throws when the start
+ * has nothing left, so a spent budget fails before xcodebuild is spawned.
+ */
+export function resolveRunnerBuildTimeoutMs(
+  options: RunnerSessionOptions,
+  budget: RunnerStartBudget,
+): number {
+  const remainingMs =
+    requireRunnerPhaseRemainingMs(budget.phase, 'runner_xctestrun_build') ?? budget.timeoutMs;
+  const explicitMs = normalizeRunnerStartupTimeoutMs(options.buildTimeoutMs);
+  return explicitMs === undefined ? remainingMs : Math.min(explicitMs, remainingMs);
 }

@@ -114,10 +114,8 @@ static NSString *RunnerApplicationScreenFailureDescription(
   }
 }
 
-// One window read. Both answers are required: an app with no window answers `frame` with
-// `(0,0 0x0)` without raising, so only `exists` says whether the window is there. The window
-// object is handed back because resolving this instance is what its `screen` will answer from.
-// The frame is reported even when refused, so a refusal names what it looked at.
+// Check existence before geometry: reading a missing window's frame records an XCTest failure,
+// even when the exception is caught. Keep the resolved instance for its screen lookup.
 static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
   id application,
   id _Nullable *window,
@@ -125,23 +123,24 @@ static RunnerApplicationScreenFailure RunnerResolveUsableWindow(
 ) {
   __block id readWindow = nil;
   __block CGRect frame = CGRectNull;
+  __block BOOL frameRead = NO;
   __block BOOL resolved = NO;
   NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
     id candidate = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
     NSNumber *present = [candidate valueForKey:@"exists"];
     resolved = [present isKindOfClass:NSNumber.class] && present.boolValue;
+    if (!resolved) return;
     NSValue *frameValue = [candidate valueForKey:@"frame"];
     [frameValue getValue:&frame size:sizeof(frame)];
+    frameRead = YES;
     readWindow = candidate;
   }];
   *observedFrame = frame;
   if (exception != nil || !resolved || !AgentDeviceForegroundFrameIsMeasurable(frame)) {
     NSLog(
-      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@ resolved=%@",
-      frame.origin.x,
-      frame.origin.y,
-      frame.size.width,
-      frame.size.height,
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=%@ raised=%@ resolved=%@",
+      frameRead ? [NSString stringWithFormat:@"(%g,%g %gx%g)",
+        frame.origin.x, frame.origin.y, frame.size.width, frame.size.height] : @"unread",
       exception != nil ? @"yes" : @"no",
       resolved ? @"yes" : @"no"
     );

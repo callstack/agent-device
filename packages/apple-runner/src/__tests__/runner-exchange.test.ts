@@ -16,7 +16,10 @@ vi.mock('../runner-transport.ts', async (importOriginal) => {
 import { executeRunnerExchange } from '../runner-exchange.ts';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { captureDiagnostics } from './runner-session-fixtures.ts';
+import {
+  captureDiagnostics,
+  makeRunnerSession as makeLocalRunnerSession,
+} from './runner-session-fixtures.ts';
 import {
   startFakeRunnerServer,
   type FakeRunnerResponse,
@@ -32,7 +35,7 @@ afterEach(async () => {
 });
 
 function sessionFor(port: number): RunnerSession {
-  return {
+  return makeLocalRunnerSession({
     sessionId: `exchange:${port}`,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
@@ -43,7 +46,7 @@ function sessionFor(port: number): RunnerSession {
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 test('the exchange preflights a mutation and settles only its answer', async () => {

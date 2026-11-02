@@ -1,3 +1,4 @@
+import { observeLocalRunnerLaunch, type LocalRunnerLaunchResources } from '../runner-disposal.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
@@ -59,22 +60,44 @@ export function makeRunnerArtifact(
 
 /** A ready runner session; `port` is shorthand for an endpoint carrying the fixture token. */
 export function makeRunnerSession(
-  overrides: Partial<RunnerSession> & { port?: number } = {},
-): RunnerSession {
-  const { port = 8100, ...rest } = overrides;
+  overrides: Partial<RunnerSession> & Partial<LocalRunnerLaunchResources> & { port?: number } = {},
+): RunnerSession & { launch: ReturnType<typeof observeLocalRunnerLaunch> } {
+  const {
+    port = 8100,
+    xctestrunPath = '/tmp/runner.xctestrun',
+    jsonPath = '/tmp/runner.json',
+    testPromise = Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
+    child = { pid: 1234, exitCode: null },
+    lease,
+    readLogTail,
+    endOutputObservation,
+    ...rest
+  } = overrides;
+  const device = rest.device ?? IOS_SIMULATOR;
+  const deviceId = rest.deviceId ?? device.id;
+  const sessionId = rest.sessionId ?? `session-${port}`;
   return {
-    sessionId: `session-${port}`,
-    device: IOS_SIMULATOR,
-    deviceId: IOS_SIMULATOR.id,
+    sessionId,
+    device,
+    deviceId,
     endpoint: { port, token: RUNNER_TOKEN_FIXTURE },
-    xctestrunPath: '/tmp/runner.xctestrun',
-    jsonPath: '/tmp/runner.json',
-    testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
-    child: { pid: 1234, exitCode: null },
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
     ...rest,
-  } as RunnerSession;
+    launch: observeLocalRunnerLaunch({
+      device,
+      deviceId,
+      sessionId,
+      xctestrunPath,
+      jsonPath,
+      testPromise,
+      child,
+      lease: lease ?? makeRunnerLease({ deviceId, sessionId }),
+      readLogTail,
+      endOutputObservation,
+      runnerLogPath: rest.runnerLogPath,
+    }),
+  };
 }
 
 export function makeRunnerLease(

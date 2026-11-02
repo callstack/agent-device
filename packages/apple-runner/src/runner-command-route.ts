@@ -1,3 +1,4 @@
+import type { RunnerEndpoint } from './runner-contract.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveIosPhysicalDeviceControl } from './host.ts';
 
@@ -38,7 +39,11 @@ const deviceTunnelIpCache = new Map<string, DeviceTunnelIpCacheEntry>();
  * back to the tunnel route. The tunnel lookup and its cache therefore only run
  * for devices that genuinely need them, and cabled devices never pay for them.
  */
-export function createRunnerCommandRouteResolver(device: DeviceInfo, port: number) {
+export function createRunnerCommandRouteResolver(
+  device: DeviceInfo,
+  port: number,
+  http?: RunnerEndpoint['http'],
+) {
   let requestTunnelIp: string | null | undefined;
   let usbmuxUnattached = false;
   return {
@@ -53,6 +58,7 @@ export function createRunnerCommandRouteResolver(device: DeviceInfo, port: numbe
       timeoutBudgetMs?: number,
       forceRefresh = false,
     ): Promise<RunnerCommandRoute> => {
+      if (http) return { kind: 'network', url: http.url, cachedTunnelIp: false };
       if (runsOnThisHost(device)) return buildLoopbackRoute(port);
       const control = resolveIosPhysicalDeviceControl(device);
       if (control.backend === 'xctest') return buildUsbmuxRoute(device, port);

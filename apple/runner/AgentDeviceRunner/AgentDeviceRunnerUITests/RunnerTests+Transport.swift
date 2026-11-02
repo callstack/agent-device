@@ -36,12 +36,12 @@ extension RunnerTests {
 
   private func admit(_ connection: NWConnection, token: RunnerListenerToken) {
     let peer = RunnerListenerPeer.of(connection)
-    guard peer != .directNetwork else {
+    guard peer.isAdmitted(acceptsForwardedConnections: acceptsForwardedConnections) else {
       connection.cancel()
       return
     }
     let inbound = RunnerInboundRequest(token: token)
-    if peer == .tunnel {
+    if peer != .loopback {
       armDeadline(for: inbound, over: connection)
     }
     receiveRequest(inbound, over: connection)

@@ -1,3 +1,5 @@
+import { buildRunnerLease } from './runner-lease.ts';
+import { observeLocalRunnerLaunch } from './runner-disposal.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -30,6 +32,7 @@ type LaunchRunnerProcessInput = Readonly<{
 export type LaunchedRunnerProcess = ExecBackgroundResult &
   Readonly<{
     startupRetryWake: AbortSignal;
+    output: Promise<void>;
     /** Gives up this process's sides of the runner's log; see {@link launchRunnerProcess}. */
     endOutputObservation: () => void;
     /** Reads the end of the runner's log, which the runner itself keeps writing to (#2681). */
@@ -112,9 +115,10 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
       closeOutputFd();
       listenerReady.finish();
     };
-    void launched.wait.then(onProcessSettled, onProcessSettled);
+    const output = launched.wait.then(onProcessSettled, onProcessSettled);
     return {
       ...launched,
+      output,
       startupRetryWake: listenerReady.wake,
       endOutputObservation,
       readLogTail: (maxBytes) => readRunnerLogTail(logFile, maxBytes),
@@ -131,5 +135,43 @@ function once(task: () => void): () => void {
     if (done) return;
     done = true;
     task();
+  };
+}
+
+export function launchLocalRunner(
+  input: LaunchRunnerProcessInput & {
+    sessionId: string;
+    endpoint: import('./runner-contract.ts').RunnerEndpoint;
+    jsonPath: string;
+    cacheKey?: string;
+  },
+) {
+  const process = launchRunnerProcess(input);
+  const lease = buildRunnerLease({
+    device: input.device,
+    sessionId: input.sessionId,
+    runnerPid: process.child.pid,
+    endpoint: input.endpoint,
+    xctestrunPath: input.xctestrunPath,
+    cacheKey: input.cacheKey,
+    jsonPath: input.jsonPath,
+    runnerLogPath: input.logPath,
+  });
+  return {
+    launch: observeLocalRunnerLaunch({
+      device: input.device,
+      deviceId: input.device.id,
+      sessionId: input.sessionId,
+      child: process.child,
+      testPromise: process.wait,
+      output: process.output,
+      xctestrunPath: input.xctestrunPath,
+      jsonPath: input.jsonPath,
+      lease,
+      endOutputObservation: process.endOutputObservation,
+      readLogTail: process.readLogTail,
+      runnerLogPath: input.logPath,
+    }),
+    startupRetryWake: process.startupRetryWake,
   };
 }
