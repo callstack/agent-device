@@ -253,18 +253,17 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
 
 CGSize RunnerSystemApplicationScreenSize(void) {
   Class<AgentDeviceForegroundElement> element = RunnerForegroundElementClass();
-  if (element == Nil || ![element respondsToSelector:@selector(systemApplication)]) {
-    return CGSizeZero;
-  }
+  BOOL available = element != Nil && [element respondsToSelector:@selector(systemApplication)];
   __block CGRect screen = CGRectNull;
-  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+  NSString *exception = available ? [RunnerObjCExceptionCatcher catchException:^{
     id<AgentDeviceForegroundElement> systemApp = [element systemApplication];
     if (systemApp == nil || ![systemApp respondsToSelector:@selector(frame)]) return;
     screen = [systemApp frame];
-  }];
-  if (exception != nil || !AgentDeviceForegroundFrameIsMeasurable(screen)) {
+  }] : nil;
+  if (!available || exception != nil || !AgentDeviceForegroundFrameIsMeasurable(screen)) {
     NSLog(
-      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=system-app frame=(%g,%g %gx%g) raised=%@",
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=system-app available=%@ frame=(%g,%g %gx%g) raised=%@",
+      available ? @"yes" : @"no",
       screen.origin.x,
       screen.origin.y,
       screen.size.width,

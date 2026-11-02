@@ -235,7 +235,10 @@ extension RunnerTests {
   func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     app.launch()
-    defer { app.terminate() }
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
     try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the host app's frame is the display only while it fills it")
     let appFrame = app.frame
     let restoreUIKit = try simulateCompatibilityModeScreen()

@@ -523,7 +523,8 @@ extension RunnerTests {
   /// The box a synthesized turn swaps side lengths about. The digitizer turns about its display, so a
   /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
   /// resolved window, which names its panel (ADR 0025). Nil when the device's only screen would not
-  /// report its size: no box there is a known basis, so the gesture refuses before it dispatches.
+  /// report its size: no box there is a known basis, so the gesture refuses before it dispatches. An
+  /// unknown orientation keeps `fallback`, which a turn that does not rotate never reads.
   func synthesizedRotationFrame(fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return fallback }
     guard let portraitSize = soleDisplayPortraitSize() else { return nil }
@@ -541,7 +542,7 @@ extension RunnerTests {
   static func unmeasuredSoleDisplayOutcome(gesture: String) -> RunnerInteractionOutcome {
     .unsupported(
       message: "synthesized \(gesture) could not read the size of the device's only screen, so its coordinates cannot be rotated",
-      hint: "Retry after the app is foregrounded; the runner log names the failed read as AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=system-app."
+      hint: "Retry after the app is foregrounded; the runner log records why the screen size could not be read."
     )
   }
 #endif
