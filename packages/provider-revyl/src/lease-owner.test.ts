@@ -3,6 +3,7 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildRevylDevice } from './device.ts';
 import { createRevylRuntime } from './runtime.ts';
+import { REVYL_STOP_REQUEST_BUDGET_MS } from './revyl-client.ts';
 import { revylLease } from './revyl-backend.fixtures.ts';
 
 const device = buildRevylDevice('ios', revylLease('ios'), 'run-1');
@@ -96,6 +97,30 @@ test('release before the first allocation await refuses the device it takes', as
   assert.equal(h.runtime.hasLiveSession(device), false);
 });
 
+test('a caller that gives up during release retains the typed teardown reason', async () => {
+  const h = harness();
+  const controller = new AbortController();
+  const allocation = h.runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
+  await vi.waitFor(() => assert.equal(h.creates(), 1));
+  const disposal = h.runtime.leaseLifecycle!.release!(lease);
+  controller.abort();
+  try {
+    await assert.rejects(
+      allocation,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'provider-lease-releasing' &&
+        error.cause instanceof AppError &&
+        error.cause.details?.reason === 'request_canceled',
+    );
+  } finally {
+    h.start.resolve(started());
+    h.stop.resolve(stopped());
+    await disposal;
+  }
+  assert.equal(h.stops(), 1);
+});
+
 test.each(['release', 'shutdown'] as const)(
   '%s bounds a pending create and ends its late answer exactly once',
   async (by) => {
@@ -139,6 +164,34 @@ test.each(['release', 'shutdown'] as const)(
   },
 );
 
+test('release waits beyond the HTTP attempt deadline for the stop result', async () => {
+  const h = harness();
+  h.start.resolve(started());
+  await h.runtime.leaseLifecycle!.allocate!(lease);
+  vi.useFakeTimers();
+  let settled = false;
+  const release = h.runtime.leaseLifecycle!.release!(lease).then(
+    (value) => {
+      settled = true;
+      return value;
+    },
+    (error: unknown) => {
+      settled = true;
+      return error;
+    },
+  );
+  // The HTTP attempt owns 30 seconds before its own timeout can settle the request.
+  await vi.advanceTimersByTimeAsync(30_001);
+  try {
+    assert.equal(settled, false, 'disposal must not race the HTTP attempt deadline');
+  } finally {
+    h.stop.resolve(stopped());
+    await release;
+  }
+  assert.equal((await release) instanceof AppError, false);
+  assert.equal(h.stops(), 1);
+});
+
 test('an unanswered stop reports uncertainty, joins the pending stop, and accepts its late confirmation', async () => {
   const h = harness();
   h.start.resolve(started());
@@ -154,8 +207,8 @@ test('an unanswered stop reports uncertainty, joins the pending stop, and accept
     .finally(() => {
       settled = true;
     });
-  // Cross the 30-second disposal wait while the stop's transport promise remains pending.
-  await vi.advanceTimersByTimeAsync(35_000);
+  // Cross the HTTP retry budget and the disposal's 5 s settlement margin.
+  await vi.advanceTimersByTimeAsync(REVYL_STOP_REQUEST_BUDGET_MS + 10_000);
   try {
     assert.equal(settled, true, 'release must bound an unanswered stop');
     const error = await observed;

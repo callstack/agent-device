@@ -1,7 +1,11 @@
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { errorMessage } from '@agent-device/kernel/errors';
 import type { RevylPlatform } from './device.ts';
-import { isRevylSessionGone, type RevylClient } from './revyl-client.ts';
+import {
+  isRevylSessionGone,
+  REVYL_STOP_REQUEST_BUDGET_MS,
+  type RevylClient,
+} from './revyl-client.ts';
 import {
   startRevylSession,
   stopRevylSession,
@@ -13,7 +17,8 @@ import type { RevylStartRequest } from './session-allocation.ts';
 import { revylSessionIdForLease } from './session-identity.ts';
 
 const CREATE_ANSWER_BUDGET_MS = 120_000;
-const STOP_ANSWER_BUDGET_MS = 30_000;
+// Allow the HTTP stop's complete request/retry budget plus a 5 s settlement margin.
+const STOP_ANSWER_BUDGET_MS = REVYL_STOP_REQUEST_BUDGET_MS + 5_000;
 
 export type RevylStopOutcome = Readonly<{
   session: RevylRentedSession;

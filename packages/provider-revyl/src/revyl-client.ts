@@ -23,6 +23,9 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** How long `start_device` may take to answer: Revyl assigns a worker and boots the device in it. */
 const REVYL_START_DEVICE_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [500, 1_500] as const;
+export const REVYL_STOP_REQUEST_BUDGET_MS =
+  DEFAULT_REQUEST_TIMEOUT_MS * (RETRY_DELAYS_MS.length + 1) +
+  RETRY_DELAYS_MS.reduce<number>((total, delay) => total + delay, 0);
 
 /** Device-proxy actions Revyl answers to a GET; every other action is a POST. */
 const DEVICE_PROXY_GET_ACTIONS = new Set(['screenshot', 'health', 'device_info', 'hierarchy']);

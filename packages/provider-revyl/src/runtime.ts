@@ -210,10 +210,11 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     // each caller bounded by its own patience.
     const entry = existing ?? this.rent(lease, platform, request, context);
     if (entry.releasing) throw releasingLease(lease.leaseId);
+    const live = entry.session;
     const outcome =
-      entry.session === undefined
+      live === undefined
         ? await this.join(lease.leaseId, entry, platform, context)
-        : { status: 'ready' as const, session: entry.session };
+        : { status: 'ready' as const, session: live };
     if (this.shuttingDown) {
       // The device this start rented is already an entry shutdown is ending, so this caller only reports
       // the refusal rather than handing a session to a runtime that is gone.
@@ -273,6 +274,9 @@ class RevylRuntimeImplementation implements ProviderDeviceRuntime {
     if (gaveUp === undefined) return await entry.creation;
     try {
       return await Promise.race([entry.creation, gaveUp.promise]);
+    } catch (error) {
+      if (entry.releasing) throw releasingLease(leaseId, error);
+      throw error;
     } finally {
       gaveUp.dispose();
     }
@@ -375,11 +379,16 @@ async function loadRevylPlatformRuntime(
   });
 }
 
-function releasingLease(leaseId: string): AppError {
-  return new AppError('DEVICE_IN_USE', 'The Revyl lease is being released.', {
-    reason: 'provider-lease-releasing',
-    leaseId,
-    retriable: true,
-    hint: 'Retry after the pending release is confirmed.',
-  });
+function releasingLease(leaseId: string, cause?: unknown): AppError {
+  return new AppError(
+    'DEVICE_IN_USE',
+    'The Revyl lease is being released.',
+    {
+      reason: 'provider-lease-releasing',
+      leaseId,
+      retriable: true,
+      hint: 'Retry after the pending release is confirmed.',
+    },
+    cause,
+  );
 }
