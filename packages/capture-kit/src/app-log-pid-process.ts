@@ -55,14 +55,16 @@ export async function createPidScopedAppLogProcess(
       state = 'active';
     }
   } catch (error) {
-    await settleCleanupSteps([
-      async () => await active?.terminate(),
-      async () => {
-        await active?.wait;
-      },
-      async () => await active?.[Symbol.asyncDispose](),
-      async () => await output[Symbol.asyncDispose](),
-    ]);
+    await settleCleanupSteps(
+      new Set([
+        async () => await active?.terminate(),
+        async () => {
+          await active?.wait;
+        },
+        async () => await active?.[Symbol.asyncDispose](),
+        async () => await output[Symbol.asyncDispose](),
+      ]),
+    );
     throw error;
   }
   const monitor = monitorPidScopedProcess({
@@ -85,19 +87,22 @@ export async function createPidScopedAppLogProcess(
   }).catch(() => {
     state = 'failed';
   });
+  const cleanupSteps = new Set([
+    async () => {
+      stopped = true;
+      await active?.terminate();
+    },
+    async () => await monitor,
+    async () => await output[Symbol.asyncDispose](),
+  ]);
   let finishPromise: ReturnType<typeof finishPidScopedProcess> | undefined;
   const finish = async () =>
     (finishPromise ??= finishPidScopedProcess({
       options,
-      monitor,
-      active: () => active,
-      stop: () => {
-        stopped = true;
-      },
+      cleanupSteps,
       setState: (next) => {
         state = next;
       },
-      output,
     }).then((outcome) => {
       if (outcome.status === 'cleanup-pending') finishPromise = undefined;
       return outcome;
@@ -112,19 +117,11 @@ export async function createPidScopedAppLogProcess(
 async function finishPidScopedProcess(
   input: Readonly<{
     options: PidScopedAppLogProcessOptions;
-    monitor: Promise<void>;
-    active(): AppLogBackgroundProcess | undefined;
-    stop(): void;
+    cleanupSteps: Set<() => Promise<void>>;
     setState(state: AppLogLiveSnapshot['state']): void;
-    output: Awaited<ReturnType<AppLogRuntimeHost['outputs']['openAppend']>>;
   }>,
 ) {
-  input.stop();
-  const failures = await settleCleanupSteps([
-    async () => await input.active()?.terminate(),
-    async () => await input.monitor,
-    async () => await input.output[Symbol.asyncDispose](),
-  ]);
+  const failures = await settleCleanupSteps(input.cleanupSteps);
   if (failures.length > 0) {
     input.setState('failed');
     return {
@@ -144,11 +141,12 @@ async function finishPidScopedProcess(
   } as const;
 }
 
-async function settleCleanupSteps(steps: readonly (() => Promise<void>)[]): Promise<unknown[]> {
+async function settleCleanupSteps(steps: Set<() => Promise<void>>): Promise<unknown[]> {
   const failures: unknown[] = [];
   for (const step of steps) {
     try {
       await step();
+      steps.delete(step);
     } catch (error) {
       failures.push(error);
     }

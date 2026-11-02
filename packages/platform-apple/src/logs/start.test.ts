@@ -6,11 +6,13 @@ import { appleDevice, hostFixture } from './runtime.fixtures.ts';
 
 test('a host log handle retries failed output disposal after its process exited', async () => {
   const dispose = vi.fn(async () => {}).mockRejectedValueOnce(new Error('Close unavailable'));
+  const terminate = vi.fn(async () => {});
+  const disposeProcess = vi.fn(async () => {});
   const fixture = hostFixture({
     startProcess: async () => ({
       wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      terminate: async () => {},
-      [Symbol.asyncDispose]: async () => {},
+      terminate,
+      [Symbol.asyncDispose]: disposeProcess,
     }),
   });
   const host = {
@@ -31,6 +33,8 @@ test('a host log handle retries failed output disposal after its process exited'
   await handle[Symbol.asyncDispose]();
   await handle[Symbol.asyncDispose]();
   expect(dispose).toHaveBeenCalledTimes(2);
+  expect(terminate).toHaveBeenCalledOnce();
+  expect(disposeProcess).toHaveBeenCalledOnce();
 });
 
 test('simulator start resolves its app container through appleTools and keeps plutil generic', async () => {

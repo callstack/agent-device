@@ -89,6 +89,7 @@ function createPollerHandle(
       await host.clock.sleep(POLL_INTERVAL_MS);
     }
   })();
+  const pendingDisposals = new Set<AsyncDisposable>([options.reader, output]);
   let finishPromise:
     | Promise<FinishOutcome<{ backend: LogBackend; outputPath: string; completedAt: number }>>
     | undefined;
@@ -96,7 +97,7 @@ function createPollerHandle(
     (finishPromise ??= (async () => {
       stopped = true;
       await polling;
-      const failures = await disposeAll([options.reader, output]);
+      const failures = await disposeAll(pendingDisposals);
       if (failures.length > 0) {
         finishPromise = undefined;
         state = 'failed';
@@ -172,9 +173,12 @@ function remoteOnlyTail(tail: string): string {
     .join('\n');
 }
 
-async function disposeAll(resources: readonly AsyncDisposable[]): Promise<unknown[]> {
+async function disposeAll(resources: Set<AsyncDisposable>): Promise<unknown[]> {
   const results = await Promise.allSettled(
-    resources.map(async (resource) => await resource[Symbol.asyncDispose]()),
+    [...resources].map(async (resource) => {
+      await resource[Symbol.asyncDispose]();
+      resources.delete(resource);
+    }),
   );
   return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 }

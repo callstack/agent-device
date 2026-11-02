@@ -23,7 +23,7 @@ import {
 } from './transitions.ts';
 
 test.each(['replay', 'refusal'] as const)(
-  'a terminal %s disposes the captured handle another handle did not release',
+  'a terminal %s cleans the captured handle another handle did not release',
   async (outcome) => {
     const definition = {
       ...testCaptureDefinition,
@@ -32,7 +32,6 @@ test.each(['replay', 'refusal'] as const)(
     };
     const { context, captured, completion, record } =
       await captureWhoseRecordAnotherHandleCommitted(definition);
-    const dispose = vi.spyOn(captured.handle, Symbol.asyncDispose);
 
     const finish = finishLiveDurableCapture(
       definition,
@@ -45,7 +44,6 @@ test.each(['replay', 'refusal'] as const)(
         details: { reason: 'resource-already-completed' },
       });
 
-    expect(dispose).toHaveBeenCalledOnce();
     expect(captured.forceCleanup).toHaveBeenCalledOnce();
     expect(captured.finish).not.toHaveBeenCalled();
     expect(context.binding.read()).toBeUndefined();
@@ -54,7 +52,7 @@ test.each(['replay', 'refusal'] as const)(
 );
 
 test.each(['replay', 'refusal'] as const)(
-  'a failed terminal disposal retains the %s binding for a later successful teardown',
+  'capture intent retains the %s binding after rejected cleanup for a later successful teardown',
   async (outcome) => {
     const definition = {
       ...testCaptureDefinition,
@@ -63,14 +61,14 @@ test.each(['replay', 'refusal'] as const)(
     };
     const { context, captured, completion, record } =
       await captureWhoseRecordAnotherHandleCommitted(definition);
-    const dispose = vi
-      .spyOn(captured.handle, Symbol.asyncDispose)
-      .mockRejectedValueOnce(new Error('Captured handle disposal failed'));
+    const cleanup = vi
+      .spyOn(captured.handle, 'forceCleanup')
+      .mockRejectedValueOnce(new Error('Captured handle cleanup failed'));
     const logPath = `${context.resourcePath}.diagnostics.ndjson`;
-    const finish = () =>
+    const finish = (intent: 'capture' | 'disposal' = 'capture') =>
       finishLiveDurableCapture(
         definition,
-        { binding: context.binding, intent: 'disposal' },
+        { binding: context.binding, intent },
         context.resourcePath,
       );
     await withDiagnosticsScope({ command: 'record', logPath }, async () => {
@@ -97,18 +95,57 @@ test.each(['replay', 'refusal'] as const)(
           cleanup: {
             status: 'cleanup-pending',
             reason: 'cleanup-unconfirmed',
-            message: 'Captured handle disposal failed',
+            message: 'Captured handle cleanup failed',
           },
         }),
       }),
     );
-    if (outcome === 'replay') await expect(finish()).resolves.toEqual(completion);
+    if (outcome === 'replay') await expect(finish('disposal')).resolves.toEqual(completion);
     else
-      await expect(finish()).rejects.toMatchObject({
+      await expect(finish('disposal')).rejects.toMatchObject({
         details: { reason: 'resource-already-completed' },
       });
-    expect(dispose).toHaveBeenCalledTimes(2);
+    expect(cleanup).toHaveBeenCalledTimes(2);
     expect(captured.finish).not.toHaveBeenCalled();
+    expect(context.binding.read()).toBeUndefined();
+    expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+  },
+);
+
+test.each(['rejected', 'unconfirmed'] as const)(
+  'disposal intent reports %s terminal cleanup even when the committed result is replayable',
+  async (failure) => {
+    const cleanup = vi.fn<() => Promise<CleanupOutcome>>().mockResolvedValue({ status: 'cleaned' });
+    if (failure === 'rejected') cleanup.mockRejectedValueOnce(new Error('Transport unavailable'));
+    else cleanup.mockResolvedValueOnce({ status: 'cleanup-pending', reason: 'transport-failed' });
+    const handle = createAppLogLiveHandle({
+      inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+      finish: async () => {
+        throw new Error('Terminal disposal must not re-finish');
+      },
+      forceCleanup: cleanup,
+    });
+    const { context, completion, record } = await captureWhoseRecordAnotherHandleCommitted(
+      testCaptureDefinition,
+      handle,
+    );
+    const finish = () =>
+      finishLiveDurableCapture(
+        testCaptureDefinition,
+        { binding: context.binding, intent: 'disposal' },
+        context.resourcePath,
+      );
+    await expect(finish()).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: {
+        reason: failure === 'rejected' ? 'cleanup-unconfirmed' : 'transport-failed',
+        cleanupStatus: 'cleanup-pending',
+      },
+    });
+    expect(context.binding.read()?.handle).toBe(handle);
+    expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
+    await expect(finish()).resolves.toEqual(completion);
+    expect(cleanup).toHaveBeenCalledTimes(2);
     expect(context.binding.read()).toBeUndefined();
     expect(testCaptureStore.read(context.resourcePath)).toEqual(record);
   },
@@ -134,7 +171,7 @@ test.each(['rejected', 'unconfirmed'] as const)(
     const finish = () =>
       finishLiveDurableCapture(
         testCaptureDefinition,
-        { binding: context.binding, intent: 'disposal' },
+        { binding: context.binding, intent: 'capture' },
         context.resourcePath,
       );
     await expect(finish()).resolves.toEqual(completion);

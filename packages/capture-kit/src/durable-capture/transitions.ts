@@ -1,6 +1,5 @@
 import {
   type CleanupOutcome,
-  type CleanupPendingReason,
   type DurableCaptureProgress,
   type FinishOutcome,
   type LiveResourceHandle,
@@ -22,14 +21,6 @@ import type {
   DurableCaptureSessionBinding,
 } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
-
-const CLEANUP_PENDING_REASONS: Readonly<Record<CleanupPendingReason, true>> = {
-  'ownership-fence-lost': true,
-  'owner-unavailable': true,
-  'transport-failed': true,
-  'cleanup-unconfirmed': true,
-  'manual-recovery-required': true,
-};
 
 export async function finishLiveDurableCapture<
   K extends string,
@@ -94,29 +85,28 @@ export async function finishDurableCaptureHandle<
     // is the only place it can come from. A queued teardown finish that had to be refused this way
     // reported the session's export as an unreleased resource.
     onCompleted: async ({ envelope }) => {
-      let cleanup: Extract<CleanupOutcome, { status: 'cleanup-pending' }> | undefined;
+      let cleanup: CleanupOutcome;
       try {
-        await params.handle[Symbol.asyncDispose]();
+        cleanup = await params.handle.forceCleanup();
       } catch (error) {
-        const reason = error instanceof AppError ? error.details?.reason : undefined;
         cleanup = {
           status: 'cleanup-pending',
-          reason:
-            typeof reason === 'string' && Object.hasOwn(CLEANUP_PENDING_REASONS, reason)
-              ? (reason as CleanupPendingReason)
-              : 'cleanup-unconfirmed',
+          reason: 'cleanup-unconfirmed',
           message: errorMessage(error),
         };
+      }
+      if (!isConfirmedCleanup(cleanup)) {
         params.onCleanupPending?.(cleanup);
         emitDiagnostic({
           level: 'warn',
           phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_terminal_cleanup_pending`,
           data: { resourcePath: params.resourcePath, cleanup },
         });
+        if (params.intent === 'disposal') throw cleanupPendingError(definition, cleanup);
       }
       const replayed = await definition.completionFromMetadata?.(envelope.metadata);
       if (replayed !== undefined) return replayed;
-      if (cleanup) throw cleanupPendingError(definition, cleanup);
+      if (!isConfirmedCleanup(cleanup)) throw cleanupPendingError(definition, cleanup);
       throw completedDurableCaptureError(definition.store);
     },
     run: async (lease) => {

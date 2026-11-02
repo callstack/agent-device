@@ -1,3 +1,4 @@
+import { createRetryableCleanup } from './durable-resource-cleanup.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogCompletion,
@@ -21,32 +22,10 @@ export function createAppLogLiveHandle(
   implementation: AppLogLiveHandleImplementation,
 ): AppLogLiveHandle {
   let finish: Promise<FinishOutcome<AppLogCompletion>> | undefined;
-  let cleanup: Promise<CleanupOutcome> | undefined;
-  let disposal: Promise<void> | undefined;
-  const forceCleanup = (): Promise<CleanupOutcome> =>
-    (cleanup ??= implementation.forceCleanup().then(
-      (outcome) => {
-        if (!isConfirmedCleanup(outcome)) cleanup = undefined;
-        return outcome;
-      },
-      (error) => {
-        cleanup = undefined;
-        throw error;
-      },
-    ));
   return Object.freeze({
     inspect: () => implementation.inspect(),
     finish: () => (finish ??= implementation.finish()),
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup()
-        .then(assertConfirmedCleanup)
-        .catch((error) => {
-          disposal = undefined;
-          throw error;
-        });
-      await disposal;
-    },
+    ...createRetryableCleanup(() => implementation.forceCleanup(), assertConfirmedCleanup),
   });
 }
 

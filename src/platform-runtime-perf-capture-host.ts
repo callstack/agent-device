@@ -13,6 +13,7 @@ import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ManagedProcessIdentity } from '@agent-device/contracts/platform-runtime-host';
 import {
   createDurableResourceEnvelope,
+  createRetryableCleanup,
   decodeDurableDescriptor,
   encodeDurableDescriptor,
 } from '@agent-device/capture-kit';
@@ -179,14 +180,8 @@ function createCaptureHandle(
 ): PerfNativeCaptureLiveHandle {
   let outPath = steps.initialOutPath;
   let finish: Promise<FinishOutcome<PerfNativeCaptureSnapshot>> | undefined;
-  let cleanup: Promise<CleanupOutcome> | undefined;
   const clean = async (): Promise<CleanupOutcome> =>
     await steps.cleanup().then(() => ({ status: 'cleaned' }) as const, cleanupPending);
-  const forceCleanup = async () =>
-    (cleanup ??= clean().then((outcome) => {
-      if (outcome.status === 'cleanup-pending') cleanup = undefined;
-      return outcome;
-    }));
   return Object.freeze({
     inspect: steps.inspect,
     setOutputPath: (value: string) => {
@@ -202,11 +197,7 @@ function createCaptureHandle(
           throw error;
         },
       )),
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      const outcome = await forceCleanup();
-      assertCleanup(outcome);
-    },
+    ...createRetryableCleanup(clean, assertCleanup),
   });
 }
 

@@ -1,3 +1,4 @@
+import { createRetryableCleanup } from './durable-resource-cleanup.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   type CleanupOutcome,
@@ -35,8 +36,6 @@ export function createScreenRecordingLiveHandle(
   let snapshot = freezeSnapshot(initial);
   let finish: Promise<FinishOutcome<ScreenRecordingCompletion>> | undefined;
   let terminalRequested = false;
-  let cleanup: Promise<CleanupOutcome> | undefined;
-  let disposal: Promise<void> | undefined;
   // Once a finish or a cleanup has been asked for, the recording no longer accepts telemetry.
   const terminal = (): boolean => terminalRequested;
   const finishRecording = (progress?: DurableCaptureProgress) => {
@@ -59,19 +58,6 @@ export function createScreenRecordingLiveHandle(
           async () => await implementation.forceCleanup(snapshot),
         )
       : implementation.forceCleanup(snapshot);
-  const forceCleanup = () => {
-    terminalRequested = true;
-    return (cleanup ??= clean().then(
-      (outcome) => {
-        if (!isConfirmedCleanup(outcome)) cleanup = undefined;
-        return outcome;
-      },
-      (error) => {
-        cleanup = undefined;
-        throw error;
-      },
-    ));
-  };
   return Object.freeze({
     inspect: () => snapshot,
     appendGestureEvents: (events: readonly RecordingGestureEvent[]) => {
@@ -97,16 +83,10 @@ export function createScreenRecordingLiveHandle(
       snapshot = freezeSnapshot({ ...snapshot, invalidatedReason });
     },
     finish: finishRecording,
-    forceCleanup,
-    [Symbol.asyncDispose]: async () => {
-      disposal ??= forceCleanup()
-        .then(assertConfirmedCleanup)
-        .catch((error) => {
-          disposal = undefined;
-          throw error;
-        });
-      await disposal;
-    },
+    ...createRetryableCleanup(() => {
+      terminalRequested = true;
+      return clean();
+    }, assertConfirmedCleanup),
   });
 }
 

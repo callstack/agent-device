@@ -1,5 +1,6 @@
+import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
-import { test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 
@@ -7,11 +8,17 @@ test.each(['rejected', 'unconfirmed'] as const)(
   'disposal retries %s cleanup and stays inert after confirmation',
   async (failure) => {
     const cleanup = vi.fn<() => Promise<CleanupOutcome>>().mockResolvedValue({ status: 'cleaned' });
-    if (failure === 'rejected') cleanup.mockRejectedValueOnce(new Error('Transport unavailable'));
+    if (failure === 'rejected')
+      cleanup.mockRejectedValueOnce(
+        new AppError('COMMAND_FAILED', 'Transport unavailable', { reason: 'transport-failed' }),
+      );
     else cleanup.mockResolvedValueOnce({ status: 'cleanup-pending', reason: 'transport-failed' });
     const finish = vi.fn(async () => completed());
     const handle = createScreenRecordingLiveHandle(snapshot(), { finish, forceCleanup: cleanup });
-    await assert.rejects(async () => await handle[Symbol.asyncDispose]());
+    await expect(Promise.resolve(handle[Symbol.asyncDispose]())).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'transport-failed' },
+    });
     handle.appendGestureEvents([{ kind: 'tap', tMs: 3, x: 4, y: 5 }]);
     assert.deepEqual(handle.inspect().gestureEvents, []);
     await Promise.all([handle[Symbol.asyncDispose](), handle[Symbol.asyncDispose]()]);
