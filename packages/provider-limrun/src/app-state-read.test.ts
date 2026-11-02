@@ -34,19 +34,18 @@ test('an iOS instance that does not answer fails typed and keeps the cause', asy
   });
 });
 
-test('a cancelled iOS check stays cancelled instead of reporting the instance gone', async () => {
+test('an iOS check cancelled in flight stays cancelled instead of reporting the instance gone', async () => {
   const controller = new AbortController();
   const reason = new AppError('COMMAND_FAILED', 'request canceled', {
     reason: 'request_canceled',
   });
+  const listApps = vi.fn(() => new Promise<unknown[]>(() => {}));
+
+  const read = readLimrunAppState(iosSession(listApps), controller.signal);
   controller.abort(reason);
 
-  await expect(
-    readLimrunAppState(
-      iosSession(() => new Promise(() => {})),
-      controller.signal,
-    ),
-  ).rejects.toBe(reason);
+  await expect(read).rejects.toBe(reason);
+  expect(listApps).toHaveBeenCalledTimes(1);
 });
 
 test('an Android session answers from its foreground app', async () => {
@@ -61,8 +60,10 @@ test('an Android session answers from its foreground app', async () => {
   });
 });
 
-test('no provider session is refused as unsupported', async () => {
+test('a provider session lost before the read is refused with a typed reason', async () => {
   await expect(readLimrunAppState(undefined, liveSignal())).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
+    message: 'Limrun appstate requires an active provider session',
+    details: { reason: 'limrun_lease_not_live' },
   });
 });

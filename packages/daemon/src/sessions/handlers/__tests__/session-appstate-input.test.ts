@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import * as path from 'node:path';
 import {
   mockDispatch,
@@ -123,6 +123,7 @@ test('appstate returns session appName when bundle id is unavailable', async () 
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
+    ...appleAppStateRuntime(async () => ({})),
   });
 
   expect(response).toBeTruthy();
@@ -438,19 +439,25 @@ test('appstate on iOS keeps the session answer, with no state, when no runner is
   }
 });
 
-function publishIosSession(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
-  sessionStore.publish(sessionName, {
-    ...makeSession(sessionName, IOS_SESSION_DEVICE),
-    appBundleId: 'dev.e2e.benchmark',
-    appName: 'Benchmark',
-  });
+const BUNDLED_APP = { appBundleId: 'dev.e2e.benchmark', appName: 'Benchmark' };
+const DEEP_LINK_APP = { appName: 'myapp://path' };
+
+function publishIosSession(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  sessionName: string,
+  app: Readonly<{ appBundleId?: string; appName: string }> = BUNDLED_APP,
+) {
+  sessionStore.publish(sessionName, { ...makeSession(sessionName, IOS_SESSION_DEVICE), ...app });
   mockResolveTargetDevice.mockResolvedValue(IOS_SESSION_DEVICE);
 }
 
-async function appStateWith(runtime: ReturnType<typeof appleAppStateRuntime>) {
+async function appStateWith(
+  runtime: ReturnType<typeof appleAppStateRuntime>,
+  app?: Parameters<typeof publishIosSession>[2],
+) {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  publishIosSession(sessionStore, sessionName);
+  publishIosSession(sessionStore, sessionName, app);
   return await handleSessionCommands({
     host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
@@ -503,6 +510,45 @@ test('appstate on iOS is refused when the owner holds no live session for the de
       code: 'UNSUPPORTED_OPERATION',
       details: { reason: 'owner-capability-missing' },
     },
+  });
+});
+
+test('appstate on iOS asks the owner about a session opened with no bundle id', async () => {
+  const read = vi.fn(async () => ({}));
+
+  const response = await appStateWith(appleAppStateRuntime(read), DEEP_LINK_APP);
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { source: 'session', appName: 'myapp://path' },
+  });
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+test('appstate on iOS fails when the read fails for a session with no bundle id', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'instance gone', {
+    reason: 'limrun_instance_unreachable',
+  });
+
+  await expect(
+    appStateWith(
+      appleAppStateRuntime(async () => {
+        throw failure;
+      }),
+      DEEP_LINK_APP,
+    ),
+  ).rejects.toBe(failure);
+});
+
+test('appstate on iOS is refused for a session with no bundle id and no live owner session', async () => {
+  const response = await appStateWith(
+    runtimeWithAppStateFact({ available: false, reason: 'owner-capability-missing' }),
+    DEEP_LINK_APP,
+  );
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'UNSUPPORTED_OPERATION', details: { reason: 'owner-capability-missing' } },
   });
 });
 

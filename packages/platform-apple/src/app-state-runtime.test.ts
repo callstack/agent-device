@@ -60,3 +60,11 @@ test('an advertised appState with no interactor implementation fails as a contra
     details: { reason: 'runtime-contract-invalid' },
   });
 });
+
+test('a session with no bundle id has no app for the runner to read', async () => {
+  const { operations, hasLiveRunnerSession, resolveInteractor } = bind(true);
+
+  await expect(operations.appState({})).resolves.toEqual({});
+  expect(hasLiveRunnerSession).not.toHaveBeenCalled();
+  expect(resolveInteractor).not.toHaveBeenCalled();
+});

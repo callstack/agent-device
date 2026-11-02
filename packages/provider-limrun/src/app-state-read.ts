@@ -13,15 +13,16 @@ export async function readLimrunAppState(
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   signal.throwIfAborted();
-  if (session?.platform === 'ios') {
-    await confirmLimrunIosInstanceAnswers(session, signal);
-    return {};
-  }
-  if (session?.platform !== 'android') {
+  if (!session) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
-      'Limrun Android appstate requires an active provider session',
+      'Limrun appstate requires an active provider session',
+      { reason: 'limrun_lease_not_live' },
     );
+  }
+  if (session.platform === 'ios') {
+    await confirmLimrunIosInstanceAnswers(session, signal);
+    return {};
   }
   const state = await session.getForegroundApp(signal);
   signal.throwIfAborted();
@@ -38,10 +39,10 @@ async function confirmLimrunIosInstanceAnswers(
     signal.throwIfAborted();
     throw new AppError(
       'COMMAND_FAILED',
-      'The Limrun iOS instance did not answer, so its app state is unknown.',
+      'Could not confirm that the Limrun iOS instance is running, so its app state is unknown.',
       {
         reason: 'limrun_instance_unreachable',
-        hint: 'The instance may have been terminated. Run connect limrun and open again.',
+        hint: 'Retry appstate. If it keeps failing, the instance may have been terminated: run connect limrun and open again.',
       },
       error,
     );

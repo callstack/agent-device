@@ -68,6 +68,11 @@ export function appleSessionRequiredRefusal(platform: 'ios' | 'macos'): DaemonRe
   );
 }
 
+/** The owner has no live session for the device, so the session record must not answer for it. */
+export function ownerHoldsNoLiveSession(reason: unknown): boolean {
+  return reason === 'owner-capability-missing';
+}
+
 type AppleAppStateRead =
   | Readonly<{ state?: AppleApplicationState }>
   | Readonly<{ refusal: DaemonFailureResponse }>;
@@ -82,7 +87,6 @@ async function readAppleSessionAppState(
   params: RuntimeCommandHandlerParams,
   session: Readonly<{ device: DeviceInfo; appBundleId?: string }>,
 ): Promise<AppleAppStateRead> {
-  if (!session.appBundleId) return {};
   const admitted = await admitRuntimeUse({
     command: 'appstate',
     device: session.device,
@@ -92,7 +96,7 @@ async function readAppleSessionAppState(
     bindDevice: params.bindDevice,
   });
   if (admitted.type === 'response') {
-    return admitted.response.error.details?.reason === 'owner-capability-missing'
+    return ownerHoldsNoLiveSession(admitted.response.error.details?.reason)
       ? { refusal: admitted.response }
       : {};
   }

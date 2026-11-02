@@ -470,7 +470,7 @@ test.each([
           appLogAvailable: false,
           appStateAvailable: false,
           networkAvailable: false,
-          providerMode: 'local',
+          providerMode: 'provider-runtime',
         }).facts,
     );
 
@@ -502,6 +502,68 @@ test.each([
     expect(inspectFacts).toHaveBeenCalledTimes(1);
   },
 );
+
+test('capabilities drops session-owned appstate once the owner holds no live session', async () => {
+  const device: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'limrun-gone',
+    name: 'Limrun iPhone',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const sessionName = 'limrun-gone-session';
+  const sessionStore = makeSessionStore('agent-device-capabilities-limrun-gone-');
+  sessionStore.publish(sessionName, {
+    name: sessionName,
+    device,
+    createdAt: Date.now(),
+    actions: [],
+    appName: 'Settings',
+    appBundleId: 'com.example.settings',
+  });
+  const inspectFacts: InspectDeviceRuntimeFacts = async (inspected: DeviceInfo) => {
+    const { facts } = createAdmissionBinding(inspected, {
+      appLogAvailable: false,
+      networkAvailable: false,
+      providerMode: 'provider-runtime',
+    });
+    return {
+      ...facts,
+      operations: {
+        ...facts.operations,
+        appState: { available: false, reason: 'owner-capability-missing' },
+      },
+    };
+  };
+
+  const response = await withTargetDeviceResolutionScope(
+    async () => [device],
+    async () =>
+      await handleSessionCommands({
+        host: createTestHostEnvironment(),
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          token: 't',
+          session: sessionName,
+          command: PUBLIC_COMMANDS.capabilities,
+          positionals: [],
+          flags: {},
+        },
+        sessionName,
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+        sessionStore,
+        inspectFacts,
+        invoke: async () => ({ ok: true, data: {} }),
+      }),
+  );
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.appState);
+});
 
 test('capabilities accepts a stopped Android AVD placeholder for explicit platform discovery', async () => {
   const stoppedAvd: DeviceInfo = {

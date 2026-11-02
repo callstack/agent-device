@@ -13,6 +13,7 @@ import {
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
+import { ownerHoldsNoLiveSession } from '../../handlers/session-appstate-apple-session.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -292,12 +293,28 @@ async function capabilitiesInventoryResponse(params: {
         : {}),
       availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
-        // available even when the sessionless runtime probe cannot see a foreground app.
-        if (command === 'appstate' && sessionOwnedAppStateAvailable) return true;
+        // available even when the sessionless runtime probe cannot see a foreground app. The
+        // exception is an owner with no live session, whose refusal appstate reports.
+        if (
+          command === 'appstate' &&
+          sessionOwnedAppStateAvailable &&
+          !ownerRefusesSessionAppState(facts)
+        ) {
+          return true;
+        }
         return commandIsAvailableFromFacts(command, facts);
       }),
     },
   };
+}
+
+function ownerRefusesSessionAppState(
+  facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
+): boolean {
+  if (!facts) return false;
+  return [facts.operations.ensureReady, facts.operations.appState].some(
+    (fact) => !fact.available && ownerHoldsNoLiveSession(fact.reason),
+  );
 }
 
 function isSessionOwnedAppStateAvailable(
