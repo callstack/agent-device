@@ -206,6 +206,19 @@ const startFailures: {
     retried: false,
   },
   {
+    name: 'a failed start without the system refusal record',
+    run: { ...INSTRUMENTATION_FAILED_RUN, stdout: 'INSTRUMENTATION_STATUS_CODE: -1\n' },
+    retried: false,
+  },
+  {
+    name: 'a refusal record after another status report',
+    run: {
+      ...INSTRUMENTATION_FAILED_RUN,
+      stdout: `INSTRUMENTATION_STATUS: numtests=1\nINSTRUMENTATION_STATUS_CODE: 1\n${REFUSED_STDOUT}`,
+    },
+    retried: false,
+  },
+  {
     name: 'the refusal words outside the startup-failure envelope',
     run: {
       exitCode: 1,
@@ -256,6 +269,7 @@ test('a helper the system refuses to start twice reports the refusal', async () 
     statusCode: -1,
     failed: HELPER_RUNNER,
     error: `Unable to find instrumentation info for: ComponentInfo{${HELPER_RUNNER}}`,
+    systemRefusal: true,
   });
 });
 

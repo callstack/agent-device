@@ -144,6 +144,11 @@ export type AndroidInstrumentationExitResult = {
    * attribute-like assignment, a payload record) or because a line of it was cut at the line limit.
    */
   withheldFields?: Array<MessageField | 'aborted'>;
+  /**
+   * The run's only report was the system refusing to start it: one status holding just an `Error`
+   * and `id=ActivityManagerService`, ended by status code -1, and no result record.
+   */
+  systemRefusal?: true;
 };
 
 const LINE_MAX_CHARS = 4_096;
@@ -174,6 +179,10 @@ const ABORTED_RE = /^INSTRUMENTATION_ABORTED:[ \t]?(.*)$/;
 const PROTOCOL_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|STATUS_CODE|RESULT|CODE|ABORTED|FAILED):/;
 const VALUE_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|RESULT): ([^=]*)=(.*)$/;
 const CODE_RE = /^INSTRUMENTATION_(STATUS_CODE|CODE): (-?\d+)\s*$/;
+// How `ActivityManagerService` reports an instrumentation it refused to start, before `am` prints
+// INSTRUMENTATION_FAILED. The snapshot helper itself only reports status 1 (a chunk) and 2 (ready).
+const SYSTEM_REFUSAL_REPORTER = 'ActivityManagerService';
+const SYSTEM_REFUSAL_STATUS_CODE = -1;
 // The protocol keys whose values are text, by the field they fill.
 const MESSAGE_FIELDS = { shortMsg: 'shortMsg', longMsg: 'longMsg', Error: 'error', stack: 'stack' };
 type MessageField = 'shortMsg' | 'longMsg' | 'error' | 'stack';
@@ -219,6 +228,23 @@ function createInstrumentationOutput() {
   > = {};
   let open: MessageField | undefined;
   const withheld = new Set<MessageField | 'aborted'>();
+  // The status being read, by its keys, and what the run reported so far, for `systemRefusal`.
+  let statusKeys = new Set<string>();
+  let reportedBySystem = false;
+  let statusReports = 0;
+  let systemRefusal = false;
+  let resultRecords = false;
+  const readStatusEnd = (code: number) => {
+    statusReports += 1;
+    systemRefusal =
+      statusReports === 1 &&
+      code === SYSTEM_REFUSAL_STATUS_CODE &&
+      reportedBySystem &&
+      statusKeys.size === 2 &&
+      statusKeys.has('Error');
+    statusKeys = new Set();
+    reportedBySystem = false;
+  };
   /** A line the limit cut cannot be proven clean, so its field is withheld like a marked one. */
   const checked = (field: MessageField | 'aborted', text: string, cut: boolean) => {
     if (cut || holdsSnapshotMarker(text)) withheld.add(field);
@@ -250,8 +276,13 @@ function createInstrumentationOutput() {
     if (code) {
       const value = Number(code[2]);
       if (!Number.isSafeInteger(value)) return undefined;
-      if (code[1] === 'CODE') fields.resultCode ??= value;
-      else fields.statusCode = value;
+      if (code[1] === 'CODE') {
+        resultRecords = true;
+        fields.resultCode ??= value;
+      } else {
+        readStatusEnd(value);
+        fields.statusCode = value;
+      }
       return undefined;
     }
     const aborted = ABORTED_RE.exec(line);
@@ -262,6 +293,12 @@ function createInstrumentationOutput() {
       return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
+    if (record && line.startsWith('INSTRUMENTATION_STATUS:')) {
+      statusKeys.add(record[1]!);
+      if (record[1] === 'id') reportedBySystem = record[2] === SYSTEM_REFUSAL_REPORTER;
+    } else if (record) {
+      resultRecords = true;
+    }
     const field = record ? messageFieldOf(record[1]!) : undefined;
     if (!field || fields[field] !== undefined) return undefined;
     fields[field] = checked(field, record![2] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
@@ -297,6 +334,9 @@ function createInstrumentationOutput() {
         ...(error !== undefined ? { error: error.trimEnd() } : {}),
         ...(stack !== undefined ? { stack: stack.trimEnd() } : {}),
         ...(withheld.size > 0 ? { withheldFields: [...withheld].sort() } : {}),
+        ...(systemRefusal && statusReports === 1 && !resultRecords
+          ? { systemRefusal: true as const }
+          : {}),
       };
     },
   };
@@ -313,15 +353,11 @@ function appendLine(value: string | undefined, line: string): string | undefined
   return next.length > MESSAGE_FIELD_MAX_CHARS ? value : next;
 }
 
-// The status code `ActivityManagerService` reports for an instrumentation it refused to start.
-// The snapshot helper itself only reports 1 (a chunk) and 2 (session ready).
-const SYSTEM_REFUSED_START_STATUS_CODE = -1;
-
 /**
  * Whether a run is a start the system refused, and nothing else. All of these hold:
  * - `am instrument` reported `INSTRUMENTATION_FAILED`;
  * - the process exited with a non-zero code, and no signal ended it;
- * - its only status is the system's refusal report: status code -1 with an `Error` message;
+ * - its only report is the system's refusal (`systemRefusal`);
  * - it has no result code, abort, `shortMsg`, `longMsg` or stack, which only a started
  *   instrumentation prints;
  * - no field was withheld.
@@ -332,7 +368,7 @@ export function isRefusedInstrumentationStart(result: AndroidInstrumentationExit
     result.exitCode !== null &&
     result.exitCode !== 0 &&
     result.signal === undefined &&
-    result.statusCode === SYSTEM_REFUSED_START_STATUS_CODE &&
+    result.systemRefusal === true &&
     result.resultCode === undefined &&
     result.aborted === undefined &&
     result.shortMsg === undefined &&
