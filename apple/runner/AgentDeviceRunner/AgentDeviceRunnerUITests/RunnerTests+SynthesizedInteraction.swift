@@ -28,7 +28,7 @@ extension RunnerTests {
       )
     }
     let frame = context.referenceFrame
-    guard let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation) else {
+    guard let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation) else {
       return Self.unmeasuredSoleDisplayOutcome(gesture: "drag")
     }
     let start = CoordinateSpaceRotation.native(
@@ -114,6 +114,7 @@ extension RunnerTests {
     }
     guard
       let rotationFrame = synthesizedRotationFrame(
+        app: app,
         fallback: context.referenceFrame,
         interfaceOrientation: orientation
       )
@@ -196,6 +197,7 @@ extension RunnerTests {
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     guard
       let rotationFrame = synthesizedRotationFrame(
+        app: app,
         fallback: context.referenceFrame,
         interfaceOrientation: orientation
       )
@@ -504,11 +506,7 @@ extension RunnerTests {
   /// anything else (a windowed iPad, a multi-screen foldable) keeps requiring a window.
   @MainActor
   func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
-    var resolvedScreen: AnyObject?
-    var resolvedDisplayID: UInt = 0
-    guard RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil else {
-      return nil
-    }
+    guard appFillsSoleScreen(app) else { return nil }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let frame = soleDisplayPortraitSize().flatMap {
       Self.soleScreenReferenceFrame(portraitSize: $0, interfaceOrientation: orientation)
@@ -520,15 +518,32 @@ extension RunnerTests {
     return frame
   }
 
+  /// The rule `RunnerResolveSoleScreen` owns: an iPhone by its idiom, an iPad only on the
+  /// fills-screen proof.
+  @MainActor
+  private func appFillsSoleScreen(_ app: XCUIApplication) -> Bool {
+    var resolvedScreen: AnyObject?
+    var resolvedDisplayID: UInt = 0
+    return RunnerResolveSoleScreen(app, &resolvedScreen, &resolvedDisplayID) == nil
+  }
+
   /// The box a synthesized turn swaps side lengths about. The digitizer turns about its display, so a
   /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
-  /// resolved window, which names its panel (ADR 0025). Nil when the device's only screen would not
-  /// report its size: no box there is a known basis, so the gesture refuses before it dispatches. An
-  /// unknown orientation keeps `fallback`, which a turn that does not rotate never reads.
+  /// resolved window `fallback`, which names its panel (ADR 0025). When the device's only screen
+  /// will not report its size, `fallback` is the basis only while the app provably fills that
+  /// screen; otherwise this is nil and the gesture refuses before it dispatches. An unknown
+  /// orientation keeps `fallback`, which a turn that does not rotate never reads.
   @MainActor
-  func synthesizedRotationFrame(fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
+  func synthesizedRotationFrame(app: XCUIApplication, fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return fallback }
-    guard let portraitSize = soleDisplayPortraitSize() else { return nil }
+    guard let portraitSize = soleDisplayPortraitSize() else {
+      let fillsScreen = appFillsSoleScreen(app)
+      NSLog(
+        "AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=rotation-basis basis=%@",
+        fillsScreen ? "window" : "refused"
+      )
+      return fillsScreen ? fallback : nil
+    }
     return Self.soleScreenReferenceFrame(portraitSize: portraitSize, interfaceOrientation: interfaceOrientation)
       ?? fallback
   }
@@ -547,7 +562,7 @@ extension RunnerTests {
 
   static func unmeasuredSoleDisplayOutcome(gesture: String) -> RunnerInteractionOutcome {
     .unsupported(
-      message: "synthesized \(gesture) could not read the size of the device's only screen, so its coordinates cannot be rotated",
+      message: "synthesized \(gesture) could not read the size of the device's only screen, and the app is not proven to fill it, so its coordinates cannot be rotated",
       hint: "Retry after the app is foregrounded; the runner log records why the screen size could not be read."
     )
   }
@@ -723,7 +738,7 @@ extension RunnerTests {
       width: plan.viewport.width,
       height: plan.viewport.height
     )
-    guard let rotationFrame = synthesizedRotationFrame(fallback: frame, interfaceOrientation: orientation) else {
+    guard let rotationFrame = synthesizedRotationFrame(app: app, fallback: frame, interfaceOrientation: orientation) else {
       return Self.unmeasuredSoleDisplayOutcome(gesture: "gesture")
     }
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in

@@ -255,7 +255,7 @@ extension RunnerTests {
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
     ]
     for (orientation, expected) in expectations {
-      let frame = try XCTUnwrap(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: orientation))
+      let frame = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: orientation))
       XCTAssertEqual(frame.origin, .zero)
       XCTAssertEqual(frame.width, expected.width, accuracy: 0.5)
       XCTAssertEqual(frame.height, expected.height, accuracy: 0.5)
@@ -271,22 +271,61 @@ extension RunnerTests {
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let portrait = RunnerInterfaceOrientation.portrait
     mainOwned.soleDisplayPortraitSize = nil
-    let measured = try XCTUnwrap(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
+    let measured = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait))
     XCTAssertNotEqual(measured, placedWindow)
 
     let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
     // Nothing between the install and the restore throws, so the restore always runs.
     let restoreAXRuntime = try simulateUnreadableSystemApplication()
-    XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait), measured)
     _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
-    XCTAssertNil(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
+    XCTAssertNotEqual(
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait),
+      measured,
+      "the next command must read the size again rather than reuse the kept one"
+    )
     restoreAXRuntime()
-    XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: portrait), measured)
   }
 
-  /// #4091: when the device's only screen will not report its size, a placed window's smaller box is
-  /// no basis to turn about either (#3899), so a tap through a resolved window refuses before it
-  /// dispatches instead of landing off target.
+  /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
+  /// proves full-screen (an iPhone by its idiom) has a window that is the display, so its tap still
+  /// turns about that window and is dispatched.
+  @MainActor
+  func testTapTurnsAboutTheWindowWhenTheSoleDisplayCannotBeMeasuredOnAFullScreenApp() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    app.launch()
+    mainOwned.app = app
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
+    let context = try XCTUnwrap(
+      SynthesizedCoordinateContext(validating: resolved.frame, resolvedWindow: resolved.window, accessibilityHealth: .healthy)
+    )
+    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    defer { restoreAXRuntime() }
+    mainOwned.soleDisplayPortraitSize = nil
+    try XCTSkipUnless(
+      soleScreenRouteIsOpen(for: app),
+      "without AXRuntime an iPad cannot prove the app fills the screen; the refusal test covers it"
+    )
+
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    XCTAssertEqual(
+      synthesizedRotationFrame(app: app, fallback: resolved.frame, interfaceOrientation: orientation),
+      resolved.frame
+    )
+    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .performed? = outcome else {
+      return XCTFail("expected the tap to be dispatched about the window, got \(String(describing: outcome))")
+    }
+  }
+
+  /// #4091: when the device's only screen will not report its size and the app is not proven to fill
+  /// it, a placed window's smaller box is no basis to turn about (#3899), so a tap through a resolved
+  /// window refuses before it dispatches instead of landing off target.
   @MainActor
   func testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
@@ -305,9 +344,13 @@ extension RunnerTests {
     defer { restoreAXRuntime() }
     // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
     mainOwned.soleDisplayPortraitSize = nil
+    try XCTSkipIf(
+      soleScreenRouteIsOpen(for: app),
+      "an app proven full-screen turns about its window; the full-screen test covers it"
+    )
 
     XCTAssertNil(
-      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
     )
     let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .unsupported(let message, _)? = outcome else {
