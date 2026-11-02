@@ -9,9 +9,8 @@
 
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
-Both broad commands and heavy `pnpm gate` ids acquire the same host lock.
 Wait for the owner to finish.
-Do not add lock wrappers. Do not delete lock files.
+Do not add lock wrappers.
 A wait ends after two hours.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
@@ -43,7 +42,6 @@ The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns full coverage, native builds, device lanes, provider integration, and compatibility that uses history.
 On a narrowed plan, related tests replace only provider integration.
 A production source change also runs the unit suite (about 3 minutes), because some unit gates read sources as text.
-Check the Integration Tests and Coverage jobs at the actual PR head.
 For docs-only changes, run the selected documentation checks.
 Do not add tests that assert prose.
 

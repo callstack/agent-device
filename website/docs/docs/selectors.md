@@ -18,8 +18,9 @@ agent-device find "Follow" list
 
 ## Find an element
 
-`find <locator> <query> <action>` takes an optional locator (`text`, `label`, `value`, `role`, or
-`id`), the query, and an action. Without a locator it searches labels, values, and ids. Text
+`find <query> [action]` and `find <locator> <query> [action] [value]` take an optional locator
+(`text`, `label`, `value`, `role`, or `id`), the query, and an optional action; the action defaults to
+`click`. Without a locator it searches labels, values, and ids. Text
 matches ignore case, and a field containing the query matches too; an exact match wins over a
 partial one.
 

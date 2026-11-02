@@ -350,9 +350,9 @@ const interactionCliSchemas = {
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   find: {
-    usageOverride: 'find <locator|text> <action> [value] [--first|--last]',
+    usageOverride: 'find <locator|text> [action] [value] [--first|--last]',
     usageFlags: [],
-    positionalArgs: ['query', 'action', 'value?'],
+    positionalArgs: ['query', 'action?', 'value?'],
     allowsExtraPositionals: true,
     allowedFlags: ['snapshotDepth', 'snapshotRaw', 'findFirst', 'findLast', 'record'],
   },

@@ -35,9 +35,11 @@ Do not record these in an ADR. Send each to its owner:
 
 - Implementation inventories and file maps: the registries, types, and gates that own them.
 - Measurements: `docs/evidence/`.
+- Experiment logs, run details, and measurements of a rejected alternative: the issue that ran the experiment. The ADR keeps the alternative with a one-line reason.
 - Rollout and migration plans: the package docs, the help, or the umbrella issue.
 - PR logs and status change-logs: the umbrella issue.
 
+Amend an ADR when its decision, its consequences, or its open gaps change.
 Do not repeat general repo guidance that `AGENTS.md` already gives.
 
 ## The record stays current
