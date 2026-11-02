@@ -253,6 +253,27 @@ extension RunnerTests {
     }
   }
 
+  /// Clears through the penalized synthesized route at `frame`'s center, where the pre-tap lookup
+  /// found `input`.
+  @MainActor
+  private func clearPenalized(at frame: CGRect, finding input: TextInputAtPoint) throws -> TextEntryResult {
+    try typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+        prefersFocusedElement: false,
+        contentTranslation: .none,
+        inputAtRefreshPoint: input
+      ),
+      text: "",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestChannelPenalized: true,
+      synthesizer: RecordingTextEntrySynthesizer()
+    )
+  }
+
   /// Launches the fixture whose field moves away when focused and leaves a neighbouring field under
   /// the point the focus tap hit, the way a React Native bottom sheet extends above the keyboard.
   /// The field is not focused yet, so the replacement's own tap starts the move.
@@ -324,21 +345,7 @@ extension RunnerTests {
     ]
 
     for (handle, inputAtRefreshPoint) in found {
-      let result = try typeTextReliably(
-        app: app,
-        target: TextEntryTarget(
-          element: nil,
-          refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
-          prefersFocusedElement: false,
-          contentTranslation: .none,
-          inputAtRefreshPoint: inputAtRefreshPoint
-        ),
-        text: "",
-        delaySeconds: 0,
-        repairMode: .replacement,
-        xCTestChannelPenalized: true,
-        synthesizer: RecordingTextEntrySynthesizer()
-      )
+      let result = try clearPenalized(at: neighbourFrame, finding: inputAtRefreshPoint)
 
       XCTAssertEqual(result.failure, .notFocused, handle)
       XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour", handle)
@@ -357,23 +364,12 @@ extension RunnerTests {
     XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
     let neighbourFrame = neighbour.frame
 
-    let result = try typeTextReliably(
-      app: app,
-      target: TextEntryTarget(
-        element: nil,
-        refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
-        prefersFocusedElement: false,
-        contentTranslation: .none,
-        inputAtRefreshPoint: TextInputAtPoint(
-          element: rebound,
-          identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier)
-        )
-      ),
-      text: "",
-      delaySeconds: 0,
-      repairMode: .replacement,
-      xCTestChannelPenalized: true,
-      synthesizer: RecordingTextEntrySynthesizer()
+    let result = try clearPenalized(
+      at: neighbourFrame,
+      finding: TextInputAtPoint(
+        element: rebound,
+        identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier)
+      )
     )
 
     XCTAssertNil(result.failure)
@@ -392,23 +388,12 @@ extension RunnerTests {
     let neighbourFrame = neighbour.frame
     let failures = currentXCTestFailureCount()
 
-    let result = try typeTextReliably(
-      app: app,
-      target: TextEntryTarget(
-        element: nil,
-        refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
-        prefersFocusedElement: false,
-        contentTranslation: .none,
-        inputAtRefreshPoint: TextInputAtPoint(
-          element: app.textFields.element,
-          identity: TextEntryInputIdentity(elementType: .textField, identifier: "")
-        )
-      ),
-      text: "",
-      delaySeconds: 0,
-      repairMode: .replacement,
-      xCTestChannelPenalized: true,
-      synthesizer: RecordingTextEntrySynthesizer()
+    let result = try clearPenalized(
+      at: neighbourFrame,
+      finding: TextInputAtPoint(
+        element: app.textFields.element,
+        identity: TextEntryInputIdentity(elementType: .textField, identifier: "")
+      )
     )
 
     XCTAssertFalse(didRecordXCTestFailure(since: failures))

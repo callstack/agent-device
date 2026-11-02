@@ -83,6 +83,27 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// Launches the app and names its own window's display and box as the lit panel: the
+  /// `litPanel` JSON member, and the window frame.
+  @MainActor
+  private func launchAppOnTheLitPanel() -> (panel: String, frame: CGRect) {
+    app.launch()
+    mainOwned.app = app
+    let window = app.windows.firstMatch
+    var displayID: UInt = 0
+    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
+    let frame = window.frame
+    return (#""litPanel":{"displayId":\#(displayID),"widthPt":\#(frame.width),"heightPt":\#(frame.height)}"#, frame)
+  }
+
+  @MainActor
+  private func tearDownLitPanelApp() {
+    litPanelWindowListUnanswerableForTesting = false
+    setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
+    invalidateCachedTarget(reason: "unit_test_cleanup")
+    app.terminate()
+  }
+
   /// Runs `command` against the launched app while the request names display 999, which none of
   /// the app's windows is on.
   @MainActor
@@ -92,11 +113,7 @@ extension RunnerTests {
   ) throws -> Response {
     app.launch()
     mainOwned.app = app
-    defer {
-      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
+    defer { tearDownLitPanelApp() }
     let command = try runnerCommandFixture(json)
     setRequestLitPanel(from: command)
     return try run(command)
@@ -121,19 +138,8 @@ extension RunnerTests {
   /// refuses before it taps a point with no target.
   @MainActor
   func testElementReadsRefuseWhenTheLitPanelWindowListIsUnanswerable() throws {
-    app.launch()
-    mainOwned.app = app
-    defer {
-      litPanelWindowListUnanswerableForTesting = false
-      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let window = app.windows.firstMatch
-    var displayID: UInt = 0
-    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
-    let frame = window.frame
-    let panel = #""litPanel":{"displayId":\#(displayID),"widthPt":\#(frame.width),"heightPt":\#(frame.height)}"#
+    let (panel, frame) = launchAppOnTheLitPanel()
+    defer { tearDownLitPanelApp() }
     for json in [
       #"{"command":"readText","x":\#(frame.midX),"y":\#(frame.midY),\#(panel)}"#,
       #"{"command":"type","text":"x","x":\#(frame.midX),"y":\#(frame.midY),\#(panel)}"#,
@@ -181,20 +187,11 @@ extension RunnerTests {
   /// invalidate the cached target the next command relies on.
   @MainActor
   func testLitPanelSnapshotPinRefusalKeepsTheCachedTarget() throws {
-    app.launch()
-    mainOwned.app = app
+    let (panel, _) = launchAppOnTheLitPanel()
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
-    defer {
-      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#))
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let window = app.windows.firstMatch
-    var displayID: UInt = 0
-    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
-    let size = window.frame.size
+    defer { tearDownLitPanelApp() }
     let command = try runnerCommandFixture(
-      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"snapshot","preferredBackend":"private-ax","litPanel":{"displayId":\#(displayID),"widthPt":\#(size.width),"heightPt":\#(size.height)}}"#
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"snapshot","preferredBackend":"private-ax",\#(panel)}"#
     )
     setRequestLitPanel(from: command)
     let response = try executeSnapshotDispatched(command: command)
