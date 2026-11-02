@@ -16,6 +16,58 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('a directory artifact expires after download header setup throws', async () => {
+  const root = mkdtempForTestSync('fu-art-header-error-');
+  const source = path.join(root, 'profile.trace');
+  fs.mkdirSync(source);
+  fs.writeFileSync(path.join(source, 'payload'), 'trace payload');
+  const runtime = createRuntimeStateHandle();
+  const server = await runtime.run(() =>
+    createDaemonHttpServer({
+      token: 'fu-art-secret',
+      handleRequest: async () => ({ ok: true, data: {} }),
+      env: process.env,
+      cwd: process.cwd(),
+    }),
+  );
+  const port = await listenOnLoopback(server);
+  const timer = vi.spyOn(globalThis, 'setTimeout');
+  const artifactId = runtime.run(() =>
+    trackDownloadableArtifact({
+      artifactPath: source,
+      artifactType: 'trace-log',
+      fileName: 'trace-💥',
+    }),
+  );
+  const expire = timer.mock.calls[0]![0];
+  timer.mockRestore();
+  const streams = vi.spyOn(fs, 'createReadStream');
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/artifacts/${artifactId}`, {
+      headers: { authorization: 'Bearer fu-art-secret' },
+    });
+    expect(response.status).toBe(500);
+    await response.body?.cancel();
+    const stream = streams.mock.results[0]!.value as fs.ReadStream;
+    const archiveDir = path.dirname(String(stream.path));
+    runtime.run(expire);
+    await vi.waitFor(() => expect(fs.existsSync(source)).toBe(false));
+    expect(stream.closed).toBe(true);
+    expect(fs.existsSync(archiveDir)).toBe(false);
+  } finally {
+    for (const result of streams.mock.results) {
+      const stream = result.value as fs.ReadStream;
+      if (stream.closed) continue;
+      const closed = new Promise<void>((resolve) => stream.once('close', resolve));
+      stream.destroy();
+      await closed;
+    }
+    streams.mockRestore();
+    await closeLoopbackServer(server);
+    runtime.dispose();
+  }
+});
+
 test.each(['another download completes', 'expiry fires'] as const)(
   'a directory download keeps its archive until its delayed file open finishes when %s',
   async (trigger) => {

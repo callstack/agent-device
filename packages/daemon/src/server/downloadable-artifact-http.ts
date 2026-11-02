@@ -80,6 +80,7 @@ async function handleArtifactDownload(
     return;
   }
 
+  let acquiredStream: { destroy(): void } | undefined;
   try {
     const auth = await authorize({
       req,
@@ -94,6 +95,10 @@ async function handleArtifactDownload(
     const artifact = await openDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
     const retainArtifactAfterDownload = options.retainArtifacts === true;
     const { stream } = artifact;
+    acquiredStream = stream;
+    stream.on('error', (error) => {
+      failStreamedHttpResponse(res, error);
+    });
     res.statusCode = 200;
     res.setHeader('content-type', artifact.mimeType);
     res.setHeader('content-length', String(artifact.sizeBytes));
@@ -103,9 +108,6 @@ async function handleArtifactDownload(
         `attachment; filename="${artifact.fileName.replace(/"/g, '')}"`,
       );
     }
-    stream.on('error', (error) => {
-      failStreamedHttpResponse(res, error);
-    });
     let didCleanupArtifact = false;
     const cleanupCompletedDownload = () => {
       if (didCleanupArtifact || retainArtifactAfterDownload) return;
@@ -131,6 +133,7 @@ async function handleArtifactDownload(
     if (res.destroyed) stream.destroy();
     stream.pipe(res);
   } catch (error) {
+    acquiredStream?.destroy();
     sendRestJsonError(res, normalizeError(error));
   }
 }
