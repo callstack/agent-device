@@ -509,8 +509,7 @@ class LeaseTable<Session, Handle, Request> {
    * so a caller that arrives later is refused rather than joining a start that is being given up.
    */
   private abandonIfUnwanted(entry: LeaseEntry<Session, Handle, Request>): void {
-    if (entry.answered || entry.abandon.signal.aborted || stillWanted(entry)) return;
-    entry.abandon.abort();
+    if (entry.answered || entry.phase === 'ending' || stillWanted(entry)) return;
     void this.teardown(entry).catch(() => undefined);
   }
 
@@ -744,6 +743,7 @@ function budgetSpent(caller: ProviderLeaseBudget, deadline: number): boolean {
 function stillWanted<Session, Handle, Request>(
   entry: LeaseEntry<Session, Handle, Request>,
 ): boolean {
+  if (entry.phase === 'ending') return false;
   const now = Date.now();
   for (const waiter of entry.waiters) {
     if (!waiter.signal?.aborted && now < waiter.deadline) return true;

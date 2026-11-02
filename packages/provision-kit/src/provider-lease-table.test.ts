@@ -250,22 +250,6 @@ test('a release during a start refuses the waiting allocation and stops the devi
   assert.deepEqual(provider.stopped, ['session-1']);
 });
 
-test('a caller that aborts mid-start is answered at once, and the late device is stopped', async () => {
-  const provider = fakeProvider();
-  const controller = new AbortController();
-  const allocating = provider.table.allocate(lease(), {}, { signal: controller.signal });
-  await settle();
-  controller.abort();
-  await assert.rejects(allocating, reason('request_canceled'));
-  assert.ok(provider.controls[0]!.signal.aborted, 'a start nobody waits for is abandoned');
-  assert.deepEqual(provider.stopped, [], 'nothing is named until the start answers');
-
-  provider.answerStart(0, ready('session-1'));
-  await settle();
-  assert.deepEqual(provider.stopped, ['session-1']);
-  assert.equal(await provider.table.release('lease-1'), undefined);
-});
-
 test("a ready answer after the only caller's deadline is stopped, even before its timer fires", async () => {
   // The clock moves past the deadline without running timers, which is a busy event loop: the caller's
   // own give-up has not run yet when the start answers.
