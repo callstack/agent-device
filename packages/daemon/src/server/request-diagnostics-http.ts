@@ -161,7 +161,7 @@ async function handleRequestDiagnostics(
     });
     stream.pipe(res);
   } catch (error) {
-    sendRestJsonError(res, normalizeError(error));
+    failStreamedHttpResponse(res, error);
   }
 }
 

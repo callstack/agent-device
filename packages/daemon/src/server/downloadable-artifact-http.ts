@@ -9,7 +9,7 @@ import {
   listDownloadableArtifacts,
   openDownloadableArtifact,
 } from '../resources/artifact-tracking.ts';
-import { sendRestJsonError } from './http-errors.ts';
+import { failStreamedHttpResponse, sendRestJsonError } from './http-errors.ts';
 import { decodeUriSegment } from './http-request-target.ts';
 
 type DownloadableArtifactHttpRoute =
@@ -83,6 +83,10 @@ async function handleArtifactDownload(
     return;
   }
 
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  res.once('close', cancel);
+  if (res.destroyed) cancel();
   try {
     const auth = await authorize({
       req,
@@ -94,7 +98,12 @@ async function handleArtifactDownload(
     });
     if (!auth) return;
 
-    const artifact = await openDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
+    const artifact = await openDownloadableArtifact(
+      artifactId,
+      auth.tenantId,
+      options.hostEnv,
+      controller.signal,
+    );
     const { stream } = artifact;
     const closed = finished(stream, { cleanup: true }).catch(() => {});
     try {
@@ -141,14 +150,9 @@ async function handleArtifactDownload(
       artifact.release();
     }
   } catch (error) {
-    if (res.destroyed) return;
-    if (res.headersSent) {
-      res.destroy(error instanceof Error ? error : undefined);
-      return;
-    }
-    res.removeHeader('content-length');
-    res.removeHeader('content-disposition');
-    sendRestJsonError(res, normalizeError(error));
+    failStreamedHttpResponse(res, error);
+  } finally {
+    res.removeListener('close', cancel);
   }
 }
 

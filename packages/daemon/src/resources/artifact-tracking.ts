@@ -176,7 +176,9 @@ export async function openDownloadableArtifact(
   artifactId: string,
   tenantId: string | undefined,
   hostEnv: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
 ): Promise<OpenedDownloadableArtifact> {
+  signal?.throwIfAborted();
   const artifacts = pendingArtifacts();
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
   const download: ArtifactDownload = {
@@ -184,6 +186,7 @@ export async function openDownloadableArtifact(
     release: () => {
       if (!entry.activeDownloads.delete(download)) return;
       clearTimeout(deadline);
+      signal?.removeEventListener('abort', cancel);
       if (entry.cleanupRequested) requestArtifactCleanup(artifacts, artifactId, entry);
     },
   };
@@ -193,7 +196,11 @@ export async function openDownloadableArtifact(
     ARTIFACT_DOWNLOAD_MAX_LIFETIME_MS,
   );
   deadline.unref();
+  const cancel = () => cancelArtifactDownload(artifactId, entry, download, signal?.reason);
+  signal?.addEventListener('abort', cancel, { once: true });
+  if (signal?.aborted) cancel();
   try {
+    download.controller.signal.throwIfAborted();
     const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
     download.controller.signal.throwIfAborted();
     if (!payload) {
@@ -215,9 +222,9 @@ function cancelArtifactDownload(
   artifactId: string,
   entry: ArtifactEntry,
   download: ArtifactDownload,
+  reason: unknown = expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId),
 ): void {
   if (!entry.activeDownloads.has(download)) return;
-  const reason = expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   download.controller.abort(reason);
   if (!download.stream) {
     if ([...entry.activeDownloads].every(({ controller }) => controller.signal.aborted)) {
@@ -331,7 +338,7 @@ async function ensureDirectoryArchive(
   if (entry.directoryArchive && fs.existsSync(entry.directoryArchive.archivePath)) {
     return entry.directoryArchive;
   }
-  if (entry.directoryArchivePromise) {
+  if (entry.directoryArchivePromise && entry.archiveAbortController?.signal.aborted === false) {
     return await entry.directoryArchivePromise;
   }
 
@@ -391,10 +398,6 @@ async function createDirectoryArchive(
       fileName,
       sizeBytes: fs.statSync(archivePath).size,
     };
-    // Inventory can expire while tar is still archiving.
-    if (entry.cleanupRequested && entry.activeDownloads.size === 0) {
-      throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
-    }
     entry.directoryArchive = archive;
     return archive;
   } catch (error) {

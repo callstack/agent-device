@@ -90,6 +90,9 @@ destination on your machine. Direct RPC callers receive artifact IDs and downloa
 By default, artifacts leave the inventory after download or after 15 minutes.
 `AGENT_DEVICE_RETAIN_ARTIFACTS` keeps downloaded artifacts in inventory until expiry. Downloads already in progress
 can finish before their files are removed, including overlapping downloads of a directory archive.
+Closing the HTTP connection cancels that download, including directory archive preparation.
+Other downloads waiting for the same archive can still finish. You can retry a cancelled download
+while the artifact remains in inventory.
 Each download has a 15-minute maximum lifetime. When it reaches that limit, the daemon cancels it
 and cleans up after its pipeline stops.
 

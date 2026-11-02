@@ -1,6 +1,6 @@
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -91,6 +91,35 @@ test('request diagnostics route serves one record as ndjson to an authorized cal
     assert.equal(response.headers.get('content-type'), 'application/x-ndjson');
     assert.equal(response.headers.get('content-length'), String(Buffer.byteLength(RECORD)));
     assert.equal(await response.text(), RECORD);
+  });
+});
+
+test('request diagnostics returns complete JSON when its stream fails before headers', async () => {
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', 'abc123');
+    const createReadStream = fs.createReadStream;
+    const streams = vi.spyOn(fs, 'createReadStream').mockImplementation((file, options) =>
+      createReadStream(file, {
+        ...(typeof options === 'object' ? options : {}),
+        fs: {
+          ...fs,
+          open: (_file, _flags, _mode, callback) => callback(new Error('record read failed')),
+        },
+      }),
+    );
+    let response: Response | undefined;
+    try {
+      response = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+        headers: { authorization: 'Bearer daemon-secret' },
+      });
+      expect(response.status).toBe(500);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      expect(response.headers.get('content-length')).toBeNull();
+      expect(await response.json()).toMatchObject({ ok: false, error: 'record read failed' });
+    } finally {
+      await response?.body?.cancel().catch(() => {});
+      streams.mockRestore();
+    }
   });
 });
 
