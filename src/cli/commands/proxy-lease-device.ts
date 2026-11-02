@@ -132,7 +132,7 @@ export async function bindLeaseNamedDevice(options: {
   }
   if (leased) {
     const identityConflict = leasedIdentityConflict(options.state, flags, leased);
-    if (identityConflict) throw identityConflict;
+    if (identityConflict) throw await releaseRefusedLease(leaseLedger, lease, identityConflict);
     if (!acquired) {
       assertLeaseSpecMatchesRequest(options.state, lease, spec, specKeys, leased);
       await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
@@ -155,7 +155,8 @@ export async function bindLeaseNamedDevice(options: {
     };
   }
   if (!acquired) throw unboundLeaseError(options.state, lease);
-  await leaseLedger.end(lease.leaseId);
+  const retired = await leaseLedger.end(lease.leaseId);
+  if (retired === undefined) throw unboundLeaseError(options.state, lease);
   const resolved = await resolveProxyLeaseStateLocally(options);
   return {
     state: resolved.state,
@@ -163,31 +164,36 @@ export async function bindLeaseNamedDevice(options: {
   };
 }
 
-/**
- * Refuses an unconfirmed spec and attempts release. A thrown release leaves ownership with the
- * caller for one rollback retry; only that retry reports failure, so recovery leaves no stale evidence.
- */
+/** A refused allocation is discarded unless the daemon explicitly reported reuse. */
 async function refuseUnhonouredSpecLease(
   leaseLedger: LeaseLedger,
   state: RemoteConnectionState,
   lease: Lease,
   keys: readonly string[],
 ): Promise<AppError> {
-  let released: boolean | undefined;
-  try {
-    ({ released } = await leaseLedger.end(lease.leaseId));
-  } catch {
-    // The caller retries the owned lease and attaches any failure as details.leaseRollback.
-  }
-  return deviceSpecUnsupportedError(
-    keys,
-    'The proxy backend leased a device without confirming the requested device spec.',
-    {
-      session: state.session,
-      leaseId: lease.leaseId,
-      ...(released === undefined ? {} : { released }),
-    },
+  return await releaseRefusedLease(
+    leaseLedger,
+    lease,
+    deviceSpecUnsupportedError(
+      keys,
+      'The proxy backend leased a device without confirming the requested device spec.',
+      { session: state.session, leaseId: lease.leaseId },
+    ),
   );
+}
+
+async function releaseRefusedLease(
+  leaseLedger: LeaseLedger,
+  lease: Lease,
+  failure: AppError,
+): Promise<AppError> {
+  try {
+    const outcome = await leaseLedger.end(lease.leaseId, failure);
+    if (outcome !== undefined) failure.details = { ...failure.details, released: outcome.released };
+  } catch {
+    // end() records the failure; only confirmed creation permits the caller's rollback retry.
+  }
+  return failure;
 }
 
 /**

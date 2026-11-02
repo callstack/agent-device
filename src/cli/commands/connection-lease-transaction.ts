@@ -27,63 +27,74 @@ type LeaseRelease = () => Promise<{ released: boolean }>;
 
 const LEASE_ROLLBACK_RELEASE_FAILED_REASON = 'LEASE_RELEASE_FAILED';
 
-/** One newly created lease awaits release or transfer to a durable session record. */
+type TrackedLease = {
+  leaseId: string;
+  release: LeaseRelease;
+  rollbackOnFailure: boolean;
+};
+
+/** One allocated lease awaits discard or transfer to a durable session record. */
 export type LeaseLedger = {
   /** Release or transfer the previous lease before tracking another allocation. */
-  track(leaseId: string, release: LeaseRelease): void;
-  /** A resolved release ends ownership, including when the daemon reports no such lease. */
-  end(leaseId: string): Promise<{ released: boolean }>;
+  track(lease: TrackedLease): void;
+  /** Undefined means untracked; a resolved release also ends ownership when no such lease exists. */
+  end(leaseId: string, failure?: AppError): Promise<{ released: boolean } | undefined>;
   transfer(leaseId: string | undefined): void;
   releaseOwnedOnFailure(failure: unknown): Promise<unknown>;
 };
 
 export function createLeaseLedger(): LeaseLedger {
-  let owned: { leaseId: string; release: LeaseRelease } | undefined;
+  let owned: TrackedLease | undefined;
 
-  async function end(leaseId: string): Promise<{ released: boolean }> {
-    if (owned?.leaseId !== leaseId) return { released: false };
-    const outcome = await owned.release();
-    owned = undefined;
-    return outcome;
+  async function end(
+    leaseId: string,
+    failure?: AppError,
+  ): Promise<{ released: boolean } | undefined> {
+    if (owned?.leaseId !== leaseId) return undefined;
+    try {
+      const outcome = await owned.release();
+      owned = undefined;
+      if (failure && failure.details?.leaseRollback !== undefined) {
+        delete failure.details.leaseRollback;
+        failure.details.released = outcome.released;
+      }
+      return outcome;
+    } catch (error) {
+      const primary = failure ?? asAppError(error, 'COMMAND_FAILED');
+      primary.details = {
+        ...primary.details,
+        leaseRollback: {
+          leaseId,
+          released: false,
+          reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
+          error: errorMessage(error),
+        },
+      };
+      throw primary;
+    }
   }
 
   return {
-    track(leaseId, release) {
-      owned = { leaseId, release };
+    track(lease) {
+      owned = lease;
     },
     end,
     transfer(leaseId) {
       if (owned?.leaseId === leaseId) owned = undefined;
     },
     async releaseOwnedOnFailure(failure) {
-      if (!owned) return failure;
-      const { leaseId } = owned;
+      if (!owned?.rollbackOnFailure) return failure;
       try {
-        await end(leaseId);
+        await end(owned.leaseId, asAppError(failure, 'COMMAND_FAILED'));
         return failure;
       } catch (error) {
-        const primary = asAppError(failure, 'COMMAND_FAILED');
-        primary.details = {
-          ...primary.details,
-          leaseRollback: {
-            leaseId,
-            released: false,
-            reason: LEASE_ROLLBACK_RELEASE_FAILED_REASON,
-            error: errorMessage(error),
-          },
-        };
-        return primary;
+        return error;
       }
     },
   };
 }
 
-/**
- * Brings the connection's lease up to date for this command: renews the one the record names or
- * allocates the one it does not, then settles the platform axis that decides which device that lease
- * rents. A lease this command created enters `leaseLedger` the moment the provider grants it, before
- * any validation or binding here can fail, so the caller's failure path still sees it.
- */
+/** Allocation enters the ledger before validation; only confirmed creation permits later rollback. */
 export async function acquireConnectionLease(options: {
   command: string;
   client: AgentDeviceClient;
@@ -324,12 +335,7 @@ function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBa
   );
 }
 
-/**
- * A renewed lease is the record's own; only an allocation can bring a new one into this command, and
- * only when the daemon says this request created it. A run's repeat allocation gets the run's
- * existing lease back — the same answer the record-less caller of another run could get — and that
- * lease belongs to whoever holds it, never to this transaction.
- */
+/** Omitted creation evidence permits discard, but not rollback after binding. */
 async function allocateOrReuseLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
@@ -379,10 +385,12 @@ async function allocateOrReuseLease(
     ...(allocateBySpec ? requireLeaseDeviceSpec(flags).spec : {}),
     providerApp: initialApp ?? flags.providerApp,
   });
-  const created = lease.created === true;
-  if (created) {
-    // Ownership starts here, before any caller of this function can fail on this lease.
-    leaseLedger.track(lease.leaseId, leaseAllocationRelease(client, state, leaseBackend, lease));
+  if (lease.created !== false) {
+    leaseLedger.track({
+      leaseId: lease.leaseId,
+      release: leaseAllocationRelease(client, state, leaseBackend, lease),
+      rollbackOnFailure: lease.created === true,
+    });
   }
   return { lease, acquired: true };
 }

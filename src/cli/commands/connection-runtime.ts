@@ -97,12 +97,8 @@ export async function materializeRemoteConnectionForCommand(options: {
   let nextState = state;
   let changed = !existingState;
 
-  // The ledger owns a lease this command created from the moment allocation returns it, before any
-  // later step can fail, and holds it until the durable session record names it — the one place
-  // ownership transfers. Every exit before that transfer ends the lease: a lease no record names is
-  // invisible to disconnect, and would hold the device until its TTL lapses. A lease this call
-  // renewed, or one the provider granted to another holder, is named elsewhere already, so this
-  // path leaves it to whoever does in every case, including a failure.
+  // Unknown creation evidence permits discard before binding, but only confirmed creation permits
+  // rollback after a later failure. A committed session record takes over either lease.
   const leaseLedger = createLeaseLedger();
   try {
     const acquired = await acquireConnectionLease({
