@@ -326,6 +326,7 @@ export async function createLimrunIosRunner(
     dispose: async () => {
       try {
         await applicationTools.finalizeRunnerSessionsForShutdown();
+        await transport.shutdown();
       } finally {
         lifetime.abort();
         await products?.catch(() => {});

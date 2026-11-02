@@ -58,13 +58,13 @@ extension RunnerTests {
       let name = String(describing: request)
       let command = try decodeProductionRunnerRequest(request, name)
       let readOnly = try XCTUnwrap(row["readOnly"] as? Bool, name)
-      XCTAssertNil(inlineResponse(for: command), name)
+      XCTAssertNil(offQueueRoute(for: command), name)
       XCTAssertEqual(command.traits.isReadOnly, readOnly, name)
       covered.insert(command.command)
     }
     let queued = try Set(CommandType.allCases.filter { type in
       let command = try runnerCommandFixture(#"{"command":"\#(type.rawValue)"}"#)
-      return inlineResponse(for: command) == nil
+      return offQueueRoute(for: command) == nil
     })
     XCTAssertEqual(covered, queued, "every queued CommandType needs parity coverage")
   }
@@ -241,19 +241,20 @@ extension RunnerTests {
 
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
-  /// clipboard.
+  /// clipboard, `snapshotBridge` with the runner-served Simulator AX bridge.
   private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
-    .appState, .pasteboardWrite, .volumeUp, .volumeDown,
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown, .snapshotBridge,
   ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
-  /// these before `executeOnMainPrepared` runs, and `executeDispatched` answers `snapshot` earlier
-  /// still, on both this and the merge-base chain. The merge-base witness predicate was therefore
+  /// these before `executeOnMainPrepared` runs, `executeDispatched` answers `snapshot` earlier
+  /// still, on both this and the merge-base chain, and the transport answers `snapshotBridge` off
+  /// its queue before any of them. The merge-base witness predicate was therefore
   /// never evaluated for them and neither is the derived one. If a command starts reaching the
   /// prepared path, removing it here is a claim the equivalence assertion below has to keep proving.
   private static let commandsAnsweredBeforeThePreparedPath: Set<CommandType> = [
     .status, .uptime, .appState, .pasteboardWrite, .activate, .terminate, .targetReset, .shutdown,
-    .recordStart, .recordStop, .snapshot,
+    .recordStart, .recordStop, .snapshot, .snapshotBridge,
   ]
 
   private func assertRememberedTextEntryWitnessInvalidation(
@@ -339,6 +340,7 @@ extension RunnerTests {
       (.status, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true, isReadOnly: true)),
       (.uptime, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),
       (.appState, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true, isReadOnly: true)),
+      (.snapshotBridge, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: false, isReadOnly: true)),
       (.pasteboardWrite, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),
       (.activate, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true, isReadOnly: false)),
       (.terminate, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true, isReadOnly: false)),

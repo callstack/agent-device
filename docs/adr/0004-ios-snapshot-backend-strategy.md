@@ -3,7 +3,7 @@
 ## Status
 
 Accepted.
-This ADR was amended after local iOS Simulator acquisition moved to the host AX bridge.
+This ADR was amended after local iOS Simulator acquisition moved to the host AX bridge, and again for provider iOS Simulators that the runner serves.
 The public surface remains two modes: regular interactive snapshots and raw diagnostic snapshots.
 The host AX bridge is an acquisition route, not a third public mode.
 
@@ -17,6 +17,7 @@ Structured snapshot quality verdicts and fallback warnings make degraded or reco
 
 - Route eligible local iOS Simulator snapshots through the host AX bridge. Present them once through the shared TypeScript engine.
   An iPad Simulator is a local iOS Simulator for this rule.
+- For an iOS Simulator that a provider runs, route its snapshots through the bridge reader that the XCTest runner serves.
 - Refuse a bridge capture of an app window that does not fill the screen.
 - If bridge acquisition or presentation fails, use one typed XCTest fallback.
 - After fallback, disable the bridge for that app generation, except for `preparing` failures and capture-scoped failures.
@@ -31,7 +32,7 @@ Structured snapshot quality verdicts and fallback warnings make degraded or reco
 
 ## Context
 
-Agent Device exposes iOS UI state through host AX acquisition on local Simulators and the long-lived XCTest runner everywhere else.
+Agent Device exposes iOS UI state through host AX acquisition on local Simulators, through the runner-served bridge on provider Simulators, and through the long-lived XCTest runner everywhere else.
 The snapshot surface has two durable needs:
 
 - Agent-facing regular context. Here the important contract is the effective user-visible UI, fixed controls such as tab bars, and scroll-hidden hints for content outside visible scroll containers.
@@ -59,7 +60,8 @@ After fallback, disable the bridge for that app generation, except for `preparin
 A `preparing` failure describes a bridge preparation that is still running, not the app.
 It sends only that capture to XCTest.
 A new app generation enables it again.
-Physical devices, providers, custom-action captures, and interactions remain on their existing owners.
+Physical devices, custom-action captures, and interactions remain on their existing owners.
+A provider iOS Simulator uses the runner-served bridge (see the amendment below).
 The iPad amendment below defines which Simulators are local iOS Simulators.
 
 A WebKit page in Safari or in a `WKWebView` lives in a WebContent process.
@@ -623,7 +625,7 @@ Thus, the pass returns that tree exactly as reported.
 This is a structural consequence of the same rule applied uniformly.
 It is not the per-tier omission that a hand-threaded space would have made it.
 
-The provider producers (`appium-source`) never see the app's windows either.
+The provider producer `appium-source` never sees the app's windows either.
 A capture from any of them publishes no keyboard fact.
 A consumer reads that silence as "this producer did not measure".
 Those paths publish what the platform reported.
@@ -740,7 +742,8 @@ An iPad Simulator runs the iOS Simulator runtime that the bridge reader is built
 On XCTest, a deep UIKit tree on an iPad Simulator can keep a long session in private-AX fallback.
 
 Decision. The bridge serves iPhone and iPad Simulators.
-tvOS and visionOS Simulators, the macOS host, providers, and physical devices keep XCTest.
+tvOS and visionOS Simulators, the macOS host, and physical devices keep XCTest.
+A provider iOS Simulator uses the runner-served bridge (see the amendment below).
 
 Two iPad facts change what the bridge reports.
 
@@ -777,3 +780,57 @@ Rejected alternatives:
 
 - Move the tree by the window origin. The bridge would then be the only correct producer for a windowed app. The keyboard window and alerts were not measured in that mode, so the refusal stays until they are.
 - Read the screen size on the host from the device type profile or from `simctl io`. That adds a host process and a format that Apple does not document. It also does not give the window origin.
+
+## Amendment: the runner-served bridge for a provider iOS Simulator
+
+This amendment changes the scope of the decision: providers were excluded, and a provider iOS Simulator now uses the bridge.
+
+A provider can run an iOS Simulator on its own host, for example Limrun.
+The daemon cannot start the guest bridge process there.
+Limrun's `simctl spawn` accepts only `defaults`, `notifyutil`, and `limproxy`.
+Limrun forwards no socket to the Simulator.
+The only process of agent-device in that Simulator is the XCTest runner, which the provider launches.
+
+Decision. The XCTest runner serves the same reader.
+The runner includes the reader sources of `apple/snapshot-bridge`.
+The runner leaves out the guest socket server.
+The `snapshotBridge` runner command reaches the reader through the runner's forwarded HTTP transport.
+The runner answers that command on its own serial queue, off its journal and off the XCTest main thread.
+The route, the generation circuit, the one typed XCTest fallback, and the `simulator-ax-bridge` producer are the same as on a local Simulator.
+
+The guest process ends itself when a read outlives its budget, because nothing can stop an accessibility call that never returns.
+The runner must not end itself, because it also runs every XCTest command.
+The runner abandons such a read (`bridge-read-abandoned`).
+The runner admits one read at a time.
+Until the admitted read returns, the runner refuses each new read (`bridge-read-in-flight`).
+A read that a cancelled capture left running meets that refusal too.
+The refusal says only that another read is running, so it has capture scope.
+The daemon gives the runner its read budget minus a transport margin.
+Thus, the runner abandons a slow read first, and the daemon receives `bridge-read-abandoned`, not a lost reply.
+
+The runner names the app generation itself, because the daemon cannot list the Simulator's processes.
+The `target` verb returns the pid and the process start time of the app's foreground process.
+The `describe` verb refuses another process of the same app as `stale_target`.
+The daemon keeps the target until a read refuses it as `stale_target`.
+Thus, a steady capture costs one runner round trip for the tree.
+While a generation's circuit is open, no read can meet a newer process.
+Thus, on a `targetFreshness: 'cached'` channel, the route asks for a fresh target before it trusts an open circuit.
+If that request fails, the channel keeps its cached target.
+The capture names no generation, because the app may have relaunched.
+
+A presented system surface stays invisible to the bridge (#2438 amendment), so the route still needs proven absence.
+The daemon cannot read the processes of a provider iOS Simulator.
+Thus, the runner's foreground read is the only read that can prove absence there.
+Every capture of a provider iOS Simulator needs the runner, so that read starts a runner that is not up yet.
+
+Rejected alternatives:
+
+- Ask the provider to start the guest bridge process and forward its socket. That needs provider features that do not exist, for every provider.
+- Read the Simulator's process table in the runner to prove absence without XCTest. The provider's sandbox does not allow process enumeration.
+- Pin the runner's private-AX backend on a provider iOS Simulator. That is another producer with another tree, and it needs the XCTest main thread.
+- Copy the reader sources into the runner. The two readers would drift.
+
+Open gaps:
+
+- The surface check needs the XCTest main thread. A capture while that thread is stuck takes the XCTest fallback, which reports the busy runner.
+- The runner carries the envelope as a JSON string inside its JSON response, which costs escaping on large trees.

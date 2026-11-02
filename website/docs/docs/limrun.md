@@ -101,7 +101,7 @@ On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use th
 
 ## Use an iOS simulator
 
-Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner, so snapshots include the same tab contents, hierarchy, and keyboard observations as local XCTest snapshots. `fill` replaces text and `type` appends it; both support `--delay-ms`.
+Use the same snapshot, selector, text-entry, gesture, navigation, clipboard, and alert commands as on a local iOS simulator. Limrun iOS uses the agent-device XCTest runner. The runner reads snapshots with the same accessibility reader as a local iOS simulator, so snapshot output, selectors, and refs match local runs. When that reader cannot serve the screen, for example while a system sign-in sheet is open, the snapshot uses XCTest instead and says so in a warning. `fill` replaces text and `type` appends it; both support `--delay-ms`.
 
 Use a stable agent-device release. It downloads and starts the matching runner automatically. You do not need local Xcode or any runner network configuration. Stop Appium or other XCTest sessions on the simulator before you start, because only one XCTest run can use it at a time. Limrun limits each XCTest run to one hour; close and reopen your session when it reaches that limit.
 

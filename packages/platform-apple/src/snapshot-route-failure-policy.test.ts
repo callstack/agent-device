@@ -24,6 +24,20 @@ describe('capture-scoped screen refusals', () => {
     },
   );
 
+  test('a runner-served read still running classifies as capture-scoped; an abandoned one does not', () => {
+    // The refusal says only that another read is running; abandoning a read past its budget is
+    // evidence about the app's tree, so that one still retires the generation.
+    expect(bridgeFailureDisposition({ kind: 'timeout', code: 'bridge-read-in-flight' })).toEqual({
+      scope: 'capture',
+      code: 'bridge-read-in-flight',
+      consequence: 'bridge-read-busy',
+    });
+    expect(bridgeFailureDisposition({ kind: 'timeout', code: 'bridge-read-abandoned' })).toEqual({
+      scope: 'generation',
+      code: 'bridge-read-abandoned',
+    });
+  });
+
   test('a bridge still being prepared classifies as capture-scoped preparation', () => {
     // The kind carries this one, not a code: the preparation owner reports a pending attempt, not
     // a screen (#2491).

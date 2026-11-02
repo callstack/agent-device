@@ -29,6 +29,30 @@ test('runtime observations use the forwarded runner with request and application
   const operations = runner.bindRunnerOperations({
     signal: controller.signal,
     resolveInteractor: async (_device, context) => runner.createInteractor(context),
+    snapshot: {
+      capture: {
+        captureSnapshot: async () => ({
+          backend: 'xctest' as const,
+          producer: 'apple-runner' as const,
+          nodes: [],
+        }),
+        captureSnapshotWithCustomActions: async () => ({
+          backend: 'xctest' as const,
+          producer: 'apple-runner' as const,
+          nodes: [],
+        }),
+        captureSnapshotWithoutActiveApp: async () => ({
+          backend: 'xctest' as const,
+          producer: 'apple-runner' as const,
+          nodes: [],
+        }),
+      },
+      present: (result) => ({
+        backend: 'xctest' as const,
+        producer: result.acquisition.producer,
+        nodes: [...result.acquisition.nodes],
+      }),
+    },
   });
   expect(await operations.appState({ appBundleId: 'com.example.app' })).toEqual({});
   await runner.resetTarget();

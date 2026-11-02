@@ -24,9 +24,9 @@ const SWIFT_RUNNER = path.resolve(
   '../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
 );
 
-/** `inlineResponse(for:)`'s switch arms, up to the `default:` where queued commands begin. */
-const INLINE_SWITCH =
-  /func inlineResponse\(for command: Command\)[\s\S]*?switch command\.command \{([\s\S]*?)\n\s*default:/;
+/** `offQueueRoute(for:)`'s switch arms, up to the `default:` where queued commands begin. */
+const OFF_QUEUE_SWITCH =
+  /func offQueueRoute\(for command: Command\)[\s\S]*?switch command\.command \{([\s\S]*?)\n\s*default:/;
 /**
  * One unguarded `case .a, .b:` header, bindings continuing across lines if needed. Each repetition
  * must carry its own comma and `.name`, so no two splits of the same text both match — an ambiguous
@@ -37,24 +37,24 @@ const INLINE_SWITCH =
 const CASE_HEADER = /\bcase\s+(\.\w+(?:\s*,\s*\.\w+)*):/g;
 
 /**
- * The commands `inlineResponse(for:)` answers without journaling them or putting them on the serial
+ * The commands `offQueueRoute(for:)` answers without journaling them or putting them on the serial
  * command queue, which is exactly why a reply to one is no evidence about queued work.
  *
  * A reader here can only fail in two directions, and each is caught: a misread that names an extra
- * command fails `runner-command-traits-readiness-routing.test.ts`, which compares this list against the daemon's
- * `readinessProbe` trait in both directions, and a misread that loses an arm makes a real probe look
+ * command fails `runner-command-traits-queue-routing.test.ts`, which compares this list against the daemon's
+ * `queued` trait in both directions, and a misread that loses an arm makes an off-queue command look
  * queued, which that same tie reports. What is left to guard locally is the case both miss — a `case`
  * these two patterns do not recognize, which would otherwise drop an arm and leave a set that still
  * happens to match the trait. That is why a header must end at its colon: a guarded arm
  * (`case .uptime where flag:`) can fall through to `default:`, so it names a command that is really
  * queued some of the time, and it has to fail here rather than read as inline.
  */
-export function readSwiftInlineCommands(): string[] {
+export function readSwiftOffQueueCommands(): string[] {
   const swift = fs.readFileSync(SWIFT_TRANSPORT, 'utf8');
-  const body = INLINE_SWITCH.exec(swift)?.[1];
+  const body = OFF_QUEUE_SWITCH.exec(swift)?.[1];
   assert.ok(
     body !== undefined,
-    'inlineResponse(for:) must keep a `switch command.command` with a default: arm, which is where ' +
+    'offQueueRoute(for:) must keep a `switch command.command` with a default: arm, which is where ' +
       'queued commands begin. Without that shape there is no inline set to read.',
   );
 
@@ -66,14 +66,14 @@ export function readSwiftInlineCommands(): string[] {
   assert.equal(
     headers.length,
     caseKeywords.length,
-    'inlineResponse(for:) has a `case` form this reader does not recognize (an enum-qualified or ' +
+    'offQueueRoute(for:) has a `case` form this reader does not recognize (an enum-qualified or ' +
       'guarded arm?). Name it here before it decides a handoff.',
   );
   const arms: string[] = [];
   for (const [, header] of headers) {
     for (const [, name] of (header ?? '').matchAll(/\.(\w+)/g)) arms.push(name!);
   }
-  assert.ok(arms.length > 0, 'inlineResponse(for:) declares no inline command arms');
+  assert.ok(arms.length > 0, 'offQueueRoute(for:) declares no off-queue command arms');
   return arms;
 }
 
