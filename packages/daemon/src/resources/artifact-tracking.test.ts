@@ -10,11 +10,122 @@ import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
 import {
   cleanupDownloadableArtifact,
+  listDownloadableArtifacts,
   openDownloadableArtifact,
   trackDownloadableArtifact,
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test.each(['cleanup', 'expiry'] as const)(
+  '%s aborts an inventory-only archive and removes its source after tar settles',
+  async (trigger) => {
+    const root = mkdtempForTestSync('fu-art-inventory-expiry-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'pending inventory archive');
+    const runtime = createRuntimeStateHandle();
+    let start!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    let finish!: () => void;
+    const stopped = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let archivePath = '';
+    let signal: AbortSignal | undefined;
+    const runCmd = command.runCmd;
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      archivePath = String(args[1]?.[1]);
+      signal = args[2]?.signal;
+      fs.writeFileSync(archivePath, 'partial tar output');
+      start();
+      await stopped;
+      return await runCmd(...args);
+    });
+    let listing: ReturnType<typeof listDownloadableArtifacts> | undefined;
+    try {
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      let id: string;
+      let expire: (() => void) | undefined;
+      try {
+        id = runtime.run(() =>
+          trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+        );
+        expire = timers.mock.calls.find(([, delay]) => delay === 15 * 60 * 1000)?.[0];
+      } finally {
+        timers.mockRestore();
+      }
+      listing = runtime.run(() => listDownloadableArtifacts(undefined, process.env));
+      await started;
+      expect(fs.existsSync(archivePath)).toBe(true);
+      if (trigger === 'expiry') {
+        expect(expire).toBeTypeOf('function');
+        runtime.run(() => expire!());
+      } else {
+        runtime.run(() => cleanupDownloadableArtifact(id));
+      }
+      expect(signal?.aborted).toBe(true);
+      expect(signal?.reason).toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: { reason: 'RESOURCE_EXPIRED' },
+      });
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      expect(fs.existsSync(archivePath)).toBe(true);
+      finish();
+      expect(await listing).toEqual([]);
+      expect(fs.existsSync(artifactPath)).toBe(false);
+      expect(fs.existsSync(path.dirname(archivePath))).toBe(false);
+      expect(archive).toHaveBeenCalledTimes(1);
+    } finally {
+      finish();
+      if (listing) await listing;
+      runtime.dispose();
+      archive.mockRestore();
+    }
+  },
+);
+
+test('a missing cached directory archive is rebuilt from the live source', async () => {
+  const root = mkdtempForTestSync('fu-art-cache-rebuild-');
+  const artifactPath = path.join(root, 'capture.trace');
+  const expected = Buffer.from('live source after cached archive disappears');
+  fs.mkdirSync(artifactPath);
+  fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
+  const runtime = createRuntimeStateHandle();
+  const downloads: OpenedDownloadableArtifact[] = [];
+  try {
+    const id = runtime.run(() =>
+      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+    );
+    const first = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    downloads.push(first);
+    expect(gunzipSync(await buffer(first.stream)).includes(expected)).toBe(true);
+    await vi.waitFor(() => expect(first.stream.closed).toBe(true));
+    first.release();
+    const oldArchive = String(first.stream.path);
+    fs.unlinkSync(oldArchive);
+    expect(fs.existsSync(artifactPath)).toBe(true);
+    const second = await runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    downloads.push(second);
+    expect(gunzipSync(await buffer(second.stream)).includes(expected)).toBe(true);
+    await vi.waitFor(() => expect(second.stream.closed).toBe(true));
+    second.release();
+    expect(String(second.stream.path)).not.toBe(oldArchive);
+    expect(fs.existsSync(path.dirname(oldArchive))).toBe(false);
+    runtime.run(() => cleanupDownloadableArtifact(id));
+    expect(fs.existsSync(artifactPath)).toBe(false);
+    expect(fs.existsSync(path.dirname(String(second.stream.path)))).toBe(false);
+  } finally {
+    for (const download of downloads) {
+      download.stream.destroy();
+      await vi.waitFor(() => expect(download.stream.closed).toBe(true));
+      download.release();
+    }
+    runtime.dispose();
+  }
+});
 
 test('cancelling the archive builder preserves a second download waiting for its full archive', async () => {
   const root = mkdtempForTestSync('fu-art-shared-build-');

@@ -8,6 +8,7 @@ export function responseDisconnectSignal(
 ): AbortSignal {
   const controller = new AbortController();
   function cancelIfDisconnected(): void {
+    // A finished response also emits close.
     if (!res.writableFinished) controller.abort(createRequestCanceledError());
     req.off('aborted', cancelIfDisconnected);
     res.off('close', cancelIfDisconnected);

@@ -204,7 +204,6 @@ export async function openDownloadableArtifact(
   const cancel = () =>
     cancelArtifactDownload(artifactId, entry, download, createRequestCanceledError());
   signal?.addEventListener('abort', cancel, { once: true });
-  if (signal?.aborted) cancel();
   try {
     download.controller.signal.throwIfAborted();
     const payload = await prepareArtifactPayload(
@@ -486,12 +485,13 @@ function requestArtifactCleanup(
 ): void {
   entry.cleanupRequested = true;
   clearTimeout(entry.timer);
-  if (
-    entry.activeDownloads.size > 0 ||
-    entry.directoryArchiveBuild ||
-    artifacts.get(artifactId) !== entry
-  )
+  if (entry.activeDownloads.size > 0 || artifacts.get(artifactId) !== entry) return;
+  if (entry.directoryArchiveBuild) {
+    entry.directoryArchiveBuild.controller.abort(
+      expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId),
+    );
     return;
+  }
   artifacts.delete(artifactId);
   cleanupDirectoryArchive(entry);
   entry.sourceCleanup.remainingEntries -= 1;
