@@ -1,4 +1,8 @@
-import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
+import {
+  namesSessionExplicitly,
+  type DaemonResponse,
+  type LeaseBackend,
+} from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
@@ -619,6 +623,6 @@ function buildLeaseRpcParams(
     }),
     ...(req.meta?.sessionExplicit === undefined
       ? {}
-      : { sessionExplicit: req.meta.sessionExplicit }),
+      : { sessionExplicit: namesSessionExplicitly(req) }),
   };
 }

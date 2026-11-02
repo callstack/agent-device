@@ -92,17 +92,26 @@ test.each([
   expect(other.result?.ok, JSON.stringify(other)).toBe(true);
 });
 
-test('a client that names no session is refused before a provider lease is allocated', async () => {
-  const { backend: leaseBackend, ...scope } = PROXY_SCOPE;
+test.each([
+  [
+    'the command method',
+    () => {
+      const { backend: leaseBackend, ...scope } = PROXY_SCOPE;
+      return rpc('agent_device.command', {
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { ...scope, leaseBackend, sessionExplicit: false },
+      });
+    },
+  ],
+  [
+    'the lease method',
+    () => allocate({ ...PROXY_SCOPE, session: 'default', sessionExplicit: false }),
+  ],
+])('a client that names no session through %s is refused', async (_label, send) => {
+  expectSessionRequired(await send());
 
-  const refused = await rpc('agent_device.command', {
-    session: 'default',
-    command: 'lease_allocate',
-    positionals: [],
-    meta: { ...scope, leaseBackend, sessionExplicit: false },
-  });
-
-  expectSessionRequired(refused);
   const other = await allocate({ ...PROXY_SCOPE, clientId: 'client-b', session: 'agent-b' });
   expect(other.result?.ok, JSON.stringify(other)).toBe(true);
 });

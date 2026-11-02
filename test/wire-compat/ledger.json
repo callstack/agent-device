@@ -190,7 +190,7 @@
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
     "packages/daemon-client/src/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
     "packages/contracts/src/lease-scope.ts#buildDaemonRpcRequest": "sha256:bead87907afdad0aa685126ef191a70d7e99495ce5d11dd1c0505d07623b9137",
-    "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:f5941df772df21da5add017a7a358bdd1c9a94dd059ad3cf3babe348a0cfcd4e",
+    "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams": "sha256:25b138457410480048ee3899ce758cdd80bd7a4d11dc6e025f1365e7e8729116",
     "packages/contracts/src/lease-scope.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "packages/contracts/src/lease-scope.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "packages/daemon/src/core/request-session-intake.ts#resolveRequestSessionAtIntake": "sha256:876d492cd428fd934554ce7c93a0a9d1108a3c7d997fb9c195d5590cb4020263"
@@ -488,7 +488,7 @@
     },
     {
       "declaration": "packages/contracts/src/lease-scope.ts#buildLeaseRpcParams",
-      "digest": "sha256:f5941df772df21da5add017a7a358bdd1c9a94dd059ad3cf3babe348a0cfcd4e",
+      "digest": "sha256:25b138457410480048ee3899ce758cdd80bd7a4d11dc6e025f1365e7e8729116",
       "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. #4171 records a request that names no session in daemon-only request state: a missing or blank session, or meta.sessionExplicit false with no named flag. A missing or blank name becomes default, and the literal default from a client stays. Lease params gain an optional sessionExplicit, which a released daemon ignores. A released client that names no session on a provider lease through the command method now gets a normal INVALID_ARGS error with reason REMOTE_SESSION_REQUIRED, and no peer misreads a payload."
     },
     {
