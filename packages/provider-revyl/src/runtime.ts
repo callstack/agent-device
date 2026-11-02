@@ -226,7 +226,9 @@ function createRevylLeaseDriver(
         appUrl: request.appUrl,
         deviceModel: request.deviceModel,
         osVersion: request.osVersion,
-        ...control.caller,
+        // The starting caller's signal is not passed on: callers that joined still want the device, and
+        // the table stops it if nobody does once it is ready.
+        ...(control.caller.deadline === undefined ? {} : { deadline: control.caller.deadline }),
       });
       if (started.status === 'failed') return started;
       const { runId, sessionId } = started.session;
@@ -284,7 +286,13 @@ function revylCleanupDetails(scope: ProviderLeaseCleanupScope): Record<string, u
 /** The platform of a lease the runtime already admitted as Revyl's. */
 function revylLeasePlatform(lease: DeviceLease): RevylPlatform {
   const platform = platformForRevylLeaseBackend(lease.backend);
-  if (platform === undefined) throw new TypeError(`Revyl lease ${lease.leaseId} has no platform`);
+  if (platform === undefined) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Revyl cannot serve this lease.', {
+      leaseId: lease.leaseId,
+      leaseProvider: lease.leaseProvider,
+      leaseBackend: lease.backend,
+    });
+  }
   return platform;
 }
 

@@ -121,9 +121,10 @@ export async function startRevylFixtureBackend(
       const raw = Buffer.concat(chunks).toString('utf8');
       const url = request.url ?? '/';
       const method = request.method ?? 'GET';
-      // The fixture listens on an ephemeral localhost port that any process on the host can reach. A
-      // request outside Revyl's API is not the runtime's, so it is not recorded as one of its calls.
-      if (!url.startsWith('/api/')) {
+      // The fixture listens on an ephemeral localhost port that any process on the host can reach, and a
+      // bare `GET /` probe from one is not the runtime's call. Any other path is recorded, so a client
+      // that leaves Revyl's API still shows up in the assertions.
+      if (method === 'GET' && url === '/') {
         response.writeHead(404).end();
         return;
       }

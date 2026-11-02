@@ -191,6 +191,29 @@ test('a canceled joiner reports its own cancellation while the shared start runs
   ]);
 });
 
+test('a joiner keeps the device when the caller that started it hangs up mid-readiness', async () => {
+  // The start belongs to every caller that joined it, so the first caller's cancellation answers only
+  // that caller: readiness goes on, and the caller still waiting gets the device.
+  const fixture = await backend({ healthDelayMs: 200 });
+  const runtime = fixture.createRuntime();
+  const lease = revylLease('ios');
+  const controller = new AbortController();
+  const first = runtime.leaseLifecycle!.allocate!(lease, { signal: controller.signal });
+  const firstCanceled = assert.rejects(
+    async () => await first,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  const joining = runtime.leaseLifecycle!.allocate!(lease);
+  await waitFor(() => fixture.paths().some((path) => path.endsWith('/health')));
+  controller.abort();
+  await firstCanceled;
+
+  assert.equal((await joining)?.providerSessionId, revylSessionIdForLease('lease-1'));
+  assert.deepEqual(stops(fixture), []);
+  await runtime.shutdown();
+  assert.deepEqual(stops(fixture), [stopPathFor('lease-1')]);
+});
+
 test('a release that lands while the shared start is still running stops the device it rents', async () => {
   // The daemon drops the lease the moment its caller is gone, and a canceled joiner is gone: this release
   // arrives while the caller that started the device is still waiting for it. The session is not in the

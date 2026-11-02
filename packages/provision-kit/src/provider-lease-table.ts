@@ -28,8 +28,9 @@ export type ProviderLeaseAllocateOptions<Request> = ProviderLeaseBudget &
 
 export type ProviderLeaseStartControl<Handle> = Readonly<{
   /**
-   * The budget of the caller that registered the start, as it asked. The start runs for every caller that
-   * joins it, so this caller's signal and deadline bound the provider's own work.
+   * The budget of the caller that registered the start, as it asked. Its deadline bounds the provider's
+   * own work. Its signal belongs to that caller alone: the start runs for every caller that joins it, so
+   * a provider that ends the start on that signal takes the device from callers still waiting.
    */
   caller: ProviderLeaseBudget;
   /** Epoch-ms by which the start should answer: the caller's deadline, cut to `startTimeoutMs`. */
@@ -76,6 +77,7 @@ export type ProviderLeaseDriver<Session, Handle, Request> = Readonly<{
   /**
    * How long one teardown waits for a stop to answer. A stop that outlives it is reported as unconfirmed,
    * and the next teardown joins the same stop instead of sending a second one. Unset waits for the answer.
+   * Only the stop is bounded here; `findByLease` answers within the provider's own request budget.
    */
   stopTimeoutMs?: number;
   start(

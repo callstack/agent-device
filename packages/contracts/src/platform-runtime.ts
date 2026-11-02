@@ -77,8 +77,8 @@ export function providerRuntimeOwner(
   });
 }
 
-// Changing the key length or the scrypt cost re-identifies every derived instance; an explicit
-// instance a composition names, such as Limrun's `runtimeInstance`, is unaffected. For a provider that
+// Changing the key length or the scrypt cost re-identifies every derived instance; an instance a
+// composition names outright, such as Limrun's `runtimeInstance` option, is not derived here at all. For a provider that
 // writes its instance into durable state, such as Limrun's app-log descriptors, that orphans every such
 // resource; Revyl keeps its instance in-process only. Each provider pins its own digest through the
 // wrapper that builds its principal.
