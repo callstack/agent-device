@@ -525,6 +525,7 @@ extension RunnerTests {
   /// resolved window, which names its panel (ADR 0025). Nil when the device's only screen would not
   /// report its size: no box there is a known basis, so the gesture refuses before it dispatches. An
   /// unknown orientation keeps `fallback`, which a turn that does not rotate never reads.
+  @MainActor
   func synthesizedRotationFrame(fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     guard XCUIScreen.screens.count == 1 else { return fallback }
     guard let portraitSize = soleDisplayPortraitSize() else { return nil }
@@ -532,11 +533,16 @@ extension RunnerTests {
       ?? fallback
   }
 
-  /// Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091).
+  /// Not `UIScreen.main`: the runner process can read that in compatibility mode (#4091). A failed
+  /// read is not kept, so the next gesture reads again.
+  @MainActor
   private func soleDisplayPortraitSize() -> CGSize? {
+    if let cached = mainOwned.soleDisplayPortraitSize { return cached }
     let screen = RunnerSystemApplicationScreenSize()
     guard screen.width > 0, screen.height > 0 else { return nil }
-    return CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
+    let size = CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
+    mainOwned.soleDisplayPortraitSize = size
+    return size
   }
 
   static func unmeasuredSoleDisplayOutcome(gesture: String) -> RunnerInteractionOutcome {
@@ -702,6 +708,7 @@ extension RunnerTests {
       : .sampled
   }
 
+  @MainActor
   func sampledPlannedGesture(
     app: XCUIApplication,
     plan: RunnerGesturePlan

@@ -9,6 +9,9 @@ final class RunnerMainOwnedState {
   var processIdentifier: Int?
   var accessibilityHealth: RunnerAccessibilityHealth = .unknown
   var needsPostSnapshotInteractionDelay = false
+  /// The device's only screen in portrait points, kept after its first successful read: a device's
+  /// display size does not change while the runner runs, and orientation is applied per gesture.
+  var soleDisplayPortraitSize: CGSize?
 
   nonisolated init() {}
 }

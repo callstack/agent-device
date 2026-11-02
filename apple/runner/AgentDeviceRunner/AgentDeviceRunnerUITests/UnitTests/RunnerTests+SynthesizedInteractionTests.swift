@@ -262,6 +262,26 @@ extension RunnerTests {
     }
   }
 
+  /// The display size costs one AXRuntime read, so the runner keeps the first successful answer and
+  /// later gestures take it even while AXRuntime would fail; a failed read is not kept.
+  @MainActor
+  func testSoleDisplaySizeIsReadOnceAndAFailedReadIsNotKept() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let portrait = RunnerInterfaceOrientation.portrait
+    mainOwned.soleDisplayPortraitSize = nil
+    let measured = try XCTUnwrap(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
+    XCTAssertNotEqual(measured, placedWindow)
+
+    // Nothing between the install and the restore throws, so the restore always runs.
+    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)
+    mainOwned.soleDisplayPortraitSize = nil
+    XCTAssertNil(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait))
+    restoreAXRuntime()
+    XCTAssertEqual(synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: portrait), measured)
+  }
+
   /// #4091: when the device's only screen will not report its size, a placed window's smaller box is
   /// no basis to turn about either (#3899), so a tap through a resolved window refuses before it
   /// dispatches instead of landing off target.
@@ -281,6 +301,8 @@ extension RunnerTests {
     )
     let restoreAXRuntime = try simulateUnreadableSystemApplication()
     defer { restoreAXRuntime() }
+    // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
+    mainOwned.soleDisplayPortraitSize = nil
 
     XCTAssertNil(
       synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
