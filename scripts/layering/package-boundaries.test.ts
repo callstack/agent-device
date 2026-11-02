@@ -511,7 +511,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/png-worker-client',
     '@agent-device/capture-kit/post-gesture-stability',
     '@agent-device/capture-kit/provider-app-log',
-    '@agent-device/capture-kit/provider-lease-table',
     '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
     '@agent-device/capture-kit/recording-artifact-fixtures',
@@ -579,6 +578,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/provision-kit/install-source-config',
     '@agent-device/provision-kit/install-source-network',
     '@agent-device/provision-kit/install-source-network-transport',
+    '@agent-device/provision-kit/provider-lease-table',
     '@agent-device/provision-kit/toolchain-probe',
   ]);
   assert.deepEqual([...provisionKitPackage.workspaceDependencies].sort(), [

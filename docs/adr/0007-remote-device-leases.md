@@ -161,7 +161,7 @@ The lease cannot expire during that allocation.
 If a successful allocation is still wanted by its requester, the inactivity TTL starts from the moment allocation completed.
 A requester that hung up preserves nothing, and its allocation is released as before.
 
-A cloud provider runtime serves allocation, release, expired-lease recovery, and shutdown from one shared lease table, `@agent-device/capture-kit/provider-lease-table`.
+A cloud provider runtime serves allocation, release, expired-lease recovery, and shutdown from one shared lease table, `@agent-device/provision-kit/provider-lease-table`.
 The provider supplies only start, stop, find-by-lease, and the errors that it reports.
 The table owns the rules that decide whether a billed device is still rented:
 

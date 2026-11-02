@@ -36,7 +36,7 @@ import {
   createProviderLeaseTable,
   type ProviderLeaseDriver,
   type ProviderLeaseTable,
-} from '@agent-device/capture-kit/provider-lease-table';
+} from '@agent-device/provision-kit/provider-lease-table';
 import { createRevylInteractor } from './interactor.ts';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { resolveRevylRuntimeInstance } from './runtime-instance.ts';
