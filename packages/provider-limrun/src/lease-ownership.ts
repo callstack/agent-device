@@ -95,7 +95,10 @@ export type LimrunOwnerCapture =
  */
 export type LimrunDisposalOutcome = Readonly<{
   cleanup: 'confirmed' | 'attached' | 'uncertain' | 'none';
-  /** Creation outlived this disposal's wait; the runtime re-takes the owner after creation settles. */
+  /**
+   * Creation outlived this disposal's wait. An uncertain outcome re-takes the owner after creation settles;
+   * a confirmed delete already ended the rented instance, and its local teardown awaits the late session.
+   */
   creationPending?: true;
   /** The instance the lease held, known as soon as the create named it. */
   instanceId: string | undefined;

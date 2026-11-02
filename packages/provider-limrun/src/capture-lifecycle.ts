@@ -203,19 +203,25 @@ async function endCapture(
   record: (leaseId: string, capture: SettledNetworkCapture) => SettledNetworkCapture,
 ): Promise<SettledNetworkCapture> {
   const { writeCaptureRecord } = await import('./network-har.ts');
-  let settled: SettledNetworkCapture;
+  const written = await writeCaptureRecord(capture).then(
+    (value) => ({ ok: true, value }) as const,
+    (error: unknown) => ({ ok: false, error }) as const,
+  );
   let closeFailure: string | undefined;
-  try {
-    settled = await writeCaptureRecord(capture);
-  } finally {
-    if (capture.phase === 'capturing') {
-      try {
-        capture.capture.close();
-      } catch (error) {
-        closeFailure = errorMessage(error);
-      }
+  if (capture.phase === 'capturing') {
+    try {
+      capture.capture.close();
+    } catch (error) {
+      closeFailure = errorMessage(error);
     }
   }
+  if (!written.ok) {
+    if (closeFailure === undefined) throw written.error;
+    throw new Error(`${errorMessage(written.error)}; Capture close failed: ${closeFailure}`, {
+      cause: written.error,
+    });
+  }
+  const settled = written.value;
   return record(leaseId, closeFailure === undefined ? settled : { ...settled, closeFailure });
 }
 

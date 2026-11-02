@@ -134,9 +134,9 @@ function captureRecordOutcome(
 }
 
 /**
- * Ends what a disposal can name after creation outlives its wait. The lease stays held until the runtime
- * re-takes it after creation settles. A known instance is deleted now; the re-take joins that delete and the
- * memoized local teardown before the runtime decides whether the lease is free.
+ * Ends what a disposal can name after creation outlives its wait. An uncertain outcome keeps the lease for
+ * a re-take after creation settles. A confirmed delete frees it: that create already named its only rented
+ * instance, and the memoized local teardown still awaits any session the create goes on to build.
  */
 async function disposeUnansweredCreate(
   host: LimrunDisposalHost,
@@ -162,8 +162,8 @@ async function disposeUnansweredCreate(
       capture: await capture,
     };
   }
-  // An instance is already named, so this disposal ends the billing it can see and leaves the create's silence
-  // as what keeps the lease held.
+  // The create has named its only rented instance, so confirming this delete ends its billing even while
+  // session construction is still pending.
   const instance = await endInstance(host, owner, instanceId);
   // Reported, not thrown: a local step that refuses is one this disposal can no longer fix, and the delete
   // it ran beside has already been answered for.

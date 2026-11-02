@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   /** Instance deletes this runtime asked Limrun for; each waits for its case to answer it. */
   deletes: [] as Array<{ instanceId: string; report: () => void }>,
   creates: 0,
+  clientStarts: 0,
+  clientGate: undefined as Promise<void> | undefined,
   createGate: undefined as Promise<void> | undefined,
   autoDelete: false,
   disconnects: 0,
@@ -62,31 +64,35 @@ vi.mock('@limrun/api', () => ({
 }));
 
 vi.mock('@limrun/api/instance-client', () => ({
-  createInstanceClient: vi.fn(async () => ({
-    disconnect: () => {
-      state.disconnects += 1;
-      if (state.disconnectThrows) throw new Error('instance client refused to disconnect');
-    },
-    keepAlive: () => {},
-    openUrl: vi.fn(),
-    sendAsset: vi.fn(),
-    pressKey: vi.fn(),
-    setText: vi.fn(),
-    tap: vi.fn(),
-    startAdbTunnel: vi.fn(async () => ({
-      address: { address: '127.0.0.1', port: 62001 },
-      close: () => {},
-    })),
-    startTunnel: vi.fn(async () => ({
-      tunnelId: 't1',
-      selectors: [],
-      close: () => {
-        state.captureCloses += 1;
-        if (state.captureCloseThrows) throw new Error('capture tunnel refused to close');
+  createInstanceClient: vi.fn(async () => {
+    state.clientStarts += 1;
+    await state.clientGate;
+    return {
+      disconnect: () => {
+        state.disconnects += 1;
+        if (state.disconnectThrows) throw new Error('instance client refused to disconnect');
       },
-    })),
-    getTunnelStatus: vi.fn(async () => ({})),
-  })),
+      keepAlive: () => {},
+      openUrl: vi.fn(),
+      sendAsset: vi.fn(),
+      pressKey: vi.fn(),
+      setText: vi.fn(),
+      tap: vi.fn(),
+      startAdbTunnel: vi.fn(async () => ({
+        address: { address: '127.0.0.1', port: 62001 },
+        close: () => {},
+      })),
+      startTunnel: vi.fn(async () => ({
+        tunnelId: 't1',
+        selectors: [],
+        close: () => {
+          state.captureCloses += 1;
+          if (state.captureCloseThrows) throw new Error('capture tunnel refused to close');
+        },
+      })),
+      getTunnelStatus: vi.fn(async () => ({})),
+    };
+  }),
 }));
 
 test('a local teardown that refuses beside a pending delete is reported, not loosed on the process', async () => {
@@ -219,6 +225,7 @@ test('a capture close that refuses still leaves the delete it ran beside answere
 
 test('a late create with failed local cleanup is freed by the normal take with confirmed deletion', async () => {
   await import('./lease-release.ts');
+  const rejections = watchUnhandledRejections();
   const createsBefore = state.creates;
   state.deletes.length = 0;
   state.disconnectThrows = true;
@@ -275,6 +282,8 @@ test('a late create with failed local cleanup is freed by the normal take with c
     state.createGate = undefined;
     await runtime.leaseLifecycle.allocate?.(lease);
     expect(state.creates - createsBefore).toBe(2);
+    vi.useRealTimers();
+    await rejections.assertIsSilent();
   } finally {
     reportCreate();
     state.createGate = undefined;
@@ -285,6 +294,59 @@ test('a late create with failed local cleanup is freed by the normal take with c
     await runtime.shutdown();
     state.autoDelete = false;
     state.deletes.length = 0;
+    rejections.stop();
+  }
+});
+
+test('a confirmed delete during creation still disconnects the late session without another rent', async () => {
+  await import('./lease-release.ts');
+  const rejections = watchUnhandledRejections();
+  const createsBefore = state.creates;
+  const clientsBefore = state.clientStarts;
+  const disconnectsBefore = state.disconnects;
+  state.deletes.length = 0;
+  let reportClient!: () => void;
+  state.clientGate = new Promise<void>((resolve) => {
+    reportClient = resolve;
+  });
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, testDependencies());
+  const lease = androidLease('lease-confirmed-before-session');
+  const allocating = Promise.resolve(runtime.leaseLifecycle.allocate?.(lease)).catch(
+    (error: unknown) => error,
+  );
+  try {
+    // Reaching the instance client means the one POST has already named the rented instance.
+    await vi.waitFor(() => expect(state.clientStarts - clientsBefore).toBe(1));
+    const released = runtime.leaseLifecycle.release?.(lease);
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(125_000);
+    expect(state.deletes).toHaveLength(1);
+    state.deletes[0]?.report();
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(await released).toMatchObject({
+      limrunInstanceId: 'android-instance-1',
+      warnings: [{ code: 'LIMRUN_TEARDOWN_INCOMPLETE' }],
+    });
+    expect(state.disconnects - disconnectsBefore).toBe(0);
+    // The owner has been closed, but its observed, memoized local release still owns this session.
+    reportClient();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await allocating).toMatchObject({
+      details: { reason: 'limrun_lease_released_mid_allocation' },
+    });
+    expect(state.creates - createsBefore).toBe(1);
+    expect(state.deletes).toHaveLength(1);
+    expect(state.disconnects - disconnectsBefore).toBe(1);
+    vi.useRealTimers();
+    await rejections.assertIsSilent();
+  } finally {
+    reportClient();
+    state.clientGate = undefined;
+    state.deletes.forEach(({ report }) => report());
+    vi.useRealTimers();
+    await runtime.shutdown();
+    state.deletes.length = 0;
+    rejections.stop();
   }
 });
 

@@ -105,6 +105,37 @@ test('a capture that answers late and then refuses is not loosed on the process'
   }
 });
 
+test('a refused capture record carries the close failure beside the write error', async () => {
+  const rejections = watchUnhandledRejections();
+  const writeError = new Error('HAR inspection refused');
+  const close = vi.fn(() => {
+    throw new Error('capture tunnel refused to close');
+  });
+  const lifecycle = new LimrunCaptureLifecycle(captureHost());
+  const owner = ownerWithCapture();
+  owner.capture = {
+    phase: 'capturing',
+    harPath: '/tmp/sm4-refused-capture.har',
+    capture: {
+      entries: () => [],
+      failures: async () => {
+        throw writeError;
+      },
+      close,
+    },
+  };
+  try {
+    await expect(lifecycle.end(owner)).rejects.toMatchObject({
+      message: 'HAR inspection refused; Capture close failed: capture tunnel refused to close',
+      cause: writeError,
+    });
+    expect(close).toHaveBeenCalledOnce();
+    await rejections.assertIsSilent();
+  } finally {
+    rejections.stop();
+  }
+});
+
 /**
  * The record limit counts a lease whose owner still holds a capture, so the very same test spares that
  * record and no other. A lease the runtime still holds for an unconfirmed delete, whose capture is already
