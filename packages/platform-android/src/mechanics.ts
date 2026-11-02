@@ -372,3 +372,12 @@ export {
   type AndroidBlockingDialogObservation,
   type AndroidWindowDumpReader,
 } from './window-state.ts';
+
+export async function createAndroidAppDeploymentOperations(
+  params: Parameters<
+    typeof import('./deployment/runtime.ts').createAndroidAppDeploymentOperations
+  >[0],
+) {
+  const { createAndroidAppDeploymentOperations: bind } = await import('./deployment/runtime.ts');
+  return bind(params);
+}
