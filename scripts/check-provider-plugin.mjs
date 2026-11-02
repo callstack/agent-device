@@ -1,5 +1,6 @@
 // Manual pre-push check for provider plugin packages; no CI lane runs it (it needs pnpm and a
 // built core). Usage: `pnpm build && node scripts/check-provider-plugin.mjs packages/provider-testmu`.
+// A fixture without `respond` is for a provider with no credentials: connect must pass at once.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -23,7 +24,9 @@ let rejectCredentials = true;
 const requests = [];
 const server = http.createServer((request, response) => {
   requests.push(request.url);
-  const result = fixture.respond(request.url, rejectCredentials);
+  const result = fixture.respond
+    ? fixture.respond(request.url, rejectCredentials)
+    : { status: 500, body: { error: 'this fixture answers no requests' } };
   response.writeHead(result.status ?? 200, { 'content-type': 'application/json' });
   response.end(JSON.stringify(result.body));
 });
@@ -83,7 +86,7 @@ try {
   const bin = path.resolve(core, coreManifest.bin['agent-device']);
   const env = {
     ...process.env,
-    ...fixture.environment(endpoint),
+    ...fixture.environment?.(endpoint),
     AGENT_DEVICE_HOME: home,
     AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
   };
@@ -113,30 +116,28 @@ globalThis.fetch = (input, init) => {
   };
   const listed = await command(['plugins', 'list']);
   assert.equal(listed.code, undefined, listed.stderr);
-  const rejected = await command([
-    'connect',
-    manifest.agentDevicePlugin.provider,
-    ...fixture.args,
-    '--state-dir',
-    path.join(scratch, 'state'),
-  ]);
-  assert.equal(
-    JSON.parse(rejected.stdout).error.code,
-    'UNAUTHORIZED',
-    rejected.stdout + rejected.stderr,
-  );
-  rejectCredentials = false;
-  const connected = await command([
-    'connect',
-    manifest.agentDevicePlugin.provider,
-    ...fixture.args,
-    '--state-dir',
-    path.join(scratch, 'state'),
-  ]);
+  const connect = async () =>
+    await command([
+      'connect',
+      fixture.provider,
+      ...fixture.args,
+      '--state-dir',
+      path.join(scratch, 'state'),
+    ]);
+  if (fixture.respond) {
+    const rejected = await connect();
+    assert.equal(
+      JSON.parse(rejected.stdout).error.code,
+      'UNAUTHORIZED',
+      rejected.stdout + rejected.stderr,
+    );
+    rejectCredentials = false;
+  }
+  const connected = await connect();
   assert.equal(connected.code, undefined, connected.stdout + connected.stderr);
-  assert.ok(requests.length > 0);
+  if (fixture.respond) assert.ok(requests.length > 0);
   console.log(
-    `Packed ${manifest.name}: isolated install, host-recognized errors, and CLI connect passed.`,
+    `Packed ${manifest.name}: isolated install${fixture.respond ? ', host-recognized errors,' : ''} and CLI connect passed.`,
   );
 } finally {
   await new Promise((resolve) => server.close(resolve));

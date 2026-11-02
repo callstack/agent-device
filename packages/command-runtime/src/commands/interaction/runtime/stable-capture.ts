@@ -67,6 +67,7 @@ const DEFAULT_QUIET_MS_BY_PRODUCER = {
   'limrun-ios-tree': DEFAULT_STABLE_QUIET_MS,
   'revyl-ios-tree': DEFAULT_STABLE_QUIET_MS,
   'android-uiautomator': DEFAULT_STABLE_QUIET_MS,
+  'cdp-dom': DEFAULT_STABLE_QUIET_MS,
   'harmonyos-uitest': DEFAULT_STABLE_QUIET_MS,
   'macos-helper': DEFAULT_STABLE_QUIET_MS,
   'linux-atspi': DEFAULT_STABLE_QUIET_MS,
