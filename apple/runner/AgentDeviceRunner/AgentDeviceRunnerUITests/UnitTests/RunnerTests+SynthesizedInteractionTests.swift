@@ -310,8 +310,8 @@ extension RunnerTests {
       height: max(appFrame.width, appFrame.height)
     )
     XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
-    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt. Only the turns
-    // that move the axes read the box.
+    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt. Portrait and an
+    // unknown orientation skip the read; landscape and upside-down read the box, so they are checked.
     let expectations = [
       (RunnerInterfaceOrientation.portraitUpsideDown, screen),
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
@@ -453,7 +453,7 @@ extension RunnerTests {
     XCTAssertEqual(
       synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       placedWindow,
-      "a portrait turn keeps the axes, so it reads no box and must not refuse"
+      "portrait skips the box read (only landscape and upside-down read it), so it must not refuse"
     )
     let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .unsupported(let message, _)? = outcome else {
