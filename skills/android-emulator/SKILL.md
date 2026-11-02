@@ -21,6 +21,12 @@ agent-device open <app-or-package-id> --platform android --foreground
 
 Follow the initial interactive snapshot and corrective error hints. If the shell reports that `agent-device` is unavailable, stop and ask the user to install it or expose their existing installation on `PATH`.
 
+When you finish, end the session and stop the emulator so it does not keep running. Use plain `agent-device close` only when the emulator must stay up for more work:
+
+```bash
+agent-device close --shutdown
+```
+
 Only when the task is specialized or a command shape is unclear, read the relevant version-matched help topic:
 
 ```bash
