@@ -99,53 +99,69 @@ test('retires a persistent session that exceeds the helper command budget', asyn
   );
 });
 
-test('cancels a stalled snapshot, retires its helper, and starts the next capture cleanly', async () => {
-  const calls: (readonly string[])[] = [];
-  const processes: FakeAndroidProcess[] = [];
-  const provider = createSessionProvider({ calls, processes, stalledSnapshots: 1 });
-  const controller = new AbortController();
-  const capture = captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
-    signal: controller.signal,
-  });
-  setTimeout(() => controller.abort(new Error('wait deadline exceeded')), 10);
+// A cancellation lands wherever the caller's deadline falls (#4030): before the helper reports
+// ready, or while the helper holds the snapshot request it never answers.
+for (const cancelPoint of ['before the helper is ready', 'while the helper stalls'] as const) {
+  test(`cancels a capture ${cancelPoint}, retires its helper, and starts the next capture cleanly`, async () => {
+    const calls: (readonly string[])[] = [];
+    const processes: FakeAndroidProcess[] = [];
+    const controller = new AbortController();
+    const cancel = () => controller.abort(new Error('wait deadline exceeded'));
+    const provider = createSessionProvider({
+      calls,
+      processes,
+      stalledSnapshots: 1,
+      ...(cancelPoint === 'while the helper stalls' ? { onStalledSnapshot: cancel } : {}),
+    });
+    const capture = captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: {
+        ...provider,
+        spawn: (args, options) => {
+          const process = provider.spawn!(args, options);
+          if (cancelPoint === 'before the helper is ready') cancel();
+          return process;
+        },
+      },
+      deviceKey: 'android:emulator-5554',
+      signal: controller.signal,
+    });
 
-  await assert.rejects(capture, /wait deadline exceeded/);
-  assert.equal(processes[0]?.killed, true);
-  assert.equal(
-    calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
-    true,
-  );
+    await assert.rejects(capture, /wait deadline exceeded/);
+    assert.equal(processes[0]?.killed, true);
+    assert.equal(
+      calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+      true,
+    );
 
-  const next = await captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
+    const next = await captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5554',
+    });
+    assert.match(next?.xml ?? '', /snapshot 1/);
+    assert.equal(next?.metadata.sessionReused, false);
+    assert.equal(processes.length, 2);
   });
-  assert.match(next?.xml ?? '', /snapshot 1/);
-  assert.equal(next?.metadata.sessionReused, false);
-  assert.equal(processes.length, 2);
-});
+}
 
 test('canceled capture joins canceled external cleanup before returning', async () => {
   const calls: (readonly string[])[] = [];
   const cleanupAborts: (readonly string[])[] = [];
+  const controller = new AbortController();
   const provider = createSessionProvider({
     calls,
     cleanupAborts,
     stalledSnapshots: 1,
     stalledCleanup: true,
+    onStalledSnapshot: () => controller.abort(new Error('wait deadline exceeded')),
   });
-  const controller = new AbortController();
   const capture = captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
     deviceKey: 'android:emulator-5554',
     signal: controller.signal,
   });
-  setTimeout(() => controller.abort(new Error('wait deadline exceeded')), 10);
 
   const outcome = await Promise.race([
     capture.then(
