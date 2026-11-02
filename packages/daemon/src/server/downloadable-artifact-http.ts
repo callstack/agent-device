@@ -1,3 +1,4 @@
+import type { ReadStream } from 'node:fs';
 import http from 'node:http';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -131,11 +132,24 @@ async function handleArtifactDownload(
       }
     });
     if (res.destroyed) stream.destroy();
-    stream.pipe(res);
+    pipeArtifactDownload(stream, res);
   } catch (error) {
     acquiredStream?.destroy();
     sendRestJsonError(res, normalizeError(error));
   }
+}
+
+function pipeArtifactDownload(stream: ReadStream, res: http.ServerResponse): void {
+  // The owner releases its reader on close; Content-Length must not let the client finish sooner.
+  let lastChunk: string | Buffer | undefined;
+  stream.on('data', (chunk: string | Buffer) => {
+    if (lastChunk !== undefined && !res.write(lastChunk)) stream.pause();
+    lastChunk = chunk;
+  });
+  res.on('drain', () => stream.resume());
+  stream.once('close', () => {
+    if (stream.readableEnded) res.end(lastChunk);
+  });
 }
 
 async function handleArtifactInventory(
