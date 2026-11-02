@@ -1,10 +1,6 @@
-import {
-  namesSessionExplicitly,
-  type DaemonResponse,
-  type LeaseBackend,
-} from '@agent-device/kernel/contracts';
+import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '@agent-device/kernel/record';
+import { namesSessionExplicitly, stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
 import type { DaemonWireRequest } from './daemon-wire-request.ts';

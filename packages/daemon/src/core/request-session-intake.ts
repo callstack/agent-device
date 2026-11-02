@@ -1,4 +1,4 @@
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { namesSessionExplicitly } from '@agent-device/kernel/record';
 import type { DaemonRequest } from './daemon-request.ts';
 
 /**
