@@ -73,11 +73,12 @@ extension RunnerTests {
     return restore
   }
 
-  /// The state both AX-failure tap tests start from: the host app launched and turned to landscape,
-  /// a tap context on its resolved window (measured at `windowFrame` when given), and AXRuntime's
-  /// display read failing with no kept size. The returned cleanup undoes every step.
+  /// The state the AX-failure tap tests start from: the host app launched (turned to landscape when
+  /// asked), a tap context on its resolved window (measured at `windowFrame` when given), and
+  /// AXRuntime's display read failing with no kept size. The returned cleanup undoes every step.
   @MainActor
-  private func launchLandscapeWithUnreadableDisplay(
+  private func launchWithUnreadableDisplay(
+    landscape: Bool,
     windowFrame: CGRect? = nil
   ) throws -> (context: SynthesizedCoordinateContext, cleanup: () -> Void) {
     var cleanups: [() -> Void] = []
@@ -89,7 +90,7 @@ extension RunnerTests {
         self.invalidateCachedTarget(reason: "unit_test_cleanup")
         self.app.terminate()
       }
-      cleanups.append(try rotateHostAppToLandscape())
+      if landscape { cleanups.append(try rotateHostAppToLandscape()) }
       let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
       let context = try XCTUnwrap(
         SynthesizedCoordinateContext(
@@ -343,13 +344,32 @@ extension RunnerTests {
     XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
   }
 
+  /// #4091: a portrait turn leaves the point as it is, so an unreadable display box neither refuses
+  /// it nor is read for it: the tap is dispatched even through a placed window on either family.
+  @MainActor
+  func testPortraitTapDispatchesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: false, windowFrame: placedWindow)
+    defer { cleanup() }
+    XCTAssertEqual(
+      Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)),
+      RunnerInterfaceOrientation.portrait
+    )
+
+    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .performed? = outcome else {
+      return XCTFail("expected a portrait tap to be dispatched, got \(String(describing: outcome))")
+    }
+  }
+
   /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
   /// proves full-screen (an iPhone by its idiom) has a window that is the display, so its tap still
   /// turns about that window and is dispatched.
   @MainActor
   func testTapTurnsAboutTheWindowWhenTheSoleDisplayCannotBeMeasuredOnAFullScreenApp() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
-    let (context, cleanup) = try launchLandscapeWithUnreadableDisplay()
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: true)
     defer { cleanup() }
     try XCTSkipUnless(
       soleScreenRouteIsOpen(for: app),
@@ -374,7 +394,7 @@ extension RunnerTests {
   func testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let (context, cleanup) = try launchLandscapeWithUnreadableDisplay(windowFrame: placedWindow)
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowFrame: placedWindow)
     defer { cleanup() }
     try XCTSkipIf(
       soleScreenRouteIsOpen(for: app),
