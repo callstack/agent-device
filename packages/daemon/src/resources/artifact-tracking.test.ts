@@ -6,6 +6,7 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import * as command from '@agent-device/host-kit/command';
 import {
   cleanupDownloadableArtifact,
   openDownloadableArtifact,
@@ -13,6 +14,127 @@ import {
   trackUploadedArtifact,
   type OpenedDownloadableArtifact,
 } from './artifact-tracking.ts';
+
+test('cancelling the archive builder preserves a second download waiting for its full archive', async () => {
+  const root = mkdtempForTestSync('fu-art-shared-build-');
+  const artifactPath = path.join(root, 'capture.trace');
+  fs.mkdirSync(artifactPath);
+  const expected = 'complete shared capture payload\n'.repeat(4096);
+  fs.writeFileSync(path.join(artifactPath, 'payload'), expected);
+  const runtime = createRuntimeStateHandle();
+  let continueArchive!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    continueArchive = resolve;
+  });
+  let archiveStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    archiveStarted = resolve;
+  });
+  const runCmd = command.runCmd;
+  const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+    archiveStarted();
+    await blocked;
+    return await runCmd(...args);
+  });
+  const timers = vi.spyOn(globalThis, 'setTimeout');
+  const openings: Array<Promise<OpenedDownloadableArtifact>> = [];
+  try {
+    const id = runtime.run(() =>
+      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+    );
+    const timerIndex = timers.mock.calls.length;
+    const first = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    openings.push(first);
+    void first.catch(() => {});
+    const cancelFirst = timers.mock.calls[timerIndex]![0];
+    await started;
+    const second = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+    openings.push(second);
+    void second.catch(() => {});
+    runtime.run(cancelFirst);
+    continueArchive();
+    const download = await second;
+    const closed = once(download.stream, 'close');
+    const bytes = await buffer(download.stream);
+    await closed;
+    download.release();
+    expect(bytes).toHaveLength(download.sizeBytes);
+    expect(gunzipSync(bytes).includes(Buffer.from(expected))).toBe(true);
+    await expect(first).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
+    expect(archive).toHaveBeenCalledTimes(1);
+    runtime.run(() => cleanupDownloadableArtifact(id));
+    expect(fs.existsSync(artifactPath)).toBe(false);
+    expect(fs.existsSync(path.dirname(String(download.stream.path)))).toBe(false);
+  } finally {
+    continueArchive();
+    const results = await Promise.allSettled(openings);
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const download = result.value;
+      if (!download.stream.closed) {
+        const closed = once(download.stream, 'close');
+        download.stream.destroy();
+        await closed;
+      }
+      download.release();
+    }
+    runtime.dispose();
+    timers.mockRestore();
+    archive.mockRestore();
+  }
+});
+
+test('disposing every archive waiter aborts the shared build and removes its temporary directory', async () => {
+  const root = mkdtempForTestSync('fu-art-cancel-all-');
+  const artifactPath = path.join(root, 'capture.trace');
+  fs.mkdirSync(artifactPath);
+  fs.writeFileSync(path.join(artifactPath, 'payload'), 'cancelled archive payload');
+  const runtime = createRuntimeStateHandle();
+  let continueArchive!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    continueArchive = resolve;
+  });
+  let archiveStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    archiveStarted = resolve;
+  });
+  let archiveDir = '';
+  let archiveSignal: AbortSignal | undefined;
+  const runCmd = command.runCmd;
+  const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+    archiveDir = path.dirname(String(args[1]?.[1]));
+    archiveSignal = args[2]?.signal;
+    archiveStarted();
+    await blocked;
+    return await runCmd(...args);
+  });
+  const openings: Array<Promise<OpenedDownloadableArtifact>> = [];
+  try {
+    const id = runtime.run(() =>
+      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+    );
+    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    await started;
+    openings.push(runtime.run(() => openDownloadableArtifact(id, undefined, process.env)));
+    for (const opening of openings) void opening.catch(() => {});
+    runtime.dispose();
+    expect(archiveSignal?.aborted).toBe(true);
+    expect(fs.existsSync(artifactPath)).toBe(true);
+    expect(fs.existsSync(archiveDir)).toBe(true);
+    continueArchive();
+    for (const opening of openings) {
+      await expect(opening).rejects.toMatchObject({ details: { reason: 'RESOURCE_EXPIRED' } });
+    }
+    expect(archive).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(artifactPath)).toBe(false);
+    expect(fs.existsSync(archiveDir)).toBe(false);
+  } finally {
+    continueArchive();
+    await Promise.allSettled(openings);
+    runtime.dispose();
+    archive.mockRestore();
+  }
+});
 
 function holdArtifactReads() {
   const pending: Array<{ file: string; complete: () => void }> = [];
@@ -106,53 +228,68 @@ test.each(['old-first', 'new-first'] as const)(
   },
 );
 
-test('expiry defers a stalled directory read until its own deadline closes and cleans it', async () => {
-  const root = mkdtempForTestSync('fu-art-stalled-expiry-');
-  const artifactPath = path.join(root, 'capture.trace');
-  fs.mkdirSync(artifactPath);
-  fs.writeFileSync(path.join(artifactPath, 'payload'), 'stalled source marker');
-  const runtime = createRuntimeStateHandle();
-  const reads = holdArtifactReads();
-  const timers = vi.spyOn(globalThis, 'setTimeout');
-  const removed = vi.spyOn(fs, 'rmSync');
-  let download: OpenedDownloadableArtifact | undefined;
-  try {
-    const id = runtime.run(() =>
-      trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
-    );
-    const expire = timers.mock.calls.at(-1)![0];
-    const timerIndex = timers.mock.calls.length;
-    const opening = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
-    const deadline = timers.mock.calls[timerIndex]![0];
-    download = await opening;
-    const archiveDir = path.dirname(String(download.stream.path));
-    download.stream.resume();
-    await vi.waitFor(() => expect(reads.pending).toHaveLength(1));
-    runtime.run(expire);
-    expect(download.stream.destroyed).toBe(false);
-    expect(fs.existsSync(artifactPath)).toBe(true);
-    expect(fs.existsSync(archiveDir)).toBe(true);
-    runtime.run(deadline);
-    expect(download.signal.aborted).toBe(true);
-    expect(download.stream.destroyed).toBe(true);
-    expect(download.stream.closed).toBe(false);
-    expect(fs.existsSync(artifactPath)).toBe(true);
-    reads.release();
-    await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
-    expect(download.stream.closed).toBe(true);
-    expect(fs.existsSync(archiveDir)).toBe(false);
-    for (const target of [artifactPath, archiveDir]) {
-      expect(removed.mock.calls.filter(([removedPath]) => removedPath === target)).toHaveLength(1);
+test.each(['expiry-first', 'deadline-first'] as const)(
+  'a stalled directory read cleans up after registration expiry and its own deadline (%s)',
+  async (order) => {
+    const root = mkdtempForTestSync('fu-art-stalled-expiry-');
+    const artifactPath = path.join(root, 'capture.trace');
+    fs.mkdirSync(artifactPath);
+    fs.writeFileSync(path.join(artifactPath, 'payload'), 'stalled source marker');
+    const runtime = createRuntimeStateHandle();
+    const reads = holdArtifactReads();
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
+    const removed = vi.spyOn(fs, 'rmSync');
+    let download: OpenedDownloadableArtifact | undefined;
+    try {
+      const id = runtime.run(() =>
+        trackDownloadableArtifact({ artifactPath, artifactType: 'trace-log' }),
+      );
+      const expire = timers.mock.calls.at(-1)![0];
+      const expiryTimer = timers.mock.results.at(-1)!.value;
+      const timerIndex = timers.mock.calls.length;
+      const opening = runtime.run(() => openDownloadableArtifact(id, undefined, process.env));
+      const deadline = timers.mock.calls[timerIndex]![0];
+      download = await opening;
+      const archiveDir = path.dirname(String(download.stream.path));
+      download.stream.resume();
+      await vi.waitFor(() => expect(reads.pending).toHaveLength(1));
+      if (order === 'expiry-first') runtime.run(expire);
+      expect(download.stream.destroyed).toBe(false);
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      expect(fs.existsSync(archiveDir)).toBe(true);
+      runtime.run(deadline);
+      expect(download.signal.aborted).toBe(true);
+      expect(download.stream.destroyed).toBe(true);
+      expect(download.stream.closed).toBe(false);
+      expect(fs.existsSync(artifactPath)).toBe(true);
+      reads.release();
+      await vi.waitFor(() => expect(download!.stream.closed).toBe(true));
+      if (order === 'deadline-first') {
+        expect(fs.existsSync(artifactPath)).toBe(true);
+        expect(fs.existsSync(archiveDir)).toBe(true);
+        expect(clearedTimers.mock.calls.some(([timer]) => timer === expiryTimer)).toBe(false);
+        runtime.run(expire);
+      }
+      await vi.waitFor(() => expect(fs.existsSync(artifactPath)).toBe(false));
+      expect(download.stream.closed).toBe(true);
+      expect(fs.existsSync(archiveDir)).toBe(false);
+      for (const target of [artifactPath, archiveDir]) {
+        expect(removed.mock.calls.filter(([removedPath]) => removedPath === target)).toHaveLength(
+          1,
+        );
+      }
+    } finally {
+      reads.release();
+      runtime.dispose();
+      if (download && !download.stream.closed) await once(download.stream, 'close');
+      timers.mockRestore();
+      clearedTimers.mockRestore();
+      reads.restore();
+      removed.mockRestore();
     }
-  } finally {
-    reads.release();
-    runtime.dispose();
-    if (download && !download.stream.closed) await once(download.stream, 'close');
-    timers.mockRestore();
-    reads.restore();
-    removed.mockRestore();
-  }
-});
+  },
+);
 
 test('disposing a runtime removes the temporary files it still tracks', () => {
   const root = mkdtempForTestSync('agent-device-artifact-dispose-');

@@ -220,7 +220,9 @@ function cancelArtifactDownload(
   const reason = expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
   download.controller.abort(reason);
   if (!download.stream) {
-    entry.archiveAbortController?.abort(reason);
+    if ([...entry.activeDownloads].every(({ controller }) => controller.signal.aborted)) {
+      entry.archiveAbortController?.abort(reason);
+    }
     return;
   }
   const closed = finished(download.stream, { cleanup: true }).catch(() => {});

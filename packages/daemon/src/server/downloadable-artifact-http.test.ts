@@ -2,11 +2,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { expect, test, vi } from 'vitest';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
-import { runCmdSync } from '@agent-device/host-kit/command';
+import * as command from '@agent-device/host-kit/command';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
-import { trackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import * as artifactTracking from '../resources/artifact-tracking.ts';
 import { createDaemonHttpServer } from './http/http-server.ts';
 
 function deferred() {
@@ -28,6 +29,7 @@ type DownloadFixture = {
   outcome(): 'pending' | 'complete' | 'failed';
   cleanupCount(): number;
   expire(): void;
+  expiryPending(): boolean;
   fireDeadlines(): void;
 };
 
@@ -56,9 +58,10 @@ async function withDownloadFixture(
   const timers = vi.spyOn(globalThis, 'setTimeout');
   const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
   const id = runtime.run(() =>
-    trackDownloadableArtifact({ artifactPath: source, artifactType: 'trace-log' }),
+    artifactTracking.trackDownloadableArtifact({ artifactPath: source, artifactType: 'trace-log' }),
   );
   const expire = timers.mock.calls[0]![0];
+  const expiryTimer = timers.mock.results[0]!.value;
   const removed = vi.spyOn(fs, 'rmSync');
   const streams: fs.ReadStream[] = [];
   const createReadStream = fs.createReadStream;
@@ -106,6 +109,7 @@ async function withDownloadFixture(
       outcome: () => outcome,
       cleanupCount: () => removed.mock.calls.filter(([target]) => target === source).length,
       expire: () => runtime.run(expire),
+      expiryPending: () => !clearedTimers.mock.calls.some(([timer]) => timer === expiryTimer),
       fireDeadlines: () => {
         for (const [index, [callback, delay]] of timers.mock.calls.entries()) {
           const handle = timers.mock.results[index]!.value;
@@ -135,6 +139,50 @@ async function withDownloadFixture(
     removed.mockRestore();
   }
 }
+
+test('a client abort during a shared archive build preserves the other HTTP download', async () => {
+  const started = deferred();
+  const proceed = deferred();
+  const runCmd = command.runCmd;
+  const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+    started.resolve();
+    await proceed.promise;
+    return await runCmd(...args);
+  });
+  const opens = vi.spyOn(artifactTracking, 'openDownloadableArtifact');
+  try {
+    await withDownloadFixture(
+      async (fixture) => {
+        const expected = fs.readFileSync(path.join(fixture.source, 'payload'));
+        fixture.start();
+        await started.promise;
+        const second = fetch(fixture.url, { headers: { authorization: 'Bearer fu-art-secret' } });
+        void second.catch(() => {});
+        try {
+          await vi.waitFor(() => expect(opens).toHaveBeenCalledTimes(2));
+          fixture.abortClient();
+          await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
+          proceed.resolve();
+          const response = await second;
+          expect(response.status).toBe(200);
+          const bytes = Buffer.from(await response.arrayBuffer());
+          expect(bytes).toHaveLength(Number(response.headers.get('content-length')));
+          expect(gunzipSync(bytes).includes(expected)).toBe(true);
+          expect(archive).toHaveBeenCalledTimes(1);
+          await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+        } finally {
+          proceed.resolve();
+          await Promise.allSettled([second]);
+        }
+      },
+      () => {},
+    );
+  } finally {
+    proceed.resolve();
+    opens.mockRestore();
+    archive.mockRestore();
+  }
+});
 
 test.each(['destroyed', 'truncated', 'errored'] as const)(
   'a %s artifact read terminates the HTTP response',
@@ -179,6 +227,37 @@ test('an artifact open failure returns a complete JSON error before streaming st
       await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
     },
     (stream) => fs.unlinkSync(String(stream.path)),
+  );
+});
+
+test('a truncated directory archive preserves the source and expires without leaking its cached archive', async () => {
+  await withDownloadFixture(
+    async (fixture) => {
+      const payloadPath = path.join(fixture.source, 'payload');
+      const expected = fs.readFileSync(payloadPath);
+      fixture.start();
+      await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
+      const stream = fixture.streams[0]!;
+      await vi.waitFor(() => expect(stream.closed).toBe(true));
+      const archiveDir = path.dirname(String(stream.path));
+      expect(fs.readFileSync(payloadPath)).toEqual(expected);
+      expect(fs.existsSync(archiveDir)).toBe(true);
+      expect(fixture.expiryPending()).toBe(true);
+      const inventory = await fetch(fixture.url.slice(0, fixture.url.lastIndexOf('/')), {
+        headers: { authorization: 'Bearer fu-art-secret' },
+      });
+      expect(await inventory.json()).toMatchObject({
+        artifacts: [{ id: fixture.url.split('/').at(-1) }],
+      });
+      fixture.expire();
+      await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+      expect(fs.existsSync(archiveDir)).toBe(false);
+      expect(fixture.cleanupCount()).toBe(1);
+    },
+    (stream) =>
+      stream.once('open', () =>
+        fs.truncateSync(String(stream.path), fs.statSync(String(stream.path)).size - 1),
+      ),
   );
 });
 
@@ -250,7 +329,7 @@ test('a directory artifact expires after download header setup throws', async ()
   const port = await listenOnLoopback(server);
   const timer = vi.spyOn(globalThis, 'setTimeout');
   const artifactId = runtime.run(() =>
-    trackDownloadableArtifact({
+    artifactTracking.trackDownloadableArtifact({
       artifactPath: source,
       artifactType: 'trace-log',
       fileName: 'trace-💥',
@@ -315,7 +394,7 @@ test.each(['another download completes', 'expiry fires'] as const)(
     const headers = { authorization: 'Bearer fu-art-secret' };
     const timer = vi.spyOn(globalThis, 'setTimeout');
     const artifactId = runtime.run(() =>
-      trackDownloadableArtifact({
+      artifactTracking.trackDownloadableArtifact({
         artifactPath: source,
         artifactType: 'trace-log',
       }),
@@ -375,7 +454,7 @@ test.each(['another download completes', 'expiry fires'] as const)(
       if (first) expect(delayed.bytes).toEqual(first.bytes);
       const downloaded = path.join(root, 'download.tar.gz');
       fs.writeFileSync(downloaded, delayed.bytes);
-      expect(runCmdSync('tar', ['-xOzf', downloaded, 'profile.trace/payload']).stdout).toBe(
+      expect(command.runCmdSync('tar', ['-xOzf', downloaded, 'profile.trace/payload']).stdout).toBe(
         expected,
       );
       await vi.waitFor(() => expect(fs.existsSync(archiveDir)).toBe(false));
