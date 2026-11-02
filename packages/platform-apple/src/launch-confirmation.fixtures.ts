@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 export const CONFIRMATION = {
   message: 'Open in “Example App”?',
   items: ['Cancel', 'Open'],
-  launchConfirmation: true,
+  launchConfirmationPrompt: true,
 };
 
 /** The runner's typed absence: `alert get` looked once and found no alert. */

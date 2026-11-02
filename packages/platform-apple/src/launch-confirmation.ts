@@ -189,7 +189,7 @@ function accepted(): LaunchConfirmationAttempt {
  * An alert the runner did not mark is reported as unrecognized.
  */
 function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
-  return alert['launchConfirmation'] === true;
+  return alert['launchConfirmationPrompt'] === true;
 }
 
 /** A failed step leaves the open unanswered; the failure is reported, not thrown. */

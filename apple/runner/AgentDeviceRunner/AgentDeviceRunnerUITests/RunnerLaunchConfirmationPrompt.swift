@@ -15,10 +15,22 @@ struct RunnerLaunchConfirmationPrompt {
 
   private let wordings: [(title: NSRegularExpression, open: String, cancel: String)]
 
+  /// A wording whose title format has no app-name placeholder (`%@` or `%1$@`) is skipped, because
+  /// its pattern would match a title with no app name.
   init(wordings: [Wording]) {
+    let placeholder = try! NSRegularExpression(pattern: "%(?:\\d+\\$)?@")
     self.wordings = wordings.compactMap { wording in
-      let pattern = NSRegularExpression.escapedPattern(for: wording.titleFormat)
-        .replacingOccurrences(of: "%@", with: ".+")
+      let format = wording.titleFormat as NSString
+      let slots = placeholder.matches(in: wording.titleFormat, range: NSRange(location: 0, length: format.length))
+      guard !slots.isEmpty else { return nil }
+      var pattern = ""
+      var from = 0
+      for slot in slots {
+        pattern += NSRegularExpression.escapedPattern(for: format.substring(with: NSRange(location: from, length: slot.range.location - from)))
+        pattern += ".+"
+        from = slot.range.location + slot.range.length
+      }
+      pattern += NSRegularExpression.escapedPattern(for: format.substring(from: from))
       guard let title = try? NSRegularExpression(pattern: "^\(pattern)$") else { return nil }
       return (title, Self.normalized(wording.open), Self.normalized(wording.cancel))
     }
@@ -49,7 +61,7 @@ extension RunnerLaunchConfirmationPrompt {
   static func fromSystemStrings(languages: [String]) -> RunnerLaunchConfirmationPrompt {
     switch RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages) {
     case .failure(let failure):
-      RunnerSystemPromptStrings.logUnavailable(failure, languages: languages)
+      RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "launch-confirmation", languages: languages)
       return .unavailable
     case .success(let tables):
       guard let table = tables.first else { return .unavailable }

@@ -144,7 +144,7 @@ extension RunnerTests {
       data: DataPayload(
         message: title,
         items: items,
-        launchConfirmation: RunnerLaunchConfirmationPrompt.system.recognizes(title: title, buttons: items) ? true : nil
+        launchConfirmationPrompt: RunnerLaunchConfirmationPrompt.system.recognizes(title: title, buttons: items) ? true : nil
       )
     )
   }

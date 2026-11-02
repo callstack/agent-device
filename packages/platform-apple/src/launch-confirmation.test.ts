@@ -82,7 +82,7 @@ test.each([
     const { port: device, acceptAlert } = port(async () => ({
       message,
       items,
-      launchConfirmation: true,
+      launchConfirmationPrompt: true,
     }));
 
     await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'accepted' });

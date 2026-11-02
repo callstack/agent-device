@@ -45,14 +45,14 @@ extension RunnerAlertLabelVocabulary {
     var tables: [RunnerSystemPromptStrings]
     switch RunnerSystemPromptStrings.read(RunnerSystemPromptStrings.promptTables, languages: languages) {
     case .failure(let failure):
-      RunnerSystemPromptStrings.logUnavailable(failure, languages: languages)
+      RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary", languages: languages)
       return .english
     case .success(let read):
       tables = read
     }
     switch RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages) {
     case .failure(let failure):
-      RunnerSystemPromptStrings.logUnavailable(failure, languages: languages)
+      RunnerSystemPromptStrings.logUnavailable(failure, subsystem: "alert-vocabulary-launch-confirmation", languages: languages)
     case .success(let read):
       tables += read
     }

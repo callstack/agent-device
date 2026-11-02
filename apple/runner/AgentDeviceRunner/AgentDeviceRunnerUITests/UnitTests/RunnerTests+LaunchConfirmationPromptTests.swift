@@ -59,3 +59,21 @@ extension RunnerTests {
   }
 }
 #endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests {
+  /// A wording with no app-name placeholder would match a title with no app name, and a positional
+  /// placeholder still marks the app-name slot.
+  func testLaunchConfirmationWordingNeedsAnAppNameSlot() {
+    let withoutSlot = RunnerLaunchConfirmationPrompt(wordings: [
+      .init(titleFormat: "Open in the app?", open: "Open", cancel: "Cancel")
+    ])
+    XCTAssertFalse(withoutSlot.recognizes(title: "Open in the app?", buttons: ["Cancel", "Open"]))
+
+    let positional = RunnerLaunchConfirmationPrompt(wordings: [
+      .init(titleFormat: "Open in “%1$@”?", open: "Open", cancel: "Cancel")
+    ])
+    XCTAssertTrue(positional.recognizes(title: "Open in “Test App”?", buttons: ["Cancel", "Open"]))
+  }
+}
+#endif

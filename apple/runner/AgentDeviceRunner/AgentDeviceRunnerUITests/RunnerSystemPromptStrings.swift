@@ -56,10 +56,10 @@ struct RunnerSystemPromptStrings {
     let source: String
   }
 
-  static func logUnavailable(_ failure: UnavailableSource, languages: [String]) {
+  static func logUnavailable(_ failure: UnavailableSource, subsystem: String, languages: [String]) {
     NSLog(
-      "AGENT_DEVICE_RUNNER_ALERT_VOCABULARY_UNAVAILABLE source=%@ languages=%@",
-      failure.source, languages.joined(separator: ",")
+      "AGENT_DEVICE_RUNNER_SYSTEM_PROMPT_STRINGS_UNAVAILABLE subsystem=%@ source=%@ languages=%@",
+      subsystem, failure.source, languages.joined(separator: ",")
     )
   }
 
