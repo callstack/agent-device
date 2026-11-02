@@ -2046,12 +2046,7 @@ test('disconnect after connect-only cleanup stays local when no session resource
   await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
       positionals: [],
-      flags: {
-        json: false,
-        help: false,
-        version: false,
-        stateDir,
-      },
+      flags: { json: false, help: false, version: false, stateDir, session: 'adc-pending' },
       client: createTestClient({
         closeSession: async () => {
           closeCalls += 1;
@@ -2215,10 +2210,10 @@ test('disconnect releases proxy lease with provider client and device metadata',
         help: false,
         version: false,
         stateDir,
+        session: 'adc-proxy',
         shutdown: true,
-        // Not persisted on connection state (ADR 0007): the caller supplies
-        // it per-command via flag/env/CLI-session, mirroring how the CLI
-        // dispatcher resolves it before invoking this handler.
+        // Not persisted on connection state (ADR 0007): the caller supplies it per-command via
+        // flag/env/CLI-session, mirroring how the CLI dispatcher resolves it before this handler.
         daemonAuthToken: 'test-not-a-real-token',
       },
       client: createTestClient({ release: release.stub }),

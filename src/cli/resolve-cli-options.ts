@@ -14,13 +14,13 @@ export function resolveCliOptions(
 ) {
   const rawParsed = parseRawArgs(argv);
   const { env, cwd } = options;
-  const remoteConfigDefaults = shouldApplyRemoteConfigDefaults(rawParsed.command)
+  const remoteConfig = shouldApplyRemoteConfigDefaults(rawParsed.command)
     ? resolveRemoteConfigDefaults({
         remoteConfig: rawParsed.flags.remoteConfig,
         cwd,
         env,
       })
-    : {};
+    : { flags: {} };
   const defaultFlags = mergeDefinedFlags(
     resolveConfigBackedFlagDefaults({
       command: rawParsed.command,
@@ -28,13 +28,18 @@ export function resolveCliOptions(
       cliFlags: rawParsed.flags as CliFlags,
       env,
     }),
-    remoteConfigDefaults,
+    remoteConfig.flags,
   );
   const finalized = finalizeParsedArgs(rawParsed, {
     strictFlags: options?.strictFlags,
     defaultFlags,
   });
-  return { ...finalized, providedFlags: rawParsed.providedFlags };
+  // The flags drop the profile's lease provider, which decides whether a session is required (#3931).
+  return {
+    ...finalized,
+    providedFlags: rawParsed.providedFlags,
+    remoteConfigLeaseProvider: remoteConfig.leaseProvider,
+  };
 }
 
 function shouldApplyRemoteConfigDefaults(command: string | null): boolean {

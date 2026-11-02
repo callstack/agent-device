@@ -4,6 +4,8 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
   readActiveConnectionState,
+  requireLeasedConnectionSession,
+  sessionLeaseScope,
   buildRemoteConnectionRequestMetadata,
   mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
@@ -72,8 +74,11 @@ export const connectCommand: ClientCommandHandler = async ({
     cwd: host.cwd,
     env: host.env,
   });
-  const connectFlags = resolved.flags;
-  const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath, host);
+  const { flags: connectFlags, connection: connectionMetadata } = scopeConnectProfile(
+    flags,
+    resolved,
+    host,
+  );
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
   const context = resolveConnectContext({
     stateDir,
@@ -297,16 +302,35 @@ async function cleanupForcedPreviousConnection(
   });
 }
 
-function readRemoteConfigConnectionMetadata(
-  remoteConfigPath: string,
+/**
+ * The flags and lease metadata `connect` binds a profile to. A leased profile the caller supplies is
+ * shared by every session that names it, so each session connects under a client and run of its own
+ * (#3931); a provider-generated profile already derives both from the session.
+ */
+function scopeConnectProfile(
+  flags: CliFlags,
+  resolved: { flags: CliFlags; remoteConfigPath: string },
   host: HostEnvironment,
-): RemoteConnectionRequestMetadata | undefined {
+): { flags: CliFlags; connection: RemoteConnectionRequestMetadata | undefined } {
   const profile = resolveRemoteConfigProfile({
-    configPath: remoteConfigPath,
+    configPath: resolved.remoteConfigPath,
     cwd: host.cwd,
     env: host.env,
   }).profile;
-  return buildRemoteConnectionRequestMetadata(profile);
+  if (!flags.remoteConfig || flags.session === undefined) {
+    return { flags: resolved.flags, connection: buildRemoteConnectionRequestMetadata(profile) };
+  }
+  const scope = sessionLeaseScope(
+    { ...profile, leaseId: resolved.flags.leaseId, runId: profile.runId },
+    flags.session,
+  );
+  return {
+    flags:
+      resolved.flags.runId === profile.runId
+        ? { ...resolved.flags, runId: scope.runId }
+        : resolved.flags,
+    connection: buildRemoteConnectionRequestMetadata({ ...profile, clientId: scope.clientId }),
+  };
 }
 
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
@@ -441,13 +465,11 @@ function readRequestedConnectionState(
     cwd: host.cwd,
     env: host.env,
   }).baseDir;
-  return {
-    session,
-    stateDir,
-    state:
-      readRemoteConnectionState({ stateDir, session }) ??
-      (flags.session ? null : readActiveConnectionState({ stateDir })),
-  };
+  const state =
+    readRemoteConnectionState({ stateDir, session }) ??
+    (flags.session ? null : readActiveConnectionState({ stateDir }));
+  if (state) requireLeasedConnectionSession(state, flags.session);
+  return { session, stateDir, state };
 }
 
 async function writeNoRemoteConnectionOutput(flags: CliFlags, session: string): Promise<void> {

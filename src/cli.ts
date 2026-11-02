@@ -48,6 +48,7 @@ import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/sessi
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
+  remoteSessionRequiredError,
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
 } from '@agent-device/remote/remote-connection-state';
@@ -372,6 +373,12 @@ async function resolveRunContextOrExit(
           configuredPlatform: parsed.flags.platform,
           configuredSession: parsed.flags.session,
         });
+    // A leased remote config, or a connect without one (it always leases through a provider), needs
+    // an explicit session before anything is resolved or leased (#3931).
+    const leasedConnect = base.command === 'connect' && !flags.remoteConfig;
+    if (flags.session === undefined && (parsed.remoteConfigLeaseProvider || leasedConnect)) {
+      throw remoteSessionRequiredError(parsed.remoteConfigLeaseProvider);
+    }
     const daemonPaths = resolveDaemonPaths(flags.stateDir, {
       env: base.host.env,
       cwd: base.host.cwd,
@@ -380,11 +387,9 @@ async function resolveRunContextOrExit(
     const connectionDefaults = resolveActiveConnectionDefaults({
       host: base.host,
       command: base.command,
-      explicitFlagKeys,
       stateDir: daemonPaths.baseDir,
-      session: sessionName,
+      session: flags.session,
       remoteConfig: flags.remoteConfig,
-      hasResolvedSession: flags.session !== undefined,
     });
     const effectiveFlags = connectionDefaults
       ? mergeConnectionFlags(flags, connectionDefaults.flags, explicitFlagKeys)
@@ -767,11 +772,9 @@ function isDaemonStartupFailure(error: AppError): boolean {
 function resolveActiveConnectionDefaults(options: {
   host: HostEnvironment;
   command: string;
-  explicitFlagKeys: Set<FlagKey>;
   stateDir: string;
-  session: string;
+  session: string | undefined;
   remoteConfig?: string;
-  hasResolvedSession: boolean;
 }): {
   flags: Partial<CliFlags>;
   runtime?: SessionRuntimeHints;
@@ -792,9 +795,6 @@ function resolveActiveConnectionDefaults(options: {
     remoteConfig: options.remoteConfig,
     cwd: options.host.cwd,
     env: options.host.env,
-    allowActiveFallback:
-      !options.explicitFlagKeys.has('session') &&
-      (!options.remoteConfig || options.command === 'disconnect' || !options.hasResolvedSession),
     validateRemoteConfigHash: options.command !== 'disconnect',
   });
   return defaults;

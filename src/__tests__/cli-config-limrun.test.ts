@@ -33,11 +33,14 @@ test('Limrun apps lists uploaded assets without allocating an instance', async (
     },
   });
 
-  const result = await runCliCapture(['apps', '--state-dir', stateDir, '--json'], {
-    cwd: project,
-    env: { HOME: home },
-    defaultResponse: { ok: true, data: { apps: ['Example.apk'] } },
-  });
+  const result = await runCliCapture(
+    ['apps', '--session', 'limrun-apps', '--state-dir', stateDir, '--json'],
+    {
+      cwd: project,
+      env: { HOME: home },
+      defaultResponse: { ok: true, data: { apps: ['Example.apk'] } },
+    },
+  );
 
   assert.equal(result.code, null);
   assert.equal(result.calls.length, 1);
@@ -125,7 +128,7 @@ test('Limrun open allocates with the exact uploaded asset name', async () => {
   });
 
   const result = await runCliCapture(
-    ['open', 'Example.app.zip', '--state-dir', stateDir, '--json'],
+    ['open', 'Example.app.zip', '--session', 'limrun-open', '--state-dir', stateDir, '--json'],
     {
       cwd: project,
       env: { HOME: home },

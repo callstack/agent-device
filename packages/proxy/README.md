@@ -37,7 +37,8 @@ server.listen(8080);
 ```
 
 Clients connect with `agent-device connect proxy --daemon-base-url https://gateway.example.com/agent-device`
-and `AGENT_DEVICE_DAEMON_AUTH_TOKEN` set to `clientToken`.
+and `AGENT_DEVICE_DAEMON_AUTH_TOKEN` set to `clientToken`. Each agent sets its own `AGENT_DEVICE_SESSION`
+(or passes `--session`): a command that names no session on a proxy connection is refused.
 
 To mount the proxy in an existing `node:http` or `node:https` server, use
 `createDaemonProxyRequestListener(createDaemonProxy(options))`.

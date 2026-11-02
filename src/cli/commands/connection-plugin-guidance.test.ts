@@ -28,7 +28,7 @@ test('connect names a missing provider plugin and returns installation guidance 
 
 test('connect prints installation guidance without JSON', async () => {
   const { home, env } = pluginHome();
-  const result = await runCliCapture(['connect', 'testmu'], {
+  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci'], {
     cwd: home,
     env,
     stateDirPrefix: 'connect-plugin-text-',
@@ -41,7 +41,7 @@ test('connect prints installation guidance without JSON', async () => {
 
 test('connect keeps an unknown provider separate from a known missing plugin', async () => {
   const { home, env } = pluginHome();
-  const result = await runCliCapture(['connect', 'testmuu', '--json'], {
+  const result = await runCliCapture(['connect', 'testmuu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
     stateDirPrefix: 'connect-unknown-provider-',
@@ -62,7 +62,7 @@ test('connect reports a failed selected plugin even when its error text describe
     '@agent-device/testmu',
     'throw new Error("TestMu AI requires the @agent-device/testmu plugin.");',
   );
-  const result = await runCliCapture(['connect', 'testmu', '--json'], {
+  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
     stateDirPrefix: 'connect-broken-plugin-',
@@ -80,7 +80,7 @@ test('connect reports a failed selected plugin even when its error text describe
 test('connect does not call a selected plugin missing when it has no connection callbacks', async () => {
   const { home, env } = pluginHome();
   selectV2Plugin(home, '@agent-device/testmu', v2RegistrationSource('testmu'));
-  const result = await runCliCapture(['connect', 'testmu', '--json'], {
+  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
     stateDirPrefix: 'connect-plugin-no-connection-',
@@ -93,7 +93,7 @@ test('connect does not call a selected plugin missing when it has no connection 
 test('connect reports an unreadable plugin selection instead of prescribing a new installation', async () => {
   const { home, env } = pluginHome();
   fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({ plugins: [] }));
-  const result = await runCliCapture(['connect', 'testmu', '--json'], {
+  const result = await runCliCapture(['connect', 'testmu', '--session', 'ci', '--json'], {
     cwd: home,
     env,
     stateDirPrefix: 'connect-plugin-config-',

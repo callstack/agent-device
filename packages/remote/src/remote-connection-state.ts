@@ -284,32 +284,25 @@ export function removeRemoteConnectionState(options: { stateDir: string; session
   }
 }
 
+/**
+ * The stored connection a command runs on, and the flags it contributes.
+ *
+ * `session` is the session the caller named (`--session`, `AGENT_DEVICE_SESSION`, or config), or
+ * `undefined` when it named none. Only a caller that named none falls back to the machine-wide
+ * active-session pointer, which names whichever connection was saved last, and it is refused a
+ * leased connection there (#3931).
+ */
 export function resolveRemoteConnectionDefaults(options: {
   stateDir: string;
-  session: string;
+  session: string | undefined;
   remoteConfig?: string;
   cwd: string;
   env: Record<string, string | undefined>;
-  allowActiveFallback?: boolean;
   validateRemoteConfigHash?: boolean;
 }): RemoteConnectionDefaults | null {
   const validateRemoteConfigHash = options.validateRemoteConfigHash ?? true;
-  const expectedRemoteConfigPath = options.remoteConfig
-    ? resolveRemoteConfigPath({
-        configPath: options.remoteConfig,
-        cwd: options.cwd,
-        env: options.env,
-      })
-    : undefined;
-  const state =
-    readRemoteConnectionState(options) ??
-    (options.allowActiveFallback
-      ? readActiveConnectionState({ stateDir: options.stateDir })
-      : null);
+  const state = selectRemoteConnectionState(options);
   if (!state) return null;
-  if (expectedRemoteConfigPath && state.remoteConfigPath !== expectedRemoteConfigPath) {
-    return null;
-  }
   if (
     validateRemoteConfigHash &&
     hashRemoteConfigFile(state.remoteConfigPath) !== state.remoteConfigHash
@@ -343,6 +336,98 @@ export function resolveRemoteConnectionDefaults(options: {
       target: state.target ?? profile.target,
     },
   };
+}
+
+function selectRemoteConnectionState(options: {
+  stateDir: string;
+  session: string | undefined;
+  remoteConfig?: string;
+  cwd: string;
+  env: Record<string, string | undefined>;
+}): RemoteConnectionState | null {
+  const state =
+    options.session === undefined
+      ? (readRemoteConnectionState({ stateDir: options.stateDir, session: 'default' }) ??
+        readActiveConnectionState({ stateDir: options.stateDir }))
+      : readRemoteConnectionState({ stateDir: options.stateDir, session: options.session });
+  if (!state || !matchesRequestedRemoteConfig(state, options)) return null;
+  requireLeasedConnectionSession(state, options.session);
+  return state;
+}
+
+function matchesRequestedRemoteConfig(
+  state: RemoteConnectionState,
+  options: { remoteConfig?: string; cwd: string; env: Record<string, string | undefined> },
+): boolean {
+  if (!options.remoteConfig) return true;
+  const expected = resolveRemoteConfigPath({
+    configPath: options.remoteConfig,
+    cwd: options.cwd,
+    env: options.env,
+  });
+  return state.remoteConfigPath === expected;
+}
+
+// The daemon accepts run ids of up to 128 characters.
+const MAX_RUN_ID_LENGTH = 128;
+
+/**
+ * The client and run a session allocates under on a leased remote-config profile.
+ *
+ * Every session that names one profile would otherwise carry the profile's client and run, and the
+ * daemon reuses a lease for a matching run binding, so one session could take over, and release,
+ * another's lease (#3931). Each session gets its own client and run, derived from its name, so the
+ * same session finds its own lease again. A profile that names a lease the host issued keeps that
+ * lease's scope.
+ */
+export function sessionLeaseScope(
+  profile: Pick<RemoteConnectionState, 'leaseProvider' | 'leaseId' | 'clientId'> & {
+    runId: string | undefined;
+  },
+  session: string,
+): { runId: string | undefined; clientId: string | undefined } {
+  if (!isLeasedConnection(profile) || profile.leaseId !== undefined) {
+    return { runId: profile.runId, clientId: profile.clientId };
+  }
+  const suffix = crypto.createHash('sha256').update(session).digest('hex').slice(0, 16);
+  return {
+    runId:
+      profile.runId && `${profile.runId.slice(0, MAX_RUN_ID_LENGTH - suffix.length - 1)}.${suffix}`,
+    clientId:
+      profile.clientId === undefined ? suffix : `${profile.clientId.slice(0, 111)}.${suffix}`,
+  };
+}
+
+/**
+ * Refuses a caller that named no session the use of a leased connection: one whose device a lease
+ * provider (proxy, a device cloud, or a provider plugin) leases for a single agent.
+ *
+ * On a machine several agents share, an unnamed session resolves to whichever connection was saved
+ * last, which may be another agent's.
+ */
+export function requireLeasedConnectionSession(
+  connection: Pick<RemoteConnectionState, 'leaseProvider'>,
+  session: string | undefined,
+): void {
+  if (session !== undefined || !isLeasedConnection(connection)) return;
+  throw remoteSessionRequiredError(connection.leaseProvider);
+}
+
+/** The refusal for a command on a leased connection that names no session. */
+export function remoteSessionRequiredError(leaseProvider: string | undefined): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'A leased remote connection needs its session named: pass --session <name> or set AGENT_DEVICE_SESSION.',
+    {
+      reason: 'REMOTE_SESSION_REQUIRED',
+      ...(leaseProvider === undefined ? {} : { leaseProvider }),
+      hint: "Without a name, a command could reach another agent's connection on this machine.",
+    },
+  );
+}
+
+function isLeasedConnection(connection: Pick<RemoteConnectionState, 'leaseProvider'>): boolean {
+  return connection.leaseProvider !== undefined;
 }
 
 export function buildRemoteConnectionRequestMetadata(

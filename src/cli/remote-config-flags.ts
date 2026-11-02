@@ -26,9 +26,9 @@ export function resolveRemoteConfigDefaults(options: {
   remoteConfig?: string;
   cwd: string;
   env: Record<string, string | undefined>;
-}): Partial<CliFlags> {
+}): { flags: Partial<CliFlags>; leaseProvider?: string } {
   if (!options.remoteConfig) {
-    return {};
+    return { flags: {} };
   }
 
   const resolved = resolveRemoteConfigProfile({
@@ -37,7 +37,7 @@ export function resolveRemoteConfigDefaults(options: {
     env: options.env,
   });
   return {
-    ...profileToCliFlags(resolved.profile),
-    remoteConfig: options.remoteConfig,
+    flags: { ...profileToCliFlags(resolved.profile), remoteConfig: options.remoteConfig },
+    leaseProvider: resolved.profile.leaseProvider,
   };
 }

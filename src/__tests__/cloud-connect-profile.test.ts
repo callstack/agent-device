@@ -146,13 +146,13 @@ test('cloud connect uses neutral public service wording in human and JSON output
   };
 
   mockCloudConnectionProfile(profile);
-  const human = await runCliCapture(['connect'], {
+  const human = await runCliCapture(['connect', '--session=ci'], {
     stateDirPrefix: 'agent-device-connect-cloud-wording-human-',
   });
   assert.match(human.stdout, /^Connected successfully with the configured cloud service\./);
 
   mockCloudConnectionProfile(profile);
-  const json = await runCliCapture(['connect', '--json'], {
+  const json = await runCliCapture(['connect', '--session=ci', '--json'], {
     stateDirPrefix: 'agent-device-connect-cloud-wording-json-',
   });
   const data = (JSON.parse(json.stdout) as { data: { verification: { service: string } } }).data;
@@ -320,7 +320,7 @@ test('connect limrun requires LIMRUN_API_KEY or access to an existing instance',
 });
 
 test('connect limrun rejects unsupported public device and backend selections', async () => {
-  const environment = { LIMRUN_API_KEY: 'lim_test_key' };
+  const environment = { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_SESSION: 'ci' };
   const device = await runCliCapture(
     ['connect', 'limrun', '--platform', 'ios', '--device', 'local-ios', '--json'],
     { env: environment, stateDirPrefix: 'agent-device-connect-limrun-scope-' },
@@ -615,7 +615,7 @@ test('connect aws-device-farm generates local provider profile from flags', asyn
 });
 
 test('connect output makes verified configuration, deferred device allocation, and app recovery explicit', async () => {
-  const environment = { LIMRUN_API_KEY: 'lim_test_key' };
+  const environment = { LIMRUN_API_KEY: 'lim_test_key', AGENT_DEVICE_SESSION: 'ci' };
   const result = await runCliCapture(['connect', 'limrun', '--platform', 'android'], {
     env: environment,
     stateDirPrefix: 'agent-device-connect-limrun-output-',
@@ -645,6 +645,7 @@ test('connect JSON exposes verification, device, app, live-session, and next-ste
     [
       'connect',
       'aws-device-farm',
+      '--session=ci',
       '--platform',
       'ios',
       '--aws-project-arn',
@@ -677,6 +678,7 @@ test('connect JSON preserves BrowserStack workflow notes from human output', asy
     [
       'connect',
       'browserstack',
+      '--session=ci',
       '--platform',
       'android',
       '--device',
@@ -729,8 +731,11 @@ test('every command BrowserStack connect emits resolves back to the connection t
   };
 
   try {
-    const json = await runCliCapture([...browserstackArgs, '--json'], captureOptions);
-    const human = await runCliCapture(browserstackArgs, captureOptions);
+    const json = await runCliCapture(
+      [...browserstackArgs, '--session=bs-1', '--json'],
+      captureOptions,
+    );
+    const human = await runCliCapture([...browserstackArgs, '--session=bs-2'], captureOptions);
 
     assert.equal(json.code, null);
     assert.equal(human.code, null);
@@ -745,8 +750,8 @@ test('every command BrowserStack connect emits resolves back to the connection t
     }
     assert.deepEqual([...readEmittedSessions([...output.nextSteps, ...output.notes])], [session]);
 
-    // The human run is a second unscoped connect, so it mints its own identity;
-    // its commands must name THAT one, not the JSON run's.
+    // The human run is a second connect under its own session; its commands must name THAT one,
+    // not the JSON run's.
     const humanSessions = [...readEmittedSessions([human.stdout])];
     assert.equal(humanSessions.length, 1, human.stdout);
     const humanSession = humanSessions[0] ?? '';
