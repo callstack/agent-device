@@ -158,7 +158,17 @@ extension RunnerTests {
     let noPermission = RunnerAlertLabelVocabulary.composed(
       permission: .failure(missing), launchConfirmation: .success([launch]), languages: ["fr"]
     )
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Annuler", "Ouvrir"], action: "accept", vocabulary: noPermission),
+      1,
+      "the launch confirmation's labels survive an unreadable permission table"
+    )
     XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Refuser", "Autoriser"], action: "dismiss", vocabulary: noPermission))
+
+    let neither = RunnerAlertLabelVocabulary.composed(
+      permission: .failure(missing), launchConfirmation: .failure(missing), languages: ["fr"]
+    )
+    XCTAssertNil(RunnerAlertButtonChoice.buttonIndex(for: ["Annuler", "Ouvrir"], action: "accept", vocabulary: neither))
   }
 
   /// An app alert can carry the exact wording and buttons, and `open` accepts a marked alert, so

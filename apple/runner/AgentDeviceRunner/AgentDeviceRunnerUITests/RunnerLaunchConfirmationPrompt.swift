@@ -13,7 +13,7 @@ struct RunnerLaunchConfirmationPrompt {
 
   static let unavailable = RunnerLaunchConfirmationPrompt(wordings: [])
 
-  private static let appNamePlaceholder = try? NSRegularExpression(pattern: "%(?:\\d+\\$)?(?:\\[[^\\]]*\\])?@")
+  private static let appNamePlaceholder = try! NSRegularExpression(pattern: "%(?:\\d+\\$)?(?:\\[[^\\]]*\\])?@")
 
   private let wordings: [(title: NSRegularExpression, open: String, cancel: String)]
 
@@ -21,10 +21,7 @@ struct RunnerLaunchConfirmationPrompt {
   /// match a title with no app name. A placeholder is `%@`, a positional `%1$@`, or Apple's
   /// bracketed object format `%[tt]@`, as Finnish words it.
   init(wordings: [Wording]) {
-    guard let placeholder = Self.appNamePlaceholder else {
-      self.wordings = []
-      return
-    }
+    let placeholder = Self.appNamePlaceholder
     self.wordings = wordings.compactMap { wording in
       let format = wording.titleFormat as NSString
       let slots = placeholder.matches(in: wording.titleFormat, range: NSRange(location: 0, length: format.length))
