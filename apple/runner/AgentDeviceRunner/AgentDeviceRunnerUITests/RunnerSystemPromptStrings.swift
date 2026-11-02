@@ -8,14 +8,15 @@ struct RunnerSystemPromptStrings {
   let localized: [String: [String: String]]
 
   /// The string tables that word the system permission prompts: notifications, privacy access
-  /// (including App Tracking Transparency), and location, plus SpringBoard's launch confirmation.
+  /// (including App Tracking Transparency), and location.
   static let promptTables = [
     (path: "/System/Library/PrivateFrameworks/UserNotificationsServer.framework", table: "Localizable"),
     (path: "/System/Library/PrivateFrameworks/TCC.framework", table: "Localizable"),
-    (path: "/System/Library/Frameworks/CoreLocation.framework", table: "locationd"),
-    launchConfirmationTable
+    (path: "/System/Library/Frameworks/CoreLocation.framework", table: "locationd")
   ]
 
+  /// SpringBoard's launch confirmation. It is read apart from `promptTables`, so a runtime without
+  /// it keeps the permission prompts' vocabulary.
   static let launchConfirmationTable = (
     path: "/System/Library/Frameworks/CoreServices.framework",
     table: "SchemeApproval"

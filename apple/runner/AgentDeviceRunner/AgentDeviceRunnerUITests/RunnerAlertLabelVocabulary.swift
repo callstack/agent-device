@@ -38,24 +38,33 @@ extension RunnerAlertLabelVocabulary {
   static let system = fromSystemStrings(languages: Locale.preferredLanguages)
 
   /// Pairs each English prompt string with the same key's value in each of `languages`. Every
-  /// table must read, or none counts: a missing table could hide the translation that makes a
-  /// label in another table claim both actions.
+  /// permission table must read, or none counts: a missing table could hide the translation that
+  /// makes a label in another table claim both actions. The launch confirmation's table only adds
+  /// its own open and cancel labels, so without it the permission vocabulary stays whole.
   static func fromSystemStrings(languages: [String]) -> RunnerAlertLabelVocabulary {
+    var tables: [RunnerSystemPromptStrings]
     switch RunnerSystemPromptStrings.read(RunnerSystemPromptStrings.promptTables, languages: languages) {
     case .failure(let failure):
       RunnerSystemPromptStrings.logUnavailable(failure, languages: languages)
       return .english
-    case .success(let tables):
-      var translations: [(english: String, localized: String)] = []
-      for table in tables {
-        for strings in table.localized.values {
-          for (key, value) in table.english {
-            if let translation = strings[key] { translations.append((english: value, localized: translation)) }
-          }
+    case .success(let read):
+      tables = read
+    }
+    switch RunnerSystemPromptStrings.read([RunnerSystemPromptStrings.launchConfirmationTable], languages: languages) {
+    case .failure(let failure):
+      RunnerSystemPromptStrings.logUnavailable(failure, languages: languages)
+    case .success(let read):
+      tables += read
+    }
+    var translations: [(english: String, localized: String)] = []
+    for table in tables {
+      for strings in table.localized.values {
+        for (key, value) in table.english {
+          if let translation = strings[key] { translations.append((english: value, localized: translation)) }
         }
       }
-      return RunnerAlertLabelVocabulary(translations: translations)
     }
+    return RunnerAlertLabelVocabulary(translations: translations)
   }
 }
 #else
