@@ -69,7 +69,11 @@ const { answerSimulatorLaunchConfirmation } = await import('./launch-confirmatio
 const NOW_MS = 1_000_000;
 /** What the daemon gives a default `open`: its 90 s client envelope less the 30 s result margin. */
 const OPEN_DEADLINE_MS = 60_000;
-const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
+const CONFIRMATION = {
+  message: 'Open in “Example App”?',
+  items: ['Cancel', 'Open'],
+  launchConfirmation: true,
+};
 
 type ScriptedAnswer =
   | Readonly<{ kind: 'ok'; data: Record<string, unknown> }>

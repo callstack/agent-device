@@ -317,7 +317,10 @@ final class RunnerTests: XCTestCase {
     NSLog("AGENT_DEVICE_RUNNER_DESIRED_PORT=%d", configuration.port.rawValue)
     listener = try Self.makeRunnerListener(port: configuration.port)
     // Reads the OS prompt strings off the alert path, so the first accept/dismiss deadline does not pay for it.
-    DispatchQueue.global(qos: .utility).async { _ = RunnerAlertLabelVocabulary.system }
+    DispatchQueue.global(qos: .utility).async {
+      _ = RunnerAlertLabelVocabulary.system
+      _ = RunnerLaunchConfirmationPrompt.system
+    }
     listener?.stateUpdateHandler = { [weak self] state in
       switch state {
       case .ready:

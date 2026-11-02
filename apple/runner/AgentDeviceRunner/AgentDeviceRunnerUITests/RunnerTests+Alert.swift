@@ -137,11 +137,14 @@ extension RunnerTests {
       }
     }
 
+    let title = preferredAlertTitle(alert.root, buttons: alert.buttons)
+    let items = alert.buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
     return Response(
       ok: true,
       data: DataPayload(
-        message: preferredAlertTitle(alert.root, buttons: alert.buttons),
-        items: alert.buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+        message: title,
+        items: items,
+        launchConfirmation: RunnerLaunchConfirmationPrompt.system.recognizes(title: title, buttons: items) ? true : nil
       )
     )
   }
