@@ -533,6 +533,7 @@ test('capabilities drops session-owned appstate once the owner holds no live ses
       ...facts,
       operations: {
         ...facts.operations,
+        ensureReady: { available: false, reason: 'owner-capability-missing' },
         appState: { available: false, reason: 'owner-capability-missing' },
       },
     };

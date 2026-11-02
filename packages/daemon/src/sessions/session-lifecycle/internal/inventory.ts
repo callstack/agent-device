@@ -12,8 +12,10 @@ import {
   type ProviderAppCatalogQuery,
 } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
-import { unsupportedOperationResponse } from '../../../core/runtime-admission.ts';
-import { ownerHoldsNoLiveSession } from '../../handlers/session-appstate-apple-session.ts';
+import {
+  ownerHoldsNoLiveSession,
+  unsupportedOperationResponse,
+} from '../../../core/runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
@@ -312,9 +314,11 @@ function ownerRefusesSessionAppState(
   facts: RuntimeFacts<PlatformRuntimeOperations> | undefined,
 ): boolean {
   if (!facts) return false;
-  return [facts.operations.ensureReady, facts.operations.appState].some(
-    (fact) => !fact.available && ownerHoldsNoLiveSession(fact.reason),
+  // In appStateUse order, as admission walks it: the first unavailable cell is what appstate reports.
+  const unavailable = [facts.operations.ensureReady, facts.operations.appState].find(
+    (fact) => !fact.available,
   );
+  return unavailable?.available === false && ownerHoldsNoLiveSession(unavailable.reason);
 }
 
 function isSessionOwnedAppStateAvailable(

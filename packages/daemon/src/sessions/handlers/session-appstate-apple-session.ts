@@ -12,7 +12,7 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { namedSessionNotFoundDetails } from '@agent-device/kernel/errors';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
-import { admitRuntimeUse } from '../../core/runtime-admission.ts';
+import { admitRuntimeUse, ownerHoldsNoLiveSession } from '../../core/runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
 
 /**
@@ -66,11 +66,6 @@ export function appleSessionRequiredRefusal(platform: 'ios' | 'macos'): DaemonRe
       ? MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE
       : IOS_APPSTATE_SESSION_REQUIRED_MESSAGE,
   );
-}
-
-/** The owner has no live session for the device, so the session record must not answer for it. */
-export function ownerHoldsNoLiveSession(reason: unknown): boolean {
-  return reason === 'owner-capability-missing';
 }
 
 type AppleAppStateRead =
