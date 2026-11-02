@@ -70,7 +70,7 @@ function publishProviderLeasedDefaultSession(
   );
 }
 
-test.each(['snapshot', 'artifacts', 'events', 'logs'])(
+test.each(['snapshot', 'artifacts', 'events', 'logs', 'doctor', 'capabilities'])(
   'an unnamed %s cannot reach the provider lease another caller left on the default session',
   async (command) => {
     const sessionStore = makeSessionStore('agent-device-request-scope-');
@@ -114,7 +114,7 @@ test('an unnamed command queued behind an open is refused once that open leaves 
   expect(dispatch).not.toHaveBeenCalled();
 });
 
-test.each(['session_list', 'devices', 'capabilities', 'doctor'])(
+test.each(['session_list', 'devices', 'release_materialized_paths'])(
   'an unnamed %s still answers while the default session holds a provider lease',
   async (command) => {
     const sessionStore = makeSessionStore('agent-device-request-scope-');
