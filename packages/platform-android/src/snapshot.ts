@@ -30,10 +30,7 @@ import {
 import { buildAndroidSnapshotClickabilityEvidence } from './snapshot-clickability.ts';
 import { resolveAndroidAdbProvider, type AndroidAdbProvider } from './adb-executor.ts';
 import { sleep } from './adb.ts';
-import {
-  buildAndroidSnapshotHelperCaptureOptions,
-  isAndroidSnapshotHelperStartFailure,
-} from './snapshot-helper-capture.ts';
+import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
@@ -78,6 +75,7 @@ import {
   readAndroidCaptureFailureReason,
 } from '@agent-device/contracts/android-snapshot-quality';
 import {
+  captureRetryingRefusedAndroidSnapshotHelperStart,
   resetAndroidSnapshotHelperRuntime,
   retireAndroidSnapshotHelperAfterContentFailure,
 } from './snapshot-helper-runtime.ts';
@@ -515,7 +513,12 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       phase: 'android_snapshot_helper_session_fallback',
       data: { reason: normalizeError(error).message },
     });
-    await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName);
+    await resetAndroidSnapshotHelperRuntime({
+      adb,
+      packageName: artifact.manifest.packageName,
+      signal,
+    });
+    signal?.throwIfAborted();
   }
   const captureOneShot = async () =>
     await withDiagnosticTimer(
@@ -529,24 +532,13 @@ async function captureAndroidUiHierarchyFromHelper(params: {
         transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport,
       },
     );
-  try {
-    return await captureOneShot();
-  } catch (error) {
-    signal?.throwIfAborted();
-    // Right after a boot or a `/data` restore, the system can refuse to start a current helper
-    // once and start it on the next run (#4109). When no session was ready and the system refused
-    // the one-shot start, nothing ran on the device, so the helper gets exactly one more start
-    // after a runtime reset. Any other failure is the answer.
-    if (sessionReady || !isAndroidSnapshotHelperStartFailure(error)) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_snapshot_helper_start_retry',
-      data: { instrumentation: normalizeError(error).details?.instrumentation },
-    });
-    await resetAndroidSnapshotHelperRuntime(adb, artifact.manifest.packageName, signal);
-    signal?.throwIfAborted();
-    return await captureOneShot();
-  }
+  return await captureRetryingRefusedAndroidSnapshotHelperStart({
+    capture: captureOneShot,
+    sessionReady,
+    adb,
+    packageName: artifact.manifest.packageName,
+    signal,
+  });
 }
 
 function formatAndroidHelperCaptureResult(
@@ -727,7 +719,10 @@ async function rejectAndroidHelperCaptureFailure(params: {
     },
   });
   await stopAndroidSnapshotHelperSession(params.helperDeviceKey);
-  await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
+  await resetAndroidSnapshotHelperRuntime({
+    adb: params.adb,
+    packageName: params.artifact.manifest.packageName,
+  });
   forgetAndroidSnapshotHelperInstall({
     deviceKey: params.helperDeviceKey,
     packageName: params.artifact.manifest.packageName,
