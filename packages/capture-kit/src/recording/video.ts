@@ -110,7 +110,7 @@ export async function isPlayableVideo(
       VALIDATOR_RUN_TIMEOUT_MS,
       deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
     );
-    // `runCmd` reads a timeout of 0 as none.
+    // A budget with no time left reads as not playable; `runCmd` would read a timeout of 0 as none.
     if (runTimeoutMs <= 0) return false;
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
@@ -134,8 +134,7 @@ export async function isPlayableVideo(
   }
 }
 
-function joinValidatorCompile(host: HostEnvironment): SharedValidatorCompile {
-  const cacheRoot = getSwiftCacheRoot(host.env);
+function joinValidatorCompile(host: HostEnvironment, cacheRoot: string): SharedValidatorCompile {
   const existing = videoValidatorCompiles.get(cacheRoot);
   if (existing) return existing;
   const cancel = new AbortController();
@@ -166,7 +165,7 @@ function joinValidatorCompile(host: HostEnvironment): SharedValidatorCompile {
 
 async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): Promise<string> {
   const cacheRoot = getSwiftCacheRoot(host.env);
-  const shared = joinValidatorCompile(host);
+  const shared = joinValidatorCompile(host, cacheRoot);
   shared.waiters += 1;
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_, reject) => {
