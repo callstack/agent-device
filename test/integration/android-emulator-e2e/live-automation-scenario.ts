@@ -137,7 +137,17 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
 
   await runStep(context, 'restore automation route top after rotation', ['scroll', 'top']);
   await scrollToVisibleSelector(context, 'id="automation-press"');
+  await scrollToVisibleSelector(context, 'id="automation-last-input"');
+  await assertElementText(context, 'id="automation-last-input"', 'Last input: none');
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
+  const inputDiff = await runStep(context, 'observe Android input canary diff', [
+    'diff',
+    'snapshot',
+    '-i',
+  ]);
+  assertDiffLine(inputDiff.json?.data, 'removed', 'Last input: none');
+  assertDiffLine(inputDiff.json?.data, 'added', 'Last input: press');
+  verifyCommand(context, C.diff, 'snapshot diff reports the durable Android input canary mutation');
   await scrollToVisibleSelector(context, 'id="automation-last-input"');
   await assertWaitText(context, 'Last input: press');
   verifyCommand(context, C.press, 'semantic press updates durable fixture input state');
@@ -192,16 +202,14 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await assertHomeAndRecentsRestoration(context);
   await scrollToVisibleSelector(context, 'id="automation-open-alert"');
   await runStep(context, 'establish automation diff baseline', ['snapshot', '-i']);
-  await runStep(context, 'return from automation route with Back', ['back']);
-  const diff = await runStep(context, 'observe automation-to-settings diff', [
-    'diff',
-    'snapshot',
-    '-i',
+  const back = await runStep(context, 'return from automation route with settled Back', [
+    'back',
+    '--settle',
   ]);
-  assertDiffLine(diff, 'removed', 'Open automation alert');
-  assertDiffLine(diff, 'added', 'Open automation lab');
   await assertWaitText(context, 'Settings');
-  verifyCommand(context, C.diff, 'snapshot diff reports the Automation-to-Settings transition');
+  assert.equal(back.json?.data?.settle?.settled, true, JSON.stringify(back.json));
+  assertDiffLine(back.json?.data?.settle?.diff, 'removed', 'Open automation alert');
+  assertDiffLine(back.json?.data?.settle?.diff, 'added', 'Open automation lab');
   verifyCommand(context, C.back, 'Android Back returns from automation route to Settings');
   verifyBehavior(
     context,
