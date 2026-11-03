@@ -12,6 +12,7 @@ import type { SessionStore } from '../core/session-store.ts';
 import { hostAndDeviceIds, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
+import { resolvePublicSessionName } from '../sessions/session-routing.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
@@ -136,6 +137,7 @@ function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
     req.positionals?.[0],
     env,
     req.flags?.surface,
+    resolvePublicSessionName(req),
   );
   return options ? { flags: req.flags ?? {}, options } : undefined;
 }

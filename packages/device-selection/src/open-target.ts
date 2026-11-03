@@ -6,11 +6,13 @@ export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,
   env: EnvMap,
   surfaceFlag: string | undefined,
+  webSessionName?: string,
 ): ResolveTargetDeviceOptions {
   const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
   return {
     env,
     appleSimulatorAppTarget: appTarget,
+    webSessionName,
     // An app named on any other surface stays on the host: those surfaces reach past one app.
     ...(appTarget && (surfaceFlag === undefined || surfaceFlag === 'app')
       ? { appDeviceTarget: appTarget }

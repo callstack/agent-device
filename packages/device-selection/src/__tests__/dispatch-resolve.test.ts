@@ -18,7 +18,7 @@ import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
 } from '../inventory-gateways.fixtures.ts';
-import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -158,6 +158,43 @@ test('an app target selects the app device in either order of one request', asyn
     (await resolveInOrder([undefined])).map((device) => device.id),
     [macDesktop.id],
   );
+});
+
+test('a web open names the device of its session, and a request without one keeps the host', async () => {
+  const webHost: DeviceInfo = {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  const resolveWeb = async (webSessionName: string | undefined): Promise<DeviceInfo> =>
+    await withTestDeviceInventory(
+      { local: async () => [webHost] },
+      async () =>
+        await resolveTargetDeviceInContext(
+          { platform: 'web' },
+          webSessionName ? { env: {}, webSessionName } : { env: {} },
+        ),
+    );
+
+  assert.deepEqual(await resolveWeb('one'), webSessionDevice(webHost, 'one'));
+  assert.notEqual((await resolveWeb('two')).id, (await resolveWeb('one')).id);
+  assert.equal((await resolveWeb(undefined)).id, webHost.id);
+});
+
+test('a session name leaves a device other than the local web host as selected', async () => {
+  const resolved = await withDeviceInventoryProvider(
+    async () => [androidEmulator],
+    async () =>
+      await resolveTargetDeviceInContext(
+        { platform: 'android' },
+        { env: {}, webSessionName: 'one' },
+      ),
+  );
+
+  assert.equal(resolved.id, androidEmulator.id);
 });
 
 test('resolveTargetDevice narrows local Android discovery to an explicit serial', async () => {

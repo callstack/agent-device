@@ -16,6 +16,7 @@ import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import { resolvePublicSessionName } from '../../session-routing.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
   invalidOpenArgs,
@@ -354,7 +355,12 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
 
   const selection = await resolveTargetDeviceSelection(
     req.flags ?? {},
-    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env, req.flags?.surface),
+    buildOpenTargetDeviceResolutionOptions(
+      openTarget,
+      params.host.env,
+      req.flags?.surface,
+      resolvePublicSessionName(req),
+    ),
   );
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);

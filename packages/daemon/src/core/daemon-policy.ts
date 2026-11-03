@@ -9,7 +9,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import {
   canonicalDeviceId,
   hostDeviceIdOf,
-  hostDeviceIdPrefix,
+  isHostScopedDeviceOf,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
@@ -59,8 +59,9 @@ function assertInvocationAdmitted(
 }
 
 /**
- * A device the policy may bind: one it names, or an app device of a host it names (ADR 0035). An
- * app device it names admits that app alone, never its host or the host's other apps.
+ * A device the policy may bind: one it names, or an app or web session device of a host it names
+ * (ADR 0035). An app or web session device it names admits that one alone, never its host or the
+ * host's other apps and sessions.
  */
 function isDeviceIdAllowed(deviceIds: ReadonlySet<string>, id: string): boolean {
   // Policy ids load canonicalized, so the compared id is too.
@@ -73,14 +74,14 @@ function isDeviceAllowedByDaemonPolicy(policy: DaemonPolicy, device: DeviceInfo)
 }
 
 /**
- * A device inventory lists: one the policy may bind, or a host one of whose app devices it may
- * bind, because selection derives the app device from its host. Binding still admits only what
- * {@link isDeviceAllowedByDaemonPolicy} does, so listing a host never authorizes the whole host.
+ * A device inventory lists: one the policy may bind, or a host one of whose app or web session
+ * devices it may bind, because selection derives that device from its host. Binding still admits
+ * only what {@link isDeviceAllowedByDaemonPolicy} does, so listing a host never authorizes the
+ * whole host.
  */
 function isDeviceDiscoverableUnderDaemonPolicy(policy: DaemonPolicy, device: DeviceInfo): boolean {
   if (!policy.deviceIds || isDeviceAllowedByDaemonPolicy(policy, device)) return true;
-  const appDevicePrefix = hostDeviceIdPrefix(device.id);
-  return [...policy.deviceIds].some((id) => id.startsWith(appDevicePrefix));
+  return [...policy.deviceIds].some((id) => isHostScopedDeviceOf(device.id, id));
 }
 
 /** Refuses a resolved device the policy does not allow, before the request binds it. */

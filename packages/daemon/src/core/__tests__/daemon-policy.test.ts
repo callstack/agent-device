@@ -6,11 +6,12 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, webSessionDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
   MACOS_DEVICE,
+  WEB_DESKTOP_DEVICE,
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -443,4 +444,47 @@ test('on a Mac the policy does not allow, app resolution reports nothing the Mac
   await expect(hostAllowed.resolveAppDevice!(MACOS_DEVICE, 'Notes')).rejects.toMatchObject({
     code: 'APP_NOT_INSTALLED',
   });
+});
+
+test('a policy that allows the web host admits the open of any web session device', async () => {
+  const { handler } = makeHandler(
+    policy({ devices: { allow: [{ udid: WEB_DESKTOP_DEVICE.id }] } }),
+  );
+  mockResolveTargetDevice.mockResolvedValue(webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-one'));
+
+  expect(
+    await handler(
+      request('open', {
+        session: 'wsd-one',
+        positionals: ['about:blank'],
+        flags: { platform: 'web' },
+      }),
+    ),
+  ).toMatchObject({ ok: true });
+});
+
+test('a policy that allows one web session device admits that session only, never the host', async () => {
+  const allowed = webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-one');
+  const { handler } = makeHandler(policy({ devices: { allow: [{ udid: allowed.id }] } }), {
+    inventory: [WEB_DESKTOP_DEVICE],
+  });
+  const openWeb = (device: DeviceInfo) => {
+    mockResolveTargetDevice.mockResolvedValue(device);
+    return request('open', {
+      session: `open-${device.id}`,
+      positionals: ['about:blank'],
+      flags: { platform: 'web' },
+    });
+  };
+
+  expect(
+    await handler(request('devices', { session: undefined, flags: { platform: 'web' } })),
+  ).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: WEB_DESKTOP_DEVICE.id })] },
+  });
+  expect(await handler(openWeb(allowed))).toMatchObject({ ok: true });
+  for (const denied of [webSessionDevice(WEB_DESKTOP_DEVICE, 'wsd-two'), WEB_DESKTOP_DEVICE]) {
+    expectPolicyDenied(await handler(openWeb(denied)), 'device');
+  }
 });

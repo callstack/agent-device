@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { hostDeviceIdOf, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
@@ -70,10 +70,10 @@ export async function resolveCommandDevice(params: {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
   });
-  // A selector that names the host of the session's app device stays on that app device: the
-  // session holds one app, not the host (ADR 0035).
-  const hostApp = params.session?.device.hostApp;
-  return hostApp && device.id === hostApp.hostDeviceId ? params.session!.device : device;
+  // A selector that names the host of the session's app or web session device stays on that
+  // device: the session holds one app or browser, not the host (ADR 0035).
+  const held = params.session?.device;
+  return held && held.id !== device.id && hostDeviceIdOf(held.id) === device.id ? held : device;
 }
 
 /**

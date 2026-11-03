@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  canonicalDeviceId,
   devicesOverlap,
   hostAppDevice,
   hostDeviceIdOf,
   isMacOsBundleId,
   resolveDevice,
+  webSessionDevice,
   type DeviceInfo,
 } from './device.ts';
 
@@ -33,6 +35,33 @@ test('hostDeviceIdOf names the host of an app device and any other device itself
   assert.equal(hostDeviceIdOf(hostAppDevice(mac, 'com.example.one').id), mac.id);
   assert.equal(hostDeviceIdOf(mac.id), mac.id);
   assert.equal(hostDeviceIdOf('emulator-5554'), 'emulator-5554');
+});
+
+const browser: DeviceInfo = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+};
+
+test('a host overlaps each of its web session devices, and two of its web session devices do not overlap', () => {
+  const one = webSessionDevice(browser, 'one').id;
+  const two = webSessionDevice(browser, 'two').id;
+  assert.equal(one, 'agent-browser-chrome:session:one');
+  assert.equal(devicesOverlap(browser.id, one), true);
+  assert.equal(devicesOverlap(two, browser.id), true);
+  assert.equal(devicesOverlap(one, one), true);
+  assert.equal(devicesOverlap(one, two), false);
+  assert.equal(devicesOverlap(one, webSessionDevice(browser, 'one:two').id), false);
+  assert.equal(devicesOverlap(webSessionDevice(mac, 'one').id, one), false);
+});
+
+test('a web session device id names its host and keeps the session name as written', () => {
+  const id = webSessionDevice(browser, 'Run:app:One').id;
+  assert.equal(hostDeviceIdOf(id), browser.id);
+  assert.equal(canonicalDeviceId(id), id);
+  assert.notEqual(id, webSessionDevice(browser, 'run:app:one').id);
 });
 
 test.each([

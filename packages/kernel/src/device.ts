@@ -73,6 +73,8 @@ export type DeviceInfo = {
 };
 
 const HOST_APP_DEVICE_ID_INFIX = ':app:';
+const WEB_SESSION_DEVICE_ID_INFIX = ':session:';
+const HOST_SCOPED_DEVICE_ID_INFIXES = [HOST_APP_DEVICE_ID_INFIX, WEB_SESSION_DEVICE_ID_INFIX];
 
 const MACOS_BUNDLE_ID_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/;
 
@@ -86,17 +88,21 @@ export function hostAppDeviceId(hostDeviceId: string, bundleId: string): string 
   return `${hostDeviceIdPrefix(hostDeviceId)}${bundleId.toLowerCase()}`;
 }
 
-/** The host of an app device id, or the id itself for any other device. */
+/** The host of an app or web session device id, or the id itself for any other device. */
 export function hostDeviceIdOf(deviceId: string): string {
-  const infix = deviceId.indexOf(HOST_APP_DEVICE_ID_INFIX);
-  return infix < 0 ? deviceId : deviceId.slice(0, infix);
+  const infixes = HOST_SCOPED_DEVICE_ID_INFIXES.map((infix) => deviceId.indexOf(infix)).filter(
+    (index) => index >= 0,
+  );
+  return infixes.length === 0 ? deviceId : deviceId.slice(0, Math.min(...infixes));
 }
 
 /** A device id as devices carry it: the bundle part of an app device id is lowercase. */
 export function canonicalDeviceId(deviceId: string): string {
   const hostDeviceId = hostDeviceIdOf(deviceId);
-  if (hostDeviceId === deviceId) return deviceId;
-  return hostAppDeviceId(hostDeviceId, deviceId.slice(hostDeviceIdPrefix(hostDeviceId).length));
+  const prefix = hostDeviceIdPrefix(hostDeviceId);
+  return deviceId.startsWith(prefix)
+    ? hostAppDeviceId(hostDeviceId, deviceId.slice(prefix.length))
+    : deviceId;
 }
 
 /** The id prefix every app device of `hostDeviceId` shares. */
@@ -113,6 +119,14 @@ export function hostAppDevice(host: DeviceInfo, bundleId: string): DeviceInfo {
   };
 }
 
+/**
+ * One web session of `host`, held as a device of its own. Session names match as written, because
+ * the backend keys its browser on the name.
+ */
+export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceInfo {
+  return { ...host, id: `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${sessionName}` };
+}
+
 /** The host of an app device, then the device itself; any other device alone. */
 export function hostAndDeviceIds(device: DeviceInfo): string[] {
   return device.hostApp ? [device.hostApp.hostDeviceId, device.id] : [device.id];
@@ -123,15 +137,22 @@ export function canHostAppDevices(device: Pick<DeviceInfo, 'platform' | 'appleOs
   return isMacOs(device);
 }
 
+/** Whether `deviceId` is an app device or a web session device of `hostDeviceId`. */
+export function isHostScopedDeviceOf(hostDeviceId: string, deviceId: string): boolean {
+  return HOST_SCOPED_DEVICE_ID_INFIXES.some((infix) =>
+    deviceId.startsWith(`${hostDeviceId}${infix}`),
+  );
+}
+
 /**
  * Whether two devices cannot be held by two sessions at once: the same device, or a host and one
- * of its app devices. Two app devices of one host do not overlap.
+ * of its app or web session devices. Two such devices of one host do not overlap.
  */
 export function devicesOverlap(leftId: string, rightId: string): boolean {
   return (
     leftId === rightId ||
-    leftId.startsWith(hostDeviceIdPrefix(rightId)) ||
-    rightId.startsWith(hostDeviceIdPrefix(leftId))
+    isHostScopedDeviceOf(rightId, leftId) ||
+    isHostScopedDeviceOf(leftId, rightId)
   );
 }
 
