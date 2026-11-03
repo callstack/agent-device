@@ -9,7 +9,12 @@ import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { compileSwiftSourceText } from './swift-cache.ts';
-import { isPlayableVideo, prepareVideoValidator, waitForPlayableVideo } from './video.ts';
+import {
+  isPlayableVideo,
+  prepareVideoValidator,
+  readPreparedVideoValidator,
+  waitForPlayableVideo,
+} from './video.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -110,6 +115,27 @@ test('preparation compiles once per Swift cache root', async () => {
   });
   await Promise.all([first, sameRoot, otherRoot]);
   expect(first).toBe(sameRoot);
+  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  new AppError('COMMAND_FAILED', 'Swift cache lock was busy', { reason: 'process_lock_timeout' }),
+  new AppError('TOOL_MISSING', 'no swiftc'),
+])('failed preparation can be retried in the same cache root: %s', async (failure) => {
+  const host = createTestHost();
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  const failed = prepareVideoValidator(host);
+  expect(prepareVideoValidator(host)).toBe(failed);
+  await expect(failed).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  expect(readPreparedVideoValidator(host)).toBeUndefined();
+
+  const retry = prepareVideoValidator(host);
+  expect(retry).not.toBe(failed);
+  await expect(retry).resolves.toMatchObject({ executablePath: '/bin/true' });
+  expect(readPreparedVideoValidator(host)).toBe(retry);
+  await expect(
+    isPlayableVideo(writeFixture('retried.mp4', Buffer.concat([ftyp, moov])), retry),
+  ).resolves.toBe(true);
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
 });
 

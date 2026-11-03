@@ -79,7 +79,11 @@ export function prepareVideoValidator(host: HostEnvironment): Promise<PreparedVi
   if (!preparing) {
     preparing = compileVideoValidator(host);
     videoValidatorPreparations.set(cacheRoot, preparing);
-    void preparing.catch(() => {});
+    void preparing.catch(() => {
+      if (videoValidatorPreparations.get(cacheRoot) === preparing) {
+        videoValidatorPreparations.delete(cacheRoot);
+      }
+    });
   }
   return preparing;
 }
