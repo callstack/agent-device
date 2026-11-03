@@ -1,3 +1,4 @@
+import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,7 +45,7 @@ const BLESS_LOG = buildFixtureById('simulator-service-hub-bless-refused').output
 function sessionWithLaunchLog(log: string, exitCode: number | null): RunnerSession {
   const runnerLogPath = path.join(mkdtempForTestSync('runner-service-hub-'), 'runner.log');
   fs.writeFileSync(runnerLogPath, log);
-  return {
+  return makeLocalRunnerSession({
     sessionId: 'service-hub-session',
     device: iosSimulator,
     deviceId: iosSimulator.id,
@@ -61,7 +62,7 @@ function sessionWithLaunchLog(log: string, exitCode: number | null): RunnerSessi
     child: { pid: 4242, exitCode } as ExecBackgroundResult['child'],
     state: 'starting',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 /** The device states a simulator startup carries; the bless cause must outrank them (#2683). */

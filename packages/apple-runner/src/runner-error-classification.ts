@@ -128,11 +128,7 @@ const hasReadinessPreflightFailure: RunnerErrorDetailsMatch = (details) =>
   details.runnerReadinessPreflightFailed === true && !isRequestCanceledDetails(details);
 
 type RunnerErrorVerdicts = {
-  /**
-   * isRetryableRunnerError: worth a same-session resend, either a transport failure or a structured
-   * refusal that executed nothing. Whether a lost response needs status recovery is a separate
-   * question ({@link isStructuredRunnerFailure}).
-   */
+  /** A transport failure or structured refusal permits a same-session resend. */
   retryable?: boolean;
   /** isRunnerBusyError: the runner refused fast while abandoned main-thread work drains. */
   drainResend?: boolean;
@@ -146,6 +142,10 @@ type RunnerErrorVerdicts = {
   restartAfterReadinessPreflight?: boolean;
   /** The runner never accepted a connection, so the restored artifact itself is suspect. */
   artifactSuspect?: boolean;
+  /** A transport outage leaves the current generation owned for the next command. */
+  retainSession?: boolean;
+  /** Status recovery can reach the runner after a lost response. */
+  postSendRecovery?: boolean;
 };
 
 /**
@@ -357,6 +357,22 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // Xcode/CoreDevice text: "Device is busy (Connecting to <device>)".
     match: { code: 'COMMAND_FAILED', foreignMessageIncludesAll: ['device is busy', 'connecting'] },
     verdicts: { retryable: false, connectRetry: false },
+  },
+  {
+    reason: 'runner_forwarding_unavailable',
+    match: {
+      code: 'COMMAND_FAILED',
+      details: (details) => details.reason === 'runner_forwarding_unavailable',
+    },
+    verdicts: {
+      retryable: true,
+      retainSession: true,
+      postSendRecovery: false,
+      connectRetry: true,
+      restartBeforeSend: false,
+      restartAfterReadinessPreflight: false,
+      artifactSuspect: false,
+    },
   },
   {
     // The marker is the whole fact: the preflight gave up before the command was written, so
@@ -655,6 +671,14 @@ export function isRetryableRunnerError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;
   if (err.code !== 'COMMAND_FAILED') return false;
   return runnerErrorVerdict(err, 'retryable') ?? false;
+}
+
+export function shouldRetainRunnerSession(error: unknown): boolean {
+  return runnerErrorVerdict(error, 'retainSession') ?? false;
+}
+
+export function shouldRecoverRunnerStatus(error: unknown): boolean {
+  return runnerErrorVerdict(error, 'postSendRecovery') ?? true;
 }
 
 /**

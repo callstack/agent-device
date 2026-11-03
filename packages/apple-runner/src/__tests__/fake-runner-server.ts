@@ -16,6 +16,7 @@ export type FakeRunnerResponse =
   | { kind: 'hangUp' }
   /** Hangs up on this request and every later one for the command: the entry is never consumed. */
   | { kind: 'hangUpAlways' }
+  | { kind: 'httpErrorAlways'; status: number }
   /** Hangs up and stops listening, as a runner process that died mid-command. */
   | { kind: 'exit' }
   /** Never answers, as a runner still executing the command when its caller gives up. */
@@ -104,7 +105,9 @@ function recordFakeRunnerRequest(req: http.IncomingMessage, raw: string): FakeRu
 function takeScriptedResponse(
   queue: FakeRunnerResponse[] | undefined,
 ): FakeRunnerResponse | undefined {
-  return queue?.[0]?.kind === 'hangUpAlways' ? queue[0] : queue?.shift();
+  return queue?.[0]?.kind === 'hangUpAlways' || queue?.[0]?.kind === 'httpErrorAlways'
+    ? queue[0]
+    : queue?.shift();
 }
 
 function writeFakeRunnerResponse(
@@ -117,6 +120,10 @@ function writeFakeRunnerResponse(
     return;
   }
   if (next.kind === 'hold') return;
+  if (next.kind === 'httpErrorAlways') {
+    res.writeHead(next.status).end('upstream unavailable');
+    return;
+  }
   if (next.kind === 'hangUp' || next.kind === 'hangUpAlways') {
     res.destroy();
     return;

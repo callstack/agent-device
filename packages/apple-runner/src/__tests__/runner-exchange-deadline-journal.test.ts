@@ -1,3 +1,4 @@
+import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { withRequestDeadline } from '@agent-device/test-kit';
@@ -31,7 +32,7 @@ test('a daemon deadline follows the ordinary canceled Apple runner journal drain
       return realSetTimeout(callback, delay, ...args);
     });
   try {
-    const session: RunnerSession = {
+    const session: RunnerSession = makeLocalRunnerSession({
       sessionId: `deadline-journal:${runner.port}`,
       device: IOS_SIMULATOR,
       deviceId: IOS_SIMULATOR.id,
@@ -42,7 +43,7 @@ test('a daemon deadline follows the ordinary canceled Apple runner journal drain
       child: { pid: process.pid, exitCode: null },
       state: 'ready',
       commandCharges: new RunnerCommandAccounting(),
-    };
+    });
     const requestId = `deadline-journal:${runner.port}`;
 
     const deadlineResult = withRequestDeadline(requestId, 25, async () => {

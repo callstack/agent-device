@@ -202,6 +202,7 @@ extension RunnerTests {
     XCTAssertEqual(failure, .unresolvedWindow)
     XCTAssertNil(screen)
     XCTAssertEqual(displayID, 0)
+    XCTAssertFalse(window.resolved, "a missing window's frame lookup records an XCTest failure")
   }
   /// The sole-screen rule's decision, at the seam the production probe feeds: the values the
   /// AXRuntime probe reads in, never a device list. The windowed/unknown rows below fail without

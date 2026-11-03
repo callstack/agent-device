@@ -11,7 +11,10 @@ import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
 import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import { createRunnerPhaseBudget, requireRunnerPhaseRemainingMs } from '../runner-phase-budget.ts';
-import { captureDiagnostics } from './runner-session-fixtures.ts';
+import {
+  captureDiagnostics,
+  makeRunnerSession as makeLocalRunnerSession,
+} from './runner-session-fixtures.ts';
 import {
   startFakeRunnerServer,
   type FakeRunnerResponse,
@@ -104,7 +107,7 @@ afterEach(async () => {
 });
 
 function makeRunnerSession(port: number, sessionId = `wiring:${port}`): RunnerSession {
-  const session: RunnerSession = {
+  const session: RunnerSession = makeLocalRunnerSession({
     sessionId,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
@@ -115,7 +118,7 @@ function makeRunnerSession(port: number, sessionId = `wiring:${port}`): RunnerSe
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
   return session;
 }
 

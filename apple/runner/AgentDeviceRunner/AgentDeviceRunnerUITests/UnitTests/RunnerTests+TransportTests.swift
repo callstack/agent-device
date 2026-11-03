@@ -151,6 +151,16 @@ extension RunnerTests {
     #endif
   }
 
+  func testRunnerListenerRequiresTheConfiguredBindAddressAndPort() throws {
+    let address = try XCTUnwrap(IPv4Address("10.23.45.67"))
+    let port = try XCTUnwrap(NWEndpoint.Port(rawValue: 8100))
+    let listener = try Self.makeRunnerListener(port: port, bindAddress: address)
+    XCTAssertEqual(
+      listener.parameters.requiredLocalEndpoint,
+      .hostPort(host: .ipv4(address), port: port)
+    )
+  }
+
   func testListenerRefusesRequestsWithoutTheTokenBeforeDecoding() throws {
     let listener = try startTransportListener()
     defer { listener.cancel() }

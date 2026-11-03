@@ -124,8 +124,17 @@ extension RunnerTests {
       )
     }
     let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-    let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
+#if os(iOS)
+    // A managed XCTest host can override TMPDIR outside the app container.
+    // The returned tmp/ path must resolve inside the runner's data container.
+    let temporaryDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+      .appendingPathComponent("tmp", isDirectory: true)
+#else
+    let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+#endif
+    let filePath = temporaryDirectory.appendingPathComponent(fileName).path
     do {
+      try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
       try pngData.write(to: URL(fileURLWithPath: filePath))
     } catch {
       return Response(

@@ -11,6 +11,18 @@ import {
 const LISTENER_CONNECT_TIMEOUT_MS = 500;
 const RETAINED_IDLE_STOP_DEFAULT_MS = 5 * 60_000;
 
+type RetainableRunnerSession = Pick<
+  RunnerSession,
+  | 'device'
+  | 'deviceId'
+  | 'sessionId'
+  | 'state'
+  | 'runnerMainThreadBusy'
+  | 'commandCharges'
+  | 'listenerWatch'
+  | 'retention'
+>;
+
 type StopRetainedRunner = (
   retention: RunnerRetention,
   reason: 'idle_timeout' | 'listener_lost',
@@ -64,8 +76,9 @@ export function observeRunnerListener(
 
 /** Retains a ready generation already observed by its listener connection, with one idle timer. */
 export async function retainRunnerSession(
-  session: RunnerSession,
+  session: RetainableRunnerSession,
   stop: StopRetainedRunner,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): Promise<boolean> {
   if (
     session.state !== 'ready' ||
@@ -92,7 +105,7 @@ export async function retainRunnerSession(
     },
   };
   session.retention = retention;
-  const idleMs = resolveRunnerIdleStopMs();
+  const idleMs = resolveRunnerIdleStopMs(env);
   if (idleMs > 0) {
     timer = setTimeout(() => {
       void stop(retention, 'idle_timeout').catch((error: unknown) => {
@@ -113,7 +126,7 @@ export async function retainRunnerSession(
   return true;
 }
 
-function needsListenerWatch(session: RunnerSession): boolean {
+function needsListenerWatch(session: Pick<RunnerSession, 'device'>): boolean {
   return session.device.kind === 'simulator' && isIosFamily(session.device);
 }
 

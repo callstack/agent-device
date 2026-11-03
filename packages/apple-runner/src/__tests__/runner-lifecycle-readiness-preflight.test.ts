@@ -53,6 +53,10 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import { prepareIosRunner, runAppleRunnerCommand } from '../index.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
+import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
+import { executeRunnerExchange } from '../runner-exchange.ts';
+import { startFakeRunnerServer } from './fake-runner-server.ts';
+import type { RunnerCommand } from '../runner-contract.ts';
 
 // What `executeRunnerCommand` decides when a readiness preflight refuses the runner
 // before the command was ever written: the table's own verdict axes say whether the
@@ -223,3 +227,138 @@ test('a boot that exited early does not wipe a restored runner artifact', async 
   assert.equal(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls.length, 0);
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
 });
+
+for (const status of [502, 503, 504]) {
+  for (const operation of ['mutation preflight', 'cold read', 'preparation'] as const) {
+    test(`forwarding ${status} exhaustion retains the run during ${operation}`, async () => {
+      const preflight = operation === 'mutation preflight';
+      const server = await startFakeRunnerServer({
+        uptime: [{ kind: 'httpErrorAlways', status }],
+        snapshot: [{ kind: 'httpErrorAlways', status }],
+      });
+      try {
+        const session = makeRunnerSession({
+          port: server.port,
+          state: preflight ? 'ready' : 'starting',
+          endpoint: {
+            port: server.port,
+            token: 'runner-token',
+            http: { url: `http://127.0.0.1:${server.port}/command`, headers: {} },
+          },
+        });
+        const ensure = mockEnsureRunnerSession.mockResolvedValue(session);
+        const invalidate = mockInvalidateRunnerSession.mockResolvedValue(undefined);
+        mockReadRunnerSessionLiveness.mockReturnValue({
+          sessionId: session.sessionId,
+          liveness: session.state,
+        });
+        mockExecuteRunnerCommandWithSession.mockImplementation(
+          (device, target, command, logPath, timeoutMs, signal) =>
+            executeRunnerExchange(
+              device,
+              target,
+              command,
+              logPath,
+              Math.min(timeoutMs, 100),
+              async (reason) => invalidate(target, reason),
+              signal,
+            ),
+        );
+        const execute = executeRunnerCommand;
+        const command: RunnerCommand = preflight
+          ? { command: 'tap', x: 10, y: 20 }
+          : { command: 'snapshot' };
+        const pending =
+          operation === 'preparation'
+            ? prepareLocalIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 100 })
+            : execute(IOS_SIMULATOR, command, {});
+        await assert.rejects(pending, (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason, 'runner_forwarding_unavailable');
+          assert.equal(error.details?.status, status);
+          assert.equal(error.details?.dispatched, preflight ? 'no' : 'unknown');
+          assert.equal(error.details?.runnerConnectFailureReason, undefined);
+          return true;
+        });
+        assert.equal(ensure.mock.calls.length, 1);
+        assert.equal(invalidate.mock.calls.length, 0);
+        assert.ok(server.requests.length > 0);
+        const sentCommand = operation === 'cold read' ? 'snapshot' : 'uptime';
+        assert.ok(server.requests.every((request) => request.command === sentCommand));
+      } finally {
+        await server.close();
+      }
+    });
+  }
+}
+
+test.each([false, true])(
+  'a forwarding outage retains the replacement runner after a real connection failure, preflight=%s',
+  async (preflight) => {
+    const oldServer = await startFakeRunnerServer([{ kind: 'exit' }]);
+    const replacement = await startFakeRunnerServer({
+      uptime: [{ kind: 'httpErrorAlways', status: 502 }],
+      snapshot: [{ kind: 'httpErrorAlways', status: 502 }],
+    });
+    try {
+      const sessions = [oldServer, replacement].map((server) =>
+        makeRunnerSession({
+          port: server.port,
+          state: preflight ? 'ready' : 'starting',
+          endpoint: {
+            port: server.port,
+            token: 'runner-token',
+            http: { url: `http://127.0.0.1:${server.port}/command` },
+          },
+        }),
+      );
+      const ensure = mockEnsureRunnerSession
+        .mockResolvedValueOnce(sessions[0])
+        .mockResolvedValue(sessions[1]);
+      const invalidate = mockInvalidateRunnerSession.mockResolvedValue(undefined);
+      mockReadRunnerSessionLiveness.mockReturnValue({
+        sessionId: sessions[0]!.sessionId,
+        liveness: sessions[0]!.state,
+      });
+      mockExecuteRunnerCommandWithSession.mockImplementation(
+        (device, session, command, logPath, timeoutMs, signal) =>
+          executeRunnerExchange(
+            device,
+            session,
+            command,
+            logPath,
+            Math.min(timeoutMs, 100),
+            async (reason) => invalidate(session, reason),
+            signal,
+          ),
+      );
+      const execute = executeRunnerCommand;
+      await assert.rejects(
+        execute(
+          IOS_SIMULATOR,
+          preflight ? { command: 'tap', x: 10, y: 20 } : { command: 'snapshot' },
+          {},
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason, 'runner_forwarding_unavailable');
+          assert.equal(error.details?.dispatched, preflight ? 'no' : 'unknown');
+          assert.equal(error.details?.runnerRestarted, true);
+          return true;
+        },
+      );
+      assert.equal(ensure.mock.calls.length, 2);
+      assert.equal(invalidate.mock.calls.length, 1);
+      assert.equal(invalidate.mock.calls[0]![0], sessions[0]);
+      assert.ok(replacement.requests.length > 0);
+      assert.ok(
+        replacement.requests.every(
+          (request) => request.command === (preflight ? 'uptime' : 'snapshot'),
+        ),
+      );
+    } finally {
+      await oldServer.close();
+      await replacement.close();
+    }
+  },
+);

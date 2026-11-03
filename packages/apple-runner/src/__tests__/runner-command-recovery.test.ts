@@ -1,3 +1,4 @@
+import { makeRunnerSession as makeLocalRunnerSession } from './runner-session-fixtures.ts';
 import assert from 'node:assert/strict';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
 import { afterEach, test, vi } from 'vitest';
@@ -27,7 +28,7 @@ afterEach(async () => {
 });
 
 function makeRunnerSession(port: number): RunnerSession {
-  return {
+  return makeLocalRunnerSession({
     sessionId: `fake:${port}`,
     device: IOS_SIMULATOR,
     deviceId: IOS_SIMULATOR.id,
@@ -38,7 +39,7 @@ function makeRunnerSession(port: number): RunnerSession {
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-  };
+  });
 }
 
 function tapCommand(commandId = 'cmd-1'): RunnerCommand {
@@ -290,3 +291,29 @@ test('a truncated retained response is not recovered', async () => {
   });
   assert.equal(invalidate.mock.calls.length, 0);
 });
+
+for (const command of [
+  tapCommand(),
+  { command: 'snapshot', commandId: 'snapshot-1' } as RunnerCommand,
+]) {
+  test(`a forwarding outage after ${command.command} keeps the generation without a status request`, async () => {
+    const { result, invalidate } = await runRecovery({
+      command,
+      script: [{ kind: 'ok', data: { lifecycleState: 'completed' } }],
+      transportError: new AppError('COMMAND_FAILED', 'gateway unavailable', {
+        reason: 'runner_forwarding_unavailable',
+      }),
+    });
+    await assert.rejects(result, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      assert.equal(
+        error.details?.reason,
+        command.command === 'tap' ? 'runner_reply_lost' : 'runner_forwarding_unavailable',
+      );
+      return true;
+    });
+    assert.equal(server?.requests.length, 0);
+    assert.equal(invalidate.mock.calls.length, 0);
+  });
+}

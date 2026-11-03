@@ -27,7 +27,7 @@ import {
   type RunnerLease,
   type RunnerLeaseAdoptionRefusal,
 } from './runner-lease.ts';
-import { isRunnerProcessAlive } from './runner-disposal.ts';
+import { isRunnerProcessAlive, observeLocalRunnerLaunch } from './runner-disposal.ts';
 import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
@@ -115,7 +115,7 @@ export async function detachRunnerSessionsForShutdown(
         deviceId,
         lane: outcome.lane,
         sessionId: session.sessionId,
-        runnerPid: session.child.pid,
+        runnerPid: session.launch.local?.child.pid,
         port: session.endpoint.port,
         runnerLogPath: session.runnerLogPath,
       },
@@ -145,11 +145,11 @@ function detachRunnerSessionForShutdown(session: RunnerSession): RunnerDetachOut
   if (!decision.detach) {
     return { detached: false, lane, reason: decision.reason };
   }
-  const lease = session.lease;
+  const lease = session.launch.local?.lease;
   if (!lease) {
     return { detached: false, lane, reason: 'lease_absent' };
   }
-  if (!isRunnerProcessAlive(session.child.pid)) {
+  if (!isRunnerProcessAlive(session.launch.local?.child.pid)) {
     return { detached: false, lane, reason: 'runner_process_dead' };
   }
   try {
@@ -162,7 +162,7 @@ function detachRunnerSessionForShutdown(session: RunnerSession): RunnerDetachOut
   // the runner's log: until that write lands the session is still owned, and an owned session that
   // stopped following its runner's output is worse off than one that never handed anything off.
   // The runner holds its own descriptor, so this cannot disturb it either way (#2681).
-  session.endOutputObservation?.();
+  session.launch.local?.endOutputObservation?.();
   advanceRunnerSessionState(session, 'stopped');
   return { detached: true, lane };
 }
@@ -247,7 +247,7 @@ export async function tryAdoptRunnerSessionFromLease(
 
   const session = buildAdoptedRunnerSession(device, lease, endpoint, runnerPid, expectedArtifact);
   try {
-    writeRunnerLease(session.lease);
+    writeRunnerLease(session.launch.local.lease);
   } catch {
     return skip('lease_write_failed', lease);
   }
@@ -396,7 +396,7 @@ function buildAdoptedRunnerSession(
   endpoint: RunnerEndpoint,
   runnerPid: number,
   expectedArtifact: ExpectedRunnerArtifact,
-): RunnerSession & { lease: RunnerLease } {
+): RunnerSession & { launch: ReturnType<typeof observeLocalRunnerLaunch> } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
     xctestrunPath: lease.xctestrunPath,
@@ -408,22 +408,16 @@ function buildAdoptedRunnerSession(
     reason: 'adopted_from_lease',
   };
   const { child, wait } = watchDetachedRunnerProcess(runnerPid);
-  return {
-    sessionId,
+  const local = {
     device,
     deviceId: device.id,
+    sessionId,
     endpoint,
     xctestrunPath: lease.xctestrunPath,
-    xctestrunArtifact: artifact,
     jsonPath: lease.jsonPath,
-    testPromise: wait,
     child,
-    // The runner appends to this file for its whole life, so the log the previous daemon handed over
-    // is still the one worth quoting (#2681).
+    testPromise: wait,
     runnerLogPath: lease.runnerLogPath,
-    // The probe already proved the runner answers commands.
-    state: 'ready',
-    commandCharges: new RunnerCommandAccounting(),
     lease: buildRunnerLease({
       device,
       sessionId,
@@ -434,6 +428,17 @@ function buildAdoptedRunnerSession(
       jsonPath: lease.jsonPath,
       runnerLogPath: lease.runnerLogPath,
     }),
+  };
+  return {
+    sessionId,
+    device,
+    deviceId: device.id,
+    endpoint,
+    xctestrunArtifact: artifact,
+    launch: observeLocalRunnerLaunch(local),
+    runnerLogPath: lease.runnerLogPath,
+    state: 'ready',
+    commandCharges: new RunnerCommandAccounting(),
   };
 }
 
