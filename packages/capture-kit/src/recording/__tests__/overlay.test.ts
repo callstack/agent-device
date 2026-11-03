@@ -58,7 +58,11 @@ afterEach(() => {
 });
 
 test('overlay burns touches through a cached helper and same-directory temp output', async () => {
-  const validator = { executablePath: '/prepared/video-validator', env: {} };
+  const validator = {
+    kind: 'avfoundation' as const,
+    executablePath: '/prepared/video-validator',
+    env: {},
+  };
   const videoPath = path.join(tmpDir, 'recording.mp4');
   const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
   fs.writeFileSync(videoPath, 'original');

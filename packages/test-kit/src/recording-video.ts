@@ -3,7 +3,7 @@ import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
-/** Prepares a stub semantic validator for synthetic recording fixtures, without host Swift tools. */
+/** Prepares validation for synthetic recording fixtures without host Swift tools. */
 export async function prepareRecordingValidatorFixture(host: HostEnvironment): Promise<void> {
   await withCommandExecutorOverride(
     (command, args) => {
