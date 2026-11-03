@@ -1,6 +1,10 @@
 import { pressJitter } from '@agent-device/contracts/touch-runtime';
 import type { PressPointOptions } from '@agent-device/contracts/interactor-types';
-import { runnerSynthesizesTap, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleDevice,
+  runnerSynthesizesTap,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import {
   MAX_RUNNER_SEQUENCE_STEPS,
@@ -35,10 +39,14 @@ export async function runApplePressSeries(
   let completedSteps = 0;
   const sequenceResults: unknown[] = [];
   let stepOffset = 0;
+  let sequenceOrientation: RunnerCommand['sequenceOrientation'];
+  const bindsOrientation = isHandheldAppleDevice(device) && commands.length > 1;
   for (const command of commands) {
     let result: Record<string, unknown>;
     try {
-      result = await runCommand(command);
+      result = await runCommand(
+        sequenceOrientation === undefined ? command : { ...command, sequenceOrientation },
+      );
     } catch (error) {
       throw discloseDispatchAfterSteps(error, completedSteps);
     }
@@ -57,6 +65,19 @@ export async function runApplePressSeries(
     completedSteps += parsed.completedSteps;
     sequenceResults.push(...parsed.results);
     stepOffset += command.steps?.length ?? 0;
+    if (bindsOrientation && sequenceOrientation === undefined) {
+      if (parsed.sequenceOrientation === undefined) {
+        throw discloseDispatchAfterSteps(
+          new AppError('COMMAND_FAILED', 'The runner did not return the press series orientation', {
+            reason: 'runner_sequence_orientation_unavailable',
+            completedSteps,
+            hint: 'Run snapshot -i to inspect the current UI before continuing with the remaining actions.',
+          }),
+          completedSteps,
+        );
+      }
+      sequenceOrientation = parsed.sequenceOrientation;
+    }
   }
   // Preserve the first response's acquisition frame and the last response's gesture completion.
   return {

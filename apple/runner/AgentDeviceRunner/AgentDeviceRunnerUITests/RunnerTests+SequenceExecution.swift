@@ -47,8 +47,10 @@ extension RunnerTests {
       : nil
 
 #if os(iOS)
-    let orientation = synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
+    let orientation = command.sequenceOrientation ?? synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
       ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp))
+#else
+    let orientation: Int? = nil
 #endif
     let execution = try assembleSequenceExecution(steps: steps) { _, step in
 #if os(iOS)
@@ -61,7 +63,7 @@ extension RunnerTests {
 #endif
       return try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
     }
-    return sequenceResponse(execution: execution, touchFrame: firstFrame)
+    return sequenceResponse(execution: execution, touchFrame: firstFrame, sequenceOrientation: orientation)
   }
 
   /// Pure, device-free assembler: runs each step in order via `perform`, stops at the first
@@ -243,7 +245,8 @@ extension RunnerTests {
 
   private func sequenceResponse(
     execution: SequenceExecutionResult,
-    touchFrame: TouchVisualizationFrame?
+    touchFrame: TouchVisualizationFrame?,
+    sequenceOrientation: Int?
   ) -> Response {
     return Response(
       ok: true,
@@ -256,6 +259,7 @@ extension RunnerTests {
         referenceWidth: touchFrame?.referenceWidth,
         referenceHeight: touchFrame?.referenceHeight,
         completedSteps: execution.completedSteps,
+        sequenceOrientation: sequenceOrientation,
         failedStepIndex: execution.failedStepIndex,
         sequenceResults: execution.results
       )

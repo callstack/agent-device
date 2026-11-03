@@ -277,6 +277,7 @@ struct Command: Codable {
   let synthesized: Bool?
   let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
   let litPanel: RunnerLitPanelFact?
+  let sequenceOrientation: Int?
   let steps: [SequenceStep]?
 }
 
@@ -530,6 +531,7 @@ struct DataPayload: Codable {
   /// daemon read `ok` as proof the runner drained (#2552).
   var runnerMainThreadBusy: Bool?
   var completedSteps: Int?
+  var sequenceOrientation: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
   var targetActivation: TargetActivationFactPayload?

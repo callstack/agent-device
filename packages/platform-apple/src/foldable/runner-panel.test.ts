@@ -265,6 +265,7 @@ test('every press-series chunk uses the lit-panel naming path', async () => {
     runCommand: async (target, command, options) => {
       await base.runCommand(target, command, options);
       return {
+        sequenceOrientation: 1,
         completedSteps: command.steps?.length ?? 0,
         sequenceResults: command.steps?.map(({ kind }) => ({ ok: true, kind })) ?? [],
       };

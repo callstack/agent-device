@@ -266,6 +266,43 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testRepeatedPressCarriesOrientationAcrossStepAndBudgetChunkBoundaries() throws {
+    try withLitPanelBookingProbe(composed: true) { _ in
+      for chunkSize in [1, 20] {
+        LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 80, width: 669, height: 871)
+        LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.portrait
+        LitPanelBookingProbe.dispatches.removeAll()
+        LitPanelBookingProbe.onDispatch = {
+          if LitPanelBookingProbe.dispatches.count == chunkSize {
+            LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.landscapeLeft
+            LitPanelBookingProbe.windowFrame = CGRect(x: 80, y: 0, width: 871, height: 669)
+          }
+        }
+        let step = #"{"kind":"tap","x":200,"y":150,"synthesized":true}"#
+        let steps = Array(repeating: step, count: chunkSize).joined(separator: ",")
+        let first = try runnerCommandFixture(
+          #"{"command":"sequence","litPanel":{"displayId":3,"widthPt":669,"heightPt":951},"steps":[\#(steps)]}"#
+        )
+        try withPreparedSurfaceCommand(first) { response in
+          XCTAssertEqual(response.data?.completedSteps, chunkSize)
+          let wire = try XCTUnwrap(try JSONSerialization.jsonObject(with: JSONEncoder().encode(response)) as? [String: Any])
+          let data = try XCTUnwrap(wire["data"] as? [String: Any])
+          XCTAssertEqual(data["sequenceOrientation"] as? Int, RunnerInterfaceOrientation.portrait)
+        }
+        let continuation = try runnerCommandFixture(
+          #"{"command":"sequence","sequenceOrientation":1,"litPanel":{"displayId":3,"widthPt":669,"heightPt":951},"steps":[\#(step)]}"#
+        )
+        try withPreparedSurfaceCommand(continuation) { response in
+          XCTAssertEqual(response.data?.completedSteps, 0)
+          XCTAssertEqual(response.data?.failedStepIndex, 0)
+          XCTAssertEqual(response.data?.sequenceResults?.first?.errorCode, "UNSUPPORTED_OPERATION")
+        }
+        XCTAssertEqual(LitPanelBookingProbe.dispatches.count, chunkSize)
+      }
+    }
+  }
+
+  @MainActor
   func testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis() throws {
     let health = mainOwned.accessibilityHealth
     defer { mainOwned.accessibilityHealth = health }
