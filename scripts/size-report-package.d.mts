@@ -4,6 +4,7 @@
 export const DOCUMENTED_PACK_STUBS: readonly string[];
 export function readMacosHelperTestTargets(manifestSource: string): string[];
 export type NpmPackEntry = Readonly<{ path: string; size: number }>;
+export function assertBundledLicenseNotices(entries: readonly NpmPackEntry[]): void;
 export function assertPublishPackageContents(
   entries: readonly NpmPackEntry[],
   options?: Readonly<{

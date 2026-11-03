@@ -23,7 +23,10 @@ export function bundledLicenseNotices(root: string, outputDirectory: string) {
             return `[${id}]`;
           };
           const packages: string[] = [];
-          for (const dependency of dependencies) {
+          const sortedDependencies = [...dependencies].sort((left, right) =>
+            `${left.name}@${left.version}`.localeCompare(`${right.name}@${right.version}`),
+          );
+          for (const dependency of sortedDependencies) {
             if (!dependency.license || !dependency.licenseText?.trim()) {
               throw new Error(
                 `Bundled dependency ${dependency.name}@${dependency.version} is missing its license or license text.`,
@@ -38,7 +41,7 @@ export function bundledLicenseNotices(root: string, outputDirectory: string) {
               );
             }
             packages.push(
-              `${dependency.name}@${dependency.version} (${dependency.license}): ${references.join(', ')}`,
+              `${dependency.name}@${dependency.version} (${dependency.license}): ${references.join(', ')}${dependency.author ? `; Author: ${dependency.author.text()}` : ''}`,
             );
           }
           return [

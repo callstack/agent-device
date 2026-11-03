@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
 import { bundledLicenseNotices } from './scripts/lib/bundled-license-notices.ts';
 
+const outDir = 'dist/src';
+
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
   new URL('lib/getExePath.js', typeScriptPackageJsonUrl).href
@@ -157,7 +159,7 @@ export default defineConfig({
   format: 'esm',
   platform: 'node',
   target: 'es2022',
-  outDir: 'dist/src',
+  outDir,
   tsconfig: 'tsconfig.lib.json',
   define: {
     __AGENT_DEVICE_VERSION__: JSON.stringify(packageJson.version),
@@ -177,10 +179,7 @@ export default defineConfig({
   minify: true,
   plugins: [
     dropAmbientDeclarationImports,
-    bundledLicenseNotices(
-      import.meta.dirname,
-      fileURLToPath(new URL('./dist/src', import.meta.url)),
-    ),
+    bundledLicenseNotices(import.meta.dirname, fileURLToPath(new URL(outDir, import.meta.url))),
   ],
   dts: {
     tsgo: {

@@ -7,9 +7,13 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 import { bundledLicenseNotices } from '../lib/bundled-license-notices.ts';
 
 async function fixture(files: Record<string, string>): Promise<string> {
-  const root = await mkdtempForTest('bundled-licenses-');
+  const root = await fs.realpath(await mkdtempForTest('bundled-licenses-'));
   const contents = {
-    'package.json': JSON.stringify({ name: 'fixture-project', private: true, type: 'module' }),
+    'package.json': JSON.stringify({ name: 'fixture-project', type: 'module' }),
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: { target: 'es2022', module: 'nodenext', skipLibCheck: true },
+      include: ['input.ts'],
+    }),
     ...files,
   };
   for (const [relative, source] of Object.entries(contents)) {
@@ -20,13 +24,15 @@ async function fixture(files: Record<string, string>): Promise<string> {
   return root;
 }
 
-async function bundle(root: string): Promise<void> {
+async function bundle(root: string, dts = false): Promise<void> {
   await build({
     config: false,
     cwd: root,
+    tsconfig: path.join(root, 'tsconfig.json'),
     entry: ['input.ts'],
     outDir: 'dist',
-    dts: false,
+    outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
+    dts,
     minify: true,
     deps: { onlyBundle: ['included', 'shared', 'distinct', 'unused', 'jpeg-js'] },
     plugins: [bundledLicenseNotices(root, path.join(root, 'dist'))],
@@ -46,6 +52,7 @@ test('bundled licenses retain full license and NOTICE text after minification', 
       name: 'included',
       version: '1.2.3',
       license: 'MIT',
+      author: 'Fixture author <author@example.test>',
       main: 'index.js',
     }),
     'node_modules/included/index.js':
@@ -72,6 +79,7 @@ test('bundled licenses retain full license and NOTICE text after minification', 
   assert.match(notices, /1\.2\.3/);
   assert.match(notices, /Copyright fixture author\nFull license terms retained\./);
   assert.match(notices, /Upstream attribution retained\./);
+  assert.match(notices, /Author: Fixture author <author@example\.test>/);
   assert.doesNotMatch(notices, /unused|external|fixture-project/);
 });
 
@@ -124,6 +132,38 @@ test('identical notices are shared without losing packages or distinct copyright
   });
   assert.equal(references[0], references[1]);
   assert.notEqual(references[0], references[2]);
+  await fs.writeFile(
+    path.join(root, 'input.ts'),
+    [
+      "export { value as third } from 'distinct';",
+      "export { value as second } from 'shared';",
+      "export { value as first } from 'included';",
+    ].join('\n'),
+  );
+  await bundle(root);
+  assert.equal(await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8'), notices);
+});
+
+test('declaration generation preserves JavaScript dependency notices', async () => {
+  const root = await fixture({
+    'input.ts': "export { value } from 'included';",
+    'node_modules/included/package.json': JSON.stringify({
+      name: 'included',
+      version: '1.0.0',
+      license: 'MIT',
+      main: 'index.js',
+      types: 'index.d.ts',
+    }),
+    'node_modules/included/index.js': "export const value = 'included';",
+    'node_modules/included/index.d.ts': 'export declare const value: string;',
+    'node_modules/included/LICENSE': 'Copyright included author\nIncluded license terms.',
+  });
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(notices, /included@1\.0\.0/);
+  await bundle(root, true);
+  assert.ok((await fs.stat(path.join(root, 'dist/input.d.ts'))).size > 0);
+  assert.equal(await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8'), notices);
 });
 
 test('bundled jpeg-js retains source-file notices and the Apache license', async () => {
