@@ -152,7 +152,7 @@ const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
  * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
  * still describes itself with no label to lean on.
  */
-function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode | null {
+function describeCoveringNode(node: CoveringNodeEvidence): SnapshotCoveringNode | null {
   const label = node.label?.trim();
   const kind = formatRole(node.type ?? 'Element');
   if (!label && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
@@ -164,14 +164,24 @@ function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode | nul
   };
 }
 
-/** Applies backend-owned covered decisions through the same publication annotation contract. */
+/** What a backend hit test observed on top of a node, described like a scanned cover. */
+export type CoveringNodeEvidence = Pick<RawSnapshotNode, 'type' | 'label' | 'rect'>;
+
+/**
+ * Applies backend-owned covered decisions through the same publication annotation contract. A
+ * decision that carries the covering element publishes its description; `true` refuses without one.
+ */
 export function annotateSnapshotNodesCoveredByPolicy(
   nodes: RawSnapshotNode[],
-  isCovered: (node: RawSnapshotNode) => boolean,
+  isCovered: (node: RawSnapshotNode) => boolean | CoveringNodeEvidence,
 ): RawSnapshotNode[] {
-  const coveredPositions: Array<{ position: number; coveredBy?: undefined }> = [];
+  const coveredPositions: Array<{ position: number; coveredBy?: SnapshotCoveringNode }> = [];
   for (const [position, node] of nodes.entries()) {
-    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push({ position });
+    if (!isCandidateTouchNode(node)) continue;
+    const decision = isCovered(node);
+    if (!decision) continue;
+    const coveredBy = decision === true ? null : describeCoveringNode(decision);
+    coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
 }

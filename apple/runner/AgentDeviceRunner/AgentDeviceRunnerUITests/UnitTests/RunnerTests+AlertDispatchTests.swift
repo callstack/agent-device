@@ -17,7 +17,7 @@ extension RunnerTests {
     }
     alertResolutionOverrideForTesting = { _ in
       box.resolutionCount += 1
-      return nil
+      return .absent
     }
     defer {
       systemModalProbeOverrideForTesting = nil
@@ -32,6 +32,29 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, "ALERT_NOT_FOUND")
     XCTAssertEqual(box.resolutionCount, 1)
     XCTAssertEqual(box.routingProbeCount, 0)
+  }
+
+  /// A blocking system modal whose host cannot be read is a prompt on screen, not an absent one:
+  /// the host retries and reports absence on `ALERT_NOT_FOUND`, so the reply must carry its own code.
+  @MainActor
+  func testAlertDispatchReportsAnUnresolvedSystemModalAsSeenNotAbsent() throws {
+    mainOwned.app = springboard
+    mainOwned.bundleId = Self.springboardBundleId
+    alertResolutionOverrideForTesting = { _ in .unresolved }
+    defer {
+      alertResolutionOverrideForTesting = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
+    }
+    for action in ["get", "accept", "dismiss"] {
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"alert-unresolved-\#(action)","appBundleId":"com.apple.springboard","action":"\#(action)","timeoutMs":1000}"#
+      )
+      let response = try execute(command: command)
+      XCTAssertFalse(response.ok, action)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+      XCTAssertEqual(response.error?.hint, RunnerTests.alertUnresolvedHint, action)
+    }
   }
 
   @MainActor
@@ -51,7 +74,7 @@ extension RunnerTests {
       box.observedDeadline = deadline
       _ = releaseResolution.wait(timeout: .now() + 1)
       resolutionExited.fulfill()
-      return nil
+      return .absent
     }
     defer {
       releaseResolution.signal()

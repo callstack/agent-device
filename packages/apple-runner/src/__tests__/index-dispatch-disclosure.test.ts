@@ -172,6 +172,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.TEXT_INPUT_PROBE_UNAVAILABLE': () =>
     replyFailure('TEXT_INPUT_PROBE_UNAVAILABLE'),
   'ios-runner.reply.ALERT_BUTTON_NOT_FOUND': () => replyFailure('ALERT_BUTTON_NOT_FOUND'),
+  'ios-runner.reply.ALERT_UNRESOLVED': () => replyFailure('ALERT_UNRESOLVED'),
   'ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED': () =>
     replyFailure('APP_SCREEN_WINDOW_UNRESOLVED'),
   'ios-runner.reply.APP_SCREEN_UNRESOLVED': () => replyFailure('APP_SCREEN_UNRESOLVED'),

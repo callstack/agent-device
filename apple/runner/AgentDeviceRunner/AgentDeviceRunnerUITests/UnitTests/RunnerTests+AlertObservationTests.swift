@@ -272,7 +272,7 @@ extension RunnerTests {
     let deadline = Date().addingTimeInterval(appExistenceTimeout)
     while Date() < deadline, !fixtureAlert.exists {
       if allow.exists {
-        let authorization = try XCTUnwrap(resolveAlert(app: app, deadline: deadline))
+        let authorization = try requireResolvedAlert(deadline: deadline)
         let response = handleAlert(authorization, action: "accept", deadline: deadline)
         XCTAssertTrue(response.ok, String(describing: response.error))
       } else {
@@ -296,7 +296,7 @@ extension RunnerTests {
 
   @MainActor
   private func resolveAlertBeforeTheCommand() throws -> RunnerAlert {
-    try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance)))
+    try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
   }
 
   @MainActor
@@ -310,7 +310,7 @@ extension RunnerTests {
     }
     XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let original = try resolveAlertBeforeTheCommand()
-    alertResolutionOverrideForTesting = { _ in original }
+    alertResolutionOverrideForTesting = { _ in .resolved(original) }
     let timeoutMs = Int(RunnerTests.alertActivationDeadline * 1000)
     let command = try runnerCommandFixture(
       #"{"command":"alert","commandId":"alert-replacement","action":"\#(action)","timeoutMs":\#(timeoutMs)}"#

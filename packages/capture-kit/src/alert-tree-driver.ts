@@ -114,7 +114,7 @@ export type TreeAlertResult<
     };
 
 const ALERT_NOT_FOUND_HINT =
-  'If a sheet is visible in snapshot but alert reports no alert, it is likely app-owned UI. Use snapshot -i and press the visible label/ref.';
+  'If a sheet is visible in snapshot but alert reports no alert, alert did not recognize it. Use snapshot -i and press @ref on the visible button.';
 
 /**
  * Runs one alert leg. `get` is a single observation with no budget to bound. `wait` polls one

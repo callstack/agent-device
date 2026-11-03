@@ -1,0 +1,49 @@
+{
+  "name": "@agent-device/webos",
+  "version": "0.21.36-dev",
+  "type": "module",
+  "description": "LG webOS TV web app plugin for agent-device.",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
+    "@agent-device/tv-cdp": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/agent-device.mjs"
+      },
+      "./agent-device": {
+        "import": "./dist/agent-device.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-webos"
+  },
+  "homepage": "https://agent-device.dev/docs/webos"
+}

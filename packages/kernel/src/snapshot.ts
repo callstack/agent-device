@@ -587,7 +587,7 @@ export type SnapshotProvenance =
         | 'limrun-ios-tree'
         | 'revyl-ios-tree';
     }
-  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' }
+  | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' | 'cdp-dom' }
   | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
   | { backend: 'macos-helper'; producer: 'macos-helper' }
   | { backend: 'linux-atspi'; producer: 'linux-atspi' }

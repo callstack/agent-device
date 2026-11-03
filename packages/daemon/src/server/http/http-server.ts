@@ -5,6 +5,7 @@
 // request's cancellation lifetime, and invocation. The envelope framing lives
 // in `http-rpc-envelope.ts`, the authorization decisions in
 // `http-authorization.ts`, and the RPC method vocabulary in `http-rpc-methods.ts`.
+import { responseDisconnectSignal } from './response-disconnect-signal.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AsyncResource } from 'node:async_hooks';
 import http from 'node:http';
@@ -453,12 +454,11 @@ function beginRpcRequestLifetime(params: {
   let abortRegistration: ReturnType<typeof registerRequestAbort>;
   let handlerCompleted = false;
   let canceledInFlight = false;
+  let disconnectSignal: AbortSignal | undefined;
+  let onClientGone: (() => void) | undefined;
 
-  // `res` close fires for a finished response too, so the completion guard is what separates a
-  // real disconnect from an ordinary end. `markRequestCanceled` aborts only this request's
-  // signal, leaving other requests, other devices, and non-Apple work alone.
   const markCanceledIfResponseIncomplete = () => {
-    if (handlerCompleted || res.writableFinished || canceledInFlight) return;
+    if (handlerCompleted || canceledInFlight) return;
     canceledInFlight = true;
     markRequestCanceled(requestId);
     emitDiagnostic({
@@ -482,10 +482,10 @@ function beginRpcRequestLifetime(params: {
       };
     },
     watchForClientDisconnect() {
-      const onClientGone = AsyncResource.bind(markCanceledIfResponseIncomplete);
-      req.on('aborted', onClientGone);
-      res.on('close', onClientGone);
-      if (req.aborted || res.destroyed) {
+      onClientGone = AsyncResource.bind(markCanceledIfResponseIncomplete);
+      disconnectSignal = responseDisconnectSignal(req, res);
+      disconnectSignal.addEventListener('abort', onClientGone, { once: true });
+      if (disconnectSignal.aborted) {
         markCanceledIfResponseIncomplete();
       }
     },
@@ -493,6 +493,7 @@ function beginRpcRequestLifetime(params: {
       handlerCompleted = true;
     },
     release() {
+      if (onClientGone) disconnectSignal?.removeEventListener('abort', onClientGone);
       clearRequestAbortRegistration(abortRegistration);
     },
   };

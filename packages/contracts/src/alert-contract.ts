@@ -32,6 +32,13 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
+ * The Apple XCUITest runner saw a blocking system modal but could not read its remote host, so
+ * it has no buttons to report or press. A prompt is on screen: this is never absence, and it
+ * travels as its own wire code with `dispatched: no`.
+ */
+export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
+
+/**
  * The acting leg's confirm budget ran out after a press landed without settling whether the
  * alert is gone: the dialog was seen standing again after the press ("did not dismiss"), or no
  * post-press read ever resolved to an answer ("could not be confirmed"). Typed so a caller can

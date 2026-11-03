@@ -117,13 +117,9 @@ async function exportProcessedVideo(params: {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    await waitForPlayableVideo(outputPath, { host, deadline });
-    if (deadline.isExpired()) {
-      exportOverran = true;
-      throw new AppError(
-        'COMMAND_FAILED',
-        'The composited video was not verified within the budget',
-      );
+    if (!(await waitForPlayableVideo(outputPath, { host, deadline }))) {
+      exportOverran = deadline.isExpired();
+      throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
     }
     fs.renameSync(outputPath, videoPath);
   } catch (error) {

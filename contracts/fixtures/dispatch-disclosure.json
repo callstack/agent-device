@@ -224,6 +224,12 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.ALERT_UNRESOLVED",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_UNRESOLVED: a visible blocking system modal whose host could not be read, refused before any activation",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code APP_SCREEN_WINDOW_UNRESOLVED: a refusal that ran nothing",

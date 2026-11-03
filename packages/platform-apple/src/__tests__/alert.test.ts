@@ -7,12 +7,13 @@ vi.mock('../os/macos/helper.ts', () => ({ runMacOsAlertAction: vi.fn() }));
 import {
   ALERT_NOT_FOUND_REASON,
   ALERT_NOT_FOUND_RUNNER_CODE,
+  ALERT_UNRESOLVED_RUNNER_CODE,
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { runMacOsAlertAction } from '../os/macos/helper.ts';
-import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from '../alert.ts';
+import { actOnAppleAlert, alertIfPresent, awaitAppleAlert, readAppleAlert } from '../alert.ts';
 
 const mockRunner = vi.mocked(runAppleRunnerCommand);
 const mockHelper = vi.mocked(runMacOsAlertAction);
@@ -25,6 +26,15 @@ const runnerOptions = {};
 function runnerAbsence(): AppError {
   return new AppError('COMMAND_FAILED', 'alert not found', {
     runnerErrorCode: ALERT_NOT_FOUND_RUNNER_CODE,
+  });
+}
+
+/** A system prompt the runner saw but could not read, as the runner contract classifies it. */
+function runnerUnresolved(): AppError {
+  return new AppError(ALERT_UNRESOLVED_RUNNER_CODE, 'a system prompt is visible', {
+    runnerErrorCode: ALERT_UNRESOLVED_RUNNER_CODE,
+    dispatched: 'no',
+    hint: 'Inspect it with screenshot, then snapshot -i.',
   });
 }
 
@@ -280,4 +290,86 @@ test('a macOS app session forwards the bundle its surface is scoped to', async (
     'dismiss',
     { bundleId: 'com.example.app', surface: 'app', env: process.env },
   ]);
+});
+
+// An unreadable prompt is a prompt on screen. Retrying it is fine, since its host may become
+// readable, but no window may end by reporting it as absence.
+test('a read that meets an unreadable prompt is not an absent alert', async () => {
+  mockRunner.mockRejectedValue(runnerUnresolved());
+
+  await assert.rejects(
+    alertIfPresent(readAppleAlert(IOS_SIMULATOR, runnerOptions, undefined, process.env)),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.runnerErrorCode === ALERT_UNRESOLVED_RUNNER_CODE,
+  );
+});
+
+test('a wait that ends on an unreadable prompt reports it, not an absence timeout', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  mockRunner.mockImplementation(async () => {
+    calls += 1;
+    throw calls === 1 ? runnerAbsence() : runnerUnresolved();
+  });
+
+  const outcome = awaitAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    { timeoutMs: 900 },
+    process.env,
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(2_000);
+  const error = (await outcome) as AppError;
+
+  assert.ok(calls > 1, 'an unreadable prompt is polled until the deadline');
+  assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
+  assert.equal(error.details?.dispatched, 'no');
+});
+
+test('a wait that polls past an unreadable prompt into a readable one answers it', async () => {
+  let calls = 0;
+  mockRunner.mockImplementation(async () => {
+    calls += 1;
+    if (calls === 1) throw runnerUnresolved();
+    return { title: 'Pair accessory' };
+  });
+
+  const result = await awaitAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    { timeoutMs: 5_000 },
+    process.env,
+  );
+
+  assert.deepEqual(result, { title: 'Pair accessory' });
+});
+
+test('an exhausted accept on an unreadable prompt keeps the runner hint, not the absence fallback', async () => {
+  vi.useFakeTimers();
+  let calls = 0;
+  mockRunner.mockImplementation(async () => {
+    calls += 1;
+    throw runnerUnresolved();
+  });
+
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(3_500);
+  const error = (await outcome) as AppError;
+
+  assert.ok(calls > 1, 'an unreadable prompt is retried in the action window');
+  assert.equal(error.code, ALERT_UNRESOLVED_RUNNER_CODE);
+  assert.match(String(error.details?.hint), /screenshot/);
+  assert.doesNotMatch(String(error.details?.hint), /scoped snapshot/i);
 });

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
@@ -35,8 +35,24 @@ semaphore.wait()
 exit(exitCode)
 `.trim();
 
+// A cold Swift module cache makes the validator compile take over 30 s on a loaded CI runner, so a
+// caller with a deadline, such as `record stop`, waits for the compile until that deadline instead.
+const VALIDATOR_COMPILE_WAIT_MS = 30_000;
+const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
+
+type SharedValidatorCompile = {
+  readonly compiled: Promise<string>;
+  readonly cancel: AbortController;
+  waiters: number;
+  settled: boolean;
+};
+
 // A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
-const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
+// Callers share one compile, and each waits for it only within its own budget. The last caller to
+// stop waiting cancels an unfinished compile: that kills this process's `swiftc`, or stops waiting
+// for another process's compile. Nothing owns `swiftc` once its requests end, so a daemon that
+// exits would leave it running.
+const videoValidatorCompiles = new Map<string, SharedValidatorCompile>();
 
 export async function waitForStableFile(
   filePath: string,
@@ -69,19 +85,44 @@ export async function waitForStableFile(
   }
 }
 
-export async function isPlayableVideo(filePath: string, host: HostEnvironment): Promise<boolean> {
+/**
+ * Whether the file is a playable video. With a `deadline`, a cold validator compile runs until the
+ * deadline instead of its own fixed bound. A validator run that times out, or that the deadline
+ * leaves no time for, reads as not playable, like a poll in `waitForPlayableVideo` that runs out of
+ * time. A WebM
+ * verdict reads only the file's structure, with no validator, so the deadline does not apply to it.
+ */
+export async function isPlayableVideo(
+  filePath: string,
+  host: HostEnvironment,
+  deadline?: Deadline,
+): Promise<boolean> {
   const container = await readVideoContainerKind(filePath);
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
   try {
-    const validatorPath = await getVideoValidatorExecutablePath(host);
+    if (deadline?.isExpired()) return false;
+    const validatorPath = await waitForValidatorCompile(
+      host,
+      deadline?.remainingMs() ?? VALIDATOR_COMPILE_WAIT_MS,
+    );
+    const runTimeoutMs = Math.min(
+      VALIDATOR_RUN_TIMEOUT_MS,
+      deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
+    );
+    // A budget with no time left reads as not playable; `runCmd` would read a timeout of 0 as none.
+    if (runTimeoutMs <= 0) return false;
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
-      timeoutMs: 10_000,
+      timeoutMs: runTimeoutMs,
       env: buildSwiftToolEnv(host.env),
+    }).catch((error: unknown) => {
+      if (isCommandTimeoutError(error)) return undefined;
+      throw error;
     });
+    if (!result) return false;
     if (result.exitCode === 0) {
       return true;
     }
@@ -94,23 +135,71 @@ export async function isPlayableVideo(filePath: string, host: HostEnvironment): 
   }
 }
 
-async function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
-  const cacheRoot = getSwiftCacheRoot(host.env);
-  let compiled = videoValidatorExecutablePaths.get(cacheRoot);
-  if (!compiled) {
-    compiled = compileSwiftSourceText({
+function joinValidatorCompile(host: HostEnvironment, cacheRoot: string): SharedValidatorCompile {
+  const existing = videoValidatorCompiles.get(cacheRoot);
+  if (existing) return existing;
+  const cancel = new AbortController();
+  const shared: SharedValidatorCompile = {
+    compiled: compileSwiftSourceText({
       host,
       source: VIDEO_VALIDATION_SCRIPT,
       cacheName: 'video-validator',
-      timeoutMs: 30_000,
-    });
-    videoValidatorExecutablePaths.set(cacheRoot, compiled);
-  }
+      signal: cancel.signal,
+    }),
+    cancel,
+    waiters: 0,
+    settled: false,
+  };
+  videoValidatorCompiles.set(cacheRoot, shared);
+  shared.compiled.then(
+    () => {
+      shared.settled = true;
+    },
+    () => {
+      shared.settled = true;
+      if (videoValidatorCompiles.get(cacheRoot) === shared)
+        videoValidatorCompiles.delete(cacheRoot);
+    },
+  );
+  return shared;
+}
+
+async function waitForValidatorCompile(host: HostEnvironment, waitMs: number): Promise<string> {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  const shared = joinValidatorCompile(host, cacheRoot);
+  shared.waiters += 1;
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new AppError(
+            'COMMAND_FAILED',
+            `The video validator did not compile within ${Math.round(waitMs)}ms`,
+            {
+              reason: 'video_validator_compile_timeout',
+              timeoutMs: waitMs,
+              retriable: true,
+              hint:
+                'Run record stop again: the Swift modules this compile already built stay ' +
+                'cached, so the next compile finishes sooner, and the recording keeps its ' +
+                'evidence either way.',
+            },
+          ),
+        ),
+      waitMs,
+    );
+  });
   try {
-    return await compiled;
-  } catch (error) {
-    videoValidatorExecutablePaths.delete(cacheRoot);
-    throw error;
+    return await Promise.race([shared.compiled, expired]);
+  } finally {
+    clearTimeout(timer);
+    shared.waiters -= 1;
+    if (shared.waiters === 0 && !shared.settled) {
+      if (videoValidatorCompiles.get(cacheRoot) === shared)
+        videoValidatorCompiles.delete(cacheRoot);
+      shared.cancel.abort();
+    }
   }
 }
 
@@ -127,20 +216,23 @@ function isSwiftVideoValidatorError(error: unknown): boolean {
   );
 }
 
-/** Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first. */
+/**
+ * Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first,
+ * and resolves whether it played.
+ */
 export async function waitForPlayableVideo(
   filePath: string,
   options: { host: HostEnvironment; pollMs?: number; attempts?: number; deadline?: Deadline },
-): Promise<void> {
+): Promise<boolean> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (await isPlayableVideo(filePath, options.host)) {
-      return;
+  for (let attempt = 1; ; attempt += 1) {
+    if (await isPlayableVideo(filePath, options.host, options.deadline)) {
+      return true;
     }
-    if (options.deadline?.isExpired()) {
-      return;
+    if (attempt >= attempts || options.deadline?.isExpired()) {
+      return false;
     }
     await sleep(pollMs);
   }

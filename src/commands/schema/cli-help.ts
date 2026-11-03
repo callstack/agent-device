@@ -21,6 +21,7 @@ import {
 } from './cli-help-workflows.ts';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from './cli-help-foldable.ts';
+import { TV_PLUGIN_FLOWS } from './cli-help-tv.ts';
 import { providerPluginHelp } from '../provider-plugin-catalog.ts';
 
 const CONFIGURATION_LINES = [
@@ -419,7 +420,7 @@ Overlays and busy RN UIs:
     agent-device screenshot
     agent-device press 124 817
     agent-device snapshot -i
-  Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.
+  Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert but a sheet is visible, alert did not recognize it: use snapshot -i and press @ref on the visible button.
 
 React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.
@@ -602,6 +603,7 @@ TestMu AI real-device flow:
   agent-device connect testmu --provider-device-type real --platform ios --device "iPhone 16" --provider-os-version 18 --provider-app ./MyApp.ipa --session checkout-real
   Real iOS devices are listed by major OS version (18, not 18.0) and install a signed .ipa. Real and virtual devices have separate upload APIs, so pass an lt:// id uploaded for the pool you connect to.
 
+${TV_PLUGIN_FLOWS}
 BrowserStack hosted-device flow:
   export BROWSERSTACK_USERNAME=... BROWSERSTACK_ACCESS_KEY=... AGENT_DEVICE_SESSION=checkout-android
   agent-device connect browserstack --platform android --device "Google Pixel 8" --provider-os-version 14.0 --provider-app bs://app-id

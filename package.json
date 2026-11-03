@@ -336,6 +336,7 @@
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
+    "@agent-device/tv-cdp": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
@@ -375,6 +376,7 @@
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0",
     "@agent-device/testmu": "workspace:*",
-    "@agent-device/revyl": "workspace:*"
+    "@agent-device/revyl": "workspace:*",
+    "@agent-device/webos": "workspace:*"
   }
 }

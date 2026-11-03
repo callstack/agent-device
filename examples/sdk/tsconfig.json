@@ -61,6 +61,7 @@
     { "path": "../../packages/provider-limrun" },
     { "path": "../../packages/provider-revyl" },
     { "path": "../../packages/provider-testmu" },
+    { "path": "../../packages/provider-webos" },
     { "path": "../../packages/provider-webdriver" },
     { "path": "../../packages/provision-kit" },
     { "path": "../../packages/proxy" },
@@ -71,6 +72,7 @@
     { "path": "../../packages/selectors" },
     { "path": "../../packages/session-journal" },
     { "path": "../../packages/test-kit" },
+    { "path": "../../packages/tv-cdp" },
     { "path": "../../packages/xml" }
   ]
 }

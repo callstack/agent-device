@@ -1,3 +1,4 @@
+import { scryptSync } from 'node:crypto';
 import {
   isPlatform,
   type AppleOS,
@@ -74,6 +75,77 @@ export function providerRuntimeOwner(
     provider: normalizedProvider,
     instance: normalizedInstance,
   });
+}
+
+// The key length and the scrypt cost, block size and parallelism all feed the digest: changing any of
+// them re-identifies every derived instance (`maxmem` is only a cap). An instance a composition names
+// outright, such as Limrun's `runtimeInstance` option, is not derived here at all. For a provider that
+// writes its instance into durable state, such as Limrun's app-log descriptors, a change orphans every
+// such resource; Revyl keeps its instance in-process only. Each provider pins its own digest through
+// the wrapper that builds its principal.
+const RUNTIME_INSTANCE_KEY_LENGTH_BYTES = 32;
+const RUNTIME_INSTANCE_SCRYPT_COST = 16_384;
+const RUNTIME_INSTANCE_SCRYPT_BLOCK_SIZE = 8;
+const RUNTIME_INSTANCE_SCRYPT_PARALLELISM = 1;
+const RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
+
+/**
+ * One fact of a provider principal: its name, and its value, or `undefined` when this account has
+ * none. An unset fact is left out of the digest, exactly as an absent one.
+ */
+export type ProviderRuntimePrincipalField = readonly [name: string, value: string | undefined];
+
+/**
+ * The runtime-owner instance for one provider account, for `providerRuntimeOwner`. The principal is
+ * the ordered list of facts that decide which devices one runtime rents (credentials, region, attached
+ * endpoints): two runtimes with the same principal share one owner. It is hashed, not carried,
+ * because the instance travels into diagnostics and durable envelopes.
+ *
+ * The order of the facts is part of the digest, so a provider declares them in one place and pins the
+ * result. `provider` is normalized as `providerRuntimeOwner` normalizes it, and the salt derives from
+ * it, so one set of credentials is a different instance under another provider.
+ *
+ * The digest is a synchronous, memory-hard scrypt (about 16 MiB, tens of milliseconds): derive it once
+ * when a runtime is built, never on a request path.
+ */
+export function providerRuntimeInstance(
+  provider: string,
+  principal: readonly ProviderRuntimePrincipalField[],
+): string {
+  const normalizedProvider = provider.trim();
+  if (normalizedProvider.length === 0) {
+    throw new TypeError('Provider runtime instance requires a non-empty provider');
+  }
+  // No prototype, so a field named `__proto__` is an own key like any other.
+  const facts: Record<string, string> = Object.create(null) as Record<string, string>;
+  facts.provider = normalizedProvider;
+  const names = new Set(['provider']);
+  for (const [name, value] of principal) {
+    if (name.length === 0 || names.has(name)) {
+      throw new TypeError(`Provider runtime principal field '${name}' is empty or repeated`);
+    }
+    // JSON orders integer-like keys first, which would break the declared field order.
+    if (/^\d+$/.test(name)) {
+      throw new TypeError(`Provider runtime principal field '${name}' must not be an integer`);
+    }
+    names.add(name);
+    if (value !== undefined) facts[name] = value;
+  }
+  if (Object.keys(facts).length === 1) {
+    throw new TypeError('Provider runtime principal needs at least one fact with a value');
+  }
+  const fingerprint = scryptSync(
+    JSON.stringify(facts),
+    `agent-device:${normalizedProvider}-runtime-owner:v1`,
+    RUNTIME_INSTANCE_KEY_LENGTH_BYTES,
+    {
+      N: RUNTIME_INSTANCE_SCRYPT_COST,
+      r: RUNTIME_INSTANCE_SCRYPT_BLOCK_SIZE,
+      p: RUNTIME_INSTANCE_SCRYPT_PARALLELISM,
+      maxmem: RUNTIME_INSTANCE_SCRYPT_MAX_MEMORY,
+    },
+  );
+  return `principal-${fingerprint.toString('hex')}`;
 }
 
 export function runtimeOwnerKey(owner: RuntimeOwnerRef): string {

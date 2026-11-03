@@ -29,3 +29,20 @@ test('derives an identity from attached instances without an API key', () => {
     resolveLimrunRuntimeInstance({ apiKey: 'k' }),
   );
 });
+
+/**
+ * Durable app-log descriptors name the instance a Limrun runtime derived, so these digests are the
+ * contract: field names, field order, and region normalization all feed them. The values are the ones
+ * Limrun derived before the fingerprint moved to `providerRuntimeInstance`.
+ */
+test('keeps the durable digest of an account and of an attached instance', () => {
+  expect(resolveLimrunRuntimeInstance({ apiKey: 'secret-key', region: ' EU ' })).toBe(
+    'principal-1426b5849137d86f197cdb796882e8f619e8be77eda1b424144502e1da55af29',
+  );
+  expect(
+    resolveLimrunRuntimeInstance({
+      apiKey: 'secret-key',
+      instances: { ios: { apiUrl: 'https://attached.example/api', token: 't' } },
+    }),
+  ).toBe('principal-5e4bdc0668a05c1c16f984e4655fc1d1a3bcd25b5965e3b9f3a40838121d5110');
+});

@@ -3,10 +3,15 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi, type MockInstance } from 'vitest';
 import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import * as command from '@agent-device/host-kit/command';
-import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+} from '@agent-device/test-kit';
 import * as artifactTracking from '../resources/artifact-tracking.ts';
 import { createDaemonHttpServer } from './http/http-server.ts';
 
@@ -28,6 +33,9 @@ type DownloadFixture = {
   failResponse(): void;
   outcome(): 'pending' | 'complete' | 'failed';
   cleanupCount(): number;
+  closedResponses(): number;
+  receivedRequests(): number;
+  responseDestroys(): number;
   expire(): void;
   expiryPending(): boolean;
   fireDeadlines(): void;
@@ -52,8 +60,14 @@ async function withDownloadFixture(
   );
   const port = await listenOnLoopback(server);
   let activeResponse: http.ServerResponse | undefined;
+  let closedResponses = 0;
+  let receivedRequests = 0;
+  const responseDestroySpies: Array<MockInstance<http.ServerResponse['destroy']>> = [];
   server.on('request', (_request, response) => {
+    responseDestroySpies.push(vi.spyOn(response, 'destroy'));
+    receivedRequests++;
     activeResponse = response;
+    response.once('close', () => closedResponses++);
   });
   const timers = vi.spyOn(globalThis, 'setTimeout');
   const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
@@ -107,6 +121,10 @@ async function withDownloadFixture(
       abortClient: () => request?.destroy(),
       failResponse: () => activeResponse?.destroy(new Error('injected response failure')),
       outcome: () => outcome,
+      closedResponses: () => closedResponses,
+      receivedRequests: () => receivedRequests,
+      responseDestroys: () =>
+        responseDestroySpies.reduce((count, spy) => count + spy.mock.calls.length, 0),
       cleanupCount: () => removed.mock.calls.filter(([target]) => target === source).length,
       expire: () => runtime.run(expire),
       expiryPending: () => !clearedTimers.mock.calls.some(([timer]) => timer === expiryTimer),
@@ -137,49 +155,137 @@ async function withDownloadFixture(
     await closeLoopbackServer(server);
     runtime.dispose();
     removed.mockRestore();
+    for (const spy of responseDestroySpies) spy.mockRestore();
   }
 }
 
-test('a client abort during a shared archive build preserves the other HTTP download', async () => {
-  const started = deferred();
-  const proceed = deferred();
-  const runCmd = command.runCmd;
-  const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
-    started.resolve();
-    await proceed.promise;
-    return await runCmd(...args);
-  });
-  const opens = vi.spyOn(artifactTracking, 'openDownloadableArtifact');
+test('a completed download is not destroyed or cleaned up twice after its 200 response', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  await withDownloadFixture(
+    async (fixture) => {
+      const expected = fs.readFileSync(path.join(fixture.source, 'payload'));
+      const response = await fetch(fixture.url, {
+        headers: { authorization: 'Bearer fu-art-secret' },
+      });
+      expect(response.status).toBe(200);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      expect(bytes).toHaveLength(Number(response.headers.get('content-length')));
+      expect(gunzipSync(bytes).includes(expected)).toBe(true);
+      await vi.waitFor(() => expect(fixture.closedResponses()).toBe(1));
+      await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+      expect(fixture.responseDestroys()).toBe(0);
+      expect(fixture.cleanupCount()).toBe(1);
+      fixture.expire();
+      fixture.runtime.dispose();
+      expect(fixture.cleanupCount()).toBe(1);
+      expect(fixture.responseDestroys()).toBe(0);
+    },
+    () => {},
+  );
+});
+
+test.each(['lone', 'shared', 'inventory'] as const)(
+  'a client abort cancels its preparation during a %s archive build',
+  async (kind) => {
+    const started = deferred();
+    const proceed = deferred();
+    let archiveSignal: AbortSignal | undefined;
+    let archiveDir = '';
+    const runCmd = command.runCmd;
+    const archive = vi.spyOn(command, 'runCmd').mockImplementationOnce(async (...args) => {
+      archiveSignal = args[2]?.signal;
+      archiveDir = path.dirname(String(args[1]?.[1]));
+      started.resolve();
+      await proceed.promise;
+      return await runCmd(...args);
+    });
+    try {
+      await withDownloadFixture(
+        async (fixture) => {
+          const expected = fs.readFileSync(path.join(fixture.source, 'payload'));
+          let second: Promise<Response> | undefined;
+          try {
+            fixture.start();
+            await started.promise;
+            if (kind !== 'lone') {
+              const url =
+                kind === 'inventory'
+                  ? fixture.url.slice(0, fixture.url.lastIndexOf('/'))
+                  : fixture.url;
+              second = fetch(url, { headers: { authorization: 'Bearer fu-art-secret' } });
+              void second.catch(() => {});
+              await vi.waitFor(() => expect(fixture.receivedRequests()).toBe(2));
+            }
+            fixture.abortClient();
+            await vi.waitFor(() => expect(fixture.closedResponses()).toBe(1));
+            if (kind !== 'inventory') expect(archiveSignal?.aborted).toBe(kind === 'lone');
+            proceed.resolve();
+            if (second) {
+              let response = await second;
+              expect(response.status).toBe(200);
+              if (kind === 'inventory') {
+                expect(await response.json()).toMatchObject({
+                  artifacts: [
+                    { id: fixture.url.split('/').at(-1), filename: 'capture.trace.tar.gz' },
+                  ],
+                });
+                expect(archiveSignal?.aborted).toBe(false);
+                expect(fs.existsSync(fixture.source)).toBe(true);
+                response = await fetch(fixture.url, {
+                  headers: { authorization: 'Bearer fu-art-secret' },
+                });
+                expect(response.status).toBe(200);
+              }
+              const bytes = Buffer.from(await response.arrayBuffer());
+              expect(bytes).toHaveLength(Number(response.headers.get('content-length')));
+              expect(gunzipSync(bytes).includes(expected)).toBe(true);
+              await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
+            } else {
+              await vi.waitFor(() => expect(fs.existsSync(archiveDir)).toBe(false));
+              expect(fs.existsSync(fixture.source)).toBe(true);
+            }
+            expect(fixture.streams).toHaveLength(kind !== 'lone' ? 1 : 0);
+            expect(archive).toHaveBeenCalledTimes(1);
+          } finally {
+            proceed.resolve();
+            await Promise.allSettled(second ? [second] : []);
+          }
+        },
+        () => {},
+      );
+    } finally {
+      proceed.resolve();
+      archive.mockRestore();
+    }
+  },
+);
+
+test('a failed archive build permits a later HTTP download to retry', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const archive = vi
+    .spyOn(command, 'runCmd')
+    .mockRejectedValueOnce(new Error('injected tar failure'));
   try {
     await withDownloadFixture(
       async (fixture) => {
+        const headers = { authorization: 'Bearer fu-art-secret' };
+        const failed = await fetch(fixture.url, { headers });
+        expect(failed.status).toBe(500);
+        expect(await failed.json()).toMatchObject({ ok: false, code: 'COMMAND_FAILED' });
+        expect(fs.existsSync(fixture.source)).toBe(true);
         const expected = fs.readFileSync(path.join(fixture.source, 'payload'));
-        fixture.start();
-        await started.promise;
-        const second = fetch(fixture.url, { headers: { authorization: 'Bearer fu-art-secret' } });
-        void second.catch(() => {});
-        try {
-          await vi.waitFor(() => expect(opens).toHaveBeenCalledTimes(2));
-          fixture.abortClient();
-          await vi.waitFor(() => expect(fixture.outcome()).toBe('failed'));
-          proceed.resolve();
-          const response = await second;
-          expect(response.status).toBe(200);
-          const bytes = Buffer.from(await response.arrayBuffer());
-          expect(bytes).toHaveLength(Number(response.headers.get('content-length')));
-          expect(gunzipSync(bytes).includes(expected)).toBe(true);
-          expect(archive).toHaveBeenCalledTimes(1);
-          await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
-        } finally {
-          proceed.resolve();
-          await Promise.allSettled([second]);
-        }
+        const response = await fetch(fixture.url, { headers });
+        expect(response.status).toBe(200);
+        const bytes = Buffer.from(await response.arrayBuffer());
+        expect(gunzipSync(bytes).includes(expected)).toBe(true);
+        expect(archive).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => expect(fs.existsSync(fixture.source)).toBe(false));
       },
       () => {},
     );
   } finally {
-    proceed.resolve();
-    opens.mockRestore();
     archive.mockRestore();
   }
 });

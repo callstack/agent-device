@@ -15,6 +15,26 @@ extension RunnerTests {
     XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
   }
 
+  /// An unreadable modal is still a prompt on screen: answering it as absent makes the host retry
+  /// and report `ALERT_NOT_FOUND` while the prompt blocks the app.
+  func testSystemModalAlertResolutionKeepsAnUnreadableModalUnresolved() {
+    var resolvedModalCount = 0
+    let resolveModal: (ResolvedBlockingSystemModal) -> AlertResolution = { _ in
+      resolvedModalCount += 1
+      return .absent
+    }
+
+    guard case .unresolved = Self.alertResolution(forSystemModal: .unresolved, resolved: resolveModal) else {
+      return XCTFail("an unreadable system modal must resolve as unresolved")
+    }
+    XCTAssertNil(Self.alertResolution(forSystemModal: .absent, resolved: resolveModal))
+    let modal = ResolvedBlockingSystemModal(root: app, ownerApp: app, actions: [], window: nil)
+    guard case .absent = Self.alertResolution(forSystemModal: .resolved(modal), resolved: resolveModal) else {
+      return XCTFail("a readable system modal must answer with its own resolution")
+    }
+    XCTAssertEqual(resolvedModalCount, 1)
+  }
+
   // No SpringBoard host (`hasSpringBoardSystemModalHost`) means modal resolution must return
   // `.absent` without probing com.apple.springboard (#1351). Written for tvOS, where no lane
   // ever executed it; `resolveBlockingSystemModal` takes that decision at RUNTIME off the same
