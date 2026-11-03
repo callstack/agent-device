@@ -64,6 +64,7 @@ export async function fixture(
   const directory = await mkdtempForTest('limrun-runner-');
   const app = path.join(directory, 'AgentDeviceRunnerUITests-Runner.app');
   await fs.mkdir(path.join(app, 'PlugIns', 'AgentDeviceRunnerUITests.xctest'), { recursive: true });
+  await fs.mkdir(path.join(app, 'Frameworks', 'XCTest.framework'), { recursive: true });
   await fs.writeFile(path.join(app, 'Runner'), 'simulator runner', { mode: 0o755 });
   const requests: string[] = [];
   const commands: Record<string, unknown>[] = [];

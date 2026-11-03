@@ -52,6 +52,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
+      # Limrun simulators run iOS 26 and cannot reach this machine's Xcode. Xcode 26 embeds XCTest in
+      # the runner app; Xcode 27 leaves it out, and the packaging step refuses such a runner.
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)"
+          echo "DEVELOPER_DIR=${XCODE_APP}/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Using ${XCODE_APP}"
+        shell: bash
+
       - name: Build iOS simulator runner
         env:
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
