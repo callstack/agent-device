@@ -379,6 +379,7 @@ async function allocateOrReuseLease(
   const {
     osVersion: _osVersion,
     imageTag: _imageTag,
+    deviceMode: _deviceMode,
     physical: _physical,
     ...providerFlags
   } = readLeaseAllocateProviderFlags(flags);

@@ -432,11 +432,14 @@ export function leaseDeviceSpecFields() {
   return {
     osVersion: leaseDeviceSpecField('osVersion'),
     imageTag: leaseDeviceSpecField('imageTag'),
+    deviceMode: leaseDeviceSpecField('deviceMode'),
     physical: leaseDeviceSpecField('physical'),
   };
 }
 
-function leaseDeviceSpecField<TKey extends 'osVersion' | 'imageTag' | 'physical'>(key: TKey) {
+function leaseDeviceSpecField<TKey extends 'osVersion' | 'imageTag' | 'deviceMode' | 'physical'>(
+  key: TKey,
+) {
   return customField(
     optionField(key).schema,
     (record) => requireLeaseDeviceSpec({ [key]: record[key] }).spec[key],

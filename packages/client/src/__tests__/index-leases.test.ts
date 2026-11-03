@@ -58,11 +58,13 @@ test('lease allocation sends the device spec and returns the device the backend 
     platform: 'android',
     osVersion: '34',
     imageTag: 'google_apis',
+    deviceMode: 'full',
     physical: true,
   });
 
   assert.equal(setup.calls[0]?.flags?.osVersion, '34');
   assert.equal(setup.calls[0]?.flags?.imageTag, 'google_apis');
+  assert.equal(setup.calls[0]?.flags?.deviceMode, 'full');
   assert.equal(setup.calls[0]?.flags?.physical, true);
   assert.deepEqual(lease.device, {
     model: 'Pixel 9',

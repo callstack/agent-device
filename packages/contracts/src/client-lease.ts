@@ -43,6 +43,8 @@ export type LeaseDeviceSpec = {
   osVersion?: string;
   /** Android system image tag, for example `google_apis_playstore`. */
   imageTag?: string;
+  /** iOS simulator mode, `slim` or `full`; the backend validates it. */
+  deviceMode?: string;
   /** `true` asks for a physical device instead of a simulator or emulator. */
   physical?: boolean;
 };

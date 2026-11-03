@@ -271,10 +271,15 @@ test('readLeaseAllocateProviderFlags carries a named or invalid spec key as give
 
 test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () => {
   assert.deepEqual(
-    readLeaseDeviceSpec({ osVersion: '>=26', imageTag: 'google_apis', physical: true }),
+    readLeaseDeviceSpec({
+      osVersion: '>=26',
+      imageTag: 'google_apis',
+      deviceMode: 'full',
+      physical: true,
+    }),
     {
-      spec: { osVersion: '>=26', imageTag: 'google_apis', physical: true },
-      keys: ['osVersion', 'imageTag', 'physical'],
+      spec: { osVersion: '>=26', imageTag: 'google_apis', deviceMode: 'full', physical: true },
+      keys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
       invalidKeys: [],
     },
   );
@@ -282,14 +287,17 @@ test('readLeaseDeviceSpec decides each key is named, not named, or invalid', () 
   assert.deepEqual(readLeaseDeviceSpec(undefined), notNamed);
   assert.deepEqual(readLeaseDeviceSpec({}), notNamed);
   assert.deepEqual(
-    readLeaseDeviceSpec({ osVersion: '', imageTag: '  ', physical: false }),
+    readLeaseDeviceSpec({ osVersion: '', imageTag: '  ', deviceMode: '', physical: false }),
     notNamed,
   );
-  assert.deepEqual(readLeaseDeviceSpec({ osVersion: 26, imageTag: null, physical: 'yes' }), {
-    spec: {},
-    keys: [],
-    invalidKeys: ['osVersion', 'imageTag', 'physical'],
-  });
+  assert.deepEqual(
+    readLeaseDeviceSpec({ osVersion: 26, imageTag: null, deviceMode: true, physical: 'yes' }),
+    {
+      spec: {},
+      keys: [],
+      invalidKeys: ['osVersion', 'imageTag', 'deviceMode', 'physical'],
+    },
+  );
   assert.deepEqual(readLeaseDeviceSpec({ osVersion: '18', physical: 1 }), {
     spec: { osVersion: '18' },
     keys: ['osVersion'],
