@@ -71,12 +71,6 @@ export const webBrowserLifecycleCheck = deferred<
   (typeof import('./doctor.ts'))['webBrowserLifecycleCheck']
 >(async () => (await import('./doctor.ts')).webBrowserLifecycleCheck);
 
-export const resolveWebProvider = deferred<(typeof import('./provider.ts'))['resolveWebProvider']>(
-  async () => (await import('./provider.ts')).resolveWebProvider,
-);
-export const hasScopedWebProvider = deferred<
-  (typeof import('./provider.ts'))['hasScopedWebProvider']
->(async () => (await import('./provider.ts')).hasScopedWebProvider);
 export const resolveRequestScopedWebProvider = deferred<
   (typeof import('./resolve-provider.ts'))['resolveRequestScopedWebProvider']
 >(async () => (await import('./resolve-provider.ts')).resolveRequestScopedWebProvider);
