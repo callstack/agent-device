@@ -144,12 +144,21 @@ private func reason(for failure: SnapshotPresentationFailure) -> String {
   }
 }
 
-private let input = try JSONDecoder().decode(
-  BatchInput.self,
-  from: FileHandle.standardInput.readDataToEndOfFile()
-)
-private let output = try JSONEncoder().encode(
-  BatchOutput(cases: input.cases.map(present))
-)
-FileHandle.standardOutput.write(output)
-FileHandle.standardOutput.write(Data([0x0a]))
+if CommandLine.arguments.dropFirst().first == "print-alert-surface" {
+  do {
+    try printAlertSurface(Array(CommandLine.arguments.dropFirst(2)))
+  } catch {
+    FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+    exit(1)
+  }
+} else {
+  let input = try JSONDecoder().decode(
+    BatchInput.self,
+    from: FileHandle.standardInput.readDataToEndOfFile()
+  )
+  let output = try JSONEncoder().encode(
+    BatchOutput(cases: input.cases.map(present))
+  )
+  FileHandle.standardOutput.write(output)
+  FileHandle.standardOutput.write(Data([0x0a]))
+}
