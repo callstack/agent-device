@@ -50,9 +50,6 @@ private final class LitPanelBookingProbe: NSObject {
         Self.originalValueForKey!,
         to: (@convention(c) (AnyObject, Selector, NSString) -> AnyObject?).self
       )
-      if self is DisplayWindowFixture {
-        return original(self, #selector(NSObject.value(forKey:)), key as NSString)
-      }
       switch key {
       case "windows": return Self.query
       case "allElementsBoundByIndex":

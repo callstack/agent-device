@@ -28,6 +28,15 @@ final class DisplayWindowFixture: NSObject {
   // Handed back as one object so a test can prove the resolver captures the screen the window
   // reported rather than a fresh value for the same key. Unresolved, it names main.
   @objc var screen: NSObject { resolved ? windowScreen : DisplayScreenFixture(1) }
+
+  override func value(forKey key: String) -> Any? {
+    switch key {
+    case "exists": return exists
+    case "frame": return NSValue(cgRect: frame)
+    case "screen": return screen
+    default: return super.value(forKey: key)
+    }
+  }
 }
 
 private final class DisplayWindowsFixture: NSObject {
