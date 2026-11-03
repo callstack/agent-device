@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { build } from 'tsdown';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import { bundledLicenseNotices } from '../lib/bundled-license-notices.ts';
+
+const execFileAsync = promisify(execFile);
 
 async function fixture(files: Record<string, string>): Promise<string> {
   const root = await fs.realpath(await mkdtempForTest('bundled-licenses-'));
@@ -25,30 +28,12 @@ async function fixture(files: Record<string, string>): Promise<string> {
 }
 
 async function bundle(root: string, dts = false): Promise<void> {
-  await build({
-    config: false,
-    cwd: root,
-    tsconfig: path.join(root, 'tsconfig.json'),
-    entry: ['input.ts'],
-    outDir: 'dist',
-    outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
-    dts,
-    minify: true,
-    deps: {
-      onlyBundle: [
-        'included',
-        'shared',
-        'distinct',
-        'unused',
-        'jpeg-js',
-        'included-extra',
-        'included.extra',
-        'included_extra',
-      ],
-    },
-    plugins: [bundledLicenseNotices(root, path.join(root, 'dist'))],
-    logLevel: 'silent',
-  });
+  await execFileAsync(process.execPath, [
+    '--experimental-strip-types',
+    fileURLToPath(new URL('./fixtures/bundled-license-build.mts', import.meta.url)),
+    root,
+    String(dts),
+  ]);
 }
 
 test('bundled licenses retain full license and NOTICE text after minification', async () => {
