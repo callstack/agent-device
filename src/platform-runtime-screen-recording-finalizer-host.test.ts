@@ -209,6 +209,26 @@ test('#2707 reports a dropped overlay and keeps the raw when compositing throws'
   });
 });
 
+test('reports a verification budget warning after overlay', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    overlay.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+    });
+    video.isPlayable.mockResolvedValueOnce(false);
+    const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+      outputPath: '/tmp/capture.mp4',
+      showTouches: true,
+      gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
+      targetLabel: 'test recording',
+    });
+    expect(result.overlayWarning).toContain('finalization budget');
+    expect(result.overlayWarning).not.toContain('unplayable');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('#2707 reports a warning when a composited recording turns unplayable after burn-in', async () => {
   // Narrower than it looks: overlay.ts confirms the composite playable before renaming, so this only
   // models the post-rename TOCTOU where the file the raw was replaced with goes unplayable. The raw
