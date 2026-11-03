@@ -475,7 +475,7 @@ extension RunnerTests {
     )
 
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    let windowFrame = try XCTUnwrap(context).referenceFrame
+    let windowFrame = try XCTUnwrap(context).geometry.windowOnScreen.rect
     XCTAssertEqual(
       unscopedDigitizerBasis(app: app, window: windowFrame, interfaceOrientation: orientation),
       windowFrame
