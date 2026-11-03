@@ -47,8 +47,9 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   admittedLease?: DeviceLease;
   /**
-   * The caller named no session. Set only by `resolveRequestSessionAtIntake`, because the defaulted
-   * name cannot be told apart from a chosen one afterwards.
+   * The caller named no session. Set by `resolveRequestSessionAtIntake`, because the defaulted name
+   * cannot be told apart from a chosen one afterwards, and copied onto batch steps by
+   * `session-batch`.
    */
   sessionOmitted?: true;
   /**
