@@ -623,7 +623,7 @@ extension RunnerTests {
   @MainActor
   private func soleDisplayPortraitSize() -> CGSize? {
     if let cached = mainOwned.soleDisplayPortraitSize { return cached }
-    let screen = RunnerSystemApplicationScreenSize()
+    let screen = RunnerSoleScreenSize()
     guard screen.width > 0, screen.height > 0 else { return nil }
     let size = CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
     mainOwned.soleDisplayPortraitSize = size

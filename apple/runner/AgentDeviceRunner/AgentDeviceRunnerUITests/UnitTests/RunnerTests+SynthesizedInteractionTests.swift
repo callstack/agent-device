@@ -35,7 +35,7 @@ private final class RunnerCompatibilityModeScreenStub: NSObject {
   @objc var nativeScale: CGFloat { 2 }
 }
 
-/// Answers like an AXRuntime whose system application cannot be read, so the display size is unknown.
+/// Physical iOS can expose no usable accessibility frame for the system application.
 private final class RunnerUnreadableSystemApplicationStub: NSObject {
   @objc class func systemApplication() -> AnyObject? { nil }
 }
@@ -44,8 +44,7 @@ extension RunnerTests {
   /// Installs `RunnerUnreadableSystemApplicationStub` on AXRuntime's `AXElement` until the returned
   /// closure restores it.
   private func simulateUnreadableSystemApplication() throws -> () -> Void {
-    // The bridge loads AXRuntime on its first read.
-    _ = RunnerSystemApplicationScreenSize()
+    _ = dlopen("/System/Library/PrivateFrameworks/AXRuntime.framework/AXRuntime", RTLD_NOW)
     let element: AnyClass = try XCTUnwrap(NSClassFromString("AXElement"))
     let selector = NSSelectorFromString("systemApplication")
     let target = try XCTUnwrap(class_getClassMethod(element, selector))
@@ -54,28 +53,49 @@ extension RunnerTests {
     return { method_setImplementation(target, original) }
   }
 
-  /// Turns the device to landscape until the host app's interface follows, so a synthesized turn
-  /// needs its display box; the returned closure turns it back to portrait.
+  private func simulateUnreadableDisplay() throws -> () -> Void {
+    let selector = #selector(NSObject.value(forKey:))
+    let inherited = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    class_addMethod(XCUIScreen.self, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited))
+    let target = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    let original = method_getImplementation(target)
+    typealias ReadValue = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
+    let readValue = unsafeBitCast(original, to: ReadValue.self)
+    let read: @convention(block) (AnyObject, NSString) -> AnyObject? = { screen, key in
+      if key == "scale" { return NSNumber(value: 0) }
+      return readValue(screen, selector, key)
+    }
+    let replacement = imp_implementationWithBlock(read)
+    method_setImplementation(target, replacement)
+    return {
+      method_setImplementation(target, original)
+      imp_removeBlock(replacement)
+    }
+  }
+
+  /// Sets the requested orientation and waits for the host app's interface to follow.
   @MainActor
-  private func rotateHostAppToLandscape() throws -> () -> Void {
-    XCUIDevice.shared.orientation = .landscapeLeft
+  private func rotateHostApp(landscape: Bool) throws -> () -> Void {
+    XCUIDevice.shared.orientation = landscape ? .landscapeLeft : .portrait
     let restore = { XCUIDevice.shared.orientation = .portrait }
-    let landscape = [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight]
+    let expected = landscape
+      ? [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight]
+      : [RunnerInterfaceOrientation.portrait]
     let deadline = Date().addingTimeInterval(5)
-    while !landscape.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))),
+    while !expected.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))),
       Date() < deadline
     {
       RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     }
-    let turned = landscape.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)))
+    let turned = expected.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)))
     if !turned { restore() }
-    _ = try XCTUnwrap(turned ? true : nil, "the host app did not turn to landscape")
+    _ = try XCTUnwrap(turned ? true : nil, "the host app did not follow the requested orientation")
     return restore
   }
 
-  /// The state the AX-failure tap tests start from: the host app launched (turned to landscape when
+  /// The state the unreadable-display tap tests start from: the host app launched (turned to landscape when
   /// asked), a tap context on its resolved window (measured at `windowFrame` when given) or, when
-  /// the window query is rejected, an unserializable tree and no context, and AXRuntime's display
+  /// the window query is rejected, an unserializable tree and no context, and XCTest's display
   /// read failing with no kept size. The returned cleanup undoes every step.
   @MainActor
   private func launchWithUnreadableDisplay(
@@ -92,7 +112,7 @@ extension RunnerTests {
         self.invalidateCachedTarget(reason: "unit_test_cleanup")
         self.app.terminate()
       }
-      if landscape { cleanups.append(try rotateHostAppToLandscape()) }
+      cleanups.append(try rotateHostApp(landscape: landscape))
       var context: SynthesizedCoordinateContext?
       if !windowQueryRejected {
         let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
@@ -104,9 +124,9 @@ extension RunnerTests {
           )
         )
       }
-      cleanups.append(try simulateUnreadableSystemApplication())
+      cleanups.append(try simulateUnreadableDisplay())
       if windowQueryRejected { cleanups.append(try simulateUnserializableAppTree()) }
-      // An earlier gesture may have kept a successful read; this one must reach AXRuntime.
+      // An earlier gesture may have kept a successful read; this one must reach XCTest.
       mainOwned.soleDisplayPortraitSize = nil
       return (context, cleanup)
     } catch {
@@ -289,6 +309,31 @@ extension RunnerTests {
     XCTAssertEqual(displayID, 0)
   }
 
+  /// Physical iOS can report no system application's AX frame while its display is measurable.
+  @MainActor
+  func testSoleDisplaySizeDoesNotRequireASystemApplicationAccessibilityFrame() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "the rotation basis requires one display")
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the host app must fill the display")
+    let frame = app.frame
+    let restoreUIKit = try simulateCompatibilityModeScreen()
+    defer { restoreUIKit() }
+    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    defer { restoreAXRuntime() }
+    mainOwned.soleDisplayPortraitSize = nil
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let measured = try XCTUnwrap(synthesizedRotationFrame(
+      app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    ))
+    XCTAssertEqual(measured.origin, .zero)
+    XCTAssertEqual(measured.width, max(frame.width, frame.height), accuracy: 0.5)
+    XCTAssertEqual(measured.height, min(frame.width, frame.height), accuracy: 0.5)
+  }
+
   /// #3899: a synthesized turn swaps the display's side lengths, never a placed window's smaller box.
   /// #4091: the display is the one the launched host app fills, not the runner process's own
   /// `UIScreen`, which the generated runner app (no launch screen) reads in compatibility mode.
@@ -310,8 +355,7 @@ extension RunnerTests {
       height: max(appFrame.width, appFrame.height)
     )
     XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
-    // Two AX readers of one screen; the fills-screen proof ties them within 0.5 pt. Portrait and an
-    // unknown orientation skip the read; landscape and upside-down read the box, so they are checked.
+    // Portrait and an unknown orientation skip the read; landscape and upside-down read the box.
     let expectations = [
       (RunnerInterfaceOrientation.portraitUpsideDown, screen),
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
@@ -324,8 +368,8 @@ extension RunnerTests {
     }
   }
 
-  /// The display size costs one AXRuntime read, so a command keeps its first successful answer and
-  /// later gestures take it even while AXRuntime would fail. The next command reads again, because
+  /// A command keeps its first successful display size and later gestures take it even while the
+  /// display read would fail. The next command reads again, because
   /// display scaling can change the size, and a failed read is not kept.
   @MainActor
   func testSoleDisplaySizeIsReadOncePerCommandAndAFailedReadIsNotKept() throws {
@@ -338,7 +382,7 @@ extension RunnerTests {
 
     let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
     // Nothing between the install and the restore throws, so the restore always runs.
-    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    let restoreDisplay = try simulateUnreadableDisplay()
     XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
     _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
     XCTAssertNotEqual(
@@ -346,7 +390,7 @@ extension RunnerTests {
       measured,
       "the next command must read the size again rather than reuse the kept one"
     )
-    restoreAXRuntime()
+    restoreDisplay()
     XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
   }
 
@@ -379,7 +423,7 @@ extension RunnerTests {
     defer { cleanup() }
     try XCTSkipUnless(
       soleScreenRouteIsOpen(for: app),
-      "without AXRuntime an iPad cannot admit the sole-screen route; the landscape test covers refusal"
+      "the sole-screen rule must admit the app; the landscape test covers refusal"
     )
     XCTAssertEqual(
       Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)),
@@ -418,7 +462,7 @@ extension RunnerTests {
     defer { cleanup() }
     try XCTSkipUnless(
       soleScreenRouteIsOpen(for: app),
-      "without AXRuntime an iPad cannot prove the app fills the screen; the refusal test covers it"
+      "the app must provably fill the screen; the refusal test covers it"
     )
 
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))

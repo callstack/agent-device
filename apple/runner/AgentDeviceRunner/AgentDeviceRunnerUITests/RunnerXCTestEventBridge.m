@@ -251,28 +251,35 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
   return cached;
 }
 
-CGSize RunnerSystemApplicationScreenSize(void) {
-  Class<AgentDeviceForegroundElement> element = RunnerForegroundElementClass();
-  BOOL available = element != Nil && [element respondsToSelector:@selector(systemApplication)];
-  __block CGRect screen = CGRectNull;
-  NSString *exception = available ? [RunnerObjCExceptionCatcher catchException:^{
-    id<AgentDeviceForegroundElement> systemApp = [element systemApplication];
-    if (systemApp == nil || ![systemApp respondsToSelector:@selector(frame)]) return;
-    screen = [systemApp frame];
-  }] : nil;
-  if (!available || exception != nil || !AgentDeviceForegroundFrameIsMeasurable(screen)) {
+CGSize RunnerSoleScreenSize(void) {
+  __block NSUInteger screenCount = 0;
+  __block CGRect bounds = CGRectNull;
+  __block CGFloat scale = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
+    screenCount = screens.count;
+    if (screenCount != 1) return;
+    XCUIScreen *screen = screens.firstObject;
+    NSValue *boundsValue = [screen valueForKey:@"bounds"];
+    [boundsValue getValue:&bounds size:sizeof(bounds)];
+    NSNumber *scaleValue = [screen valueForKey:@"scale"];
+    if ([scaleValue isKindOfClass:NSNumber.class]) scale = scaleValue.doubleValue;
+  }];
+  if (exception != nil || screenCount != 1 ||
+      !AgentDeviceForegroundFrameIsMeasurable(bounds) || !isfinite(scale) || scale <= 0) {
     NSLog(
-      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=system-app available=%@ frame=(%g,%g %gx%g) raised=%@",
-      available ? @"yes" : @"no",
-      screen.origin.x,
-      screen.origin.y,
-      screen.size.width,
-      screen.size.height,
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen-size screens=%lu bounds=(%g,%g %gx%g) scale=%g raised=%@",
+      (unsigned long)screenCount,
+      bounds.origin.x,
+      bounds.origin.y,
+      bounds.size.width,
+      bounds.size.height,
+      scale,
       exception != nil ? @"yes" : @"no"
     );
     return CGSizeZero;
   }
-  return screen.size;
+  return CGSizeMake(bounds.size.width / scale, bounds.size.height / scale);
 }
 
 // One contained probe: it checks each selector before sending it and reads the target pid and both
@@ -347,7 +354,7 @@ NSString * _Nullable RunnerResolveSoleScreen(
   }
   // An iPhone keeps every app full-screen, so its idiom answers the rule and admission never pays
   // for the fills-screen probe. Off the phone idiom the route opens only on that proof. The display
-  // size is a separate AXRuntime read (~0.6–0.9 ms) the caller makes after admission, the first time
+  // size is a separate XCTest screen read the caller makes after admission, the first time
   // a command needs the box; a command keeps a successful read, and the next gesture retries a failed
   // one.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
