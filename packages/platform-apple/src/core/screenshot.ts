@@ -66,6 +66,7 @@ type SimulatorScreenshotFlowDeps = {
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
+    env: Readonly<EnvMap>,
     display: AppleDeviceDisplay | undefined,
   ) => Promise<void>;
   /**
@@ -93,7 +94,7 @@ type SimulatorScreenshotFlowDeps = {
 };
 
 type SimulatorScreenshotFlowOptions = {
-  /** The calling runtime's host environment; runner-container configuration is read from it. */
+  /** The calling runtime's host environment for simulator capture and runner-container configuration. */
   env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
@@ -169,7 +170,7 @@ export async function captureSimulatorScreenshotWithFallback(
   const { display, displayRotation } = await deps.resolveCaptureTarget(device);
   const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
   const captureAndNormalize = async () => {
-    await deps.captureWithRetry(device, outPath, display);
+    await deps.captureWithRetry(device, outPath, options.env, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
   };
   const captureWithFallback = async (): Promise<ScreenshotCaptureFacts> => {
@@ -219,6 +220,7 @@ export async function captureSimulatorScreenshotWithFallback(
 export async function captureSimulatorScreenshotWithRetry(
   device: DeviceInfo,
   outPath: string,
+  env: Readonly<EnvMap>,
   display?: AppleDeviceDisplay,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS);
@@ -226,6 +228,7 @@ export async function captureSimulatorScreenshotWithRetry(
     'io',
     device.id,
     'screenshot',
+    ...(env.AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK === 'black' ? ['--mask=black'] : []),
     ...appleSimulatorDisplayArgvFragment(display),
     outPath,
   ];

@@ -1,4 +1,4 @@
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -24,6 +24,10 @@ const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
 beforeEach(() => {
   vi.resetAllMocks();
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 const BOOTED_SIM_LIST_JSON = JSON.stringify({
@@ -96,13 +100,15 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
             exitCode: 60,
           };
         }
-        writeFileSync(args[4] ?? '', sourcePng);
+        writeFileSync(args.at(-1) ?? '', sourcePng);
         return '';
       }
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await screenshotIos(IOS_TEST_SIMULATOR, outPath, { env: process.env });
+      await screenshotIos(IOS_TEST_SIMULATOR, outPath, {
+        env: { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: 'black' },
+      });
       const png = PNG.sync.read(await fs.readFile(outPath));
       assert.equal(png.width, 42);
       assert.equal(png.height, 91);
@@ -110,7 +116,7 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
 
       const flat = calls.map((args) => args.join(' '));
       assert.equal(
-        flat.filter((line) => line === `simctl io sim-1 screenshot ${outPath}`).length,
+        flat.filter((line) => line === `simctl io sim-1 screenshot --mask=black ${outPath}`).length,
         3,
         'should retry screenshot command until success',
       );
@@ -123,31 +129,48 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   );
 });
 
-test('screenshotIos keeps requested simulator pixel density', async () => {
-  const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-density-');
-  const outPath = path.join(tmpDir, 'screen.png');
+test.each([undefined, '', 'alpha', 'BLACK', 'black'])(
+  'screenshotIos keeps density and opts into a black outline only for host setting %s',
+  async (mask) => {
+    vi.stubEnv('AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK', mask === 'black' ? 'alpha' : 'black');
+    const tmpDir = await mkdtempForTest('agent-device-ios-screenshot-density-');
+    const outPath = path.join(tmpDir, 'screen.png');
 
-  // Both dimensions divisible by 3 so the 2/3 rescale (density 2 against the stub's native
-  // scale 3) stays exact. What this pins is that ratio, not an absolute resolution: it used
-  // to allocate and resize a 1206x2622 iPhone 16 Pro frame — 3.2 megapixels, ~90x more than
-  // the arithmetic needs.
-  const sourcePng = PNG.sync.write(new PNG({ width: 126, height: 273 }));
+    // Both dimensions divisible by 3 so the 2/3 rescale (density 2 against the stub's native
+    // scale 3) stays exact. What this pins is that ratio, not an absolute resolution: it used
+    // to allocate and resize a 1206x2622 iPhone 16 Pro frame — 3.2 megapixels, ~90x more than
+    // the arithmetic needs.
+    const sourcePng = PNG.sync.write(new PNG({ width: 126, height: 273 }));
 
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (isSimctlMainScreenScale(args)) return '3\n';
-      if (isSimctlScreenshot(args)) {
-        writeFileSync(args[4] ?? '', sourcePng);
-        return '';
-      }
-      return unexpectedArgs(args);
-    },
-    async () => {
-      await screenshotIos(IOS_TEST_SIMULATOR, outPath, { env: process.env, pixelDensity: 2 });
-      const png = PNG.sync.read(await fs.readFile(outPath));
-      assert.equal(png.width, 84);
-      assert.equal(png.height, 182);
-    },
-  );
-});
+    await withFakeAppleTool(
+      (args) => {
+        if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+        if (isSimctlMainScreenScale(args)) return '3\n';
+        if (isSimctlScreenshot(args)) {
+          writeFileSync(args.at(-1) ?? '', sourcePng);
+          return '';
+        }
+        return unexpectedArgs(args);
+      },
+      async ({ calls }) => {
+        await screenshotIos(IOS_TEST_SIMULATOR, outPath, {
+          env: { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: mask },
+          pixelDensity: 2,
+        });
+        assert.deepEqual(calls.filter(isSimctlScreenshot), [
+          [
+            'simctl',
+            'io',
+            'sim-1',
+            'screenshot',
+            ...(mask === 'black' ? ['--mask=black'] : []),
+            outPath,
+          ],
+        ]);
+        const png = PNG.sync.read(await fs.readFile(outPath));
+        assert.equal(png.width, 84);
+        assert.equal(png.height, 182);
+      },
+    );
+  },
+);

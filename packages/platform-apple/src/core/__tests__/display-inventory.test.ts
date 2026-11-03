@@ -508,19 +508,25 @@ describe('captureSimulatorScreenshotWithRetry display targeting', () => {
   });
 
   test('names the lit panel explicitly instead of accepting the black default', async () => {
-    await captureSimulatorScreenshotWithRetry(IOS_TEST_SIMULATOR, '/tmp/duo.png', outerPanel);
+    await captureSimulatorScreenshotWithRetry(
+      IOS_TEST_SIMULATOR,
+      '/tmp/duo.png',
+      { AGENT_DEVICE_IOS_SIMULATOR_SCREENSHOT_MASK: 'black' },
+      outerPanel,
+    );
     assert.equal(mockRunSimctlForDevice.mock.calls.length, 1);
     assert.deepEqual(mockRunSimctlForDevice.mock.calls[0]![1], [
       'io',
       IOS_TEST_SIMULATOR.id,
       'screenshot',
+      '--mask=black',
       '--display=LCD',
       '/tmp/duo.png',
     ]);
   });
 
   test('omits the display flag for a single-panel device', async () => {
-    await captureSimulatorScreenshotWithRetry(IOS_TEST_SIMULATOR, '/tmp/duo.png', undefined);
+    await captureSimulatorScreenshotWithRetry(IOS_TEST_SIMULATOR, '/tmp/duo.png', {});
     assert.deepEqual(mockRunSimctlForDevice.mock.calls[0]![1], [
       'io',
       IOS_TEST_SIMULATOR.id,
