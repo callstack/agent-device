@@ -10,8 +10,9 @@ export async function prepareRecordingValidatorFixture(host: HostEnvironment): P
       if (command !== 'xcrun' || args[0] !== 'swiftc') {
         throw new Error(`Unexpected validator preparation command: ${command}`);
       }
-      const output = args[args.indexOf('-o') + 1];
-      if (!output) throw new Error('Swift compiler fixture received no executable output');
+      const [outputFlag, output] = args.slice(-2);
+      if (outputFlag !== '-o' || !output)
+        throw new Error('Swift compiler fixture received no executable output');
       fs.writeFileSync(output, `#!${process.execPath}\nprocess.exit(0);\n`, { mode: 0o755 });
       return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
     },
