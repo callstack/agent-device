@@ -30,9 +30,9 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
-  ) -> XCUIElement? {
+  ) throws -> XCUIElement? {
 #if os(iOS)
-    let candidate = resolveTextEntryInput(app: app, target: target)?.element
+    let candidate = try resolveTextEntryInput(app: app, target: target)?.element
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -67,7 +67,7 @@ extension RunnerTests {
     }
     return candidate
 #else
-    return resolveTextEntryInput(app: app, target: target)?.element
+    return try resolveTextEntryInput(app: app, target: target)?.element
 #endif
   }
 

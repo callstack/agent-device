@@ -154,10 +154,10 @@ extension RunnerTests {
     }
   }
 
-  /// A bound input re-read at its refresh point answers no input when the lit-panel walk fails: the
-  /// app-wide identifier query after it could name the dark panel's twin.
+  /// A bound input re-read on a lit-panel request whose walk fails propagates the refusal, and the
+  /// input cannot be proven gone.
   @MainActor
-  func testBoundInputReReadAnswersNoInputWhenTheLitPanelWalkFails() throws {
+  func testBoundInputReReadRefusesWhenTheLitPanelWalkFails() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     let (panel, _) = launchAppOnTheLitPanel()
     defer {
@@ -177,10 +177,47 @@ extension RunnerTests {
     )
     let command = try runnerCommandFixture(#"{"command":"type",\#(panel)}"#)
     setRequestLitPanel(from: command)
-    XCTAssertNotNil(resolveTextEntryInput(app: app, target: target), "the walk answers")
+    XCTAssertNotNil(try resolveTextEntryInput(app: app, target: target), "the walk answers")
     setRequestLitPanel(from: command)
     litPanelWindowWalkIssueForTesting = true
-    XCTAssertNil(resolveTextEntryInput(app: app, target: target))
+    XCTAssertThrowsError(try resolveTextEntryInput(app: app, target: target)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
+    XCTAssertFalse(boundTextEntryInputIsGone(app: app, target: target))
+  }
+
+  /// The walk answers but finds no input at the refresh point, so resolution reaches the
+  /// identifier query: on a lit-panel request it searches only the lit windows, so a field the
+  /// app-wide query finds, standing in for the dark panel's twin, is not resolved.
+  @MainActor
+  func testBoundInputIdentifierQuerySearchesOnlyTheLitWindows() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    app.launch()
+    mainOwned.app = app
+    defer {
+      app.launchArguments = []
+      tearDownLitPanelApp()
+    }
+    let identifier = "agent-device-hardware-keyboard-input"
+    let field = app.textFields[identifier]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let frame = field.frame
+    let target = TextEntryTarget(
+      element: nil,
+      refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+      prefersFocusedElement: false,
+      contentTranslation: .none,
+      boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: identifier)
+    )
+    setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"type"}"#))
+    XCTAssertNotNil(try resolveTextEntryInput(app: app, target: target), "the app-wide query finds it")
+    setRequestLitPanel(from: try runnerCommandFixture(
+      #"{"command":"type","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+    ))
+    guard case .absent = try probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none) else {
+      return XCTFail("the walk answers with no input at the point")
+    }
+    XCTAssertNil(try resolveTextEntryInput(app: app, target: target))
   }
 
   /// With a lit panel named, selector and point reads search only the windows on that display; the

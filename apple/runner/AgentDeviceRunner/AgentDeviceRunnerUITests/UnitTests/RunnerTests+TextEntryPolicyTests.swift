@@ -830,7 +830,7 @@ extension RunnerTests {
   func testSynthesizedReplacementCommitSkipsSubmitKeyText() {
     for expectedText in ["ada@example.test\n", "ada@example.test\r"] {
       XCTAssertEqual(
-        awaitSynthesizedReplacementCommit(
+        try awaitSynthesizedReplacementCommit(
           app: XCUIApplication(),
           target: TextEntryTarget(element: nil, refreshPoint: CGPoint(x: 10, y: 20), prefersFocusedElement: false, contentTranslation: .none),
           expectedText: expectedText

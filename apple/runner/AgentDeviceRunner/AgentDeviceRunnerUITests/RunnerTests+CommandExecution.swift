@@ -548,7 +548,7 @@ extension RunnerTests {
       )
 #endif
     case .backInApp:
-      switch tapInAppBackControl(app: activeApp) {
+      switch try tapInAppBackControl(app: activeApp) {
       case .performed:
         return Response(ok: true, data: DataPayload(message: "backInApp"))
       case .unavailable:

@@ -84,7 +84,8 @@ extension RunnerTests {
   /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
   func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
     let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
-      textValueRead(for: resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
+      guard let input = try? resolveTextEntryInput(app: app, target: target) else { return .unavailable }
+      return textValueRead(for: input.attributes, treatingPlaceholderAsEmpty: true)
     }
     guard case .success(let read) = probed else { return .unavailable }
     return read

@@ -9,16 +9,26 @@ import { readFoldablePanelTable } from './orientation.ts';
 const PANEL_TABLE_UNREADABLE_HINT =
   'The panel table is unreadable, so no lit panel can be named and nothing was sent. Retry; if it persists, run xcrun devicectl device info displays --device <udid>.';
 
+/** Refuses a request whose lit panel cannot be named; nothing was sent. */
+function panelTableRefusal(device: DeviceInfo, message: string): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    deviceId: device.id,
+    reason: 'panel-table-unreadable',
+    runnerErrorCode: 'APP_SCREEN_UNRESOLVED',
+    dispatched: 'no',
+    hint: PANEL_TABLE_UNREADABLE_HINT,
+  });
+}
+
 /**
  * The lit panel a runner request names, read fresh per request because a fold changes it (ADR
- * 0025). A read that spends the request's `timeoutMs` is refused like an unread table. Undefined
- * keeps the historic first-window route, for a device not known to have more than one panel.
+ * 0025). The read never outlasts the request's `timeoutMs`. Undefined keeps the historic
+ * first-window route, for a device not known to have more than one panel.
  */
 export async function resolveRunnerRequestLitPanel(
   device: DeviceInfo,
   options: { signal?: AbortSignal; requestTimeoutMs?: number },
 ): Promise<RunnerCommand['litPanel']> {
-  const startedAt = Date.now();
   const read = await readFoldablePanelTable(device, {
     signal: options.signal,
     timeoutMs: Math.min(
@@ -26,21 +36,37 @@ export async function resolveRunnerRequestLitPanel(
       IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
     ),
   });
-  if (read.kind === 'single-panel') return undefined;
-  const spentRequest =
-    options.requestTimeoutMs !== undefined && Date.now() - startedAt >= options.requestTimeoutMs;
-  if (read.kind === 'unreadable' || spentRequest) {
-    throw new AppError(
-      'COMMAND_FAILED',
+  if (read.kind === 'unreadable') {
+    throw panelTableRefusal(
+      device,
       `The panel table of ${device.name} did not answer, so the lit panel cannot be named`,
-      {
-        deviceId: device.id,
-        reason: 'panel-table-unreadable',
-        runnerErrorCode: 'APP_SCREEN_UNRESOLVED',
-        dispatched: 'no',
-        hint: PANEL_TABLE_UNREADABLE_HINT,
-      },
     );
   }
-  return appleLitPanel(read.inventory);
+  return read.kind === 'multi-panel' ? appleLitPanel(read.inventory) : undefined;
+}
+
+/**
+ * `command` with the lit panel named and the request budget the read left, measured on one clock.
+ * A read that leaves no budget is refused before anything is sent.
+ */
+export async function nameRunnerRequestLitPanel(
+  device: DeviceInfo,
+  command: RunnerCommand,
+  signal: AbortSignal | undefined,
+): Promise<RunnerCommand> {
+  const startedAt = Date.now();
+  const litPanel = await resolveRunnerRequestLitPanel(device, {
+    signal,
+    requestTimeoutMs: command.timeoutMs,
+  });
+  if (!litPanel) return command;
+  if (command.timeoutMs === undefined) return { ...command, litPanel };
+  const timeoutMs = command.timeoutMs - (Date.now() - startedAt);
+  if (timeoutMs < 1) {
+    throw panelTableRefusal(
+      device,
+      `Reading the panel table of ${device.name} spent the request's ${command.timeoutMs} ms, so nothing was sent`,
+    );
+  }
+  return { ...command, litPanel, timeoutMs };
 }

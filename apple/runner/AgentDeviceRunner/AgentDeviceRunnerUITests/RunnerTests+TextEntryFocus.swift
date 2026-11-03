@@ -123,7 +123,7 @@ extension RunnerTests {
           contentTranslation: contentTranslation
         )
       }
-      let focused = waitForTextEntryReadiness(
+      let focused = try waitForTextEntryReadiness(
         app: app,
         target: TextEntryTarget(
           element: focusedTextInput(app: app),
@@ -171,7 +171,7 @@ extension RunnerTests {
     )
     let element = stabilized.focusConfirmed
       ? readyTarget.element
-      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
+      : (try waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
     return focusedTextEntryTarget(element, requestedPoint: requestedPoint, contentTranslation: contentTranslation)
   }
 

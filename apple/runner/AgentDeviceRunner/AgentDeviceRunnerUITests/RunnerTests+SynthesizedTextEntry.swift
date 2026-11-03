@@ -261,12 +261,12 @@ extension RunnerTests {
   /// Clears until the field reads empty, at most `maxClearPassCount` passes. A read that cannot
   /// answer ends the clear, so the post never types over text it could not see removed.
   static func clearUntilEmpty(
-    clearOnce: () -> SynthesizedStepDispatch,
-    read: () -> TextValueRead
-  ) -> SynthesizedClearOutcome {
+    clearOnce: () throws -> SynthesizedStepDispatch,
+    read: () throws -> TextValueRead
+  ) rethrows -> SynthesizedClearOutcome {
     for pass in 1...SynthesizedTextPlan.Step.maxClearPassCount {
-      guard clearOnce() == .posted else { return .stopped }
-      switch read() {
+      guard try clearOnce() == .posted else { return .stopped }
+      switch try read() {
       case .text(let value) where value.isEmpty:
         return .cleared
       case .text:
@@ -300,22 +300,22 @@ extension RunnerTests {
   func runSynthesizedTextPlan(
     _ plan: SynthesizedTextPlan,
     text: String,
-    post: (_ characters: String, _ step: SynthesizedTextPlan.Step) -> SynthesizedStepDispatch,
-    waitAfterWarmupCharacter: (_ characters: String) -> Void,
+    post: (_ characters: String, _ step: SynthesizedTextPlan.Step) throws -> SynthesizedStepDispatch,
+    waitAfterWarmupCharacter: (_ characters: String) throws -> Void,
     didPostStep: (_ step: SynthesizedTextPlan.Step) -> Void = { _ in }
-  ) -> SynthesizedPlanRun {
+  ) rethrows -> SynthesizedPlanRun {
     let characters = Array(text)
     var postedCount = 0
     for step in plan.steps {
       let nextCount = postedCount + step.characterCount
-      if post(String(characters[postedCount..<nextCount]), step) == .stop {
+      if try post(String(characters[postedCount..<nextCount]), step) == .stop {
         // The stopped post never delivered its slice, so the run reports what did arrive.
         return SynthesizedPlanRun(postedCharacterCount: postedCount, stoppedEarly: true)
       }
       postedCount = nextCount
       didPostStep(step)
       if step.warmsUpField {
-        waitAfterWarmupCharacter(String(characters[postedCount - step.characterCount..<postedCount]))
+        try waitAfterWarmupCharacter(String(characters[postedCount - step.characterCount..<postedCount]))
       } else if step.pauseAfterSeconds > 0 {
         sleepFor(step.pauseAfterSeconds)
       }
@@ -355,7 +355,7 @@ extension RunnerTests {
     var clearOutcome: SynthesizedClearOutcome?
     // A private synthesis channel that is gone mid-plan leaves the command the same
     // point-and-focus fallback it had before the plan existed.
-    let synthesisAvailable = runSynthesizedTextPlan(
+    let synthesisAvailable = try runSynthesizedTextPlan(
       plan,
       text: request.text,
       post: { slice, step in
@@ -426,7 +426,7 @@ extension RunnerTests {
     // still-in-flight character at all. Wait here, on the same request.target
     // (element nil, refreshPoint set) that gated this route, so each poll re-resolves via the
     // refresh point rather than trusting a stale element handle.
-    let commit = awaitSynthesizedReplacementCommit(
+    let commit = try awaitSynthesizedReplacementCommit(
       app: request.app,
       target: request.target,
       expectedText: request.text

@@ -84,7 +84,7 @@ extension RunnerTests {
     let target = TextEntryTarget(element: nil, refreshPoint: point, prefersFocusedElement: false, contentTranslation: .none)
 
     let (lookup, lookupReads) = try countingReads { try textInputCandidatesAt(app: app, point: point, contentTranslation: .none).first }
-    let (input, resolutionReads) = try countingReads { resolveTextEntryInput(app: app, target: target) }
+    let (input, resolutionReads) = try countingReads { try resolveTextEntryInput(app: app, target: target) }
 
     XCTAssertEqual(lookup?.snapshot?.identifier, "agent-device-hardware-keyboard-input")
     XCTAssertEqual(input?.snapshot?.identifier, "agent-device-hardware-keyboard-input")

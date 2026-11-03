@@ -34,7 +34,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func tapInAppBackControl(app: XCUIApplication) -> InAppBackOutcome {
+  func tapInAppBackControl(app: XCUIApplication) throws -> InAppBackOutcome {
 #if os(macOS)
     if let back = macOSNavigationBackElement(app: app) {
       tapElementCenter(app: app, element: back)
@@ -57,7 +57,7 @@ extension RunnerTests {
       || isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
-    } else if let frame = topNavigationBackFrame(app: app) {
+    } else if let frame = try topNavigationBackFrame(app: app) {
       return tapResolvedNavigationBackControl(app: app, frame: frame)
     }
     return tapTopLeadingNavigationFallback(
@@ -112,10 +112,12 @@ extension RunnerTests {
     }
   }
 
-  private func topNavigationBackFrame(app: XCUIApplication) -> CGRect? {
+  private func topNavigationBackFrame(app: XCUIApplication) throws -> CGRect? {
 #if os(iOS)
     let window = onScreenWindowFrame(app: app)
-    let candidates = app.buttons.matching(Self.navigationBackPredicate()).allElementsBoundByIndex.compactMap {
+    let candidates = try elementQueries(app: app, matching: .button).flatMap {
+      $0.matching(Self.navigationBackPredicate()).allElementsBoundByIndex
+    }.compactMap {
       element -> (frame: CGRect, rank: Int)? in
       guard element.exists, element.isHittable else { return nil }
       let frame = element.frame
