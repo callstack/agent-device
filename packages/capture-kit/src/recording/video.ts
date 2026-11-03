@@ -42,22 +42,23 @@ exit(exitCode)
 
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
-/** Executable authority produced by background preparation; validation cannot compile. */
-export type PreparedVideoValidator = Readonly<{
-  executablePath: string;
-  env: NodeJS.ProcessEnv;
-}>;
+/** Host-selected validation authority; validation cannot compile. */
+export type PreparedVideoValidator =
+  | Readonly<{ kind: 'container' }>
+  | Readonly<{ kind: 'avfoundation'; executablePath: string; env: NodeJS.ProcessEnv }>;
 
 export type VideoValidator = PreparedVideoValidator | Promise<PreparedVideoValidator>;
+const containerVideoValidator = Object.freeze({ kind: 'container' } as const);
 const videoValidatorPreparations = new Map<
   string,
   { promise: Promise<PreparedVideoValidator>; failed: boolean }
 >();
 
-/** Reads prepared executable authority from the host cache without compiling. */
+/** Selects container validation or reads prepared executable authority without compiling. */
 export function readPreparedVideoValidator(
   host: HostEnvironment,
 ): Promise<PreparedVideoValidator> | undefined {
+  if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
   const cacheRoot = getSwiftCacheRoot(host.env);
   const preparing = videoValidatorPreparations.get(cacheRoot);
   if (preparing && !preparing.failed) return preparing.promise;
@@ -75,10 +76,11 @@ function preparedVideoValidator(
   host: HostEnvironment,
   executablePath: string,
 ): PreparedVideoValidator {
-  return Object.freeze({ executablePath, env: buildSwiftToolEnv(host.env) });
+  return Object.freeze({ kind: 'avfoundation', executablePath, env: buildSwiftToolEnv(host.env) });
 }
 
 export function prepareVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
+  if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
   const cacheRoot = getSwiftCacheRoot(host.env);
   let preparing = videoValidatorPreparations.get(cacheRoot);
   if (!preparing || preparing.failed) {
@@ -171,7 +173,7 @@ export async function waitForStableFile(
   }
 }
 
-/** Validates with a prepared executable, bounded by the caller's finalization deadline. */
+/** Uses prepared validation authority; executable runs stay within the finalization deadline. */
 export async function isPlayableVideo(
   filePath: string,
   validator: VideoValidator | undefined,
@@ -214,6 +216,7 @@ export async function isPlayableVideo(
   } finally {
     clearTimeout(timer);
   }
+  if (prepared.kind === 'container') return true;
   const runTimeoutMs = Math.min(
     VALIDATOR_RUN_TIMEOUT_MS,
     deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,

@@ -27,13 +27,19 @@ vi.mock('./swift-cache.ts', () => ({
   compileSwiftSourceText: vi.fn(async () => '/bin/true'),
 }));
 
+const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
 beforeEach(() => {
+  Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', mkdtempForTestSync('agent-device-video-validator-'));
   vi.mocked(runCmd).mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   vi.mocked(compileSwiftSourceText).mockReset().mockResolvedValue('/bin/true');
   vi.mocked(readCompiledSwiftSourceText).mockReset().mockReturnValue(undefined);
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  Object.defineProperty(process, 'platform', originalPlatform);
+});
 
 const directory = mkdtempForTestSync('agent-device-video-webm-');
 const playableWebm = likelyPlayableWebmContainer();
@@ -62,7 +68,42 @@ const moov = mp4Atom(
   mp4Atom('mvhd', mp4MovieHeader({ version: 0, timescale: 1_000, duration: 2_000 })),
 );
 
-const validator = { executablePath: '/prepared/video-validator', env: {} };
+const validator = {
+  kind: 'avfoundation' as const,
+  executablePath: '/prepared/video-validator',
+  env: {},
+};
+
+test.each(['linux', 'win32'] as const)(
+  '%s recording validation uses container authority without Swift preparation',
+  async (platform) => {
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    const host = createTestHost();
+    const prepared = await prepareVideoValidator(host);
+    expect(prepared).toEqual({ kind: 'container' });
+    expect(await readPreparedVideoValidator(host)).toBe(prepared);
+    const mp4 = writeFixture(`${platform}.mp4`, Buffer.concat([ftyp, moov]));
+    await expect(isPlayableVideo(mp4, prepared)).resolves.toBe(true);
+    await expect(
+      isPlayableVideo(writeFixture(`${platform}-invalid.mp4`, Buffer.from('invalid')), prepared),
+    ).resolves.toBe(false);
+    await expect(isPlayableVideo(mp4, undefined)).rejects.toMatchObject({
+      details: { reason: 'video_validator_not_prepared' },
+    });
+    expect(compileSwiftSourceText).not.toHaveBeenCalled();
+    expect(readCompiledSwiftSourceText).not.toHaveBeenCalled();
+    expect(runCmd).not.toHaveBeenCalled();
+  },
+);
+
+test('semantic authority still runs when the current platform differs from its construction host', async () => {
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  vi.mocked(runCmd).mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' });
+  await expect(
+    isPlayableVideo(writeFixture('semantic.mp4', Buffer.concat([ftyp, moov])), validator),
+  ).resolves.toBe(false);
+  expect(runCmd).toHaveBeenCalledOnce();
+});
 
 test('validation reuses the prepared executable without compiling at completion', async () => {
   const mp4 = writeFixture('prepared.mp4', Buffer.concat([ftyp, moov]));

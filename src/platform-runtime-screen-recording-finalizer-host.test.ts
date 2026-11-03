@@ -6,6 +6,7 @@ import {
 } from '@agent-device/capture-kit/recording-overlay';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import type { PreparedVideoValidator } from '@agent-device/capture-kit/recording-video';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 
 const video = vi.hoisted(() => ({
@@ -13,8 +14,12 @@ const video = vi.hoisted(() => ({
   playable: vi.fn(async (_path: string, _options: { deadline?: Deadline }) => true),
   isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
-  prepare: vi.fn(async () => ({ executablePath: '/bin/true', env: {} })),
-  read: vi.fn<() => Promise<{ executablePath: string; env: NodeJS.ProcessEnv }> | undefined>(),
+  prepare: vi.fn(async () => ({
+    kind: 'avfoundation' as const,
+    executablePath: '/bin/true',
+    env: {},
+  })),
+  read: vi.fn<() => Promise<PreparedVideoValidator> | undefined>(),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
@@ -46,12 +51,18 @@ beforeEach(() => {
   video.playable.mockReset().mockResolvedValue(true);
   video.isPlayable.mockReset().mockResolvedValue(true);
   video.container.mockReset().mockResolvedValue(true);
-  video.prepare.mockReset().mockResolvedValue({ executablePath: '/bin/true', env: {} });
+  video.prepare
+    .mockReset()
+    .mockResolvedValue({ kind: 'avfoundation', executablePath: '/bin/true', env: {} });
   video.read.mockReset();
 });
 
 test('requires stable playable media before publishing finalization telemetry', async () => {
-  const validator = Promise.resolve({ executablePath: '/prepared/validator', env: {} });
+  const validator = Promise.resolve({
+    kind: 'avfoundation' as const,
+    executablePath: '/prepared/validator',
+    env: {},
+  });
   video.prepare.mockReturnValue(validator);
   video.read.mockReturnValue(validator);
   const finalizer = createScreenRecordingFinalizer(createLiveTestHostEnvironment());
