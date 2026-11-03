@@ -6,7 +6,6 @@ import {
   buildSwiftToolEnv,
   compileSwiftSourceText,
   readCompiledSwiftSourceText,
-  getSwiftCacheRoot,
 } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -49,27 +48,81 @@ export type PreparedVideoValidator =
 
 export type VideoValidator = PreparedVideoValidator | Promise<PreparedVideoValidator>;
 const containerVideoValidator = Object.freeze({ kind: 'container' } as const);
-const videoValidatorPreparations = new Map<
-  string,
-  { promise: Promise<PreparedVideoValidator>; failed: boolean }
->();
 
-/** Selects container validation or reads prepared executable authority without compiling. */
-export function readPreparedVideoValidator(
-  host: HostEnvironment,
-): Promise<PreparedVideoValidator> | undefined {
-  if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
-  const cacheRoot = getSwiftCacheRoot(host.env);
-  const preparing = videoValidatorPreparations.get(cacheRoot);
-  if (preparing && !preparing.failed) return preparing.promise;
-  const executablePath = readCompiledSwiftSourceText({
-    host,
-    source: VIDEO_VALIDATION_SCRIPT,
-    cacheName: 'video-validator',
+/**
+ * One runtime host's validator preparation, with the lifetime its compile needs: `prepare` starts
+ * or reuses the background compile, `read` answers with what preparation has produced so far, and
+ * `close` cancels an unfinished compile and waits for its cleanup. The owner is per runtime host
+ * because that is who can close it: the daemon closes its recording host, and a compile that
+ * outlived the process which started it would keep `swiftc`, its temporary output and the Swift
+ * cache lock behind with nobody left to stop them.
+ */
+export type VideoValidatorPreparation = Readonly<{
+  /** Warms the validator without waiting for it; never starts a second compile for this owner. */
+  prepare(): Promise<PreparedVideoValidator>;
+  /**
+   * Selects container validation or reads prepared authority without compiling. Answers `undefined`
+   * when nothing was ever prepared and no executable is published: a stop reports that as its own
+   * retriable not-prepared outcome.
+   */
+  read(): Promise<PreparedVideoValidator> | undefined;
+  /** Stops an unfinished compile and awaits its settlement, including temp output and lock cleanup. */
+  close(): Promise<void>;
+}>;
+
+type VideoValidatorCompile = {
+  readonly promise: Promise<PreparedVideoValidator>;
+  readonly cancel: AbortController;
+  failed: boolean;
+};
+
+/** Owns one cache's validator preparation; cross-process compilation stays with the cache lock. */
+export function createVideoValidatorPreparation(host: HostEnvironment): VideoValidatorPreparation {
+  let compile: VideoValidatorCompile | undefined;
+  let closed = false;
+  return Object.freeze({
+    prepare: () => {
+      if (closed) return Promise.reject(videoValidatorPreparationClosed());
+      if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
+      if (!compile || compile.failed) {
+        const cancel = new AbortController();
+        const next: VideoValidatorCompile = {
+          cancel,
+          failed: false,
+          promise: compileVideoValidator(host, cancel.signal),
+        };
+        compile = next;
+        void next.promise.catch(() => {
+          next.failed = true;
+        });
+      }
+      return compile.promise;
+    },
+    read: () => {
+      if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
+      const executablePath = readCompiledSwiftSourceText({
+        host,
+        source: VIDEO_VALIDATION_SCRIPT,
+        cacheName: 'video-validator',
+      });
+      // A published executable answers even after this process's own preparation failed, which is
+      // how another process's `prepare ios-runner` recovers a stop in this one.
+      if (executablePath) return Promise.resolve(preparedVideoValidator(host, executablePath));
+      // A failed preparation stays readable as its own typed failure until an explicit prepare
+      // retries it; only a preparation that never started answers no authority at all.
+      return compile ? compile.promise : undefined;
+    },
+    close: async () => {
+      closed = true;
+      const pending = compile;
+      if (!pending) return;
+      // The abort is this owner's shutdown, not a request's: it stops `swiftc` through its signal,
+      // or stops waiting for another process's compile, and the compile's own cleanup removes its
+      // temporary output and gives the cache lock back before this settles.
+      pending.cancel.abort();
+      await pending.promise.catch(() => undefined);
+    },
   });
-  return executablePath
-    ? Promise.resolve(preparedVideoValidator(host, executablePath))
-    : preparing?.promise;
 }
 
 function preparedVideoValidator(
@@ -79,22 +132,23 @@ function preparedVideoValidator(
   return Object.freeze({ kind: 'avfoundation', executablePath, env: buildSwiftToolEnv(host.env) });
 }
 
-export function prepareVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
-  if (process.platform !== 'darwin') return Promise.resolve(containerVideoValidator);
-  const cacheRoot = getSwiftCacheRoot(host.env);
-  let preparing = videoValidatorPreparations.get(cacheRoot);
-  if (!preparing || preparing.failed) {
-    const next = { promise: compileVideoValidator(host), failed: false };
-    preparing = next;
-    videoValidatorPreparations.set(cacheRoot, preparing);
-    void next.promise.catch(() => {
-      next.failed = true;
-    });
-  }
-  return preparing.promise;
+/** A preparation whose owner has closed will not compile again; this outcome is terminal. */
+function videoValidatorPreparationClosed(): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The video validator preparation is closed and will not compile',
+    {
+      reason: 'video_validator_preparation_closed',
+      retriable: false,
+      hint: 'This recording host has shut down. Start a recording session on a running host to prepare the validator.',
+    },
+  );
 }
 
-async function compileVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
+async function compileVideoValidator(
+  host: HostEnvironment,
+  signal: AbortSignal,
+): Promise<PreparedVideoValidator> {
   const { withDiagnosticTimer } = await import('@agent-device/host-kit/diagnostics');
   return await withDiagnosticTimer(
     'prepare_video_validator',
@@ -104,6 +158,7 @@ async function compileVideoValidator(host: HostEnvironment): Promise<PreparedVid
           host,
           source: VIDEO_VALIDATION_SCRIPT,
           cacheName: 'video-validator',
+          signal,
         });
         return preparedVideoValidator(host, executablePath);
       } catch (error) {

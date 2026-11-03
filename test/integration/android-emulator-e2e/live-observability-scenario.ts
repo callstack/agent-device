@@ -1,4 +1,4 @@
-import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
+import { createVideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -75,7 +75,9 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
   );
 
   const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
-  const validator = await prepareVideoValidator(captureHostEnvironment(process));
+  const validator = await createVideoValidatorPreparation(
+    captureHostEnvironment(process),
+  ).prepare();
   await runStep(context, 'start short Android screen recording', [
     'record',
     'start',

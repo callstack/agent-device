@@ -10,6 +10,7 @@ function lifecycle(overrides: {
   recoverTestImeStartup: AndroidApplicationTools['recoverTestImeStartup'];
   detachRunnerSessionsForShutdown?: AppleApplicationTools['detachRunnerSessionsForShutdown'];
   finalizeRunnerSessionsForShutdown?: AppleApplicationTools['finalizeRunnerSessionsForShutdown'];
+  closeValidatorPreparation?: () => Promise<void>;
 }) {
   return createApplicationResourceLifecycle({
     android: {
@@ -22,6 +23,9 @@ function lifecycle(overrides: {
       finalizeRunnerSessionsForShutdown:
         overrides.finalizeRunnerSessionsForShutdown ?? (async () => {}),
     } as unknown as AppleApplicationTools,
+    recording: {
+      closeValidatorPreparation: overrides.closeValidatorPreparation ?? (async () => {}),
+    },
   });
 }
 
@@ -45,11 +49,13 @@ test('startup recovery reaches Android mechanics only after validated marker evi
 test('daemon shutdown phases delegate to the Apple runner owner', async () => {
   const detachRunnerSessionsForShutdown = vi.fn(async () => ['ios-sim']);
   const finalizeRunnerSessionsForShutdown = vi.fn(async () => ['ios-sim']);
+  const closeValidatorPreparation = vi.fn(async () => {});
   const resources = lifecycle({
     hasTestImeRecoveryEvidence: async () => false,
     recoverTestImeStartup: async () => {},
     detachRunnerSessionsForShutdown,
     finalizeRunnerSessionsForShutdown,
+    closeValidatorPreparation,
   });
 
   await resources.detachForDaemonShutdown();
@@ -57,4 +63,54 @@ test('daemon shutdown phases delegate to the Apple runner owner', async () => {
 
   expect(detachRunnerSessionsForShutdown).toHaveBeenCalledOnce();
   expect(finalizeRunnerSessionsForShutdown).toHaveBeenCalledOnce();
+  expect(closeValidatorPreparation).toHaveBeenCalledOnce();
+});
+
+test('a validator compile is closed before the device sweep that may wait on a recorder', async () => {
+  const order: string[] = [];
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    finalizeRunnerSessionsForShutdown: async () => {
+      order.push('runners');
+      return [];
+    },
+    closeValidatorPreparation: async () => {
+      order.push('validator');
+    },
+  });
+
+  await resources.finalizeDaemonShutdown();
+
+  expect(order).toEqual(['validator', 'runners']);
+});
+
+test('a failing runner sweep still closes the validator compile and reports its own failure', async () => {
+  const sweepFailure = new Error('runner finalization failed');
+  const closeValidatorPreparation = vi.fn(async () => {});
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    finalizeRunnerSessionsForShutdown: async () => {
+      throw sweepFailure;
+    },
+    closeValidatorPreparation,
+  });
+
+  await expect(resources.finalizeDaemonShutdown()).rejects.toBe(sweepFailure);
+  expect(closeValidatorPreparation).toHaveBeenCalledOnce();
+});
+
+test('a failed validator close is reported when the runner sweep succeeded', async () => {
+  const closeFailure = new Error('swiftc cleanup failed');
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    finalizeRunnerSessionsForShutdown: async () => ['ios-sim'],
+    closeValidatorPreparation: async () => {
+      throw closeFailure;
+    },
+  });
+
+  await expect(resources.finalizeDaemonShutdown()).rejects.toBe(closeFailure);
 });

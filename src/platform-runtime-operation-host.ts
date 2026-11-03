@@ -135,6 +135,7 @@ export function createPlatformRuntimeHost(options: {
     applicationResources: createApplicationResourceLifecycle({
       android: androidApplications,
       apple: appleApplications,
+      recording: screenRecording,
     }),
     clock: Object.freeze({
       now: () => Date.now(),
