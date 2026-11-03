@@ -73,7 +73,11 @@ async function overlayTouches(
       validator,
     });
     if (!(await isPlayableVideo(input.outputPath, validator, deadline))) {
-      throw new Error('recording post-processing produced an unplayable video');
+      throw new Error(
+        deadline.isExpired()
+          ? 'recording post-processing verification exceeded the finalization budget'
+          : 'recording post-processing produced an unplayable video',
+      );
     }
     return { telemetryPath };
   } catch (error) {
