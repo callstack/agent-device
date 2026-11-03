@@ -6,6 +6,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 const leaseProbe = vi.hoisted(() => ({
   registries: [] as import('../../resources/lease-registry.ts').LeaseRegistry[],
   ended: [] as Array<[string, string]>,
+  retryCalls: 0,
   shutdownSteps: [] as string[],
 }));
 vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
@@ -25,6 +26,9 @@ vi.mock('../request-execution-scope.ts', async (importOriginal) => {
     createLeaseSessionEnd: () => ({
       end: async (leaseId: string, reason: string) => {
         leaseProbe.ended.push([leaseId, reason]);
+      },
+      retryPending: async () => {
+        leaseProbe.retryCalls += 1;
       },
       cancel: () => {
         leaseProbe.shutdownSteps.push('cancel');
@@ -46,6 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   leaseProbe.registries.length = 0;
   leaseProbe.ended.length = 0;
+  leaseProbe.retryCalls = 0;
   leaseProbe.shutdownSteps.length = 0;
 });
 
@@ -76,6 +81,7 @@ test('an expired lease ends its session without any further request', async () =
 
     await vi.advanceTimersByTimeAsync(1_000);
     assert.deepEqual(leaseProbe.ended, [[lease.leaseId, 'LEASE_EXPIRED']]);
+    assert.equal(leaseProbe.retryCalls, 1);
 
     const shutdown = runtime?.close();
     await vi.runOnlyPendingTimersAsync();

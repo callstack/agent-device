@@ -190,6 +190,19 @@ function closeLeaseDecision(
   return activeLease && provider?.release ? 'provider-release' : 'local-release';
 }
 
+export function inspectSessionLeaseRetainedOnClose(params: {
+  session: SessionState;
+  leaseRegistry: LeaseRegistry;
+}): boolean {
+  if (!params.session.lease) return false;
+  return (
+    closeLeaseDecision(
+      params.leaseRegistry.inspectLeaseForClose(closeReleaseRequest(params.session)),
+      undefined,
+    ) === 'retained'
+  );
+}
+
 export function inspectSessionProviderReleaseOnClose(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;

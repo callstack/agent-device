@@ -49,9 +49,15 @@ import {
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 type SessionEntry = { current: SessionState };
 type SessionPatch = Partial<SessionState> | ((current: SessionState) => Partial<SessionState>);
+export type RetainedExecutionHost = Readonly<{
+  address: string;
+  device: SessionState['device'];
+  lease: NonNullable<SessionState['lease']>;
+}>;
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionEntry>();
+  private readonly retainedExecutionHosts = new Map<string, RetainedExecutionHost>();
   private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
   private readonly sessionsDir: string;
@@ -105,6 +111,11 @@ export class SessionStore {
     this.assertPublishable(address);
     const entry = { current: session };
     this.sessions.set(address, entry);
+    for (const retained of this.retainedExecutionHosts.values()) {
+      if (devicesOverlap(retained.device.id, session.device.id)) {
+        this.releaseRetainedExecutionHost(retained);
+      }
+    }
     this.clearIdleExpiryTombstone(address);
     return this.captureRef(address, entry);
   }
@@ -141,10 +152,33 @@ export class SessionStore {
     return next;
   }
 
-  retire(ref: SessionRef): boolean {
-    if (!this.resolveCurrent(ref)) return false;
+  retire(ref: SessionRef, options: { retainExecutionHost?: boolean } = {}): boolean {
+    const session = this.resolveCurrent(ref);
+    if (!session) return false;
+    if (options.retainExecutionHost && session.lease) {
+      this.retainedExecutionHosts.set(session.device.id, {
+        address: ref.address,
+        device: session.device,
+        lease: { ...session.lease },
+      });
+    }
     this.runtimeHints.delete(ref.address);
     return this.sessions.delete(ref.address);
+  }
+
+  listRetainedExecutionHosts(leaseId: string): RetainedExecutionHost[] {
+    return Array.from(this.retainedExecutionHosts.values()).filter(
+      (host) => host.lease.leaseId === leaseId,
+    );
+  }
+
+  ownsRetainedExecutionHost(host: RetainedExecutionHost): boolean {
+    return this.retainedExecutionHosts.get(host.device.id) === host;
+  }
+
+  releaseRetainedExecutionHost(host: RetainedExecutionHost): boolean {
+    if (!this.ownsRetainedExecutionHost(host)) return false;
+    return this.retainedExecutionHosts.delete(host.device.id);
   }
 
   private captureRef(address: string, entry: SessionEntry): SessionRef {

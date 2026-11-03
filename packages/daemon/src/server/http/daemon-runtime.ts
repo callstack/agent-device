@@ -300,10 +300,10 @@ async function startDaemonRuntimeOnHost(
   });
   // The registry only notices an expired lease when something calls it; this sweep ends an
   // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.
-  const leaseExpirySweep = setInterval(
-    () => leaseRegistry.consumeExpiredLeases(),
-    LEASE_EXPIRY_SWEEP_INTERVAL_MS,
-  );
+  const leaseExpirySweep = setInterval(() => {
+    leaseRegistry.consumeExpiredLeases();
+    void leaseSessionEnd.retryPending();
+  }, LEASE_EXPIRY_SWEEP_INTERVAL_MS);
   leaseExpirySweep.unref();
   rollback.onRollback(() => clearInterval(leaseExpirySweep));
   const dispatchRequest = createRequestHandler({
@@ -420,6 +420,7 @@ async function startDaemonRuntimeOnHost(
     sessionStore,
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
     teardownSession: settleIdleExpiredSession,
+    cleanupSessionlessExecutionHost: deps.platformResourceCleanup.cleanupSessionlessExecutionHost,
     withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
   });
 

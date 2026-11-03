@@ -78,6 +78,25 @@ test('address reuse with the same record still starts a different lifetime', () 
   assert.equal(store.getRuntimeHints(ADDRESS), undefined);
 });
 
+test('retained execution-host ownership follows the current session lifetime', () => {
+  const store = makeSessionStore();
+  const session = makeSession('default', {
+    lease: { leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
+  });
+  const old = store.publish(ADDRESS, session);
+  store.retire(old, { retainExecutionHost: true });
+  const [retained] = store.listRetainedExecutionHosts('lease-1');
+  assert.ok(retained);
+  assert.equal(store.ownsRetainedExecutionHost(retained), true);
+  const successor = store.publish(ADDRESS, session);
+  assert.equal(store.ownsRetainedExecutionHost(retained), false);
+  assert.equal(store.retire(old, { retainExecutionHost: true }), false);
+  assert.deepEqual(store.listRetainedExecutionHosts('lease-1'), []);
+  store.retire(successor, { retainExecutionHost: true });
+  assert.equal(store.releaseRetainedExecutionHost(retained), false);
+  assert.equal(store.listRetainedExecutionHosts('lease-1').length, 1);
+});
+
 test('retired updates cannot run their derivation or resurrect a record', () => {
   const store = makeSessionStore();
   const ref = store.publish(ADDRESS, makeSession('default'));
