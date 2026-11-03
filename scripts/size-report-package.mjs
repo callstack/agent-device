@@ -97,15 +97,21 @@ function readLicenseTextIds(lines) {
 
 /**
  * The `name@version (license): [n]` line the bundler writes, or undefined for any other line. The
- * references are what stands between the colon and the optional `; Author: …` clause; one package can
- * name several ids when it ships a NOTICE or source-file notices with its license.
+ * license field is whatever the plugin reports, wrapped in the renderer's own parentheses, so a
+ * grouped SPDX expression like `(MIT OR (Apache-2.0 AND CC0-1.0))` nests inside it: the field ends
+ * at the first `):` boundary, which only that closing parenthesis can reach. What follows the colon
+ * up to the renderer's optional `; Author: ` clause is the reference list — one package names
+ * several ids when it ships a NOTICE or source-file notices with its license. The author clause is
+ * attribution metadata: an author field holding a bracketed footnote must not read as a license
+ * reference, in either direction.
  */
 function readAttribution(line) {
-  const attribution = line.match(/^(\S+@\S+ \([^)]+\)): ?(.*)$/);
+  const attribution = line.match(/^(\S+@\S+ \((.+?)\)): ?(.*)$/);
   if (!attribution) return undefined;
+  const references = attribution[3].split('; Author: ', 1)[0];
   return {
     label: attribution[1],
-    references: [...attribution[2].matchAll(/\[(\d+)\]/g)].map((reference) => Number(reference[1])),
+    references: [...references.matchAll(/\[(\d+)\]/g)].map((reference) => Number(reference[1])),
   };
 }
 

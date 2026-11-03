@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { test } from 'vitest';
 import { mkdtempForTest } from '@agent-device/test-kit';
 import { formatMarkdown } from '../size-report.mjs';
@@ -13,6 +15,8 @@ import {
 const fixturePack = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
 );
+
+const execFileAsync = promisify(execFile);
 
 // The fixture pack ships the macOS helper (manifest, sources, and per-target PackStub.swift),
 // so every assertion here names the manifest source the guard would read from the packed tree;
@@ -222,6 +226,171 @@ test('pack gate reads content without a tree, staying a manifest-only check', ()
   // and both calls in `check-package.ts` — always name that tree, so the packed and installed copies
   // are read, never only the manifest.
   assert.doesNotThrow(() => assertBundledLicenseNotices([noticesEntry()]));
+});
+
+/** A dependency the license plugin bundles, with the manifest fields that shape its attribution. */
+function dependencyManifest(name: string, fields: Record<string, string>): [string, string][] {
+  return [
+    [
+      `node_modules/${name}/package.json`,
+      JSON.stringify({ name, version: '1.2.3', main: 'index.js', ...fields }),
+    ],
+    [
+      `node_modules/${name}/index.js`,
+      `export const ${name.replaceAll(/[^A-Za-z0-9_$]/g, '_')} = process.env.${name.toUpperCase()};`,
+    ],
+    [`node_modules/${name}/LICENSE`, `Copyright ${name} author\nFull ${name} license terms.`],
+  ];
+}
+
+/**
+ * Real renderer bytes: runs the same `bundledLicenseNotices` plugin the published build uses (through
+ * the shared fixture build script) over a fixture tree, so the attribution lines the pack gate reads
+ * are the ones `renderNotices` writes — grouped SPDX field, author clause and all — rather than a
+ * hand-written approximation of them.
+ */
+async function renderedNotices(dependencies: [string, Record<string, string>][]): Promise<string> {
+  const root = await realpath(await mkdtempForTest('pack-gate-render-'));
+  const files: [string, string][] = [
+    ['package.json', JSON.stringify({ name: 'fixture-project', type: 'module' })],
+    [
+      'tsconfig.json',
+      JSON.stringify({
+        compilerOptions: { target: 'es2022', module: 'nodenext', skipLibCheck: true },
+        include: ['input.ts'],
+      }),
+    ],
+    ['input.ts', dependencies.map(([name]) => `export { ${name} } from '${name}';`).join('\n')],
+  ];
+  for (const [name, fields] of dependencies) files.push(...dependencyManifest(name, fields));
+  for (const [relative, source] of files) {
+    const file = join(root, relative);
+    await mkdir(join(file, '..'), { recursive: true });
+    await writeFile(file, source);
+  }
+  await execFileAsync(
+    process.execPath,
+    [
+      '--experimental-strip-types',
+      join(import.meta.dirname, 'fixtures', 'bundled-license-build.mts'),
+      root,
+      'false',
+      'dist',
+    ],
+    { cwd: import.meta.dirname },
+  );
+  const tree = await treeWithNotices(
+    await readFile(join(root, 'dist', 'THIRD_PARTY_NOTICES.txt'), 'utf8'),
+  );
+  return tree;
+}
+
+test('pack gate accepts the attribution the renderer writes for a grouped SPDX expression', async () => {
+  // A `package.json` license may be a grouped SPDX expression, and `renderNotices` wraps whatever the
+  // plugin reports in its own parentheses, so the attribution carries nested ones. Those bytes are
+  // valid producer output: the gate has to read them, not report them as naming nobody.
+  const root = await renderedNotices([
+    ['shared', { license: '(MIT OR Apache-2.0)', author: 'Grouped author <g@example.test>' }],
+  ]);
+  const rendered = await readFile(join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(rendered, /^shared@1\.2\.3 \(\(MIT OR Apache-2\.0\)\): \[1\]; Author: /m);
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
+test('pack gate reads the license reference, not the author clause, from real bytes', async () => {
+  // The author line is attribution metadata: a bracketed footnote inside it is not a license
+  // reference. Resolving it as one would both reject valid bytes (no such section) and let an
+  // attribution with no reference at all pass on an author's footnote.
+  const root = await renderedNotices([
+    ['distinct', { license: 'MIT', author: 'Bracket author [7] <b@example.test>' }],
+  ]);
+  const rendered = await readFile(join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(rendered, /\[1\]; Author: Bracket author \[7\]/);
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
+test('pack gate still rejects a grouped attribution whose reference is missing or absent', async () => {
+  // The mixed file is the point: a simple attribution must not stand in for the grouped one, so the
+  // grouped line has to be inspected and named rather than skipped as unparseable.
+  const groupedDangling = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): [1]',
+      'undici@7.1.1 (MIT OR (Apache-2.0 AND CC0-1.0)): [9]',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: groupedDangling,
+        context: 'npm pack',
+      }),
+    /2 attributions and 1 license texts[\s\S]*unresolved: undici@7\.1\.1 \(MIT OR \(Apache-2\.0 AND CC0-1\.0\)\) -> \[9\]/,
+  );
+  const groupedEmpty = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): [1]',
+      'undici@7.1.1 (MIT OR Apache-2.0): ',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: groupedEmpty,
+        context: 'npm pack',
+      }),
+    /unresolved: undici@7\.1\.1 \(MIT OR Apache-2\.0\) -> no reference/,
+  );
+});
+
+test('pack gate takes no reference from an author clause', async () => {
+  // Written out rather than rendered: the shape the renderer only produces when a package's author
+  // field carries a footnote, which the real-bytes case above already covers end to end.
+  const authorSupplied = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): ; Author: Footnote author [1]',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: authorSupplied,
+        context: 'npm pack',
+      }),
+    /unresolved: @agent-device\/proxy@0\.21\.37-dev \(MIT\) -> no reference/,
+  );
+  // And the same file with a real reference beside the footnote passes: the author clause is
+  // ignored, not treated as a rejection by default.
+  const withReference = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): [1]; Author: Footnote author [1]',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], {
+      noticesRoot: withReference,
+      context: 'npm pack',
+    }),
+  );
 });
 
 test('publish package gate rejects placeholder notices from the tree it packed', async () => {
