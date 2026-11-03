@@ -17,9 +17,21 @@ package struct RawAlertRecording: Decodable {
   package let honorModal: [Node]
 
   package static func load(_ file: URL) throws -> RawAlertRecording {
-    let recording = try JSONDecoder().decode(Self.self, from: Data(contentsOf: file))
     func invalid(_ detail: String) -> NSError {
       NSError(domain: "alert-recording", code: 1, userInfo: [NSLocalizedDescriptionKey: "\(file.path): \(detail)"])
+    }
+    let recording: Self
+    do {
+      recording = try JSONDecoder().decode(Self.self, from: Data(contentsOf: file))
+    } catch let error as DecodingError {
+      let context: DecodingError.Context
+      switch error {
+      case let .keyNotFound(_, value), let .valueNotFound(_, value),
+        let .typeMismatch(_, value), let .dataCorrupted(value): context = value
+      @unknown default: throw error
+      }
+      let path = context.codingPath.map { $0.intValue.map { "node \($0)" } ?? $0.stringValue }.joined(separator: ".")
+      throw invalid("\(path): \(context.debugDescription)")
     }
     guard recording.format == 2 else { throw invalid("format \(recording.format) is not 2. Capture it again.") }
     for (name, nodes) in [("plain", recording.plain), ("honorModal", recording.honorModal)] {

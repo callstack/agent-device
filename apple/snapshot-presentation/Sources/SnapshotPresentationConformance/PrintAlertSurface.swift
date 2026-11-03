@@ -28,11 +28,13 @@ func printAlertSurface(_ arguments: [String]) throws {
     }
   case .noExclusion:
     answer = "noExclusion"
+  case let .unknown(.unstable(instability)):
+    answer = "unknown(unstable(\(instability.rawValue)))"
   case let .unknown(reason):
     answer = "unknown(\(reason))"
   }
   print("ModalSurface reads (the rule's answer, not ground truth): \(answer)")
-  let printPlain = arguments.last == "plain"
+  let printPlain = arguments.count == 2 && arguments[1] == "plain"
   let nodes = printPlain ? recording.plain : recording.honorModal
   var depths: [Int] = []
   let encoder = JSONEncoder()
