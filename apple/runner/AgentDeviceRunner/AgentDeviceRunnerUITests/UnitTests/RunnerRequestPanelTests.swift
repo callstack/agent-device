@@ -34,6 +34,7 @@ private final class LitPanelBookingProbe: NSObject {
   static var composedDarkWindow: DisplayWindowFixture?
   static var synthesizedPoint: CGPoint?
   static var synthesizedDisplay: UInt?
+  static var beforeElementLookup: (() -> Void)?
 
   static var coordinate: XCUICoordinate?
   static var windowFrame = CGRect.zero
@@ -76,6 +77,7 @@ private final class LitPanelBookingProbe: NSObject {
   }
   @objc(descendantsMatchingType:)
   func descendants(matching type: UInt) -> XCUIElementQuery {
+    Self.beforeElementLookup?()
     let elements = self === Self.window ? [Self.target!] : [Self.darkTarget!, Self.target!]
     return unsafeBitCast(SurfaceSelectorQuery(elements), to: XCUIElementQuery.self)
   }
@@ -114,6 +116,9 @@ extension RunnerTests {
   @MainActor
   func testLitPanelBookingAndCoordinateFallbackShareScreenPointsForPartialWindows() throws {
     try withLitPanelBookingProbe(composed: true) { window in
+      LitPanelBookingProbe.beforeElementLookup = {
+        XCTAssertNotNil(self.litPanelState.surface, "Preparation must book before element lookup")
+      }
       for (frame, orientation, expected, digitizer) in [
         (
           CGRect(x: 80, y: 0, width: 871, height: 669), RunnerInterfaceOrientation.landscapeLeft,
@@ -134,23 +139,22 @@ extension RunnerTests {
       ] {
         LitPanelBookingProbe.windowFrame = frame
         LitPanelBookingProbe.orientation = orientation
-        LitPanelBookingProbe.tappedPoint = nil
-        setRequestLitPanel(from: try runnerCommandFixture(
-          #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
-        ))
-        XCTAssertNil(bookRequestLitPanelSurface(app: app))
-        let booked = try XCTUnwrap(litPanelState.surface)
-        XCTAssertTrue(booked.window === window)
-        XCTAssertEqual(booked.geometry.windowOnScreen.rect, frame)
-        XCTAssertEqual(booked.geometry.digitizerBasis.rect, expected)
         for synthesized in [true, false] {
+          LitPanelBookingProbe.anchor = nil
+          LitPanelBookingProbe.tappedPoint = nil
           LitPanelBookingProbe.synthesizedPoint = nil
           LitPanelBookingProbe.synthesizedDisplay = nil
           let command = try runnerCommandFixture(
             #"{"command":"tap","selectorKey":"label","selectorValue":"same-selector","x":200,"y":150,"allowNonHittableCoordinateFallback":true,"synthesized":\#(synthesized),"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
           )
+          let requestID = setRequestLitPanel(from: command)
+          defer { endRequestLitPanel(requestID) }
           let response = try executeOnMainPrepared(command: command, activeApp: app)
           XCTAssertTrue(response.ok, response.error?.message ?? "")
+          let booked = try XCTUnwrap(litPanelState.surface)
+          XCTAssertTrue(booked.window === window)
+          XCTAssertEqual(booked.geometry.windowOnScreen.rect, frame)
+          XCTAssertEqual(booked.geometry.digitizerBasis.rect, expected)
           if synthesized {
             XCTAssertEqual(LitPanelBookingProbe.synthesizedDisplay, 3)
             XCTAssertEqual(LitPanelBookingProbe.synthesizedPoint, digitizer)
@@ -391,6 +395,7 @@ extension RunnerTests {
       LitPanelBookingProbe.target = nil
       LitPanelBookingProbe.darkTarget = nil
       LitPanelBookingProbe.composedDarkWindow = nil
+      LitPanelBookingProbe.beforeElementLookup = nil
       LitPanelBookingProbe.anchor = nil
       LitPanelBookingProbe.originalValueForKey = nil
       LitPanelBookingProbe.maxWindowListReads = nil
