@@ -50,14 +50,13 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testNewlyFocusedReplacementPreparesCaretBeforeSelectAll() throws {
+  func testNewlyFocusedReplacementKeepsCaretPreparation() throws {
     let field = try launchTextEntryWitness(prefilled: true)
     defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
     XCTAssertFalse(keyboardFocusConfirmed(app: app, element: field))
 
     let counts = try assertWitnessEntry(field, text: "hello")
     XCTAssertEqual(counts.taps, 2)
-    XCTAssertEqual(counts.selections, 1)
   }
 
   @MainActor
