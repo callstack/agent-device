@@ -80,39 +80,75 @@ test('a new target generation reuses the healthy helper and carries generation p
   assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
 });
 
-test('a failed startup does not retire a new app generation without another attempt', async () => {
-  const fixture = createLifecycleFixture();
-  let starts = 0;
-  const manager = new SnapshotBridgeManager({
-    ...fixture.host,
-    start: (...args) => {
-      starts += 1;
-      if (starts === 1) throw snapshotSourceError('process-crash', 'bridge-exited');
-      return fixture.host.start(...args);
-    },
-  });
-  try {
-    await assert.rejects(
-      manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
-      (error: unknown) =>
-        error instanceof SnapshotSourceError && error.failureKind === 'process-crash',
-    );
-    const next = { ...target, generation: 'generation-2' };
-    const result = await manager.request({
-      target: next,
-      bridge,
-      limits,
-      maxDepth: 10,
-      deadline: deadline(),
+test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
+  'a late helper crash is consumed once by %s',
+  async (capture) => {
+    vi.useFakeTimers();
+    let connecting = true;
+    const fixture = createLifecycleFixture();
+    const manager = new SnapshotBridgeManager({
+      ...fixture.host,
+      ensureDirectory: async () => {},
+      remove: async () => {},
+      connect: async (...args) => {
+        if (connecting)
+          throw snapshotSourceError('transport-failure', 'bridge-closed-before-connect');
+        return fixture.host.connect(...args);
+      },
     });
-    assert.equal(result.generation, next.generation);
-    assert.equal(starts, 2);
-    assert.equal(fixture.processes.length, 1);
-    assert.equal(fixture.sockets[0]?.writes, 1);
-  } finally {
-    await manager.close();
-  }
-});
+    try {
+      const first = assert.rejects(
+        manager.request({
+          target,
+          bridge,
+          limits,
+          maxDepth: 10,
+          deadline: deadline(undefined, 5000),
+        }),
+        (error: unknown) =>
+          error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+      );
+      await vi.advanceTimersByTimeAsync(2001);
+      await first;
+      fixture.processes[0]!.crash();
+      await vi.advanceTimersByTimeAsync(20);
+      assert.equal(exitDiagnostics(fixture).length, 1);
+      if (capture !== 'new-generation') {
+        const observed = assert.rejects(
+          manager.request({
+            target,
+            bridge,
+            limits,
+            maxDepth: 10,
+            deadline: deadline(undefined, 5000),
+          }),
+          isHelperCrashFailure,
+        );
+        observed.catch(() => {});
+        await vi.advanceTimersByTimeAsync(2001);
+        await observed;
+        assert.equal(fixture.processes.length, 1);
+      }
+      connecting = false;
+      const generation = capture === 'same-generation-retry' ? target.generation : 'generation-2';
+      const next = { ...target, generation };
+      const retried = manager.request({
+        target: next,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      assert.equal((await retried).generation, next.generation);
+      assert.equal(fixture.processes.length, 2);
+      assert.equal(fixture.sockets[0]?.writes, 1);
+    } finally {
+      await manager.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('cancellation while queued prevents a later dispatch', async () => {
   const fixture = createLifecycleFixture({ responseDelayMs: 200 });
@@ -740,50 +776,74 @@ test('slow helper readiness detaches from a capture and later uses the same proc
   }
 });
 
-test('owned startup expiry cleans the helper before a later generation retries', async () => {
-  vi.useFakeTimers();
-  const options = { connectDelayMs: 20000 };
-  const fixture = createLifecycleFixture(options);
-  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
-  const manager = new SnapshotBridgeManager(fixture.host);
-  const caller = new AbortController();
-  try {
-    const first = assert.rejects(
-      manager.request({
-        target,
+test.each(['same-generation', 'same-generation-retry', 'new-generation'])(
+  'owned startup expiry delivers its failure once to %s',
+  async (capture) => {
+    vi.useFakeTimers();
+    const options = { connectDelayMs: 20000 };
+    const fixture = createLifecycleFixture(options);
+    fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+    const manager = new SnapshotBridgeManager(fixture.host);
+    const caller = new AbortController();
+    try {
+      const first = assert.rejects(
+        manager.request({
+          target,
+          bridge,
+          limits,
+          maxDepth: 10,
+          deadline: deadline(undefined, 5000),
+        }),
+        (error: unknown) =>
+          error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+      );
+      await vi.advanceTimersByTimeAsync(2001);
+      await first;
+      await vi.advanceTimersByTimeAsync(8000);
+      assert.equal(caller.signal.aborted, false);
+      assert.equal(fixture.processes.length, 1);
+      assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+      assert.equal(fixture.sockets.length, 0);
+      if (capture !== 'new-generation') {
+        const observed = assert.rejects(
+          manager.request({
+            target,
+            bridge,
+            limits,
+            maxDepth: 10,
+            deadline: deadline(undefined, 5000),
+          }),
+          (error: unknown) =>
+            error instanceof SnapshotSourceError &&
+            error.failureKind === 'timeout' &&
+            error.failureCode === 'bridge-startup-deadline',
+        );
+        observed.catch(() => {});
+        await vi.advanceTimersByTimeAsync(2001);
+        await observed;
+        assert.equal(fixture.processes.length, 1);
+      }
+      options.connectDelayMs = 0;
+      const generation = capture === 'same-generation-retry' ? target.generation : 'generation-2';
+      const next = { ...target, generation };
+      const retried = manager.request({
+        target: next,
         bridge,
         limits,
         maxDepth: 10,
-        deadline: deadline(undefined, 5000),
-      }),
-      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
-    );
-    await vi.advanceTimersByTimeAsync(2001);
-    await first;
-    await vi.advanceTimersByTimeAsync(8000);
-    assert.equal(caller.signal.aborted, false);
-    assert.equal(fixture.processes.length, 1);
-    assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
-    assert.equal(fixture.sockets.length, 0);
-    options.connectDelayMs = 0;
-    const next = { ...target, generation: 'generation-2' };
-    const retried = manager.request({
-      target: next,
-      bridge,
-      limits,
-      maxDepth: 10,
-      deadline: deadline(caller.signal, 5000),
-    });
-    await vi.advanceTimersByTimeAsync(10);
-    assert.equal((await retried).generation, next.generation);
-    assert.equal(caller.signal.aborted, false);
-    assert.equal(fixture.processes.length, 2);
-    assert.equal(fixture.sockets[0]?.writes, 1);
-  } finally {
-    await manager.close();
-    vi.useRealTimers();
-  }
-});
+        deadline: deadline(caller.signal, 5000),
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      assert.equal((await retried).generation, next.generation);
+      assert.equal(caller.signal.aborted, false);
+      assert.equal(fixture.processes.length, 2);
+      assert.equal(fixture.sockets[0]?.writes, 1);
+    } finally {
+      await manager.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('close adopts paused startup, awaits cleanup and refuses future requests', async () => {
   const fixture = createLifecycleFixture();

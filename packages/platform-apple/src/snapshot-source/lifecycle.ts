@@ -76,6 +76,10 @@ type SnapshotBridgeRequest = Readonly<{
 
 export class SnapshotBridgeManager {
   private readonly entries = new Map<string, BridgeEntry>();
+  private readonly startupFailures = new Map<
+    string,
+    Readonly<{ generation: string; failure: SnapshotSourceError }>
+  >();
   private readonly requestQueues = new Map<string, Promise<void>>();
   /**
    * Every turn and creation underway. The queue names only the newest request for a Simulator, so this
@@ -186,6 +190,7 @@ export class SnapshotBridgeManager {
     if (this.closing) return this.closing;
     this.closed = true;
     this.readiness.close();
+    this.startupFailures.clear();
     const adopted = [...this.activeWork];
     this.requestQueues.clear();
     for (const work of adopted) work.interrupt.abort();
@@ -222,44 +227,52 @@ export class SnapshotBridgeManager {
     }
 
     if (refusedByClose(this.closed, turn)) throw closedSourceRefusal();
+    const startupFailure = this.startupFailures.get(udid);
+    this.startupFailures.delete(udid);
+    if (startupFailure?.generation === input.target.generation) throw startupFailure.failure;
     const waitDeadline =
       input.readinessDeadline ??
       createSnapshotSourceDeadline(
         Math.min(2000, remainingSnapshotSourceMs(deadline, 'bridge-readiness-deadline')),
         deadline.signal,
       );
-    return await this.readiness.value(`${udid}:${input.bridge.path}`, {
-      start: (signal) => this.createSession(udid, input, signal),
-      wait: async (ms, stop) => {
-        const creation = this.entries.get(udid);
-        const left = Math.max(0, waitDeadline.clock.remainingMs(waitDeadline.now()));
-        await waitForSnapshotSourceDelay(
-          deadline,
-          Math.min(ms, left),
-          'bridge-readiness-deadline',
-          AbortSignal.any([stop, turn.interrupt.signal]),
-        );
-        if (refusedByClose(this.closed, turn)) {
-          if (creation?.phase === 'creating') {
-            await creation.work.settled;
-            if (creation.failure?.failureKind === 'process-crash') throw creation.failure;
+    return await this.readiness
+      .value(`${udid}:${input.bridge.path}`, {
+        start: (signal) => this.createSession(udid, input, signal),
+        wait: async (ms, stop) => {
+          const creation = this.entries.get(udid);
+          const left = Math.max(0, waitDeadline.clock.remainingMs(waitDeadline.now()));
+          await waitForSnapshotSourceDelay(
+            deadline,
+            Math.min(ms, left),
+            'bridge-readiness-deadline',
+            AbortSignal.any([stop, turn.interrupt.signal]),
+          );
+          if (refusedByClose(this.closed, turn)) {
+            if (creation?.phase === 'creating') {
+              await creation.work.settled;
+              if (creation.failure?.failureKind === 'process-crash') throw creation.failure;
+            }
+            throw closedSourceRefusal();
           }
-          throw closedSourceRefusal();
-        }
-      },
-      pending: () => {
-        const creation = this.entries.get(udid);
-        if (
-          deadline.clock.remainingMs(deadline.now()) <= 0 &&
-          creation?.phase === 'creating' &&
-          creation.session &&
-          !creation.session.process.isAlive()
-        ) {
-          return snapshotSourceError('timeout', 'bridge-exit-deadline');
-        }
-        return snapshotSourceError('preparing', 'bridge-readiness-pending');
-      },
-    });
+        },
+        pending: () => {
+          const creation = this.entries.get(udid);
+          if (
+            deadline.clock.remainingMs(deadline.now()) <= 0 &&
+            creation?.phase === 'creating' &&
+            creation.session &&
+            !creation.session.process.isAlive()
+          ) {
+            return snapshotSourceError('timeout', 'bridge-exit-deadline');
+          }
+          return snapshotSourceError('preparing', 'bridge-readiness-pending');
+        },
+      })
+      .catch((error: unknown) => {
+        if (this.startupFailures.get(udid)?.failure === error) this.startupFailures.delete(udid);
+        throw error;
+      });
   }
 
   private async createSession(
@@ -325,9 +338,18 @@ export class SnapshotBridgeManager {
       }
     } catch (error) {
       entry.failure = asSnapshotSourceError(error);
-      if (entry.failure.failureKind === 'process-crash') throw entry.failure;
-      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
-      if (expiry.signal.aborted) throw snapshotSourceError('timeout', 'bridge-startup-deadline');
+      if (entry.failure.failureKind !== 'process-crash') {
+        if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+        if (expiry.signal.aborted) {
+          entry.failure = snapshotSourceError('timeout', 'bridge-startup-deadline');
+        }
+      }
+      if (!this.closed) {
+        this.startupFailures.set(udid, {
+          generation: input.target.generation,
+          failure: entry.failure,
+        });
+      }
       throw entry.failure;
     } finally {
       clearTimeout(timer);
