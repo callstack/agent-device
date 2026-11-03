@@ -3,11 +3,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 
 export async function resolveWebNetworkTransport(device: DeviceInfo): Promise<NetworkTransport> {
   if (device.platform !== 'web') return Object.freeze({ mode: 'local' });
-  const { hasScopedWebProvider, resolveWebProvider } = await import('@agent-device/platform-web');
-  // Only the request's own provider answers: an unscoped one would read the default browser
-  // session instead of the session's.
-  if (!(await hasScopedWebProvider())) return Object.freeze({ mode: 'local' });
-  const dumpNetwork = (await resolveWebProvider()).dumpNetwork;
+  const { resolveRequestScopedWebProvider } = await import('@agent-device/platform-web');
+  const provider = await resolveRequestScopedWebProvider();
+  if (!provider) return Object.freeze({ mode: 'local' });
+  const dumpNetwork = provider.dumpNetwork;
   if (!dumpNetwork) return Object.freeze({ mode: 'transport-composed' });
   return Object.freeze({
     mode: 'transport-composed',

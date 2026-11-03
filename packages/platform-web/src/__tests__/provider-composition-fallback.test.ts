@@ -1,6 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { resolveRequestScopedWebProvider, resolveWebProviderForHost } from '../resolve-provider.ts';
 import { resolveWebProvider, withWebProvider, type WebProvider } from '../provider.ts';
 
 // The scope's un-composed fallback is the single policy for a request that reaches a web device
@@ -48,4 +50,16 @@ test('a composed request provider answers instead of the fallback refusal', asyn
     await resolveWebProvider().open('https://example.test');
   });
   assert.deepEqual(opened, ['https://example.test']);
+});
+
+test('the request-scoped resolver answers only inside a composed request, and the host resolver falls back', async () => {
+  const provider = { open: async () => {} } as unknown as WebProvider;
+  const host = createTestHostEnvironment();
+  assert.equal(await resolveRequestScopedWebProvider(), undefined);
+  assert.notEqual(await resolveWebProviderForHost(host), provider);
+  await withWebProvider(provider, async () => {
+    assert.equal(await resolveRequestScopedWebProvider(), provider);
+    assert.equal(await resolveWebProviderForHost(host), provider);
+  });
+  assert.equal(await resolveWebProviderForHost(host, provider), provider);
 });
