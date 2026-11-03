@@ -4,12 +4,14 @@ import {
   OVERLAY_BUDGET_MS,
   type overlayRecordingTouches,
 } from '@agent-device/capture-kit/recording-overlay';
+import { Deadline } from '@agent-device/host-kit/retry';
+import { AppError } from '@agent-device/kernel/errors';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 
 const video = vi.hoisted(() => ({
   stable: vi.fn(async () => {}),
-  playable: vi.fn(async () => {}),
-  isPlayable: vi.fn(async () => true),
+  playable: vi.fn(async (_path: string, _options: { deadline?: Deadline }) => true),
+  isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
@@ -37,7 +39,7 @@ vi.mock('@agent-device/capture-kit/recording-overlay', async (importOriginal) =>
 beforeEach(() => {
   overlay.mockReset().mockResolvedValue(undefined);
   video.stable.mockReset().mockResolvedValue(undefined);
-  video.playable.mockReset().mockResolvedValue(undefined);
+  video.playable.mockReset().mockResolvedValue(true);
   video.isPlayable.mockReset().mockResolvedValue(true);
   video.container.mockReset().mockResolvedValue(true);
 });
@@ -53,12 +55,13 @@ test('requires stable playable media before publishing finalization telemetry', 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
     host: expect.objectContaining({ cwd: process.cwd() }),
+    deadline: expect.any(Deadline),
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });
 
 test('names the retry and the escape for a recording that never became playable', async () => {
-  video.isPlayable.mockResolvedValueOnce(false);
+  video.playable.mockResolvedValueOnce(false);
 
   await expect(
     createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
@@ -76,6 +79,24 @@ test('names the retry and the escape for a recording that never became playable'
       hint: expect.stringContaining('close this session'),
     },
   });
+});
+
+test('a validator compile that outlasts the budget reaches the caller as its own retriable error', async () => {
+  const compileTimeout = new AppError('COMMAND_FAILED', 'The video validator did not compile', {
+    reason: 'video_validator_compile_timeout',
+    retriable: true,
+  });
+  video.playable.mockRejectedValueOnce(compileTimeout);
+
+  await expect(
+    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+      outputPath: '/tmp/capture.mp4',
+      showTouches: false,
+      gestureEvents: [],
+      targetLabel: 'test recording',
+    }),
+  ).rejects.toBe(compileTimeout);
+  expect(telemetry).not.toHaveBeenCalled();
 });
 
 test('burns touches into a playable recording without a warning', async () => {
@@ -119,9 +140,36 @@ test('the overlay budget covers the playability checks that run before the overl
       targetLabel: 'test recording',
     });
 
-    expect(overlay.mock.calls[0]![0].deadline.remainingMs()).toBe(
-      OVERLAY_BUDGET_MS - playabilityMs,
-    );
+    const budget = overlay.mock.calls[0]![0].deadline;
+    expect(budget.remainingMs()).toBe(OVERLAY_BUDGET_MS - playabilityMs);
+    // The validator compile those checks may run is bounded by the same budget.
+    expect(video.playable.mock.calls[0]![1].deadline).toBe(budget);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a recording confirmed playable as the budget runs out is not refused by a second check', async () => {
+  // A check after the budget is spent reads as not playable, so the finalizer decides on the
+  // verdict of the wait that confirmed the file rather than asking again. Any second check, with
+  // the spent budget or without one, refuses here.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    video.isPlayable.mockResolvedValue(false);
+    video.playable.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+      return true;
+    });
+
+    await expect(
+      createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+        outputPath: '/tmp/capture.mp4',
+        showTouches: false,
+        gestureEvents: [],
+        targetLabel: 'test recording',
+      }),
+    ).resolves.toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
+    expect(video.isPlayable).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }

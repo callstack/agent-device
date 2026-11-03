@@ -25,7 +25,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 vi.mock('../video.ts', () => ({
-  waitForPlayableVideo: vi.fn(async () => {}),
+  waitForPlayableVideo: vi.fn(async () => true),
 }));
 
 import {
@@ -322,6 +322,27 @@ test('overlay keeps the plain failure when the export failed with budget to spar
   });
 });
 
+test('overlay keeps the video as recorded when the export never plays within its budget', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  vi.mocked(waitForPlayableVideo).mockResolvedValueOnce(false);
+
+  await expect(
+    overlayRecordingTouches({
+      host: createTestHost(),
+      videoPath,
+      telemetryPath,
+      deadline: startRecordingOverlayBudget(),
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Failed to add touch overlays to the recording',
+  });
+  expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+});
+
 test('overlay keeps the video as recorded when verifying the export spent its budget', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   const videoPath = path.join(tmpDir, 'recording.mp4');
@@ -331,6 +352,7 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   const deadline = startRecordingOverlayBudget();
   vi.mocked(waitForPlayableVideo).mockImplementationOnce(async () => {
     vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+    return false;
   });
 
   await expect(

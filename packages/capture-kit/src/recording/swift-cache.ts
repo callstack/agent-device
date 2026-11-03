@@ -16,6 +16,9 @@ import {
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;
+// swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
+// SIGKILL or SIGTERM leaves them compiling with no parent.
+const SWIFTC_STOP = { signal: 'SIGINT', graceMs: 2_000 } as const;
 const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
 
 /**
@@ -130,6 +133,8 @@ export async function compileSwiftSourceText(params: {
   source: string;
   cacheName: string;
   timeoutMs?: number;
+  /** Cancels the compile: kills `swiftc`, or stops waiting for another process's compile. */
+  signal?: AbortSignal;
 }): Promise<string> {
   const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
@@ -143,6 +148,7 @@ export async function compileSwiftSourceText(params: {
     executablePath,
     sourceText: params.source,
     timeoutMs: params.timeoutMs,
+    signal: params.signal,
   });
   return executablePath;
 }
@@ -162,6 +168,7 @@ async function ensureSwiftExecutable(params: {
   executablePath: string;
   sourceText?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<void> {
   if (isExecutableFile(params.executablePath)) {
     return;
@@ -171,7 +178,7 @@ async function ensureSwiftExecutable(params: {
   fs.mkdirSync(executableDir, { recursive: true });
   const timeoutMs = params.timeoutMs ?? 120_000;
   await withProcessLock({
-    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs),
+    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs, params.signal),
     task: async () => {
       // Another process may have published the executable while this one waited for the lock.
       if (isExecutableFile(params.executablePath)) {
@@ -193,6 +200,8 @@ async function ensureSwiftExecutable(params: {
         }
         await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
+          signal: params.signal,
+          kill: SWIFTC_STOP,
           env: buildSwiftToolEnv(params.host.env),
         });
         fs.renameSync(tempExecutablePath, params.executablePath);
@@ -206,6 +215,7 @@ async function ensureSwiftExecutable(params: {
 async function acquireSwiftCacheLock(
   lockDir: string,
   timeoutMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<ProcessLockRelease> {
   try {
     return await acquireProcessLock({
@@ -217,6 +227,7 @@ async function acquireSwiftCacheLock(
       },
       timeoutMs,
       pollMs: LOCK_RETRY_DELAY_MS,
+      signal,
       description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
     });
   } catch (error) {
