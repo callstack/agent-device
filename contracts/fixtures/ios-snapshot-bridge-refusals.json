@@ -24,6 +24,10 @@
     {
       "code": "bridge-preparation-pending",
       "consequence": "bridge-preparation"
+    },
+    {
+      "code": "snapshot-tree-changed",
+      "consequence": "tree-changed"
     }
   ],
   "generationScoped": [

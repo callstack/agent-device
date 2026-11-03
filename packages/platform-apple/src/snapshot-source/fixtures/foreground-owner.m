@@ -203,6 +203,8 @@ int main(int argc, const char *argv[])
       if ([@[@"depth-missing-element", @"depth-incomplete", @"depth-missing-count", @"depth-invalid-count", @"depth-continuation-count", @"depth-fractional-count", @"depth-nan-count", @"depth-negative-count"] containsObject:scenario]) {
         expectedCode = @"snapshot-tree-malformed";
         if (![scenario isEqual:@"depth-incomplete"] && ![scenario isEqual:@"depth-continuation-count"]) expectedCaptures = 2;
+        // The continuation found fewer children than the first read counted: the tree changed.
+        if ([scenario isEqual:@"depth-incomplete"]) expectedCode = @"snapshot-tree-changed";
       }
       if ([scenario isEqual:@"depth-owner-change"]) {
         replacementApplication = system;
@@ -240,7 +242,7 @@ int main(int argc, const char *argv[])
         nativeLevelsHint:0 requestId:@"capture-1" generation:@"generation-1" maxDurationMs:4000 error:&error];
     if (expectedCode) {
       require(result == nil, @"refused capture must not publish the app tree");
-      require([error[@"error_kind"] isEqual:([expectedCode isEqual:@"application-server-unavailable"] ? @"application_unavailable" : [expectedCode isEqual:@"snapshot-tree-malformed"] ? @"malformed_tree" : [expectedCode isEqual:@"continuation-budget-exhausted"] ? @"reader_unavailable" : @"unsupported")], @"refusal must preserve the typed failure kind");
+      require([error[@"error_kind"] isEqual:([expectedCode isEqual:@"application-server-unavailable"] ? @"application_unavailable" : ([expectedCode isEqual:@"snapshot-tree-malformed"] || [expectedCode isEqual:@"snapshot-tree-changed"]) ? @"malformed_tree" : [expectedCode isEqual:@"continuation-budget-exhausted"] ? @"reader_unavailable" : @"unsupported")], @"refusal must preserve the typed failure kind");
       require([error[@"error_code"] isEqual:expectedCode], @"refusal must name the ownership phase");
       require([error[@"requestId"] isEqual:@"capture-1"], @"refusal must preserve request identity");
     } else {

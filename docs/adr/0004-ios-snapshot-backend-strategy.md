@@ -90,6 +90,12 @@ A bridge request on each capture would instead add a refused bridge round trip t
 The circuit limits that cost to one capture per generation.
 A refusal that provides evidence about the screen instead of the app has capture scope.
 The coordinate-space amendment below decides that case.
+A tree that changed between two reads also has capture scope (`snapshot-tree-changed`).
+The reader re-reads a node whose children the first read withheld.
+If the re-read returns fewer children than the first read counted, the screen moved between the reads, as a scrolling list does when it recycles its cells.
+That refusal costs one capture, and the next capture of the same app uses the bridge again.
+A foreground owner that changes during a continuation is `foreground-owner-changed`, with the same scope.
+`contracts/fixtures/ios-snapshot-bridge-refusals.json` lists the scope of every refusal code.
 
 Keep the two public snapshot strategies explicit:
 

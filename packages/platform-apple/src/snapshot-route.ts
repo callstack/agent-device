@@ -626,6 +626,8 @@ function captureScopedFallbackWarning(code: string, consequence: CaptureScopedCo
       return `${thisCapture} while an earlier bridge read was still running.`;
     case 'foreground-ownership':
       return `${thisCapture}, while another surface owned the foreground.`;
+    case 'tree-changed':
+      return `${thisCapture}, while the screen changed during the bridge read.`;
     case 'window-not-full-screen':
       return `${thisCapture}, while the app window did not fill the screen; the runner republishes a windowed capture in screen space.`;
     case 'coordinate-space-unresolved':

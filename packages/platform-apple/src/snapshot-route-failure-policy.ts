@@ -6,7 +6,7 @@ import type { SnapshotSourceFailure } from './snapshot-source-facade.ts';
 
 /**
  * What the screen showed when a capture-scoped bridge refusal fired: a preparation still running
- * (#2491), a runner-served read still running, an unresolved coordinate space (#2612), a foreground
+ * (#2491), a runner-served read still running, a tree that changed between two reads, an unresolved coordinate space (#2612), a foreground
  * another surface owns (#3874), or a window that does not fill the screen (#3844). The route consumes one disposition for both
  * decisions that must agree: whether the generation's bridge circuit opens, and which sentence the
  * fallback warning carries (#3874, #3895).
@@ -16,6 +16,7 @@ export type CaptureScopedConsequence =
   | 'bridge-read-busy'
   | 'coordinate-space-unresolved'
   | 'foreground-ownership'
+  | 'tree-changed'
   | 'window-not-full-screen';
 
 /**
@@ -62,6 +63,9 @@ const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = n
   // The runner-served reader runs one read at a time: the refusal says only that another read, such
   // as one a cancelled capture left running, has not returned yet.
   ['bridge-read-in-flight', 'bridge-read-busy'],
+  // A continuation re-read found fewer children than the first read reported: the tree changed
+  // between the two reads, as a list does while it scrolls and recycles its cells.
+  ['snapshot-tree-changed', 'tree-changed'],
 ]);
 
 /**

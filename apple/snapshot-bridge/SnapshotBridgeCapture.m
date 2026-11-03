@@ -1,5 +1,7 @@
 #import "SnapshotBridgeCapture.h"
 
+NSErrorDomain const SnapshotCaptureErrorDomain = @"agent-device.snapshot";
+
 static NSString *const attributesKey = @"UIAccessibilitySnapshotKeyAttributes";
 static NSString *const childrenKey = @"UIAccessibilitySnapshotKeyChildren";
 static NSString *const childCountKey = @"UIAccessibilitySnapshotKeyChildrenCount";
@@ -32,7 +34,7 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
   NSUInteger attemptDepth = MIN(depth, self.acceptedDepth);
   for (NSUInteger retries = 0;; retries++) {
     if (self.requests >= kMaximumRequestsPerCapture) {
-      if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:1
+      if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorBudgetExhausted
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation request budget exhausted"}];
       return nil;
     }
@@ -58,7 +60,7 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
   if (![tree isKindOfClass:NSDictionary.class] ||
       ![tree[attributesKey] isKindOfClass:NSDictionary.class] ||
       ![tree[childrenKey] isKindOfClass:NSArray.class]) {
-    if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:2
+    if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorMalformedContinuation
         userInfo:@{NSLocalizedDescriptionKey: @"malformed snapshot continuation"}];
     return nil;
   }
@@ -73,7 +75,7 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
       childCount.doubleValue == (double)childCount.unsignedIntegerValue;
   if (nativeLevels <= 1 && !knownChildCount && depth <= 1) self.truncated = YES;
   if (depth > 1 && nativeLevels <= 1 && !knownChildCount) {
-    if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:6
+    if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorBoundaryChildCountUnavailable
         userInfo:@{NSLocalizedDescriptionKey: @"snapshot boundary child count unavailable"}];
     return nil;
   }
@@ -88,7 +90,7 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
   if (withheld && children.count < self.remainingNodes) {
     id element = tree[elementKey];
     if (!element) {
-      if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:3
+      if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorContinuationElementUnavailable
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation element unavailable"}];
       return nil;
     }
@@ -97,7 +99,7 @@ const NSUInteger kMaximumRequestsPerCapture = 64;
     nativeLevels = MIN(depth, self.acceptedDepth);
     children = continuation[childrenKey];
     if (![children isKindOfClass:NSArray.class] || children.count < MIN(childCount.unsignedIntegerValue, self.remainingNodes)) {
-      if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:4
+      if (error) *error = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorTreeChanged
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation children unavailable"}];
       return nil;
     }

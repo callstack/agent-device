@@ -38,6 +38,25 @@ static NSString *const kAttributeChildren = @"XC_kAXXCAttributeChildren";
 static NSString *const kAttributeIsUserInteractionEnabled = @"XC_kAXXCAttributeIsUserInteractionEnabled";
 static NSString *const kPresentationDimmingViewClass = @"UIDimmingView";
 static NSString *const kSnapshotAttributes = @"UIAccessibilitySnapshotKeyAttributes";
+
+/// The wire refusal for a reader error. A tree that changed between two reads and a foreground that
+/// changed during a continuation describe the screen at that moment, so their codes are capture-scoped;
+/// the other reader errors describe what this reader can read.
+static NSDictionary *captureFailureResponse(NSString *requestId, SnapshotCaptureError code, NSString *message) {
+  switch (code) {
+    case SnapshotCaptureErrorBudgetExhausted:
+      return failureResponse(requestId, @"reader_unavailable", @"continuation-budget-exhausted", message);
+    case SnapshotCaptureErrorTreeChanged:
+      return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-changed", message);
+    case SnapshotCaptureErrorForegroundOwnerChanged:
+      return failureResponse(requestId, @"unsupported", @"foreground-owner-changed", message);
+    case SnapshotCaptureErrorMalformedContinuation:
+    case SnapshotCaptureErrorContinuationElementUnavailable:
+    case SnapshotCaptureErrorBoundaryChildCountUnavailable:
+      return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-malformed", message);
+  }
+  return failureResponse(requestId, @"malformed_tree", @"snapshot-tree-malformed", message);
+}
 static NSString *const kSnapshotChildren = @"UIAccessibilitySnapshotKeyChildren";
 static NSString *const kSnapshotElement = @"UIAccessibilitySnapshotKeyElement";
 static NSString *const kXctAutomationSupportPath =
@@ -422,7 +441,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes, nativeLevelsHint,
         ^id(id element, NSUInteger depth, NSUInteger nodes, NSError **captureError) {
           if (![self isPrimaryForegroundProcess:pid]) {
-            if (captureError) *captureError = [NSError errorWithDomain:@"agent-device.snapshot" code:5
+            if (captureError) *captureError = [NSError errorWithDomain:SnapshotCaptureErrorDomain code:SnapshotCaptureErrorForegroundOwnerChanged
                 userInfo:@{NSLocalizedDescriptionKey: @"foreground owner changed during continuation"}];
             return nil;
           }
@@ -442,10 +461,8 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
-  if (!snapshot && [runtimeError.domain isEqualToString:@"agent-device.snapshot"]) {
-    BOOL exhausted = runtimeError.code == 1;
-    if (error) *error = failureResponse(requestId, exhausted ? @"reader_unavailable" : @"malformed_tree",
-        exhausted ? @"continuation-budget-exhausted" : @"snapshot-tree-malformed", runtimeError.localizedDescription);
+  if (!snapshot && [runtimeError.domain isEqualToString:SnapshotCaptureErrorDomain]) {
+    if (error) *error = captureFailureResponse(requestId, (SnapshotCaptureError)runtimeError.code, runtimeError.localizedDescription);
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
