@@ -96,7 +96,23 @@ async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
     try {
       if (earlyFailureReached) await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(2);
     } finally {
-      await second.close();
+      const closing = second.close();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          closing,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error('second owner cleanup did not settle')),
+              1_000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+        finishSecond?.();
+        await closing;
+      }
       await secondResult?.catch(() => undefined);
       const bin = path.join(cacheDir, 'bin');
       if (fs.existsSync(bin)) {
