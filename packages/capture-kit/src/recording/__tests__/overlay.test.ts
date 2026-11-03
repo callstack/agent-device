@@ -58,13 +58,14 @@ afterEach(() => {
 });
 
 test('overlay burns touches through a cached helper and same-directory temp output', async () => {
+  const validator = { executablePath: '/prepared/video-validator', env: {} };
   const videoPath = path.join(tmpDir, 'recording.mp4');
   const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
-    validator: undefined,
+    validator,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -72,7 +73,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
   fs.writeFileSync(videoPath, 'second original');
   await overlayRecordingTouches({
-    validator: undefined,
+    validator,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -86,6 +87,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
 
   expect(compileCalls).toHaveLength(1);
   expect(helperCalls).toHaveLength(2);
+  expect(vi.mocked(waitForPlayableVideo).mock.calls[0]?.[1].validator).toBe(validator);
 
   const [helperCmd, helperArgs, helperOptions] = helperCalls[0]!;
   const inputPath = helperArgs[helperArgs.indexOf('--input') + 1]!;

@@ -6,6 +6,7 @@ import {
   buildSwiftToolEnv,
   compileSwiftSourceText,
   readCompiledSwiftSourceText,
+  getSwiftCacheRoot,
 } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -41,22 +42,28 @@ exit(exitCode)
 
 const VALIDATOR_RUN_TIMEOUT_MS = 10_000;
 
-/** Executable authority prepared before the recorder starts; validation cannot compile. */
+/** Executable authority produced by background preparation; validation cannot compile. */
 export type PreparedVideoValidator = Readonly<{
   executablePath: string;
   env: NodeJS.ProcessEnv;
 }>;
 
+export type VideoValidator = PreparedVideoValidator | Promise<PreparedVideoValidator>;
+const videoValidatorPreparations = new Map<string, Promise<PreparedVideoValidator>>();
+
 /** Reads prepared executable authority from the host cache without compiling. */
 export function readPreparedVideoValidator(
   host: HostEnvironment,
-): PreparedVideoValidator | undefined {
+): Promise<PreparedVideoValidator> | undefined {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  const preparing = videoValidatorPreparations.get(cacheRoot);
+  if (preparing) return preparing;
   const executablePath = readCompiledSwiftSourceText({
     host,
     source: VIDEO_VALIDATION_SCRIPT,
     cacheName: 'video-validator',
   });
-  return executablePath ? preparedVideoValidator(host, executablePath) : undefined;
+  return executablePath ? Promise.resolve(preparedVideoValidator(host, executablePath)) : undefined;
 }
 
 function preparedVideoValidator(
@@ -66,11 +73,18 @@ function preparedVideoValidator(
   return Object.freeze({ executablePath, env: buildSwiftToolEnv(host.env) });
 }
 
-export async function prepareVideoValidator(
-  host: HostEnvironment,
-  signal?: AbortSignal,
-  timeoutMs?: number,
-): Promise<PreparedVideoValidator> {
+export function prepareVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  let preparing = videoValidatorPreparations.get(cacheRoot);
+  if (!preparing) {
+    preparing = compileVideoValidator(host);
+    videoValidatorPreparations.set(cacheRoot, preparing);
+    void preparing.catch(() => {});
+  }
+  return preparing;
+}
+
+async function compileVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
   const { withDiagnosticTimer } = await import('@agent-device/host-kit/diagnostics');
   return await withDiagnosticTimer(
     'prepare_video_validator',
@@ -80,19 +94,10 @@ export async function prepareVideoValidator(
           host,
           source: VIDEO_VALIDATION_SCRIPT,
           cacheName: 'video-validator',
-          signal,
-          timeoutMs,
         });
         return preparedVideoValidator(host, executablePath);
       } catch (error) {
-        if (
-          error instanceof AppError &&
-          (error.code === 'TOOL_MISSING' ||
-            isSwiftVideoValidatorUnavailable(
-              String(error.details?.stderr ?? ''),
-              String(error.details?.stdout ?? ''),
-            ))
-        ) {
+        if (isUnavailableVideoValidatorError(error)) {
           throw unavailableVideoValidator(error);
         }
         throw error;
@@ -113,6 +118,17 @@ function unavailableVideoValidator(cause?: Error): AppError {
       hint: 'Install the Xcode command line tools with AVFoundation on the recording host, then start a new recording.',
     },
     cause,
+  );
+}
+
+function isUnavailableVideoValidatorError(error: unknown): error is AppError {
+  return (
+    error instanceof AppError &&
+    (error.code === 'TOOL_MISSING' ||
+      isSwiftVideoValidatorUnavailable(
+        String(error.details?.stderr ?? ''),
+        String(error.details?.stdout ?? ''),
+      ))
   );
 }
 
@@ -150,7 +166,7 @@ export async function waitForStableFile(
 /** Validates with a prepared executable, bounded by the caller's finalization deadline. */
 export async function isPlayableVideo(
   filePath: string,
-  validator: PreparedVideoValidator | undefined,
+  validator: VideoValidator | undefined,
   deadline?: Deadline,
 ): Promise<boolean> {
   const container = await readVideoContainerKind(filePath);
@@ -158,28 +174,44 @@ export async function isPlayableVideo(
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
-  if (!validator) {
-    throw new AppError(
+  const notPrepared = () =>
+    new AppError(
       'COMMAND_FAILED',
-      'The video validator was not prepared before finalization',
+      'The video validator is not ready within the finalization budget',
       {
         reason: 'video_validator_not_prepared',
         retriable: true,
-        hint: 'Run prepare ios-runner on this host to prepare recording helpers, then retry record stop in this session.',
+        hint: 'Preparation continues in the background. Retry record stop in this session once the validator is ready.',
       },
     );
+  if (!validator) throw notPrepared();
+  let timer: NodeJS.Timeout | undefined;
+  let prepared: PreparedVideoValidator;
+  try {
+    prepared = await Promise.race([
+      validator,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(notPrepared()),
+          deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
   const runTimeoutMs = Math.min(
     VALIDATOR_RUN_TIMEOUT_MS,
     deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
   );
   if (runTimeoutMs <= 0) return false;
-  const result = await runCmd(validator.executablePath, [filePath], {
+  const result = await runCmd(prepared.executablePath, [filePath], {
     allowFailure: true,
     timeoutMs: runTimeoutMs,
-    env: validator.env,
+    env: prepared.env,
   }).catch((error: unknown) => {
     if (isCommandTimeoutError(error)) return undefined;
+    if (isUnavailableVideoValidatorError(error)) throw unavailableVideoValidator(error);
     throw error;
   });
   if (!result) return false;
@@ -195,7 +227,7 @@ export async function isPlayableVideo(
 export async function waitForPlayableVideo(
   filePath: string,
   options: {
-    validator: PreparedVideoValidator | undefined;
+    validator: VideoValidator | undefined;
     pollMs?: number;
     attempts?: number;
     deadline?: Deadline;

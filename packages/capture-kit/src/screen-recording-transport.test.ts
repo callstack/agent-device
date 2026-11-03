@@ -56,6 +56,9 @@ function harness(
   const prepare = vi.fn(async () => {
     calls.push('prepare');
   });
+  const prepareValidator = vi.fn(async () => {
+    calls.push('prepare-validator');
+  });
   const complete = vi.fn(async () => {
     calls.push('finalize');
     return await (options.finalize ?? (async () => ({})))();
@@ -65,7 +68,7 @@ function harness(
       host: {
         screenRecording: {
           outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
-          finalize: { prepare: async () => {}, sniff: async () => {}, complete },
+          finalize: { prepare: prepareValidator, sniff: async () => {}, complete },
         },
       },
       device,
@@ -76,7 +79,7 @@ function harness(
       support: { scopes: ['app'], fps: false, exportQuality: true, hideTouches: false },
       unsupported: (unsupported) => `test recordings do not support ${unsupported.join(', ')}`,
     });
-  return { start, calls, prepare, complete, transport };
+  return { start, calls, prepare, prepareValidator, complete, transport };
 }
 
 test('a finish stops once, collects to the output path, finalizes, and confirms the recorder', async () => {
@@ -86,6 +89,7 @@ test('a finish stops once, collects to the output path, finalizes, and confirms 
   const outcome = await started.pendingHandle.transfer().finish();
 
   expect(calls).toEqual([
+    'prepare-validator',
     'prepare',
     'start',
     'stop',
@@ -160,12 +164,12 @@ test('cleanup after a failed finish stops the recorder once and does not collect
 });
 
 test('unsupported options are refused with a typed error before the output is prepared', async () => {
-  const { prepare, calls } = harness();
+  const { prepare, prepareValidator, calls } = harness();
   const started = startTransportScreenRecording({
     host: {
       screenRecording: {
         outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
-        finalize: { prepare: async () => {}, sniff: async () => {}, complete: async () => ({}) },
+        finalize: { prepare: prepareValidator, sniff: async () => {}, complete: async () => ({}) },
       },
     },
     device,
@@ -189,6 +193,7 @@ test('unsupported options are refused with a typed error before the output is pr
     message: 'test recordings do not support --fps',
   });
   expect(prepare).not.toHaveBeenCalled();
+  expect(prepareValidator).not.toHaveBeenCalled();
   expect(calls).toEqual([]);
 });
 
@@ -206,7 +211,7 @@ test('a start cancelled after the recorder acquired is stopped again and reports
   });
 
   await expect(start()).rejects.toBe(reason);
-  expect(calls).toEqual(['prepare', 'start', 'stop']);
+  expect(calls).toEqual(['prepare-validator', 'prepare', 'start', 'stop']);
 });
 
 test('the durable descriptor round-trips through the backend-scoped codec', async () => {

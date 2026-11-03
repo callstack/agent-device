@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
@@ -17,14 +17,17 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 vi.mock('./swift-cache.ts', () => ({
   buildSwiftToolEnv: () => ({}),
+  getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR,
   readCompiledSwiftSourceText: vi.fn(() => undefined),
   compileSwiftSourceText: vi.fn(async () => '/bin/true'),
 }));
 
 beforeEach(() => {
+  vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', mkdtempForTestSync('agent-device-video-validator-'));
   vi.mocked(runCmd).mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   vi.mocked(compileSwiftSourceText).mockReset().mockResolvedValue('/bin/true');
 });
+afterEach(() => vi.unstubAllEnvs());
 
 const directory = mkdtempForTestSync('agent-device-video-webm-');
 const playableWebm = likelyPlayableWebmContainer();
@@ -67,7 +70,7 @@ test('validation reuses the prepared executable without compiling at completion'
   ]);
 });
 
-test('completion during preparation fails with a typed outcome and does not wait or compile', async () => {
+test('a stop deadline leaves preparation running and a later stop uses the same compile', async () => {
   const mp4 = writeFixture('pending.mp4', Buffer.concat([ftyp, moov]));
   let finish!: (path: string) => void;
   let entered!: () => void;
@@ -83,15 +86,45 @@ test('completion during preparation fails with a typed outcome and does not wait
   );
   const preparing = prepareVideoValidator(createTestHost());
   await preparationStarted;
-  await expect(
-    isPlayableVideo(mp4, undefined, Deadline.fromTimeoutMs(5_000)),
-  ).rejects.toMatchObject({
+  await expect(isPlayableVideo(mp4, preparing, Deadline.fromTimeoutMs(5))).rejects.toMatchObject({
     details: { reason: 'video_validator_not_prepared', retriable: true },
   });
   expect(runCmd).not.toHaveBeenCalled();
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(1);
+  expect(prepareVideoValidator(createTestHost())).toBe(preparing);
   finish('/prepared/validator');
-  await expect(isPlayableVideo(mp4, await preparing)).resolves.toBe(true);
+  await expect(isPlayableVideo(mp4, preparing)).resolves.toBe(true);
+  expect(compileSwiftSourceText).toHaveBeenCalledTimes(1);
+});
+
+test('preparation compiles once per Swift cache root', async () => {
+  const host = createTestHost();
+  const first = prepareVideoValidator(host);
+  const sameRoot = prepareVideoValidator(createTestHost());
+  const otherRoot = prepareVideoValidator({
+    ...host,
+    env: {
+      ...host.env,
+      AGENT_DEVICE_SWIFT_CACHE_DIR: `${host.env.AGENT_DEVICE_SWIFT_CACHE_DIR}-other`,
+    },
+  });
+  await Promise.all([first, sameRoot, otherRoot]);
+  expect(first).toBe(sameRoot);
+  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+});
+
+test('WebM validation ignores failed background MP4 preparation', async () => {
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(
+    new AppError('TOOL_MISSING', 'no swiftc'),
+  );
+  const preparing = prepareVideoValidator(createTestHost());
+  await expect(preparing).rejects.toMatchObject({
+    details: { reason: 'video_validator_unavailable' },
+  });
+  await expect(
+    isPlayableVideo(writeFixture('without-swift.webm', playableWebm), preparing),
+  ).resolves.toBe(true);
+  expect(runCmd).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -128,6 +161,13 @@ test('an unavailable validator at execution never makes an MP4 playable', async 
   await expect(isPlayableVideo(mp4, validator)).rejects.toMatchObject({
     details: { reason: 'video_validator_unavailable' },
   });
+});
+
+test('a removed prepared executable returns the typed unavailable outcome', async () => {
+  vi.mocked(runCmd).mockRejectedValueOnce(new AppError('TOOL_MISSING', 'validator disappeared'));
+  await expect(
+    isPlayableVideo(writeFixture('removed.mp4', Buffer.concat([ftyp, moov])), validator),
+  ).rejects.toMatchObject({ details: { reason: 'video_validator_unavailable' } });
 });
 
 test('a budget spent before the validator runs reads as not playable instead of a 1 ms run', async () => {

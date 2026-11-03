@@ -98,7 +98,7 @@ async function startAppleRecording(params: AppleRecordingStartParams) {
 async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
   const { host, device, owner, input, signal } = params;
   await validateAppleSimulatorRecording(device, input, host.screenRecording.apple.isRunnerBundleId);
-  await host.screenRecording.finalize.prepare({ container: 'mp4' }, signal);
+  void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   const clockAnchor = input.activeSessionApp
     ? await host.screenRecording.apple.captureClockAnchor(
         device,
@@ -290,7 +290,7 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
   if (!appBundleId) {
     throw new TypeError('Apple runner recording requires an active app session identity');
   }
-  await host.screenRecording.finalize.prepare({ container: 'mp4' }, signal);
+  void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   await host.screenRecording.outputs.prepare(input.outputPath);
   const result = await host.screenRecording.apple.runRunner(
     device,

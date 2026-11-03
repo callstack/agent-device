@@ -97,7 +97,7 @@ export function createAppleApplicationTools(
     },
     prepareRunner: async (device, input, signal) => {
       const startedAtMs = Date.now();
-      await prepareRecording({ container: 'mp4', timeoutMs: input.timeoutMs }, signal);
+      void prepareRecording({ container: 'mp4' }).catch(() => {});
       const { Deadline } = await loadRetry();
       const { prepareIosRunner } = await loadRunnerOperations();
       return await prepareIosRunner(device, {

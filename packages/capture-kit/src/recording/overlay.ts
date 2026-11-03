@@ -10,7 +10,7 @@ import {
   compileSwiftSourceFile,
   resolveRecordingScriptPath,
 } from './swift-cache.ts';
-import { waitForPlayableVideo, type PreparedVideoValidator } from './video.ts';
+import { waitForPlayableVideo, type VideoValidator } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
@@ -79,7 +79,7 @@ async function exportProcessedVideo(params: {
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
-  validator: PreparedVideoValidator | undefined;
+  validator: VideoValidator | undefined;
 }): Promise<void> {
   const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
   const outputPath = temporarySiblingVideoPath(videoPath);
@@ -159,7 +159,7 @@ function temporarySiblingVideoPath(videoPath: string): string {
 
 export async function overlayRecordingTouches(params: {
   host: HostEnvironment;
-  validator: PreparedVideoValidator | undefined;
+  validator: VideoValidator | undefined;
   videoPath: string;
   telemetryPath: string;
   exportQuality?: RecordingExportQuality;

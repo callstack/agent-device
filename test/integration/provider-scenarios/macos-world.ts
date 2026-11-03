@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { mkdtempForTestSync, prepareRecordingValidatorFixture } from '@agent-device/test-kit';
 import type { AppleRunnerProvider } from '@agent-device/apple-runner';
 import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
@@ -48,8 +49,15 @@ export async function createMacOsDesktopWorld(
       },
     },
   });
-  // Recording finalization runs the Swift validator; the process's warm cache keeps it from compiling.
-  const swiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
+  const swiftCacheDir = options.appleRunnerScreenRecordingTransport
+    ? mkdtempForTestSync('agent-device-macos-recording-validator-')
+    : process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
+  if (options.appleRunnerScreenRecordingTransport) {
+    await prepareRecordingValidatorFixture({
+      env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCacheDir },
+      cwd: process.cwd(),
+    });
+  }
   const daemon = await createProviderScenarioHarness({
     ...(swiftCacheDir ? { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: swiftCacheDir } } : {}),
     appleRunnerProvider: options.appleRunnerProvider

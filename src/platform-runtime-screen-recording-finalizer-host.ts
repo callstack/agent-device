@@ -13,7 +13,7 @@ import {
   hasVideoContainer,
   prepareVideoValidator,
   readPreparedVideoValidator,
-  type PreparedVideoValidator,
+  type VideoValidator,
   isPlayableVideo,
   waitForPlayableVideo,
   waitForStableFile,
@@ -21,17 +21,13 @@ import {
 
 export function createScreenRecordingFinalizer(
   host: HostEnvironment,
-): ScreenRecordingRuntimeHost['finalize'] &
-  Readonly<{ videoValidator(): PreparedVideoValidator | undefined }> {
-  let validator = readPreparedVideoValidator(host);
+): ScreenRecordingRuntimeHost['finalize'] {
   return Object.freeze({
-    prepare: async (input, signal) => {
-      if (input.container === 'mp4')
-        validator = await prepareVideoValidator(host, signal, input.timeoutMs);
+    prepare: async (input) => {
+      if (input.container === 'mp4') void prepareVideoValidator(host);
     },
-    videoValidator: () => validator,
     sniff: async (input) => await sniffRecording(input),
-    complete: async (input) => await finalizeScreenRecording(host, input, validator),
+    complete: async (input) => await finalizeScreenRecording(host, input),
   });
 }
 
@@ -42,8 +38,8 @@ async function sniffRecording(input: Readonly<{ outputPath: string }>): Promise<
 async function finalizeScreenRecording(
   host: HostEnvironment,
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
-  validator: PreparedVideoValidator | undefined,
 ) {
+  const validator = readPreparedVideoValidator(host);
   const finalizeDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
   if (!(await waitForPlayableVideo(input.outputPath, { validator, deadline: finalizeDeadline }))) {
@@ -61,7 +57,7 @@ async function overlayTouches(
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
   telemetryPath: string,
   deadline: Deadline,
-  validator: PreparedVideoValidator | undefined,
+  validator: VideoValidator | undefined,
 ) {
   const warning = getRecordingOverlaySupportWarning();
   if (warning) return { telemetryPath, overlayWarning: warning };

@@ -370,6 +370,7 @@ test('the cache root and tool environment come from the host it is given, not th
 test('reads only a published executable for the exact source and cache, without compiling', async () => {
   const input = { host: createTestHost(), source: 'print("prepared")', cacheName: 'prepared' };
   expect(readCompiledSwiftSourceText(input)).toBeUndefined();
+  expect(mockRunCmd).not.toHaveBeenCalled();
   const executable = await compileSwiftSourceText(input);
   mockRunCmd.mockClear();
   expect(readCompiledSwiftSourceText(input)).toBe(executable);
