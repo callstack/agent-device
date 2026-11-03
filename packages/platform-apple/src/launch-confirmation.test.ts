@@ -218,20 +218,17 @@ test.each([
  */
 function wedgedCoreSimulator(
   answers: Readonly<Record<string, string>> = {},
-  onSpawn?: (count: number) => void,
 ): AppleToolProvider & { spawns: () => number } {
   let spawns = 0;
   const answered = (key: string): ExecResult | undefined => {
     const stdout = answers[key];
     if (stdout === undefined) return undefined;
     spawns += 1;
-    onSpawn?.(spawns);
     return { stdout, stderr: '', exitCode: 0 } as ExecResult;
   };
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
-      onSpawn?.(spawns);
       if (options?.signal?.aborted) {
         reject(options.signal.reason);
         return;
@@ -283,13 +280,7 @@ test.each([
     vi.mocked(emitDiagnostic).mockClear();
     try {
       const { interactor, acceptAlert } = confirmationRunner();
-      let observeSecondSpawn!: () => void;
-      const secondSpawned = new Promise<void>((resolve) => {
-        observeSecondSpawn = resolve;
-      });
-      const coreSimulator = wedgedCoreSimulator(answers, (count) => {
-        if (count === 2) observeSecondSpawn();
-      });
+      const coreSimulator = wedgedCoreSimulator(answers);
       let answered: unknown = 'pending';
       const answer = withAppleToolProvider(coreSimulator, async () =>
         answerSimulatorLaunchConfirmation(
@@ -301,8 +292,7 @@ test.each([
         ).then((value) => (answered = value)),
       );
 
-      await secondSpawned;
-      expect(coreSimulator.spawns()).toBe(2);
+      await vi.waitFor(() => expect(coreSimulator.spawns()).toBe(2));
       await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
       expect(answered).toEqual({ outcome: 'unreadable', step: 'url-owner' });
       await answer;
