@@ -38,6 +38,7 @@ import {
   managedWebBrowserProcessRecordIsLive,
   recordManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';
+import { normalizeWebSessionName } from '@agent-device/kernel/device';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -60,8 +61,12 @@ type AgentBrowserRunOptions = {
   stdin?: string;
 };
 
+function normalizedSessionName(session: string | undefined): string | undefined {
+  return session === undefined ? undefined : normalizeWebSessionName(session);
+}
+
 export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptions): WebProvider {
-  const session = options.session?.trim();
+  const session = normalizedSessionName(options.session);
   const runJson = async (args: string[], run?: AgentBrowserRunOptions): Promise<unknown> =>
     await runAgentBrowserJson(args, { session, options, ...run });
 
@@ -561,8 +566,10 @@ async function finalizeAgentBrowserProcessRecord(params: {
   if (!store || !params.status.installed) return;
   try {
     const remainingSessions = params.options.openWebSessionNames?.() ?? [];
-    const currentSession = params.options.session?.trim();
-    const otherOpenSessions = remainingSessions.filter((name) => name !== currentSession);
+    const currentSession = normalizedSessionName(params.options.session);
+    const otherOpenSessions = remainingSessions.filter(
+      (name) => normalizeWebSessionName(name) !== currentSession,
+    );
     if (canClearAgentBrowserRecord(params, otherOpenSessions.length)) {
       store.clear({ kind: 'daemon' });
       return;

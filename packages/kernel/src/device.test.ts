@@ -6,10 +6,12 @@ import {
   hostAppDevice,
   hostDeviceIdOf,
   isMacOsBundleId,
+  normalizeWebSessionName,
   resolveDevice,
   webSessionDevice,
   type DeviceInfo,
 } from './device.ts';
+import { AppError } from './errors.ts';
 
 const mac: DeviceInfo = {
   platform: 'apple',
@@ -53,16 +55,37 @@ test('a host overlaps each of its web session devices, and two of its web sessio
   assert.equal(devicesOverlap(two, browser.id), true);
   assert.equal(devicesOverlap(one, one), true);
   assert.equal(devicesOverlap(one, two), false);
-  assert.equal(devicesOverlap(one, webSessionDevice(browser, 'one:two').id), false);
+  assert.equal(devicesOverlap(one, webSessionDevice(browser, 'one-two').id), false);
   assert.equal(devicesOverlap(webSessionDevice(mac, 'one').id, one), false);
 });
 
-test('a web session device id names its host and keeps the session name as written', () => {
-  const id = webSessionDevice(browser, 'Run:app:One').id;
+test('a web session device id names its host and keeps the name case-sensitive', () => {
+  const id = webSessionDevice(browser, 'Run-One').id;
   assert.equal(hostDeviceIdOf(id), browser.id);
   assert.equal(canonicalDeviceId(id), id);
-  assert.notEqual(id, webSessionDevice(browser, 'run:app:one').id);
+  assert.notEqual(id, webSessionDevice(browser, 'run-one').id);
 });
+
+test('web session names that drive one browser are one device', () => {
+  const one = webSessionDevice(browser, 'one').id;
+  assert.equal(webSessionDevice(browser, 'one ').id, one);
+  assert.equal(webSessionDevice(browser, ' one').id, one);
+  assert.equal(devicesOverlap(webSessionDevice(browser, 'one\t').id, one), true);
+  assert.equal(normalizeWebSessionName(' one '), 'one');
+});
+
+test.each(['', ' ', '\t', 'one:session:two', 'one:app:two', 'a:b', ':'])(
+  'a web session name of %j is refused with a typed reason',
+  (name) => {
+    assert.throws(
+      () => webSessionDevice(browser, name),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.details?.reason === 'web_session_name_invalid',
+    );
+  },
+);
 
 test.each([
   ['com.apple.TextEdit', true],

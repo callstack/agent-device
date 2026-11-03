@@ -182,6 +182,14 @@ test('a web open names the device of its session, and a request without one keep
   assert.deepEqual(await resolveWeb('one'), webSessionDevice(webHost, 'one'));
   assert.notEqual((await resolveWeb('two')).id, (await resolveWeb('one')).id);
   assert.equal((await resolveWeb(undefined)).id, webHost.id);
+  assert.equal((await resolveWeb('one ')).id, (await resolveWeb('one')).id);
+  await assert.rejects(
+    resolveWeb('one:app:two'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'web_session_name_invalid',
+  );
 });
 
 test('a session name leaves a device other than the local web host as selected', async () => {

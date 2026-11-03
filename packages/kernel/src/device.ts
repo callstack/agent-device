@@ -120,11 +120,32 @@ export function hostAppDevice(host: DeviceInfo, bundleId: string): DeviceInfo {
 }
 
 /**
- * One web session of `host`, held as a device of its own. Session names match as written, because
- * the backend keys its browser on the name.
+ * The name the web backend keys its browser on: it trims the name, so `a ` and `a` drive one
+ * browser. The one owner of that rule; the provider and the session device id both read it.
+ */
+export function normalizeWebSessionName(sessionName: string): string {
+  return sessionName.trim();
+}
+
+/**
+ * One web session of `host`, held as a device of its own and named by the normalized session name,
+ * so two names that drive one browser are one device. A name that is empty or holds `:` is
+ * refused: `:` would parse as the `:session:` or `:app:` infix of another device id.
  */
 export function webSessionDevice(host: DeviceInfo, sessionName: string): DeviceInfo {
-  return { ...host, id: `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${sessionName}` };
+  const name = normalizeWebSessionName(sessionName);
+  if (name.length === 0 || name.includes(':')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'A web session name must be non-empty and not contain ":".',
+      {
+        reason: 'web_session_name_invalid',
+        sessionName,
+        hint: 'Pass --session with a name such as "checkout-1".',
+      },
+    );
+  }
+  return { ...host, id: `${host.id}${WEB_SESSION_DEVICE_ID_INFIX}${name}` };
 }
 
 /** The host of an app device, then the device itself; any other device alone. */

@@ -43,6 +43,19 @@ beforeEach(() => {
   mockProviderStartupCleanup.mockReset();
 });
 
+test('agent-browser provider keys its browser on the normalized session name', async () => {
+  await withManagedAgentBrowserProvider({ session: ' web-session ' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.open('https://example.test');
+    });
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [['open', 'https://example.test', '--json', '--session', 'web-session']],
+    );
+  });
+});
+
 test('agent-browser provider maps supported operations to session-scoped JSON commands', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
