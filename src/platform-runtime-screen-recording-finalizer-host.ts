@@ -11,6 +11,9 @@ import {
 import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
 import {
   hasVideoContainer,
+  prepareVideoValidator,
+  readPreparedVideoValidator,
+  type PreparedVideoValidator,
   isPlayableVideo,
   waitForPlayableVideo,
   waitForStableFile,
@@ -18,10 +21,17 @@ import {
 
 export function createScreenRecordingFinalizer(
   host: HostEnvironment,
-): ScreenRecordingRuntimeHost['finalize'] {
+): ScreenRecordingRuntimeHost['finalize'] &
+  Readonly<{ videoValidator(): PreparedVideoValidator | undefined }> {
+  let validator = readPreparedVideoValidator(host);
   return Object.freeze({
+    prepare: async (input, signal) => {
+      if (input.container === 'mp4')
+        validator = await prepareVideoValidator(host, signal, input.timeoutMs);
+    },
+    videoValidator: () => validator,
     sniff: async (input) => await sniffRecording(input),
-    complete: async (input) => await finalizeScreenRecording(host, input),
+    complete: async (input) => await finalizeScreenRecording(host, input, validator),
   });
 }
 
@@ -32,17 +42,18 @@ async function sniffRecording(input: Readonly<{ outputPath: string }>): Promise<
 async function finalizeScreenRecording(
   host: HostEnvironment,
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
+  validator: PreparedVideoValidator | undefined,
 ) {
   const finalizeDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
-  if (!(await waitForPlayableVideo(input.outputPath, { host, deadline: finalizeDeadline }))) {
+  if (!(await waitForPlayableVideo(input.outputPath, { validator, deadline: finalizeDeadline }))) {
     throw unplayableRecording(input.outputPath);
   }
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
-  return await overlayTouches(host, input, telemetryPath, finalizeDeadline);
+  return await overlayTouches(host, input, telemetryPath, finalizeDeadline, validator);
 }
 
 async function overlayTouches(
@@ -50,6 +61,7 @@ async function overlayTouches(
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
   telemetryPath: string,
   deadline: Deadline,
+  validator: PreparedVideoValidator | undefined,
 ) {
   const warning = getRecordingOverlaySupportWarning();
   if (warning) return { telemetryPath, overlayWarning: warning };
@@ -62,8 +74,9 @@ async function overlayTouches(
       ...(input.fps === undefined ? {} : { fps: input.fps }),
       targetLabel: input.targetLabel,
       deadline,
+      validator,
     });
-    if (!(await isPlayableVideo(input.outputPath, host))) {
+    if (!(await isPlayableVideo(input.outputPath, validator, deadline))) {
       throw new Error('recording post-processing produced an unplayable video');
     }
     return { telemetryPath };

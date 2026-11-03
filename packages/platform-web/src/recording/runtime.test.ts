@@ -186,7 +186,7 @@ async function runtime(
     host: {
       screenRecording: {
         web: { resolve: async () => transport },
-        finalize: { sniff: async () => {}, complete },
+        finalize: { prepare: async () => {}, sniff: async () => {}, complete },
         outputs: { ...recordingFileStore().outputs, prepare },
       },
     },

@@ -13,6 +13,7 @@ const video = vi.hoisted(() => ({
   playable: vi.fn(async (_path: string, _options: { deadline?: Deadline }) => true),
   isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
+  prepare: vi.fn(async () => ({ executablePath: '/bin/true', env: {} })),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
@@ -23,6 +24,8 @@ vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,
   hasVideoContainer: video.container,
+  prepareVideoValidator: video.prepare,
+  readPreparedVideoValidator: () => undefined,
 }));
 vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
   persistRecordingTelemetry: telemetry,
@@ -54,7 +57,7 @@ test('requires stable playable media before publishing finalization telemetry', 
 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
-    host: expect.objectContaining({ cwd: process.cwd() }),
+    validator: undefined,
     deadline: expect.any(Deadline),
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
@@ -81,9 +84,9 @@ test('names the retry and the escape for a recording that never became playable'
   });
 });
 
-test('a validator compile that outlasts the budget reaches the caller as its own retriable error', async () => {
-  const compileTimeout = new AppError('COMMAND_FAILED', 'The video validator did not compile', {
-    reason: 'video_validator_compile_timeout',
+test('a validator that was not prepared reaches the caller as its own retriable error', async () => {
+  const compileTimeout = new AppError('COMMAND_FAILED', 'The video validator was not prepared', {
+    reason: 'video_validator_not_prepared',
     retriable: true,
   });
   video.playable.mockRejectedValueOnce(compileTimeout);
@@ -124,8 +127,6 @@ test('hands the caller fps to the touch overlay', async () => {
 });
 
 test('the overlay budget covers the playability checks that run before the overlay', async () => {
-  // A cold host compiles the playability validator before the overlay starts; that time comes out
-  // of the overlay budget rather than being added to it.
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
     const playabilityMs = 25_000;
@@ -142,7 +143,6 @@ test('the overlay budget covers the playability checks that run before the overl
 
     const budget = overlay.mock.calls[0]![0].deadline;
     expect(budget.remainingMs()).toBe(OVERLAY_BUDGET_MS - playabilityMs);
-    // The validator compile those checks may run is bounded by the same budget.
     expect(video.playable.mock.calls[0]![1].deadline).toBe(budget);
   } finally {
     vi.useRealTimers();

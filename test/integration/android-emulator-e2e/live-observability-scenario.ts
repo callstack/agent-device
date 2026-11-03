@@ -1,3 +1,5 @@
+import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -73,6 +75,7 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
   );
 
   const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
+  const validator = await prepareVideoValidator(captureHostEnvironment(process));
   await runStep(context, 'start short Android screen recording', [
     'record',
     'start',
@@ -92,7 +95,7 @@ async function assertTraceAndRecording(context: LiveContext): Promise<void> {
   await runStep(context, 'record Android visible mutation', ['press', 'id="home-open-settings"']);
   await assertWaitText(context, 'Settings');
   await runStep(context, 'stop short Android screen recording', ['record', 'stop']);
-  await assertMp4File(recordingPath);
+  await assertMp4File(recordingPath, validator);
   verifyCommand(context, C.record, 'short Android recording is a finalized playable MP4');
 }
 

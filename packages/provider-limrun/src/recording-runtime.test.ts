@@ -50,6 +50,7 @@ function fakeRecordingHost(calls: string[], finalize?: () => Promise<Record<stri
         remove: vi.fn(async () => 'removed' as const),
       },
       finalize: {
+        prepare: async () => {},
         sniff: vi.fn(async () => {}),
         complete: vi.fn(async () => {
           calls.push('finalize');

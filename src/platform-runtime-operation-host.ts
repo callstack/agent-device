@@ -75,7 +75,11 @@ export function createPlatformRuntimeHost(options: {
       return await resolveWebNetworkTransport(device, host);
     },
   });
-  const appleApplications = createAppleApplicationTools(env);
+  const screenRecording = createScreenRecordingRuntimeHost({
+    ownedProcesses: options.ownedProcesses,
+    host,
+  });
+  const appleApplications = createAppleApplicationTools(env, screenRecording.finalize.prepare);
   const androidApplications = createAndroidApplicationTools();
   return Object.freeze({
     hostEnvironment: host,
@@ -121,10 +125,7 @@ export function createPlatformRuntimeHost(options: {
       options.shutdownLoaders,
       options.assertShutdownAllowed,
     ),
-    screenRecording: createScreenRecordingRuntimeHost({
-      ownedProcesses: options.ownedProcesses,
-      host,
-    }),
+    screenRecording,
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses, host }),
     perf: createPerfRuntimeHost(),
     snapshot: options.snapshot,

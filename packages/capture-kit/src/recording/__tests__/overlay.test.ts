@@ -64,6 +64,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -71,6 +72,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
   fs.writeFileSync(videoPath, 'second original');
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -113,6 +115,7 @@ test('overlay preserves Swift helper compile hints', async () => {
 
   await expect(
     overlayRecordingTouches({
+      validator: undefined,
       host: createTestHost(),
       videoPath,
       telemetryPath,
@@ -134,6 +137,7 @@ test('overlay defaults to the fast medium export preset', async () => {
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -152,6 +156,7 @@ test('overlay forwards the requested high export preset', async () => {
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -171,6 +176,7 @@ test('overlay caps the helper frame rate at the caller fps only when one was ask
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -180,6 +186,7 @@ test('overlay caps the helper frame rate at the caller fps only when one was ask
 
   mockRunCmd.mockClear();
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -197,6 +204,7 @@ test('overlay hands the helper what is left of its budget, inside the record req
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -225,7 +233,13 @@ test('overlay hands the helper only what the finalization left of the budget', a
   const deadline = startRecordingOverlayBudget();
   vi.setSystemTime(Date.now() + spentMs);
 
-  await overlayRecordingTouches({ host: createTestHost(), videoPath, telemetryPath, deadline });
+  await overlayRecordingTouches({
+    validator: undefined,
+    host: createTestHost(),
+    videoPath,
+    telemetryPath,
+    deadline,
+  });
 
   const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
   expect(helperCall?.[2]?.timeoutMs).toBe(OVERLAY_BUDGET_MS - spentMs);
@@ -248,6 +262,7 @@ test('overlay leaves the video as recorded when compiling the helper spent its b
 
   await expect(
     overlayRecordingTouches({
+      validator: undefined,
       host: createTestHost(),
       videoPath,
       telemetryPath,
@@ -269,6 +284,7 @@ test('overlay names its budget when the export ran out of it', async () => {
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -282,6 +298,7 @@ test('overlay names its budget when the export ran out of it', async () => {
 
   await expect(
     overlayRecordingTouches({
+      validator: undefined,
       host: createTestHost(),
       videoPath,
       telemetryPath,
@@ -301,6 +318,7 @@ test('overlay keeps the plain failure when the export failed with budget to spar
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
   await overlayRecordingTouches({
+    validator: undefined,
     host: createTestHost(),
     videoPath,
     telemetryPath,
@@ -312,6 +330,7 @@ test('overlay keeps the plain failure when the export failed with budget to spar
 
   await expect(
     overlayRecordingTouches({
+      validator: undefined,
       host: createTestHost(),
       videoPath,
       telemetryPath,
@@ -331,6 +350,7 @@ test('overlay keeps the video as recorded when the export never plays within its
 
   await expect(
     overlayRecordingTouches({
+      validator: undefined,
       host: createTestHost(),
       videoPath,
       telemetryPath,
@@ -356,13 +376,19 @@ test('overlay keeps the video as recorded when verifying the export spent its bu
   });
 
   await expect(
-    overlayRecordingTouches({ host: createTestHost(), videoPath, telemetryPath, deadline }),
+    overlayRecordingTouches({
+      validator: undefined,
+      host: createTestHost(),
+      videoPath,
+      telemetryPath,
+      deadline,
+    }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: `Failed to add touch overlays to the recording: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`,
   });
   expect(vi.mocked(waitForPlayableVideo)).toHaveBeenCalledWith(expect.any(String), {
-    host: expect.objectContaining({ cwd: process.cwd() }),
+    validator: undefined,
     deadline,
   });
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');

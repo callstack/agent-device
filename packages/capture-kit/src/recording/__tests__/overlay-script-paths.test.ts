@@ -32,6 +32,7 @@ test('a helper script path is resolved per host working directory, not once per 
   const overlay = async (cwd: string) => {
     fs.writeFileSync(videoPath, 'original');
     await overlayRecordingTouches({
+      validator: undefined,
       host: { env: {}, cwd },
       videoPath,
       telemetryPath,

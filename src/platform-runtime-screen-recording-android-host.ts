@@ -5,9 +5,11 @@ import type {
   AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { type ShellWord, shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
-import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
+import {
+  isPlayableVideo,
+  type PreparedVideoValidator,
+} from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const ANDROID_MANIFEST_NAME = 'agent-device-recording-active.json';
@@ -16,7 +18,7 @@ const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 
 export async function createAndroidScreenRecordingTransport(
   device: DeviceInfo,
-  host: HostEnvironment,
+  videoValidator: () => PreparedVideoValidator | undefined,
 ): Promise<AndroidScreenRecordingTransport> {
   const { resolveAndroidAdbExecutor, resolveScopedAndroidAdbBackgroundTransport, runAdbShell } =
     await loadAndroidMechanics();
@@ -109,7 +111,7 @@ export async function createAndroidScreenRecordingTransport(
       });
       return {
         ...result,
-        playable: result.exitCode === 0 && (await isPlayableVideo(outputPath, host)),
+        playable: result.exitCode === 0 && (await isPlayableVideo(outputPath, videoValidator())),
       };
     },
     remove: async (remotePath, signal) =>

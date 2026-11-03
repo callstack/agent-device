@@ -241,6 +241,11 @@ export type WebScreenRecordingHost = Readonly<{
 
 /** Closed post-processing authority for stable/playable validation, telemetry, and overlays. */
 export type ScreenRecordingFinalizer = Readonly<{
+  /** Prepares the video validator before capture. */
+  prepare(
+    input: Readonly<{ container: 'mp4' | 'webm'; timeoutMs?: number }>,
+    signal?: AbortSignal,
+  ): Promise<void>;
   /**
    * The container sniff a stop runs on its collected copy before it checkpoints that copy (ADR 0024
    * 2.3): `ftyp` and `moov` for MP4, the EBML segment for WebM. It spawns no validator; `complete`

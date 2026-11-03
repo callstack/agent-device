@@ -7,6 +7,7 @@ import type {
   PrepareAppleRunnerInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { ScreenRecordingFinalizer } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -48,7 +49,10 @@ let retryModule: Promise<typeof import('@agent-device/host-kit/retry')> | undefi
 const loadRetry = () => (retryModule ??= import('@agent-device/host-kit/retry'));
 
 /** Lazy Apple tools; the Apple package owns lifecycle sequencing around these primitives. */
-export function createAppleApplicationTools(env: Readonly<EnvMap>): AppleApplicationTools {
+export function createAppleApplicationTools(
+  env: Readonly<EnvMap>,
+  prepareRecording: ScreenRecordingFinalizer['prepare'],
+): AppleApplicationTools {
   return Object.freeze({
     resolveOpenTarget: async (device, input) => await resolveAppleOpenTarget(device, input, env),
     prewarmRunnerCache: async (device, execution, signal) => {
@@ -92,9 +96,10 @@ export function createAppleApplicationTools(env: Readonly<EnvMap>): AppleApplica
       await releaseIosRunnerOnClose(deviceId, options);
     },
     prepareRunner: async (device, input, signal) => {
+      const startedAtMs = Date.now();
+      await prepareRecording({ container: 'mp4', timeoutMs: input.timeoutMs }, signal);
       const { Deadline } = await loadRetry();
       const { prepareIosRunner } = await loadRunnerOperations();
-      const startedAtMs = Date.now();
       return await prepareIosRunner(device, {
         ...appleRunnerOptions(input.execution, signal),
         cleanStaleBundles: true,

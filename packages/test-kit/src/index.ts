@@ -178,3 +178,5 @@ export {
   type StreamCapture,
   type StreamCaptureOptions,
 } from './stream-capture.ts';
+
+export { prepareRecordingValidatorFixture } from './recording-video.ts';

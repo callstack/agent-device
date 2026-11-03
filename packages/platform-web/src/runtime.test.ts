@@ -456,7 +456,7 @@ function host(
         removeMedia: async () => true,
       },
       web: { resolve: async () => webRecording },
-      finalize: { complete: async () => ({}) },
+      finalize: { prepare: async () => {}, complete: async () => ({}) },
     },
   } as unknown as PlatformRuntimeHost;
 }

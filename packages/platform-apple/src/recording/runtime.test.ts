@@ -628,3 +628,50 @@ test('compensates a runner finalizer failure without stopping the runner twice',
   await expect(handle.forceCleanup()).resolves.toEqual({ status: 'cleaned' });
   expect(stop).toHaveBeenCalledOnce();
 });
+
+test('does not start or prepare recorder output while video validation preparation is pending', async () => {
+  let ready!: () => void;
+  const preparing = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  let entered!: () => void;
+  const preparationStarted = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const host = appleHost({
+    prepare: async () => {
+      entered();
+      await preparing;
+    },
+    apple: {
+      startSimulator: async () => ({
+        markers: [processIdentity],
+        wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
+        terminate: async () => {},
+      }),
+    },
+  });
+  const clockAnchor = vi.spyOn(host.screenRecording.apple, 'captureClockAnchor');
+  const startRecorder = vi.spyOn(host.screenRecording.apple, 'startSimulator');
+  const prepareOutput = vi.spyOn(host.screenRecording.outputs, 'prepare');
+  const operations = createAppleScreenRecordingOperations({
+    host,
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const starting = operations.screenRecordingStart(input());
+  expect(
+    await Promise.race([
+      preparationStarted.then(() => 'preparing'),
+      starting.then(() => 'started'),
+    ]),
+  ).toBe('preparing');
+  expect(startRecorder).not.toHaveBeenCalled();
+  expect(prepareOutput).not.toHaveBeenCalled();
+  expect(clockAnchor).not.toHaveBeenCalled();
+  ready();
+  const started = await starting;
+  expect(startRecorder).toHaveBeenCalledOnce();
+  await started.pendingHandle[Symbol.asyncDispose]();
+});

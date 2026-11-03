@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { prepareRecordingValidatorFixture } from '@agent-device/test-kit';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -23,7 +24,7 @@ export async function stopAndroidRecording(
 
 /**
  * The daemon's host for an Android recording scenario: no real tool on its PATH, so the Swift
- * helpers cannot compile, and a Swift cache of its own.
+ * helpers use a prepared fixture executable in a Swift cache of its own.
  */
 function androidRecordingHostEnv(tmpDir: string): Readonly<Record<string, string>> {
   return { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') };
@@ -33,9 +34,11 @@ export async function createAndroidRecordingScenarioHarness(
   deps: Parameters<typeof createProviderScenarioHarness>[0],
   tmpDir: string,
 ): Promise<ProviderScenarioDaemon> {
+  const env = { ...androidRecordingHostEnv(tmpDir), ...deps.env };
+  await prepareRecordingValidatorFixture({ env, cwd: tmpDir });
   return await createProviderScenarioHarness({
     ...deps,
-    env: { ...androidRecordingHostEnv(tmpDir), ...deps.env },
+    env,
   });
 }
 
