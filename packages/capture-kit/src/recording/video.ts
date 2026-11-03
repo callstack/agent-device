@@ -49,7 +49,10 @@ export type PreparedVideoValidator = Readonly<{
 }>;
 
 export type VideoValidator = PreparedVideoValidator | Promise<PreparedVideoValidator>;
-const videoValidatorPreparations = new Map<string, Promise<PreparedVideoValidator>>();
+const videoValidatorPreparations = new Map<
+  string,
+  { promise: Promise<PreparedVideoValidator>; failed: boolean }
+>();
 
 /** Reads prepared executable authority from the host cache without compiling. */
 export function readPreparedVideoValidator(
@@ -57,7 +60,7 @@ export function readPreparedVideoValidator(
 ): Promise<PreparedVideoValidator> | undefined {
   const cacheRoot = getSwiftCacheRoot(host.env);
   const preparing = videoValidatorPreparations.get(cacheRoot);
-  if (preparing) return preparing;
+  if (preparing) return preparing.promise;
   const executablePath = readCompiledSwiftSourceText({
     host,
     source: VIDEO_VALIDATION_SCRIPT,
@@ -76,16 +79,15 @@ function preparedVideoValidator(
 export function prepareVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
   const cacheRoot = getSwiftCacheRoot(host.env);
   let preparing = videoValidatorPreparations.get(cacheRoot);
-  if (!preparing) {
-    preparing = compileVideoValidator(host);
+  if (!preparing || preparing.failed) {
+    const next = { promise: compileVideoValidator(host), failed: false };
+    preparing = next;
     videoValidatorPreparations.set(cacheRoot, preparing);
-    void preparing.catch(() => {
-      if (videoValidatorPreparations.get(cacheRoot) === preparing) {
-        videoValidatorPreparations.delete(cacheRoot);
-      }
+    void next.promise.catch(() => {
+      next.failed = true;
     });
   }
-  return preparing;
+  return preparing.promise;
 }
 
 async function compileVideoValidator(host: HostEnvironment): Promise<PreparedVideoValidator> {
