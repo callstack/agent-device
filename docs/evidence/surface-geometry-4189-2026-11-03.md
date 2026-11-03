@@ -63,3 +63,10 @@ Missing live evidence: verified Duo orientations, half-open interaction, scoped-
 The two-device assignment excludes extra scoped clones and live iPad hardware.
 The CLI offers no forced single-tap XCTest route; the composed native harness covers that route.
 Cleanup reported Duo hinge `0`; both simulators shut down; the owned daemon released both claims cleanly; Metro stopped.
+
+## Final API consolidation
+
+The first full gate at `3090b336` rejected ten new native duplicate blocks.
+The follow-up consolidates drag dispatch, passes tap points as `CGPoint`, resolves point orientation with its target, and shares screen-query and preparation fixtures.
+Two existing fallback/alert stubs were also updated to the current native selector.
+The live observations above precede this API consolidation; final-head native and gate results are recorded in the PR validation section.

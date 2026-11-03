@@ -109,18 +109,18 @@ private final class LitPanelBookingProbe: NSObject {
     return unsafeBitCast(SurfaceSelectorQuery(elements), to: XCUIElementQuery.self)
   }
 
-  @objc(synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:)
-  class func synthesizeTap(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int, x: Double, y: Double,
+  @objc(synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:)
+  class func synthesizeTap(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int, point: CGPoint,
                           deadline: NSDate?, errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Int {
-    record(window: resolvedWindow, orientation: interfaceOrientation, start: CGPoint(x: x, y: y))
+    record(window: resolvedWindow, orientation: interfaceOrientation, start: point)
     return 0
   }
 
-  @objc(synthesizeControlledScrollWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:)
+  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:)
   class func synthesizeDrag(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int,
-                            x: Double, y: Double, x2: Double, y2: Double, durationMs: Double) -> String? {
+                            drag: RunnerSynthesizedDrag) -> String? {
     record(window: resolvedWindow, orientation: interfaceOrientation,
-           start: CGPoint(x: x, y: y), end: CGPoint(x: x2, y: y2))
+           start: drag.start, end: drag.end)
     return nil
   }
 
@@ -200,22 +200,20 @@ extension RunnerTests {
           let command = try runnerCommandFixture(
             #"{"command":"tap","selectorKey":"label","selectorValue":"same-selector","x":200,"y":150,"allowNonHittableCoordinateFallback":true,"synthesized":\#(synthesized),"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
           )
-          let requestID = setRequestLitPanel(from: command)
-          defer { endRequestLitPanel(requestID) }
-          let response = try executeOnMainPrepared(command: command, activeApp: app)
-          XCTAssertTrue(response.ok, response.error?.message ?? "")
-          let booked = try XCTUnwrap(litPanelState.surface)
-          XCTAssertTrue(booked.window === window)
-          XCTAssertEqual(booked.geometry.windowOnScreen.rect, frame)
-          XCTAssertEqual(booked.geometry.digitizerBasis.rect, expected)
-          if synthesized {
-            XCTAssertEqual(LitPanelBookingProbe.synthesizedDisplay, 3)
-            XCTAssertEqual(LitPanelBookingProbe.synthesizedPoint, digitizer)
-          } else {
-            var display: UInt = 0
-            XCTAssertNil(RunnerResolveWindowDisplayID(try XCTUnwrap(LitPanelBookingProbe.anchor), &display))
-            XCTAssertEqual(display, 3)
-            XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
+          try withPreparedSurfaceCommand(command) { _ in
+            let booked = try XCTUnwrap(litPanelState.surface)
+            XCTAssertTrue(booked.window === window)
+            XCTAssertEqual(booked.geometry.windowOnScreen.rect, frame)
+            XCTAssertEqual(booked.geometry.digitizerBasis.rect, expected)
+            if synthesized {
+              XCTAssertEqual(LitPanelBookingProbe.synthesizedDisplay, 3)
+              XCTAssertEqual(LitPanelBookingProbe.synthesizedPoint, digitizer)
+            } else {
+              var display: UInt = 0
+              XCTAssertNil(RunnerResolveWindowDisplayID(try XCTUnwrap(LitPanelBookingProbe.anchor), &display))
+              XCTAssertEqual(display, 3)
+              XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
+            }
           }
         }
         XCTAssertTrue(LitPanelBookingProbe.anchor === window)
@@ -248,21 +246,19 @@ extension RunnerTests {
           let command = try runnerCommandFixture(
             #"{"command":"sequence","litPanel":{"displayId":3,"widthPt":669,"heightPt":951},"steps":[{"kind":"tap","x":200,"y":150,"synthesized":\#(synthesized)},{"kind":"\#(nextKind)","x":200,"y":150,"synthesized":true,"durationMs":100}]}"#
           )
-          let requestID = setRequestLitPanel(from: command)
-          defer { endRequestLitPanel(requestID) }
-          let response = try executeOnMainPrepared(command: command, activeApp: app)
-          XCTAssertTrue(response.ok, response.error?.message ?? "")
-          XCTAssertEqual(response.data?.x, 200)
-          XCTAssertEqual(response.data?.y, 150)
-          XCTAssertEqual(response.data?.completedSteps, 1)
-          XCTAssertEqual(response.data?.failedStepIndex, 1)
-          XCTAssertEqual(response.data?.sequenceResults?.last?.errorCode, "UNSUPPORTED_OPERATION")
-          XCTAssertEqual(LitPanelBookingProbe.dispatches.count, synthesized ? 1 : 0)
-          if synthesized {
-            let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
-            XCTAssertEqual(dispatch.displayID, 3)
-            XCTAssertEqual(dispatch.start, CGPoint(x: 200, y: 150))
-            XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.portrait)
+          try withPreparedSurfaceCommand(command) { response in
+            XCTAssertEqual(response.data?.x, 200)
+            XCTAssertEqual(response.data?.y, 150)
+            XCTAssertEqual(response.data?.completedSteps, 1)
+            XCTAssertEqual(response.data?.failedStepIndex, 1)
+            XCTAssertEqual(response.data?.sequenceResults?.last?.errorCode, "UNSUPPORTED_OPERATION")
+            XCTAssertEqual(LitPanelBookingProbe.dispatches.count, synthesized ? 1 : 0)
+            if synthesized {
+              let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+              XCTAssertEqual(dispatch.displayID, 3)
+              XCTAssertEqual(dispatch.start, CGPoint(x: 200, y: 150))
+              XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.portrait)
+            }
           }
         }
       }
@@ -281,24 +277,22 @@ extension RunnerTests {
       let command = try runnerCommandFixture(
         #"{"command":"scroll","direction":"down","pixels":200,"durationMs":400,"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
       )
-      let requestID = setRequestLitPanel(from: command)
-      defer { endRequestLitPanel(requestID) }
-      let response = try executeOnMainPrepared(command: command, activeApp: app)
-      XCTAssertTrue(response.ok, response.error?.message ?? "")
-      XCTAssertEqual(response.data?.referenceWidth, 669)
-      XCTAssertEqual(response.data?.referenceHeight, 508)
-      XCTAssertEqual(response.data?.keyboardAvoided, true)
-      XCTAssertEqual(response.data?.keyboardMinY, 600)
-      XCTAssertEqual(response.data?.x, 335)
-      XCTAssertEqual(response.data?.y, 434)
-      XCTAssertEqual(response.data?.x2, 335)
-      XCTAssertEqual(response.data?.y2, 234)
-      XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
-      let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
-      XCTAssertEqual(dispatch.displayID, 3)
-      XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
-      XCTAssertEqual(dispatch.start, CGPoint(x: 235, y: 335))
-      XCTAssertEqual(dispatch.end, CGPoint(x: 435, y: 335))
+      try withPreparedSurfaceCommand(command) { response in
+        XCTAssertEqual(response.data?.referenceWidth, 669)
+        XCTAssertEqual(response.data?.referenceHeight, 508)
+        XCTAssertEqual(response.data?.keyboardAvoided, true)
+        XCTAssertEqual(response.data?.keyboardMinY, 600)
+        XCTAssertEqual(response.data?.x, 335)
+        XCTAssertEqual(response.data?.y, 434)
+        XCTAssertEqual(response.data?.x2, 335)
+        XCTAssertEqual(response.data?.y2, 234)
+        XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
+        let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+        XCTAssertEqual(dispatch.displayID, 3)
+        XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
+        XCTAssertEqual(dispatch.start, CGPoint(x: 235, y: 335))
+        XCTAssertEqual(dispatch.end, CGPoint(x: 435, y: 335))
+      }
     }
   }
 
@@ -308,28 +302,12 @@ extension RunnerTests {
     let cached = mainOwned.soleDisplayPortraitSize
     defer { mainOwned.soleDisplayPortraitSize = cached }
     mainOwned.soleDisplayPortraitSize = nil
-    let selector = #selector(NSObject.value(forKey:))
-    let inherited = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
-    class_addMethod(XCUIScreen.self, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited))
-    let target = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
-    let original = method_getImplementation(target)
-    typealias ReadValue = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
-    let readValue = unsafeBitCast(original, to: ReadValue.self)
     var screenReads = 0
-    let read: @convention(block) (AnyObject, NSString) -> AnyObject? = { screen, key in
-      if key == "bounds" {
-        screenReads += 1
-        return NSValue(cgRect: CGRect(x: 0, y: 0, width: 2048, height: 2732))
-      }
-      if key == "scale" { return NSNumber(value: 2) }
-      return readValue(screen, selector, key)
-    }
-    let replacement = imp_implementationWithBlock(read)
-    method_setImplementation(target, replacement)
-    defer {
-      method_setImplementation(target, original)
-      imp_removeBlock(replacement)
-    }
+    let restore = try overrideSoleScreenValues([
+      "bounds": NSValue(cgRect: CGRect(x: 0, y: 0, width: 2048, height: 2732)),
+      "scale": NSNumber(value: 2)
+    ], didRead: { if $0 == "bounds" { screenReads += 1 } })
+    defer { restore() }
     try withLitPanelBookingProbe(composed: true) { _ in
       LitPanelBookingProbe.windowDisplayID = 1
       LitPanelBookingProbe.includeDarkSelector = false
@@ -340,21 +318,19 @@ extension RunnerTests {
       let command = try runnerCommandFixture(
         #"{"command":"tap","selectorKey":"label","selectorValue":"same-selector","synthesized":true}"#
       )
-      let requestID = setRequestLitPanel(from: command)
-      defer { endRequestLitPanel(requestID) }
-      let response = try executeOnMainPrepared(command: command, activeApp: app)
-      XCTAssertTrue(response.ok, response.error?.message ?? "")
-      XCTAssertGreaterThan(screenReads, 0)
-      XCTAssertEqual(mainOwned.soleDisplayPortraitSize, CGSize(width: 1024, height: 1366))
-      XCTAssertEqual(response.data?.referenceWidth, 386)
-      XCTAssertEqual(response.data?.referenceHeight, 682)
-      XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
-      let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
-      XCTAssertEqual(dispatch.displayID, 1)
-      XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
-      XCTAssertEqual(dispatch.start, CGPoint(x: 624, y: 300))
-      XCTAssertTrue(dispatch.window === LitPanelBookingProbe.window)
-      XCTAssertEqual((dispatch.window as? XCUIElement)?.frame, CGRect(x: 224, y: 207, width: 386, height: 682))
+      try withPreparedSurfaceCommand(command) { response in
+        XCTAssertGreaterThan(screenReads, 0)
+        XCTAssertEqual(mainOwned.soleDisplayPortraitSize, CGSize(width: 1024, height: 1366))
+        XCTAssertEqual(response.data?.referenceWidth, 386)
+        XCTAssertEqual(response.data?.referenceHeight, 682)
+        XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
+        let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+        XCTAssertEqual(dispatch.displayID, 1)
+        XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
+        XCTAssertEqual(dispatch.start, CGPoint(x: 624, y: 300))
+        XCTAssertTrue(dispatch.window === LitPanelBookingProbe.window)
+        XCTAssertEqual((dispatch.window as? XCUIElement)?.frame, CGRect(x: 224, y: 207, width: 386, height: 682))
+      }
     }
   }
 
@@ -524,6 +500,15 @@ extension RunnerTests {
   }
 
   @MainActor
+  private func withPreparedSurfaceCommand(_ command: Command, _ assertions: (Response) throws -> Void) throws {
+    let requestID = setRequestLitPanel(from: command)
+    defer { endRequestLitPanel(requestID) }
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+    XCTAssertTrue(response.ok, response.error?.message ?? "")
+    try assertions(response)
+  }
+
+  @MainActor
   private func withLitPanelBookingProbe(composed: Bool = false, _ body: (XCUIElement) throws -> Void) throws {
     app.launch()
     defer { app.terminate() }
@@ -563,17 +548,16 @@ extension RunnerTests {
       (#selector(XCUIElement.descendants(matching:)), #selector(LitPanelBookingProbe.descendants(matching:))),
     ].map { (class_getInstanceMethod(windowClass, $0.0), class_getInstanceMethod(LitPanelBookingProbe.self, $0.1)) }
     let synthesisSwap = (
-      class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:")),
-      class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeTap(_:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:)))
+      class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:")),
+      class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeTap(_:resolvedWindow:interfaceOrientation:point:deadline:errorMessage:)))
     )
-    let dragStub = class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeDrag(_:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:)))
+    let dragStub = class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeDrag(_:resolvedWindow:interfaceOrientation:drag:)))
     let composedSwaps: [(Method?, Method?)] = [
       (class_getInstanceMethod(try XCTUnwrap(object_getClass(app)), NSSelectorFromString("keyboards")),
        class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.keyboards))),
       (class_getInstanceMethod(try XCTUnwrap(object_getClass(query)), #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
        class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.allElementsBoundByIndex))),
-      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeControlledScrollWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:")), dragStub),
-      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeSwipeWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:")), dragStub),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:")), dragStub),
       (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:")),
        class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:))))
     ]

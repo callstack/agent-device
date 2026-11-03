@@ -54,8 +54,7 @@ extension RunnerTests {
         withApplication: TapApplicationFixture(),
         resolvedWindow: window,
         interfaceOrientation: 1,
-        x: 50,
-        y: 50,
+        point: CGPoint(x: 50, y: 50),
         deadline: deadline,
         errorMessage: &message
       )
@@ -70,8 +69,7 @@ extension RunnerTests {
         withApplication: TapApplicationFixture(),
         resolvedWindow: TapWindowFixture {},
         interfaceOrientation: 1,
-        x: 50,
-        y: 50,
+        point: CGPoint(x: 50, y: 50),
         deadline: .distantFuture,
         errorMessage: &message
       )
@@ -87,8 +85,7 @@ extension RunnerTests {
         withApplication: TapApplicationFixture(),
         resolvedWindow: TapWindowFixture {},
         interfaceOrientation: 4,
-        x: 50,
-        y: 50,
+        point: CGPoint(x: 50, y: 50),
         deadline: .distantFuture,
         errorMessage: &message
       )

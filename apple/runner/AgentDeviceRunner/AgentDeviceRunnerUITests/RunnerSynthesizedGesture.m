@@ -87,48 +87,15 @@ static id RunnerTapPointerPath(
 
 @implementation RunnerSynthesizedGesture
 
-+ (NSString * _Nullable)synthesizeSwipeWithApplication:(id)application
-                                        resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
-                                                     x:(double)x
-                                                     y:(double)y
-                                                    x2:(double)x2
-                                                    y2:(double)y2
-                                            durationMs:(double)durationMs {
++ (NSString * _Nullable)synthesizeDragWithApplication:(id)application
+                                      resolvedWindow:(id _Nullable)resolvedWindow
+                                interfaceOrientation:(NSInteger)interfaceOrientation
+                                                drag:(RunnerSynthesizedDrag)drag {
   @try {
     return RunnerTrySynthesizeDrag(
-      application,
-      resolvedWindow,
-      interfaceOrientation,
-      CGPointMake(x, y),
-      CGPointMake(x2, y2),
-      durationMs,
-      @"agent-device-swipe",
-      RunnerSwipePointerPath
-    );
-  } @catch (NSException *exception) {
-    return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
-  }
-}
-
-+ (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
-                                                 resolvedWindow:(id _Nullable)resolvedWindow
-                                           interfaceOrientation:(NSInteger)interfaceOrientation
-                                                                x:(double)x
-                                                                y:(double)y
-                                                               x2:(double)x2
-                                                               y2:(double)y2
-                                                       durationMs:(double)durationMs {
-  @try {
-    return RunnerTrySynthesizeDrag(
-      application,
-      resolvedWindow,
-      interfaceOrientation,
-      CGPointMake(x, y),
-      CGPointMake(x2, y2),
-      durationMs,
-      @"agent-device-controlled-scroll",
-      RunnerControlledScrollPointerPath
+      application, resolvedWindow, interfaceOrientation, drag.start, drag.end, drag.durationMs,
+      drag.controlledScroll ? @"agent-device-controlled-scroll" : @"agent-device-swipe",
+      drag.controlledScroll ? RunnerControlledScrollPointerPath : RunnerSwipePointerPath
     );
   } @catch (NSException *exception) {
     return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
@@ -138,13 +105,12 @@ static id RunnerTapPointerPath(
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                 interfaceOrientation:(NSInteger)interfaceOrientation
-                                                   x:(double)x
-                                                   y:(double)y
+                                               point:(CGPoint)point
                                             deadline:(NSDate * _Nullable)deadline
                                         errorMessage:(NSString * _Nullable * _Nullable)errorMessage {
   if (errorMessage != NULL) *errorMessage = nil;
   @try {
-    return RunnerTrySynthesizeTap(application, resolvedWindow, interfaceOrientation, CGPointMake(x, y), deadline, errorMessage);
+    return RunnerTrySynthesizeTap(application, resolvedWindow, interfaceOrientation, point, deadline, errorMessage);
   } @catch (NSException *exception) {
     if (errorMessage != NULL) {
       *errorMessage = RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");

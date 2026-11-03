@@ -39,30 +39,13 @@ extension RunnerTests {
       referenceFrame: frame,
       orientation: context.geometry.orientation
     )
-    let message = switch profile {
-    case .controlledScroll:
-      RunnerSynthesizedGesture.synthesizeControlledScroll(
-        withApplication: app,
-        resolvedWindow: context.resolvedWindow,
-        interfaceOrientation: geometry.orientation,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    case .fastSwipe:
-      RunnerSynthesizedGesture.synthesizeSwipe(
-        withApplication: app,
-        resolvedWindow: context.resolvedWindow,
-        interfaceOrientation: geometry.orientation,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    }
+    let message = RunnerSynthesizedGesture.synthesizeDrag(
+      withApplication: app,
+      resolvedWindow: context.resolvedWindow,
+      interfaceOrientation: geometry.orientation,
+      drag: RunnerSynthesizedDrag(start: start, end: end, durationMs: durationMs,
+                                  controlledScroll: ObjCBool(profile == .controlledScroll))
+    )
     if let message {
       return .unsupported(
         message: message,
@@ -99,16 +82,14 @@ extension RunnerTests {
       )
     }
     let context = try context ?? synthesizedCoordinateContext(app: app)
-    let orientation = context?.geometry.orientation ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let resolution = pointGestureTarget(
       app: app,
       x: x,
       y: y,
-      orientation: orientation,
       context: context,
       gesture: .tap
     )
-    guard case .target(let point, let resolvedWindow, let referenceFrame) = resolution else {
+    guard case .target(let point, let resolvedWindow, let referenceFrame, let orientation) = resolution else {
       return resolution.refusal
     }
     logSynthesizedDispatch(
@@ -123,8 +104,7 @@ extension RunnerTests {
       withApplication: app,
       resolvedWindow: resolvedWindow,
       interfaceOrientation: orientation,
-      x: Double(point.x),
-      y: Double(point.y),
+      point: point,
       deadline: deadline,
       errorMessage: &message
     )
@@ -174,16 +154,14 @@ extension RunnerTests {
         hint: "Retry with finite x and y values and a positive durationMs."
       )
     }
-    let orientation = context?.geometry.orientation ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let resolution = pointGestureTarget(
       app: app,
       x: x,
       y: y,
-      orientation: orientation,
       context: context,
       gesture: .longpress
     )
-    guard case .target(let point, let resolvedWindow, let referenceFrame) = resolution else {
+    guard case .target(let point, let resolvedWindow, let referenceFrame, let orientation) = resolution else {
       return resolution.refusal
     }
     logSynthesizedDispatch(
@@ -550,7 +528,7 @@ extension RunnerTests {
 
   private enum PointGestureResolution {
     /// A nil `resolvedWindow` routes the record to the sole screen.
-    case target(point: CGPoint, resolvedWindow: XCUIElement?, referenceFrame: CGRect)
+    case target(point: CGPoint, resolvedWindow: XCUIElement?, referenceFrame: CGRect, orientation: Int)
     case refused(RunnerInteractionOutcome)
 
     /// Read only on the branch that is not a target, so its `.performed` answer is never returned.
@@ -567,7 +545,6 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    orientation: Int,
     context: SynthesizedCoordinateContext?,
     gesture: SynthesizedPointGesture
   ) -> PointGestureResolution {
@@ -576,10 +553,11 @@ extension RunnerTests {
         return .refused(Self.unmeasuredSoleDisplayOutcome(gesture: gesture.rawValue))
       }
       let point = geometry.digitizerPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
-      return .target(point: point, resolvedWindow: context.resolvedWindow, referenceFrame: context.geometry.windowOnScreen.rect)
+      return .target(point: point, resolvedWindow: context.resolvedWindow, referenceFrame: context.geometry.windowOnScreen.rect, orientation: geometry.orientation)
     }
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     if let unrotated = unrotatedSoleScreenPoint(app: app, x: x, y: y, interfaceOrientation: orientation) {
-      return .target(point: unrotated, resolvedWindow: nil, referenceFrame: .null)
+      return .target(point: unrotated, resolvedWindow: nil, referenceFrame: .null, orientation: orientation)
     }
     return .refused(
       .unsupported(

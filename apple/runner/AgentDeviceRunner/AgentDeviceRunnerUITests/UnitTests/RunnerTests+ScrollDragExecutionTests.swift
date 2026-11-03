@@ -5,16 +5,12 @@ import AgentDeviceSnapshotPresentation
 import ObjectiveC.runtime
 
 private final class RunnerSynthesizedSwipeFailureStub: NSObject {
-  @objc(synthesizeSwipeWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:)
+  @objc(synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:)
   class func synthesizeSwipe(
     application: XCUIApplication,
     resolvedWindow: Any?,
     interfaceOrientation: Int,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double
+    drag: RunnerSynthesizedDrag
   ) -> String? {
     "forced private synthesis failure"
   }
@@ -57,7 +53,7 @@ extension RunnerTests {
   @MainActor
   func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
     let selector = NSSelectorFromString(
-      "synthesizeSwipeWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:"
+      "synthesizeDragWithApplication:resolvedWindow:interfaceOrientation:drag:"
     )
     guard
       let synthesizedSwipeMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),

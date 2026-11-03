@@ -54,6 +54,12 @@ extension RunnerTests {
   }
 
   private func simulateUnreadableDisplay() throws -> () -> Void {
+    try overrideSoleScreenValues(["scale": NSNumber(value: 0)])
+  }
+
+  func overrideSoleScreenValues(
+    _ values: [String: AnyObject], didRead: @escaping (String) -> Void = { _ in }
+  ) throws -> () -> Void {
     let selector = #selector(NSObject.value(forKey:))
     let inherited = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
     class_addMethod(XCUIScreen.self, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited))
@@ -62,7 +68,8 @@ extension RunnerTests {
     typealias ReadValue = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
     let readValue = unsafeBitCast(original, to: ReadValue.self)
     let read: @convention(block) (AnyObject, NSString) -> AnyObject? = { screen, key in
-      if key == "scale" { return NSNumber(value: 0) }
+      didRead(key as String)
+      if let value = values[key as String] { return value }
       return readValue(screen, selector, key)
     }
     let replacement = imp_implementationWithBlock(read)
