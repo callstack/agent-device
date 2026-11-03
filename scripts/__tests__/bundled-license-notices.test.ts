@@ -78,6 +78,10 @@ test('bundled licenses retain full license and NOTICE text after minification', 
   assert.match(notices, /Upstream attribution retained\./);
   assert.match(notices, /Author: Fixture author <author@example\.test>/);
   assert.doesNotMatch(notices, /unused|external|fixture-project/);
+  // The populated notice ends like any other text file: exactly one trailing newline, so a reader
+  // who cats it and a tool that counts its lines both see a finished last license block.
+  assert.ok(notices.endsWith('\n'), 'notices end with a newline');
+  assert.ok(!notices.endsWith('\n\n'), 'notices carry exactly one trailing newline');
 });
 
 test('bundling fails when a dependency has a license identifier but no license text', async () => {

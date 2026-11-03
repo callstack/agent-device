@@ -91,7 +91,10 @@ function renderNotices(root: string, dependencies: readonly Dependency[]): strin
       `${dependency.name}@${dependency.version} (${dependency.license}): ${references.join(', ')}${dependency.author ? `; Author: ${dependency.author.text()}` : ''}`,
     );
   }
-  return [packages.join('\n'), ...Array.from(texts, ([text, id]) => `[${id}]\n${text}`)].join(
+  // One trailing newline closes the last license block: the generic notice above carries one, and a
+  // reader who `cat`s the file or counts its lines sees a finished file either way.
+  const body = [packages.join('\n'), ...Array.from(texts, ([text, id]) => `[${id}]\n${text}`)].join(
     '\n\n',
   );
+  return `${body}\n`;
 }
