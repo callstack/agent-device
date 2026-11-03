@@ -60,13 +60,15 @@ export function readPreparedVideoValidator(
 ): Promise<PreparedVideoValidator> | undefined {
   const cacheRoot = getSwiftCacheRoot(host.env);
   const preparing = videoValidatorPreparations.get(cacheRoot);
-  if (preparing) return preparing.promise;
+  if (preparing && !preparing.failed) return preparing.promise;
   const executablePath = readCompiledSwiftSourceText({
     host,
     source: VIDEO_VALIDATION_SCRIPT,
     cacheName: 'video-validator',
   });
-  return executablePath ? Promise.resolve(preparedVideoValidator(host, executablePath)) : undefined;
+  return executablePath
+    ? Promise.resolve(preparedVideoValidator(host, executablePath))
+    : preparing?.promise;
 }
 
 function preparedVideoValidator(
@@ -121,7 +123,7 @@ function unavailableVideoValidator(cause?: Error): AppError {
     {
       reason: 'video_validator_unavailable',
       retriable: false,
-      hint: 'Install the Xcode command line tools with AVFoundation on the recording host, then start a new recording.',
+      hint: 'Install the Xcode command line tools with AVFoundation on the recording host, then run agent-device prepare ios-runner --platform ios there using the same Swift cache. Once preparation is ready, retry record stop in the original recording session.',
     },
     cause,
   );
@@ -190,7 +192,13 @@ export async function isPlayableVideo(
         hint: 'Preparation continues in the background. Retry record stop in this session once the validator is ready.',
       },
     );
-  if (!validator) throw notPrepared();
+  if (!validator) {
+    throw new AppError('COMMAND_FAILED', 'The video validator has not been prepared', {
+      reason: 'video_validator_not_prepared',
+      retriable: true,
+      hint: 'Run agent-device prepare ios-runner --platform ios on the recording host using the same Swift cache. Once preparation is ready, retry record stop in the original recording session.',
+    });
+  }
   let timer: NodeJS.Timeout | undefined;
   let prepared: PreparedVideoValidator;
   try {

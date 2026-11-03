@@ -29,9 +29,9 @@ export function getRecordingOverlaySupportWarning(
  * `record stop` is one daemon request, which the client abandons after `record`'s 90 s envelope:
  * the caller gets "Daemon request timed out" while the daemon finishes the stop. So the overlay must
  * end well inside it. The budget starts with the stop's finalization, so the playability checks
- * before the overlay come out of it, as do
- * compiling the helper, its export, its exit and verifying its output; past it the stop keeps the raw video and its
- * gesture telemetry, with a warning.
+ * before the overlay come out of it, as do compiling the overlay helper, exporting, exiting and
+ * verifying its output. Past the budget, the stop keeps the raw video and gesture telemetry, with
+ * a warning.
  */
 export const OVERLAY_BUDGET_MS = 70_000;
 

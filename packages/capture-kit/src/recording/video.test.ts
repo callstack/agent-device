@@ -8,7 +8,7 @@ import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtu
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { Deadline } from '@agent-device/host-kit/retry';
-import { compileSwiftSourceText } from './swift-cache.ts';
+import { compileSwiftSourceText, readCompiledSwiftSourceText } from './swift-cache.ts';
 import {
   isPlayableVideo,
   prepareVideoValidator,
@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.stubEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', mkdtempForTestSync('agent-device-video-validator-'));
   vi.mocked(runCmd).mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   vi.mocked(compileSwiftSourceText).mockReset().mockResolvedValue('/bin/true');
+  vi.mocked(readCompiledSwiftSourceText).mockReset().mockReturnValue(undefined);
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -118,7 +119,7 @@ test('preparation compiles once per Swift cache root', async () => {
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
 });
 
-test.each([
+const preparationFailures = [
   {
     name: 'a contended cache lock',
     failure: new AppError('COMMAND_FAILED', 'Swift cache lock was busy', {
@@ -131,24 +132,67 @@ test.each([
     failure: new AppError('TOOL_MISSING', 'no swiftc'),
     reason: 'video_validator_unavailable',
   },
-])('failed preparation can be retried after $name', async ({ failure, reason }) => {
-  const host = createTestHost();
-  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
-  const failed = prepareVideoValidator(host);
-  expect(prepareVideoValidator(host)).toBe(failed);
-  await expect(failed).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason } });
-  expect(readPreparedVideoValidator(host)).toBe(failed);
-  const mp4 = writeFixture('retried.mp4', Buffer.concat([ftyp, moov]));
-  await expect(isPlayableVideo(mp4, readPreparedVideoValidator(host))).rejects.toMatchObject({
-    details: { reason },
-  });
+] as const;
 
-  const retry = prepareVideoValidator(host);
-  expect(retry).not.toBe(failed);
-  await expect(retry).resolves.toMatchObject({ executablePath: '/bin/true' });
-  expect(readPreparedVideoValidator(host)).toBe(retry);
-  await expect(isPlayableVideo(mp4, retry)).resolves.toBe(true);
-  expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+test.each(preparationFailures)(
+  'failed preparation can be retried after $name',
+  async ({ failure, reason }) => {
+    const host = createTestHost();
+    vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+    const failed = prepareVideoValidator(host);
+    expect(prepareVideoValidator(host)).toBe(failed);
+    await expect(failed).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason } });
+    expect(readPreparedVideoValidator(host)).toBe(failed);
+    const originalError = await failed.catch((error: unknown) => error);
+    const mp4 = writeFixture('retried.mp4', Buffer.concat([ftyp, moov]));
+    await expect(isPlayableVideo(mp4, readPreparedVideoValidator(host))).rejects.toBe(
+      originalError,
+    );
+
+    const retry = prepareVideoValidator(host);
+    expect(retry).not.toBe(failed);
+    await expect(retry).resolves.toMatchObject({ executablePath: '/bin/true' });
+    expect(readPreparedVideoValidator(host)).toBe(retry);
+    await expect(isPlayableVideo(mp4, retry)).resolves.toBe(true);
+    expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
+  },
+);
+
+test.each(preparationFailures)(
+  'a cache-only stop observes an executable published after $name',
+  async ({ failure, reason }) => {
+    const host = createTestHost();
+    vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+    const failed = prepareVideoValidator(host);
+    await expect(failed).rejects.toMatchObject({ details: { reason } });
+    expect(readPreparedVideoValidator(host)).toBe(failed);
+
+    vi.mocked(readCompiledSwiftSourceText).mockReturnValue('/published/video-validator');
+    const recovered = readPreparedVideoValidator(host);
+    await expect(recovered).resolves.toMatchObject({
+      executablePath: '/published/video-validator',
+    });
+    const mp4 = writeFixture('published.mp4', Buffer.concat([ftyp, moov]));
+    await expect(isPlayableVideo(mp4, recovered)).resolves.toBe(true);
+    expect(runCmd).toHaveBeenCalledWith('/published/video-validator', [mp4], expect.anything());
+    expect(compileSwiftSourceText).toHaveBeenCalledTimes(1);
+  },
+);
+
+test('an MP4 stop without prior preparation or cache reports not-prepared without compiling', async () => {
+  const host = createTestHost();
+  expect(readPreparedVideoValidator(host)).toBeUndefined();
+  await expect(
+    isPlayableVideo(
+      writeFixture('never-prepared.mp4', Buffer.concat([ftyp, moov])),
+      readPreparedVideoValidator(host),
+    ),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'video_validator_not_prepared', retriable: true },
+  });
+  expect(compileSwiftSourceText).not.toHaveBeenCalled();
+  expect(runCmd).not.toHaveBeenCalled();
 });
 
 test('WebM validation ignores failed background MP4 preparation', async () => {

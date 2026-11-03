@@ -153,8 +153,6 @@ export function readCompiledSwiftSourceText(params: SwiftSourceTextInput): strin
 export async function compileSwiftSourceText(
   params: SwiftSourceTextInput & {
     timeoutMs?: number;
-    /** Cancels the compile: kills swiftc, or stops waiting for another process's compile. */
-    signal?: AbortSignal;
   },
 ): Promise<string> {
   const { sourcePath, executablePath } = swiftSourceTextPaths(params);
@@ -165,7 +163,6 @@ export async function compileSwiftSourceText(
     executablePath,
     sourceText: params.source,
     timeoutMs: params.timeoutMs,
-    signal: params.signal,
   });
   return executablePath;
 }
@@ -185,7 +182,6 @@ async function ensureSwiftExecutable(params: {
   executablePath: string;
   sourceText?: string;
   timeoutMs?: number;
-  signal?: AbortSignal;
 }): Promise<void> {
   if (isExecutableFile(params.executablePath)) {
     return;
@@ -195,7 +191,7 @@ async function ensureSwiftExecutable(params: {
   fs.mkdirSync(executableDir, { recursive: true });
   const timeoutMs = params.timeoutMs ?? 120_000;
   await withProcessLock({
-    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs, params.signal),
+    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs),
     task: async () => {
       // Another process may have published the executable while this one waited for the lock.
       if (isExecutableFile(params.executablePath)) {
@@ -217,7 +213,6 @@ async function ensureSwiftExecutable(params: {
         }
         await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
-          signal: params.signal,
           kill: SWIFTC_STOP,
           env: buildSwiftToolEnv(params.host.env),
         });
@@ -232,7 +227,6 @@ async function ensureSwiftExecutable(params: {
 async function acquireSwiftCacheLock(
   lockDir: string,
   timeoutMs: number,
-  signal: AbortSignal | undefined,
 ): Promise<ProcessLockRelease> {
   try {
     return await acquireProcessLock({
@@ -244,7 +238,6 @@ async function acquireSwiftCacheLock(
       },
       timeoutMs,
       pollMs: LOCK_RETRY_DELAY_MS,
-      signal,
       description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
     });
   } catch (error) {

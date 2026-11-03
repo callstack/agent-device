@@ -3,7 +3,6 @@ import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -172,60 +171,23 @@ test('compileSwiftSourceText resolves a cache name with a long interior dash run
   expect(elapsedMs).toBeLessThan(1_000);
 });
 
-test('a canceled compile kills swiftc through its signal and leaves no temp output', async () => {
-  const cancel = new AbortController();
-  mockRunCmd.mockImplementationOnce(
-    async (_cmd, _args, options) =>
-      await new Promise((_, reject) => {
-        options?.signal?.addEventListener('abort', () => reject(createRequestCanceledError()));
-      }),
-  );
+test('a compile timeout preserves the error and cleans unpublished output and its lock', async () => {
+  const timeout = new Error('compile timed out');
+  mockRunCmd.mockRejectedValueOnce(timeout);
 
-  const compiled = compileSwiftSourceText({
-    host: createTestHost(),
-    source: 'print(1)',
-    cacheName: 'canceled',
-    signal: cancel.signal,
-  });
-  await vi.waitFor(() => expect(mockRunCmd).toHaveBeenCalledOnce());
-  cancel.abort();
-
-  await expect(compiled).rejects.toSatisfy(isRequestCanceledError);
-  expect(mockRunCmd.mock.calls[0]![2]).toMatchObject({
-    signal: cancel.signal,
-    kill: { signal: 'SIGINT' },
-  });
-  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
-});
-
-test('a canceled wait on another process compile stops waiting and leaves its lock alone', async () => {
-  const compile = (signal?: AbortSignal) =>
+  await expect(
     compileSwiftSourceText({
       host: createTestHost(),
       source: 'print(1)',
-      cacheName: 'held-elsewhere',
-      signal,
-    });
-  const executablePath = await compile();
-  fs.rmSync(executablePath);
-  const lockDir = `${executablePath}.lock`;
-  fs.mkdirSync(lockDir);
-  vi.clearAllMocks();
-  // The parent process stands in for another live process that holds the lock while it compiles.
-  fs.writeFileSync(
-    path.join(lockDir, 'owner.json'),
-    JSON.stringify({ pid: process.ppid, startTime: null, acquiredAtMs: Date.now() }),
-  );
-  const cancel = new AbortController();
-
-  const compiled = compile(cancel.signal);
-  // Let the wait poll the held lock a few times before it is canceled.
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  cancel.abort();
-
-  await expect(compiled).rejects.toSatisfy(isRequestCanceledError);
-  expect(mockRunCmd).not.toHaveBeenCalled();
-  expect(fs.existsSync(path.join(lockDir, 'owner.json'))).toBe(true);
+      cacheName: 'timed-out',
+      timeoutMs: 75,
+    }),
+  ).rejects.toBe(timeout);
+  expect(mockRunCmd.mock.calls[0]![2]).toMatchObject({
+    timeoutMs: 75,
+    kill: { signal: 'SIGINT', graceMs: 2_000 },
+  });
+  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
 });
 
 test('compileSwiftSourceText falls back to swift-helper when the cache name sanitizes to nothing', async () => {
