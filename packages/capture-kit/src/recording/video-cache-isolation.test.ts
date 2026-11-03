@@ -17,7 +17,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test('closing a cache lock holder lets another pending owner compile and publish', async () => {
+async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   const cacheDir = mkdtempForTestSync('video-cache-isolation-');
   const host = {
@@ -31,25 +31,31 @@ test('closing a cache lock holder lets another pending owner compile and publish
   vi.mocked(runCmd).mockImplementation(async (_command, args, options) => {
     const signal = options!.signal!;
     signals.push(signal);
-    if (signals.length === 1) {
-      await new Promise<void>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('compiler cancelled')), {
-          once: true,
-        });
-      });
-    } else {
-      await new Promise<void>((resolve) => {
-        finishSecond = resolve;
-      });
-      const output = args[args.indexOf('-o') + 1]!;
-      fs.writeFileSync(output, 'compiled');
-      fs.chmodSync(output, 0o755);
-    }
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        signal.removeEventListener('abort', abort);
+        reject(new Error('compiler cancelled'));
+      };
+      const finish = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      if (signal.aborted) {
+        abort();
+      } else {
+        signal.addEventListener('abort', abort, { once: true });
+        if (signals.length > 1) finishSecond = finish;
+      }
+    });
+    const output = args[args.indexOf('-o') + 1]!;
+    fs.writeFileSync(output, 'compiled');
+    fs.chmodSync(output, 0o755);
     return { exitCode: 0, stdout: '', stderr: '' };
   });
   const firstResult = first.prepare();
   void firstResult.catch(() => undefined);
   let secondResult: ReturnType<typeof second.prepare> | undefined;
+  let earlyFailureReached = false;
   try {
     await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(1);
     const bin = path.join(cacheDir, 'bin');
@@ -64,6 +70,10 @@ test('closing a cache lock holder lets another pending owner compile and publish
       })
       .toBe(true);
     expect(signals).toHaveLength(1);
+    if (failBeforeClose) {
+      earlyFailureReached = true;
+      throw new Error('intentional early assertion failure');
+    }
     await first.close();
     expect(signals[0]!.aborted).toBe(true);
     await expect(firstResult).rejects.toThrow('compiler cancelled');
@@ -83,8 +93,26 @@ test('closing a cache lock holder lets another pending owner compile and publish
   } finally {
     finishSecond?.();
     await first.close();
-    await second.close();
-    await secondResult?.catch(() => undefined);
-    fs.rmSync(cacheDir, { recursive: true, force: true });
+    try {
+      if (earlyFailureReached) await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(2);
+    } finally {
+      await second.close();
+      await secondResult?.catch(() => undefined);
+      const bin = path.join(cacheDir, 'bin');
+      if (fs.existsSync(bin)) {
+        expect(
+          fs.readdirSync(bin).some((entry) => entry.endsWith('.lock') || entry.startsWith('.')),
+        ).toBe(false);
+      }
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
   }
+}
+
+test('closing a cache lock holder lets another pending owner compile and publish', async () => {
+  await runIsolationScenario(false);
+}, 15_000);
+
+test('cleanup cancels a compiler that starts after an early failure', async () => {
+  await expect(runIsolationScenario(true)).rejects.toThrow('intentional early assertion failure');
 }, 15_000);
