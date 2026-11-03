@@ -68,6 +68,19 @@ agent-device artifacts <provider-session-id> --provider <provider> --json
 
 Providers finalize video and log URLs after the session ends. If the lookup reports artifacts as pending right after `close`, retry it a little later.
 
+## NoMac
+
+[NoMac](https://nomac.app) runs hosted iPhone and iPad simulators. Its provider is the [`@nomac/agent-device`](https://github.com/NoMac-app/agent-device-plugin) plugin, which NoMac maintains. Install the plugin, then connect with a NoMac API key:
+
+```bash
+agent-device plugins add @nomac/agent-device
+export NOMAC_API_KEY=...
+export AGENT_DEVICE_SESSION=checkout-ios
+agent-device connect nomac
+```
+
+For the devices, app installation, and supported commands, see the plugin's [README](https://github.com/NoMac-app/agent-device-plugin#readme). Report plugin problems in [its repository](https://github.com/NoMac-app/agent-device-plugin/issues).
+
 ## Expo Simulators
 
 [Expo Simulators](https://docs.expo.dev/preview/simulators/introduction/) runs Android Emulators and iOS Simulators on EAS. It is not an `agent-device` provider: an Expo Simulators session provisions its own `agent-device` daemon, and you run the same commands inside the session through `eas simulator:exec`:
