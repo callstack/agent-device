@@ -45,8 +45,7 @@ extension RunnerTests {
   /// Books `app`'s window on the lit panel for the rest of the request, or returns why it cannot. A
   /// request that named no panel books nothing. Later surface reads of `app` answer with this
   /// window, so none of them can fall back to the application's own coordinates. The booked frame
-  /// is the panel's box turned like the window, at the window's origin: a window that leaves part
-  /// of the panel uncovered still maps points into the whole screen.
+  /// is the panel's box turned like the window, so a partial window maps into the whole screen.
   func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
     guard let litPanel = requestLitPanel else { return nil }
     if let booked = litPanelState.surface, booked.app === app { return nil }
