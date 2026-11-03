@@ -11,7 +11,7 @@ import {
 } from '@agent-device/apple-runner';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
-import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-client.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
@@ -72,7 +72,8 @@ export function createAppleRunnerRuntime(options: {
         return undefined;
       }
     }
-    return {};
+    const session = readRunnerSessionLiveness(device.id);
+    return session?.liveness === 'ready' ? { sessionId: session.sessionId } : undefined;
   });
   let snapshotRoute: SnapshotBridgeRoute | undefined;
   /**

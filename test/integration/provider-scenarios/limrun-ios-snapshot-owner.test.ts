@@ -47,6 +47,12 @@ vi.mock('@limrun/api', () => ({
   },
 }));
 
+// The fake runner stands in for the registered session a real Limrun runner start leaves behind.
+vi.mock('@agent-device/apple-runner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/apple-runner')>()),
+  readRunnerSessionLiveness: () => ({ sessionId: 'limrun-runner-session', liveness: 'ready' }),
+}));
+
 vi.mock('@limrun/api/ios-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@limrun/api/ios-client')>();
   limrunApiState.simctl.mockImplementation((args: string[]) => {

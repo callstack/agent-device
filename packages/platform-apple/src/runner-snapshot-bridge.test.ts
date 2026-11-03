@@ -1,7 +1,16 @@
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppleRunnerProvider, RunnerCommand } from '@agent-device/apple-runner';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
+
+const registry = vi.hoisted(() => ({
+  session: undefined as { sessionId: string; liveness: 'ready' | 'starting' } | undefined,
+}));
+vi.mock('./core/runner-client.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./core/runner-client.ts')>()),
+  readRunnerSessionLiveness: () => registry.session ?? null,
+}));
+
 import { createAppleRunnerRuntime } from './runner-runtime.ts';
 import { createRunnerSnapshotBridge } from './runner-snapshot-bridge.ts';
 import { createSnapshotBridgeRoute } from './snapshot-route.ts';
@@ -17,6 +26,10 @@ import {
 } from './snapshot-source/protocol.ts';
 
 const APP = 'com.example.app';
+
+beforeEach(() => {
+  registry.session = { sessionId: 'runner-session-1', liveness: 'ready' };
+});
 
 type RunnerProcess = { pid: number; processStartTime: string };
 
@@ -409,4 +422,48 @@ test('a runner whose foreground read cannot answer sends the capture to XCTest w
     'Simulator AX snapshot unavailable (system-surface-probe-unavailable); used XCTest for an unverified app generation.',
   ]);
   expect(verbs(sent)).not.toContain('describe');
+});
+
+test('the foreground proof starts the runner when none is live, then reads only that session', async () => {
+  registry.session = undefined;
+  const { provider } = bridgeRunner({
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+  });
+  let started = false;
+  const appStateSessions: (string | undefined)[] = [];
+  const { snapshot, fallbacks } = runtimeSnapshots({
+    ...provider,
+    hasLiveSession: () => started,
+    runCommand: async (device, command, options) => {
+      if (command.command === 'uptime') {
+        started = true;
+        registry.session = { sessionId: 'runner-session-2', liveness: 'ready' };
+        return {};
+      }
+      if (command.command === 'appState') {
+        appStateSessions.push(options.expectedRunnerSessionId);
+        return { applicationState: 'notRunning' };
+      }
+      return await provider.runCommand(device, command, options);
+    },
+  });
+
+  await snapshot();
+
+  expect(fallbacks).toEqual([]);
+  expect(appStateSessions.length).toBeGreaterThan(0);
+  expect(appStateSessions.every((id) => id === 'runner-session-2')).toBe(true);
+});
+
+test('a runner whose session id cannot be read answers the foreground proof as unknown', async () => {
+  registry.session = undefined;
+  const { provider, sent } = bridgeRunner({
+    process: { pid: 41, processStartTime: '1700000000.000001' },
+  });
+  const { snapshot, fallbacks } = runtimeSnapshots(withHostStates(provider, 'notRunning'));
+
+  await snapshot();
+
+  expect(fallbacks).toHaveLength(1);
+  expect(sent.map((command) => command.command)).not.toContain('appState');
 });

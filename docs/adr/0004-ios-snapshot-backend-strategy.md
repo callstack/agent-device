@@ -822,6 +822,8 @@ A presented system surface stays invisible to the bridge (#2438 amendment), so t
 The daemon cannot read the processes of a provider iOS Simulator.
 Thus, the runner's foreground read is the only read that can prove absence there.
 Every capture of a provider iOS Simulator needs the runner, so that read starts a runner that is not up yet.
+The proof starts the runner when none is live, and then reads only that runner session.
+If the session id cannot be read, the proof answers `unknown` and the capture uses XCTest.
 
 Rejected alternatives:
 
