@@ -98,7 +98,7 @@ test.each(
     ),
   ),
 )(
-  'early output error reports once and preserves status ($errorCode, code=$exitCode, settles=$settles)',
+  'early output error preserves status and reports non-EPIPE failures once ($errorCode, code=$exitCode, settles=$settles)',
   async ({ errorCode, exitCode, settles }) => {
     const source = [
       `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
@@ -167,22 +167,31 @@ test.each(
     const source = [
       `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
       "import { Writable } from 'node:stream';",
+      'const [errorCode, stream, exitCode] = process.argv.slice(1);',
       'const stderr = process.stderr;',
       'const faulty = new Writable({ write(_chunk, _encoding, done) { done(); } });',
       'let injected = false;',
       'const waiting = new Writable({ write(chunk, encoding, done) {',
       '  if (!injected && chunk.length === 0) {',
       '    injected = true;',
-      `    setImmediate(() => { faulty.destroy(Object.assign(new Error('late write failure'), { code: ${JSON.stringify(errorCode)} })); setImmediate(done); });`,
+      "    setImmediate(() => { faulty.destroy(Object.assign(new Error('late write failure'), { code: errorCode })); setImmediate(done); });",
       '  } else stderr.write(chunk, encoding, done);',
       '} });',
-      `Object.defineProperty(process, ${JSON.stringify(stream)}, { value: faulty });`,
-      `Object.defineProperty(process, ${JSON.stringify(stream === 'stdout' ? 'stderr' : 'stdout')}, { value: waiting });`,
-      `runEntrypoint('fixture', async () => ${exitCode});`,
+      'Object.defineProperty(process, stream, { value: faulty });',
+      "Object.defineProperty(process, stream === 'stdout' ? 'stderr' : 'stdout', { value: waiting });",
+      "runEntrypoint('fixture', async () => Number(exitCode));",
     ].join('\n');
     const child = spawn(
       process.execPath,
-      ['--experimental-strip-types', '--input-type=module', '--eval', source],
+      [
+        '--experimental-strip-types',
+        '--input-type=module',
+        '--eval',
+        source,
+        errorCode,
+        stream,
+        String(exitCode),
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let stderr = '';
