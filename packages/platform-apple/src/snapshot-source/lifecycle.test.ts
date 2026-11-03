@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { SnapshotSourceError } from './errors.ts';
+import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
 import type { SnapshotSourceTarget } from './types.ts';
@@ -78,6 +78,40 @@ test('a new target generation reuses the healthy helper and carries generation p
   assert.deepEqual(fixture.processes[0]!.signals, []);
   await manager.close();
   assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+});
+
+test('a failed startup does not retire a new app generation without another attempt', async () => {
+  const fixture = createLifecycleFixture();
+  let starts = 0;
+  const manager = new SnapshotBridgeManager({
+    ...fixture.host,
+    start: (...args) => {
+      starts += 1;
+      if (starts === 1) throw snapshotSourceError('process-crash', 'bridge-exited');
+      return fixture.host.start(...args);
+    },
+  });
+  try {
+    await assert.rejects(
+      manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+      (error: unknown) =>
+        error instanceof SnapshotSourceError && error.failureKind === 'process-crash',
+    );
+    const next = { ...target, generation: 'generation-2' };
+    const result = await manager.request({
+      target: next,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(),
+    });
+    assert.equal(result.generation, next.generation);
+    assert.equal(starts, 2);
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets[0]?.writes, 1);
+  } finally {
+    await manager.close();
+  }
 });
 
 test('cancellation while queued prevents a later dispatch', async () => {
@@ -706,9 +740,10 @@ test('slow helper readiness detaches from a capture and later uses the same proc
   }
 });
 
-test('owned startup expiry remains a timeout for a later uncancelled capture', async () => {
+test('owned startup expiry cleans the helper before a later generation retries', async () => {
   vi.useFakeTimers();
-  const fixture = createLifecycleFixture({ connectDelayMs: 20000 });
+  const options = { connectDelayMs: 20000 };
+  const fixture = createLifecycleFixture(options);
   fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
   const manager = new SnapshotBridgeManager(fixture.host);
   const caller = new AbortController();
@@ -726,23 +761,24 @@ test('owned startup expiry remains a timeout for a later uncancelled capture', a
     await vi.advanceTimersByTimeAsync(2001);
     await first;
     await vi.advanceTimersByTimeAsync(8000);
-    await assert.rejects(
-      manager.request({
-        target,
-        bridge,
-        limits,
-        maxDepth: 10,
-        deadline: deadline(caller.signal, 5000),
-      }),
-      (error: unknown) =>
-        error instanceof SnapshotSourceError &&
-        error.failureKind === 'timeout' &&
-        error.failureCode === 'bridge-startup-deadline',
-    );
     assert.equal(caller.signal.aborted, false);
     assert.equal(fixture.processes.length, 1);
     assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
     assert.equal(fixture.sockets.length, 0);
+    options.connectDelayMs = 0;
+    const next = { ...target, generation: 'generation-2' };
+    const retried = manager.request({
+      target: next,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(caller.signal, 5000),
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    assert.equal((await retried).generation, next.generation);
+    assert.equal(caller.signal.aborted, false);
+    assert.equal(fixture.processes.length, 2);
+    assert.equal(fixture.sockets[0]?.writes, 1);
   } finally {
     await manager.close();
     vi.useRealTimers();

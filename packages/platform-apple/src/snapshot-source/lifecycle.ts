@@ -89,7 +89,6 @@ export class SnapshotBridgeManager {
   private readonly readiness = createDetachedAttempts<BridgeSession>({
     waitMs: 2000,
     waitGrant: 'first-caller',
-    retryAfterMs: 60000,
   });
   private readonly host: SnapshotSourceHost;
 
