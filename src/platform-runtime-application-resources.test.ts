@@ -1,3 +1,5 @@
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { createPlatformRuntimeShutdownError } from './platform-runtime-shutdown-error.ts';
 import { expect, test, vi } from 'vitest';
 import type {
   AndroidApplicationTools,
@@ -132,4 +134,128 @@ test('shutdown retains both runner and validator cleanup failures', async () => 
   expect(failure).toBeInstanceOf(AggregateError);
   expect((failure as AggregateError).errors).toEqual([runner, validator]);
   expect((failure as AggregateError).cause).toBe(runner);
+});
+
+test('normalized shutdown preserves sanitized runner and validator cleanup evidence', async () => {
+  const compile = new AppError('COMMAND_FAILED', 'compile failed token=private', {
+    reason: 'compile_failed',
+  });
+  const temp = new AppError(
+    'COMMAND_FAILED',
+    'temp failed',
+    { reason: 'swift_cache_temp_removal_failed' },
+    new Error('password=hidden'),
+  );
+  const lock = new AppError('COMMAND_FAILED', 'lock failed', {
+    reason: 'swift_cache_lock_release_failed',
+  });
+  const validator = new AppError(
+    'COMMAND_FAILED',
+    'Swift cache cleanup failed',
+    { reason: 'swift_cache_cleanup_failed' },
+    new AggregateError([compile, temp, lock]),
+  );
+  const runner = new AppError('COMMAND_FAILED', 'runner failed', {
+    reason: 'runner_failed',
+    token: 'private',
+  });
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    finalizeRunnerSessionsForShutdown: async () => {
+      throw runner;
+    },
+    closeValidatorPreparation: async () => {
+      throw validator;
+    },
+  });
+  const ownerFailure = await resources.finalizeDaemonShutdown().catch((error: unknown) => error);
+  const normalized = normalizeError(
+    createPlatformRuntimeShutdownError([
+      { owner: { kind: 'local-family', family: 'apple' }, error: ownerFailure },
+    ]),
+  );
+  expect(normalized.details).toMatchObject({
+    failures: [
+      {
+        error: {
+          details: {
+            shutdownFailures: [
+              { details: { reason: 'runner_failed', token: '[REDACTED]' } },
+              {
+                details: {
+                  reason: 'swift_cache_cleanup_failed',
+                  shutdownFailures: [
+                    {
+                      message: 'compile failed token=[REDACTED]',
+                      details: { reason: 'compile_failed' },
+                    },
+                    {
+                      details: { reason: 'swift_cache_temp_removal_failed' },
+                      cause: { message: 'password=[REDACTED]' },
+                    },
+                    { details: { reason: 'swift_cache_lock_release_failed' } },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
+  expect(JSON.stringify(normalized)).not.toContain('private');
+  expect(JSON.stringify(normalized)).not.toContain('hidden');
+});
+
+test('normalized validator-only shutdown retains cleanup evidence from both attempts', async () => {
+  const attempt = (name: string) =>
+    new AppError(
+      'COMMAND_FAILED',
+      'Swift cache cleanup failed',
+      { reason: 'swift_cache_cleanup_failed' },
+      new AggregateError([
+        new AppError('COMMAND_FAILED', `${name} compile`, { reason: 'compile_failed' }),
+        new AppError('COMMAND_FAILED', `${name} removal`, {
+          reason: 'swift_cache_temp_removal_failed',
+        }),
+      ]),
+    );
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    closeValidatorPreparation: async () => {
+      throw new AggregateError([attempt('first'), attempt('second')], 'attempts failed');
+    },
+  });
+  const error = await resources.finalizeDaemonShutdown().catch((error: unknown) => error);
+  const result = normalizeError(
+    createPlatformRuntimeShutdownError([
+      { owner: { kind: 'local-family', family: 'apple' }, error },
+    ]),
+  );
+  expect(result.details).toMatchObject({
+    failures: [
+      {
+        error: {
+          details: {
+            shutdownFailures: [
+              {
+                details: {
+                  reason: 'swift_cache_cleanup_failed',
+                  shutdownFailures: [{ message: 'first compile' }, { message: 'first removal' }],
+                },
+              },
+              {
+                details: {
+                  reason: 'swift_cache_cleanup_failed',
+                  shutdownFailures: [{ message: 'second compile' }, { message: 'second removal' }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
 });

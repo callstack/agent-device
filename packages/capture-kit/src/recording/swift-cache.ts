@@ -229,7 +229,14 @@ async function ensureSwiftExecutable(params: {
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
         } catch (error) {
-          cleanupFailures.push(error);
+          cleanupFailures.push(
+            new AppError(
+              'COMMAND_FAILED',
+              'Swift temporary output removal failed',
+              { reason: 'swift_cache_temp_removal_failed' },
+              error,
+            ),
+          );
         }
       }
     })();
@@ -240,7 +247,14 @@ async function ensureSwiftExecutable(params: {
   try {
     await release();
   } catch (error) {
-    cleanupFailures.push(error);
+    cleanupFailures.push(
+      new AppError(
+        'COMMAND_FAILED',
+        'Swift cache lock release failed',
+        { reason: 'swift_cache_lock_release_failed' },
+        error,
+      ),
+    );
   }
   if (cleanupFailures.length) {
     throw new AppError(
