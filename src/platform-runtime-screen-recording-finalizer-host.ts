@@ -14,7 +14,6 @@ import {
   prepareVideoValidator,
   readPreparedVideoValidator,
   type VideoValidator,
-  isPlayableVideo,
   waitForPlayableVideo,
   waitForStableFile,
 } from '@agent-device/capture-kit/recording-video';
@@ -72,13 +71,6 @@ async function overlayTouches(
       deadline,
       validator,
     });
-    if (!(await isPlayableVideo(input.outputPath, validator, deadline))) {
-      throw new Error(
-        deadline.isExpired()
-          ? 'recording post-processing verification exceeded the finalization budget'
-          : 'recording post-processing produced an unplayable video',
-      );
-    }
     return { telemetryPath };
   } catch (error) {
     return {

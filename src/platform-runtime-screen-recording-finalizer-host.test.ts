@@ -220,46 +220,30 @@ test('#2707 reports a dropped overlay and keeps the raw when compositing throws'
   });
 });
 
-test('reports a verification budget warning after overlay', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  try {
-    overlay.mockImplementationOnce(async () => {
-      vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
-    });
-    video.isPlayable.mockResolvedValueOnce(false);
-    const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
-      outputPath: '/tmp/capture.mp4',
-      showTouches: true,
-      gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
-      targetLabel: 'test recording',
-    });
-    expect(result.overlayWarning).toContain('finalization budget');
-    expect(result.overlayWarning).not.toContain('unplayable');
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test('#2707 reports a warning when a composited recording turns unplayable after burn-in', async () => {
-  // Narrower than it looks: overlay.ts confirms the composite playable before renaming, so this only
-  // models the post-rename TOCTOU where the file the raw was replaced with goes unplayable. The raw
-  // is already overwritten here, so the finalizer can report but not restore — it must not exit 0
-  // silently, which the pre-rename probe and the Swift check already prevent for ordinary failures.
-  overlay.mockImplementationOnce(async () => {
-    video.isPlayable.mockResolvedValueOnce(false);
-  });
-
-  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
-    outputPath: '/tmp/capture.mp4',
-    showTouches: true,
-    gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
-    targetLabel: 'test recording',
-  });
-
-  expect(result).toMatchObject({
-    overlayWarning: expect.stringContaining('failed to overlay recording touches'),
-  });
-});
+test.each([0, OVERLAY_BUDGET_MS])(
+  'a verified overlay is published without another check after %i ms',
+  async (elapsedMs) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      overlay.mockImplementationOnce(async () => {
+        vi.setSystemTime(Date.now() + elapsedMs);
+      });
+      video.isPlayable.mockResolvedValueOnce(false);
+      const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete(
+        {
+          outputPath: '/tmp/capture.mp4',
+          showTouches: true,
+          gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
+          targetLabel: 'test recording',
+        },
+      );
+      expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
+      expect(video.isPlayable).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('sniffs a collected copy without spawning the validator, and refuses one with no container', async () => {
   const validatorCalls = video.isPlayable.mock.calls.length + video.playable.mock.calls.length;

@@ -123,6 +123,7 @@ function unavailableVideoValidator(cause?: Error): AppError {
     'COMMAND_FAILED',
     'The video validator is unavailable; MP4 playability cannot be verified',
     {
+      ...(cause instanceof AppError ? cause.details : {}),
       reason: 'video_validator_unavailable',
       retriable: false,
       hint: 'Install the Xcode command line tools with AVFoundation on the recording host, then run agent-device prepare ios-runner --platform ios there using the same Swift cache. Once preparation is ready, retry record stop in the original recording session.',
@@ -232,8 +233,11 @@ export async function isPlayableVideo(
     throw error;
   });
   if (!result) return false;
-  if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout))
-    throw unavailableVideoValidator();
+  if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
+    throw unavailableVideoValidator(
+      new AppError('COMMAND_FAILED', 'The prepared video validator could not run', result),
+    );
+  }
   return result.exitCode === 0;
 }
 
@@ -266,7 +270,7 @@ export async function waitForPlayableVideo(
 
 function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boolean {
   const combined = `${stderr}\n${stdout}`;
-  return /\b(no such module ['"]AVFoundation['"]|unable to find utility ["']swiftc?["']|xcrun: error: unable to find utility ["']swiftc?["'])/i.test(
+  return /\b(no such module ['"]AVFoundation['"]|unable to find utility ["']swiftc?["'])/i.test(
     combined,
   );
 }
