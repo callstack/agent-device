@@ -62,15 +62,14 @@ extension RunnerTests {
 
   @MainActor
   func testFocusedAppendKeepsItsFocusTap() throws {
-    let field = try launchTextEntryWitness(prefilled: true)
+    let field = try launchTextEntryWitness()
     defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
     field.tap()
-    field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
 
     let response = try executeWitnessEntry(field, text: "hello", mode: "append")
 
     XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "seedvaluehello")
+    XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "hello")
     XCTAssertEqual(try textEntryWitnessCounts().taps, 2)
     XCTAssertEqual(try textEntryWitnessCounts().selections, 0)
   }

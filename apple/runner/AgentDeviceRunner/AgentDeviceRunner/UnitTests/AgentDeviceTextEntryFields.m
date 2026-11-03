@@ -39,6 +39,7 @@ static NSUInteger AgentDeviceTextEntryValueReads = 0;
 @property(nonatomic, assign) NSUInteger taps;
 @property(nonatomic, assign) NSUInteger selections;
 @property(nonatomic, assign) NSUInteger rejectedEdits;
+@property(nonatomic, assign) BOOL rejectNextSelectionDeletion;
 @end
 
 @implementation AgentDeviceTextEntryWitnessField
@@ -72,14 +73,16 @@ static NSUInteger AgentDeviceTextEntryValueReads = 0;
 
 - (void)selectAll:(id)sender {
   self.selections += 1;
+  self.rejectNextSelectionDeletion =
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-witness-refuse-selection"];
   [super selectAll:sender];
 }
 
 - (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   if ([arguments containsObject:@"--agent-device-text-entry-witness-refuse-edits"] ||
-      ([arguments containsObject:@"--agent-device-text-entry-witness-refuse-selection"] &&
-       !textField.selectedTextRange.isEmpty && range.length > 1 && string.length == 0)) {
+      (self.rejectNextSelectionDeletion && range.length > 1 && string.length == 0)) {
+    self.rejectNextSelectionDeletion = NO;
     self.rejectedEdits += 1;
     UITextPosition *start = textField.beginningOfDocument;
     textField.selectedTextRange = [textField textRangeFromPosition:start toPosition:start];
