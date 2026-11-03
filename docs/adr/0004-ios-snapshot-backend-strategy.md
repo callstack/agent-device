@@ -825,6 +825,9 @@ Every capture of a provider iOS Simulator needs the runner, so that read starts 
 The proof starts the runner when none is live, and then reads only that runner session.
 If the session id cannot be read, the proof answers `unknown` and the capture uses XCTest.
 
+An observe-only capture skips the route and goes straight to the provider's capture.
+An observe-only capture must not activate the app or start work, so the provider's capture decides how to observe.
+
 Rejected alternatives:
 
 - Ask the provider to start the guest bridge process and forward its socket. That needs provider features that do not exist, for every provider.
