@@ -70,8 +70,8 @@ export async function resolveCommandDevice(params: {
     env: params.env,
     androidAvdSelection: params.androidAvdSelection,
   });
-  // A selector that names the host of the session's app or web session device stays on that
-  // device: the session holds one app or browser, not the host (ADR 0035).
+  // A selector that names the host of the session's app device (ADR 0035) or web session device
+  // stays on that device: the session holds one app or browser, not the host.
   const held = params.session?.device;
   return held && held.id !== device.id && hostDeviceIdOf(held.id) === device.id ? held : device;
 }

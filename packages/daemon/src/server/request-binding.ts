@@ -125,8 +125,8 @@ async function resolveFreshSessionDevice(
   );
   if (!resolution) return undefined;
   try {
-    // A fresh web session locks its own device whichever command starts it (ADR 0035 rule 3: a
-    // replay or batch locks only the device it starts on), never the shared host device.
+    // A fresh web session locks its own device whichever command starts it, never the shared host
+    // device: a replay or batch locks only the device it starts on, as for an app device (ADR 0035).
     return await resolveTargetDevice(resolution.flags, {
       ...resolution.options,
       env,

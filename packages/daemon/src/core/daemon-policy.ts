@@ -59,9 +59,9 @@ function assertInvocationAdmitted(
 }
 
 /**
- * A device the policy may bind: one it names, or an app or web session device of a host it names
- * (ADR 0035). An app or web session device it names admits that one alone, never its host or the
- * host's other apps and sessions.
+ * A device the policy may bind: one it names, or an app device of a host it names (ADR 0035). A web
+ * session device follows the same rule. An app or web session device it names admits that one
+ * alone, never its host or the host's other apps and sessions.
  */
 function isDeviceIdAllowed(deviceIds: ReadonlySet<string>, id: string): boolean {
   // Policy ids load canonicalized, so the compared id is too.
