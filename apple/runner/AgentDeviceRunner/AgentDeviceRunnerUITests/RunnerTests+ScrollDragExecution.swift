@@ -38,9 +38,9 @@ extension RunnerTests {
     message: String,
     context: SynthesizedCoordinateContext,
     releaseBehavior: ScrollReleaseBehavior?
-  ) -> Response {
+  ) throws -> Response {
 #if os(iOS)
-    return executeDragGesture(
+    return try executeDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -52,7 +52,7 @@ extension RunnerTests {
       synthesized: (profile: scrollDragProfile(releaseBehavior: releaseBehavior), policyKind: .scroll)
     )
 #else
-    return executeDragGesture(
+    return try executeDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -77,7 +77,7 @@ extension RunnerTests {
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
     synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil
-  ) -> Response {
+  ) throws -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -86,7 +86,7 @@ extension RunnerTests {
         error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
       )
     }
-    if let synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
+    if let synthesized, let synthesizedResponse = try executeSynthesizedDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -100,7 +100,7 @@ extension RunnerTests {
     ) {
       return synthesizedResponse
     }
-    return executeCoordinateDrag(
+    return try executeCoordinateDrag(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -124,7 +124,7 @@ extension RunnerTests {
     holdDuration: TimeInterval,
     message: String,
     fallback: GestureFallback? = nil
-  ) -> Response {
+  ) throws -> Response {
     let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
     let dragFrame = resolvedDragVisualizationFrame(
       app: activeApp,
@@ -133,8 +133,8 @@ extension RunnerTests {
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    let (timing, outcome) = performGesture(activeApp) {
-      dragAt(
+    let (timing, outcome) = try performGesture(activeApp) {
+      try dragAt(
         app: activeApp,
         x: dragPoints.x,
         y: dragPoints.y,
@@ -161,7 +161,7 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind,
     profile: SynthesizedDragProfile
-  ) -> Response? {
+  ) throws -> Response? {
 #if os(iOS)
     let context = context ?? synthesizedCoordinateContext(app: activeApp)
     guard let plan = axFreeSynthesizedDragPlan(
@@ -206,7 +206,7 @@ extension RunnerTests {
     case .performed(let timing):
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
     case .xctestFallback(let fallbackMessage, let hint):
-      return executeCoordinateDrag(
+      return try executeCoordinateDrag(
         activeApp: activeApp,
         x: plan.points.x,
         y: plan.points.y,

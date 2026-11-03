@@ -47,6 +47,10 @@ extension RunnerTests {
     let strategy: String
     let message: String
     let hint: String?
+
+    static func coordinateTap(_ message: String, hint: String?) -> Self {
+      Self(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+    }
   }
 
 
@@ -61,19 +65,19 @@ extension RunnerTests {
   func performGesture(
     _ app: XCUIApplication,
     idleTimeout: Bool = true,
-    _ action: () -> RunnerInteractionOutcome
-  ) -> (timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double), outcome: RunnerInteractionOutcome) {
-    var outcome = RunnerInteractionOutcome.performed
+    _ action: () throws -> RunnerInteractionOutcome
+  ) throws -> (timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double), outcome: RunnerInteractionOutcome) {
+    var outcome: Result<RunnerInteractionOutcome, Error> = .success(.performed)
     let timing = measureGesture {
       if idleTimeout {
         withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
-          outcome = action()
+          outcome = Result { try action() }
         }
       } else {
-        outcome = action()
+        outcome = Result { try action() }
       }
     }
-    return (timing, outcome)
+    return (timing, try outcome.get())
   }
 
   /// Single factory for the success payload every gesture returns (message + gesture timing +

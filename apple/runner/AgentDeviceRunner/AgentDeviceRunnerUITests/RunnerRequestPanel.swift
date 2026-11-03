@@ -13,7 +13,6 @@ struct LitPanelSurface {
 final class RunnerLitPanelState {
   var panel: RunnerLitPanel?
   var surface: LitPanelSurface?
-  var windows: (app: XCUIApplication, elements: [XCUIElement])?
 }
 
 extension RunnerTests {
@@ -28,7 +27,6 @@ extension RunnerTests {
     let write = {
       state.panel = panel
       state.surface = nil
-      state.windows = nil
     }
     if Thread.isMainThread {
       write()
@@ -55,11 +53,18 @@ extension RunnerTests {
     return nil
   }
 
+  func requireRequestLitPanelSurface(app: XCUIApplication) throws -> LitPanelSurface {
+    if let refusal = bookRequestLitPanelSurface(app: app) { throw refusal }
+    guard let surface = litPanelState.surface, surface.app === app else {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
+    return surface
+  }
+
   /// The roots of every element read: the app, or the windows proven on the lit display. A walk that
   /// cannot read the list, or that records an issue (#2995), throws `APP_SCREEN_UNRESOLVED`.
   func elementSearchRoots(app: XCUIApplication) throws -> [XCUIElement] {
     guard let litPanel = requestLitPanel else { return [app] }
-    if let cached = litPanelState.windows, cached.app === app { return cached.elements }
     var windows: [XCUIElement]?
     let walk = holdingRecordedIssues {
       windows = RunnerCopyLitPanelWindows(app, litPanel)?.compactMap { $0 as? XCUIElement }
@@ -69,10 +74,9 @@ extension RunnerTests {
       }
 #endif
     }
-    guard walk.issues.isEmpty, walk.exceptionMessage == nil, let windows else {
+    guard walk.issues.isEmpty, walk.exceptionMessage == nil, let windows, !windows.isEmpty else {
       throw RunnerAppScreenCaptureFailure.unresolvedScreen
     }
-    litPanelState.windows = (app, windows)
     return windows
   }
 

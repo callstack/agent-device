@@ -352,8 +352,22 @@ extension RunnerTests {
   /// #2995: a `frame` read on a window the query says is gone records an XCTest issue.
   func testLitPanelWindowNeverAsksAnAbsentWindowForItsFrame() {
     let absent = DisplayWindowFixture(frame: Self.innerHome, displayID: 3, present: false)
-    XCTAssertEqual(resolveLitPanelWindow([absent]).failure, .unresolvedWindow)
+    let failure = resolveLitPanelWindow([absent]).failure
+    XCTAssertEqual(failure, .unresolvedWindow)
+    XCTAssertEqual(RunnerAppScreenCaptureFailure(failure).response.error?.code, "APP_SCREEN_WINDOW_UNRESOLVED")
     XCTAssertFalse(absent.resolved)
+  }
+
+  func testLitPanelElementSearchIncludesWindowsPastTheBookingCap() {
+    let early = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let later = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
+    let windows: [NSObject] = [early] + (0..<Int(AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS)).map { _ in
+      DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)
+    } + [later]
+    let lit = RunnerCopyLitPanelWindows(
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel)
+    XCTAssertEqual(lit?.count, 2)
+    XCTAssertTrue((lit?.last as AnyObject) === later)
   }
 
   /// The one owner of the windows an element read may search: those that report the lit display.

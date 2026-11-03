@@ -398,7 +398,8 @@ extension RunnerTests {
     while true {
       guard let input = try reader.input() else {
         let target = reader.target
-        let failure: TextEntryFailure? = target.boundIdentity != nil && !boundTextEntryInputIsGone(app: app, target: target)
+        let inputIsGone = try boundTextEntryInputIsGone(app: app, target: target)
+        let failure: TextEntryFailure? = target.boundIdentity != nil && !inputIsGone
           ? .commitNotObserved : nil
         if target.boundIdentity != nil && failure == nil {
           NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
@@ -424,7 +425,7 @@ extension RunnerTests {
     expectedText: String?
   ) throws -> TextEntryResult {
     if try reader.input() == nil, reader.target.boundIdentity != nil {
-      guard boundTextEntryInputIsGone(app: app, target: reader.target) else {
+      guard try boundTextEntryInputIsGone(app: app, target: reader.target) else {
         return TextEntryResult(
           verified: nil,
           repaired: false,

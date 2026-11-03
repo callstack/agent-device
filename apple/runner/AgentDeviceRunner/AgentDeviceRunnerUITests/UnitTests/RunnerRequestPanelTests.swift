@@ -1,6 +1,151 @@
 import AgentDeviceSnapshotPresentation
 import XCTest
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+private final class LitPanelBookingScreen: NSObject {
+  @objc let displayID: UInt = 3
+}
+
+@MainActor
+private final class LitPanelBookingProbe: NSObject {
+  static var originalValueForKey: IMP?
+  static let query = NSObject()
+  static var window: XCUIElement?
+  static var coordinate: XCUICoordinate?
+  static var windowFrame = CGRect.zero
+  static var orientation = RunnerInterfaceOrientation.landscapeLeft
+  static var anchor: NSObject?
+  static var point = CGPoint.zero
+  static var tappedPoint: CGPoint?
+
+  @objc class func interfaceOrientation(forApplication application: AnyObject) -> Int { orientation }
+
+  nonisolated override func value(forKey key: String) -> Any? {
+    MainActor.assumeIsolated {
+      switch key {
+      case "windows": return Self.query
+      case "allElementsBoundByIndex": return [Self.window!]
+      case "screen": return LitPanelBookingScreen()
+      case "exists": return true
+      case "frame": return NSValue(cgRect: Self.windowFrame)
+      default: break
+      }
+      let original = unsafeBitCast(
+        Self.originalValueForKey!,
+        to: (@convention(c) (AnyObject, Selector, NSString) -> AnyObject?).self
+      )
+      return original(self, #selector(NSObject.value(forKey:)), key as NSString)
+    }
+  }
+
+  @objc(coordinateWithNormalizedOffset:)
+  func coordinateWithNormalizedOffset(_ offset: CGVector) -> XCUICoordinate {
+    Self.anchor = self
+    Self.point = CGPoint(
+      x: Self.windowFrame.minX + offset.dx * Self.windowFrame.width,
+      y: Self.windowFrame.minY + offset.dy * Self.windowFrame.height
+    )
+    return Self.coordinate!
+  }
+
+  @objc(coordinateWithOffset:)
+  func coordinateWithOffset(_ offset: CGVector) -> XCUICoordinate {
+    Self.point.x += offset.dx
+    Self.point.y += offset.dy
+    return Self.coordinate!
+  }
+
+  @objc func tap() { Self.tappedPoint = Self.point }
+}
+
+extension RunnerTests {
+  @MainActor
+  func testLitPanelBookingAndCoordinateFallbackShareScreenPointsForPartialWindows() throws {
+    app.launch()
+    defer { app.terminate() }
+    let query = app.windows
+    let window = query.firstMatch
+    LitPanelBookingProbe.window = window
+    LitPanelBookingProbe.coordinate = window.coordinate(withNormalizedOffset: .zero)
+    let windowClass = try XCTUnwrap(object_getClass(window))
+    let coordinateClass = try XCTUnwrap(object_getClass(LitPanelBookingProbe.coordinate!))
+    let valueForKey = try XCTUnwrap(class_getInstanceMethod(windowClass, #selector(NSObject.value(forKey:))))
+    LitPanelBookingProbe.originalValueForKey = method_getImplementation(valueForKey)
+    let swaps: [(Method?, Method?)] = [
+      (valueForKey,
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(NSObject.value(forKey:)))),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, #selector(RunnerSynthesizedGesture.interfaceOrientation(forApplication:))),
+       class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.interfaceOrientation(forApplication:)))),
+      (class_getInstanceMethod(windowClass, #selector(XCUIElement.coordinate(withNormalizedOffset:))),
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.coordinateWithNormalizedOffset(_:)))),
+      (class_getInstanceMethod(coordinateClass, #selector(XCUICoordinate.withOffset(_:))),
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.coordinateWithOffset(_:)))),
+      (class_getInstanceMethod(coordinateClass, #selector(XCUICoordinate.tap)),
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.tap))),
+    ]
+    var originals: [(Method, IMP)] = []
+    defer {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+      LitPanelBookingProbe.window = nil
+      LitPanelBookingProbe.coordinate = nil
+      LitPanelBookingProbe.anchor = nil
+      LitPanelBookingProbe.originalValueForKey = nil
+      litPanelState.panel = nil
+      litPanelState.surface = nil
+    }
+    for (method, stub) in swaps {
+      let method = try XCTUnwrap(method)
+      let stub = try XCTUnwrap(stub)
+      originals.append((method, method_setImplementation(method, method_getImplementation(stub))))
+    }
+    for (frame, orientation, expected) in [
+      (
+        CGRect(x: 80, y: 0, width: 871, height: 669), RunnerInterfaceOrientation.landscapeLeft,
+        CGRect(x: 0, y: 0, width: 951, height: 669)
+      ),
+      (
+        CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portrait,
+        CGRect(x: 0, y: 0, width: 669, height: 951)
+      ),
+      (
+        CGRect(x: 80, y: 0, width: 180, height: 669), RunnerInterfaceOrientation.landscapeRight,
+        CGRect(x: 0, y: 0, width: 951, height: 669)
+      ),
+      (
+        CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portraitUpsideDown,
+        CGRect(x: 0, y: 0, width: 669, height: 951)
+      ),
+    ] {
+      LitPanelBookingProbe.windowFrame = frame
+      LitPanelBookingProbe.orientation = orientation
+      LitPanelBookingProbe.tappedPoint = nil
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      XCTAssertNil(bookRequestLitPanelSurface(app: app))
+      let booked = try XCTUnwrap(litPanelState.surface)
+      XCTAssertTrue(booked.window === window)
+      XCTAssertEqual(booked.frame, frame)
+      XCTAssertEqual(synthesizedRotationFrame(fallback: booked.frame, interfaceOrientation: orientation), expected)
+      if case .unsupported(let message, _) = try tapAt(app: app, x: 200, y: 150) { XCTFail(message) }
+      XCTAssertTrue(LitPanelBookingProbe.anchor === window)
+      XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
+    }
+    LitPanelBookingProbe.tappedPoint = nil
+    setRequestLitPanel(from: try runnerCommandFixture(
+      #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+    ))
+    XCTAssertThrowsError(try tapAt(app: app, x: 200, y: 150)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .offLitPanel)
+    }
+    XCTAssertNil(LitPanelBookingProbe.tappedPoint)
+
+  }
+}
+#endif
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
   /// One runner process can serve a foldable's `tap` and then a single-panel request; the second
@@ -206,7 +351,6 @@ extension RunnerTests {
     let command = try runnerCommandFixture(#"{"command":"type",\#(panel)}"#)
     setRequestLitPanel(from: command)
     XCTAssertNotNil(try resolveTextEntryInput(app: app, target: target), "the walk answers")
-    setRequestLitPanel(from: command)
     litPanelWindowWalkIssueForTesting = true
     XCTAssertThrowsError(try resolveTextEntryInput(app: app, target: target)) {
       XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
@@ -214,14 +358,15 @@ extension RunnerTests {
     XCTAssertThrowsError(try clearedFieldRead(app: app, target: target), "a clear pass read propagates it too") {
       XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
     }
-    XCTAssertFalse(boundTextEntryInputIsGone(app: app, target: target))
+    XCTAssertThrowsError(try boundTextEntryInputIsGone(app: app, target: target)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
   }
 
-  /// The walk answers but finds no input at the refresh point, so resolution reaches the
-  /// identifier query: on a lit-panel request it searches only the lit windows, so a field the
-  /// app-wide query finds, standing in for the dark panel's twin, is not resolved.
+  /// A bound input read refuses when every window is off the named panel, even if the app-wide
+  /// query can resolve the same input.
   @MainActor
-  func testBoundInputIdentifierQuerySearchesOnlyTheLitWindows() throws {
+  func testBoundInputIdentifierReadRefusesWhenAllWindowsAreOffTheLitPanel() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
     mainOwned.app = app
@@ -235,41 +380,38 @@ extension RunnerTests {
     setRequestLitPanel(from: try runnerCommandFixture(
       #"{"command":"type","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
     ))
-    guard let point = target.refreshPoint,
-      case .absent = try probeTextInputs(app: app, point: point, contentTranslation: .none)
-    else {
-      return XCTFail("the walk answers with no input at the point")
+    let point = try XCTUnwrap(target.refreshPoint)
+    XCTAssertThrowsError(try probeTextInputs(app: app, point: point, contentTranslation: .none)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
     }
-    XCTAssertNil(try resolveTextEntryInput(app: app, target: target))
+    XCTAssertThrowsError(try resolveTextEntryInput(app: app, target: target)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
   }
 
   /// With a lit panel named, selector and point reads search only the windows on that display; the
   /// launched app's windows are all on another one, so neither read may answer.
   @MainActor
   func testElementReadsSearchOnlyTheLitDisplaysWindows() throws {
-    var found: (unnamed: Bool, named: Bool, text: String?, namedText: String?) = (false, false, nil, nil)
     _ = try responseWithTheAppOffTheLitPanel(
       #"{"command":"tap","x":1,"y":1,"litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
     ) { _ in
-      found.named = try findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
-        .element != nil
-      let unnamed = try runnerCommandFixture(#"{"command":"tap"}"#)
-      setRequestLitPanel(from: unnamed)
+      XCTAssertThrowsError(try findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")) {
+        XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+      }
+      setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"tap"}"#))
       let match = try findElement(app: app, selectorKey: "label", selectorValue: "Agent Device Runner")
-      found.unnamed = match.element != nil
-      if let frame = match.element?.frame {
-        found.text = try readTextAt(app: app, x: frame.midX, y: frame.midY)
-        setRequestLitPanel(from: try runnerCommandFixture(
-          #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
-        ))
-        found.namedText = try readTextAt(app: app, x: frame.midX, y: frame.midY)
+      let element = try XCTUnwrap(match.element)
+      let frame = element.frame
+      XCTAssertNotNil(try readTextAt(app: app, x: frame.midX, y: frame.midY))
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+      ))
+      XCTAssertThrowsError(try readTextAt(app: app, x: frame.midX, y: frame.midY)) {
+        XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
       }
       return Response(ok: true)
     }
-    XCTAssertTrue(found.unnamed, "the label exists in the app's own window")
-    XCTAssertNotNil(found.text)
-    XCTAssertFalse(found.named, "a selector read must not search off the lit display")
-    XCTAssertNil(found.namedText, "a point read must not search off the lit display")
   }
 
   /// A refused pin is a request refusal: it never reaches the capture plan, so it does not

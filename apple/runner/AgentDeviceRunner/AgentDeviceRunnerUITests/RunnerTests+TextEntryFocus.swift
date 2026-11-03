@@ -141,7 +141,7 @@ extension RunnerTests {
     let requestedPoint = CGPoint(x: x, y: y)
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).
     let tapPoint = input?.frameOnScreen.flatMap { $0.isEmpty ? nil : CGPoint(x: $0.midX, y: $0.midY) } ?? requestedPoint
-    _ = tapAt(app: app, x: tapPoint.x, y: tapPoint.y)
+    _ = try tapAt(app: app, x: tapPoint.x, y: tapPoint.y)
     // A visible keyboard is not enough evidence for app.typeText, because focus may still
     // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
     // so after tapping it the iOS readiness timeout cannot prove anything stronger.

@@ -15,7 +15,7 @@ extension RunnerTests {
     XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))
     let failures = currentXCTestFailureCount()
     let startedAt = Date()
-    waitForTextEntryReadinessAfterTap(app: app, element: field)
+    try waitForTextEntryReadinessAfterTap(app: app, element: field)
     let elapsed = Date().timeIntervalSince(startedAt)
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
     XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))

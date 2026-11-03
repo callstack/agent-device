@@ -170,7 +170,7 @@ extension RunnerTests {
     let alert = try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
     XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
 
-    let response = handleAlert(
+    let response = try handleAlert(
       alert,
       action: "dismiss",
       deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
@@ -194,7 +194,7 @@ extension RunnerTests {
     XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
 
-    let response = handleAlert(
+    let response = try handleAlert(
       alert,
       action: "dismiss",
       deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline)

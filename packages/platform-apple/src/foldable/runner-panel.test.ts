@@ -107,6 +107,7 @@ test('a cancelled panel-table read leaves the next request free to ask', async (
 });
 
 test('a multi-panel device whose panel power decides nothing sends no panel', async () => {
+  const device = simulator();
   // Both panels lit: panel power settles no single panel, so the runner keeps its historic route.
   answering({
     result: {
@@ -117,10 +118,18 @@ test('a multi-panel device whose panel power decides nothing sends no panel', as
       })),
     },
   });
-  assert.equal(await resolveRunnerRequestLitPanel(simulator(), {}), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+  answering(IPHONE_DUO_OPEN);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 3);
+  assert.equal(
+    mockPanelTable.mock.calls.length,
+    2,
+    'ambiguous power does not cache a single-panel verdict',
+  );
 });
 
 test('a multi-panel device whose panel table is incomplete sends no panel', async () => {
+  const device = simulator();
   // The parser read one of two integrated panels, so the unread one may be the lit one.
   const [outer, inner] = IPHONE_DUO_CLOSED.result.displays;
   answering({
@@ -128,7 +137,10 @@ test('a multi-panel device whose panel table is incomplete sends no panel', asyn
       displays: [outer, { ...inner, nativeSize: undefined }],
     },
   });
-  assert.equal(await resolveRunnerRequestLitPanel(simulator(), {}), undefined);
+  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+  answering(IPHONE_DUO_OPEN);
+  assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 3);
+  assert.equal(mockPanelTable.mock.calls.length, 2, 'an incomplete table remains multi-panel');
 });
 
 test('a device the fold fact refuses never costs a panel table read', async () => {

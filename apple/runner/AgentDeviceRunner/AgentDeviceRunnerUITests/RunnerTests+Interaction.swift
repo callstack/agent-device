@@ -203,10 +203,10 @@ extension RunnerTests {
     let matches = try elementQueries(app: app, matching: .any)
       .flatMap { $0.matching(predicate).allElementsBoundByIndex }
       .filter(\.exists)
-    let facts = matches.map { element in
+    let facts = try matches.map { element in
       SelectorCandidateFacts(
         isHittable: element.isHittable,
-        hasTappableFrame: hasTappableFrame(app: app, element: element),
+        hasTappableFrame: try hasTappableFrame(app: app, element: element),
         containsExpectedPoint: expectedPoint.map(element.frame.contains) ?? true
       )
     }
@@ -236,12 +236,12 @@ extension RunnerTests {
   // resolved bounds Maestro-style, so the union frame is intentional. A
   // lit-panel request uses its booked window, because app.frame names one
   // panel (ADR 0025).
-  private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) -> Bool {
+  private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) throws -> Bool {
+    let windowFrame = try requestLitPanel == nil ? app.frame : requireRequestLitPanelSurface(app: app).frame
     let frame = element.frame
     if frame.isEmpty {
       return false
     }
-    let windowFrame = requestLitPanel == nil ? app.frame : onScreenWindowFrame(app: app)
     return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: windowFrame)
   }
 
@@ -418,16 +418,16 @@ extension RunnerTests {
     }
   }
 
-  func tapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  func tapAt(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "tap") {
       return outcome
     }
-    return performCoordinateTap(app: app, x: x, y: y)
+    return try performCoordinateTap(app: app, x: x, y: y)
   }
 
   func mouseClickAt(app: XCUIApplication, x: Double, y: Double, button: String) throws {
 #if os(macOS)
-    let coordinate = interactionCoordinate(app: app, x: x, y: y)
+    let coordinate = try interactionCoordinate(app: app, x: x, y: y)
     switch button {
     case "primary":
       coordinate.tap()
@@ -460,7 +460,7 @@ extension RunnerTests {
       durationMs: durationMs
     )
 
-    let coordinate = interactionCoordinate(app: app, x: x, y: y)
+    let coordinate = try interactionCoordinate(app: app, x: x, y: y)
     let interval = desktopScrollEventIntervalSeconds(durationMs: durationMs, eventCount: events.count)
     for (index, deltas) in events.enumerated() {
       // Keep desktop scrolling on XCTest's coordinate API so macOS owns wheel synthesis, natural
@@ -534,21 +534,21 @@ extension RunnerTests {
     }
   }
 
-  func doubleTapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  func doubleTapAt(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "double tap") {
       guard case .performed = outcome else { return outcome }
       sleepFor(0.1)
       _ = pressTvRemote(.select)
       return .performed
     }
-    return performCoordinateDoubleTap(app: app, x: x, y: y)
+    return try performCoordinateDoubleTap(app: app, x: x, y: y)
   }
 
-  func longPressAt(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) -> RunnerInteractionOutcome {
+  func longPressAt(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) throws -> RunnerInteractionOutcome {
     if let outcome = longSelectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), duration: duration) {
       return outcome
     }
-    return performCoordinateLongPress(app: app, x: x, y: y, duration: duration)
+    return try performCoordinateLongPress(app: app, x: x, y: y, duration: duration)
   }
 
   func dragAt(
@@ -558,7 +558,7 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     holdDuration: TimeInterval
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
     // tvOS has no coordinate drag. Preserve the direction as a focus move.
     let dx = x2 - x
     let dy = y2 - y
@@ -568,41 +568,41 @@ extension RunnerTests {
     if pressTvRemote(button) {
       return .performed
     }
-    return performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
+    return try performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
   }
 
-  private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).tap()
+    try interactionCoordinate(app: app, x: x, y: y).tap()
     return .performed
 #endif
   }
 
-  private func performCoordinateDoubleTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  private func performCoordinateDoubleTap(app: XCUIApplication, x: Double, y: Double) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate double tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).doubleTap()
+    try interactionCoordinate(app: app, x: x, y: y).doubleTap()
     return .performed
 #endif
   }
 
-  private func performCoordinateLongPress(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) -> RunnerInteractionOutcome {
+  private func performCoordinateLongPress(app: XCUIApplication, x: Double, y: Double, duration: TimeInterval) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate long press is not supported on tvOS; move focus with swipe or scroll, then long-select the focused element",
       hint: "tvOS has no coordinate input; move focus with swipe/scroll to the target, then long-select it."
     )
 #else
-    interactionCoordinate(app: app, x: x, y: y).press(forDuration: duration)
+    try interactionCoordinate(app: app, x: x, y: y).press(forDuration: duration)
     return .performed
 #endif
   }
@@ -614,22 +614,22 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     holdDuration: TimeInterval
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
       message: "coordinate drag is not supported on tvOS",
       hint: "tvOS has no coordinate input; use remote-driven swipe/scroll to move focus instead."
     )
 #else
-    let start = interactionCoordinate(app: app, x: x, y: y)
-    let end = interactionCoordinate(app: app, x: x2, y: y2)
+    let start = try interactionCoordinate(app: app, x: x, y: y)
+    let end = try interactionCoordinate(app: app, x: x2, y: y2)
     start.press(forDuration: holdDuration, thenDragTo: end)
     return .performed
 #endif
   }
 
 #if !os(tvOS)
-  private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
+  private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) throws -> XCUICoordinate {
 #if os(iOS)
     // Coordinate taps, double taps, long presses, and drags anchor at the app origin, not the
     // resolved window: callers pass screen points, and `app.frame` starts at the screen origin even
@@ -643,13 +643,17 @@ extension RunnerTests {
       let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
       return origin.withOffset(CGVector(dx: x, dy: y))
     }
-#endif
+    let booked = try requireRequestLitPanelSurface(app: app)
+    let origin = booked.window.coordinate(withNormalizedOffset: .zero)
+    return origin.withOffset(CGVector(dx: x - booked.frame.minX, dy: y - booked.frame.minY))
+#else
     let resolved = resolveRunnerWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let offsetX = x - Double(resolved.frame.origin.x)
     let offsetY = y - Double(resolved.frame.origin.y)
     return origin.withOffset(CGVector(dx: offsetX, dy: offsetY))
+#endif
   }
 #endif
 }

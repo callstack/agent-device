@@ -2,6 +2,11 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  private func refusedTapResponse(_ message: String, hint: String?) -> Response {
+    clearRememberedTextEntryTap()
+    return unsupportedResponse(message: message, hint: hint)
+  }
+
   /// Runs `command` against its prepared app; a thrown lit-panel refusal answers it (ADR 0025).
   @MainActor
   func executeOnMainPrepared(
@@ -112,7 +117,7 @@ extension RunnerTests {
             }) {
             case .performed(let timing):
               if isTextEntry {
-                waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
+                try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
               }
               rememberTextEntryTap(isTextEntry ? element : nil)
               return gestureResponse(
@@ -127,28 +132,27 @@ extension RunnerTests {
                   : nil
               )
             case .xctestFallback(let message, let hint):
-              fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+              fallback = .coordinateTap(message, hint: hint)
             case .refused(_, let message, let hint):
-              clearRememberedTextEntryTap()
-              return unsupportedResponse(message: message, hint: hint)
+              return refusedTapResponse(message, hint: hint)
             }
           }
-          let (timing, outcome) = performGesture(activeApp) {
+          let (timing, outcome) = try performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
               // Maestro compatibility: RN E2E backdoor controls can be 1x1 and
               // reported non-hittable by XCTest. Snapshot-resolved targets also
               // need coordinate delivery because XCUIElement.activate() does not
               // invoke every React Native accessibility wrapper.
-              return tapAt(app: activeApp, x: touchPoint.x, y: touchPoint.y)
+              return try tapAt(app: activeApp, x: touchPoint.x, y: touchPoint.y)
             }
-            return activateElement(app: activeApp, element: element, action: "tap by selector")
+            return try activateElement(app: activeApp, element: element, action: "tap by selector")
           }
           if let response = unsupportedResponse(for: outcome) {
             clearRememberedTextEntryTap()
             return response
           }
           if isTextEntry {
-            waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
+            try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
           }
           rememberTextEntryTap(isTextEntry ? element : nil)
           return gestureResponse(
@@ -199,14 +203,13 @@ extension RunnerTests {
             rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)
           case .xctestFallback(let message, let hint):
-            fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+            fallback = .coordinateTap(message, hint: hint)
           case .refused(_, let message, let hint):
-            clearRememberedTextEntryTap()
-            return unsupportedResponse(message: message, hint: hint)
+            return refusedTapResponse(message, hint: hint)
           }
         }
         let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
-        let (timing, outcome) = performGesture(activeApp) { tapAt(app: activeApp, x: x, y: y) }
+        let (timing, outcome) = try performGesture(activeApp) { try tapAt(app: activeApp, x: x, y: y) }
         if let response = unsupportedResponse(for: outcome) {
           clearRememberedTextEntryTap()
           return response
@@ -268,8 +271,8 @@ extension RunnerTests {
       fallback = nil
 #endif
       let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
-      let (timing, outcome) = performGesture(activeApp) {
-        longPressAt(app: activeApp, x: x, y: y, duration: durationMs / 1000.0)
+      let (timing, outcome) = try performGesture(activeApp) {
+        try longPressAt(app: activeApp, x: x, y: y, duration: durationMs / 1000.0)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
@@ -285,7 +288,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "drag requires x, y, x2, and y2"))
       }
       let defaults = runnerDragCommandDefaults(command)
-      return executeDragGesture(
+      return try executeDragGesture(
         activeApp: activeApp,
         x: x,
         y: y,
@@ -340,7 +343,7 @@ extension RunnerTests {
           return invalidScrollDurationResponse(commandName: "scroll")
         }
         return gesture.attachingEvidence(
-          to: executeScrollDragGesture(
+          to: try executeScrollDragGesture(
             activeApp: activeApp,
             x: gesture.planFrame.minX + gesture.plan.x1,
             y: gesture.planFrame.minY + gesture.plan.y1,
@@ -647,7 +650,7 @@ extension RunnerTests {
       )
       switch resolveAlert(app: activeApp, deadline: deadline) {
       case .resolved(let alert):
-        return handleAlert(alert, action: action, deadline: deadline)
+        return try handleAlert(alert, action: action, deadline: deadline)
       case .absent:
         // Typed so the host retries on absence alone: a transport or runner failure carries no
         // code and must not be mistaken for "no alert yet" (ALERT_NOT_FOUND_RUNNER_CODE).
@@ -684,7 +687,7 @@ extension RunnerTests {
         let first = plan.pointers[0].samples.first!.point
         let last = plan.pointers[0].samples.last!.point
         return canonicalPlannedGestureResponse(
-          executeDragGesture(
+          try executeDragGesture(
             activeApp: activeApp,
             x: first.x,
             y: first.y,
@@ -696,7 +699,7 @@ extension RunnerTests {
           )
         )
       case .sampled:
-        let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+        let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
           sampledPlannedGesture(app: activeApp, plan: plan)
         }
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
@@ -708,7 +711,7 @@ extension RunnerTests {
       }
       return Response(ok: true, data: DataPayload(message: "gestureViewport", x: frame.minX, y: frame.minY, x2: frame.width, y2: frame.height))
     case .sequence:
-      return executeSequence(command: command, activeApp: activeApp)
+      return try executeSequence(command: command, activeApp: activeApp)
     }
   }
 }
