@@ -15,6 +15,7 @@ export function bundledLicenseNotices(root: string): ReturnType<typeof license> 
       },
     },
   });
+  // rollup-plugin-license 3.7.1 exposes synchronous dependency output without a bundler context.
   return {
     ...collector,
     async generateBundle(options, bundle, isWrite) {
@@ -22,7 +23,10 @@ export function bundledLicenseNotices(root: string): ReturnType<typeof license> 
       const hook = collector.generateBundle;
       const generate = typeof hook === 'function' ? hook : hook?.handler;
       await generate?.call(this, options, bundle, isWrite);
-      if (source === undefined) this.error('License collector did not produce bundled notices.');
+      if (source === undefined)
+        this.error(
+          'rollup-plugin-license did not report dependencies from generateBundle; expected its synchronous thirdParty.output callback.',
+        );
       this.emitFile({ type: 'asset', fileName: 'THIRD_PARTY_NOTICES.txt', source });
     },
   };

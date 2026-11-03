@@ -196,6 +196,10 @@ test('declaration generation preserves JavaScript dependency notices', async () 
 test.each(['0.4.4', '0.4.5'])(
   'bundled jpeg-js@%s requires matching source-file notices',
   async (version) => {
+    const [sourceNotices, apacheLicense] = await Promise.all([
+      fs.readFile(new URL('../../LICENSES/jpeg-js.txt', import.meta.url), 'utf8'),
+      fs.readFile(new URL('../../LICENSES/Apache-2.0.txt', import.meta.url), 'utf8'),
+    ]);
     const root = await fixture({
       'input.ts': "export { value } from 'jpeg-js';",
       'node_modules/jpeg-js/package.json': JSON.stringify({
@@ -206,9 +210,8 @@ test.each(['0.4.4', '0.4.5'])(
       }),
       'node_modules/jpeg-js/index.js': 'export const value = process.env.FIXTURE_NUMBER;',
       'node_modules/jpeg-js/LICENSE': 'Package-level BSD terms.',
-      'LICENSES/jpeg-js.txt':
-        'jpeg-js 0.4.4 source-file notices\n\nCopyright 2011 notmasteryet\nCopyright 2008 Adobe.',
-      'LICENSES/Apache-2.0.txt': 'Full Apache license text.',
+      'LICENSES/jpeg-js.txt': sourceNotices,
+      'LICENSES/Apache-2.0.txt': apacheLicense,
     });
     if (version === '0.4.5') {
       await assert.rejects(bundle(root), /LICENSES\/jpeg-js\.txt.*jpeg-js@0\.4\.5/);
@@ -218,8 +221,10 @@ test.each(['0.4.4', '0.4.5'])(
     const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
     assert.match(notices, /Package-level BSD terms/);
     assert.match(notices, /Copyright 2011 notmasteryet/);
-    assert.match(notices, /Copyright 2008 Adobe/);
-    assert.match(notices, /Full Apache license text/);
+    assert.match(notices, /Adobe Systems Incorporated/);
+    assert.match(notices, /JPEG encoder ported to JavaScript and optimized by Andreas Ritter/);
+    assert.ok(notices.includes(sourceNotices.replaceAll('\r\n', '\n').trim()));
+    assert.ok(notices.includes(apacheLicense.replaceAll('\r\n', '\n').trim()));
   },
 );
 
