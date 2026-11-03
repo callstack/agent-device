@@ -6,7 +6,7 @@ export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,
   env: EnvMap,
   surfaceFlag: string | undefined,
-  webSessionName?: string,
+  webSessionName: string | undefined,
 ): ResolveTargetDeviceOptions {
   const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
   return {
