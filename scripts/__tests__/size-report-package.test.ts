@@ -249,7 +249,9 @@ function dependencyManifest(name: string, fields: Record<string, string>): [stri
  * are the ones `renderNotices` writes — grouped SPDX field, author clause and all — rather than a
  * hand-written approximation of them.
  */
-async function renderedNotices(dependencies: [string, Record<string, string>][]): Promise<string> {
+async function renderedNotices(
+  dependencies: [string, Record<string, string>, Record<string, string>?][],
+): Promise<string> {
   const root = await realpath(await mkdtempForTest('pack-gate-render-'));
   const files: [string, string][] = [
     ['package.json', JSON.stringify({ name: 'fixture-project', type: 'module' })],
@@ -262,7 +264,10 @@ async function renderedNotices(dependencies: [string, Record<string, string>][])
     ],
     ['input.ts', dependencies.map(([name]) => `export { ${name} } from '${name}';`).join('\n')],
   ];
-  for (const [name, fields] of dependencies) files.push(...dependencyManifest(name, fields));
+  for (const [name, fields, extras] of dependencies) {
+    files.push(...dependencyManifest(name, fields));
+    if (extras) files.push(...Object.entries(extras));
+  }
   for (const [relative, source] of files) {
     const file = join(root, relative);
     await mkdir(join(file, '..'), { recursive: true });
@@ -310,6 +315,56 @@ test('pack gate reads the license reference, not the author clause, from real by
   assert.match(rendered, /\[1\]; Author: Bracket author \[7\]/);
   assert.doesNotThrow(() =>
     assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
+test('pack gate reads no attribution from license or NOTICE body text', async () => {
+  // A numbered section holds upstream license or NOTICE text verbatim, at column zero: the renderer
+  // neither escapes nor indents it. Prose shaped like an attribution — an email contact, a line
+  // pointing at "section [9]" of some other package — is ordinary upstream content, and the only
+  // attributions the bundler itself writes are the block before the first heading. Reading a body
+  // line as an attribution would reject publishable bytes: the dangling [9] and the empty reference
+  // below are unparseable as anything but unresolved attributions.
+  const root = await renderedNotices([
+    [
+      'included',
+      { license: 'MIT' },
+      {
+        'node_modules/included/NOTICE': [
+          'This distribution bundles software from several upstreams:',
+          'helper-pkg@0.1.0 (MIT): see section [9] for those terms',
+          'maintainer@example.test (Apache-2.0): ',
+        ].join('\n'),
+      },
+    ],
+  ]);
+  const rendered = await readFile(join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.match(rendered, /^helper-pkg@0\.1\.0 \(MIT\): see section \[9\]/m);
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
+test('pack gate rejects a file that attributes nobody but whose license text names somebody', async () => {
+  // The gate exists to catch a notices file that attributes nobody. A build that lost the leading
+  // attribution block keeps the heading and bodies, and one body can happen to carry a line shaped
+  // like an attribution pointing at its own section. That file must not clear the gate on prose it
+  // preserves verbatim: only the block the renderer writes before the first heading attributes.
+  const bodyOnly = await treeWithNotices(
+    [
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+      '@agent-device/proxy@0.21.37-dev (MIT): [1]',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: bodyOnly,
+        context: 'npm pack',
+      }),
+    /no bundled dependency notices[\s\S]*found 0 attributions and 1 license texts/,
   );
 });
 
