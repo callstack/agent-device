@@ -73,6 +73,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
   });
   const session = makeRunnerSession({
     port: server.port,
+    testPromise: new Promise(() => {}),
     xctestrunPath: path.join(scratch, 'runner.xctestrun'),
     jsonPath: path.join(scratch, 'runner.json'),
   });
@@ -91,6 +92,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
     async (request) => await executeRunnerCommand(IOS_SIMULATOR, request, {}),
   );
   await notifyIosRunnerAppRelaunched(IOS_SIMULATOR);
+  vi.spyOn(session.launch, 'waitForExit').mockResolvedValue(true);
   await disposeRunnerSession(session);
 
   appleRunnerTestHost.update({

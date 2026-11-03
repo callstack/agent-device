@@ -73,14 +73,14 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     expectedText: String
-  ) -> SynthesizedTextCommitOutcome {
+  ) throws -> SynthesizedTextCommitOutcome {
     guard !expectedText.contains("\n"), !expectedText.contains("\r") else {
       return .unobservable
     }
     let waitStartedAt = Date()
     NSLog("[DEBUG-1874] wait start expectedLen=%ld route=replacement", expectedText.count)
-    let ingredients = synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
-    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+    let ingredients = try synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
+    let outcome = try Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
       fieldIsUnreadable: ingredients.fieldIsUnreadable,
@@ -132,13 +132,13 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     expectedText: String
-  ) -> (
+  ) throws -> (
     placeholder: String?,
     fieldIsUnreadable: Bool,
-    observe: () -> TextValueRead,
+    observe: () throws -> TextValueRead,
     waitForNextObservation: () -> Void
   ) {
-    let field = resolveTextEntryInput(app: app, target: target)?.attributes
+    let field = try resolveTextEntryInput(app: app, target: target)?.attributes
     let placeholder = field?.placeholderValue
     let waitStartedAt = Date()
     return (
@@ -146,7 +146,7 @@ extension RunnerTests {
       fieldIsUnreadable: textValueRead(for: field) == .unreadable,
       observe: {
         let observed = self.textValueRead(
-          for: self.resolveTextEntryInput(app: app, target: target)?.attributes,
+          for: try self.resolveTextEntryInput(app: app, target: target)?.attributes,
           treatingPlaceholderAsEmpty: true
         )
         var observedText: String?

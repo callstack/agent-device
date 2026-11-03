@@ -42,6 +42,7 @@ extension RunnerTests {
       RunnerAppScreenCaptureFailure(.unresolvedScreen).rawValue,
       "APP_SCREEN_UNRESOLVED"
     )
+    XCTAssertEqual(RunnerAppScreenCaptureFailure(.offLitPanel).rawValue, "APP_SCREEN_OFF_LIT_PANEL")
     // The display resolved and the image did not: a distinct code, because an operator chasing a
     // panel problem is chasing the wrong thing here. This one has no bridge counterpart, so it is
     // named on the Swift reason rather than mapped from one.
@@ -134,6 +135,24 @@ extension RunnerTests {
         return XCTFail("a display that refused must not become a capture")
       }
       XCTAssertEqual(refusal.rawValue, "APP_SCREEN_UNRESOLVED")
+    }
+
+    /// A requested app whose windows are all on the dark panel is refused: the system surface would
+    /// answer with a capture of a different app.
+    func testObservedScreenCaptureRefusesAnAppOffTheLitPanelWithoutAskingTheSystemSurface() {
+      var askedSystemSurface = false
+      let outcome = selectObservedScreenCapture(
+        resolving: { .failure(RunnerAppScreenCaptureFailure(.offLitPanel)) },
+        fallingBack: {
+          askedSystemSurface = true
+          return .failure(.unrenderableImage)
+        }
+      )
+      XCTAssertFalse(askedSystemSurface)
+      guard case .failure(let refusal) = outcome else {
+        return XCTFail("an app off the lit panel must not become a capture")
+      }
+      XCTAssertEqual(refusal, .offLitPanel)
     }
 
     func testObservedScreenCaptureKeepsTheSessionAppCaptureItResolved() {

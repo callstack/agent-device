@@ -81,6 +81,7 @@ final class RunnerTests: XCTestCase {
   static let defaultRecordingFps: Int32 = 15
   var listener: NWListener?
   var listenerToken: RunnerListenerToken?
+  var acceptsForwardedConnections = false
   var doneExpectation: XCTestExpectation?
   var transportConnections: [ObjectIdentifier: NWConnection] = [:]
   let shutdownResponseWrites = DispatchGroup()
@@ -89,6 +90,7 @@ final class RunnerTests: XCTestCase {
   let app = XCUIApplication()
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
   let mainOwned = RunnerMainOwnedState()
+  let litPanelState = RunnerLitPanelState()
   // Set while serving a command that had to re-activate the bound app, and stamped onto that
   // command's response before it leaves the execution queue (#2682).
   var pendingTargetActivation: TargetActivationFactPayload?
@@ -201,6 +203,9 @@ final class RunnerTests: XCTestCase {
 
   /// Simulates an app tree read that returns no descendants without an issue or exception.
   var textInputProbeBlindForTesting = false
+
+  /// Records an XCTest issue during the lit-panel window walk, as a window that vanishes mid-walk does.
+  var litPanelWindowWalkIssueForTesting = false
 
   static let injectedTapFailureFlagPathForTesting =
     "/tmp/agent-device-inject-tap-recorded-failure-for-testing"
@@ -342,13 +347,14 @@ final class RunnerTests: XCTestCase {
     NSLog("AGENT_DEVICE_RUNNER_HEADLESS_STARTUP=1")
     guard let configuration = RunnerListenerConfiguration.fromEnvironment() else {
       NSLog("AGENT_DEVICE_RUNNER_LISTENER_CONFIGURATION_MISSING")
-      XCTFail("runner listener port or token is missing; refusing to listen")
+      XCTFail("runner listener port, token, or bind address is missing or invalid; refusing to listen")
       return
     }
     listenerToken = configuration.token
+    acceptsForwardedConnections = configuration.bindAddress != nil
     NSLog("AGENT_DEVICE_RUNNER_AUTH=required")
     NSLog("AGENT_DEVICE_RUNNER_DESIRED_PORT=%d", configuration.port.rawValue)
-    listener = try Self.makeRunnerListener(port: configuration.port)
+    listener = try Self.makeRunnerListener(port: configuration.port, bindAddress: configuration.bindAddress)
     // Reads the OS prompt strings off the alert path, so the first accept/dismiss deadline does not pay for it.
     DispatchQueue.global(qos: .utility).async { _ = RunnerAlertLabelVocabulary.system }
     DispatchQueue.global(qos: .utility).async { _ = RunnerLaunchConfirmationPrompt.system }
@@ -397,9 +403,14 @@ final class RunnerTests: XCTestCase {
     }
   }
 
-  /// Simulators and macOS bind loopback: the host reaches them only through 127.0.0.1. A physical
-  /// device listens on every interface because the CoreDevice tunnel arrives on a network address.
-  static func makeRunnerListener(port: NWEndpoint.Port) throws -> NWListener {
+  /// Cloud simulators bind their assigned address; local simulators keep the loopback listener.
+  /// Physical devices accept CoreDevice tunnel connections on their network interface.
+  static func makeRunnerListener(port: NWEndpoint.Port, bindAddress: IPv4Address? = nil) throws -> NWListener {
+    if let bindAddress {
+      let parameters = NWParameters.tcp
+      parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(bindAddress), port: port)
+      return try NWListener(using: parameters)
+    }
     #if targetEnvironment(simulator) || os(macOS)
       let parameters = NWParameters.tcp
       parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: port)

@@ -1,3 +1,4 @@
+import RecordingSupport
 import AgentDeviceSnapshotPresentation
 import CoreGraphics
 import Foundation

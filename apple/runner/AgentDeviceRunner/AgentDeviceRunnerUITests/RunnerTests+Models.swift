@@ -230,6 +230,13 @@ struct CoordinateTapTextInputEvidence: Codable {
   let textInputRects: [RunnerGestureViewport]
 }
 
+/// The wire spelling of the lit panel the host names for a multi-panel device (ADR 0025).
+struct RunnerLitPanelFact: Codable {
+  let displayId: UInt
+  let widthPt: Double
+  let heightPt: Double
+}
+
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -269,6 +276,7 @@ struct Command: Codable {
   let inlineScreenshot: Bool?
   let synthesized: Bool?
   let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
+  let litPanel: RunnerLitPanelFact?
   let steps: [SequenceStep]?
 }
 

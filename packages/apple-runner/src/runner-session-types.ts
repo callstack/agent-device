@@ -1,9 +1,8 @@
+import type { RunnerLaunchObservation } from './runner-launcher.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
-import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Deadline } from './host.ts';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
-import type { RunnerLease } from './runner-lease.ts';
 import type { IosRunnerDeviceStates } from './runner-error-classification.ts';
 import type { RunnerCommand, RunnerEndpoint } from './runner-contract.ts';
 
@@ -64,28 +63,15 @@ export type RunnerSession = {
   device: DeviceInfo;
   deviceId: string;
   endpoint: RunnerEndpoint;
-  xctestrunPath: string;
   xctestrunArtifact?: RunnerXctestrunArtifact;
-  jsonPath: string;
   /**
    * Where this runner's own output goes: the file handed to the child as its stdout/stderr, which
    * the runner keeps appending to across a daemon handoff (#2681). A session adopted from an older
    * lease has none, because that runner wrote into pipes its own daemon held.
    */
   runnerLogPath?: string;
-  testPromise: Promise<ExecResult>;
-  child: RunnerProcessHandle;
-  /**
-   * Gives up this daemon's sides of the runner's log: the tail it follows and its copy of the log's
-   * write end. Only a session this process launched has either. The runner keeps its own descriptor,
-   * so handing off is a bookkeeping step and cannot disturb a running runner (#2681).
-   */
-  endOutputObservation?: () => void;
-  /**
-   * Reads the end of {@link runnerLogPath}. The module that opened the file answers for it, so the
-   * code quoting a runner's failure does not have to know how the log is stored (#2681).
-   */
-  readLogTail?: (maxBytes: number) => string;
+  launch: RunnerLaunchObservation;
+  disposal?: Promise<void>;
   /** Moves only through {@link advanceRunnerSessionState}. */
   state: RunnerSessionState;
   listenerWatch?: RunnerListenerWatch;
@@ -133,7 +119,6 @@ export type RunnerSession = {
    */
   startupDeviceStates?: IosRunnerDeviceStates;
   logicalLeaseContext?: RunnerLogicalLeaseContext;
-  lease?: RunnerLease;
 };
 
 // A session goes forward through the lifecycle once: a state already reached is never re-entered,

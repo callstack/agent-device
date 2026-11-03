@@ -162,8 +162,11 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
 #endif
+    // Only the tree tier can prove which panel a window is on, so a multi-panel request runs it
+    // alone; preparation already refused a pin to another backend.
+    let surfacePlan = target.litPanelSurface == nil ? plan : [.recursiveTree]
     let effective = Self.effectiveSnapshotCapturePlan(
-      plan,
+      surfacePlan,
       xCTestChannelPenalized: xCTestChannelPenalized,
       xCTestRecoveryProbeDue: xCTestRecoveryProbeDue,
       availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform)),
@@ -344,7 +347,8 @@ extension RunnerTests {
               app: app,
               hint: hint,
               captureDeadline: deadline,
-              treeCaptureSliceBudgetOverride: step.treeCaptureSliceBudgetOverride
+              treeCaptureSliceBudgetOverride: step.treeCaptureSliceBudgetOverride,
+              litPanelSurface: target.litPanelSurface
             )
           else {
             return (nil, .completed)
@@ -373,7 +377,7 @@ extension RunnerTests {
             timeout: max(0.1, sliceDeadline.timeIntervalSinceNow),
             timeoutError: self.snapshotMainThreadTimeoutError("running query-sweep snapshot")
           ) {
-            self.querySweepSnapshotAcquisition(
+            try self.querySweepSnapshotAcquisition(
               app: app,
               hint: hint,
               sliceDeadline: sliceDeadline

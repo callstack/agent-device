@@ -30,9 +30,9 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
-  ) -> XCUIElement? {
+  ) throws -> XCUIElement? {
 #if os(iOS)
-    let candidate = resolveTextEntryInput(app: app, target: target)?.element
+    let candidate = try resolveTextEntryInput(app: app, target: target)?.element
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -67,7 +67,7 @@ extension RunnerTests {
     }
     return candidate
 #else
-    return resolveTextEntryInput(app: app, target: target)?.element
+    return try resolveTextEntryInput(app: app, target: target)?.element
 #endif
   }
 
@@ -85,7 +85,7 @@ extension RunnerTests {
   /// `ResolvedTextEntryInput` already reads elements this way. It is read again after the
   /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
   /// field is then, which is the moment the read it replaced ran at.
-  func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
+  func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) throws {
 #if os(iOS)
     if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
@@ -95,18 +95,18 @@ extension RunnerTests {
     }) else {
       return
     }
-    retapAt(read: settled, app: app, element: element)
+    try retapAt(read: settled, app: app, element: element)
 #endif
   }
 
   /// The readiness repeat, at the read's screen box; a read that names none taps nothing (#3899).
-  func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) {
+  func retapAt(read: ResolvedTextEntryInput, app: XCUIApplication, element: XCUIElement) throws {
     guard let frame = read.frameOnScreen, !frame.isEmpty else {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP skipped reason=%@", read.frameOnScreen == nil ? "no-screen-frame" : "empty-frame")
       return
     }
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_RETAP x=%.1f y=%.1f", frame.midX, frame.midY)
-    _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+    _ = try tapAt(app: app, x: frame.midX, y: frame.midY)
     _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
   }
 

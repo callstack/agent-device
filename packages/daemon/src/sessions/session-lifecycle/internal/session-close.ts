@@ -362,19 +362,21 @@ async function runCloseTeardownAndRelease(params: {
   } = params;
   const { address: sessionName } = ref;
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const { platformCloseError, saveScriptError, shutdownResult } = await runSessionCloseTeardown({
-    req,
-    ref,
-    logPath,
-    sessionStore,
-    lifecycle,
-    clearRuntimeHints,
-    cleanupFailures,
-    repairArmed: params.repairArmed,
-    dispatchTargetedPlatformClose,
-    finalizeOrdinaryCloseScript,
-    platformResourceCleanup: params.platformResourceCleanup,
-  });
+  const { platformCloseError, retainExecutionHost, saveScriptError, shutdownResult } =
+    await runSessionCloseTeardown({
+      leaseRegistry,
+      req,
+      ref,
+      logPath,
+      sessionStore,
+      lifecycle,
+      clearRuntimeHints,
+      cleanupFailures,
+      repairArmed: params.repairArmed,
+      dispatchTargetedPlatformClose,
+      finalizeOrdinaryCloseScript,
+      platformResourceCleanup: params.platformResourceCleanup,
+    });
   let session = sessionStore.requireCurrent(ref);
   const leaseRelease = await releaseProviderLeaseForClose({
     req,
@@ -400,7 +402,7 @@ async function runCloseTeardownAndRelease(params: {
   } else {
     await clearDeviceClaim(session.deviceClaim, params.env);
   }
-  sessionStore.retire(ref);
+  sessionStore.retire(ref, { retainExecutionHost });
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;
   if (saveScriptError) throw saveScriptError;
   return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };

@@ -115,11 +115,24 @@ extension RunnerTests {
   func synthesizedSequenceCoordinateContext(
     steps: [SequenceStep],
     app: XCUIApplication
-  ) -> SynthesizedCoordinateContext? {
+  ) throws -> SynthesizedCoordinateContext? {
     guard steps.lazy.contains(where: { synthesizedPolicyKind(forSequenceStep: $0) != nil }) else {
       return nil
     }
-    return synthesizedCoordinateContext(app: app)
+    return try synthesizedCoordinateContext(app: app)
+  }
+
+  @MainActor
+  func performSynthesizedTapGesture(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext? = nil
+  ) throws -> SynthesizedGestureAttempt {
+    let context = try context ?? synthesizedCoordinateContext(app: app)
+    return try performSynthesizedGesture(app, kind: .coordinateTap, context: context) {
+      try synthesizedTapAt(app: app, x: x, y: y, context: context)
+    }
   }
 
   /// `context` is nil when no window frame resolved; `kind`'s fallback decision then reads the
@@ -129,10 +142,10 @@ extension RunnerTests {
     _ app: XCUIApplication,
     kind: SynthesizedGesturePolicyKind,
     context: SynthesizedCoordinateContext?,
-    synthesize: () -> RunnerInteractionOutcome?
-  ) -> SynthesizedGestureAttempt {
+    synthesize: () throws -> RunnerInteractionOutcome?
+  ) throws -> SynthesizedGestureAttempt {
     var outcome: RunnerInteractionOutcome?
-    let timing = measureGesture { outcome = synthesize() }
+    let timing = try measureGesture { outcome = try synthesize() }
     guard let outcome else {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
       return .refused(timing: timing, message: "synthesized gesture deadline expired before dispatch", hint: nil)

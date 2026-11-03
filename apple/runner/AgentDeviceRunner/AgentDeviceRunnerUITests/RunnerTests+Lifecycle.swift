@@ -52,7 +52,7 @@ extension RunnerTests {
   /// session window falls to the system surface's window, which is what the home screen is. macOS
   /// keeps the host display it always recorded.
   func captureRunnerFrame(app: XCUIApplication) -> RunnerImage? {
-    switch captureRunnerFrameResult(app: app) {
+    switch captureRunnerFrameResult(app: app, litPanel: requestLitPanel) {
     case .success(let captured):
       return captured.image
     case .failure:
@@ -65,10 +65,11 @@ extension RunnerTests {
   /// typed code rather than a message. The ongoing pump reads the same result and ignores a refusal
   /// the way it ignored the `nil` it used to get; only a frame that must exist owes a reason (#2728).
   func captureRunnerFrameResult(
-    app: XCUIApplication
+    app: XCUIApplication,
+    litPanel: RunnerLitPanel?
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
 #if os(iOS)
-    return captureObservedScreen(app: app)
+    return captureObservedScreen(app: app, litPanel: litPanel)
 #else
     var outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> = .failure(
       .unrenderableImage
@@ -124,8 +125,17 @@ extension RunnerTests {
       )
     }
     let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-    let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
+#if os(iOS)
+    // A managed XCTest host can override TMPDIR outside the app container.
+    // The returned tmp/ path must resolve inside the runner's data container.
+    let temporaryDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+      .appendingPathComponent("tmp", isDirectory: true)
+#else
+    let temporaryDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+#endif
+    let filePath = temporaryDirectory.appendingPathComponent(fileName).path
     do {
+      try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
       try pngData.write(to: URL(fileURLWithPath: filePath))
     } catch {
       return Response(

@@ -45,15 +45,9 @@ extension RunnerTests {
 
   @MainActor
   func testAlertDeadlineBeforeActivationLeavesTheOriginalUntouched() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let alert = try resolveAlertBeforeTheCommand()
-    let response = handleAlert(alert, action: "accept", deadline: .distantPast)
+    defer { tearDownReplacementAlert() }
+    let alert = try launchReplacementAlert()
+    let response = try handleAlert(alert, action: "accept", deadline: .distantPast)
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "ALERT_DEADLINE_EXCEEDED")
     XCTAssertTrue(app.alerts.firstMatch.exists)
@@ -77,7 +71,7 @@ extension RunnerTests {
       }
       return true
     }
-    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(1))
+    let response = try handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(1))
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "ALERT_DEADLINE_EXCEEDED")
     XCTAssertTrue(app.alerts.firstMatch.exists)
@@ -86,34 +80,22 @@ extension RunnerTests {
 
   @MainActor
   func testAlertActivationAfterDeadlineDoesNotTapTheOriginal() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let alert = try resolveAlertBeforeTheCommand()
+    defer { tearDownReplacementAlert() }
+    let alert = try launchReplacementAlert()
     let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
     let frame = button.frame
 
-    let outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantPast)
+    let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantPast)
 
     XCTAssertNil(outcome, "an expired command must not synthesize a tap")
-    XCTAssertNil(activateAlertButton(alert, button: button, action: "accept", frame: .zero, deadline: .distantFuture))
+    XCTAssertNil(try activateAlertButton(alert, button: button, action: "accept", frame: .zero, deadline: .distantFuture))
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
   @MainActor
   func testAlertActivationRefusesAnUnreadableHostWindowWithoutTapping() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let resolved = try resolveAlertBeforeTheCommand()
+    defer { tearDownReplacementAlert() }
+    let resolved = try launchReplacementAlert()
     let alert = RunnerAlert(
       root: resolved.root,
       ownerApp: resolved.ownerApp,
@@ -127,8 +109,8 @@ extension RunnerTests {
     let options = XCTExpectedFailure.Options()
     options.issueMatcher = { $0.compactDescription.contains("agent-device-missing-window") }
     var outcome: RunnerInteractionOutcome?
-    XCTExpectFailure("The unreadable window is the condition under test", options: options) {
-      outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+    try XCTExpectFailure("The unreadable window is the condition under test", options: options) {
+      outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
     }
 
     guard case .unsupported? = outcome else {
@@ -139,39 +121,24 @@ extension RunnerTests {
 
   @MainActor
   func testAlertDeadlineDuringSynthesisPreparationLeavesTheOriginalUntouched() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let alert = try resolveAlertBeforeTheCommand()
+    defer { tearDownReplacementAlert() }
+    let alert = try launchReplacementAlert()
     let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
     let frame = button.frame
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
-    let method = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
-    let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
-    let original = method_getImplementation(method)
-    method_setImplementation(method, method_getImplementation(stub))
-    defer {
-      AlertTapDeadlineStub.status = nil
-      AlertTapDeadlineStub.interruptionHandlingDisabled = nil
-      method_setImplementation(method, original)
-    }
+    try withAlertTapStub {
+      let outcome = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
 
-    let outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+      XCTAssertNil(outcome)
+      XCTAssertTrue(app.alerts.firstMatch.exists)
+      XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
 
-    XCTAssertNil(outcome)
-    XCTAssertTrue(app.alerts.firstMatch.exists)
-    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
-
-    AlertTapDeadlineStub.status = RunnerTapSynthesisStatus(rawValue: 999)
-    let unknown = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
-    guard case .unsupported? = unknown else {
-      return XCTFail("an unknown native status must report failure rather than deadline expiry")
+      AlertTapDeadlineStub.status = RunnerTapSynthesisStatus(rawValue: 999)
+      let unknown = try activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+      guard case .unsupported? = unknown else {
+        return XCTFail("an unknown native status must report failure rather than deadline expiry")
     }
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+    }
   }
 
   @MainActor
@@ -189,7 +156,7 @@ extension RunnerTests {
     XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
 
-    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
+    let response = try handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
 
     // The fixture keeps an animation in flight until a button is answered or its backstop, which
     // outlasts resolution plus activation, stops it, and an in-flight animation is what XCTest waits
@@ -212,7 +179,7 @@ extension RunnerTests {
 
       try assertAlertActivationDisablesInterruptionHandling(alert)
       let deadline = Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
-      let response = handleAlert(alert, action: "accept", deadline: deadline)
+      let response = try handleAlert(alert, action: "accept", deadline: deadline)
 
       XCTAssertEqual(consultedInterruptions, [], "alert activation consulted XCTest's interruption handling")
       XCTAssertTrue(response.ok, String(describing: response.error))
@@ -225,24 +192,42 @@ extension RunnerTests {
   private func assertAlertActivationDisablesInterruptionHandling(_ alert: RunnerAlert) throws {
     let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
     let frame = button.frame
+    try withAlertTapStub {
+      AlertTapDeadlineStub.status = .deadlineExceeded
+      let outcome = try activateAlertButton(
+        alert, button: button, action: "accept", frame: frame, deadline: .distantFuture
+      )
+      XCTAssertNil(outcome)
+      XCTAssertEqual(AlertTapDeadlineStub.interruptionHandlingDisabled, true)
+    }
+  }
+
+  @MainActor
+  private func launchReplacementAlert() throws -> RunnerAlert {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
+    return try resolveAlertBeforeTheCommand()
+  }
+
+  @MainActor
+  private func tearDownReplacementAlert() {
+    invalidateCachedTarget(reason: "unit_test_cleanup")
+    app.terminate()
+  }
+
+  @MainActor
+  private func withAlertTapStub(_ body: () throws -> Void) throws {
     let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
     let method = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
     let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
-    let original = method_getImplementation(method)
-    AlertTapDeadlineStub.status = .deadlineExceeded
-    AlertTapDeadlineStub.interruptionHandlingDisabled = nil
-    method_setImplementation(method, method_getImplementation(stub))
+    let original = method_setImplementation(method, method_getImplementation(stub))
     defer {
       AlertTapDeadlineStub.status = nil
       AlertTapDeadlineStub.interruptionHandlingDisabled = nil
       method_setImplementation(method, original)
     }
-
-    let outcome = activateAlertButton(
-      alert, button: button, action: "accept", frame: frame, deadline: .distantFuture
-    )
-    XCTAssertNil(outcome)
-    XCTAssertEqual(AlertTapDeadlineStub.interruptionHandlingDisabled, true)
+    try body()
   }
 
   @MainActor
@@ -273,7 +258,7 @@ extension RunnerTests {
     while Date() < deadline, !fixtureAlert.exists {
       if allow.exists {
         let authorization = try requireResolvedAlert(deadline: deadline)
-        let response = handleAlert(authorization, action: "accept", deadline: deadline)
+        let response = try handleAlert(authorization, action: "accept", deadline: deadline)
         XCTAssertTrue(response.ok, String(describing: response.error))
       } else {
         Thread.sleep(forTimeInterval: 0.25)
@@ -322,7 +307,7 @@ extension RunnerTests {
     XCTAssertTrue(app.alerts.firstMatch.exists, "the replacement must remain visible")
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
     let current = try resolveAlertBeforeTheCommand()
-    let inspection = handleAlert(current, action: "get", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
+    let inspection = try handleAlert(current, action: "get", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.items?.sorted(), ["Cancel", "OK"])
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")

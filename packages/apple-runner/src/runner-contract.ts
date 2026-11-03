@@ -163,6 +163,11 @@ export type RunnerCommand = {
   fullscreen?: boolean;
   inlineScreenshot?: boolean;
   synthesized?: boolean;
+  /**
+   * The lit panel's display and native box in points, sent only for a multi-panel device on a
+   * command that resolves a screen (ADR 0025).
+   */
+  litPanel?: { displayId: number; widthPt: number; heightPt: number };
   steps?: RunnerSequenceStep[];
 };
 
@@ -270,12 +275,17 @@ export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCC
 const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
 const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
 const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
+const RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE = 'APP_SCREEN_OFF_LIT_PANEL';
 
-/** Every runner code meaning "this capture did not happen", covering the display and the image. */
+/**
+ * Every runner code meaning "this capture did not happen", covering the display, the image, and the
+ * panel: on a foldable, a target app whose windows are all on the dark panel is refused.
+ */
 export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
   RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
+  RUNNER_SCREEN_OFF_LIT_PANEL_RUNNER_CODE,
 ]);
 
 /**
@@ -488,17 +498,26 @@ const RUNNER_TOKEN_BYTES = 24;
 export const RUNNER_TOKEN_UNSUPPORTED_REASON = 'runner_token_unsupported';
 
 /** How to reach one runner generation: its listener port and the token it requires. */
-export type RunnerEndpoint = Readonly<{ port: number; token: string }>;
+export type RunnerEndpoint = Readonly<{
+  port: number;
+  token: string;
+  /** A provider's authenticated forwarding route; omitted for local and USB runners. */
+  http?: Readonly<{ url: string; headers?: Readonly<Record<string, string>> }>;
+}>;
 
 export function mintRunnerToken(): string {
   return crypto.randomBytes(RUNNER_TOKEN_BYTES).toString('base64url');
 }
 
 /** What the runner reads at launch to open its listener; see `RunnerTests+Environment.swift`. */
-export function runnerListenerEnv(endpoint: RunnerEndpoint): Record<string, string> {
+export function runnerListenerEnv(
+  endpoint: RunnerEndpoint,
+  bindAddress?: string,
+): Record<string, string> {
   return {
     AGENT_DEVICE_RUNNER_PORT: String(endpoint.port),
     AGENT_DEVICE_RUNNER_TOKEN: endpoint.token,
+    ...(bindAddress ? { AGENT_DEVICE_RUNNER_BIND_IP: bindAddress } : {}),
   };
 }
 

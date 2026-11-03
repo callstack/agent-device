@@ -109,7 +109,7 @@ extension RunnerTests {
       ]
       for testCase in cases {
         RunnerWindowFrameReads.begin(answering: testCase.frames)
-        let resolved = resolveRunnerWindow(app: app)
+        let resolved = try resolveRunnerWindow(app: app)
         XCTAssertEqual(resolved.window != nil, testCase.hasWindow, testCase.name)
         XCTAssertEqual(RunnerWindowFrameReads.recorded(), testCase.reads, testCase.name)
         XCTAssertEqual(

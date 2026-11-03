@@ -108,7 +108,7 @@ export function createPlatformResourceCleanup(host: HostEnvironment): PlatformRe
         params.device.kind === 'simulator' &&
         !params.shutdownRequested &&
         !params.hasScreenRecording &&
-        !params.hasLease
+        !params.leaseWillEnd
       );
     },
   });

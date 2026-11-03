@@ -115,3 +115,9 @@ export type AndroidAppDeploymentExecutor = Readonly<{
     options?: Readonly<{ installedOnly?: boolean }>,
   ): Promise<string>;
 }>;
+
+/** Transfers an already materialized app to the selected target. */
+export type AppDeploymentInstaller = (
+  artifact: MaterializedAppSource,
+  signal: AbortSignal,
+) => Promise<AppDeploymentResult>;

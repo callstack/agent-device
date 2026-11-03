@@ -36,7 +36,8 @@ extension RunnerTests {
     app: XCUIApplication,
     hint: CaptureHint,
     captureDeadline: Date = .distantFuture,
-    treeCaptureSliceBudgetOverride: TimeInterval? = nil
+    treeCaptureSliceBudgetOverride: TimeInterval? = nil,
+    litPanelSurface: LitPanelSurface? = nil
   ) throws -> SnapshotTraversalContext? {
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
@@ -54,7 +55,7 @@ extension RunnerTests {
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("reading snapshot viewport")
     ) {
-      self.safeSnapshotViewport(app: app, readingOrientation: true)
+      try self.safeSnapshotViewport(app: app, readingOrientation: true)
     }
     // Use the same tree for keyboard coverage so a later dismissal cannot invalidate the band.
     let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, viewport: viewport, deadline: captureDeadline)
@@ -64,7 +65,8 @@ extension RunnerTests {
       rootSnapshot: rootSnapshot,
       rootReadDuration: rootReadDuration,
       viewport: viewport,
-      keyboardBand: keyboardBand
+      keyboardBand: keyboardBand,
+      litPanelSurface: litPanelSurface
     )
   }
 
@@ -136,15 +138,18 @@ extension RunnerTests {
   /// The viewport as a declared fact; a read that raises is `.missing(reason: .notProvided)` (#2891).
   /// `readingOrientation` reads the interface orientation in the same hop, for tiers whose frames can
   /// arrive in the device's native space; without it the viewport cannot anchor a rotation.
-  func safeSnapshotViewport(app: XCUIApplication, readingOrientation: Bool) -> SnapshotViewport {
-    safely("SNAPSHOT_VIEWPORT", .missing(reason: .notProvided)) {
-      .reported(
-        box: snapshotAppFrame(app: app),
-        interfaceOrientation: readingOrientation
-          ? capturedInterfaceOrientation(app: app)
-          : RunnerInterfaceOrientation.unknown
-      )
+  func safeSnapshotViewport(app: XCUIApplication, readingOrientation: Bool) throws -> SnapshotViewport {
+    let result: Result<SnapshotViewport, Error> = safely("SNAPSHOT_VIEWPORT", .success(.missing(reason: .notProvided))) {
+      Result {
+        .reported(
+          box: try snapshotAppFrame(app: app),
+          interfaceOrientation: readingOrientation
+            ? capturedInterfaceOrientation(app: app)
+            : RunnerInterfaceOrientation.unknown
+        )
+      }
     }
+    return try result.get()
   }
 
   private func describeSnapshotError(_ error: Error) -> String {
@@ -257,9 +262,9 @@ extension RunnerTests {
     return placeholderText(element.placeholderValue)
   }
 
-  private func snapshotAppFrame(app: XCUIApplication) -> CGRect {
+  private func snapshotAppFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
-    return onScreenWindowFrame(app: app)
+    return try onScreenWindowFrame(app: app)
 #else
     return app.frame
 #endif
@@ -294,11 +299,11 @@ extension RunnerTests {
   func appendCollapsedTabFallbackNodes(
     to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
-    resolveCandidates: () -> [CollapsedTabCandidate],
+    resolveCandidates: () throws -> [CollapsedTabCandidate],
     depth: Int,
     parentIndex: Int
-  ) {
-    let fallbackNodes = collapsedTabFallbackNodes(
+  ) throws {
+    let fallbackNodes = try collapsedTabFallbackNodes(
       for: containerSnapshot,
       resolveCandidates: resolveCandidates,
       startingIndex: nodes.count,
@@ -331,15 +336,14 @@ extension RunnerTests {
     let selected: Bool
   }
 
-  /// The live elements any collapsed tab container in this capture may adopt, read in one XCTest
-  /// query: `collapsedTabCandidatePredicate` copies each match's attributes while XCTest evaluates
-  /// it, so no match costs a further round trip. The query starts only while the time left before
-  /// `processingDeadline` covers what this capture's root tree read took; nil means it did not start.
+  /// Live controls collapsed tab containers may adopt, queried under the capture's proven-lit roots.
+  /// The predicate copies attributes during each query without further round trips. Queries start
+  /// only while the remaining slice covers the root read's duration; nil means a query could not start.
   @MainActor
   func collapsedTabCandidates(
     context: SnapshotTraversalContext,
     processingDeadline: Date
-  ) -> [CollapsedTabCandidate]? {
+  ) throws -> [CollapsedTabCandidate]? {
     let containerFrames = Self.snapshotDescendants(of: context.rootSnapshot)
       .filter(isCollapsedTabContainer)
       .map(\.frame)
@@ -347,19 +351,26 @@ extension RunnerTests {
     let predicate = Self.collapsedTabCandidatePredicate(containerFrames: containerFrames) { attributes in
       candidates.append(self.collapsedTabCandidate(attributes))
     }
-    guard
-      Self.xctestQueryCanStart(
-        deadline: processingDeadline,
-        now: Date(),
-        expectedCost: context.rootReadDuration
-      )
-    else {
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_QUERY_NOT_STARTED")
-      return nil
+    func canStartQuery() -> Bool {
+      guard Self.xctestQueryCanStart(deadline: processingDeadline, now: Date(), expectedCost: context.rootReadDuration) else {
+        NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_QUERY_NOT_STARTED")
+        return false
+      }
+      return true
     }
-    let matches = snapshotElementsQuery {
-      context.queryRoot.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
-    }.elements
+    guard canStartQuery() else { return nil }
+    let queries = try elementQueries(
+      root: context.queryRoot,
+      matching: .any,
+      litDisplayID: context.litPanelSurface?.displayID
+    )
+    var matches: [XCUIElement] = []
+    for query in queries {
+      guard canStartQuery() else { return nil }
+      matches += snapshotElementsQuery {
+        query.matching(predicate).allElementsBoundByIndex
+      }.elements
+    }
     return matches.isEmpty ? [] : candidates
   }
 
@@ -429,18 +440,18 @@ extension RunnerTests {
 
   private func collapsedTabFallbackNodes(
     for containerSnapshot: XCUIElementSnapshot,
-    resolveCandidates: () -> [CollapsedTabCandidate],
+    resolveCandidates: () throws -> [CollapsedTabCandidate],
     startingIndex: Int,
     depth: Int,
     parentIndex: Int
-  ) -> [RawAXNode] {
+  ) throws -> [RawAXNode] {
     guard isCollapsedTabContainer(containerSnapshot) else { return [] }
     // Candidates are read from live elements, which XCTest reports in the app's own space, and a
     // collapsed tab container sits under the app's own window. `SnapshotGeometrySpace.normalized` keys
     // rotation on ancestry, so these nodes never enter a declared native space and need no special
     // case here; `isCollapsedTabCandidate` compares reported frames to each other.
     let containerFrame = containerSnapshot.frame
-    let candidates = resolveCandidates().compactMap { candidate in
+    let candidates = try resolveCandidates().compactMap { candidate in
       collapsedTabCandidateNode(
         candidate: candidate,
         containerSnapshot: containerSnapshot,

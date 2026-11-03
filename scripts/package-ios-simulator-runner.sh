@@ -92,6 +92,17 @@ if [ -n "$EXPECTED_RUNNER_BUNDLE_ID" ] && [ "$RUNNER_BUNDLE_ID" != "$EXPECTED_RU
 fi
 
 ditto "$RUNNER_APP_PATH" "$STAGED_APP_PATH"
+# Remote simulators cannot resolve dependencies from the build machine's Xcode paths.
+PLATFORM_PATH="$(xcrun --sdk iphonesimulator --show-sdk-platform-path)"
+INTEROP_LIBRARY="$PLATFORM_PATH/Developer/usr/lib/lib_TestingInterop.dylib"
+mkdir -p "$STAGED_APP_PATH/Frameworks"
+if [ -f "$INTEROP_LIBRARY" ]; then
+  cp "$INTEROP_LIBRARY" "$STAGED_APP_PATH/Frameworks/"
+elif [ -d "$STAGED_APP_PATH/Frameworks/Testing.framework" ] &&
+     [ ! -f "$STAGED_APP_PATH/Frameworks/lib_TestingInterop.dylib" ]; then
+  echo "Testing.framework requires lib_TestingInterop.dylib, but it was not found at $INTEROP_LIBRARY" >&2
+  exit 1
+fi
 rm -f "$ARCHIVE_PATH"
 (
   cd "$STAGE_DIR"

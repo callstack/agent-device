@@ -16,6 +16,7 @@ export type PlatformResourceCleanup = Readonly<{
     device: DeviceInfo;
     shutdownRequested: boolean;
     hasScreenRecording: boolean;
-    hasLease: boolean;
+    /** True when the lease is not kept on close, or when its close decision could not be inspected. */
+    leaseWillEnd: boolean;
   }): boolean;
 }>;

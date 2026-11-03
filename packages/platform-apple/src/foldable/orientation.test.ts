@@ -15,6 +15,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
 import { createAppleInteractor } from '../interactor.ts';
+import { readFoldablePanelTable } from './orientation.ts';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import { IPHONE_17_SINGLE_PANEL, IPHONE_DUO_CLOSED } from '../__tests__/display-fixtures.ts';
 
@@ -198,6 +199,30 @@ test('a foldable rotation that CoreDevice never reports is refused as unverified
     },
   });
   expect(sim.helpers).toHaveLength(1);
+});
+
+/** A rotation reads the panel table itself: the surface probe's retry window never holds it. */
+test('a rotation is not routed by a pending panel-table retry', async () => {
+  const device = simulator();
+  let tableFailures = 0;
+  const sim = fakeSimulator(device, DUO_DISPLAYS);
+  const failing = createLocalAppleToolProvider({
+    runCommand: async (_command, args) => {
+      if (args.slice(0, 4).join(' ') === 'devicectl device info displays') {
+        tableFailures += 1;
+        throw new AppError('COMMAND_FAILED', 'devicectl does not report displays', {
+          timeoutMs: 2_000,
+        });
+      }
+      throw new Error(`unexpected tool call: ${args.join(' ')}`);
+    },
+  });
+  await withAppleToolProvider(failing, () => readFoldablePanelTable(device, { timeoutMs: 5_000 }));
+  expect(tableFailures).toBe(1);
+
+  await expect(sim.rotate('landscape-left')).resolves.toEqual({ orientation: 'landscape-left' });
+  expect(sim.helpers).toEqual([['rotate', 'landscape-left']]);
+  expect(mockRunner).not.toHaveBeenCalled();
 });
 
 test('a stale CoreDevice sample cannot verify a rotation that did not happen', async () => {

@@ -18,6 +18,7 @@ const SNAPSHOT_PRESENTATION_RUNNER_MANIFEST = 'Package.runner.swift';
 const SNAPSHOT_PRESENTATION_DEVELOPMENT_DIR_NAMES = new Set([
   'Tests',
   'SnapshotPresentationConformance',
+  'RecordingSupport',
   '.build',
   '.swiftpm',
   'UnitTests',

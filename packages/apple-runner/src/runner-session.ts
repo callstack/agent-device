@@ -24,7 +24,6 @@ import {
   openRunnerStartAdmission,
   prepareXctestrunWithEnv,
   readmitRunnerStartAdmission,
-  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   retireAllRunnerStartAdmissions,
@@ -43,7 +42,6 @@ import {
 import { enrichRunnerStartupFailureWithDeviceStates } from './runner-error-classification.ts';
 import { isRunnerReadinessProbeCommand } from './runner-command-traits.ts';
 import {
-  buildRunnerLease,
   prepareRunnerLeaseForStartup,
   runnerOwnerToken,
   withRunnerLeaseLock,
@@ -58,7 +56,6 @@ import {
   abortRunnerSessionsAndPrepProcesses,
   cleanupOwnedIosRunnerLease,
   disposeRunnerSession,
-  isRunnerProcessAlive,
   runnerLeaseCleanupAdapter,
   RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
   stopRunnerPrepProcesses,
@@ -68,14 +65,13 @@ import {
   buildRunnerSessionId,
   canWorkWithRunnerSession,
   isRunnerMainThreadOccupied,
-  normalizeRunnerStartupTimeoutMs,
   resolveRunnerSessionLiveness,
   RunnerCommandAccounting,
   type RunnerSession,
   type RunnerSessionLiveness,
   type RunnerSessionRegistration,
 } from './runner-session-types.ts';
-import { launchRunnerProcess, type LaunchedRunnerProcess } from './runner-process-launch.ts';
+import { launchLocalRunner } from './runner-process-launch.ts';
 import { isSameRunnerSimulator } from './runner-device-set.ts';
 // The start-budget members are read through function-scoped imports: this module sits in the
 // façade closures the eager-closure budget holds at its merge-base size, and the budget module is
@@ -107,6 +103,7 @@ export async function ensureRunnerSession(
   // other start takes a token for itself. Both are taken synchronously, before the first await and
   // registered with the device, so a teardown beginning in this same turn closes it even while
   // this start queues behind the work another start holds the session lock for (#3220).
+  const launcher = options.launcher;
   const ownedAdmission = options.startAdmission;
   const startAdmission = ownedAdmission ?? openRunnerStartAdmission(device.id);
   const start = withRunnerSessionLock(device.id, async () => {
@@ -139,6 +136,31 @@ export async function ensureRunnerSession(
         }
       }
 
+      if (launcher) {
+        assertRunnerSessionMayStart(options.expectedRunnerSessionId);
+        const { launchRunnerSession, refuseFailedRunnerPublication } =
+          await import('./runner-launched-session.ts');
+        const session = await launchRunnerSession(
+          device,
+          launcher,
+          options,
+          budget,
+          startAdmission.signal,
+        );
+        try {
+          if (budget.phase.signal?.aborted) {
+            await disposeRunnerSession(session, { graceful: false });
+            budget.phase.signal.throwIfAborted();
+          }
+          await refuseRetiredRunnerPublication(device, session, startAdmission);
+          await refuseFailedRunnerPublication(session);
+        } catch (error) {
+          if (session.state !== 'stopped') runnerSessions().set(device.id, session);
+          throw error;
+        }
+        runnerSessions().set(device.id, session);
+        return session;
+      }
       return await withRunnerLeaseLock(
         device.id,
         async () => await startRunnerSessionWithLease(device, options, budget, startAdmission),
@@ -211,7 +233,10 @@ async function startRunnerSessionWithLease(
   });
   await measureRunnerStartupStep(startupTimings, 'ensure_booted', async () => {
     assertRunnerStartAdmitsPreparation(device.id, startAdmission);
-    await ensureBootedIfNeeded(device);
+    await ensureBootedIfNeeded(
+      device,
+      AbortSignal.any([startAdmission.signal, ...(signal ? [signal] : [])]),
+    );
   });
   // Device first, host second: both answers can be wrong at once, and the phone's own state is the
   // one the caller can act on without admin rights. Probing the host first would publish only the
@@ -254,7 +279,7 @@ async function startRunnerSessionWithLease(
   let xctestrunPath: string;
   let jsonPath: string;
   const runnerLogPath = resolveRunnerLaunchLogPath(options.logPath, device.id);
-  let runnerProcess: LaunchedRunnerProcess;
+  let runnerProcess: Awaited<ReturnType<typeof launchLocalRunner>>;
   // One catch for everything between here and a runner that answers, because the device's own answer
   // belongs on all of it (#2690 review): a cold build, a warm derived cache that fails at install, and
   // an external xctestrun that never launches are different steps, and a caller told "developer disk
@@ -267,7 +292,10 @@ async function startRunnerSessionWithLease(
         await ensureXctestrunArtifact(device, {
           ...options,
           startAdmission,
-          budget: createRunnerPhaseBudget(resolveRunnerBuildTimeoutMs(options, budget), signal),
+          budget: createRunnerPhaseBudget(
+            (await import('./runner-start-budget.ts')).resolveRunnerBuildTimeoutMs(options, budget),
+            signal,
+          ),
         }),
     );
     startupTimings[BUILD_XCTESTRUN_TIMING] = xctestrunArtifact.buildMs;
@@ -306,7 +334,11 @@ async function startRunnerSessionWithLease(
         // it; otherwise a queued build line reads as the runner's own failure output (#2681).
         await flushRunnerLogAppends(runnerLogPath).catch(() => {});
         assertRunnerStartAdmitsPreparation(device.id, startAdmission);
-        return await launchRunnerProcess({
+        return await launchLocalRunner({
+          sessionId: buildRunnerSessionId(device.id, endpoint.port),
+          endpoint,
+          jsonPath,
+          cacheKey: xctestrunArtifact.cacheKey,
           device,
           xctestrunPath,
           derivedPath: xctestrunArtifact.derived,
@@ -320,38 +352,24 @@ async function startRunnerSessionWithLease(
   } catch (error) {
     throw enrichRunnerStartupFailureWithDeviceStates(error, deviceStates);
   }
-  const sessionId = buildRunnerSessionId(device.id, endpoint.port);
-  const lease = buildRunnerLease({
-    device,
-    sessionId,
-    runnerPid: runnerProcess.child.pid,
-    endpoint,
-    xctestrunPath,
-    cacheKey: xctestrunArtifact.cacheKey,
-    jsonPath,
-    runnerLogPath,
-  });
+  const { lease, sessionId } = runnerProcess.launch.local;
   const session: RunnerSession = {
     sessionId,
     device,
     deviceId: device.id,
     endpoint,
-    xctestrunPath,
     xctestrunArtifact,
-    jsonPath,
     runnerLogPath,
-    testPromise: runnerProcess.wait,
-    child: runnerProcess.child,
-    endOutputObservation: runnerProcess.endOutputObservation,
-    readLogTail: runnerProcess.readLogTail,
+    launch: runnerProcess.launch,
     state: 'starting',
     commandCharges: new RunnerCommandAccounting(),
     startupRetryWake: runnerProcess.startupRetryWake,
-    launchDeadline: Deadline.fromTimeoutMs(resolveRunnerLaunchReadinessMs(budget)),
+    launchDeadline: Deadline.fromTimeoutMs(
+      (await import('./runner-start-budget.ts')).resolveRunnerLaunchReadinessMs(budget),
+    ),
     startupTimings,
     startupDeviceStates: deviceStates,
     logicalLeaseContext,
-    lease,
     speculative: options.speculative === true,
   };
   if (signal?.aborted) {
@@ -401,10 +419,10 @@ async function refuseRetiredRunnerPublication(
 }
 
 export function assertExpectedRunnerSession(
-  session: Pick<RunnerSession, 'sessionId'>,
+  session: Pick<RunnerSession, 'sessionId'> | undefined,
   expectedRunnerSessionId: string | undefined,
 ): void {
-  if (expectedRunnerSessionId !== undefined && session.sessionId !== expectedRunnerSessionId) {
+  if (expectedRunnerSessionId !== undefined && session?.sessionId !== expectedRunnerSessionId) {
     throw runnerSessionOwnershipChanged();
   }
 }
@@ -426,6 +444,10 @@ async function isRunnerSessionServing(
   device: DeviceInfo,
   existing: RunnerSession,
 ): Promise<boolean> {
+  if (existing.state === 'draining') {
+    await stopRunnerSessionInternal(device.id, existing, { graceful: false });
+    return false;
+  }
   const liveness = readRunnerSessionLivenessFor(existing);
   if (liveness === 'gone') {
     await measureRunnerStartupStep({}, 'stop_stale_session', async () => {
@@ -472,7 +494,7 @@ async function resolveReusableRunnerSession(
   if (!(await isRunnerSessionServing(device, existing))) return null;
 
   const existingArtifact = existing.xctestrunArtifact;
-  if (existingArtifact?.cache === 'external') {
+  if (!existing.launch.local || existingArtifact?.cache === 'external') {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_session_reuse',
@@ -480,7 +502,7 @@ async function resolveReusableRunnerSession(
         deviceId: device.id,
         sessionId: existing.sessionId,
         ready: existing.state === 'ready',
-        cache: existingArtifact.cache,
+        cache: existingArtifact?.cache,
         logicalLeaseContext: existing.logicalLeaseContext,
       },
     });
@@ -578,7 +600,7 @@ export function readRunnerSessionLiveness(deviceId: string): RunnerSessionRegist
 function readRunnerSessionLivenessFor(session: RunnerSession): RunnerSessionLiveness {
   return resolveRunnerSessionLiveness({
     state: session.state,
-    processRunning: isRunnerProcessAlive(session.child.pid),
+    processRunning: session.launch.isRunning(),
   });
 }
 
@@ -614,10 +636,8 @@ async function stopRunnerSessionInternal(
 ): Promise<void> {
   const session = sessionOverride ?? runnerSessions().get(deviceId);
   if (!session) return;
-  // Once disposal has begun or finished, this session has no runner to wait on; a repeat stop
-  // would only re-signal a process that is already leaving and re-emit a teardown for a reason
-  // that has nothing left to tear down.
-  if (!canWorkWithRunnerSession(session)) return;
+  // A failed managed termination still owns its endpoint and must be retried before replacement.
+  if (!canWorkWithRunnerSession(session) && session.state !== 'draining') return;
   await disposeRunnerSession(session, options);
   if (runnerSessions().get(deviceId) === session) {
     runnerSessions().delete(deviceId);
@@ -645,7 +665,10 @@ async function stopRetainedRunner(
 }
 
 /** The first command that is not a readiness probe makes the session the caller's, not a guess. */
-export function markRunnerSessionServed(session: RunnerSession, command: RunnerCommand): void {
+export function markRunnerSessionServed(
+  session: Pick<RunnerSession, 'speculative'>,
+  command: RunnerCommand,
+): void {
   if (session.speculative && !isRunnerReadinessProbeCommand(command)) {
     session.speculative = false;
   }
@@ -671,48 +694,63 @@ export async function releaseSpeculativeIosRunnerSession(deviceId: string): Prom
         ready: session.state === 'ready',
       },
     });
-    await stopIosRunnerSession(deviceId);
+    await stopRunnerSession(deviceId);
     return true;
   });
 }
 
 export async function stopIosRunnerSession(deviceId: string): Promise<void> {
-  await stopIosRunnerSessionDevice(deviceId);
+  await stopRunnerSession(deviceId, () =>
+    withRunnerLeaseLock(deviceId, () => cleanupOwnedIosRunnerLease(deviceId)),
+  );
 }
 
-/**
- * Stops the device's runner under the session lock. `fenceSettle`, when given, is called as the
- * last step INSIDE that lock, so a start queued behind this stop wakes to a device whose teardown
- * has fully settled and runs on rather than reading the still-pending fence as its own refusal.
- */
-async function stopIosRunnerSessionDevice(
+export async function stopRunnerSession(
   deviceId: string,
-  fenceSettle?: () => void,
+  cleanupOrphan?: () => Promise<void>,
+): Promise<void> {
+  const settle = fenceRunnerStartAdmissionsForTeardown(deviceId);
+  await stopRunnerSessionDevice(deviceId, settle, cleanupOrphan);
+}
+
+async function stopRunnerSessionDevice(
+  deviceId: string,
+  fenceSettle: () => void,
+  cleanupOrphan?: () => Promise<void>,
 ): Promise<void> {
   try {
     await withRunnerSessionLock(deviceId, async () => {
-      await withRunnerLeaseLock(deviceId, async () => {
-        const session = runnerSessions().get(deviceId);
-        await stopRunnerSessionInternal(deviceId, session, {
-          leaseLockHeld: true,
-          graceful:
-            session?.state === 'ready' &&
-            !isRunnerMainThreadOccupied(session) &&
-            !session.listenerWatch?.lost,
-        });
-        await cleanupOwnedIosRunnerLease(deviceId);
+      const session = runnerSessions().get(deviceId);
+      await stopRunnerSessionInternal(deviceId, session, {
+        graceful:
+          session?.state === 'ready' &&
+          !isRunnerMainThreadOccupied(session) &&
+          !session.listenerWatch?.lost,
       });
-      fenceSettle?.();
+      await cleanupOrphan?.();
+      fenceSettle();
     });
   } finally {
-    fenceSettle?.();
+    fenceSettle();
   }
 }
 
-/** Retires startup recovery at close; only a serving, observed generation can remain idle. */
 export async function releaseIosRunnerOnClose(
   deviceId: string,
   options: { retain: boolean },
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
+  await releaseRunnerOnClose(deviceId, options, env, () =>
+    withRunnerLeaseLock(deviceId, () => cleanupOwnedIosRunnerLease(deviceId)),
+  );
+}
+
+/** Retires startup recovery at close; only a serving, observed generation can remain idle. */
+export async function releaseRunnerOnClose(
+  deviceId: string,
+  options: { retain: boolean },
+  env?: NodeJS.ProcessEnv,
+  cleanupOrphan?: () => Promise<void>,
 ): Promise<void> {
   const candidate = runnerSessions().get(deviceId);
   const busyAtClose = isRunnerMainThreadOccupied(candidate);
@@ -724,8 +762,10 @@ export async function releaseIosRunnerOnClose(
         if (!session) return false;
         const { retainRunnerSession } = await import('./runner-retention.ts');
         if (
-          await retainRunnerSession(session, (retention, reason) =>
-            stopRetainedRunner(session, retention, reason),
+          await retainRunnerSession(
+            session,
+            (retention, reason) => stopRetainedRunner(session, retention, reason),
+            env,
           )
         ) {
           settleFence();
@@ -749,7 +789,7 @@ export async function releaseIosRunnerOnClose(
       });
     }
     await stopRunnerPrepProcesses(deviceId);
-    await stopIosRunnerSessionDevice(deviceId, settleFence);
+    await stopRunnerSessionDevice(deviceId, settleFence, cleanupOrphan);
   } finally {
     settleFence();
   }
@@ -764,12 +804,23 @@ export async function abortAllIosRunnerSessions(): Promise<void> {
     activeSessions.map((session) => session.deviceId),
   );
   try {
-    await abortRunnerSessionsAndPrepProcesses(activeSessions);
-    for (const session of activeSessions) {
-      if (runnerSessions().get(session.deviceId) === session) {
+    const failures: unknown[] = [];
+    await abortRunnerSessionsAndPrepProcesses(activeSessions).catch((error: unknown) => {
+      failures.push(error);
+    });
+    await Promise.allSettled(runnerSessionLocks().values());
+    const unpublished = [...runnerSessions().values()].filter(
+      (session) => !activeSessions.includes(session),
+    );
+    await abortRunnerSessionsAndPrepProcesses(unpublished).catch((error: unknown) => {
+      failures.push(error);
+    });
+    for (const session of [...activeSessions, ...unpublished]) {
+      if (session.state === 'stopped' && runnerSessions().get(session.deviceId) === session) {
         runnerSessions().delete(session.deviceId);
       }
     }
+    if (failures.length) throw new AggregateError(failures, 'Runner shutdown failed');
   } finally {
     // The abort settles even on its error path, so no device stays fenced past this teardown.
     settleFences();
@@ -793,21 +844,30 @@ export async function stopAllIosRunnerSessions(): Promise<string[]> {
   // instead of answering the final prep sweep with another build (#3220).
   const settleFences = retireAllRunnerStartAdmissions(runnerSessions().keys());
   try {
-    await abortAllIosRunnerSessions();
+    const failures: unknown[] = [];
+    await abortAllIosRunnerSessions().catch((error: unknown) => {
+      failures.push(error);
+    });
     const pending = Array.from(runnerSessions().keys());
-    await Promise.allSettled(
+    const stopped = await Promise.allSettled(
       pending.map(async (deviceId) => {
-        await stopIosRunnerSession(deviceId);
+        await stopRunnerSession(deviceId);
       }),
     );
-    await stopRunnerPrepProcesses();
+    failures.push(
+      ...stopped.filter((result) => result.status === 'rejected').map((result) => result.reason),
+    );
+    await stopRunnerPrepProcesses().catch((error: unknown) => {
+      failures.push(error);
+    });
+    if (failures.length) throw new AggregateError(failures, 'Runner shutdown failed');
     return owned;
   } finally {
     settleFences();
   }
 }
 
-function ensureBootedIfNeeded(device: DeviceInfo): Promise<void> {
+function ensureBootedIfNeeded(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
   if (device.kind !== 'simulator') {
     return Promise.resolve();
   }
@@ -819,12 +879,13 @@ function ensureBootedIfNeeded(device: DeviceInfo): Promise<void> {
     });
     return Promise.resolve();
   }
-  return ensureBooted(device);
+  return ensureBooted(device, signal);
 }
 
-async function ensureBooted(device: DeviceInfo): Promise<void> {
+async function ensureBooted(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
   await runXcrun(buildSimctlArgsForDevice(device, ['bootstatus', device.id, '-b']), {
     timeoutMs: RUNNER_STARTUP_TIMEOUT_MS,
+    signal,
   });
 }
 
@@ -871,34 +932,6 @@ export async function executeRunnerCommandWithSession(
     });
   }
   return data;
-}
-
-/**
- * What the xctestrun build may spend: the rest of the start budget, which an explicit
- * `buildTimeoutMs` can only shorten. The build is the one step with no ceiling of its own, so a
- * start with no caller left is still ended by the clock it opened (#2894). Throws when the start
- * has nothing left, so a spent budget fails before xcodebuild is spawned.
- */
-function resolveRunnerBuildTimeoutMs(
-  options: RunnerSessionOptions,
-  budget: RunnerStartBudget,
-): number {
-  const remainingMs =
-    requireRunnerPhaseRemainingMs(budget.phase, 'runner_xctestrun_build') ?? budget.timeoutMs;
-  const explicitMs = normalizeRunnerStartupTimeoutMs(options.buildTimeoutMs);
-  return explicitMs === undefined ? remainingMs : Math.min(explicitMs, remainingMs);
-}
-
-/**
- * What the launched runner has to answer its first command, measured from launch. An explicit
- * `startupTimeoutMs` bounds the whole start, readiness included, so readiness gets what is left of
- * it. A defaulted start keeps the runner's own readiness window ({@link RUNNER_STARTUP_TIMEOUT_MS}):
- * the default budget is sized for a cold build, and a runner that never answers must not be joined
- * for the rest of it. Neither exceeds what the start budget has left.
- */
-function resolveRunnerLaunchReadinessMs(budget: RunnerStartBudget): number {
-  const remainingMs = Math.floor(budget.phase.deadline?.remainingMs() ?? budget.timeoutMs);
-  return budget.explicit ? remainingMs : Math.min(RUNNER_STARTUP_TIMEOUT_MS, remainingMs);
 }
 
 async function measureRunnerStartupStep<T>(

@@ -298,7 +298,7 @@ extension RunnerTests {
       "x": frame.midX, "y": frame.midY, "appBundleId": "com.callstack.agentdevice.runner",
     ]))
     let failures = currentXCTestFailureCount()
-    let response = executeTypeCommand(activeApp: app, command: command)
+    let response = try executeTypeCommand(activeApp: app, command: command)
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
@@ -338,7 +338,7 @@ extension RunnerTests {
       "x": frame.midX, "y": frame.midY, "appBundleId": "com.callstack.agentdevice.runner",
     ]))
     let failures = currentXCTestFailureCount()
-    let response = executeTypeCommand(activeApp: app, command: command)
+    let response = try executeTypeCommand(activeApp: app, command: command)
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertEqual(response.data?.message, "typed")
@@ -435,7 +435,7 @@ extension RunnerTests {
     )
 
     let failuresBeforeType = currentXCTestFailureCount()
-    let response = executeTypeCommand(activeApp: app, command: command)
+    let response = try executeTypeCommand(activeApp: app, command: command)
 
     XCTAssertFalse(didRecordXCTestFailure(since: failuresBeforeType))
     XCTAssertTrue(response.ok, String(describing: response.error))

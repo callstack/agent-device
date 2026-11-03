@@ -29,7 +29,33 @@ typedef NS_ENUM(NSUInteger, RunnerApplicationScreenFailure) {
   RunnerApplicationScreenFailureUnresolvedWindow,
   // A resolved window whose screen or display identity the XCTest runtime would not answer.
   RunnerApplicationScreenFailureUnresolvedScreen,
+  // The application has windows, and every one of them is on a display other than the lit panel.
+  RunnerApplicationScreenFailureOffLitPanel,
 };
+
+// The lit panel (ADR 0025): its display and native box in points, sides swapped on a turned window.
+typedef struct {
+  NSUInteger displayID;
+  CGFloat widthPt;
+  CGFloat heightPt;
+} RunnerLitPanel;
+
+// The booking walk (`RunnerResolveLitPanelWindow`) reads at most this many windows: a vanished
+// window's read records an XCTest issue (#2995), and SpringBoard lists about forty.
+#define AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS 8
+
+// Resolves the window on `litPanel`: the first window on that display whose frame is the panel's
+// box either way up, else the largest window on that display. An unreadable list, an unplaced
+// window, or a list past the cap with no full-panel window in it, is `UnresolvedScreen`. Windows
+// that are all on another display are `OffLitPanel`; no window at all is `UnresolvedWindow`. The
+// screen is the one the chosen window reports.
+FOUNDATION_EXPORT RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
+  id application,
+  RunnerLitPanel litPanel,
+  id _Nullable *window,
+  CGRect *windowFrame,
+  id _Nullable *screen
+);
 
 // Resolves the shared core against the live XCTest runtime. Returns nil on success, or a
 // "private XCTest <surface> synthesis unavailable: ..." message when a class or selector the
@@ -52,6 +78,11 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
   RunnerApplicationScreenFailure *failure
 );
 
+// Every application window that reports `litPanel`'s display, in list order, uncapped so element
+// search sees all of them; the caller holds the walk's XCTest issues. A window that is gone or names
+// no display is left out. Nil when the window list itself cannot be read.
+FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, NSUInteger litDisplayID);
+
 // Reads the display ID off an already-resolved window, keeping a synthesized record's display and
 // the caller's booked reference frame on the same window. The frame is still read before the
 // screen; a window that answers empty or raises fails closed with a refusal message naming the
@@ -70,6 +101,13 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
   id _Nullable *screen,
   NSUInteger *displayID
 );
+
+// The sole XCTest display's pixel bounds divided by its scale, in points. Neither the runner's
+// compatibility-mode `UIScreen` nor the system application's possibly empty AX frame supplies
+// this measurement. Any failed read or a screen count other than one answers `CGSizeZero`.
+#if TARGET_OS_IOS
+FOUNDATION_EXPORT CGSize RunnerSoleScreenSize(void);
+#endif
 
 // What the full-screen proof concluded. The decision is a function of these values, so a test
 // supplies them directly instead of restating the device rule.

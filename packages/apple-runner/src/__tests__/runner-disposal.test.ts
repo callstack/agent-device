@@ -3,7 +3,10 @@ import { IOS_SIMULATOR, MACOS_DEVICE, TVOS_SIMULATOR } from './device-fixtures.t
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import { makeRunnerLease } from './runner-session-fixtures.ts';
+import {
+  makeRunnerLease,
+  makeRunnerSession as makeLocalRunnerSession,
+} from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const { mockCleanupTempFile } = vi.hoisted(() => ({
@@ -75,8 +78,8 @@ test('macOS runner abort waits for XCTest teardown after SIGINT', async () => {
   await abort;
 
   expect(runnerSignals(session)).toEqual(['SIGINT']);
-  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.xctestrunPath);
-  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.jsonPath);
+  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.launch.local!.xctestrunPath);
+  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.launch.local!.jsonPath);
 });
 
 test('macOS runner abort stages TERM after the interrupt grace period', async () => {
@@ -168,7 +171,7 @@ test('simulator disposal skips container-app termination after a foreign takeove
   await disposeRunnerSession(session, { graceful: false, waitTimeoutMs: 1 });
 
   expect(simulatorTerminateCalls()).toEqual([]);
-  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.xctestrunPath);
+  expect(mockCleanupTempFile).toHaveBeenCalledWith(session.launch.local!.xctestrunPath);
 });
 
 test('disposal serializes behind a successor reclaim window and never terminates its runner', async () => {
@@ -256,9 +259,9 @@ function simulatorTerminateCalls(): unknown[] {
 function makeRunnerSession(
   device: RunnerSession['device'],
   testPromise: Promise<ExecResult>,
-  overrides: Partial<RunnerSession> = {},
+  overrides: Parameters<typeof makeLocalRunnerSession>[0] = {},
 ): RunnerSession {
-  return {
+  return makeLocalRunnerSession({
     sessionId: `${device.id}:8123:test`,
     device,
     deviceId: device.id,
@@ -270,12 +273,12 @@ function makeRunnerSession(
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
     ...overrides,
-  };
+  });
 }
 
 function runnerSignals(session: RunnerSession): NodeJS.Signals[] {
   return mockSignalProcessGroupBestEffort.mock.calls
-    .filter(([pid]) => pid === session.child.pid)
+    .filter(([pid]) => pid === session.launch.local!.child?.pid)
     .map(([, signal]) => signal as NodeJS.Signals);
 }
 

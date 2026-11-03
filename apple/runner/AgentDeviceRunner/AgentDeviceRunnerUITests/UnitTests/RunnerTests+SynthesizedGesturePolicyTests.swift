@@ -89,23 +89,23 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testCoordinateTapThatWasNotDispatchedDoesNotFallBackToXCTest() {
+  func testCoordinateTapThatWasNotDispatchedDoesNotFallBackToXCTest() throws {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       mainOwned.accessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
-        let attempt = performSynthesizedGesture(app, kind: .coordinateTap, context: context) { nil }
+        let attempt = try performSynthesizedGesture(app, kind: .coordinateTap, context: context) { nil }
         XCTAssertEqual(synthesizedGestureRoute(attempt), "refused", "axHealth=\(health.rawValue)")
       }
     }
   }
 
   @MainActor
-  func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() {
+  func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() throws {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       mainOwned.accessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
         let label = "axHealth=\(health.rawValue) context=\(context == nil ? "unresolved" : "resolved")"
-        let attempt = performSynthesizedGesture(
+        let attempt = try performSynthesizedGesture(
           app,
           kind: .coordinateTap,
           context: context,
@@ -117,7 +117,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSynthesizedGestureFallbackFollowsItsKindAndTheResolvedAccessibilityHealth() {
+  func testSynthesizedGestureFallbackFollowsItsKindAndTheResolvedAccessibilityHealth() throws {
     mainOwned.accessibilityHealth = .healthy
     let unavailable = synthesizedGestureTestContext(accessibilityHealth: .unavailable)
     let unknown = synthesizedGestureTestContext(accessibilityHealth: .unknown)
@@ -130,7 +130,7 @@ extension RunnerTests {
       (.coordinateLongPress, unknown, "xctestFallback"),
     ]
     for (kind, context, expected) in cases {
-      let attempt = performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)
+      let attempt = try performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)
       XCTAssertEqual(synthesizedGestureRoute(attempt), expected, "kind=\(kind.rawValue)")
       switch attempt {
       case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
@@ -139,7 +139,7 @@ extension RunnerTests {
       case .performed:
         break
       }
-      let performed = performSynthesizedGesture(app, kind: kind, context: context) { .performed }
+      let performed = try performSynthesizedGesture(app, kind: kind, context: context) { .performed }
       XCTAssertEqual(synthesizedGestureRoute(performed), "performed", "kind=\(kind.rawValue)")
     }
   }

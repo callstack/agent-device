@@ -26,7 +26,136 @@ private final class RunnerCoordinatePressCounter: NSObject {
   }
 }
 
+/// Answers like the runner process's `UIScreen` in iPad compatibility mode, which the generated runner
+/// app (no launch screen) can run in: 768x1024 whatever the device (#4091). It replaces the getters a
+/// runner-process screen read takes: `bounds`, and `nativeBounds` over `nativeScale`.
+private final class RunnerCompatibilityModeScreenStub: NSObject {
+  @objc var bounds: CGRect { CGRect(x: 0, y: 0, width: 768, height: 1024) }
+  @objc var nativeBounds: CGRect { CGRect(x: 0, y: 0, width: 1536, height: 2048) }
+  @objc var nativeScale: CGFloat { 2 }
+}
+
+/// Physical iOS can expose no usable accessibility frame for the system application.
+private final class RunnerUnreadableSystemApplicationStub: NSObject {
+  @objc class func systemApplication() -> AnyObject? { nil }
+}
+
 extension RunnerTests {
+  /// Installs `RunnerUnreadableSystemApplicationStub` on AXRuntime's `AXElement` until the returned
+  /// closure restores it.
+  private func simulateUnreadableSystemApplication() throws -> () -> Void {
+    _ = dlopen("/System/Library/PrivateFrameworks/AXRuntime.framework/AXRuntime", RTLD_NOW)
+    let element: AnyClass = try XCTUnwrap(NSClassFromString("AXElement"))
+    let selector = NSSelectorFromString("systemApplication")
+    let target = try XCTUnwrap(class_getClassMethod(element, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(RunnerUnreadableSystemApplicationStub.self, selector))
+    let original = method_setImplementation(target, method_getImplementation(stub))
+    return { method_setImplementation(target, original) }
+  }
+
+  private func simulateUnreadableDisplay() throws -> () -> Void {
+    let selector = #selector(NSObject.value(forKey:))
+    let inherited = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    class_addMethod(XCUIScreen.self, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited))
+    let target = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    let original = method_getImplementation(target)
+    typealias ReadValue = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
+    let readValue = unsafeBitCast(original, to: ReadValue.self)
+    let read: @convention(block) (AnyObject, NSString) -> AnyObject? = { screen, key in
+      if key == "scale" { return NSNumber(value: 0) }
+      return readValue(screen, selector, key)
+    }
+    let replacement = imp_implementationWithBlock(read)
+    method_setImplementation(target, replacement)
+    return {
+      method_setImplementation(target, original)
+      imp_removeBlock(replacement)
+    }
+  }
+
+  /// Sets the requested orientation and waits for the host app's interface to follow.
+  @MainActor
+  private func rotateHostApp(landscape: Bool) throws -> () -> Void {
+    XCUIDevice.shared.orientation = landscape ? .landscapeLeft : .portrait
+    let restore = { XCUIDevice.shared.orientation = .portrait }
+    let expected = landscape
+      ? [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight]
+      : [RunnerInterfaceOrientation.portrait]
+    let deadline = Date().addingTimeInterval(5)
+    while !expected.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))),
+      Date() < deadline
+    {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+    let turned = expected.contains(Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)))
+    if !turned { restore() }
+    _ = try XCTUnwrap(turned ? true : nil, "the host app did not follow the requested orientation")
+    return restore
+  }
+
+  /// The state the unreadable-display tap tests start from: the host app launched (turned to landscape when
+  /// asked), a tap context on its resolved window (measured at `windowFrame` when given) or, when
+  /// the window query is rejected, an unserializable tree and no context, and XCTest's display
+  /// read failing with no kept size. The returned cleanup undoes every step.
+  @MainActor
+  private func launchWithUnreadableDisplay(
+    landscape: Bool,
+    windowFrame: CGRect? = nil,
+    windowQueryRejected: Bool = false
+  ) throws -> (context: SynthesizedCoordinateContext?, cleanup: () -> Void) {
+    var cleanups: [() -> Void] = []
+    let cleanup = { for step in cleanups.reversed() { step() } }
+    do {
+      app.launch()
+      mainOwned.app = app
+      cleanups.append {
+        self.invalidateCachedTarget(reason: "unit_test_cleanup")
+        self.app.terminate()
+      }
+      cleanups.append(try rotateHostApp(landscape: landscape))
+      var context: SynthesizedCoordinateContext?
+      if !windowQueryRejected {
+        let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
+        context = try XCTUnwrap(
+          SynthesizedCoordinateContext(
+            validating: windowFrame ?? resolved.frame,
+            resolvedWindow: resolved.window,
+            accessibilityHealth: .healthy
+          )
+        )
+      }
+      cleanups.append(try simulateUnreadableDisplay())
+      if windowQueryRejected { cleanups.append(try simulateUnserializableAppTree()) }
+      // An earlier gesture may have kept a successful read; this one must reach XCTest.
+      mainOwned.soleDisplayPortraitSize = nil
+      return (context, cleanup)
+    } catch {
+      cleanup()
+      throw error
+    }
+  }
+
+  /// Installs `RunnerCompatibilityModeScreenStub` until the returned closure restores UIKit.
+  private func simulateCompatibilityModeScreen() throws -> () -> Void {
+    let getters = [
+      #selector(getter: UIScreen.bounds),
+      #selector(getter: UIScreen.nativeBounds),
+      #selector(getter: UIScreen.nativeScale),
+    ]
+    let resolved = try getters.map { getter in
+      (
+        try XCTUnwrap(class_getInstanceMethod(UIScreen.self, getter)),
+        try XCTUnwrap(class_getInstanceMethod(RunnerCompatibilityModeScreenStub.self, getter))
+      )
+    }
+    let originals = resolved.map { target, stub in
+      (target, method_setImplementation(target, method_getImplementation(stub)))
+    }
+    return {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+    }
+  }
+
   /// Installs `RunnerUnserializableTreeStub` until the returned closure restores XCTest.
   private func simulateUnserializableAppTree() throws -> () -> Void {
     let swaps: [(Method?, Method?)] = [
@@ -104,6 +233,7 @@ extension RunnerTests {
   func testGestureViewportOnAnUnserializableTreeIsTheSoleScreen() throws {
     app.launch()
     mainOwned.app = app
+    let appFrame = app.frame
     let restoreXCTest = try simulateUnserializableAppTree()
     defer {
       restoreXCTest()
@@ -118,11 +248,10 @@ extension RunnerTests {
 
     if soleScreenRouteIsOpen(for: app) {
       XCTAssertTrue(response.ok, String(describing: response.error))
-      let screen = UIScreen.main.bounds
       XCTAssertEqual(response.data?.x, 0)
       XCTAssertEqual(response.data?.y, 0)
-      XCTAssertEqual(response.data?.x2, Double(screen.width))
-      XCTAssertEqual(response.data?.y2, Double(screen.height))
+      XCTAssertEqual(try XCTUnwrap(response.data?.x2), Double(appFrame.width), accuracy: 0.5)
+      XCTAssertEqual(try XCTUnwrap(response.data?.y2), Double(appFrame.height), accuracy: 0.5)
     } else {
       XCTAssertFalse(response.ok)
       XCTAssertEqual(response.error?.message, "Active app interaction viewport is unavailable")
@@ -137,13 +266,13 @@ extension RunnerTests {
     let portrait = CGSize(width: 402, height: 874)
     for orientation in [RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown] {
       XCTAssertEqual(
-        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        Self.soleScreenReferenceFrame(portraitSize: portrait, interfaceOrientation: orientation),
         CGRect(x: 0, y: 0, width: 402, height: 874)
       )
     }
     for orientation in [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight] {
       XCTAssertEqual(
-        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        Self.soleScreenReferenceFrame(portraitSize: portrait, interfaceOrientation: orientation),
         CGRect(x: 0, y: 0, width: 874, height: 402)
       )
     }
@@ -180,32 +309,217 @@ extension RunnerTests {
     XCTAssertEqual(displayID, 0)
   }
 
+  /// Physical iOS can report no system application's AX frame while its display is measurable.
+  @MainActor
+  func testSoleDisplaySizeDoesNotRequireASystemApplicationAccessibilityFrame() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "the rotation basis requires one display")
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the host app must fill the display")
+    let frame = app.frame
+    let restoreUIKit = try simulateCompatibilityModeScreen()
+    defer { restoreUIKit() }
+    let restoreAXRuntime = try simulateUnreadableSystemApplication()
+    defer { restoreAXRuntime() }
+    mainOwned.soleDisplayPortraitSize = nil
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let measured = try XCTUnwrap(synthesizedRotationFrame(
+      app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    ))
+    XCTAssertEqual(measured.origin, .zero)
+    XCTAssertEqual(measured.width, max(frame.width, frame.height), accuracy: 0.5)
+    XCTAssertEqual(measured.height, min(frame.width, frame.height), accuracy: 0.5)
+  }
+
   /// #3899: a synthesized turn swaps the display's side lengths, never a placed window's smaller box.
+  /// #4091: the display is the one the launched host app fills, not the runner process's own
+  /// `UIScreen`, which the generated runner app (no launch screen) reads in compatibility mode.
+  @MainActor
   func testSynthesizedRotationFrameIsTheDisplayNotAPlacedWindow() throws {
     try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    try XCTSkipUnless(soleScreenRouteIsOpen(for: app), "the host app's frame is the display only while it fills it")
+    let appFrame = app.frame
+    let restoreUIKit = try simulateCompatibilityModeScreen()
+    defer { restoreUIKit() }
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let screen = UIScreen.main.fixedCoordinateSpace.bounds.size
+    let screen = CGSize(
+      width: min(appFrame.width, appFrame.height),
+      height: max(appFrame.width, appFrame.height)
+    )
+    XCTAssertNotEqual(screen, CGSize(width: 768, height: 1024), "the host app must not fill a 768x1024 screen")
+    // Portrait and an unknown orientation skip the read; landscape and upside-down read the box.
+    let expectations = [
+      (RunnerInterfaceOrientation.portraitUpsideDown, screen),
+      (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
+    ]
+    for (orientation, expected) in expectations {
+      let frame = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: orientation))
+      XCTAssertEqual(frame.origin, .zero)
+      XCTAssertEqual(frame.width, expected.width, accuracy: 0.5)
+      XCTAssertEqual(frame.height, expected.height, accuracy: 0.5)
+    }
+  }
+
+  /// A command keeps its first successful display size and later gestures take it even while the
+  /// display read would fail. The next command reads again, because
+  /// display scaling can change the size, and a failed read is not kept.
+  @MainActor
+  func testSoleDisplaySizeIsReadOncePerCommandAndAFailedReadIsNotKept() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let landscape = RunnerInterfaceOrientation.landscapeRight
+    mainOwned.soleDisplayPortraitSize = nil
+    let measured = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape))
+    XCTAssertNotEqual(measured, placedWindow)
+
+    let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
+    // Nothing between the install and the restore throws, so the restore always runs.
+    let restoreDisplay = try simulateUnreadableDisplay()
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
+    _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
+    XCTAssertNotEqual(
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape),
+      measured,
+      "the next command must read the size again rather than reuse the kept one"
+    )
+    restoreDisplay()
+    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
+  }
+
+  /// #4091: a portrait turn leaves the point as it is, so an unreadable display box neither refuses
+  /// it nor is read for it: the tap is dispatched even through a placed window on either family.
+  @MainActor
+  func testPortraitTapDispatchesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: false, windowFrame: placedWindow)
+    defer { cleanup() }
     XCTAssertEqual(
-      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
-      CGRect(origin: .zero, size: screen)
+      Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)),
+      RunnerInterfaceOrientation.portrait
+    )
+
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .performed? = outcome else {
+      return XCTFail("expected a portrait tap to be dispatched, got \(String(describing: outcome))")
+    }
+  }
+
+  /// #4091: with the window query rejected (a tree XCTest cannot serialize) and the display
+  /// unreadable there is no box at all. A portrait turn leaves the point as it is, so an admitted sole
+  /// screen still takes the tap as given.
+  @MainActor
+  func testWindowlessPortraitTapDispatchesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: false, windowQueryRejected: true)
+    defer { cleanup() }
+    try XCTSkipUnless(
+      soleScreenRouteIsOpen(for: app),
+      "the sole-screen rule must admit the app; the landscape test covers refusal"
     )
     XCTAssertEqual(
-      synthesizedRotationFrame(fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight),
-      CGRect(x: 0, y: 0, width: screen.height, height: screen.width)
+      Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)),
+      RunnerInterfaceOrientation.portrait
     )
+
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40)
+    guard case .performed? = outcome else {
+      return XCTFail("expected a window-less portrait tap to be dispatched, got \(String(describing: outcome))")
+    }
+  }
+
+  /// #4091: a landscape turn needs the box, and with the window query rejected no window can stand in
+  /// for an unreadable display, so the tap refuses before it dispatches instead of falling back to the
+  /// runner's own `UIScreen`.
+  @MainActor
+  func testWindowlessLandscapeTapRefusesWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (_, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowQueryRejected: true)
+    defer { cleanup() }
+
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40)
+    guard case .unsupported(let message, _)? = outcome else {
+      return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
+    }
+    XCTAssertEqual(message, "synthesized coordinate tap could not resolve an app window with a finite screen frame")
+  }
+
+  /// #4091: when the device's only screen will not report its size, an app the sole-screen rule
+  /// proves full-screen (an iPhone by its idiom) has a window that is the display, so its tap still
+  /// turns about that window and is dispatched.
+  @MainActor
+  func testTapTurnsAboutTheWindowWhenTheSoleDisplayCannotBeMeasuredOnAFullScreenApp() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: true)
+    defer { cleanup() }
+    try XCTSkipUnless(
+      soleScreenRouteIsOpen(for: app),
+      "the app must provably fill the screen; the refusal test covers it"
+    )
+
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let windowFrame = try XCTUnwrap(context).referenceFrame
+    XCTAssertEqual(
+      synthesizedRotationFrame(app: app, fallback: windowFrame, interfaceOrientation: orientation),
+      windowFrame
+    )
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .performed? = outcome else {
+      return XCTFail("expected the tap to be dispatched about the window, got \(String(describing: outcome))")
+    }
+  }
+
+  /// #4091: when the device's only screen will not report its size and the app is not proven to fill
+  /// it, a placed window's smaller box is no basis to turn about (#3899), so a tap through a resolved
+  /// window refuses before it dispatches instead of landing off target.
+  @MainActor
+  func testTapRefusesBeforeDispatchWhenTheSoleDisplayCannotBeMeasured() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "a multi-screen host keeps its panel's window box")
+    let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let (context, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowFrame: placedWindow)
+    defer { cleanup() }
+    try XCTSkipIf(
+      soleScreenRouteIsOpen(for: app),
+      "an app proven full-screen turns about its window; the full-screen test covers it"
+    )
+
+    XCTAssertNil(
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+    )
+    XCTAssertEqual(
+      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      placedWindow,
+      "portrait skips the box read (only landscape and upside-down read it), so it must not refuse"
+    )
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    guard case .unsupported(let message, _)? = outcome else {
+      return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
+    }
+    guard case .unsupported(let refusal, _) = Self.unmeasuredSoleDisplayOutcome(gesture: "tap") else {
+      return XCTFail("the unmeasured-display outcome must be a refusal")
+    }
+    XCTAssertEqual(message, refusal)
   }
 #endif
 
   func testSoleScreenReferenceFrameRefusesAnUnknownOrientationOrAnEmptyScreen() {
     XCTAssertNil(
       Self.soleScreenReferenceFrame(
-        nativePortraitSize: CGSize(width: 402, height: 874),
+        portraitSize: CGSize(width: 402, height: 874),
         interfaceOrientation: RunnerInterfaceOrientation.unknown
       )
     )
     XCTAssertNil(
       Self.soleScreenReferenceFrame(
-        nativePortraitSize: .zero,
+        portraitSize: .zero,
         interfaceOrientation: RunnerInterfaceOrientation.portrait
       )
     )

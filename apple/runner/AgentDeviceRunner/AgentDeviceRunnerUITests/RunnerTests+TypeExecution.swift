@@ -3,7 +3,7 @@ import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   @MainActor
-  func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
+  func executeTypeCommand(activeApp: XCUIApplication, command: Command) throws -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
     }
@@ -33,7 +33,7 @@ extension RunnerTests {
       // answer both refuse here, each under its own reason.
       let contentTranslation = liveContentTranslation(app: activeApp)
       let inputAtPoint: TextInputAtPoint
-      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
+      switch try coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y, contentTranslation: contentTranslation) {
       case .input(let input):
         inputAtPoint = input
       case .absent:
@@ -41,11 +41,8 @@ extension RunnerTests {
       case .unavailable:
         return textInputProbeUnavailableResponse()
       }
-      let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-      let context = synthesizedCoordinateContext(app: activeApp)
-      switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
-        synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-      }) {
+      let context = try synthesizedCoordinateContext(app: activeApp)
+      switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y, context: context) {
       case .performed:
         resolvedCoordinateContext = context
         resolvedCoordinateTarget = TextEntryTarget(
@@ -68,7 +65,7 @@ extension RunnerTests {
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
     } else {
-      target = focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
+      target = try focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
     }
     NSLog(
       "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",
@@ -95,7 +92,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: message))
       }
     }
-    let textResult = typeTextReliably(
+    let textResult = try typeTextReliably(
       app: activeApp,
       target: target,
       text: text,

@@ -45,7 +45,7 @@ env:
 jobs:
   differential-ios:
     name: iOS Conformance Differential
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 90
     env:
       IOS_RUNTIME_VERSION: '26.2'

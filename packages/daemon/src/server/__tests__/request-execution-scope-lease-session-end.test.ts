@@ -16,6 +16,7 @@ import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims
 import { existingSessionExecutionLockKeys } from '../request-binding.ts';
 import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
+import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
 import { createLeaseSessionEnd } from '../request-execution-scope.ts';
 
@@ -67,7 +68,13 @@ function holdSessionLocks(
   return { finish, held };
 }
 
-function leaseSessionEnd(sessionStore: SessionStore, teardownSession: SessionTeardown) {
+function leaseSessionEnd(
+  sessionStore: SessionStore,
+  teardownSession: SessionTeardown,
+  cleanupSessionlessExecutionHost: PlatformResourceCleanup['cleanupSessionlessExecutionHost'] = vi.fn(
+    async () => {},
+  ),
+) {
   const executionLocks = new Map<string, Promise<unknown>>();
   return {
     executionLocks,
@@ -76,11 +83,258 @@ function leaseSessionEnd(sessionStore: SessionStore, teardownSession: SessionTea
       sessionStore,
       executionLocks,
       teardownSession,
+      cleanupSessionlessExecutionHost,
     }),
   };
 }
 
 const settle = async (): Promise<void> => await new Promise((resolve) => setImmediate(resolve));
+
+function retainExecutionHost(sessionStore: SessionStore, name = 'leased', leaseId = 'lease-1') {
+  const ref = sessionStore.publish(
+    name,
+    makeIosSession(name, {
+      lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
+    }),
+  );
+  sessionStore.retire(ref, { retainExecutionHost: true });
+  return ref;
+}
+
+test.each(['LEASE_RELEASED', 'LEASE_EXPIRED'] as const)(
+  '%s stops a retained host after its session has retired',
+  async (reason) => {
+    const sessionStore = makeSessionStore();
+    const ref = retainExecutionHost(sessionStore);
+    const cleanup = vi.fn(async () => {});
+    const teardown = vi.fn(async () => {});
+    const { ender } = leaseSessionEnd(sessionStore, teardown, cleanup);
+
+    await ender.end('lease-1', reason);
+
+    expect(teardown).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledExactlyOnceWith(ref.session.device);
+    expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+  },
+);
+
+test('expiry waiting behind close cleans the host that close retains before retiring', async () => {
+  const sessionStore = makeSessionStore();
+  const ref = sessionStore.publish(
+    'leased',
+    makeIosSession('leased', {
+      lease: { leaseId: 'lease-1', tenantId: 'tenant-a', runId: 'run-1' },
+    }),
+  );
+  const cleanup = vi.fn(async () => {});
+  const teardown = vi.fn(async () => {});
+  const { executionLocks, ender } = leaseSessionEnd(sessionStore, teardown, cleanup);
+  const close = holdSessionLocks(executionLocks, sessionStore, 'leased');
+  const ending = ender.end('lease-1', 'LEASE_EXPIRED');
+  await settle();
+  expect(cleanup).not.toHaveBeenCalled();
+
+  sessionStore.retire(ref, { retainExecutionHost: true });
+  close.finish();
+  await close.held;
+  await ending;
+
+  expect(teardown).not.toHaveBeenCalled();
+  expect(cleanup).toHaveBeenCalledExactlyOnceWith(ref.session.device);
+  expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+});
+
+test.each([false, true])(
+  'lease end preserves a replacement owner with retained=%s',
+  async (retained) => {
+    const sessionStore = makeSessionStore();
+    const old = retainExecutionHost(sessionStore);
+    const cleanup = vi.fn(async () => {});
+    const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
+    let unlock!: () => void;
+    const held = withRequestExecutionLockKeys(
+      executionLocks,
+      existingSessionExecutionLockKeys(old.address, old.session.device.id),
+      async () =>
+        await new Promise<void>((resolve) => {
+          unlock = resolve;
+        }),
+    );
+    await settle();
+    const ending = ender.end('lease-1', 'LEASE_RELEASED');
+    await settle();
+    const replacement = sessionStore.publish(
+      'replacement',
+      makeIosSession('replacement', {
+        lease: { leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
+      }),
+    );
+    if (retained) sessionStore.retire(replacement, { retainExecutionHost: true });
+    unlock();
+    await held;
+    await ending;
+
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+    if (retained) expect(sessionStore.listRetainedExecutionHosts('lease-2')).toHaveLength(1);
+    else expect(sessionStore.resolveCurrent(replacement)).toBeDefined();
+  },
+);
+
+test('release ends a same-lease reopen published at a new address while cleanup waits for its device', async () => {
+  const sessionStore = makeSessionStore();
+  const old = retainExecutionHost(sessionStore);
+  const cleanup = vi.fn(async () => {});
+  const teardown = vi.fn(async () => {});
+  const { executionLocks, ender } = leaseSessionEnd(sessionStore, teardown, cleanup);
+  let finishNativeOpen!: () => void;
+  const nativeOpen = new Promise<void>((resolve) => {
+    finishNativeOpen = resolve;
+  });
+  const reopening = withRequestExecutionLockKeys(
+    executionLocks,
+    existingSessionExecutionLockKeys('reopened', old.session.device.id),
+    async () => {
+      await nativeOpen;
+      sessionStore.publish('reopened', makeIosSession('reopened', { lease: old.session.lease }));
+    },
+  );
+  await settle();
+  const ending = ender.end('lease-1', 'LEASE_RELEASED');
+  await settle();
+  expect(teardown).not.toHaveBeenCalled();
+  finishNativeOpen();
+  await reopening;
+  await ending;
+
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(teardown).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ address: 'reopened' }),
+  );
+  expect(sessionStore.get('reopened')).toBeUndefined();
+  expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+});
+
+test('failed retained-host cleanup stays owned and throttles retries without another release request', async () => {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+  try {
+    const sessionStore = makeSessionStore();
+    retainExecutionHost(sessionStore);
+    const cleanup = vi
+      .fn(async () => {})
+      .mockRejectedValueOnce(new Error('device unreachable'))
+      .mockRejectedValueOnce(new Error('device still unreachable'));
+    const { ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
+
+    await ender.end('lease-1', 'LEASE_RELEASED');
+    expect(sessionStore.listRetainedExecutionHosts('lease-1')).toHaveLength(1);
+    for (let elapsed = 1_000; elapsed < 10_000; elapsed += 1_000) {
+      now.mockReturnValue(elapsed);
+      await ender.retryPending();
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    }
+    now.mockReturnValue(10_000);
+    await ender.retryPending();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(sessionStore.listRetainedExecutionHosts('lease-1')).toHaveLength(1);
+    now.mockReturnValue(19_999);
+    await ender.retryPending();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(20_000);
+    await ender.retryPending();
+    expect(cleanup).toHaveBeenCalledTimes(3);
+    expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+    now.mockReturnValue(30_000);
+    await ender.retryPending();
+    expect(cleanup).toHaveBeenCalledTimes(3);
+  } finally {
+    now.mockRestore();
+  }
+});
+
+test('cancel preserves a retained host queued for cleanup for daemon shutdown', async () => {
+  const sessionStore = makeSessionStore();
+  const ref = retainExecutionHost(sessionStore);
+  const cleanup = vi.fn(async () => {});
+  const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
+  let unlock!: () => void;
+  const held = withRequestExecutionLockKeys(
+    executionLocks,
+    existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
+    async () =>
+      await new Promise<void>((resolve) => {
+        unlock = resolve;
+      }),
+  );
+  await settle();
+  const ending = ender.end('lease-1', 'LEASE_EXPIRED');
+  await settle();
+  ender.cancel();
+  unlock();
+  await held;
+  await ending;
+  await ender.drain();
+  await ender.retryPending();
+
+  expect(cleanup).not.toHaveBeenCalled();
+  expect(sessionStore.listRetainedExecutionHosts('lease-1')).toHaveLength(1);
+});
+
+test('retry does not queue duplicate cleanup and shutdown drains a running retained-host stop', async () => {
+  const sessionStore = makeSessionStore();
+  retainExecutionHost(sessionStore);
+  let finish!: () => void;
+  const cleanup = vi.fn(
+    async () =>
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
+  const ending = ender.end('lease-1', 'LEASE_EXPIRED');
+  await settle();
+  await ender.retryPending();
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  ender.cancel();
+  let drained = false;
+  const drain = ender.drain().then(() => {
+    drained = true;
+  });
+  await settle();
+  expect(drained).toBe(false);
+  finish();
+  await ending;
+  await drain;
+  expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+});
+
+test('a request holding the device lock can end its lease ahead of a queued background end', async () => {
+  const sessionStore = makeSessionStore();
+  const ref = retainExecutionHost(sessionStore);
+  const cleanup = vi.fn(async () => {});
+  const { executionLocks, ender } = leaseSessionEnd(sessionStore, async () => {}, cleanup);
+  let release!: () => void;
+  const continueRequest = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const request = withRequestExecutionLockKeys(
+    executionLocks,
+    existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
+    async () => {
+      await continueRequest;
+      await ender.end('lease-1', 'LEASE_RELEASED');
+    },
+  );
+  await settle();
+  const expiry = ender.end('lease-1', 'LEASE_EXPIRED');
+  await settle();
+  release();
+  await request;
+  await expiry;
+
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  expect(sessionStore.listRetainedExecutionHosts('lease-1')).toEqual([]);
+});
 
 test('end publishes the recorded script of the session it ends', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-script-');

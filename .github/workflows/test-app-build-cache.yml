@@ -29,14 +29,14 @@ permissions:
 jobs:
   fingerprint:
     name: Resolve native fingerprint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.fingerprint.outputs.matrix }}
       has-work: ${{ steps.fingerprint.outputs.has-work }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
@@ -88,14 +88,14 @@ jobs:
               {
                 name: "iOS Release",
                 platform: "ios",
-                runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
+                runsOn: (if $iosBuild then "blacksmith-6vcpu-macos-26" else "blacksmith-4vcpu-ubuntu-2404" end),
                 artifactName: $iosName,
                 build: $iosBuild
               },
               {
                 name: "Android Release",
                 platform: "android",
-                runsOn: "ubuntu-latest",
+                runsOn: "blacksmith-4vcpu-ubuntu-2404",
                 artifactName: $androidName,
                 build: $androidBuild
               }

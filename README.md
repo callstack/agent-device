@@ -221,6 +221,12 @@ Teams and developers at Callstack, JPMorgan Chase, [Expensify](https://www.calls
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+<p align="center">
+  <a href="https://blacksmith.sh/">
+    <img src="docs/assets/blacksmith-ci.png" width="280" height="96" alt="CI powered by Blacksmith">
+  </a>
+</p>
+
 ## Made at Callstack
 
 `agent-device` is open source under the MIT license. Visit [agent-device.dev](https://agent-device.dev/) or [contact Callstack](mailto:hello@callstack.com).

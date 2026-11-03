@@ -1,3 +1,4 @@
+import type { RunnerLauncher } from './runner-launcher.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -6,6 +7,7 @@ import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerXctestrunArtifactState, RunnerXctestrunCacheKind } from './runner-xctestrun.ts';
 
 export type AppleRunnerCommandOptions = AppleRunnerRequestOptions & {
+  launcher?: RunnerLauncher;
   signal?: AbortSignal;
   cleanStaleBundles?: boolean;
   startupTimeoutMs?: number;

@@ -93,7 +93,7 @@ extension RunnerTests {
     defer { terminateCrowdedScreen() }
 
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
-    let inspection = handleAlert(alert, action: "get", deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+    let inspection = try handleAlert(alert, action: "get", deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "Relaunch to continue")
   }
