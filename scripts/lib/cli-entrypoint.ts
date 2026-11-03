@@ -29,7 +29,8 @@ function drainOutput(stream: NodeJS.WriteStream, deadline: number): Promise<unkn
 }
 
 // Shared bootstrap for script entrypoints. Output failure fails a successful command; a closed
-// pipe preserves its code. A stopped reader cannot hold exit past the shared drain deadline.
+// pipe preserves its code. Primary output has a hard deadline, even for a slow reader.
+// A failure diagnostic gets one separate bounded drain window.
 export function runEntrypoint(prefix: string, main: () => Promise<number>): void {
   // Node retains the cause on stream.errored; early writes must survive until the drain classifies it.
   for (const stream of [process.stdout, process.stderr]) stream.on('error', () => undefined);
@@ -44,7 +45,7 @@ export function runEntrypoint(prefix: string, main: () => Promise<number>): void
       const message = stdoutError instanceof Error ? stdoutError.message : String(stdoutError);
       try {
         process.stderr.write(`${prefix}: unable to flush stdout: ${message}\n`);
-        stderrError = await drainOutput(process.stderr, deadline);
+        stderrError = await drainOutput(process.stderr, Date.now() + OUTPUT_DRAIN_TIMEOUT_MS);
       } catch (error) {
         stderrError = error;
       }

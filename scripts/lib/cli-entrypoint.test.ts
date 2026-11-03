@@ -92,11 +92,24 @@ test.each(
 );
 
 // A real pipe must stay unread: synthetic write callbacks cannot prove process termination under backpressure.
-test.each([0, 7])(
-  'a stalled output reader cannot keep a finished command alive (code=%s)',
-  async (exitCode) => {
+test.each([
+  { exitCode: 0, diagnosticDelayMs: 0 },
+  { exitCode: 7, diagnosticDelayMs: 0 },
+  { exitCode: 0, diagnosticDelayMs: 50 },
+])(
+  'a stalled output reader cannot keep a finished command alive (code=$exitCode, diagnostic delay=$diagnosticDelayMs)',
+  async ({ exitCode, diagnosticDelayMs }) => {
     const source = [
       `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+      "import { Writable } from 'node:stream';",
+      `if (${diagnosticDelayMs} > 0) {`,
+      '  const stderr = process.stderr;',
+      '  const delayed = new Writable({ write(chunk, encoding, done) {',
+      `    if (chunk.length > 0) setTimeout(() => stderr.write(chunk, encoding, done), ${diagnosticDelayMs});`,
+      '    else stderr.write(chunk, encoding, done);',
+      '  } });',
+      "  Object.defineProperty(process, 'stderr', { value: delayed });",
+      '}',
       'setTimeout(() => process.exit(99), 3000);',
       'runEntrypoint("fixture", async () => {',
       "  process.stdout.write('o'.repeat(4 * 1024 * 1024));",
