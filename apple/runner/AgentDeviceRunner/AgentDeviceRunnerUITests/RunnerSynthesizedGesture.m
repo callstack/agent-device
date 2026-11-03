@@ -113,7 +113,7 @@ static id RunnerTapPointerPath(
 
 + (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
                                                  resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                           interfaceOrientation:(NSInteger)interfaceOrientation
                                                                 x:(double)x
                                                                 y:(double)y
                                                                x2:(double)x2
@@ -137,7 +137,7 @@ static id RunnerTapPointerPath(
 
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                interfaceOrientation:(NSInteger)interfaceOrientation
                                                    x:(double)x
                                                    y:(double)y
                                             deadline:(NSDate * _Nullable)deadline
@@ -155,7 +155,7 @@ static id RunnerTapPointerPath(
 
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
                                           resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                    interfaceOrientation:(NSInteger)interfaceOrientation
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples {
   @try {
     RunnerGestureEventBridge bridge;

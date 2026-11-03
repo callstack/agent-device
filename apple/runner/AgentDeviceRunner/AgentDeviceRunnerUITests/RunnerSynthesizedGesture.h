@@ -28,7 +28,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 
 + (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
                                                  resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                           interfaceOrientation:(NSInteger)interfaceOrientation
                                                                 x:(double)x
                                                                 y:(double)y
                                                                x2:(double)x2
@@ -37,7 +37,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                interfaceOrientation:(NSInteger)interfaceOrientation
                                                    x:(double)x
                                                    y:(double)y
                                             deadline:(NSDate * _Nullable)deadline
@@ -47,7 +47,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 // starts contact; subsequent samples move it; all pointers lift at their final offset.
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
                                           resolvedWindow:(id _Nullable)resolvedWindow
-                                  interfaceOrientation:(NSInteger)interfaceOrientation
+                                    interfaceOrientation:(NSInteger)interfaceOrientation
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples;
 
 // UIInterfaceOrientation of the app (1 portrait, 2 upsideDown, 3 landscapeRight,

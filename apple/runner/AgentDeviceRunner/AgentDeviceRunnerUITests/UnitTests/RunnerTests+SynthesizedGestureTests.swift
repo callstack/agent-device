@@ -59,13 +59,13 @@ extension RunnerTests {
         deadline: deadline,
         errorMessage: &message
       )
-  
+
       XCTAssertTrue(preparationBeganBeforeDeadline)
       XCTAssertTrue(prepared)
       XCTAssertEqual(expired, .deadlineExceeded)
       XCTAssertNil(message)
       XCTAssertEqual(TapRecordSpy.syntheses, 0)
-  
+
       let control = RunnerSynthesizedGesture.synthesizeTap(
         withApplication: TapApplicationFixture(),
         resolvedWindow: TapWindowFixture {},
