@@ -11,6 +11,22 @@ extension RunnerTests {
     try assertInAppBackDispatch(navigationBar: false)
   }
 
+  @MainActor
+  func testNavigationBarBackDoesNotChooseAControlOffTheLitPanel() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"], navigationBar: true)
+    defer {
+      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"uptime"}"#))
+      endBackFixture()
+    }
+    setRequestLitPanel(from: try runnerCommandFixture(
+      #"{"command":"backInApp","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+    ))
+    XCTAssertThrowsError(try tapInAppBackControl(app: app)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
+    XCTAssertNotEqual(status.label, "Back performed")
+  }
+
   /// A navigation bar button keeps XCTest's element tap, which aims at its computed hittable point.
   @MainActor
   func testNavigationBarBackKeepsTheElementTap() throws {

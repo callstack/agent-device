@@ -204,10 +204,13 @@ extension RunnerTests {
       .flatMap { $0.matching(predicate).allElementsBoundByIndex }
       .filter(\.exists)
     let facts = try matches.map { element in
-      SelectorCandidateFacts(
-        isHittable: element.isHittable,
-        hasTappableFrame: try hasTappableFrame(app: app, element: element),
-        containsExpectedPoint: expectedPoint.map(element.frame.contains) ?? true
+      let isHittable = element.isHittable
+      let containsExpectedPoint = expectedPoint.map(element.frame.contains) ?? true
+      return SelectorCandidateFacts(
+        isHittable: isHittable,
+        hasTappableFrame: allowNonHittableFallback && !isHittable && containsExpectedPoint
+          ? try hasTappableFrame(app: app, element: element) : false,
+        containsExpectedPoint: containsExpectedPoint
       )
     }
     switch classifyDirectSelectorCandidates(
@@ -277,8 +280,7 @@ extension RunnerTests {
   /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
   func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
     if requestLitPanel != nil {
-      _ = bookRequestLitPanelSurface(app: app)
-      guard let booked = litPanelState.surface, booked.app === app else { return nil }
+      guard bookRequestLitPanelSurface(app: app) == nil, let booked = litPanelState.surface else { return nil }
       return (booked.window, booked.frame)
     }
     for window in app.windows.allElementsBoundByIndex where window.exists {

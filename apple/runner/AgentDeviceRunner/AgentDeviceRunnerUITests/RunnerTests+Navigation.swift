@@ -46,7 +46,8 @@ extension RunnerTests {
     return .performed
 #else
     let rejectedQueriesBefore = navigationRejectedQueryCount()
-    let buttons = app.navigationBars.buttons.allElementsBoundByIndex
+    let buttons = try elementQueries(app: app, matching: .navigationBar)
+      .flatMap { $0.buttons.allElementsBoundByIndex }
     if let back = buttons.first(where: { $0.isHittable }) {
       // `isHittable` promises a hittable point, not a hittable center: a bar button partly under an
       // overlay keeps the element tap, which aims at the point XCTest computed.

@@ -12,6 +12,8 @@ private final class LitPanelBookingScreen: NSObject {
 private final class LitPanelBookingProbe: NSObject {
   static var originalValueForKey: IMP?
   static let query = NSObject()
+  static var windowListReads = 0
+  static var maxWindowListReads: Int?
   static var window: XCUIElement?
   static var coordinate: XCUICoordinate?
   static var windowFrame = CGRect.zero
@@ -26,7 +28,10 @@ private final class LitPanelBookingProbe: NSObject {
     MainActor.assumeIsolated {
       switch key {
       case "windows": return Self.query
-      case "allElementsBoundByIndex": return [Self.window!]
+      case "allElementsBoundByIndex":
+        Self.windowListReads += 1
+        if let max = Self.maxWindowListReads, Self.windowListReads > max { return [] }
+        return [Self.window!]
       case "screen": return LitPanelBookingScreen()
       case "exists": return true
       case "frame": return NSValue(cgRect: Self.windowFrame)
@@ -63,6 +68,111 @@ private final class LitPanelBookingProbe: NSObject {
 extension RunnerTests {
   @MainActor
   func testLitPanelBookingAndCoordinateFallbackShareScreenPointsForPartialWindows() throws {
+    try withLitPanelBookingProbe { window in
+      for (frame, orientation, expected) in [
+        (
+          CGRect(x: 80, y: 0, width: 871, height: 669), RunnerInterfaceOrientation.landscapeLeft,
+          CGRect(x: 0, y: 0, width: 951, height: 669)
+        ),
+        (
+          CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portrait,
+          CGRect(x: 0, y: 0, width: 669, height: 951)
+        ),
+        (
+          CGRect(x: 80, y: 0, width: 180, height: 669), RunnerInterfaceOrientation.landscapeRight,
+          CGRect(x: 0, y: 0, width: 951, height: 669)
+        ),
+        (
+          CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portraitUpsideDown,
+          CGRect(x: 0, y: 0, width: 669, height: 951)
+        ),
+      ] {
+        LitPanelBookingProbe.windowFrame = frame
+        LitPanelBookingProbe.orientation = orientation
+        LitPanelBookingProbe.tappedPoint = nil
+        setRequestLitPanel(from: try runnerCommandFixture(
+          #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+        ))
+        XCTAssertNil(bookRequestLitPanelSurface(app: app))
+        let booked = try XCTUnwrap(litPanelState.surface)
+        XCTAssertTrue(booked.window === window)
+        XCTAssertEqual(booked.frame, frame)
+        XCTAssertEqual(synthesizedRotationFrame(fallback: booked.frame, interfaceOrientation: orientation), expected)
+        if case .unsupported(let message, _) = try tapAt(app: app, x: 200, y: 150) { XCTFail(message) }
+        XCTAssertTrue(LitPanelBookingProbe.anchor === window)
+        XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
+      }
+      LitPanelBookingProbe.tappedPoint = nil
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+      ))
+      XCTAssertThrowsError(try tapAt(app: app, x: 200, y: 150)) {
+        XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .offLitPanel)
+      }
+      XCTAssertNil(LitPanelBookingProbe.tappedPoint)
+
+    }
+  }
+
+  @MainActor
+  func testLitPanelBookingUsesBundleIdentityAcrossProxiesAndRequests() throws {
+    try withLitPanelBookingProbe { window in
+      let bundleID = try XCTUnwrap(app.value(forKey: "bundleID") as? String)
+      let sameApp = XCUIApplication(bundleIdentifier: bundleID)
+      let otherApp = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+      let secondWindow = otherApp.windows.firstMatch
+      let command = try runnerCommandFixture(#"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#)
+      LitPanelBookingProbe.windowFrame = CGRect(x: 80, y: 0, width: 871, height: 669)
+      let firstRequest = setRequestLitPanel(from: command)
+      XCTAssertNil(bookRequestLitPanelSurface(app: app))
+      let firstReads = LitPanelBookingProbe.windowListReads
+      XCTAssertNil(bookRequestLitPanelSurface(app: sameApp))
+      XCTAssertEqual(LitPanelBookingProbe.windowListReads, firstReads, "a second proxy of the same bundle reuses this request's booking")
+      LitPanelBookingProbe.window = secondWindow
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 80, width: 669, height: 871)
+      XCTAssertNil(bookRequestLitPanelSurface(app: otherApp))
+      XCTAssertTrue(try requireRequestLitPanelSurface(app: otherApp).window === secondWindow)
+      XCTAssertGreaterThan(LitPanelBookingProbe.windowListReads, firstReads)
+      LitPanelBookingProbe.window = window
+      let nextRequest = setRequestLitPanel(from: command)
+      endRequestLitPanel(firstRequest)
+      XCTAssertNil(bookRequestLitPanelSurface(app: sameApp))
+      XCTAssertTrue(try requireRequestLitPanelSurface(app: app).window === window)
+      XCTAssertEqual(litPanelState.surface?.key.requestID, nextRequest)
+      endRequestLitPanel(nextRequest)
+      XCTAssertNil(litPanelState.surface)
+      XCTAssertNil(requestLitPanel)
+    }
+  }
+
+  @MainActor
+  func testAcceptedRequestEndsItsLitPanelBooking() throws {
+    try withLitPanelBookingProbe { _ in
+      let command = try runnerCommandFixture(#"{"command":"uptime","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#)
+      _ = try executeAccepted(command: command)
+      XCTAssertNil(requestLitPanel, "finished commands cannot leave a panel for unrelated main work")
+      XCTAssertNil(litPanelState.surface)
+    }
+  }
+
+  @MainActor
+  func testDuplicateSelectorRefusesWithoutTryingToBookATapPoint() throws {
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    try withLitPanelBookingProbe { _ in
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 0, width: 669, height: 951)
+      LitPanelBookingProbe.maxWindowListReads = 1
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      let match = try findElement(app: app, selectorKey: "id", selectorValue: "agent-device-selector-read-duplicate")
+      XCTAssertTrue(match.isAmbiguous)
+      XCTAssertNil(match.element)
+      XCTAssertEqual(LitPanelBookingProbe.windowListReads, 1, "ambiguity does not require a coordinate booking")
+    }
+  }
+
+  @MainActor
+  private func withLitPanelBookingProbe(_ body: (XCUIElement) throws -> Void) throws {
     app.launch()
     defer { app.terminate() }
     let query = app.windows
@@ -92,6 +202,7 @@ extension RunnerTests {
       LitPanelBookingProbe.coordinate = nil
       LitPanelBookingProbe.anchor = nil
       LitPanelBookingProbe.originalValueForKey = nil
+      LitPanelBookingProbe.maxWindowListReads = nil
       litPanelState.panel = nil
       litPanelState.surface = nil
     }
@@ -100,48 +211,8 @@ extension RunnerTests {
       let stub = try XCTUnwrap(stub)
       originals.append((method, method_setImplementation(method, method_getImplementation(stub))))
     }
-    for (frame, orientation, expected) in [
-      (
-        CGRect(x: 80, y: 0, width: 871, height: 669), RunnerInterfaceOrientation.landscapeLeft,
-        CGRect(x: 0, y: 0, width: 951, height: 669)
-      ),
-      (
-        CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portrait,
-        CGRect(x: 0, y: 0, width: 669, height: 951)
-      ),
-      (
-        CGRect(x: 80, y: 0, width: 180, height: 669), RunnerInterfaceOrientation.landscapeRight,
-        CGRect(x: 0, y: 0, width: 951, height: 669)
-      ),
-      (
-        CGRect(x: 0, y: 80, width: 669, height: 871), RunnerInterfaceOrientation.portraitUpsideDown,
-        CGRect(x: 0, y: 0, width: 669, height: 951)
-      ),
-    ] {
-      LitPanelBookingProbe.windowFrame = frame
-      LitPanelBookingProbe.orientation = orientation
-      LitPanelBookingProbe.tappedPoint = nil
-      setRequestLitPanel(from: try runnerCommandFixture(
-        #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
-      ))
-      XCTAssertNil(bookRequestLitPanelSurface(app: app))
-      let booked = try XCTUnwrap(litPanelState.surface)
-      XCTAssertTrue(booked.window === window)
-      XCTAssertEqual(booked.frame, frame)
-      XCTAssertEqual(synthesizedRotationFrame(fallback: booked.frame, interfaceOrientation: orientation), expected)
-      if case .unsupported(let message, _) = try tapAt(app: app, x: 200, y: 150) { XCTFail(message) }
-      XCTAssertTrue(LitPanelBookingProbe.anchor === window)
-      XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
-    }
-    LitPanelBookingProbe.tappedPoint = nil
-    setRequestLitPanel(from: try runnerCommandFixture(
-      #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
-    ))
-    XCTAssertThrowsError(try tapAt(app: app, x: 200, y: 150)) {
-      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .offLitPanel)
-    }
-    XCTAssertNil(LitPanelBookingProbe.tappedPoint)
-
+    LitPanelBookingProbe.windowListReads = 0
+    try body(window)
   }
 }
 #endif

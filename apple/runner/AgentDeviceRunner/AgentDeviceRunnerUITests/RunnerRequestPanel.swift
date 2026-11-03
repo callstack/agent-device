@@ -2,8 +2,13 @@ import XCTest
 
 // The lit panel of the command in flight (ADR 0025), main-owned and written behind main work a
 // previous command left queued, so that work still reads its own command's panel.
+struct LitPanelBookingKey: Equatable {
+  let bundleID: String
+  let requestID: UUID
+}
+
 struct LitPanelSurface {
-  let app: XCUIApplication
+  let key: LitPanelBookingKey
   let displayID: UInt
   let window: XCUIElement
   let frame: CGRect
@@ -11,12 +16,15 @@ struct LitPanelSurface {
 
 /// The command's lit panel and what it booked on it. Read and written only on the main thread.
 final class RunnerLitPanelState {
+  var requestID: UUID?
   var panel: RunnerLitPanel?
   var surface: LitPanelSurface?
 }
 
 extension RunnerTests {
-  func setRequestLitPanel(from command: Command) {
+  @discardableResult
+  func setRequestLitPanel(from command: Command) -> UUID {
+    let requestID = UUID()
     var panel: RunnerLitPanel?
     if let fact = command.litPanel, fact.displayId != 0, fact.widthPt.isFinite, fact.heightPt.isFinite,
       fact.widthPt > 0, fact.heightPt > 0
@@ -25,6 +33,7 @@ extension RunnerTests {
     }
     let state = litPanelState
     let write = {
+      state.requestID = requestID
       state.panel = panel
       state.surface = nil
     }
@@ -32,6 +41,22 @@ extension RunnerTests {
       write()
     } else {
       DispatchQueue.main.async(execute: write)
+    }
+    return requestID
+  }
+
+  func endRequestLitPanel(_ requestID: UUID) {
+    let state = litPanelState
+    let clear = {
+      guard state.requestID == requestID else { return }
+      state.requestID = nil
+      state.panel = nil
+      state.surface = nil
+    }
+    if Thread.isMainThread {
+      clear()
+    } else {
+      DispatchQueue.main.async(execute: clear)
     }
   }
 
@@ -41,7 +66,12 @@ extension RunnerTests {
   /// Books `app`'s lit-panel window for the request, or returns why it cannot.
   func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
     guard let litPanel = requestLitPanel else { return nil }
-    if let booked = litPanelState.surface, booked.app === app { return nil }
+    guard let requestID = litPanelState.requestID,
+      let bundleID = safely("LIT_PANEL_APP_IDENTITY", { app.value(forKey: "bundleID") as? String })?.trimmedNonEmpty
+    else { return .unresolvedScreen }
+    let key = LitPanelBookingKey(bundleID: bundleID, requestID: requestID)
+    if litPanelState.surface?.key == key { return nil }
+    litPanelState.surface = nil
     var window: AnyObject?
     var frame = CGRect.null
     var screen: AnyObject?
@@ -49,13 +79,13 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    litPanelState.surface = LitPanelSurface(app: app, displayID: litPanel.displayID, window: element, frame: frame)
+    litPanelState.surface = LitPanelSurface(key: key, displayID: litPanel.displayID, window: element, frame: frame)
     return nil
   }
 
   func requireRequestLitPanelSurface(app: XCUIApplication) throws -> LitPanelSurface {
     if let refusal = bookRequestLitPanelSurface(app: app) { throw refusal }
-    guard let surface = litPanelState.surface, surface.app === app else {
+    guard let surface = litPanelState.surface else {
       throw RunnerAppScreenCaptureFailure.unresolvedScreen
     }
     return surface
@@ -75,6 +105,13 @@ extension RunnerTests {
 #endif
     }
     guard walk.issues.isEmpty, walk.exceptionMessage == nil, let windows, !windows.isEmpty else {
+      for issue in walk.issues {
+        NSLog("AGENT_DEVICE_RUNNER_LIT_PANEL_WALK_ISSUE=%@", issue.compactDescription)
+      }
+      NSLog(
+        "AGENT_DEVICE_RUNNER_LIT_PANEL_WALK_REFUSED issues=%ld exception=%@ windows=%ld",
+        walk.issues.count, walk.exceptionMessage ?? "none", windows?.count ?? -1
+      )
       throw RunnerAppScreenCaptureFailure.unresolvedScreen
     }
     return windows

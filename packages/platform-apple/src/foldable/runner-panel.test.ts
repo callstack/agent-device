@@ -88,12 +88,21 @@ test('a device with one panel sends no panel and is never asked again', async ()
   assert.equal(mockPanelTable.mock.calls.length, reads, 'one panel is hardware, probed once');
 });
 
-test('a panel table that would not answer is not asked again by the next request', async () => {
-  const device = simulator();
-  mockPanelTable.mockRejectedValue(new Error('devicectl does not report displays'));
-  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
-  assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
-  assert.equal(mockPanelTable.mock.calls.length, 1);
+test('a failed first panel read backs off temporarily and probes again after expiry', async () => {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+  try {
+    const device = simulator();
+    mockPanelTable.mockRejectedValue(new Error('devicectl does not report displays'));
+    assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+    assert.equal(await resolveRunnerRequestLitPanel(device, {}), undefined);
+    assert.equal(mockPanelTable.mock.calls.length, 1);
+    now.mockReturnValue(6_001);
+    answering(IPHONE_DUO_OPEN);
+    assert.equal((await resolveRunnerRequestLitPanel(device, {}))?.displayId, 3);
+    assert.equal(mockPanelTable.mock.calls.length, 2);
+  } finally {
+    now.mockRestore();
+  }
 });
 
 test('a cancelled panel-table read leaves the next request free to ask', async () => {
@@ -196,7 +205,8 @@ test('a panel read that spends the whole request budget refuses instead of sendi
       runAppleRunnerCommand(device, { command: 'tap', x: 10, y: 20, timeoutMs: 20 }),
     ),
     (error: AppError) => {
-      assert.equal(error.details?.reason, 'panel-table-unreadable');
+      assert.equal(error.details?.reason, 'panel-probe-budget-exhausted');
+      assert.equal(error.details?.runnerErrorCode, undefined);
       assert.equal(error.details?.dispatched, 'no');
       return true;
     },

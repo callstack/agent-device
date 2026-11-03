@@ -63,9 +63,15 @@ export async function nameRunnerRequestLitPanel(
   if (command.timeoutMs === undefined) return { ...command, litPanel };
   const timeoutMs = command.timeoutMs - (Date.now() - startedAt);
   if (timeoutMs < 1) {
-    throw panelTableRefusal(
-      device,
+    throw new AppError(
+      'COMMAND_FAILED',
       `Reading the panel table of ${device.name} spent the request's ${command.timeoutMs} ms, so nothing was sent`,
+      {
+        deviceId: device.id,
+        reason: 'panel-probe-budget-exhausted',
+        dispatched: 'no',
+        hint: 'Increase the request timeout to leave time for the command after reading the panel table.',
+      },
     );
   }
   return { ...command, litPanel, timeoutMs };

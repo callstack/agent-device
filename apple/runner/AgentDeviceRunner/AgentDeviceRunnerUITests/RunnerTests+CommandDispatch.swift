@@ -7,7 +7,8 @@ extension RunnerTests {
   func executeAccepted(command: Command) throws -> Response {
     commandJournal.start(command: command)
     pendingTargetActivation = nil
-    setRequestLitPanel(from: command)
+    let panelRequestID = setRequestLitPanel(from: command)
+    defer { endRequestLitPanel(panelRequestID) }
     do {
       let response = try executeDispatched(command: command)
       commandJournal.finish(command: command, response: response)
