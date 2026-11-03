@@ -36,7 +36,7 @@ concurrency:
 jobs:
   plan:
     name: Plan
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Waits up to 20 minutes for the commit's CI to finish.
     timeout-minutes: 25
     permissions:
@@ -50,7 +50,7 @@ jobs:
       previous_tag: ${{ steps.plan.outputs.previous_tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
         with:
           persist-credentials: false
 
@@ -69,7 +69,7 @@ jobs:
     name: Build ${{ needs.plan.outputs.version }}
     needs: plan
     if: contains(fromJSON('["dry-run", "nightly", "stable"]'), needs.plan.outputs.mode)
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 120
     permissions:
       contents: read
@@ -115,7 +115,7 @@ jobs:
     name: Publish ${{ needs.plan.outputs.version }} to npm
     needs: [plan, build]
     if: contains(fromJSON('["nightly", "stable"]'), needs.plan.outputs.mode)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     environment: npm-publish
     permissions:
@@ -123,7 +123,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout publisher
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
         with:
           persist-credentials: false
           sparse-checkout: scripts/release-publish.mjs
@@ -152,7 +152,7 @@ jobs:
     name: Tag nightly ${{ needs.plan.outputs.version }}
     needs: [plan, publish]
     if: needs.plan.outputs.mode == 'nightly'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: write
@@ -170,7 +170,7 @@ jobs:
     name: Draft GitHub release
     needs: [plan, publish]
     if: needs.plan.outputs.mode == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: write
@@ -210,7 +210,7 @@ jobs:
   publish-github-release:
     name: Publish GitHub release
     needs: [plan, ios-runner, android-snapshot-helper]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
       contents: write
@@ -240,7 +240,7 @@ jobs:
     name: Redeploy agent-device.dev
     needs: [plan, publish]
     if: needs.plan.outputs.mode == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions: {}
     steps:
@@ -271,13 +271,13 @@ jobs:
     name: Move main past ${{ needs.plan.outputs.version }}
     needs: [plan, publish]
     if: needs.plan.outputs.mode == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Checkout main
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
         with:
           ref: main
 

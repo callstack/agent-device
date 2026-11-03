@@ -65,7 +65,7 @@ jobs:
   perf-ios:
     name: iOS Command Perf
     if: ${{ github.event_name == 'schedule' || github.event.inputs.ios == 'true' }}
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 100
     env:
       IOS_RUNTIME_VERSION: '26.2'
@@ -172,11 +172,11 @@ jobs:
   perf-android:
     name: Android Command Perf
     if: ${{ github.event_name == 'schedule' || github.event.inputs.android == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 100
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm

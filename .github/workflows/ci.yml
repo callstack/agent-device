@@ -34,11 +34,11 @@ jobs:
   # runtime (#1976 / PR #2006), so it runs after Setup toolchain instead.
   lint-typecheck-package:
     name: Lint, Typecheck & Package
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
 
       # #1976: ripgrep is never installed on ubuntu-latest, so `rg` failed with "command not
       # found" (exit 127) on every run, and `if rg ...; then ... fi` cannot distinguish that
@@ -127,14 +127,14 @@ jobs:
   # asserts.
   repo-guards:
     name: Repo Guards & Compatibility
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
       # The layering ratchets (R6/R9/R10) measure the merge-base with origin/main, which a
       # shallow checkout cannot reach. Fallow, replay-compat, and daemon-wire-compat need full
       # history or tags.
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -281,11 +281,11 @@ jobs:
   # thresholds, so a separate unit-tests job would rerun the same tests.
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
         with:
           fetch-depth: 0
 
@@ -363,11 +363,11 @@ jobs:
 
   integration:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@v1 # v6.0.2
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm

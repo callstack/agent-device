@@ -29,7 +29,7 @@ jobs:
   smoke-apple:
     name: Smoke Tests
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     # Keep each platform's former 80-minute ceiling, plus shared setup and cleanup.
     timeout-minutes: 170
     env:
