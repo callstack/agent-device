@@ -17,18 +17,18 @@ public enum WindowContentSpace {}
 public enum InterfaceScreenSpace {}
 public enum NativeDigitizerSpace {}
 
-public struct SurfacePoint<Space>: Equatable {
+public struct SurfacePoint<Space>: Equatable, Sendable {
   public let point: CGPoint
   public init(_ point: CGPoint) { self.point = point }
 }
 
-public struct SurfaceRect<Space>: Equatable {
+public struct SurfaceRect<Space>: Equatable, Sendable {
   public let rect: CGRect
   public init(_ rect: CGRect) { self.rect = rect }
 }
 
 /// Geometry measured once for a window. Panel size is absent when the runtime cannot prove it.
-public struct SurfaceGeometry {
+public struct SurfaceGeometry: Sendable {
   public let windowOnScreen: SurfaceRect<InterfaceScreenSpace>
   public let panelNativeSize: CGSize?
   public let orientation: Int
