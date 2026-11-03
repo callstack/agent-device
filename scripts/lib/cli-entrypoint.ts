@@ -6,9 +6,14 @@ export function runEntrypoint(prefix: string, main: () => Promise<number>): void
     await Promise.all(
       [process.stdout, process.stderr].map(
         (stream) =>
-          new Promise<void>((resolve, reject) =>
-            stream.write('', (error) => (error ? reject(error) : resolve())),
-          ),
+          new Promise<void>((resolve) => {
+            if (stream.destroyed || !stream.writable) {
+              resolve();
+              return;
+            }
+            stream.once('error', () => resolve());
+            stream.write('', () => resolve());
+          }),
       ),
     );
     process.exit(code);
