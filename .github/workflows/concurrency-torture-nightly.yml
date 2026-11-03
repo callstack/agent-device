@@ -48,7 +48,7 @@ jobs:
       TORTURE_ENVELOPE: ${{ github.workspace }}/torture-results/envelope.json
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@v1 # v6.0.2
+        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
