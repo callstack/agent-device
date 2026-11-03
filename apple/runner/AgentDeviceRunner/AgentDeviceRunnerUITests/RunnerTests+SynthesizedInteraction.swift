@@ -441,11 +441,6 @@ extension RunnerTests {
     windowQueryRejected: Bool = false
   ) throws -> SynthesizedCoordinateContext? {
 #if os(iOS)
-    if requestLitPanel != nil {
-      guard bookRequestLitPanelSurface(app: app) == nil, let surface = litPanelState.surface else { return nil }
-      return SynthesizedCoordinateContext(geometry: surface.geometry, resolvedWindow: surface.window,
-                                          accessibilityHealth: mainOwned.accessibilityHealth)
-    }
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
@@ -789,9 +784,9 @@ extension RunnerTests {
   func sampledPlannedGesture(
     app: XCUIApplication,
     plan: RunnerGesturePlan
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
 #if os(iOS)
-    guard let context = synthesizedCoordinateContext(app: app) else {
+    guard let context = try synthesizedCoordinateContext(app: app) else {
       return .unsupported(message: "gesture could not resolve a surface", hint: nil)
     }
     guard let geometry = digitizerGeometry(app: app, surface: context.geometry) else {

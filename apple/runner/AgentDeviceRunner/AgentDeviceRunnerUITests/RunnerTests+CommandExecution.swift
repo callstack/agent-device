@@ -680,7 +680,7 @@ extension RunnerTests {
         )
       case .sampled:
         let (timing, outcome) = try performGesture(activeApp, idleTimeout: false) {
-          sampledPlannedGesture(app: activeApp, plan: plan)
+          try sampledPlannedGesture(app: activeApp, plan: plan)
         }
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
