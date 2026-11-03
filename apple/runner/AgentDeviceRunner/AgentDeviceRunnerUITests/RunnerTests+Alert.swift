@@ -6,7 +6,6 @@ extension RunnerTests {
     let root: XCUIElement
     let ownerApp: XCUIApplication
     let actions: [XCUIElement]
-    let buttons: [XCUIElement]
     let source: AlertSurfaceSource
     /// The window hosting a SpringBoard modal; nil routes through `ownerApp`.
     let window: XCUIElement?
@@ -55,18 +54,18 @@ extension RunnerTests {
       if let alert = try firstExistingElement(in: readModalElements(deadline: deadline) {
         activeApp.alerts.allElementsBoundByIndex
       }, deadline: deadline) {
-        return try runnerAlert(root: alert, ownerApp: activeApp,
-          actions: readModalActions(in: alert, deadline: deadline), source: .appAlert, deadline: deadline)
+        return .resolved(RunnerAlert(root: alert, ownerApp: activeApp,
+          actions: try readModalActions(in: alert, deadline: deadline), source: .appAlert, window: nil))
       }
       if let dialog = try firstExistingElement(in: readModalElements(deadline: deadline) {
         activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
       }, deadline: deadline) {
-        return try runnerAlert(root: dialog, ownerApp: activeApp,
-          actions: readModalActions(in: dialog, deadline: deadline), source: .safariDialog, deadline: deadline)
+        return .resolved(RunnerAlert(root: dialog, ownerApp: activeApp,
+          actions: try readModalActions(in: dialog, deadline: deadline), source: .safariDialog, window: nil))
       }
       if let popup = try firstDismissPopupWindow(in: activeApp, deadline: deadline) {
-        return try runnerAlert(root: popup, ownerApp: activeApp,
-          actions: readModalActions(in: popup, deadline: deadline), source: .dismissPopup, deadline: deadline)
+        return .resolved(RunnerAlert(root: popup, ownerApp: activeApp,
+          actions: try readModalActions(in: popup, deadline: deadline), source: .dismissPopup, window: nil))
       }
       return .absent
     } catch {
@@ -77,7 +76,15 @@ extension RunnerTests {
   @MainActor
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) throws -> Response {
     if action == "accept" || action == "dismiss" {
-      guard let button = chooseAlertButton(alert, action: action) else {
+      let selectedButton: XCUIElement?
+      do {
+        selectedButton = try chooseAlertButton(alert, action: action, deadline: deadline)
+      } catch ModalReadFailure.deadlineExceeded {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
+      } catch {
+        return alertUnresolvedResponse()
+      }
+      guard let button = selectedButton else {
         // The choice refused before any activation, so this discloses dispatched: no like the
         // runner's other pre-run refusals.
         return Response(ok: false, error: ErrorPayload(
@@ -142,8 +149,15 @@ extension RunnerTests {
       }
     }
 
+    let items: [String]
+    do {
+      items = try readModalValue(deadline: deadline) {
+        alert.actions.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+      }
+    } catch {
+      return alertUnresolvedResponse()
+    }
     let title = safely("ALERT_TITLE", "Alert") { preferredAlertTitle(alert.root, buttons: alert.actions) }
-    let items = alert.actions.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
     return Response(
       ok: true,
       data: DataPayload(
@@ -262,18 +276,12 @@ extension RunnerTests {
     operation()
   }
 
-  func runnerAlert(
-    root: XCUIElement,
-    ownerApp: XCUIApplication,
-    actions: [XCUIElement],
-    source: AlertSurfaceSource,
-    window: XCUIElement? = nil,
-    deadline: Date
-  ) throws -> AlertResolution {
-    let buttons = try actions.filter { candidate in
-      try readModalValue(deadline: deadline) { candidate.exists && candidate.isEnabled }
-    }
-    return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, actions: actions, buttons: buttons, source: source, window: window))
+  func alertUnresolvedResponse() -> Response {
+    Response(ok: false, error: ErrorPayload(
+      code: RunnerWireErrorCode.alertUnresolved,
+      message: "alert could not finish reading the current prompt state",
+      hint: Self.alertUnresolvedHint
+    ))
   }
 
   private func firstExistingElement(in elements: [XCUIElement], deadline: Date) throws -> XCUIElement? {
@@ -300,16 +308,20 @@ extension RunnerTests {
 
   // Internal, not private: the dismiss-popup wiring is pinned by
   // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
-  func chooseAlertButton(_ alert: RunnerAlert, action: String) -> XCUIElement? {
+  func chooseAlertButton(_ alert: RunnerAlert, action: String, deadline: Date = .distantFuture) throws -> XCUIElement? {
+    let buttons = try readModalValue(deadline: deadline) {
+      alert.actions.filter { $0.exists && $0.isEnabled }
+    }
+    let labels = try readModalValue(deadline: deadline) { buttons.map(\.label) }
     guard let index = RunnerAlertButtonChoice.buttonIndex(
-      for: alert.buttons.map(\.label),
+      for: labels,
       action: action,
       popupMarkerSurface: alert.source == .dismissPopup,
       vocabulary: .system
     ) else {
       return nil
     }
-    return alert.buttons[index]
+    return buttons[index]
   }
 
   /// The alert's own title: the first non-empty static text inside the alert that is neither a

@@ -168,7 +168,7 @@ extension RunnerTests {
     // Resolution is a pure read; a contended hosted simulator can spend far more than the 10 s
     // command timeout on it, so it runs under the sibling fixtures' resolution allowance.
     let alert = try requireResolvedAlert(within: RunnerTests.alertResolutionAllowance)
-    XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
+    XCTAssertEqual(alert.actions.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
 
     let response = try handleAlert(
       alert,

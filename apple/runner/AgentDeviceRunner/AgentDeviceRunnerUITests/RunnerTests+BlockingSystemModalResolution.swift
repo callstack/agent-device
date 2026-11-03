@@ -9,14 +9,14 @@ extension RunnerTests {
         return .absent
       }
       let actions = try readModalActions(in: modal.root, deadline: deadline)
-      if RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: actions.count),
-         let remote = try remoteHostedSystemModal(deadline: deadline) {
-        return remote
+      if RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: actions.count) {
+        guard let remote = try remoteHostedSystemModal(deadline: deadline) else { return .unresolved }
+        return .resolved(remote)
       }
-      return try runnerAlert(
+      return .resolved(RunnerAlert(
         root: modal.root, ownerApp: springboard, actions: actions,
-        source: .blockingSystemModal, window: modal.window, deadline: deadline
-      )
+        source: .blockingSystemModal, window: modal.window
+      ))
     } catch {
       return .unresolved
     }
@@ -28,7 +28,7 @@ extension RunnerTests {
     "com.apple.AccessorySetupUI"
   ]
 
-  private func remoteHostedSystemModal(deadline: Date) throws -> AlertResolution? {
+  private func remoteHostedSystemModal(deadline: Date) throws -> RunnerAlert? {
     for bundleId in Self.remoteSystemModalHostBundleIds {
       let host = XCUIApplication(bundleIdentifier: bundleId)
       let state = try readModalValue(deadline: deadline) { host.state }
@@ -36,9 +36,9 @@ extension RunnerTests {
 
       let actions = try readModalActions(in: host, deadline: deadline)
       guard !actions.isEmpty else { continue }
-      return try runnerAlert(
+      return RunnerAlert(
         root: host, ownerApp: host, actions: actions,
-        source: .blockingSystemModal, deadline: deadline
+        source: .blockingSystemModal, window: nil
       )
     }
     return nil

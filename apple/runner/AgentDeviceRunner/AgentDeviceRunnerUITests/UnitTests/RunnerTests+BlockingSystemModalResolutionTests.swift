@@ -95,6 +95,38 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testUnreadableRemoteModalMirrorNeverResolvesAsAnEmptyAlert() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      modalElementsQueryOverrideForTesting = nil
+      app.terminate()
+    }
+    let modal = app.alerts.firstMatch
+    XCTAssertTrue(modal.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let window = app.windows.firstMatch
+    var queryIndex = 0
+    modalElementsQueryOverrideForTesting = {
+      queryIndex += 1
+      switch queryIndex {
+      case 1: return [window]
+      case 2: return [modal]
+      default: return []
+      }
+    }
+    for action in ["get", "accept", "dismiss", "wait"] {
+      queryIndex = 0
+      let command = try runnerCommandFixture(
+        #"{"command":"alert","commandId":"unreadable-mirror-\#(action)","action":"\#(action)"}"#
+      )
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertFalse(response.ok, action)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertUnresolved, action)
+    }
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
+  @MainActor
   func testAlertWithNoEnabledButtonsStaysResolved() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-disabled-buttons"]
     app.launch()
@@ -108,7 +140,7 @@ extension RunnerTests {
       app: app, deadline: Date().addingTimeInterval(Self.defaultAlertCommandTimeout)
     ) else { return XCTFail("a recognized surface remains resolved without enabled buttons") }
     XCTAssertEqual(alert.source, .appAlert)
-    XCTAssertTrue(alert.buttons.isEmpty)
+    XCTAssertEqual(alert.actions.count, 2)
     let inspection = handleAlert(alert, action: "get", deadline: .distantFuture)
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "First confirmation")
