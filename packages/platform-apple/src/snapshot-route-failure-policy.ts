@@ -51,6 +51,8 @@ export type BridgeFallbackDisposition = Exclude<
  * resize, so retiring the generation would move every later capture of a healthy app to the runner.
  * A new capture-scoped refusal enters here, by an explicit decision; the route's warning switch is
  * exhaustive over the consequence, so a new one cannot reach the warning path undefined.
+ * `contracts/fixtures/ios-snapshot-bridge-refusals.json` lists every emitted code with its scope, and
+ * `test/repo-guards/snapshot-bridge-refusals.test.ts` fails when this table and the emitters disagree.
  */
 const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = new Map([
   ['window-coordinate-space-unresolved', 'coordinate-space-unresolved'],

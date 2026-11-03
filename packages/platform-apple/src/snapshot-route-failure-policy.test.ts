@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { bridgeFailureDisposition } from './snapshot-route-failure-policy.ts';
@@ -122,4 +124,33 @@ describe('generation-wide failures', () => {
       });
     },
   );
+});
+
+// The table is shared with the emitter guard in test/repo-guards/snapshot-bridge-refusals.test.ts.
+const fixture = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      import.meta.dirname,
+      '../../../contracts/fixtures/ios-snapshot-bridge-refusals.json',
+    ),
+    'utf8',
+  ),
+) as { captureScoped: { code: string; consequence: string }[]; generationScoped: string[] };
+
+test('the policy gives each code of the shared refusal table its scope and consequence', () => {
+  for (const { code, consequence } of fixture.captureScoped) {
+    // A preparation still running is classified by its failure kind, not by its code.
+    const kind = consequence === 'bridge-preparation' ? 'preparing' : 'unsupported';
+    expect(bridgeFailureDisposition({ kind, code }), code).toEqual({
+      scope: 'capture',
+      code,
+      consequence,
+    });
+  }
+  for (const code of fixture.generationScoped) {
+    expect(bridgeFailureDisposition({ kind: 'unsupported', code }), code).toEqual({
+      scope: 'generation',
+      code,
+    });
+  }
 });
