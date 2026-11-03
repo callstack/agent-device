@@ -77,6 +77,10 @@ test('package apple runner source strips unit-test blocks without mutating check
     false,
   );
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Tests')), false);
+  assert.equal(
+    fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Sources/RecordingSupport')),
+    false,
+  );
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/README.md')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/.build/cache.txt')), false);
   assert.equal(
@@ -447,6 +451,11 @@ function writeStripFixtureTree(root: string): void {
     root,
     'apple/snapshot-presentation/Sources/SnapshotPresentationConformance/main.swift',
     'development harness\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Sources/RecordingSupport/RawAlertRecording.swift',
+    'development recording support\n',
   );
   writeFixtureFile(
     root,
