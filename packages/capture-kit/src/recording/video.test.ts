@@ -119,23 +119,35 @@ test('preparation compiles once per Swift cache root', async () => {
 });
 
 test.each([
-  new AppError('COMMAND_FAILED', 'Swift cache lock was busy', { reason: 'process_lock_timeout' }),
-  new AppError('TOOL_MISSING', 'no swiftc'),
-])('failed preparation can be retried in the same cache root: %s', async (failure) => {
+  {
+    name: 'a contended cache lock',
+    failure: new AppError('COMMAND_FAILED', 'Swift cache lock was busy', {
+      reason: 'process_lock_timeout',
+    }),
+    reason: 'process_lock_timeout',
+  },
+  {
+    name: 'an unavailable toolchain',
+    failure: new AppError('TOOL_MISSING', 'no swiftc'),
+    reason: 'video_validator_unavailable',
+  },
+])('failed preparation can be retried after $name', async ({ failure, reason }) => {
   const host = createTestHost();
   vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
   const failed = prepareVideoValidator(host);
   expect(prepareVideoValidator(host)).toBe(failed);
-  await expect(failed).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-  expect(readPreparedVideoValidator(host)).toBeUndefined();
+  await expect(failed).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { reason } });
+  expect(readPreparedVideoValidator(host)).toBe(failed);
+  const mp4 = writeFixture('retried.mp4', Buffer.concat([ftyp, moov]));
+  await expect(isPlayableVideo(mp4, readPreparedVideoValidator(host))).rejects.toMatchObject({
+    details: { reason },
+  });
 
   const retry = prepareVideoValidator(host);
   expect(retry).not.toBe(failed);
   await expect(retry).resolves.toMatchObject({ executablePath: '/bin/true' });
   expect(readPreparedVideoValidator(host)).toBe(retry);
-  await expect(
-    isPlayableVideo(writeFixture('retried.mp4', Buffer.concat([ftyp, moov])), retry),
-  ).resolves.toBe(true);
+  await expect(isPlayableVideo(mp4, retry)).resolves.toBe(true);
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(2);
 });
 
