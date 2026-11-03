@@ -12,6 +12,7 @@ import {
   readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
   readInstrumentationExitResult,
+  isRefusedInstrumentationStart,
 } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
@@ -119,6 +120,14 @@ export async function captureAndroidSnapshotWithHelper(
     );
   }
   return output;
+}
+
+/**
+ * The one-shot run exited on its own after the system refused to start the helper (see
+ * `isRefusedInstrumentationStart`), so no helper code ran on the device.
+ */
+export function isAndroidSnapshotHelperStartFailure(error: unknown): boolean {
+  return error instanceof AppError && error.details?.androidSnapshotHelperStartRefused === true;
 }
 
 /**
@@ -268,6 +277,11 @@ function readAndroidSnapshotHelperOutput(
         stderr: result.stderr,
         exitCode: result.exitCode,
         instrumentation,
+        // Read only here, where adb returned the run's own exit: a deadline or a host failure throws
+        // before this point, so it can never read as a refused start.
+        ...(isRefusedInstrumentationStart(result)
+          ? { androidSnapshotHelperStartRefused: true }
+          : {}),
         ...androidCaptureFailureReasonDetail(
           androidCaptureFailureReasonFromExitCode(result.exitCode),
         ),

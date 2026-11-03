@@ -174,6 +174,15 @@ const ABORTED_RE = /^INSTRUMENTATION_ABORTED:[ \t]?(.*)$/;
 const PROTOCOL_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|STATUS_CODE|RESULT|CODE|ABORTED|FAILED):/;
 const VALUE_RECORD_RE = /^INSTRUMENTATION_(?:STATUS|RESULT): ([^=]*)=(.*)$/;
 const CODE_RE = /^INSTRUMENTATION_(STATUS_CODE|CODE): (-?\d+)\s*$/;
+// How `ActivityManagerService` reports an instrumentation it refused to start, before `am` prints
+// INSTRUMENTATION_FAILED. The snapshot helper itself only reports status 1 (a chunk) and 2 (ready).
+const SYSTEM_REFUSAL_REPORTER = 'ActivityManagerService';
+const SYSTEM_REFUSAL_STATUS_CODE = -1;
+// The refusal's stdout lines by record kind and key; Bundle order decides which key comes first.
+const SYSTEM_REFUSAL_SHAPES = new Set([
+  'STATUS Error,STATUS id,STATUS_CODE',
+  'STATUS id,STATUS Error,STATUS_CODE',
+]);
 // The protocol keys whose values are text, by the field they fill.
 const MESSAGE_FIELDS = { shortMsg: 'shortMsg', longMsg: 'longMsg', Error: 'error', stack: 'stack' };
 type MessageField = 'shortMsg' | 'longMsg' | 'error' | 'stack';
@@ -219,6 +228,9 @@ function createInstrumentationOutput() {
   > = {};
   let open: MessageField | undefined;
   const withheld = new Set<MessageField | 'aborted'>();
+  // Every non-blank stdout line by kind and key, never by value, for `isSystemRefusal`.
+  const stdoutShape: string[] = [];
+  let reportedBySystem = false;
   /** A line the limit cut cannot be proven clean, so its field is withheld like a marked one. */
   const checked = (field: MessageField | 'aborted', text: string, cut: boolean) => {
     if (cut || holdsSnapshotMarker(text)) withheld.add(field);
@@ -236,6 +248,7 @@ function createInstrumentationOutput() {
     return false;
   };
   const readStdoutLine = (line: string, cut: boolean) => {
+    if (line.trim() !== '') stdoutShape.push(stdoutLineShape(line, cut));
     if (readFailed(line, cut)) {
       open = undefined;
     } else if (PROTOCOL_RECORD_RE.test(line)) {
@@ -244,28 +257,41 @@ function createInstrumentationOutput() {
       fields[open] = appendLine(fields[open], checked(open, line, cut));
     }
   };
+  const readCodeRecord = (kind: string, value: number) => {
+    if (kind === 'CODE') fields.resultCode ??= value;
+    else fields.statusCode = value;
+  };
+  const readAbortedRecord = (message: string, cut: boolean) => {
+    if (fields.aborted !== undefined) return;
+    // The abort message is one line; whatever follows it is not part of it.
+    fields.aborted = checked('aborted', message, cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+  };
+  /** Answers the message field a value record opens, if any. */
+  const readMessageRecord = (key: string, value: string, cut: boolean) => {
+    const field = messageFieldOf(key);
+    if (!field || fields[field] !== undefined) return undefined;
+    fields[field] = checked(field, value, cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+    return field;
+  };
   /** Reads one protocol record; answers the message field whose value it opens, if any. */
   const readProtocolRecord = (line: string, cut: boolean): MessageField | undefined => {
     const code = CODE_RE.exec(line);
     if (code) {
       const value = Number(code[2]);
-      if (!Number.isSafeInteger(value)) return undefined;
-      if (code[1] === 'CODE') fields.resultCode ??= value;
-      else fields.statusCode = value;
+      if (Number.isSafeInteger(value)) readCodeRecord(code[1]!, value);
       return undefined;
     }
     const aborted = ABORTED_RE.exec(line);
     if (aborted) {
-      if (fields.aborted !== undefined) return undefined;
-      // The abort message is one line; whatever follows it is not part of it.
-      fields.aborted = checked('aborted', aborted[1] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
+      readAbortedRecord(aborted[1] ?? '', cut);
       return undefined;
     }
     const record = VALUE_RECORD_RE.exec(line);
-    const field = record ? messageFieldOf(record[1]!) : undefined;
-    if (!field || fields[field] !== undefined) return undefined;
-    fields[field] = checked(field, record![2] ?? '', cut).slice(0, MESSAGE_FIELD_MAX_CHARS);
-    return field;
+    if (!record) return undefined;
+    if (record[1] === 'id' && line.startsWith('INSTRUMENTATION_STATUS:')) {
+      reportedBySystem = record[2] === SYSTEM_REFUSAL_REPORTER;
+    }
+    return readMessageRecord(record[1]!, record[2] ?? '', cut);
   };
   const stdout = createLineAssembler(readStdoutLine);
   const stderr = createLineAssembler(readFailed);
@@ -299,7 +325,27 @@ function createInstrumentationOutput() {
         ...(withheld.size > 0 ? { withheldFields: [...withheld].sort() } : {}),
       };
     },
+    /**
+     * Stdout held the system's refusal to start the run and nothing else: a status holding just an
+     * `Error` and `id=ActivityManagerService`, then status code -1, and no other line.
+     */
+    isSystemRefusal: () =>
+      SYSTEM_REFUSAL_SHAPES.has(stdoutShape.join(',')) &&
+      reportedBySystem &&
+      fields.statusCode === SYSTEM_REFUSAL_STATUS_CODE,
   };
+}
+
+/** A stdout line by record kind and key only; anything else is told apart only as protocol or text. */
+function stdoutLineShape(line: string, cut: boolean): string {
+  if (cut) return 'cut';
+  const code = CODE_RE.exec(line);
+  if (code) return code[1]!;
+  const record = VALUE_RECORD_RE.exec(line);
+  if (record) {
+    return `${line.startsWith('INSTRUMENTATION_STATUS:') ? 'STATUS' : 'RESULT'} ${record[1]}`;
+  }
+  return PROTOCOL_RECORD_RE.test(line) ? 'protocol' : 'text';
 }
 
 function messageFieldOf(key: string): MessageField | undefined {
@@ -313,16 +359,43 @@ function appendLine(value: string | undefined, line: string): string | undefined
   return next.length > MESSAGE_FIELD_MAX_CHARS ? value : next;
 }
 
-export function readInstrumentationExitResult(run: {
+/**
+ * Whether a finished run is a start the system refused, and nothing else. All of these hold:
+ * - `am instrument` reported `INSTRUMENTATION_FAILED`;
+ * - the process exited with a non-zero code;
+ * - no signal ended it;
+ * - its stdout is the system's refusal report and nothing else.
+ */
+export function isRefusedInstrumentationStart(run: InstrumentationRun): boolean {
+  const output = readInstrumentationOutput(run);
+  const result = output.result(run.exitCode, run.signal, true);
+  return (
+    result.failed !== undefined &&
+    result.exitCode !== null &&
+    result.exitCode !== 0 &&
+    result.signal === undefined &&
+    output.isSystemRefusal()
+  );
+}
+
+type InstrumentationRun = {
   stdout: string;
   stderr: string;
   exitCode: number | null | undefined;
   signal?: string | null;
-}): AndroidInstrumentationExitResult {
+};
+
+function readInstrumentationOutput(run: InstrumentationRun) {
   const output = createInstrumentationOutput();
   output.writeStdout(run.stdout);
   output.writeStderr(run.stderr);
-  return output.result(run.exitCode, run.signal, true);
+  return output;
+}
+
+export function readInstrumentationExitResult(
+  run: InstrumentationRun,
+): AndroidInstrumentationExitResult {
+  return readInstrumentationOutput(run).result(run.exitCode, run.signal, true);
 }
 
 /** The exit of a spawned helper process and what it printed. */
