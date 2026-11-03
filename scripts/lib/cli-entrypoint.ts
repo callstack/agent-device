@@ -4,12 +4,16 @@ function isClosedPipe(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EPIPE';
 }
 
+function outputFailure(stream: NodeJS.WriteStream, error?: unknown): unknown {
+  const cause = stream.errored ?? error;
+  return cause != null && !isClosedPipe(cause) ? cause : undefined;
+}
+
 function drainOutput(stream: NodeJS.WriteStream, deadline: number): Promise<unknown> {
   return new Promise((resolve) => {
     const finish = (error?: unknown): void => {
       clearTimeout(timer);
-      const cause = stream.errored ?? error;
-      resolve(cause != null && !isClosedPipe(cause) ? cause : undefined);
+      resolve(outputFailure(stream, error));
     };
     const timer = setTimeout(
       () => finish(new Error('output drain timed out')),
@@ -60,11 +64,12 @@ export function runEntrypoint(prefix: string, main: () => Promise<number>): void
   });
   const exitAfterOutput = async (code: number): Promise<never> => {
     const deadline = Date.now() + OUTPUT_DRAIN_TIMEOUT_MS;
-    const [stdoutError, initialStderrError] = await Promise.all([
+    const [initialStdoutError, initialStderrError] = await Promise.all([
       drainOutput(process.stdout, deadline),
       drainOutput(process.stderr, deadline),
     ]);
-    let stderrError = initialStderrError;
+    const stdoutError = initialStdoutError ?? outputFailure(process.stdout);
+    let stderrError = initialStderrError ?? outputFailure(process.stderr);
     if (stdoutError != null && stderrError == null) {
       reportStdoutFailure(stdoutError);
       stderrError = await drainOutput(process.stderr, Date.now() + OUTPUT_DRAIN_TIMEOUT_MS);

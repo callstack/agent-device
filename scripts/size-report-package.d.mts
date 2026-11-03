@@ -16,5 +16,7 @@ export function assertPublishPackageContents(
 
 export function parseNpmPackOutput(stdout: string): Readonly<{
   filename: string;
+  size: number;
+  unpackedSize: number;
   files: readonly NpmPackEntry[];
 }>;

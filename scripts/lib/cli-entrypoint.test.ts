@@ -155,6 +155,50 @@ test.each([0, 7])(
   },
 );
 
+test.each(
+  ['stdout', 'stderr'].flatMap((stream) =>
+    ['EIO', 'EPIPE'].flatMap((errorCode) =>
+      [0, 7].map((exitCode) => ({ stream, errorCode, exitCode })),
+    ),
+  ),
+)(
+  'a late $stream error during the other drain preserves status ($errorCode, code=$exitCode)',
+  async ({ stream, errorCode, exitCode }) => {
+    const source = [
+      `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+      "import { Writable } from 'node:stream';",
+      'const stderr = process.stderr;',
+      'const faulty = new Writable({ write(_chunk, _encoding, done) { done(); } });',
+      'let injected = false;',
+      'const waiting = new Writable({ write(chunk, encoding, done) {',
+      '  if (!injected && chunk.length === 0) {',
+      '    injected = true;',
+      `    setImmediate(() => { faulty.destroy(Object.assign(new Error('late write failure'), { code: ${JSON.stringify(errorCode)} })); setImmediate(done); });`,
+      '  } else stderr.write(chunk, encoding, done);',
+      '} });',
+      `Object.defineProperty(process, ${JSON.stringify(stream)}, { value: faulty });`,
+      `Object.defineProperty(process, ${JSON.stringify(stream === 'stdout' ? 'stderr' : 'stdout')}, { value: waiting });`,
+      `runEntrypoint('fixture', async () => ${exitCode});`,
+    ].join('\n');
+    const child = spawn(
+      process.execPath,
+      ['--experimental-strip-types', '--input-type=module', '--eval', source],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+    const [code, signal] = await once(child, 'close');
+    assert.equal(signal, null);
+    assert.equal(code, exitCode || (errorCode === 'EPIPE' ? 0 : 1));
+    assert.equal(
+      stderr,
+      stream === 'stdout' && errorCode !== 'EPIPE'
+        ? 'fixture: unable to flush stdout: late write failure\n'
+        : '',
+    );
+  },
+);
+
 // A real pipe must stay unread: synthetic write callbacks cannot prove process termination under backpressure.
 test.each([
   { exitCode: 0, diagnosticDelayMs: 0 },

@@ -210,6 +210,28 @@ test.each(['1', -1, 0.5, null])('npm pack rejects malformed file sizes (%s)', (s
   );
 });
 
+test.each(
+  ['size', 'unpackedSize'].flatMap((field) =>
+    [undefined, null, '1', -1, 0.5, Number.MAX_SAFE_INTEGER + 1].map((value) => ({ field, value })),
+  ),
+)('npm pack rejects invalid aggregate $field ($value)', ({ field, value }) => {
+  assert.throws(
+    () =>
+      parseNpmPackOutput(
+        JSON.stringify({ filename: 'fixture.tgz', ...fixturePack, [field]: value }),
+      ),
+    new RegExp(`invalid ${field}`),
+  );
+});
+
+test.each([0, Number.MAX_SAFE_INTEGER])('npm pack retains valid aggregate sizes (%s)', (size) => {
+  const parsed = parseNpmPackOutput(
+    JSON.stringify({ filename: 'fixture.tgz', ...fixturePack, size, unpackedSize: size }),
+  );
+  assert.equal(parsed.size, size);
+  assert.equal(parsed.unpackedSize, size);
+});
+
 test('npm pack parser shares validated file entries across both output shapes', () => {
   const pack = { filename: 'fixture.tgz', ...fixturePack };
   assert.deepEqual(parseNpmPackOutput(JSON.stringify([pack])).files, fixturePack.files);

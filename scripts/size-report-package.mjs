@@ -172,6 +172,11 @@ export function parseNpmPackOutput(stdout) {
   if (!pack || typeof pack.filename !== 'string' || pack.filename.length === 0) {
     throw new Error('npm pack did not return a filename');
   }
+  for (const field of ['size', 'unpackedSize']) {
+    if (!Number.isSafeInteger(pack[field]) || pack[field] < 0) {
+      throw new Error(`npm pack returned an invalid ${field}: ${JSON.stringify(pack[field])}`);
+    }
+  }
   return { ...pack, files: normalizeNpmPackEntries(pack) };
 }
 
