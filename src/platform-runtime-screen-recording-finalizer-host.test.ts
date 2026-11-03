@@ -237,6 +237,7 @@ test.each([0, OVERLAY_BUDGET_MS])(
           targetLabel: 'test recording',
         },
       );
+      expect(overlay).toHaveBeenCalledOnce();
       expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
       expect(video.isPlayable).not.toHaveBeenCalled();
     } finally {
