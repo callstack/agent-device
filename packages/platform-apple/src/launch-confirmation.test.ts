@@ -277,9 +277,12 @@ test.each([
     vi.mocked(emitDiagnostic).mockClear();
     try {
       const { interactor, acceptAlert } = confirmationRunner();
-      const secondSpawned = Promise.withResolvers<void>();
+      let observeSecondSpawn!: () => void;
+      const secondSpawned = new Promise<void>((resolve) => {
+        observeSecondSpawn = resolve;
+      });
       const coreSimulator = wedgedCoreSimulator(answers, (count) => {
-        if (count === 2) secondSpawned.resolve();
+        if (count === 2) observeSecondSpawn();
       });
       let answered: unknown = 'pending';
       const answer = withAppleToolProvider(coreSimulator, async () =>
@@ -292,7 +295,7 @@ test.each([
         ).then((value) => (answered = value)),
       );
 
-      await secondSpawned.promise;
+      await secondSpawned;
       expect(coreSimulator.spawns()).toBe(2);
       await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
       expect(answered).toEqual({ outcome: 'unreadable', step: 'url-owner' });
