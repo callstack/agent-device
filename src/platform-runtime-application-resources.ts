@@ -27,17 +27,26 @@ export function createApplicationResourceLifecycle(tools: {
     finalizeDaemonShutdown: async () => {
       // A cold validator compile runs outside every request, so this is the last owner that can
       // stop it before the process exits. It closes first and on every path: a runner sweep that
-      // waits on a recorder, or fails, must not leave the compiler and its cache lock behind. The
-      // sweep stays the failure this phase reports when both owners failed.
+      // waits on a recorder, or fails, must not leave the compiler and its cache lock behind.
+      // Both failures remain available when both owners fail.
       const validatorFailure = await tools.recording
         .closeValidatorPreparation()
-        .catch((error: unknown) => error);
+        .then(() => ({ failed: false }) as const)
+        .catch((error: unknown) => ({ failed: true, error }) as const);
       const sweep = await tools.apple
         .finalizeRunnerSessionsForShutdown()
         .then((devices) => ({ failed: false, devices }) as const)
         .catch((error: unknown) => ({ failed: true, error }) as const);
-      if (sweep.failed) throw sweep.error;
-      if (validatorFailure !== undefined) throw validatorFailure;
+      if (sweep.failed) {
+        if (validatorFailure.failed)
+          throw new AggregateError(
+            [sweep.error, validatorFailure.error],
+            'Daemon shutdown cleanup failed',
+            { cause: sweep.error },
+          );
+        throw sweep.error;
+      }
+      if (validatorFailure.failed) throw validatorFailure.error;
       return sweep.devices;
     },
   });

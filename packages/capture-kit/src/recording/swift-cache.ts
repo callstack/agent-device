@@ -8,11 +8,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import {
-  acquireProcessLock,
-  withProcessLock,
-  type ProcessLockRelease,
-} from '@agent-device/host-kit/file';
+import { acquireProcessLock, type ProcessLockRelease } from '@agent-device/host-kit/file';
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;
@@ -194,9 +190,16 @@ async function ensureSwiftExecutable(params: {
   const executableDir = path.dirname(params.executablePath);
   fs.mkdirSync(executableDir, { recursive: true });
   const timeoutMs = params.timeoutMs ?? 120_000;
-  await withProcessLock({
-    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs, params.signal),
-    task: async () => {
+  const release = await acquireSwiftCacheLock(
+    `${params.executablePath}.lock`,
+    timeoutMs,
+    params.signal,
+  );
+  const cleanupFailures: unknown[] = [];
+  let taskFailure: unknown;
+  let taskFailed = false;
+  try {
+    await (async () => {
       // Another process may have published the executable while this one waited for the lock.
       if (isExecutableFile(params.executablePath)) {
         return;
@@ -223,10 +226,31 @@ async function ensureSwiftExecutable(params: {
         });
         fs.renameSync(tempExecutablePath, params.executablePath);
       } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (error) {
+          cleanupFailures.push(error);
+        }
       }
-    },
-  });
+    })();
+  } catch (error) {
+    taskFailed = true;
+    taskFailure = error;
+  }
+  try {
+    await release();
+  } catch (error) {
+    cleanupFailures.push(error);
+  }
+  if (cleanupFailures.length) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Swift cache cleanup failed',
+      { reason: 'swift_cache_cleanup_failed' },
+      new AggregateError(taskFailed ? [taskFailure, ...cleanupFailures] : cleanupFailures),
+    );
+  }
+  if (taskFailed) throw taskFailure;
 }
 
 async function acquireSwiftCacheLock(

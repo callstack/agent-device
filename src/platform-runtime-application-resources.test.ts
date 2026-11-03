@@ -114,3 +114,22 @@ test('a failed validator close is reported when the runner sweep succeeded', asy
 
   await expect(resources.finalizeDaemonShutdown()).rejects.toBe(closeFailure);
 });
+
+test('shutdown retains both runner and validator cleanup failures', async () => {
+  const runner = new Error('runner failure');
+  const validator = new Error('validator failure');
+  const resources = lifecycle({
+    hasTestImeRecoveryEvidence: async () => false,
+    recoverTestImeStartup: async () => {},
+    finalizeRunnerSessionsForShutdown: async () => {
+      throw runner;
+    },
+    closeValidatorPreparation: async () => {
+      throw validator;
+    },
+  });
+  const failure = await resources.finalizeDaemonShutdown().catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).errors).toEqual([runner, validator]);
+  expect((failure as AggregateError).cause).toBe(runner);
+});

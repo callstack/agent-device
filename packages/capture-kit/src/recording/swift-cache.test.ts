@@ -258,7 +258,7 @@ test('compileSwiftSourceText falls back to swift-helper when the cache name sani
   expect(fs.statSync(executablePath).mode & 0o111).not.toBe(0);
 });
 
-test('a compile that failed is reported over a cache lock that could not be given back', async () => {
+test('a failed compile and an unverified lock release retain both errors', async () => {
   const sourcePath = writeSourceFile();
   const buildFailure = new Error('swiftc: error: build failed');
   let lockDir = '';
@@ -277,9 +277,17 @@ test('a compile that failed is reported over a cache lock that could not be give
     throw buildFailure;
   });
 
-  await expect(
-    compileSwiftSourceFile({ host: createTestHost(), sourcePath, cacheName: 'recording-overlay' }),
-  ).rejects.toBe(buildFailure);
+  const error = await compileSwiftSourceFile({
+    host: createTestHost(),
+    sourcePath,
+    cacheName: 'recording-overlay',
+  }).catch((error: unknown) => error);
+  expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
+  expect((error as Error).cause).toBeInstanceOf(AggregateError);
+  expect(((error as Error).cause as AggregateError).errors).toEqual([
+    buildFailure,
+    expect.any(Error),
+  ]);
   // The release really could not verify itself: the lock is still standing.
   expect(fs.existsSync(lockDir)).toBe(true);
 });
@@ -406,4 +414,29 @@ test('reads only a published executable for the exact source and cache, without 
   fs.chmodSync(executable, 0o644);
   expect(readCompiledSwiftSourceText(input)).toBeUndefined();
   expect(mockRunCmd).not.toHaveBeenCalled();
+});
+
+test('a temp removal failure survives a canceled compile', async () => {
+  const removalFailure = new Error('removal failed');
+  const cancelFailure = createRequestCanceledError();
+  mockRunCmd.mockRejectedValueOnce(cancelFailure);
+  const original = fs.rmSync;
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
+    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    return original(target, options);
+  }) as typeof fs.rmSync);
+  try {
+    const error = await compileSwiftSourceText({
+      host: createTestHost(),
+      source: 'print(1)',
+      cacheName: 'removal',
+    }).catch((error: unknown) => error);
+    expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
+    expect(((error as Error).cause as AggregateError).errors).toEqual([
+      cancelFailure,
+      removalFailure,
+    ]);
+  } finally {
+    spy.mockRestore();
+  }
 });
