@@ -53,7 +53,6 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS = [
       C.appState,
       C.back,
       C.click,
-      C.diff,
       C.find,
       C.get,
       C.home,
@@ -86,7 +85,7 @@ export const ANDROID_EMULATOR_LIVE_SCENARIOS = [
   },
   {
     behaviors: ['test-ime-restoration', 'test-ime-unicode-input'],
-    commands: [C.fill, C.focus, C.type],
+    commands: [C.diff, C.fill, C.focus, C.type],
     id: 'smoke:form-input',
     run: assertFormInput,
     start: {

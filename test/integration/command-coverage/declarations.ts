@@ -731,8 +731,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   },
   [C.diff]: {
     androidEmulator: androidEmulator.live(
-      'smoke:automation-system',
-      'snapshot diff observes removed and added Android input canary text',
+      'smoke:form-input',
+      'snapshot diff observes a confirmed Android name replacement',
     ),
     iosSimulator: iosSimulator.live(
       'smoke:form-input',
