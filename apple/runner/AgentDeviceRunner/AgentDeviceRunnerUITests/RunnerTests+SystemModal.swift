@@ -21,7 +21,7 @@ extension RunnerTests {
     deadline: Date = .distantFuture
   ) throws -> DataPayload? {
     let modal = resolvedModal.root
-    let actions = resolvedModal.buttons
+    let actions = resolvedModal.actions
 
     let title = preferredSystemModalTitle(modal)
     guard let modalNode = safeMakeSnapshotNode(

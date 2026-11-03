@@ -9,10 +9,12 @@ extension RunnerTests {
     app.launch()
     defer { app.terminate() }
     XCTAssertTrue(app.switches["native-off"].waitForFixtureExistence(timeout: appExistenceTimeout))
+    let actions = try readModalActions(in: app, deadline: .distantFuture)
     let resolved = RunnerAlert(
       root: app,
       ownerApp: app,
-      buttons: try readModalActions(in: app, deadline: .distantFuture),
+      actions: actions,
+      buttons: actions,
       source: .blockingSystemModal,
       window: nil
     )
@@ -21,6 +23,19 @@ extension RunnerTests {
     let on = try XCTUnwrap(payload.nodes?.first { $0.identifier == "native-on" })
     XCTAssertEqual(off.value, "0")
     XCTAssertEqual(on.value, "1")
+  }
+
+  @MainActor
+  func testBlockingModalSnapshotIncludesDisabledActions() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-disabled-buttons"]
+    app.launch()
+    defer { app.terminate() }
+    let alert = try requireResolvedAlert(within: Self.defaultAlertCommandTimeout)
+    XCTAssertTrue(alert.buttons.isEmpty)
+    let payload = try XCTUnwrap(try snapshotForBlockingSystemModal(alert))
+    let buttons = try XCTUnwrap(payload.nodes).filter { $0.type == "Button" }
+    XCTAssertEqual(buttons.compactMap(\.label).sorted(), ["Cancel", "OK"])
+    XCTAssertTrue(buttons.allSatisfy { $0.enabled == false })
   }
 #endif
 }

@@ -16,6 +16,16 @@ extension RunnerTests {
     XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
   }
 
+  func testRequiredModalReadPreservesSuccessfulEmptyAndOptionalValues() throws {
+    let elements: [XCUIElement] = try readModalValue(deadline: .distantFuture) { [] }
+    XCTAssertTrue(elements.isEmpty)
+    let element: XCUIElement? = try readModalValue(deadline: .distantFuture) { nil as XCUIElement? }
+    XCTAssertNil(element)
+    let visible = try readModalValue(deadline: .distantFuture) { false }
+    XCTAssertFalse(visible)
+    XCTAssertNoThrow(try readModalValue(deadline: .distantFuture) { () })
+  }
+
 #if os(iOS)
   @MainActor
   func testAlertRequiredQueryFailureNeverReportsAbsence() throws {
@@ -102,7 +112,7 @@ extension RunnerTests {
     let inspection = handleAlert(alert, action: "get", deadline: .distantFuture)
     XCTAssertTrue(inspection.ok)
     XCTAssertEqual(inspection.data?.message, "First confirmation")
-    XCTAssertEqual(inspection.data?.items, [])
+    XCTAssertEqual(inspection.data?.items, ["Cancel", "OK"])
     for action in ["accept", "dismiss"] {
       let response = handleAlert(alert, action: action, deadline: .distantFuture)
       XCTAssertEqual(response.error?.code, RunnerWireErrorCode.alertButtonNotFound, action)

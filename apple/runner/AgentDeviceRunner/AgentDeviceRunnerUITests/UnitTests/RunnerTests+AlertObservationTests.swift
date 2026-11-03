@@ -99,6 +99,7 @@ extension RunnerTests {
     let alert = RunnerAlert(
       root: resolved.root,
       ownerApp: resolved.ownerApp,
+      actions: resolved.actions,
       buttons: resolved.buttons,
       source: resolved.source,
       window: app.windows.matching(identifier: "agent-device-missing-window").firstMatch

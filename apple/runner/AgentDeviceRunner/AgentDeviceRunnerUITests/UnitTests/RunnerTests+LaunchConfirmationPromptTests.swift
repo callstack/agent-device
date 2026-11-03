@@ -178,7 +178,7 @@ extension RunnerTests {
     let items = ["Cancel", "Open"]
     let foreign = XCUIApplication(bundleIdentifier: "com.example.app")
     func alert(owner: XCUIApplication, source: AlertSurfaceSource) -> RunnerAlert {
-      RunnerAlert(root: owner, ownerApp: owner, buttons: [], source: source, window: nil)
+      RunnerAlert(root: owner, ownerApp: owner, actions: [], buttons: [], source: source, window: nil)
     }
     XCTAssertTrue(marksLaunchConfirmation(alert(owner: springboard, source: .blockingSystemModal), title: title, items: items))
     XCTAssertFalse(marksLaunchConfirmation(alert(owner: foreign, source: .appAlert), title: title, items: items))

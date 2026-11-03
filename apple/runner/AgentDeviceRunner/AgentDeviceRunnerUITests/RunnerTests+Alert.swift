@@ -5,6 +5,7 @@ extension RunnerTests {
   struct RunnerAlert {
     let root: XCUIElement
     let ownerApp: XCUIApplication
+    let actions: [XCUIElement]
     let buttons: [XCUIElement]
     let source: AlertSurfaceSource
     /// The window hosting a SpringBoard modal; nil routes through `ownerApp`.
@@ -141,8 +142,8 @@ extension RunnerTests {
       }
     }
 
-    let title = safely("ALERT_TITLE", "Alert") { preferredAlertTitle(alert.root, buttons: alert.buttons) }
-    let items = alert.buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+    let title = safely("ALERT_TITLE", "Alert") { preferredAlertTitle(alert.root, buttons: alert.actions) }
+    let items = alert.actions.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
     return Response(
       ok: true,
       data: DataPayload(
@@ -272,7 +273,7 @@ extension RunnerTests {
     let buttons = try actions.filter { candidate in
       try readModalValue(deadline: deadline) { candidate.exists && candidate.isEnabled }
     }
-    return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: window))
+    return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, actions: actions, buttons: buttons, source: source, window: window))
   }
 
   private func firstExistingElement(in elements: [XCUIElement], deadline: Date) throws -> XCUIElement? {
