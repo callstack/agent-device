@@ -72,6 +72,11 @@ export type InteractionSurfaceEntry = {
    * `classifyBaselineSurfaceEvidence` in interaction-surface-signature.ts.
    */
   discriminating: boolean;
+  /**
+   * Set on soft-keyboard chrome only. Its rect says nothing about a gesture, but the keyboard
+   * arriving or leaving does: see `classifyPostGestureBaselineEvidence`.
+   */
+  keyboardChrome?: true;
 };
 
 /**

@@ -16,7 +16,7 @@ export function buildInteractionSurfaceSignature(
   const entries: InteractionSurfaceSignature = [];
   // Computed once per signature build (needs the whole tree for the
   // ancestor/descendant walk `collectKeyboardChrome` does — see
-  // `isNonDiscriminatingSurfaceNode`), not per node.
+  // `isKeyboardChromeNode`), not per node.
   const keyboardChromeRefs = collectKeyboardChromeRefs(nodes);
 
   for (const node of nodes) {
@@ -119,6 +119,31 @@ export function classifyBaselineSurfaceEvidence(
   // capture of the same screen.
   if (droppedFromBaseline && addedSinceBaseline) return 'changed';
   return 'unchanged';
+}
+
+/**
+ * `classifyBaselineSurfaceEvidence` for the post-gesture distrust verdict, which also counts the soft
+ * keyboard arriving or leaving as a change.
+ *
+ * A drag that dismisses the keyboard moves no content, so on content alone the quiet pair after it
+ * equals the pre-gesture baseline, and the loop distrusted a read that had in fact changed until the
+ * distrust cap: about 3.5 s for every keyboard dismissal by drag. The stale read the distrust exists
+ * for is a whole accessibility snapshot of the app that predates the gesture, and the keyboard's
+ * window is part of that snapshot, so a keyboard that only one side shows proves the read is fresh.
+ * Only a pre-gesture baseline reaches this classifier, and only Apple stores one; the loop compares
+ * the two under one iOS comparison key, which names one producer and one presentation, so the
+ * keyboard missing from one side is not scope drift.
+ */
+export function classifyPostGestureBaselineEvidence(
+  baseline: InteractionSurfaceSignature,
+  current: InteractionSurfaceSignature,
+): InteractionSurfaceChange {
+  if (showsKeyboard(baseline) !== showsKeyboard(current)) return 'changed';
+  return classifyBaselineSurfaceEvidence(baseline, current);
+}
+
+function showsKeyboard(signature: InteractionSurfaceSignature): boolean {
+  return signature.some((entry) => entry.keyboardChrome === true);
 }
 
 /**
@@ -278,6 +303,7 @@ function buildInteractionSurfaceEntry(
   const occurrence = occurrenceCounts.get(semanticKey) ?? 0;
   occurrenceCounts.set(semanticKey, occurrence + 1);
   const identity = interactionSurfaceIdentity(node);
+  const keyboardChrome = isKeyboardChromeNode(node, keyboardChromeRefs);
   return {
     key: `${semanticKey}|#${occurrence}`,
     ...(identity ? { identity } : {}),
@@ -286,7 +312,8 @@ function buildInteractionSurfaceEntry(
     y: Math.round(node.rect.y),
     width: Math.round(node.rect.width),
     height: Math.round(node.rect.height),
-    discriminating: !isNonDiscriminatingSurfaceNode(node, keyboardChromeRefs),
+    discriminating: !keyboardChrome && !isViewportRootNode(node),
+    ...(keyboardChrome ? { keyboardChrome } : {}),
   };
 }
 
@@ -320,14 +347,15 @@ function interactionSurfaceIdentity(node: SnapshotNode): string | undefined {
  * them from the discriminating-overlap count for exactly this reason.
  *
  * Not a special case for "Application" alone, and not a container-only
- * special case for the keyboard either: both checks below reuse this repo's
- * existing kind classifications rather than inventing a narrower one.
+ * special case for the keyboard either: the viewport-root check and this
+ * keyboard check reuse this repo's existing kind classifications rather than
+ * inventing a narrower one.
  */
-function isNonDiscriminatingSurfaceNode(
+function isKeyboardChromeNode(
   node: SnapshotNode,
   keyboardChromeRefs: ReadonlySet<string>,
 ): boolean {
-  return isViewportRootNode(node) || (node.ref !== undefined && keyboardChromeRefs.has(node.ref));
+  return node.ref !== undefined && keyboardChromeRefs.has(node.ref);
 }
 
 /**

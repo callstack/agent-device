@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   buildInteractionSurfaceSignature,
-  classifyBaselineSurfaceEvidence,
+  classifyPostGestureBaselineEvidence,
   type InteractionSurfaceSignature,
 } from '../interaction-surface-signature.ts';
 import {
@@ -24,7 +24,7 @@ const decidePostGestureStabilityVerdict = (params: {
   quietSignature: InteractionSurfaceSignature;
   elapsedMs: number;
   distrustCapMs: number;
-}) => decideWithHooks({ ...params, classifyBaselineEvidence: classifyBaselineSurfaceEvidence });
+}) => decideWithHooks({ ...params, classifyBaselineEvidence: classifyPostGestureBaselineEvidence });
 
 function preActionBaseline(
   signature: InteractionSurfaceSignature,
@@ -224,5 +224,59 @@ test('decidePostGestureStabilityVerdict trusts immediately when the overlap is o
       distrustCapMs: 3_500,
     }),
     { verdict: 'trust' },
+  );
+});
+
+// --- A drag that dismisses the keyboard moves no content: the keyboard leaving is the change ---
+
+function pickupWithKeyboard(keyboard: boolean): InteractionSurfaceSignature {
+  return buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+    ...(keyboard ? keyboardWindowNodes() : []),
+  ]);
+}
+
+test('decidePostGestureStabilityVerdict trusts a quiet read the keyboard left, though no content moved', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(true)),
+      quietSignature: pickupWithKeyboard(false),
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'trust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict trusts a quiet read the keyboard arrived in, though no content moved', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(false)),
+      quietSignature: pickupWithKeyboard(true),
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'trust' },
+  );
+});
+
+test('decidePostGestureStabilityVerdict still distrusts a read that keeps the keyboard and the content', () => {
+  assert.deepEqual(
+    decidePostGestureStabilityVerdict({
+      baseline: preActionBaseline(pickupWithKeyboard(true)),
+      quietSignature: pickupWithKeyboard(true),
+      elapsedMs: 0,
+      distrustCapMs: 3_500,
+    }),
+    { verdict: 'distrust' },
   );
 });

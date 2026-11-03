@@ -488,6 +488,38 @@ test('capturePostGestureStabilizedResult trusts immediately (no cap tax) when th
   assert.equal(capture.mock.calls.length, 2);
 });
 
+test('capturePostGestureStabilizedResult settles at the first quiet pair after a drag that only dismissed the keyboard (iOS)', async () => {
+  // The keyboard-dismissing drag moves no content, so every read matches the pre-gesture content.
+  // The keyboard leaving is what proves the read fresh; without it the loop polled to the cap.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState([...pickupSnapshot(500).nodes, ...keyboardWindowNodes()]);
+  markPostGestureStabilization(session, 'swipe');
+
+  const capture = vi.fn(async () => pickupSnapshot(500));
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(1_000);
+  const { result, staleAccepts, settled } = await resultPromise;
+
+  assert.equal(settled, 1);
+  assert.equal(staleAccepts, 0);
+  assert.equal(result.postGestureOutcome, undefined);
+  assert.equal(capture.mock.calls.length, 2);
+});
+
 // --- #1569: a backend swap mid-poll is not comparable evidence ---
 
 test('capturePostGestureStabilizedResult re-baselines instead of concluding when the backend changes (iOS)', async () => {

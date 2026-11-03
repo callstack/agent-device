@@ -17,7 +17,7 @@ import {
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
-  classifyBaselineSurfaceEvidence,
+  classifyPostGestureBaselineEvidence,
   haveIdenticalDiscriminatingSurfaces,
   summarizeDiscriminatingSurfaceDivergence,
   snapshotSurfaceComparisonKey,
@@ -377,7 +377,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
           };
         },
         signaturesStable: areInteractionSurfaceSignaturesStable,
-        classifyBaselineEvidence: classifyBaselineSurfaceEvidence,
+        classifyBaselineEvidence: classifyPostGestureBaselineEvidence,
         surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
         summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
       },
