@@ -5,7 +5,9 @@ import XCTest
 import ObjectiveC.runtime
 
 private final class LitPanelBookingScreen: NSObject {
-  @objc let displayID: UInt = 3
+  @objc let displayID: UInt
+
+  init(_ displayID: UInt = 3) { self.displayID = displayID }
 }
 
 @MainActor
@@ -15,6 +17,7 @@ private final class LitPanelBookingProbe: NSObject {
   static var windowListReads = 0
   static var maxWindowListReads: Int?
   static var window: XCUIElement?
+  static var darkWindow: XCUIElement?
   static var coordinate: XCUICoordinate?
   static var windowFrame = CGRect.zero
   static var orientation = RunnerInterfaceOrientation.landscapeLeft
@@ -31,8 +34,8 @@ private final class LitPanelBookingProbe: NSObject {
       case "allElementsBoundByIndex":
         Self.windowListReads += 1
         if let max = Self.maxWindowListReads, Self.windowListReads > max { return [] }
-        return [Self.window!]
-      case "screen": return LitPanelBookingScreen()
+        return [Self.window!, Self.darkWindow].compactMap { $0 }
+      case "screen": return LitPanelBookingScreen(self === Self.darkWindow ? 1 : 3)
       case "exists": return true
       case "frame": return NSValue(cgRect: Self.windowFrame)
       default: break
@@ -111,6 +114,80 @@ extension RunnerTests {
       }
       XCTAssertNil(LitPanelBookingProbe.tappedPoint)
 
+    }
+  }
+
+  @MainActor
+  func testCollapsedTabCandidatesExcludeOverlappingDarkWindowsAndKeepTheCaptureScope() throws {
+    try withLitPanelBookingProbe { window in
+      let darkWindow = XCUIApplication(bundleIdentifier: "com.apple.springboard").windows.firstMatch
+      LitPanelBookingProbe.darkWindow = darkWindow
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 0, width: 669, height: 951)
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"snapshot","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      ))
+      XCTAssertNil(bookRequestLitPanelSurface(app: app))
+      let container = ElementAttributesFixture(.tabBar, CGRect(x: 0, y: 800, width: 669, height: 31))
+      let context = SnapshotTraversalContext(
+        queryRoot: app,
+        rootSnapshot: ElementAttributesFixture(.application, LitPanelBookingProbe.windowFrame, children: [
+          ElementAttributesFixture(.window, LitPanelBookingProbe.windowFrame, children: [container], displayID: 3),
+        ]),
+        rootReadDuration: 0,
+        viewport: .missing(reason: .notProvided),
+        keyboardBand: nil,
+        litPanelSurface: try XCTUnwrap(litPanelState.surface)
+      )
+      let lit = ElementAttributesFixture(.button, CGRect(x: 30, y: 800, width: 100, height: 30), label: "Lit")
+      let second = ElementAttributesFixture(.button, CGRect(x: 170, y: 800, width: 100, height: 30), label: "Second")
+      let dark = ElementAttributesFixture(.button, lit.frame, label: "Dark")
+      let appQuery = app.descendants(matching: .any)
+      let litQuery = window.descendants(matching: .any)
+      let darkQuery = darkWindow.descendants(matching: .any)
+      var predicates: [ObjectIdentifier: NSPredicate] = [:]
+      var restores: [() -> Void] = []
+      defer { restores.reversed().forEach { $0() } }
+      func swap(_ type: AnyClass, _ name: String, _ block: Any) throws {
+        let method = try XCTUnwrap(class_getInstanceMethod(type, NSSelectorFromString(name)))
+        let replacement = imp_implementationWithBlock(block)
+        let original = method_setImplementation(method, replacement)
+        restores.append {
+          method_setImplementation(method, original)
+          imp_removeBlock(replacement)
+        }
+      }
+      try swap(XCUIElement.self, "descendantsMatchingType:", { (root: AnyObject, _: UInt) -> XCUIElementQuery in
+        root === window ? litQuery : root === darkWindow ? darkQuery : appQuery
+      } as @convention(block) (AnyObject, UInt) -> XCUIElementQuery)
+      try swap(XCUIElementQuery.self, "matchingPredicate:", { (query: AnyObject, predicate: NSPredicate) -> XCUIElementQuery in
+        predicates[ObjectIdentifier(query)] = predicate
+        return query as! XCUIElementQuery
+      } as @convention(block) (AnyObject, NSPredicate) -> XCUIElementQuery)
+      try swap(XCUIElementQuery.self, "allElementsBoundByIndex", { (query: AnyObject) -> NSArray in
+        let attributes = query === litQuery ? [lit, second] : query === darkQuery ? [dark] : [lit, second, dark]
+        let matches = attributes.filter { predicates[ObjectIdentifier(query)]?.evaluate(with: $0) == true }
+        return matches.isEmpty ? [] : [window]
+      } as @convention(block) (AnyObject) -> NSArray)
+      let candidates = try XCTUnwrap(try collapsedTabCandidates(context: context, processingDeadline: .distantFuture))
+      XCTAssertEqual(candidates.map(\.label), ["Lit", "Second"], "an overlapping control on a dark window must not enter the capture")
+      let hint = CaptureHint(projection: .regular, depth: nil, regularPresentedDepth: nil, interactiveOnly: false, customActions: false)
+      let capture = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: .distantFuture)
+      let labels = capture.acquisition.nodes.compactMap(\.label)
+      XCTAssertTrue(labels.contains("Lit"))
+      XCTAssertTrue(labels.contains("Second"))
+      XCTAssertFalse(labels.contains("Dark"), "the serialized capture must exclude the overlapping dark control")
+      endRequestLitPanel(try XCTUnwrap(litPanelState.requestID))
+      let pinned = try XCTUnwrap(try collapsedTabCandidates(context: context, processingDeadline: .distantFuture))
+      XCTAssertEqual(pinned.map(\.label), ["Lit", "Second"], "the capture's display scope survives a cleared current request")
+      var unscoped = context
+      unscoped.litPanelSurface = nil
+      let all = try XCTUnwrap(try collapsedTabCandidates(context: unscoped, processingDeadline: .distantFuture))
+      XCTAssertEqual(all.map(\.label), ["Lit", "Second", "Dark"], "an unscoped capture keeps application-wide candidates")
+      litPanelWindowWalkIssueForTesting = true
+      defer { litPanelWindowWalkIssueForTesting = false }
+      XCTAssertThrowsError(try collapsedTabCandidates(context: context, processingDeadline: .distantFuture)) {
+        XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+      }
     }
   }
 
@@ -232,6 +309,7 @@ extension RunnerTests {
     var originals: [(Method, IMP)] = []
     defer {
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+      LitPanelBookingProbe.darkWindow = nil
       LitPanelBookingProbe.window = nil
       LitPanelBookingProbe.coordinate = nil
       LitPanelBookingProbe.anchor = nil
@@ -517,6 +595,30 @@ extension RunnerTests {
       }
       return Response(ok: true)
     }
+  }
+
+  @MainActor
+  func testCollapsedTabSnapshotReadsProvenLitLiveWindows() throws {
+    app.launchArguments = ["--agent-device-collapsed-tab-bar", "--agent-device-wide-slider"]
+    let (panel, _) = launchAppOnTheLitPanel()
+    defer { tearDownLitPanelApp() }
+    setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"snapshot",\#(panel)}"#))
+    XCTAssertNil(bookRequestLitPanelSurface(app: app))
+    let hint = CaptureHint(projection: .regular, depth: nil, regularPresentedDepth: nil, interactiveOnly: false, customActions: false)
+    let context = try XCTUnwrap(try makeSnapshotTraversalContext(
+      app: app,
+      hint: hint,
+      litPanelSurface: try XCTUnwrap(litPanelState.surface)
+    ))
+    let container = try XCTUnwrap(Self.snapshotDescendants(of: context.rootSnapshot).first { $0.elementType == .tabBar })
+    XCTAssertTrue(container.children.isEmpty, "the live fixture must reach collapsed-tab recovery")
+    let candidates = try XCTUnwrap(try collapsedTabCandidates(context: context, processingDeadline: .distantFuture))
+    XCTAssertTrue(candidates.contains { $0.label == "Left" })
+    XCTAssertTrue(candidates.contains { $0.label == "Right" })
+    let capture = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: .distantFuture)
+    let labels = capture.acquisition.nodes.compactMap(\.label)
+    XCTAssertTrue(labels.contains("Left"))
+    XCTAssertTrue(labels.contains("Right"))
   }
 
   /// A refused pin is a request refusal: it never reaches the capture plan, so it does not

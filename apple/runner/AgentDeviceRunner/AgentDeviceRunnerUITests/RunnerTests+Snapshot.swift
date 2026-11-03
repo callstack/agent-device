@@ -193,11 +193,11 @@ extension RunnerTests {
   ) throws -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
     var outcome = SnapshotTierOutcome.completed
     var cachedCollapsedTabCandidates: [CollapsedTabCandidate]?
-    func collapsedTabCandidatesOnce() -> [CollapsedTabCandidate] {
+    func collapsedTabCandidatesOnce() throws -> [CollapsedTabCandidate] {
       if let cachedCollapsedTabCandidates {
         return cachedCollapsedTabCandidates
       }
-      let candidates = collapsedTabCandidates(context: context, processingDeadline: processingDeadline)
+      let candidates = try collapsedTabCandidates(context: context, processingDeadline: processingDeadline)
       if candidates == nil { outcome = .deadlineExhausted }
       cachedCollapsedTabCandidates = candidates ?? []
       return candidates ?? []
@@ -217,7 +217,7 @@ extension RunnerTests {
     let rootChildren = try Self.litPanelRootChildren(context.rootSnapshot, surface: context.litPanelSurface)
     var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
-      appendCollapsedTabFallbackNodes(
+      try appendCollapsedTabFallbackNodes(
         to: &nodes,
         containerSnapshot: context.rootSnapshot,
         resolveCandidates: collapsedTabCandidatesOnce,
@@ -274,7 +274,7 @@ extension RunnerTests {
         throw regularSnapshotTooLargeFailure(nodeCount: nodes.count)
       }
       if Self.canDescendAtRawDepth(depth, hint: hint) {
-        appendCollapsedTabFallbackNodes(
+        try appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
           resolveCandidates: collapsedTabCandidatesOnce,

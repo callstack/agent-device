@@ -81,7 +81,7 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
 // Every application window that reports `litPanel`'s display, in list order, uncapped so element
 // search sees all of them; the caller holds the walk's XCTest issues. A window that is gone or names
 // no display is left out. Nil when the window list itself cannot be read.
-FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel);
+FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, NSUInteger litDisplayID);
 
 // Reads the display ID off an already-resolved window, keeping a synthesized record's display and
 // the caller's booked reference frame on the same window. The frame is still read before the

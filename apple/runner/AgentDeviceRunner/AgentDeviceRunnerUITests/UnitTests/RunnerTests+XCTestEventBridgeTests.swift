@@ -365,7 +365,7 @@ extension RunnerTests {
       DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)
     } + [later]
     let lit = RunnerCopyLitPanelWindows(
-      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel)
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel.displayID)
     XCTAssertEqual(lit?.count, 2)
     XCTAssertTrue((lit?.last as AnyObject) === later)
   }
@@ -380,13 +380,13 @@ extension RunnerTests {
       DisplayWindowFixture(frame: Self.innerHome, displayID: 3, present: false), dock,
     ]
     let lit = RunnerCopyLitPanelWindows(
-      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel)
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), Self.innerPanel.displayID)
     XCTAssertEqual(lit?.count, 2)
     XCTAssertTrue((lit?.first as AnyObject) === home)
     XCTAssertTrue((lit?.last as AnyObject) === dock)
     XCTAssertNil(
       RunnerCopyLitPanelWindows(
-        DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel),
+        DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel.displayID),
       "an unreadable window list is not an empty lit display"
     )
   }

@@ -299,11 +299,11 @@ extension RunnerTests {
   func appendCollapsedTabFallbackNodes(
     to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
-    resolveCandidates: () -> [CollapsedTabCandidate],
+    resolveCandidates: () throws -> [CollapsedTabCandidate],
     depth: Int,
     parentIndex: Int
-  ) {
-    let fallbackNodes = collapsedTabFallbackNodes(
+  ) throws {
+    let fallbackNodes = try collapsedTabFallbackNodes(
       for: containerSnapshot,
       resolveCandidates: resolveCandidates,
       startingIndex: nodes.count,
@@ -336,15 +336,14 @@ extension RunnerTests {
     let selected: Bool
   }
 
-  /// The live elements any collapsed tab container in this capture may adopt, read in one XCTest
-  /// query: `collapsedTabCandidatePredicate` copies each match's attributes while XCTest evaluates
-  /// it, so no match costs a further round trip. The query starts only while the time left before
-  /// `processingDeadline` covers what this capture's root tree read took; nil means it did not start.
+  /// Live controls collapsed tab containers may adopt, queried under the capture's proven-lit roots.
+  /// The predicate copies attributes during each query without further round trips. Queries start
+  /// only while the remaining slice covers the root read's duration; nil means a query could not start.
   @MainActor
   func collapsedTabCandidates(
     context: SnapshotTraversalContext,
     processingDeadline: Date
-  ) -> [CollapsedTabCandidate]? {
+  ) throws -> [CollapsedTabCandidate]? {
     let containerFrames = Self.snapshotDescendants(of: context.rootSnapshot)
       .filter(isCollapsedTabContainer)
       .map(\.frame)
@@ -352,19 +351,26 @@ extension RunnerTests {
     let predicate = Self.collapsedTabCandidatePredicate(containerFrames: containerFrames) { attributes in
       candidates.append(self.collapsedTabCandidate(attributes))
     }
-    guard
-      Self.xctestQueryCanStart(
-        deadline: processingDeadline,
-        now: Date(),
-        expectedCost: context.rootReadDuration
-      )
-    else {
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_QUERY_NOT_STARTED")
-      return nil
+    func canStartQuery() -> Bool {
+      guard Self.xctestQueryCanStart(deadline: processingDeadline, now: Date(), expectedCost: context.rootReadDuration) else {
+        NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_QUERY_NOT_STARTED")
+        return false
+      }
+      return true
     }
-    let matches = snapshotElementsQuery {
-      context.queryRoot.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
-    }.elements
+    guard canStartQuery() else { return nil }
+    let queries = try elementQueries(
+      root: context.queryRoot,
+      matching: .any,
+      litDisplayID: context.litPanelSurface?.displayID
+    )
+    var matches: [XCUIElement] = []
+    for query in queries {
+      guard canStartQuery() else { return nil }
+      matches += snapshotElementsQuery {
+        query.matching(predicate).allElementsBoundByIndex
+      }.elements
+    }
     return matches.isEmpty ? [] : candidates
   }
 
@@ -434,18 +440,18 @@ extension RunnerTests {
 
   private func collapsedTabFallbackNodes(
     for containerSnapshot: XCUIElementSnapshot,
-    resolveCandidates: () -> [CollapsedTabCandidate],
+    resolveCandidates: () throws -> [CollapsedTabCandidate],
     startingIndex: Int,
     depth: Int,
     parentIndex: Int
-  ) -> [RawAXNode] {
+  ) throws -> [RawAXNode] {
     guard isCollapsedTabContainer(containerSnapshot) else { return [] }
     // Candidates are read from live elements, which XCTest reports in the app's own space, and a
     // collapsed tab container sits under the app's own window. `SnapshotGeometrySpace.normalized` keys
     // rotation on ancestry, so these nodes never enter a declared native space and need no special
     // case here; `isCollapsedTabCandidate` compares reported frames to each other.
     let containerFrame = containerSnapshot.frame
-    let candidates = resolveCandidates().compactMap { candidate in
+    let candidates = try resolveCandidates().compactMap { candidate in
       collapsedTabCandidateNode(
         candidate: candidate,
         containerSnapshot: containerSnapshot,

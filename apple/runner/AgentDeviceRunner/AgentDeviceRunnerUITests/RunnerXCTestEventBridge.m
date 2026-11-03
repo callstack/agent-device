@@ -316,7 +316,7 @@ RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
   return outcome;
 }
 
-NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel) {
+NSArray *RunnerCopyLitPanelWindows(id application, NSUInteger litDisplayID) {
   NSArray *windows = RunnerCopyWindowList(application);
   if (windows == nil) {
     return nil;
@@ -328,7 +328,7 @@ NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel) {
     NSUInteger displayID = 0;
     if (RunnerReadLitPanelCandidate(candidate, &frame, &screen, &displayID) ==
           RunnerApplicationScreenFailureNone &&
-        displayID == litPanel.displayID) {
+        displayID == litDisplayID) {
       [lit addObject:candidate];
     }
   }
