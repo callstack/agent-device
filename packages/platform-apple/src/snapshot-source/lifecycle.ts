@@ -238,7 +238,14 @@ export class SnapshotBridgeManager {
       );
     return await this.readiness
       .value(`${udid}:${input.bridge.path}`, {
-        start: (signal) => this.createSession(udid, input, signal),
+        start: (signal) =>
+          this.createSession(udid, input, signal).catch((error: unknown) => {
+            const failure = asSnapshotSourceError(error);
+            if (!this.closed) {
+              this.startupFailures.set(udid, { generation: input.target.generation, failure });
+            }
+            throw failure;
+          }),
         wait: async (ms, stop) => {
           const creation = this.entries.get(udid);
           const left = Math.max(0, waitDeadline.clock.remainingMs(waitDeadline.now()));
@@ -338,18 +345,9 @@ export class SnapshotBridgeManager {
       }
     } catch (error) {
       entry.failure = asSnapshotSourceError(error);
-      if (entry.failure.failureKind !== 'process-crash') {
-        if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
-        if (expiry.signal.aborted) {
-          entry.failure = snapshotSourceError('timeout', 'bridge-startup-deadline');
-        }
-      }
-      if (!this.closed) {
-        this.startupFailures.set(udid, {
-          generation: input.target.generation,
-          failure: entry.failure,
-        });
-      }
+      if (entry.failure.failureKind === 'process-crash') throw entry.failure;
+      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+      if (expiry.signal.aborted) throw snapshotSourceError('timeout', 'bridge-startup-deadline');
       throw entry.failure;
     } finally {
       clearTimeout(timer);
