@@ -218,7 +218,10 @@ static RunnerApplicationScreenFailure RunnerReadLitPanelCandidate(
     }
   }];
   *frame = readFrame;
-  if (exception != nil || !present || !AgentDeviceForegroundFrameIsMeasurable(readFrame)) {
+  if (exception != nil) {
+    return RunnerApplicationScreenFailureUnresolvedScreen;
+  }
+  if (!present || !AgentDeviceForegroundFrameIsMeasurable(readFrame)) {
     return RunnerApplicationScreenFailureUnresolvedWindow;
   }
   return RunnerReadResolvedWindowScreen(candidate, readFrame, screen, displayID);

@@ -325,6 +325,20 @@ extension RunnerTests {
     XCTAssertNil(walk.window)
   }
 
+  func testLitPanelWindowRefusesAFrameReadExceptionBeforeAnyLaterWindow() {
+    let laterWindows: [[NSObject]] = [
+      [],
+      [DisplayWindowFixture(frame: Self.innerHome, displayID: 3)],
+      [DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1)],
+    ]
+    for later in laterWindows {
+      let walk = resolveLitPanelWindow([FramelessWindowFixture()] + later)
+      XCTAssertEqual(walk.failure, .unresolvedScreen)
+      XCTAssertNil(walk.window)
+      XCTAssertTrue(walk.frame.isNull)
+    }
+  }
+
   /// An app that occupies part of the lit panel has no full-panel box; being on the lit display is
   /// still the fact the first-window route could not establish.
   func testLitPanelWindowBooksTheLargestWindowOnTheLitDisplay() {
