@@ -18,7 +18,9 @@ test('Settings categories retain separate actionable refs inside nested scroll c
       hittable: true,
     });
   }
-  expect(nodes.find((node) => node.ref === 'e4')?.label).toBeUndefined();
+  const outerScroll = nodes.find((node) => node.ref === 'e4');
+  expect(outerScroll).toBeDefined();
+  expect(outerScroll?.label).toBeUndefined();
 });
 
 test('a row keeps its own passive label alongside an independent button', () => {
@@ -54,7 +56,10 @@ test('a row keeps its own passive label alongside an independent button', () => 
   expect(nodes.some((node) => node.index === 2)).toBe(false);
 });
 
-test('a row does not absorb content owned by an editable descendant', () => {
+test.each([
+  { type: 'android.widget.EditText', editable: undefined },
+  { type: 'com.example.ProfileField', editable: true },
+])('a row does not absorb content owned by an editable $type descendant', (field) => {
   const input: SnapshotNode[] = [
     { index: 0, type: 'root' },
     {
@@ -74,7 +79,7 @@ test('a row does not absorb content owned by an editable descendant', () => {
     {
       index: 3,
       parentIndex: 1,
-      type: 'android.widget.EditText',
+      ...field,
       label: 'Name',
       rect: { x: 60, y: 2, width: 100, height: 60 },
     },
