@@ -12,6 +12,8 @@ struct SnapshotCaptureTarget {
   let app: XCUIApplication
   let bundleId: String?
   let processIdentifier: Int?
+  /// The lit panel's window the request booked; set only on a multi-panel request.
+  var litPanelSurface: LitPanelSurface? = nil
 }
 
 /// What snapshot command preparation hands the off-main capture.

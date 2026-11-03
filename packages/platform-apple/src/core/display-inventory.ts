@@ -1,4 +1,5 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { RunnerCommand } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
@@ -407,6 +408,23 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
       hint: 'The panel table reported the primary panel as at least as large as the other panel. Its `primary` flag still selects the capture fallback; verify the device type capabilities.',
     },
   });
+}
+
+/**
+ * The panel a runner request names, only when panel power decided exactly one panel. Unlike a
+ * capture, a surface request does not fall back to the `primary` panel: it can keep the runner's
+ * historic route instead of guessing. Display 0 is the runtime's "no display" identity.
+ */
+export function appleLitPanel(inventory: AppleDisplayInventory): RunnerCommand['litPanel'] {
+  if (!inventory.multiScreen || inventory.unresolved || !inventory.activeDisplay) return undefined;
+  const litPanels = inventory.displays.filter((display) => display.power === 'lit');
+  const panel = litPanels.length === 1 ? litPanels[0]! : undefined;
+  if (!panel || panel.displayId <= 0) return undefined;
+  return {
+    displayId: panel.displayId,
+    widthPt: panel.widthPx / panel.pointScale,
+    heightPt: panel.heightPx / panel.pointScale,
+  };
 }
 
 /**

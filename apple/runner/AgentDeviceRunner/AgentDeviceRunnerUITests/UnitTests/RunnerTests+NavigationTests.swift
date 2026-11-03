@@ -11,6 +11,22 @@ extension RunnerTests {
     try assertInAppBackDispatch(navigationBar: false)
   }
 
+  @MainActor
+  func testNavigationBarBackDoesNotChooseAControlOffTheLitPanel() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"], navigationBar: true)
+    defer {
+      setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"uptime"}"#))
+      endBackFixture()
+    }
+    setRequestLitPanel(from: try runnerCommandFixture(
+      #"{"command":"backInApp","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+    ))
+    XCTAssertThrowsError(try tapInAppBackControl(app: app)) {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
+    XCTAssertNotEqual(status.label, "Back performed")
+  }
+
   /// A navigation bar button keeps XCTest's element tap, which aims at its computed hittable point.
   @MainActor
   func testNavigationBarBackKeepsTheElementTap() throws {
@@ -22,7 +38,7 @@ extension RunnerTests {
     let status = try launchBackFixture(["--agent-device-back-regression"])
     defer { endBackFixture() }
 
-    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+    let outcome = try withRejectedAppTree(framesReadable: false) { try tapInAppBackControl(app: app) }
 
     guard soleScreenRouteIsOpen(for: app) else {
       guard case .unavailable = outcome else {
@@ -43,7 +59,7 @@ extension RunnerTests {
     _ = try launchBackFixture([])
     defer { endBackFixture() }
 
-    let outcome = try withRejectedAppTree(framesReadable: false) { tapInAppBackControl(app: app) }
+    let outcome = try withRejectedAppTree(framesReadable: false) { try tapInAppBackControl(app: app) }
 
     guard case .unavailable = outcome else {
       return XCTFail("a top-leading tap on an app without a back control must not read as performed")
@@ -61,7 +77,7 @@ extension RunnerTests {
     defer { endBackFixture() }
 
     let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
-      tapInAppBackControl(app: app)
+      try tapInAppBackControl(app: app)
     }
 
     guard case .performed = outcome else {
@@ -94,7 +110,7 @@ extension RunnerTests {
     )
 
     let outcome = try withRejectedAppTree(framesReadable: true, rejections: 1) {
-      tapInAppBackControl(app: app)
+      try tapInAppBackControl(app: app)
     }
     guard case .performed = outcome else {
       return XCTFail("a refused sole-screen route must still dispatch back through the resolved window")
@@ -156,7 +172,7 @@ extension RunnerTests {
   private func withRejectedAppTree<T>(
     framesReadable: Bool,
     rejections: Int = .max,
-    _ body: () -> T
+    _ body: () throws -> T
   ) throws -> T {
     var restorations: [() -> Void] = []
     defer { restorations.reversed().forEach { $0() } }
@@ -188,7 +204,7 @@ extension RunnerTests {
         imp_removeBlock(unavailableFrame)
       }
     }
-    return body()
+    return try body()
   }
 
   @MainActor
@@ -217,7 +233,7 @@ extension RunnerTests {
       }
     }
 
-    guard case .performed = tapInAppBackControl(app: app) else {
+    guard case .performed = try tapInAppBackControl(app: app) else {
       return XCTFail("the selected back control must dispatch")
     }
     let changed = expectation(for: NSPredicate(format: "label == %@", "Back performed"), evaluatedWith: status)

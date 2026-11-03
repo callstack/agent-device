@@ -21,14 +21,22 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   case unresolvedWindow = "APP_SCREEN_WINDOW_UNRESOLVED"
   case unresolvedScreen = "APP_SCREEN_UNRESOLVED"
   case unrenderableImage = "APP_SCREEN_CAPTURE_UNRENDERABLE"
+  case offLitPanel = "APP_SCREEN_OFF_LIT_PANEL"
 
   init(_ failure: RunnerApplicationScreenFailure) {
     switch failure {
     case .unresolvedWindow:
       self = .unresolvedWindow
+    case .offLitPanel:
+      self = .offLitPanel
     default:
       self = .unresolvedScreen
     }
+  }
+
+  /// The refusal as a runner reply.
+  var response: Response {
+    Response(ok: false, error: ErrorPayload(code: rawValue, message: message, hint: hint))
   }
 
   var message: String {
@@ -39,6 +47,8 @@ enum RunnerAppScreenCaptureFailure: String, Error {
       return "The resolved app window did not report the display it is shown on."
     case .unrenderableImage:
       return "The resolved display handed back an image that could not be drawn upright."
+    case .offLitPanel:
+      return "Every window of the target app is on the panel the host reports as dark."
     }
   }
 
@@ -50,6 +60,8 @@ enum RunnerAppScreenCaptureFailure: String, Error {
       return "Retry the capture. If it persists, the XCTest runtime is not reporting the window's display; runner.log names the window frame it resolved."
     case .unrenderableImage:
       return "Retry the capture. The display was resolved, so this is the capture itself failing, not a panel question."
+    case .offLitPanel:
+      return "Unfold or fold the device so the target app is on the lit panel, or bring it forward there; runner.log names the panel in AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW."
     }
   }
 }
@@ -82,14 +94,17 @@ extension RunnerTests {
   ///
   /// Never activates `app`: an observation must not change which app is foregrounded just to get a
   /// screen, so the caller passes the app context it already intends to observe.
+  ///
+  /// `litPanel` is the panel the request named; nil keeps the app's first window.
   func captureResolvedAppScreen(
-    app: XCUIApplication
+    app: XCUIApplication,
+    litPanel: RunnerLitPanel?
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     var outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> = .failure(
       .unresolvedScreen
     )
     let capture = {
-      outcome = Self.resolveCapturedAppScreen(app: app)
+      outcome = Self.resolveCapturedAppScreen(app: app, litPanel: litPanel)
     }
     if Thread.isMainThread {
       capture()
@@ -109,22 +124,33 @@ extension RunnerTests {
   /// Only an unresolved *window* moves on to the system surface. A window that resolved and then
   /// refused to name its display is the failure the host has to see, and no second question about a
   /// different process should bury it.
-  func captureObservedScreen(app: XCUIApplication) -> Result<
+  func captureObservedScreen(app: XCUIApplication, litPanel: RunnerLitPanel?) -> Result<
     CapturedAppScreen, RunnerAppScreenCaptureFailure
   > {
     selectObservedScreenCapture(
-      resolving: { captureResolvedAppScreen(app: app) },
-      fallingBack: { captureResolvedAppScreen(app: springboard) }
+      resolving: { captureResolvedAppScreen(app: app, litPanel: litPanel) },
+      fallingBack: { captureResolvedAppScreen(app: springboard, litPanel: litPanel) }
     )
   }
 
   private static func resolveCapturedAppScreen(
-    app: XCUIApplication
+    app: XCUIApplication,
+    litPanel: RunnerLitPanel?
   ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     var screen: AnyObject?
     var displayID: UInt = 0
     var resolution: RunnerApplicationScreenFailure = .unresolvedScreen
-    guard RunnerResolveApplicationScreen(app, &screen, &displayID, &resolution),
+    var resolved: Bool
+    if let litPanel {
+      var window: AnyObject?
+      var frame = CGRect.null
+      resolution = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame, &screen)
+      resolved = resolution == .none
+      displayID = litPanel.displayID
+    } else {
+      resolved = RunnerResolveApplicationScreen(app, &screen, &displayID, &resolution)
+    }
+    guard resolved,
       let captureScreen = screen as? XCUIScreen
     else {
       return .failure(RunnerAppScreenCaptureFailure(resolution))

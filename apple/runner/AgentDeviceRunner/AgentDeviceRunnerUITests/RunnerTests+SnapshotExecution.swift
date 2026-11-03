@@ -18,14 +18,22 @@ extension RunnerTests {
       case .response(let response):
         return .response(response)
       case .context(let context):
+        if let refusal = self.bookRequestLitPanelSurface(app: context.app) {
+          return .response(refusal.response)
+        }
+        if self.requestLitPanel != nil, let refusal = Self.litPanelBackendPinRefusal(command) {
+          return .response(refusal)
+        }
+        var target = context.observation == nil
+          ? self.takeSnapshotCaptureTarget(app: context.app)
+          : SnapshotCaptureTarget(
+            app: context.app,
+            bundleId: command.appBundleId?.trimmedNonEmpty,
+            processIdentifier: Self.processIdentifier(of: context.app)
+          )
+        target.litPanelSurface = self.litPanelState.surface
         return .capture(
-          context.observation == nil
-            ? self.takeSnapshotCaptureTarget(app: context.app)
-            : SnapshotCaptureTarget(
-              app: context.app,
-              bundleId: command.appBundleId?.trimmedNonEmpty,
-              processIdentifier: Self.processIdentifier(of: context.app)
-            ),
+          target,
           systemSurface: context.systemSurface,
           observation: context.observation
         )
@@ -128,6 +136,8 @@ extension RunnerTests {
       }
       setNeedsPostSnapshotInteractionDelay()
       return Response(ok: true, data: payload)
+    } catch let refusal as RunnerAppScreenCaptureFailure {
+      return refusal.response
     } catch let failure as SnapshotCaptureFailure {
       invalidateCachedTargetAfterSnapshotFailure()
       return Response(
@@ -157,6 +167,25 @@ extension RunnerTests {
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))
     }
+  }
+
+  /// A multi-panel snapshot runs only the tree backend, the one that proves which panel a window is
+  /// on, so a pin to another backend, or `customActions` implying one, is refused as a request.
+  static func litPanelBackendPinRefusal(_ command: Command) -> Response? {
+    guard let pinned = presentationOptions(from: command).preferredBackend,
+      pinned != SnapshotBackendKind.recursiveTree.rawValue
+    else {
+      return nil
+    }
+    let cause = command.preferredBackend == nil ? "customActions" : "the \(pinned) backend pin"
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "UNSUPPORTED_OPERATION",
+        message: "a multi-panel snapshot runs only the tree backend, so \(cause) cannot be served",
+        hint: "Snapshot without \(cause): only the tree backend proves which panel a window is on (ADR 0025)."
+      )
+    )
   }
 
   func invalidateCachedTargetAfterSnapshotFailure() {

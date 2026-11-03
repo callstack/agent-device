@@ -10,13 +10,15 @@ final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
   let label: String
   let children: [XCUIElementSnapshot]
   let identifier: String
+  @objc let displayID: NSNumber?
 
-  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", identifier: String = "", children: [XCUIElementSnapshot] = []) {
+  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", identifier: String = "", children: [XCUIElementSnapshot] = [], displayID: NSNumber? = nil) {
     self.elementType = elementType
     self.frame = frame
     self.label = label
     self.children = children
     self.identifier = identifier
+    self.displayID = displayID
   }
 
   var value: Any? { nil }

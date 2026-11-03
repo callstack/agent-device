@@ -92,6 +92,56 @@ export const RUNNER_COMMAND_TRAITS = {
   shutdown: DEFAULT_TRAITS,
 } as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitsEntry>;
 
+/**
+ * Whether the runner resolves a screen for the command: a window to book a gesture on, a viewport,
+ * a display to sample, or windows to search for an element. Such a request for a multi-panel device
+ * names the lit panel (ADR 0025). This table is the one list of lit-panel-scoped commands.
+ */
+const RUNNER_COMMAND_RESOLVES_SURFACE = {
+  tap: true,
+  mouseClick: false,
+  longPress: true,
+  drag: true,
+  remotePress: false,
+  type: true,
+  swipe: true,
+  scroll: true,
+  desktopScroll: false,
+  findText: true,
+  querySelector: true,
+  readText: true,
+  snapshot: true,
+  screenshot: true,
+  backInApp: true,
+  backSystem: true,
+  home: false,
+  rotate: false,
+  gesture: true,
+  gestureViewport: true,
+  appSwitcher: true,
+  actionButton: false,
+  volumeUp: false,
+  volumeDown: false,
+  keyboardDismiss: true,
+  keyboardReturn: false,
+  alert: false,
+  sequence: true,
+  recordStart: true,
+  recordStop: false,
+  status: false,
+  uptime: false,
+  appState: false,
+  pasteboardWrite: false,
+  activate: false,
+  terminate: false,
+  targetReset: false,
+  shutdown: false,
+} as const satisfies Record<RunnerCommand['command'], boolean>;
+
+export function runnerCommandResolvesSurface(command: RunnerCommand): boolean {
+  return RUNNER_COMMAND_RESOLVES_SURFACE[command.command];
+}
+
 export function isReadOnlyRunnerCommand(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readOnly;
 }

@@ -34,10 +34,10 @@ extension RunnerTests {
   }
 
   @MainActor
-  func tapInAppBackControl(app: XCUIApplication) -> InAppBackOutcome {
+  func tapInAppBackControl(app: XCUIApplication) throws -> InAppBackOutcome {
 #if os(macOS)
     if let back = macOSNavigationBackElement(app: app) {
-      tapElementCenter(app: app, element: back)
+      try tapElementCenter(app: app, element: back)
       return .performed
     }
     return .unavailable
@@ -46,7 +46,8 @@ extension RunnerTests {
     return .performed
 #else
     let rejectedQueriesBefore = navigationRejectedQueryCount()
-    let buttons = app.navigationBars.buttons.allElementsBoundByIndex
+    let buttons = try elementQueries(app: app, matching: .navigationBar)
+      .flatMap { $0.buttons.allElementsBoundByIndex }
     if let back = buttons.first(where: { $0.isHittable }) {
       // `isHittable` promises a hittable point, not a hittable center: a bar button partly under an
       // overlay keeps the element tap, which aims at the point XCTest computed.
@@ -57,20 +58,20 @@ extension RunnerTests {
       || isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
-    } else if let frame = topNavigationBackFrame(app: app) {
-      return tapResolvedNavigationBackControl(app: app, frame: frame)
+    } else if let frame = try topNavigationBackFrame(app: app) {
+      return try tapResolvedNavigationBackControl(app: app, frame: frame)
     }
-    return tapTopLeadingNavigationFallback(
+    return try tapTopLeadingNavigationFallback(
       app: app,
       windowQueryRejected: navigationRejectedQueryCount() != rejectedQueriesBefore
     )
 #endif
   }
 
-  private func tapElementCenter(app: XCUIApplication, element: XCUIElement) {
+  private func tapElementCenter(app: XCUIApplication, element: XCUIElement) throws {
     let frame = element.frame
     if !frame.isEmpty {
-      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+      _ = try tapAt(app: app, x: frame.midX, y: frame.midY)
       return
     }
 #if !os(tvOS)
@@ -79,10 +80,10 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func tapResolvedNavigationBackControl(app: XCUIApplication, frame: CGRect) -> InAppBackOutcome {
+  private func tapResolvedNavigationBackControl(app: XCUIApplication, frame: CGRect) throws -> InAppBackOutcome {
     guard SnapshotGeometry.isPositiveFinite(frame) else { return .unavailable }
-    let context = synthesizedCoordinateContext(app: app)
-    guard dispatchNavigationTap(app: app, point: CGPoint(x: frame.midX, y: frame.midY), context: context) else {
+    let context = try synthesizedCoordinateContext(app: app)
+    guard try dispatchNavigationTap(app: app, point: CGPoint(x: frame.midX, y: frame.midY), context: context) else {
       return .unavailable
     }
     return .performed
@@ -95,27 +96,29 @@ extension RunnerTests {
     app: XCUIApplication,
     point: CGPoint,
     context: SynthesizedCoordinateContext?
-  ) -> Bool {
-    switch performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
-      synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
+  ) throws -> Bool {
+    switch try performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
+      try synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
     }) {
     case .performed:
       return true
     case .refused:
       return false
     case .xctestFallback:
-      let fallback = performGesture(app) {
-        tapAt(app: app, x: point.x, y: point.y)
+      let fallback = try performGesture(app) {
+        try tapAt(app: app, x: point.x, y: point.y)
       }
       if case .performed = fallback.outcome { return true }
       return false
     }
   }
 
-  private func topNavigationBackFrame(app: XCUIApplication) -> CGRect? {
+  private func topNavigationBackFrame(app: XCUIApplication) throws -> CGRect? {
 #if os(iOS)
-    let window = onScreenWindowFrame(app: app)
-    let candidates = app.buttons.matching(Self.navigationBackPredicate()).allElementsBoundByIndex.compactMap {
+    let window = try onScreenWindowFrame(app: app)
+    let candidates = try elementQueries(app: app, matching: .button).flatMap {
+      $0.matching(Self.navigationBackPredicate()).allElementsBoundByIndex
+    }.compactMap {
       element -> (frame: CGRect, rank: Int)? in
       guard element.exists, element.isHittable else { return nil }
       let frame = element.frame
@@ -219,9 +222,9 @@ extension RunnerTests {
   private func tapTopLeadingNavigationFallback(
     app: XCUIApplication,
     windowQueryRejected: Bool
-  ) -> InAppBackOutcome {
+  ) throws -> InAppBackOutcome {
 #if os(iOS)
-    guard let context = synthesizedCoordinateContext(
+    guard let context = try synthesizedCoordinateContext(
       app: app,
       windowQueryRejected: windowQueryRejected
     ), let point = Self.topLeadingNavigationFallbackPoint(
@@ -231,7 +234,7 @@ extension RunnerTests {
       return .unavailable
     }
     let before = captureNavigationFallbackVisualState(app: app, context: context)
-    guard dispatchNavigationTap(app: app, point: point, context: context) else {
+    guard try dispatchNavigationTap(app: app, point: point, context: context) else {
       return .unavailable
     }
     return verifyNavigationFallbackOutcome(app: app, before: before, context: context)
@@ -255,9 +258,10 @@ extension RunnerTests {
   ) -> Result<Data, RunnerAppScreenCaptureFailure> {
 #if os(iOS)
     return Self.navigationVisualSample(
-      from: context.resolvedWindow == nil
+      // A lit-panel request never takes the sole-screen route: a foldable has no sole screen.
+      from: context.resolvedWindow == nil && requestLitPanel == nil
         ? captureSoleAppScreen(app: app)
-        : captureResolvedAppScreen(app: app),
+        : captureResolvedAppScreen(app: app, litPanel: requestLitPanel),
       encoding: { runnerPngData(for: $0.image) }
     )
 #else

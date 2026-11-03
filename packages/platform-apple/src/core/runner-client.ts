@@ -1,4 +1,12 @@
-import { bindAppleRunnerHost } from '@agent-device/apple-runner';
+import {
+  bindAppleRunnerHost,
+  resolveRunnerRequestSignal,
+  runnerCommandResolvesSurface,
+  runAppleRunnerCommand as runHostBoundAppleRunnerCommand,
+  type AppleRunnerCommandOptions,
+  type RunnerCommand,
+} from '@agent-device/apple-runner';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleRunnerHost } from './runner-host.ts';
 
 /**
@@ -10,6 +18,27 @@ import { appleRunnerHost } from './runner-host.ts';
  * host-free helpers from the package façade when no host binding is needed.
  */
 bindAppleRunnerHost(appleRunnerHost);
+
+/**
+ * Sends `command` to the runner. A command that resolves a screen names the lit panel for a
+ * multi-panel device. The panel probe loads on first use, because this module is in the eager closure
+ * of the Apple façades (ADR 0019).
+ */
+export async function runAppleRunnerCommand(
+  device: DeviceInfo,
+  command: RunnerCommand,
+  options: AppleRunnerCommandOptions = {},
+): Promise<Record<string, unknown>> {
+  if (!runnerCommandResolvesSurface(command)) {
+    return await runHostBoundAppleRunnerCommand(device, command, options);
+  }
+  const { nameRunnerRequestLitPanel } = await import('../foldable/runner-panel.ts');
+  return await runHostBoundAppleRunnerCommand(
+    device,
+    await nameRunnerRequestLitPanel(device, command, resolveRunnerRequestSignal(options)),
+    options,
+  );
+}
 
 export {
   applyXctestRunnerAppIconFromDerivedPath,
@@ -38,7 +67,6 @@ export {
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
   runApplePressSeries,
-  runAppleRunnerCommand,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
   verifyLeaseRunnerPidIdentity,

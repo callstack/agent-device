@@ -31,6 +31,8 @@ extension RunnerTests {
      * (#2660). Nil only where the platform has no iOS keyboard to measure.
      */
     let keyboardBand: RunnerKeyboardBandFact?
+    /// The lit panel's window the request booked; set only on a multi-panel request (ADR 0025).
+    var litPanelSurface: LitPanelSurface? = nil
   }
 
   struct SnapshotEvaluation {
@@ -191,11 +193,11 @@ extension RunnerTests {
   ) throws -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
     var outcome = SnapshotTierOutcome.completed
     var cachedCollapsedTabCandidates: [CollapsedTabCandidate]?
-    func collapsedTabCandidatesOnce() -> [CollapsedTabCandidate] {
+    func collapsedTabCandidatesOnce() throws -> [CollapsedTabCandidate] {
       if let cachedCollapsedTabCandidates {
         return cachedCollapsedTabCandidates
       }
-      let candidates = collapsedTabCandidates(context: context, processingDeadline: processingDeadline)
+      let candidates = try collapsedTabCandidates(context: context, processingDeadline: processingDeadline)
       if candidates == nil { outcome = .deadlineExhausted }
       cachedCollapsedTabCandidates = candidates ?? []
       return candidates ?? []
@@ -204,18 +206,18 @@ extension RunnerTests {
     // Acquisition serializes reported frames only; no coordinate space or fold decision is carried
     // down the walk (#2661). Its sole bounds are raw traversal depth (nil for a regular capture) and
     // the node cap; `SnapshotPresentation` folds and cuts the normalized array.
-    var nodes: [RawAXNode] = []
-    nodes.append(
-      makeSnapshotNode(
-        snapshot: context.rootSnapshot,
-        evaluation: evaluateSnapshot(context.rootSnapshot),
-        depth: 0,
-        index: 0,
-        parentIndex: nil
-      )
+    var root = makeSnapshotNode(
+      snapshot: context.rootSnapshot,
+      evaluation: evaluateSnapshot(context.rootSnapshot),
+      depth: 0,
+      index: 0,
+      parentIndex: nil
     )
+    Self.publishLitPanelRoot(&root, surface: context.litPanelSurface)
+    let rootChildren = try Self.litPanelRootChildren(context.rootSnapshot, surface: context.litPanelSurface)
+    var nodes: [RawAXNode] = [root]
     if Self.canDescendAtRawDepth(0, hint: hint) {
-      appendCollapsedTabFallbackNodes(
+      try appendCollapsedTabFallbackNodes(
         to: &nodes,
         containerSnapshot: context.rootSnapshot,
         resolveCandidates: collapsedTabCandidatesOnce,
@@ -227,7 +229,7 @@ extension RunnerTests {
     var seen = Set<String>()
     var stack: [SnapshotTraversalEntry] = []
     if Self.canDescendAtRawDepth(0, hint: hint) {
-      stack = context.rootSnapshot.children.map {
+      stack = rootChildren.map {
         SnapshotTraversalEntry(snapshot: $0, depth: 1, parentIndex: 0)
       }
     }
@@ -272,7 +274,7 @@ extension RunnerTests {
         throw regularSnapshotTooLargeFailure(nodeCount: nodes.count)
       }
       if Self.canDescendAtRawDepth(depth, hint: hint) {
-        appendCollapsedTabFallbackNodes(
+        try appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
           resolveCandidates: collapsedTabCandidatesOnce,
@@ -292,6 +294,44 @@ extension RunnerTests {
       ),
       outcome
     )
+  }
+
+  /// A lit-panel snapshot's root, raw or regular, is the booked box (ADR 0025).
+  static func publishLitPanelRoot(_ root: inout RawAXNode, surface: LitPanelSurface?) {
+    if let surface {
+      root.rect = SnapshotRect(surface.frame)
+    }
+  }
+
+  /// A lit-panel snapshot descends only into windows proven on the lit display; none refuses.
+  static func litPanelRootChildren(
+    _ root: XCUIElementSnapshot,
+    surface: LitPanelSurface?
+  ) throws -> [XCUIElementSnapshot] {
+    guard let surface else { return root.children }
+    let lit = windowsOnLitDisplay(root.children, litDisplayID: surface.displayID) { snapshotDisplayID($0) }
+    if lit.isEmpty {
+      throw RunnerAppScreenCaptureFailure.unresolvedScreen
+    }
+    return lit
+  }
+
+  /// A window that reports no display is dropped: it may be on the dark panel.
+  static func windowsOnLitDisplay<Window>(
+    _ windows: [Window],
+    litDisplayID: UInt,
+    displayID: (Window) -> UInt?
+  ) -> [Window] {
+    windows.filter { displayID($0) == litDisplayID }
+  }
+
+  /// The display a window snapshot reports, or nil when the runtime names none.
+  static func snapshotDisplayID(_ snapshot: XCUIElementSnapshot) -> UInt? {
+    var displayID: UInt?
+    _ = RunnerObjCExceptionCatcher.catchException({
+      displayID = ((snapshot as AnyObject).value(forKey: "displayID") as? NSNumber)?.uintValue
+    })
+    return displayID.flatMap { $0 == 0 ? nil : $0 }
   }
 
   // See `snapshotFast` above: the single production entry point, no unit-test overload.
@@ -409,7 +449,8 @@ extension RunnerTests {
     func walk(
       _ snapshot: XCUIElementSnapshot,
       depth: Int,
-      parentIndex: Int?
+      parentIndex: Int?,
+      children: [XCUIElementSnapshot]? = nil
     ) throws {
       if let limit = hint.rawTraversalDepth, depth > limit { return }
 
@@ -428,8 +469,7 @@ extension RunnerTests {
         )
       )
 
-      let children = snapshot.children
-      for child in children {
+      for child in children ?? snapshot.children {
         try walk(
           child,
           depth: depth + 1,
@@ -441,8 +481,12 @@ extension RunnerTests {
     try walk(
       context.rootSnapshot,
       depth: 0,
-      parentIndex: nil
+      parentIndex: nil,
+      children: try Self.litPanelRootChildren(context.rootSnapshot, surface: context.litPanelSurface)
     )
+    if !nodes.isEmpty {
+      Self.publishLitPanelRoot(&nodes[0], surface: context.litPanelSurface)
+    }
     return SnapshotAcquisition(
       hint: hint,
       nodes: nodes,
@@ -457,7 +501,7 @@ extension RunnerTests {
     app: XCUIApplication,
     hint: CaptureHint,
     sliceDeadline deadline: Date
-  ) -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
+  ) throws -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
@@ -474,7 +518,7 @@ extension RunnerTests {
       )
     }
 
-    let viewport = safeSnapshotViewport(app: app, readingOrientation: false)
+    let viewport = try safeSnapshotViewport(app: app, readingOrientation: false)
     var seen = Set<String>()
     var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)

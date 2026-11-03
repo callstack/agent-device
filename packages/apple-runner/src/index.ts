@@ -26,8 +26,10 @@ export {
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
+  resolveRunnerRequestSignal,
   type RunnerCommand,
 } from './runner-contract.ts';
+export { runnerCommandResolvesSurface } from './runner-command-traits.ts';
 export { isRunnerMainThreadTimeoutError } from './runner-error-classification.ts';
 export {
   withAppleRunnerProvider,

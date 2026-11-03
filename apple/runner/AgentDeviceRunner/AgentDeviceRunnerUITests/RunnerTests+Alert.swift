@@ -95,7 +95,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
+  func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) throws -> Response {
     if action == "accept" || action == "dismiss" {
       guard let button = chooseAlertButton(alert, action: action) else {
         // The choice refused before any activation, so this discloses dispatched: no like the
@@ -141,7 +141,7 @@ extension RunnerTests {
       // (#2546). The post-tap settle stays, because the verification below reads the alert this tap
       // replaces; an alert that dismisses and presents an identical replacement passes through a
       // window with no alert, and a first read landing there reports a dismissal nothing proved.
-      guard let outcome = activateAlertButton(alert, button: button, action: action, frame: buttonFrame, deadline: deadline) else {
+      guard let outcome = try activateAlertButton(alert, button: button, action: action, frame: buttonFrame, deadline: deadline) else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
       if let response = unsupportedResponse(for: outcome) {
@@ -190,8 +190,9 @@ extension RunnerTests {
     action: String,
     frame: CGRect,
     deadline: Date
-  ) -> RunnerInteractionOutcome? {
+  ) throws -> RunnerInteractionOutcome? {
     var outcome: RunnerInteractionOutcome?
+    var activationError: Error?
     withUIInterruptionHandlingDisabledIfSupported(alert.ownerApp) {
       withBoundedInteractionIdleTimeoutIfSupported(alert.ownerApp, waits: .preEventSkipped) {
         guard Date() < deadline else { return }
@@ -223,13 +224,20 @@ extension RunnerTests {
           }
           hostContext = context
         }
-        switch synthesizedTapAt(
-          app: alert.ownerApp,
-          x: frame.midX,
-          y: frame.midY,
-          context: hostContext,
-          deadline: deadline
-        ) {
+        let attempt: RunnerInteractionOutcome?
+        do {
+          attempt = try synthesizedTapAt(
+            app: alert.ownerApp,
+            x: frame.midX,
+            y: frame.midY,
+            context: hostContext,
+            deadline: deadline
+          )
+        } catch {
+          activationError = error
+          return
+        }
+        switch attempt {
         case .performed?:
           typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
           let waitForQuiescence = unsafeBitCast(
@@ -247,15 +255,15 @@ extension RunnerTests {
           break
         }
 #else
-        outcome = activateElement(
-          app: alert.ownerApp,
-          element: button,
-          action: "alert \(action)",
-          resolvedFrame: frame
-        )
+        do {
+          outcome = try activateElement(app: alert.ownerApp, element: button, action: "alert \(action)", resolvedFrame: frame)
+        } catch {
+          activationError = error
+        }
 #endif
       }
     }
+    if let activationError { throw activationError }
     return outcome
   }
 

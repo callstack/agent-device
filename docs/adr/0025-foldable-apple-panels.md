@@ -8,6 +8,7 @@ The touch-overlay export diagnosis was corrected on 2026-09-22 under #2707.
 The Android emulator pose amendment is dated 2026-10-10.
 The no-panel refusal correction (#3761) is dated 2026-10-18.
 The guest readback amendment is dated 2026-10-26.
+The runner surface amendment is dated 2026-10-31.
 This ADR covers iPhone Duo (iOS 27.1, `iPhone19,4`) and Apple devices with more than one integrated CoreDevice display.
 The amendment below also covers foldable Android emulators.
 
@@ -148,12 +149,18 @@ The vitest twin and runner unit-test lane decode this golden table.
 Contract drift therefore fails CI on both sides.
 
 Capture first asks for the target app's window, then the system surface's window.
+On a multi-panel device, it asks the system surface only when the app has no window at all.
 SpringBoard owns the home-screen window.
 Thus, a session without an app, or with a stopped app, can still resolve a window's display.
 The result always names a display occupied by a window.
 It never defaults to `XCUIScreen.main`, which is dark on a Duo when the app uses the inner panel.
-A capture fails closed only in three cases. Neither window resolves. A resolved window names no display. A resolved display yields an unrenderable image.
-The typed reasons are `unresolvedWindow`, `unresolvedScreen`, and `unrenderableImage` (`RunnerAppScreenCapture.swift`).
+A capture fails closed with one of four typed reasons (`RunnerAppScreenCapture.swift`).
+
+- `unresolvedWindow` (`APP_SCREEN_WINDOW_UNRESOLVED`): neither window resolves.
+- `unresolvedScreen` (`APP_SCREEN_UNRESOLVED`): a resolved window names no display. On a multi-panel device, it also covers a window list that cannot be read and a window the lit-panel walk cannot place.
+- `unrenderableImage` (`APP_SCREEN_CAPTURE_UNRENDERABLE`): a resolved display yields an unrenderable image.
+- `offLitPanel` (`APP_SCREEN_OFF_LIT_PANEL`): on a multi-panel device, every window of the target app is on the dark panel.
+
 The query uses both `exists` and frame evidence to refuse an app without a window.
 Such an app returns `(0,0 0x0)` from `frame` without an exception.
 Geometry alone cannot prove that no window exists.
@@ -708,3 +715,28 @@ It is refused as `single-panel-device`, the same typed reason as a single-panel 
 Keyframes and panel geometry remain Apple-only.
 The emulator console supports only fixed postures.
 Android reports the app window on the next snapshot instead of a panel.
+
+## Amendment: the lit panel chooses the runner's window (2026-10-31)
+
+SpringBoard keeps windows on both panels. Its first window is the outer panel's status bar, whichever panel is lit. The runner booked gestures, the synthesized reference frame, the snapshot viewport, and the capture display against that window. A home-screen gesture could therefore land on a dark panel.
+
+Decision: the host names the lit panel in each runner request that resolves a screen. `RUNNER_COMMAND_RESOLVES_SURFACE` in `packages/apple-runner/src/runner-command-traits.ts` is the one list of these commands: `tap`, `longPress`, `drag`, `type`, `swipe`, `scroll`, `findText`, `querySelector`, `readText`, `snapshot`, `screenshot`, `backInApp`, `backSystem`, `gesture`, `gestureViewport`, `appSwitcher`, `keyboardDismiss`, `sequence`, and `recordStart`. The request field is `litPanel` (`displayId`, `widthPt`, `heightPt`). The panel table is read once per request because a fold changes the answer. The read never outlasts the request's `timeoutMs`. A multi-panel table read that names the lit panel but spends the request budget refuses with `COMMAND_FAILED`, `reason: panel-probe-budget-exhausted` and `dispatched: no`, without a runner error code. The host sends the field only for a multi-panel simulator whose panel power decides exactly one panel. The runner gets what the read left of `timeoutMs`. A device known to be multi-panel whose table does not answer is refused with `COMMAND_FAILED`, `reason: panel-table-unreadable` and `runnerErrorCode: APP_SCREEN_UNRESOLVED`, before anything is sent. Only a device whose panel count was never read keeps the historic first-window route unchanged.
+
+With a named panel, the runner walks at most eight windows to book one; element search reads every window that reports the lit display. It books the first window on the lit display whose frame is the panel's native box, upright or turned. If no window fills the panel, it books the largest window on the lit display. A window that the walk cannot place refuses the request with `APP_SCREEN_UNRESOLVED`, even if a full-panel window follows it. A list past the cap with no full-panel window refuses the same way. An app whose windows are all on another display is `APP_SCREEN_OFF_LIT_PANEL`. An app with no window at all is `APP_SCREEN_WINDOW_UNRESOLVED`. A window list that cannot be read is `APP_SCREEN_UNRESOLVED`, so it never reaches the system-surface fallback.
+
+The request books the window by bundle identity and request identity before it acts, and releases the booking when the request ends. A refusal is returned before any gesture or snapshot. Dispatch, the coordinate fallback, and the snapshot viewport reuse the booked window of the same app, so they never fall back to the application's own frame. Every element read of such a request (`findText`, `querySelector`, `readText`, a selector `tap`, and the text-input lookup of `tap` and `type`) searches only under the application's windows that report the lit display. The element search rereads the complete window list for each read, including windows beyond the booking cap, because mutations can open another window. If the list cannot be read or contains no proven lit windows, the search throws `APP_SCREEN_UNRESOLVED` instead of answering no match. A lit-panel refusal during text-entry confirmation propagates with its typed code. The panel is written onto the main queue behind work already queued there, so work that a previous command abandoned still reads that command's panel. Capture resolves its own window with the same rule. It asks the system surface only when the app has no window, and it refuses an app on the dark panel.
+
+A snapshot runs only the tree tier, because only that tier can prove which display a window is on. A pin to another backend is refused with `UNSUPPORTED_OPERATION`. The snapshot traverses the application's tree, not only the booked window, and keeps every window whose element snapshot reports the lit display. A window that reports no display is dropped. If no window is proven, the snapshot refuses with `APP_SCREEN_UNRESOLVED`. The root takes the booked window's frame. `--raw` applies the same window filter and the same root frame, so raw and regular coordinates share one space. The snapshot reads the booked window only from its capture target. Collapsed-tab fallback candidates use the shared proven-lit element-query owner with that capture target's pinned display ID. A failed root walk propagates `APP_SCREEN_UNRESOLVED`. A `customActions` request with no explicit backend pin implies the private AX pin, so its refusal names `customActions`.
+
+Rejected alternatives:
+
+- **Largest window overall: rejected.** It guesses panel power from size.
+- **Pruning the application tree by geometry: rejected.** A dark 466x678 window fits inside the inner panel's box, and a turned inner window does not.
+- **Rooting the snapshot at the booked window: rejected.** The first full-panel SpringBoard window has no icons, and an app's keyboard lives in another window.
+- **A device-wide panel cached in the runner: rejected.** It is stale after a fold.
+
+Consequences:
+
+- `runner.log` prints `AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=<id>(<w>x<h>) windows=<n> outcome=<reason> frame=(…)`. `SYNTHESIZED_DISPATCH reference=` must equal that frame. Snapshot points are translated by that frame's origin, as for a placed iPad window, and a synthesized turn is about the lit panel's screen in the app's interface orientation, not the window's shape: an app beside the inner panel's 80 pt status strip still maps into the whole screen. `SYNTHESIZED_RECORD displayID=` must equal `lit=`.
+- A recording keeps the panel that its `recordStart` named. The runner cannot read panel power, so it does not notice a fold during the recording: SpringBoard keeps windows on the panel that went dark, and later frames show that dark panel. Start a new recording after a fold.
+- Open gap: on the folded home screen, XCTest reports the page icons with the inner panel's layout in both panels' windows. The Dock and the page indicator report the outer panel correctly.

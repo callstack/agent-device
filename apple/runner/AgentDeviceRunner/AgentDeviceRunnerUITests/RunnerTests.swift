@@ -90,6 +90,7 @@ final class RunnerTests: XCTestCase {
   let app = XCUIApplication()
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
   let mainOwned = RunnerMainOwnedState()
+  let litPanelState = RunnerLitPanelState()
   // Set while serving a command that had to re-activate the bound app, and stamped onto that
   // command's response before it leaves the execution queue (#2682).
   var pendingTargetActivation: TargetActivationFactPayload?
@@ -202,6 +203,9 @@ final class RunnerTests: XCTestCase {
 
   /// Simulates an app tree read that returns no descendants without an issue or exception.
   var textInputProbeBlindForTesting = false
+
+  /// Records an XCTest issue during the lit-panel window walk, as a window that vanishes mid-walk does.
+  var litPanelWindowWalkIssueForTesting = false
 
   static let injectedTapFailureFlagPathForTesting =
     "/tmp/agent-device-inject-tap-recorded-failure-for-testing"

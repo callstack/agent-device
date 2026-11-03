@@ -21,10 +21,10 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSequenceAcceptsDoubleTapKind() {
+  func testSequenceAcceptsDoubleTapKind() throws {
     // A doubleTap step missing coords must fail on the coords check, not the kind allowlist —
     // proving "doubleTap" passes validateSequenceStep without needing a device to execute on.
-    let response = executeSequenceForTest(steps: [
+    let response = try executeSequenceForTest(steps: [
       sequenceStep(kind: "doubleTap", x: nil)
     ])
     XCTAssertEqual(response.ok, false)
@@ -35,7 +35,7 @@ extension RunnerTests {
 
   @MainActor
   func testSequenceRejectsUnknownKind() throws {
-    let response = executeSequenceForTest(steps: [
+    let response = try executeSequenceForTest(steps: [
       sequenceStep(kind: "tap", x: 1, y: 2),
       sequenceStep(kind: "pinch", x: 3, y: 4),
     ])
@@ -46,16 +46,16 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSequenceRejectsEmpty() {
-    let response = executeSequenceForTest(steps: [])
+  func testSequenceRejectsEmpty() throws {
+    let response = try executeSequenceForTest(steps: [])
     XCTAssertEqual(response.ok, false)
     XCTAssertEqual(response.error?.code, "INVALID_ARGS")
   }
 
   @MainActor
-  func testSequenceRejectsTooManySteps() {
+  func testSequenceRejectsTooManySteps() throws {
     let steps = (0..<21).map { _ in sequenceStep(kind: "tap", x: 1, y: 2) }
-    let response = executeSequenceForTest(steps: steps)
+    let response = try executeSequenceForTest(steps: steps)
     XCTAssertEqual(response.ok, false)
     XCTAssertEqual(response.error?.code, "INVALID_ARGS")
     XCTAssertTrue(response.error?.message.contains("at most 20") ?? false)
@@ -156,9 +156,9 @@ extension RunnerTests {
   /// Validation runs before any executor call, so the INVALID_ARGS paths are exercised without
   /// reaching the device executor (which is never invoked when validation rejects).
   @MainActor
-  private func executeSequenceForTest(steps: [SequenceStep]) -> Response {
+  private func executeSequenceForTest(steps: [SequenceStep]) throws -> Response {
     let command = makeSequenceCommand(steps: steps)
-    return executeSequence(command: command, activeApp: app)
+    return try executeSequence(command: command, activeApp: app)
   }
 
   /// Build a sequence Command via JSON so the test does not depend on the memberwise init's

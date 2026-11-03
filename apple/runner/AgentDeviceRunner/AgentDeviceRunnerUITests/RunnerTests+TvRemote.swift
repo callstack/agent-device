@@ -60,7 +60,7 @@ extension RunnerTests {
     element: XCUIElement,
     action: String,
     resolvedFrame: CGRect? = nil
-  ) -> RunnerInteractionOutcome {
+  ) throws -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, element: element, action: action) {
       return outcome
     }
@@ -72,7 +72,7 @@ extension RunnerTests {
       // XCUIElement.tap() can fail the whole XCTest after navigation because it
       // re-resolves the tapped element even after the app removed it. Keep the
       // selector target semantic, then activate its resolved stable screen point.
-      return tapAt(app: app, x: frame.midX, y: frame.midY)
+      return try tapAt(app: app, x: frame.midX, y: frame.midY)
     }
     return performElementTap(element)
 #endif

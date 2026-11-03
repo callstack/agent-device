@@ -261,12 +261,12 @@ extension RunnerTests {
   /// Clears until the field reads empty, at most `maxClearPassCount` passes. A read that cannot
   /// answer ends the clear, so the post never types over text it could not see removed.
   static func clearUntilEmpty(
-    clearOnce: () -> SynthesizedStepDispatch,
-    read: () -> TextValueRead
-  ) -> SynthesizedClearOutcome {
+    clearOnce: () throws -> SynthesizedStepDispatch,
+    read: () throws -> TextValueRead
+  ) rethrows -> SynthesizedClearOutcome {
     for pass in 1...SynthesizedTextPlan.Step.maxClearPassCount {
-      guard clearOnce() == .posted else { return .stopped }
-      switch read() {
+      guard try clearOnce() == .posted else { return .stopped }
+      switch try read() {
       case .text(let value) where value.isEmpty:
         return .cleared
       case .text:
@@ -300,22 +300,22 @@ extension RunnerTests {
   func runSynthesizedTextPlan(
     _ plan: SynthesizedTextPlan,
     text: String,
-    post: (_ characters: String, _ step: SynthesizedTextPlan.Step) -> SynthesizedStepDispatch,
-    waitAfterWarmupCharacter: (_ characters: String) -> Void,
+    post: (_ characters: String, _ step: SynthesizedTextPlan.Step) throws -> SynthesizedStepDispatch,
+    waitAfterWarmupCharacter: (_ characters: String) throws -> Void,
     didPostStep: (_ step: SynthesizedTextPlan.Step) -> Void = { _ in }
-  ) -> SynthesizedPlanRun {
+  ) rethrows -> SynthesizedPlanRun {
     let characters = Array(text)
     var postedCount = 0
     for step in plan.steps {
       let nextCount = postedCount + step.characterCount
-      if post(String(characters[postedCount..<nextCount]), step) == .stop {
+      if try post(String(characters[postedCount..<nextCount]), step) == .stop {
         // The stopped post never delivered its slice, so the run reports what did arrive.
         return SynthesizedPlanRun(postedCharacterCount: postedCount, stoppedEarly: true)
       }
       postedCount = nextCount
       didPostStep(step)
       if step.warmsUpField {
-        waitAfterWarmupCharacter(String(characters[postedCount - step.characterCount..<postedCount]))
+        try waitAfterWarmupCharacter(String(characters[postedCount - step.characterCount..<postedCount]))
       } else if step.pauseAfterSeconds > 0 {
         sleepFor(step.pauseAfterSeconds)
       }
@@ -326,7 +326,7 @@ extension RunnerTests {
   @MainActor
   func runSynthesizedReplacementRoute(
     _ request: SynthesizedReplacementRequest
-  ) -> SynthesizedReplacementRouteOutcome {
+  ) throws -> SynthesizedReplacementRouteOutcome {
 #if os(iOS)
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
     let plan = Self.synthesizedTextPlan(
@@ -355,11 +355,11 @@ extension RunnerTests {
     var clearOutcome: SynthesizedClearOutcome?
     // A private synthesis channel that is gone mid-plan leaves the command the same
     // point-and-focus fallback it had before the plan existed.
-    let synthesisAvailable = runSynthesizedTextPlan(
+    let synthesisAvailable = try runSynthesizedTextPlan(
       plan,
       text: request.text,
       post: { slice, step in
-        func enter(_ text: String, replacingExistingText: Bool) -> SynthesizedStepDispatch {
+        func enter(_ text: String, replacingExistingText: Bool) throws -> SynthesizedStepDispatch {
           switch request.synthesizer.enterText(
             app: request.app,
             text: text,
@@ -379,18 +379,18 @@ extension RunnerTests {
         }
         if step.replacesExistingText {
           var passes = 0
-          let outcome = Self.clearUntilEmpty(
+          let outcome = try Self.clearUntilEmpty(
             clearOnce: {
               passes += 1
-              return enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)
+              return try enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)
             },
-            read: { self.clearedFieldRead(app: request.app, target: request.target) }
+            read: { try self.clearedFieldRead(app: request.app, target: request.target) }
           )
           clearOutcome = outcome
           NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR passes=%d outcome=%@", passes, String(describing: outcome))
           guard outcome == .cleared || outcome == .unverified else { return .stop }
         }
-        return enter(slice, replacingExistingText: false)
+        return try enter(slice, replacingExistingText: false)
       },
       // A replacement never peels a warmup character, so no step asks for a read-back.
       waitAfterWarmupCharacter: { _ in }
@@ -418,7 +418,7 @@ extension RunnerTests {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
       guard let point = request.target.refreshPoint else { return .notApplicable }
       return .fallback(
-        focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
+        try focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
       )
     }
     // The private synthesize call returns at post time, not commit time, and this route never
@@ -426,7 +426,7 @@ extension RunnerTests {
     // still-in-flight character at all. Wait here, on the same request.target
     // (element nil, refreshPoint set) that gated this route, so each poll re-resolves via the
     // refresh point rather than trusting a stale element handle.
-    let commit = awaitSynthesizedReplacementCommit(
+    let commit = try awaitSynthesizedReplacementCommit(
       app: request.app,
       target: request.target,
       expectedText: request.text
@@ -523,9 +523,9 @@ extension RunnerTests {
     stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
     ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date = { Date() },
-    observe: () -> TextValueRead,
+    observe: () throws -> TextValueRead,
     waitForNextObservation: () -> Void
-  ) -> SynthesizedTextCommitOutcome {
+  ) rethrows -> SynthesizedTextCommitOutcome {
     // An unreadable field never exposes its value, so every read could only expire the wait. The
     // element route leaves such a field unverified rather than failed; so does this one. A masked
     // value appears only once the burst lands, so a read that turns unreadable mid-wait ends it
@@ -545,7 +545,7 @@ extension RunnerTests {
     // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
     while true {
       let observedText: String?
-      switch observe() {
+      switch try observe() {
       case .unreadable:
         return .unobservable
       case .text(let value):
