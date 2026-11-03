@@ -46,6 +46,13 @@ private final class LitPanelBookingProbe: NSObject {
 
   nonisolated override func value(forKey key: String) -> Any? {
     MainActor.assumeIsolated {
+      let original = unsafeBitCast(
+        Self.originalValueForKey!,
+        to: (@convention(c) (AnyObject, Selector, NSString) -> AnyObject?).self
+      )
+      if self is DisplayWindowFixture {
+        return original(self, #selector(NSObject.value(forKey:)), key as NSString)
+      }
       switch key {
       case "windows": return Self.query
       case "allElementsBoundByIndex":
@@ -58,10 +65,6 @@ private final class LitPanelBookingProbe: NSObject {
       case "frame": return NSValue(cgRect: Self.windowFrame)
       default: break
       }
-      let original = unsafeBitCast(
-        Self.originalValueForKey!,
-        to: (@convention(c) (AnyObject, Selector, NSString) -> AnyObject?).self
-      )
       return original(self, #selector(NSObject.value(forKey:)), key as NSString)
     }
   }
