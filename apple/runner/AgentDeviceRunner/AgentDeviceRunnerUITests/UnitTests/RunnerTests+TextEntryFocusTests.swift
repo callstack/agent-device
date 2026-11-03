@@ -11,11 +11,7 @@ extension RunnerTests {
       XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))
       XCTAssertEqual(try textEntryWitnessCounts().taps, 1)
 
-      let response = try executeWitnessEntry(field, text: text)
-
-      XCTAssertTrue(response.ok, String(describing: response.error))
-      XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, text)
-      let counts = try textEntryWitnessCounts()
+      let counts = try assertWitnessEntry(field, text: text)
       XCTAssertEqual(counts.taps, 1)
       XCTAssertEqual(counts.selections, prefilled ? 1 : 0)
       XCTAssertEqual(counts.rejected, 0)
@@ -48,11 +44,9 @@ extension RunnerTests {
     field.tap()
     XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))
 
-    let response = try executeWitnessEntry(field, text: "hello")
+    let counts = try assertWitnessEntry(field, text: "hello")
 
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "hello")
-    XCTAssertEqual(try textEntryWitnessCounts().taps, 3)
+    XCTAssertEqual(counts.taps, 3)
   }
 
   @MainActor
@@ -61,11 +55,7 @@ extension RunnerTests {
     defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
     XCTAssertFalse(keyboardFocusConfirmed(app: app, element: field))
 
-    let response = try executeWitnessEntry(field, text: "hello")
-
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "hello")
-    let counts = try textEntryWitnessCounts()
+    let counts = try assertWitnessEntry(field, text: "hello")
     XCTAssertEqual(counts.taps, 2)
     XCTAssertEqual(counts.selections, 1)
   }
@@ -91,11 +81,7 @@ extension RunnerTests {
       defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
       field.tap()
 
-      let response = try executeWitnessEntry(field, text: text)
-
-      XCTAssertTrue(response.ok, String(describing: response.error))
-      XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, text)
-      let counts = try textEntryWitnessCounts()
+      let counts = try assertWitnessEntry(field, text: text)
       XCTAssertEqual(counts.taps, 2)
       XCTAssertGreaterThan(counts.rejected, 0)
     }
@@ -136,7 +122,8 @@ extension RunnerTests {
       + (prefilled ? ["--agent-device-text-entry-witness-prefill"] : []) + extra
     app.launch()
     XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let field = app.textFields.firstMatch
+    let field = extra.contains("--agent-device-text-entry-unnamed-input")
+      ? app.textFields.firstMatch : app.textFields["agent-device-hardware-keyboard-input"]
     XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     return field
   }
@@ -148,6 +135,14 @@ extension RunnerTests {
       #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(frame.midX),"y":\#(frame.midY)}"#
     )
     return executeTypeCommand(activeApp: app, command: command)
+  }
+
+  @MainActor
+  private func assertWitnessEntry(_ field: XCUIElement, text: String) throws -> (taps: Int, selections: Int, rejected: Int) {
+    let response = try executeWitnessEntry(field, text: text)
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, text)
+    return try textEntryWitnessCounts()
   }
 
   @MainActor
