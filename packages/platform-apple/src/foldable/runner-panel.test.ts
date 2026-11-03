@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { bindTestCommandHost } from '@agent-device/test-kit';
-import { withAppleRunnerProvider } from '@agent-device/apple-runner';
+import { withAppleRunnerProvider, type AppleRunnerProvider } from '@agent-device/apple-runner';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
 
@@ -18,6 +18,7 @@ vi.mock('../core/devicectl.ts', async (importOriginal) => ({
 
 import { runIosDevicectlJsonRequest } from '../core/devicectl.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
+import { iosRunnerOverrides } from '../interactions.ts';
 import {
   recordingRunnerProvider,
   type RecordedRunnerCall,
@@ -252,4 +253,69 @@ test('a slow failed read does not back off over a newer read that resolved', asy
     1,
     'the stale failure must not hold the next request on the historic route',
   );
+});
+
+test('every press-series chunk uses the lit-panel naming path', async () => {
+  answering(IPHONE_DUO_OPEN);
+  const device = simulator();
+  const calls: RecordedRunnerCall[] = [];
+  const base = recordingRunnerProvider(calls);
+  const provider: AppleRunnerProvider = {
+    ...base,
+    runCommand: async (target, command, options) => {
+      await base.runCommand(target, command, options);
+      return {
+        completedSteps: command.steps?.length ?? 0,
+        sequenceResults: command.steps?.map(({ kind }) => ({ ok: true, kind })) ?? [],
+      };
+    },
+  };
+  // A long interval forces separate sequence chunks; each dispatch must name its current panel.
+  mockPanelTable.mockResolvedValueOnce({ ok: true, payload: IPHONE_DUO_OPEN });
+  mockPanelTable.mockResolvedValueOnce({ ok: true, payload: IPHONE_DUO_CLOSED });
+  await withAppleRunnerProvider(provider, { deviceId: device.id }, async () => {
+    const { overrides } = iosRunnerOverrides(
+      device,
+      { appBundleId: 'com.example.app' },
+      process.env,
+    );
+    await overrides.pressPoint!(
+      { x: 100, y: 200 },
+      {
+        button: 'primary',
+        count: 4,
+        intervalMs: 10_000,
+        holdMs: 0,
+        jitterPx: 0,
+        doubleTap: false,
+      },
+    );
+  });
+  assert.ok(calls.length > 1, 'the regression must exercise more than one chunk');
+  assert.ok(calls.every(({ command }) => command.command === 'sequence' && command.litPanel));
+  assert.equal(calls[0]?.command.litPanel?.displayId, 3);
+  assert.equal(calls[1]?.command.litPanel?.displayId, 1);
+  assert.equal(mockPanelTable.mock.calls.length, calls.length);
+});
+
+test('an unnamed panel keeps the historic wire timeout and caller signal', async () => {
+  let time = 1_000;
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => time);
+  try {
+    mockPanelTable.mockImplementation(async () => {
+      time += 50;
+      return { ok: true, payload: IPHONE_17_SINGLE_PANEL };
+    });
+    const device = simulator();
+    const calls: RecordedRunnerCall[] = [];
+    const signal = new AbortController().signal;
+    await withAppleRunnerProvider(recordingRunnerProvider(calls), { deviceId: device.id }, () =>
+      runAppleRunnerCommand(device, { command: 'tap', x: 10, y: 20, timeoutMs: 1_200 }, { signal }),
+    );
+    assert.equal(calls[0]?.command.timeoutMs, 1_200);
+    assert.equal(calls[0]?.command.litPanel, undefined);
+    assert.equal(calls[0]?.options.signal, signal);
+  } finally {
+    clock.mockRestore();
+  }
 });

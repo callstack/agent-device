@@ -190,7 +190,7 @@ extension RunnerTests {
   func resolvedScrollViewport(
     app: XCUIApplication,
     context: SynthesizedCoordinateContext
-  ) -> RunnerScrollViewport {
+  ) throws -> RunnerScrollViewport {
 #if os(iOS)
     // Every scroll reports its decision, including the two ways it avoids reading the keyboard at
     // all: unavailable accessibility health, and a probe that finds no keyboard.
@@ -223,7 +223,7 @@ extension RunnerTests {
     }
     return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: clip)
 #else
-    let fallbackFrame = resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    let fallbackFrame = try resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
     return ScrollViewportPolicy.frames(referenceFrame: fallbackFrame, clip: .unobstructed)
 #endif
   }

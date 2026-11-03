@@ -377,7 +377,7 @@ extension RunnerTests {
             timeout: max(0.1, sliceDeadline.timeIntervalSinceNow),
             timeoutError: self.snapshotMainThreadTimeoutError("running query-sweep snapshot")
           ) {
-            self.querySweepSnapshotAcquisition(
+            try self.querySweepSnapshotAcquisition(
               app: app,
               hint: hint,
               sliceDeadline: sliceDeadline

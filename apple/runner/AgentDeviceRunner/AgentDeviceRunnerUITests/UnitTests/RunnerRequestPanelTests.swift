@@ -97,7 +97,7 @@ extension RunnerTests {
         let booked = try XCTUnwrap(litPanelState.surface)
         XCTAssertTrue(booked.window === window)
         XCTAssertEqual(booked.frame, frame)
-        XCTAssertEqual(synthesizedRotationFrame(fallback: booked.frame, interfaceOrientation: orientation), expected)
+        XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: booked.frame, interfaceOrientation: orientation), expected)
         if case .unsupported(let message, _) = try tapAt(app: app, x: 200, y: 150) { XCTFail(message) }
         XCTAssertTrue(LitPanelBookingProbe.anchor === window)
         XCTAssertEqual(LitPanelBookingProbe.tappedPoint, CGPoint(x: 200, y: 150))
@@ -168,6 +168,40 @@ extension RunnerTests {
       XCTAssertTrue(match.isAmbiguous)
       XCTAssertNil(match.element)
       XCTAssertEqual(LitPanelBookingProbe.windowListReads, 1, "ambiguity does not require a coordinate booking")
+    }
+  }
+
+  @MainActor
+  func testFailedLitPanelBookingRefusesEveryReferenceFrameConsumer() throws {
+    try withLitPanelBookingProbe { _ in
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 0, width: 669, height: 951)
+      setRequestLitPanel(from: try runnerCommandFixture(
+        #"{"command":"tap","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
+      ))
+      func refuses<T>(_ read: () throws -> T) {
+        XCTAssertThrowsError(try read()) {
+          XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .offLitPanel)
+        }
+      }
+      refuses { try resolveRunnerWindow(app: app) }
+      refuses { try onScreenWindowFrame(app: app) }
+      refuses { try resolvedTouchReferenceFrame(app: app, appFrame: CGRect(x: 0, y: 0, width: 466, height: 678)) }
+      refuses { try synthesizedCoordinateContext(app: app) }
+      refuses { try gestureViewportFrame(app: app) }
+      refuses { try resolvedTouchVisualizationFrame(app: app, x: 20, y: 30) }
+      refuses { try resolvedDragVisualizationFrame(app: app, x: 20, y: 30, x2: 40, y2: 50) }
+      refuses { try performSynthesizedTapGesture(app: app, x: 20, y: 30) }
+      var alertRefusal: Error?
+      let held = holdingRecordedIssues {
+        do {
+          _ = try activateAlertButton(
+            RunnerAlert(root: app, ownerApp: app, buttons: [app], source: .appAlert, window: nil),
+            button: app, action: "accept", frame: CGRect(x: 10, y: 10, width: 40, height: 40), deadline: .distantFuture
+          )
+        } catch { alertRefusal = error }
+      }
+      XCTAssertEqual(alertRefusal as? RunnerAppScreenCaptureFailure, .offLitPanel)
+      XCTAssertTrue(held.issues.isEmpty, "the typed refusal must survive the idle/interruption wrappers")
     }
   }
 
@@ -313,10 +347,10 @@ extension RunnerTests {
       #"{"command":"tap","litPanel":{"displayId":\#(displayID),"widthPt":\#(frame.width),"heightPt":\#(frame.height + 80)}}"#
     ))
     XCTAssertNil(bookRequestLitPanelSurface(app: app))
-    let context = try XCTUnwrap(synthesizedCoordinateContext(app: app))
+    let context = try XCTUnwrap(try synthesizedCoordinateContext(app: app))
     XCTAssertEqual(context.referenceFrame, frame, "the booked reference is the window's own frame")
     XCTAssertEqual(
-      synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      synthesizedRotationFrame(app: app, fallback: context.referenceFrame, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       CGRect(x: 0, y: 0, width: frame.width, height: frame.height + 80),
       "the turn is about the whole lit panel, not the window"
     )

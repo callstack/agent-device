@@ -66,46 +66,46 @@ extension RunnerTests {
     let usedNonHittableFallback: Bool
   }
 
-  func performBackGesture(app: XCUIApplication) {
+  func performBackGesture(app: XCUIApplication) throws {
     if pressTvRemote(.menu) {
       return
     }
-    performCoordinateBackGesture(app: app)
+    try performCoordinateBackGesture(app: app)
   }
 
-  private func performCoordinateBackGesture(app: XCUIApplication) {
+  private func performCoordinateBackGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = resolveRunnerWindow(app: app).window ?? app
+    let target = try resolveRunnerWindow(app: app).window ?? app
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
     start.press(forDuration: 0.05, thenDragTo: end)
 #endif
   }
 
-  func performSystemBackAction(app: XCUIApplication) -> Bool {
+  func performSystemBackAction(app: XCUIApplication) throws -> Bool {
 #if os(macOS)
     return false
 #else
     if pressTvRemote(.menu) {
       return true
     }
-    performBackGesture(app: app)
+    try performBackGesture(app: app)
     return true
 #endif
   }
 
-  func performAppSwitcherGesture(app: XCUIApplication) {
+  func performAppSwitcherGesture(app: XCUIApplication) throws {
     if pressTvRemote(.home) {
       sleepFor(resolveTvRemoteDoublePressDelay())
       _ = pressTvRemote(.home)
       return
     }
-    performCoordinateAppSwitcherGesture(app: app)
+    try performCoordinateAppSwitcherGesture(app: app)
   }
 
-  private func performCoordinateAppSwitcherGesture(app: XCUIApplication) {
+  private func performCoordinateAppSwitcherGesture(app: XCUIApplication) throws {
 #if !os(tvOS)
-    let target = resolveRunnerWindow(app: app).window ?? app
+    let target = try resolveRunnerWindow(app: app).window ?? app
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
     start.press(forDuration: 0.6, thenDragTo: end)
@@ -267,11 +267,12 @@ extension RunnerTests {
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID
   /// (`RunnerResolveWindowDisplayID`).
-  func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
-    guard let resolved = resolveRunnerWindowElement(app: app) else {
-      // A lit-panel request never falls back to the application, whose frame names another panel.
-      return (nil, requestLitPanel == nil ? app.frame : .null)
+  func resolveRunnerWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
+    if requestLitPanel != nil {
+      let booked = try requireRequestLitPanelSurface(app: app)
+      return (booked.window, booked.frame)
     }
+    guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, app.frame) }
     return (resolved.window, resolved.frame)
   }
 
@@ -292,8 +293,8 @@ extension RunnerTests {
     return nil
   }
 
-  func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
-    resolveRunnerWindow(app: app).frame
+  func onScreenWindowFrame(app: XCUIApplication) throws -> CGRect {
+    try resolveRunnerWindow(app: app).frame
   }
 
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) throws -> Response {
@@ -649,7 +650,7 @@ extension RunnerTests {
     let origin = booked.window.coordinate(withNormalizedOffset: .zero)
     return origin.withOffset(CGVector(dx: x - booked.frame.minX, dy: y - booked.frame.minY))
 #else
-    let resolved = resolveRunnerWindow(app: app)
+    let resolved = try resolveRunnerWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let offsetX = x - Double(resolved.frame.origin.x)

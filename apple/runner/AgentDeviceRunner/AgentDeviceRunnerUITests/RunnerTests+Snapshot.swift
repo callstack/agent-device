@@ -501,7 +501,7 @@ extension RunnerTests {
     app: XCUIApplication,
     hint: CaptureHint,
     sliceDeadline deadline: Date
-  ) -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
+  ) throws -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
@@ -518,7 +518,7 @@ extension RunnerTests {
       )
     }
 
-    let viewport = safeSnapshotViewport(app: app, readingOrientation: false)
+    let viewport = try safeSnapshotViewport(app: app, readingOrientation: false)
     var seen = Set<String>()
     var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)

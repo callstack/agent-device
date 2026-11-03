@@ -224,13 +224,20 @@ extension RunnerTests {
           }
           hostContext = context
         }
-        switch synthesizedTapAt(
-          app: alert.ownerApp,
-          x: frame.midX,
-          y: frame.midY,
-          context: hostContext,
-          deadline: deadline
-        ) {
+        let attempt: RunnerInteractionOutcome?
+        do {
+          attempt = try synthesizedTapAt(
+            app: alert.ownerApp,
+            x: frame.midX,
+            y: frame.midY,
+            context: hostContext,
+            deadline: deadline
+          )
+        } catch {
+          activationError = error
+          return
+        }
+        switch attempt {
         case .performed?:
           typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
           let waitForQuiescence = unsafeBitCast(

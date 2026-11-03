@@ -48,6 +48,7 @@ export async function resolveRunnerRequestLitPanel(
 /**
  * `command` with the lit panel named and the request budget the read left, measured on one clock.
  * A read that leaves no budget is refused before anything is sent.
+ * Only a named panel charges probe time to the wire timeout; unnamed-panel requests keep the historic timeout and share the caller's AbortSignal.
  */
 export async function nameRunnerRequestLitPanel(
   device: DeviceInfo,

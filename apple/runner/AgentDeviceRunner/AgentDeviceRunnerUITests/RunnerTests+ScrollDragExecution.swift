@@ -125,8 +125,8 @@ extension RunnerTests {
     message: String,
     fallback: GestureFallback? = nil
   ) throws -> Response {
-    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
-    let dragFrame = resolvedDragVisualizationFrame(
+    let dragPoints = try keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
+    let dragFrame = try resolvedDragVisualizationFrame(
       app: activeApp,
       x: dragPoints.x,
       y: dragPoints.y,
@@ -163,8 +163,8 @@ extension RunnerTests {
     profile: SynthesizedDragProfile
   ) throws -> Response? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(app: activeApp)
-    guard let plan = axFreeSynthesizedDragPlan(
+    let context = try context ?? synthesizedCoordinateContext(app: activeApp)
+    guard let plan = try axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,
       y: y,
@@ -191,8 +191,8 @@ extension RunnerTests {
       referenceWidth: Double(plan.referenceFrame.width),
       referenceHeight: Double(plan.referenceFrame.height)
     )
-    switch performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
-      synthesizedDragAt(
+    switch try performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
+      try synthesizedDragAt(
         app: activeApp,
         x: plan.points.x,
         y: plan.points.y,

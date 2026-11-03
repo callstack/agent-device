@@ -82,7 +82,7 @@ extension RunnerTests {
   @MainActor
   private func tapResolvedNavigationBackControl(app: XCUIApplication, frame: CGRect) throws -> InAppBackOutcome {
     guard SnapshotGeometry.isPositiveFinite(frame) else { return .unavailable }
-    let context = synthesizedCoordinateContext(app: app)
+    let context = try synthesizedCoordinateContext(app: app)
     guard try dispatchNavigationTap(app: app, point: CGPoint(x: frame.midX, y: frame.midY), context: context) else {
       return .unavailable
     }
@@ -97,8 +97,8 @@ extension RunnerTests {
     point: CGPoint,
     context: SynthesizedCoordinateContext?
   ) throws -> Bool {
-    switch performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
-      synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
+    switch try performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
+      try synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
     }) {
     case .performed:
       return true
@@ -115,7 +115,7 @@ extension RunnerTests {
 
   private func topNavigationBackFrame(app: XCUIApplication) throws -> CGRect? {
 #if os(iOS)
-    let window = onScreenWindowFrame(app: app)
+    let window = try onScreenWindowFrame(app: app)
     let candidates = try elementQueries(app: app, matching: .button).flatMap {
       $0.matching(Self.navigationBackPredicate()).allElementsBoundByIndex
     }.compactMap {
@@ -224,7 +224,7 @@ extension RunnerTests {
     windowQueryRejected: Bool
   ) throws -> InAppBackOutcome {
 #if os(iOS)
-    guard let context = synthesizedCoordinateContext(
+    guard let context = try synthesizedCoordinateContext(
       app: app,
       windowQueryRejected: windowQueryRejected
     ), let point = Self.topLeadingNavigationFallbackPoint(

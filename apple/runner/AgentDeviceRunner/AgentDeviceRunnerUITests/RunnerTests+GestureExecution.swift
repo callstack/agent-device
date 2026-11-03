@@ -6,9 +6,9 @@ extension RunnerTests {
     ProcessInfo.processInfo.systemUptime * 1000
   }
 
-  func measureGesture(_ action: () -> Void) -> (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double) {
+  func measureGesture(_ action: () throws -> Void) rethrows -> (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double) {
     let gestureStartUptimeMs = currentUptimeMs()
-    action()
+    try action()
     return (gestureStartUptimeMs, currentUptimeMs())
   }
 

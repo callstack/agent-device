@@ -86,7 +86,7 @@ extension RunnerTests {
           // negative x), so it happily "contains" unreachable coordinates.
           // The DECISION lives in TapPointPolicy (golden parity table with the
           // TS twin); onScreenWindowFrame only supplies the frame.
-          if !match.usedNonHittableFallback
+          if try !match.usedNonHittableFallback
             && !TapPointPolicy.isAllowed(
               elementFrame: frame,
               windowFrame: onScreenWindowFrame(app: activeApp)
@@ -98,23 +98,14 @@ extension RunnerTests {
           }
           let isTextEntry = isTextEntryElement(element)
           let touchPoint = expectedPoint ?? CGPoint(x: frame.midX, y: frame.midY)
-          let touchFrame = resolvedTouchVisualizationFrame(
+          let touchFrame = try resolvedTouchVisualizationFrame(
             app: activeApp,
             x: touchPoint.x,
             y: touchPoint.y
           )
           var fallback: GestureFallback?
           if command.synthesized == true {
-            let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-            let context = synthesizedCoordinateContext(app: activeApp)
-            switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
-              synthesizedTapAt(
-                app: activeApp,
-                x: touchPoint.x,
-                y: touchPoint.y,
-                context: context
-              )
-            }) {
+            switch try performSynthesizedTapGesture(app: activeApp, x: touchPoint.x, y: touchPoint.y) {
             case .performed(let timing):
               if isTextEntry {
                 try waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
@@ -194,11 +185,7 @@ extension RunnerTests {
         }
         var fallback: GestureFallback?
         if command.synthesized == true {
-          let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-          let context = synthesizedCoordinateContext(app: activeApp)
-          switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
-            synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-          }) {
+          switch try performSynthesizedTapGesture(app: activeApp, x: x, y: y) {
           case .performed(let timing):
             rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)
@@ -208,7 +195,7 @@ extension RunnerTests {
             return refusedTapResponse(message, hint: hint)
           }
         }
-        let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+        let touchFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
         let (timing, outcome) = try performGesture(activeApp) { try tapAt(app: activeApp, x: x, y: y) }
         if let response = unsupportedResponse(for: outcome) {
           clearRememberedTextEntryTap()
@@ -228,7 +215,7 @@ extension RunnerTests {
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "mouseClick requires x and y"))
       }
-      let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+      let touchFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
       do {
         // mouseClick throws (it has no RunnerInteractionOutcome), so it keeps raw measureGesture
         // and only routes the success payload through gestureResponse.
@@ -255,9 +242,9 @@ extension RunnerTests {
       let fallback: GestureFallback?
 #if os(iOS)
       let policyKind = SynthesizedGesturePolicyKind.coordinateLongPress
-      let context = synthesizedCoordinateContext(app: activeApp)
-      switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
-        synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
+      let context = try synthesizedCoordinateContext(app: activeApp)
+      switch try performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
+        try synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
       }) {
       case .performed(let timing):
         let touchFrame = context.map { touchVisualizationFrame(x: x, y: y, context: $0) }
@@ -270,7 +257,7 @@ extension RunnerTests {
 #else
       fallback = nil
 #endif
-      let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
+      let touchFrame = try resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
       let (timing, outcome) = try performGesture(activeApp) {
         try longPressAt(app: activeApp, x: x, y: y, duration: durationMs / 1000.0)
       }
@@ -306,13 +293,13 @@ extension RunnerTests {
       else {
         return invalidScrollDirectionResponse(commandName: "scroll")
       }
-      guard let scrollContext = synthesizedCoordinateContext(app: activeApp) else {
+      guard let scrollContext = try synthesizedCoordinateContext(app: activeApp) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
       }
-      let viewport = resolvedScrollViewport(app: activeApp, context: scrollContext)
+      let viewport = try resolvedScrollViewport(app: activeApp, context: scrollContext)
       let defaults = runnerDragCommandDefaults(command)
       switch viewport.gestureDispatch(
         direction: direction,
@@ -363,7 +350,7 @@ extension RunnerTests {
         return invalidScrollDirectionResponse(commandName: "desktopScroll")
       }
       let appFrame = activeApp.frame
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
+      let frame = try resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,
@@ -392,7 +379,7 @@ extension RunnerTests {
       guard scrollDurationIsValid(command.durationMs) else {
         return invalidScrollDurationResponse(commandName: "desktopScroll")
       }
-      let touchFrame = resolvedTouchVisualizationFrame(
+      let touchFrame = try resolvedTouchVisualizationFrame(
         app: activeApp,
         x: localX,
         y: localY
@@ -444,13 +431,13 @@ extension RunnerTests {
       }
       // swipe returns an optional frame (tvOS-only) rather than a RunnerInteractionOutcome, so it
       // keeps raw measureGesture and only routes the success payload through gestureResponse.
-      var executedFrame: DragVisualizationFrame?
+      var executedFrame: Result<DragVisualizationFrame?, Error> = .success(nil)
       let timing = measureGesture {
         withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
-          executedFrame = swipe(app: activeApp, direction: direction)
+          executedFrame = Result { try swipe(app: activeApp, direction: direction) }
         }
       }
-      guard let dragFrame = executedFrame else {
+      guard let dragFrame = try executedFrame.get() else {
         return Response(ok: false, error: ErrorPayload(message: "swipe is only supported on tvOS"))
       }
       return gestureResponse(message: "swiped", timing: timing, frame: .drag(dragFrame))
@@ -565,7 +552,7 @@ extension RunnerTests {
         return Response(ok: false, error: error)
       }
     case .backSystem:
-      if performSystemBackAction(app: activeApp) {
+      if try performSystemBackAction(app: activeApp) {
         return Response(ok: true, data: DataPayload(message: "backSystem"))
       }
       return Response(ok: false, error: ErrorPayload(message: "system back is not available"))
@@ -575,7 +562,7 @@ extension RunnerTests {
     case .rotate:
       return executeRotateCommand(command)
     case .appSwitcher:
-      performAppSwitcherGesture(app: activeApp)
+      try performAppSwitcherGesture(app: activeApp)
       return Response(ok: true, data: DataPayload(message: "appSwitcher"))
     case .actionButton:
       guard pressActionButton() else {
@@ -705,7 +692,7 @@ extension RunnerTests {
         return plannedGestureResponse(plan: plan, timing: timing, outcome: outcome)
       }
     case .gestureViewport:
-      let frame = gestureViewportFrame(app: activeApp)
+      let frame = try gestureViewportFrame(app: activeApp)
       guard !frame.isNull, !frame.isInfinite, !frame.isEmpty else {
         return Response(ok: false, error: ErrorPayload(code: "COMMAND_FAILED", message: "Active app interaction viewport is unavailable"))
       }

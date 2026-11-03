@@ -407,7 +407,7 @@ extension RunnerTests {
       RunnerInterfaceOrientation.portrait
     )
 
-    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .performed? = outcome else {
       return XCTFail("expected a portrait tap to be dispatched, got \(String(describing: outcome))")
     }
@@ -430,7 +430,7 @@ extension RunnerTests {
       RunnerInterfaceOrientation.portrait
     )
 
-    let outcome = synthesizedTapAt(app: app, x: 40, y: 40)
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40)
     guard case .performed? = outcome else {
       return XCTFail("expected a window-less portrait tap to be dispatched, got \(String(describing: outcome))")
     }
@@ -445,7 +445,7 @@ extension RunnerTests {
     let (_, cleanup) = try launchWithUnreadableDisplay(landscape: true, windowQueryRejected: true)
     defer { cleanup() }
 
-    let outcome = synthesizedTapAt(app: app, x: 40, y: 40)
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40)
     guard case .unsupported(let message, _)? = outcome else {
       return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
     }
@@ -471,7 +471,7 @@ extension RunnerTests {
       synthesizedRotationFrame(app: app, fallback: windowFrame, interfaceOrientation: orientation),
       windowFrame
     )
-    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .performed? = outcome else {
       return XCTFail("expected the tap to be dispatched about the window, got \(String(describing: outcome))")
     }
@@ -499,7 +499,7 @@ extension RunnerTests {
       placedWindow,
       "portrait skips the box read (only landscape and upside-down read it), so it must not refuse"
     )
-    let outcome = synthesizedTapAt(app: app, x: 40, y: 40, context: context)
+    let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
     guard case .unsupported(let message, _)? = outcome else {
       return XCTFail("expected a refusal before dispatch, got \(String(describing: outcome))")
     }

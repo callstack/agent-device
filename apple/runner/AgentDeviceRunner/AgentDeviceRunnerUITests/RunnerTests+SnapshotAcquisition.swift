@@ -55,7 +55,7 @@ extension RunnerTests {
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("reading snapshot viewport")
     ) {
-      self.safeSnapshotViewport(app: app, readingOrientation: true)
+      try self.safeSnapshotViewport(app: app, readingOrientation: true)
     }
     // Use the same tree for keyboard coverage so a later dismissal cannot invalidate the band.
     let keyboardBand = captureKeyboardBandFact(snapshot: rootSnapshot, viewport: viewport, deadline: captureDeadline)
@@ -138,15 +138,18 @@ extension RunnerTests {
   /// The viewport as a declared fact; a read that raises is `.missing(reason: .notProvided)` (#2891).
   /// `readingOrientation` reads the interface orientation in the same hop, for tiers whose frames can
   /// arrive in the device's native space; without it the viewport cannot anchor a rotation.
-  func safeSnapshotViewport(app: XCUIApplication, readingOrientation: Bool) -> SnapshotViewport {
-    safely("SNAPSHOT_VIEWPORT", .missing(reason: .notProvided)) {
-      .reported(
-        box: snapshotAppFrame(app: app),
-        interfaceOrientation: readingOrientation
-          ? capturedInterfaceOrientation(app: app)
-          : RunnerInterfaceOrientation.unknown
-      )
+  func safeSnapshotViewport(app: XCUIApplication, readingOrientation: Bool) throws -> SnapshotViewport {
+    let result: Result<SnapshotViewport, Error> = safely("SNAPSHOT_VIEWPORT", .success(.missing(reason: .notProvided))) {
+      Result {
+        .reported(
+          box: try snapshotAppFrame(app: app),
+          interfaceOrientation: readingOrientation
+            ? capturedInterfaceOrientation(app: app)
+            : RunnerInterfaceOrientation.unknown
+        )
+      }
     }
+    return try result.get()
   }
 
   private func describeSnapshotError(_ error: Error) -> String {
@@ -259,9 +262,9 @@ extension RunnerTests {
     return placeholderText(element.placeholderValue)
   }
 
-  private func snapshotAppFrame(app: XCUIApplication) -> CGRect {
+  private func snapshotAppFrame(app: XCUIApplication) throws -> CGRect {
 #if os(iOS)
-    return onScreenWindowFrame(app: app)
+    return try onScreenWindowFrame(app: app)
 #else
     return app.frame
 #endif

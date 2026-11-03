@@ -35,12 +35,12 @@ extension RunnerTests {
       }
     }
 
-    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
+    let synthesizedContext = try synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
     // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
-    let firstFrame = (firstStep.x != nil && firstStep.y != nil)
+    let firstFrame = try (firstStep.x != nil && firstStep.y != nil)
       ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
         ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
@@ -149,8 +149,8 @@ extension RunnerTests {
     let y = step.y ?? 0
     let longPressDurationMs = min(max(step.durationMs ?? 800, 16), 10000)
     if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
-      switch performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
-        synthesizedSequenceStep(
+      switch try performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
+        try synthesizedSequenceStep(
           policyKind,
           app: activeApp,
           x: x,
@@ -193,11 +193,11 @@ extension RunnerTests {
     y: Double,
     longPressDurationMs: Double,
     context: SynthesizedCoordinateContext?
-  ) -> RunnerInteractionOutcome? {
+  ) throws -> RunnerInteractionOutcome? {
     switch policyKind {
 #if os(iOS)
     case .coordinateLongPress:
-      return synthesizedLongPressAt(
+      return try synthesizedLongPressAt(
         app: app,
         x: x,
         y: y,
@@ -206,7 +206,7 @@ extension RunnerTests {
       )
 #endif
     default:
-      return synthesizedTapAt(app: app, x: x, y: y, context: context)
+      return try synthesizedTapAt(app: app, x: x, y: y, context: context)
     }
   }
 
