@@ -137,17 +137,7 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
 
   await runStep(context, 'restore automation route top after rotation', ['scroll', 'top']);
   await scrollToVisibleSelector(context, 'id="automation-press"');
-  await scrollToVisibleSelector(context, 'id="automation-last-input"');
-  await assertElementText(context, 'id="automation-last-input"', 'Last input: none');
   await runStep(context, 'press semantic canary', ['press', 'id="automation-press"']);
-  const inputDiff = await runStep(context, 'observe Android input canary diff', [
-    'diff',
-    'snapshot',
-    '-i',
-  ]);
-  assertDiffLine(inputDiff.json?.data, 'removed', 'Last input: none');
-  assertDiffLine(inputDiff.json?.data, 'added', 'Last input: press');
-  verifyCommand(context, C.diff, 'snapshot diff reports the durable Android input canary mutation');
   await scrollToVisibleSelector(context, 'id="automation-last-input"');
   await assertWaitText(context, 'Last input: press');
   verifyCommand(context, C.press, 'semantic press updates durable fixture input state');

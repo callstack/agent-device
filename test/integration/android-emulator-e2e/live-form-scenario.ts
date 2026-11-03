@@ -7,6 +7,7 @@ import type { CliJsonResult } from '../cli-json.ts';
 import {
   assertElementText,
   assertFilesDiffer,
+  assertDiffLine,
   assertWaitText,
   capturePng,
   requireAndroidResourceId,
@@ -30,11 +31,27 @@ export async function assertFormInput(context: LiveContext): Promise<void> {
     JSON.stringify(keyboardStatus.json),
   );
 
-  await runStep(context, 'fill Unicode full name through test IME', [
+  const baselineName = await runStep(context, 'fill the name diff baseline', [
+    'fill',
+    'id="field-name"',
+    'Grace Hopper',
+  ]);
+  assert.equal(baselineName.json?.data?.verification, undefined, JSON.stringify(baselineName.json));
+  await runStep(context, 'capture confirmed name diff baseline', ['snapshot', '-i']);
+  const filledName = await runStep(context, 'fill Unicode full name through test IME', [
     'fill',
     'id="field-name"',
     'Ada Łovelace',
   ]);
+  assert.equal(filledName.json?.data?.verification, undefined, JSON.stringify(filledName.json));
+  const nameDiff = await runStep(context, 'observe confirmed Android name replacement diff', [
+    'diff',
+    'snapshot',
+    '-i',
+  ]);
+  assertDiffLine(nameDiff.json?.data, 'removed', 'Grace Hopper');
+  assertDiffLine(nameDiff.json?.data, 'added', 'Ada Łovelace');
+  verifyCommand(context, C.diff, 'snapshot diff reports a confirmed Android name replacement');
   await runStep(context, 'fill email field', ['fill', 'id="field-email"', 'ada@example']);
   const name = await runStep(context, 'read filled full name', ['get', 'text', 'id="field-name"']);
   assert.equal(name.json?.data?.text, 'Ada Łovelace', JSON.stringify(name.json));
