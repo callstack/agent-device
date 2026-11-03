@@ -452,7 +452,7 @@ extension RunnerTests {
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
       guard let context = SynthesizedCoordinateContext(
-        validating: booked.frame, resolvedWindow: booked.window, accessibilityHealth: health
+        validating: booked.geometry, resolvedWindow: booked.window, accessibilityHealth: health
       ) else { throw RunnerAppScreenCaptureFailure.unresolvedScreen }
       return context
     }

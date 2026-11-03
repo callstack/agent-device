@@ -267,7 +267,7 @@ extension RunnerTests {
   func resolveRunnerWindow(app: XCUIApplication) throws -> (window: XCUIElement?, frame: CGRect) {
     if requestLitPanel != nil {
       let booked = try requireRequestLitPanelSurface(app: app)
-      return (booked.window, booked.frame)
+      return (booked.window, booked.geometry.windowOnScreen.rect)
     }
     guard let resolved = resolveRunnerWindowElement(app: app) else { return (nil, app.frame) }
     return (resolved.window, resolved.frame)
