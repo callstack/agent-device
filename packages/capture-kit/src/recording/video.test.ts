@@ -78,6 +78,7 @@ test.each(['linux', 'win32'] as const)(
   '%s recording validation uses container authority without Swift preparation',
   async (platform) => {
     Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    vi.mocked(compileSwiftSourceText).mockRejectedValue(new AppError('TOOL_MISSING', 'no xcrun'));
     const host = createTestHost();
     const prepared = await prepareVideoValidator(host);
     expect(prepared).toEqual({ kind: 'container' });
