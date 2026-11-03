@@ -21,13 +21,14 @@ let package = Package(
   ],
   targets: [
     .target(name: "AgentDeviceSnapshotPresentation"),
+    .target(name: "RecordingSupport", dependencies: ["AgentDeviceSnapshotPresentation"]),
     .executableTarget(
       name: "SnapshotPresentationConformance",
-      dependencies: ["AgentDeviceSnapshotPresentation"]
+      dependencies: ["AgentDeviceSnapshotPresentation", "RecordingSupport"]
     ),
     .testTarget(
       name: "AgentDeviceSnapshotPresentationTests",
-      dependencies: ["AgentDeviceSnapshotPresentation"]
+      dependencies: ["AgentDeviceSnapshotPresentation", "RecordingSupport"]
     ),
   ]
 )

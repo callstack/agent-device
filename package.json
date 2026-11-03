@@ -225,7 +225,7 @@
     "test:linux:command-evidence": "node --experimental-strip-types test/integration/linux-e2e/live-runner.ts",
     "prepublishOnly": "echo 'agent-device publishes from .github/workflows/release.yml; see CONTRIBUTING.md.' >&2 && exit 1",
     "capture:alert-surface": "node --experimental-strip-types scripts/capture-alert-surface.ts",
-    "print:alert-surface": "node --experimental-strip-types scripts/print-alert-surface-tree.ts"
+    "print:alert-surface": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift run --package-path apple/snapshot-presentation snapshot-presentation-conformance print-alert-surface"
   },
   "files": [
     "bin",

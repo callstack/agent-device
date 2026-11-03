@@ -41,11 +41,10 @@ checking each root and action against the screenshot.
    pnpm print:alert-surface apple/snapshot-presentation/Tests/AlertSurfaceCorpus/iphone-duo-folded-springboard-open-in-app.json
    ```
 
-   Each line after the first shows a node's index, type, and label. `[kept 1 of 3 children]`
-   marks a node where the honor-modal tree removed children. The first line is what
-   `ModalSurface` reads, labeled as the rule's answer, not ground truth. It is `modal`,
-   `noExclusion`, or `unknown(<reason>)` with the node where the read failed, and nodes are
-   marked only when it is `modal`. To print the whole tree, add `plain` after the path. If the
+   The command runs the Swift package's rule directly. Each line after the first shows a node's
+   index, type, and label. `[surface roots: 3]` marks a modal host and lists its kept roots.
+   The first line is what `ModalSurface` reads, labeled as the rule's answer, not ground truth.
+   It is `modal`, `noExclusion`, or `unknown(<reason>)`. Hosts are marked only for `modal`. To print the whole tree, add `plain` after the path. If the
    recording does not load in the replay, the command stops with one line that names the problem.
 
 4. Add `expect` from the screenshot. For each source that must find the prompt, give its title and
@@ -64,8 +63,7 @@ checking each root and action against the screenshot.
      screen. Don't add the recording. Report the screen in an issue, and attach the recording.
    - If the first line reads `unknown(duplicatedChild)`, a node lists one element more than once
      and the honor-modal tree kept only some of the copies, so the rule can't tell which copy
-     lost children. The line shows the element as its raw AX `element` id, such as
-     `99943:4829729792.1219`. Search the recording for that id to find the copies. Write
+     lost children. Inspect repeated AX `element` ids under the same parent in the recording. Write
      `{"reading": "unknown", "reason": "duplicatedChild"}` only after you confirm those copies in
      the recording.
    - If the first line reads `unknown` with any other reason, the replay rejects the recording.
@@ -88,9 +86,9 @@ of its printout:
 
 ```text
 ModalSurface reads (the rule's answer, not ground truth): modal
-   0 Application ""  [kept 1 of 40 children]
-   1   Window ""  [kept 1 of 3 children]
-   2     Other ""  [kept 1 of 3 children]
+   0 Application ""
+   1   Window ""
+   2     Other ""  [surface roots: 3]
    3       Alert "Open in “Agent Device Tester”?"
    4         Other ""
    5           Other ""
