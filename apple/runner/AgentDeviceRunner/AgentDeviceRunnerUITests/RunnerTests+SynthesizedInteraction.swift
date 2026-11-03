@@ -292,14 +292,12 @@ extension RunnerTests {
   /// The touch visualization frame of a synthesized gesture, read from its context instead of the
   /// app tree.
   func touchVisualizationFrame(
-    x: Double,
-    y: Double,
+    point: SurfacePoint<InterfaceScreenSpace>,
     context: SynthesizedCoordinateContext
   ) -> TouchVisualizationFrame {
-    let screen = context.geometry.screenPoint(from: SurfacePoint(CGPoint(x: x, y: y))).point
-    return TouchVisualizationFrame(
-      x: Double(screen.x),
-      y: Double(screen.y),
+    TouchVisualizationFrame(
+      x: Double(point.point.x),
+      y: Double(point.point.y),
       referenceWidth: Double(context.geometry.windowOnScreen.rect.width),
       referenceHeight: Double(context.geometry.windowOnScreen.rect.height)
     )

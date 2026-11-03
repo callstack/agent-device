@@ -24,15 +24,81 @@ private final class TapApplicationFixture: NSObject {
 
 private final class TapRecordSpy: NSObject {
   static var syntheses = 0
+  static var recordOrientations: [Int] = []
+  static var recordReadError: String?
   @objc(synthesizeWithError:)
   func synthesize(error: AutoreleasingUnsafeMutablePointer<NSError?>?) -> Bool {
     Self.syntheses += 1
+    Self.recordReadError = RunnerObjCExceptionCatcher.catchException {
+      if let orientation = self.value(forKey: "interfaceOrientation") as? NSNumber {
+        Self.recordOrientations.append(orientation.intValue)
+      }
+    }
     return true
   }
 }
 
 extension RunnerTests {
   func testTapDeadlineExpiringDuringEventPreparationDoesNotSynthesize() throws {
+    try withTapRecordSpy {
+      let deadline = Date().addingTimeInterval(1)
+      var prepared = false
+      var preparationBeganBeforeDeadline = false
+      let window = TapWindowFixture {
+        preparationBeganBeforeDeadline = Date() < deadline
+        while Date() < deadline { Thread.sleep(forTimeInterval: 0.001) }
+        prepared = true
+      }
+      var message: NSString?
+      let expired = RunnerSynthesizedGesture.synthesizeTap(
+        withApplication: TapApplicationFixture(),
+        resolvedWindow: window,
+        interfaceOrientation: 1,
+        x: 50,
+        y: 50,
+        deadline: deadline,
+        errorMessage: &message
+      )
+  
+      XCTAssertTrue(preparationBeganBeforeDeadline)
+      XCTAssertTrue(prepared)
+      XCTAssertEqual(expired, .deadlineExceeded)
+      XCTAssertNil(message)
+      XCTAssertEqual(TapRecordSpy.syntheses, 0)
+  
+      let control = RunnerSynthesizedGesture.synthesizeTap(
+        withApplication: TapApplicationFixture(),
+        resolvedWindow: TapWindowFixture {},
+        interfaceOrientation: 1,
+        x: 50,
+        y: 50,
+        deadline: .distantFuture,
+        errorMessage: &message
+      )
+      XCTAssertEqual(control, .succeeded, message as String? ?? "")
+      XCTAssertEqual(TapRecordSpy.syntheses, 1)
+    }
+  }
+
+  func testSynthesizedRecordKeepsTheConvertedPointsOrientation() throws {
+    try withTapRecordSpy {
+      var message: NSString?
+      let result = RunnerSynthesizedGesture.synthesizeTap(
+        withApplication: TapApplicationFixture(),
+        resolvedWindow: TapWindowFixture {},
+        interfaceOrientation: 4,
+        x: 50,
+        y: 50,
+        deadline: .distantFuture,
+        errorMessage: &message
+      )
+      XCTAssertEqual(result, .succeeded, message as String? ?? "")
+      XCTAssertNil(TapRecordSpy.recordReadError)
+      XCTAssertEqual(TapRecordSpy.recordOrientations, [4])
+    }
+  }
+
+  private func withTapRecordSpy(_ body: () throws -> Void) throws {
     let recordClass = try XCTUnwrap(NSClassFromString("XCSynthesizedEventRecord"))
     let selector = NSSelectorFromString("synthesizeWithError:")
     let method = try XCTUnwrap(class_getInstanceMethod(recordClass, selector))
@@ -42,42 +108,10 @@ extension RunnerTests {
     defer { method_setImplementation(method, original) }
     TapRecordSpy.syntheses = 0
 
-    let deadline = Date().addingTimeInterval(1)
-    var prepared = false
-    var preparationBeganBeforeDeadline = false
-    let window = TapWindowFixture {
-      preparationBeganBeforeDeadline = Date() < deadline
-      while Date() < deadline { Thread.sleep(forTimeInterval: 0.001) }
-      prepared = true
-    }
-    var message: NSString?
-    let expired = RunnerSynthesizedGesture.synthesizeTap(
-      withApplication: TapApplicationFixture(),
-      resolvedWindow: window,
-      interfaceOrientation: 1,
-      x: 50,
-      y: 50,
-      deadline: deadline,
-      errorMessage: &message
-    )
-
-    XCTAssertTrue(preparationBeganBeforeDeadline)
-    XCTAssertTrue(prepared)
-    XCTAssertEqual(expired, .deadlineExceeded)
-    XCTAssertNil(message)
-    XCTAssertEqual(TapRecordSpy.syntheses, 0)
-
-    let control = RunnerSynthesizedGesture.synthesizeTap(
-      withApplication: TapApplicationFixture(),
-      resolvedWindow: TapWindowFixture {},
-      interfaceOrientation: 1,
-      x: 50,
-      y: 50,
-      deadline: .distantFuture,
-      errorMessage: &message
-    )
-    XCTAssertEqual(control, .succeeded, message as String? ?? "")
-    XCTAssertEqual(TapRecordSpy.syntheses, 1)
+    TapRecordSpy.recordOrientations = []
+    TapRecordSpy.recordReadError = nil
+    try body()
   }
+
 }
 #endif

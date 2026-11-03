@@ -248,6 +248,8 @@ extension RunnerTests {
           defer { endRequestLitPanel(requestID) }
           let response = try executeOnMainPrepared(command: command, activeApp: app)
           XCTAssertTrue(response.ok, response.error?.message ?? "")
+          XCTAssertEqual(response.data?.x, 200)
+          XCTAssertEqual(response.data?.y, 150)
           XCTAssertEqual(response.data?.completedSteps, 1)
           XCTAssertEqual(response.data?.failedStepIndex, 1)
           XCTAssertEqual(response.data?.sequenceResults?.last?.errorCode, "UNSUPPORTED_OPERATION")

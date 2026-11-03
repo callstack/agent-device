@@ -42,7 +42,7 @@ extension RunnerTests {
     // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
     let firstFrame = try (firstStep.x != nil && firstStep.y != nil)
-      ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
+      ? synthesizedContext.map { touchVisualizationFrame(point: SurfacePoint(CGPoint(x: firstStep.x!, y: firstStep.y!)), context: $0) }
         ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
