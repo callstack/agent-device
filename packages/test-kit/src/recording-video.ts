@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
+import { createVideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -17,7 +17,7 @@ export async function prepareRecordingValidatorFixture(host: HostEnvironment): P
       return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
     },
     async () => {
-      await prepareVideoValidator(host);
+      await createVideoValidatorPreparation(host).prepare();
     },
   );
 }

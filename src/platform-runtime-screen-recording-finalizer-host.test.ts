@@ -14,24 +14,17 @@ const video = vi.hoisted(() => ({
   playable: vi.fn(async (_path: string, _options: { deadline?: Deadline }) => true),
   isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
-  prepare: vi.fn(async () => ({
-    kind: 'avfoundation' as const,
-    executablePath: '/bin/true',
-    env: {},
-  })),
-  read: vi.fn<() => Promise<PreparedVideoValidator> | undefined>(),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
 bindTestCommandHost();
 
-vi.mock('@agent-device/capture-kit/recording-video', () => ({
+vi.mock('@agent-device/capture-kit/recording-video', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/capture-kit/recording-video')>()),
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,
   hasVideoContainer: video.container,
-  prepareVideoValidator: video.prepare,
-  readPreparedVideoValidator: video.read,
 }));
 vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
   persistRecordingTelemetry: telemetry,
@@ -51,23 +44,43 @@ beforeEach(() => {
   video.playable.mockReset().mockResolvedValue(true);
   video.isPlayable.mockReset().mockResolvedValue(true);
   video.container.mockReset().mockResolvedValue(true);
-  video.prepare
-    .mockReset()
-    .mockResolvedValue({ kind: 'avfoundation', executablePath: '/bin/true', env: {} });
-  video.read.mockReset();
 });
 
+const validatorAuthority: PreparedVideoValidator = Object.freeze({
+  kind: 'avfoundation' as const,
+  executablePath: '/prepared/validator',
+  env: {},
+});
+
+/** Stands in for the runtime host's one preparation owner, at the port the finalizer consumes. */
+function createPreparationStub(
+  overrides: Partial<{
+    prepare: () => Promise<PreparedVideoValidator>;
+    read: () => Promise<PreparedVideoValidator> | undefined;
+    close: () => Promise<void>;
+  }> = {},
+) {
+  // One promise for every read: the finalizer hands the authority it read straight to validation.
+  const reading = Promise.resolve<PreparedVideoValidator>(validatorAuthority);
+  return {
+    reading,
+    prepare: vi.fn(overrides.prepare ?? (async () => validatorAuthority)),
+    read: vi.fn(overrides.read ?? (() => reading)),
+    close: vi.fn(overrides.close ?? (async () => {})),
+  };
+}
+
+function createFinalizer(preparation = createPreparationStub()) {
+  return {
+    preparation,
+    finalizer: createScreenRecordingFinalizer(createLiveTestHostEnvironment(), preparation),
+  };
+}
+
 test('requires stable playable media before publishing finalization telemetry', async () => {
-  const validator = Promise.resolve({
-    kind: 'avfoundation' as const,
-    executablePath: '/prepared/validator',
-    env: {},
-  });
-  video.prepare.mockReturnValue(validator);
-  video.read.mockReturnValue(validator);
-  const finalizer = createScreenRecordingFinalizer(createLiveTestHostEnvironment());
+  const { preparation, finalizer } = createFinalizer();
   await finalizer.prepare({ container: 'mp4' });
-  expect(video.prepare).toHaveBeenCalledOnce();
+  expect(preparation.prepare).toHaveBeenCalledOnce();
   const result = await finalizer.complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: false,
@@ -77,17 +90,38 @@ test('requires stable playable media before publishing finalization telemetry', 
 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
-    validator,
+    validator: preparation.reading,
     deadline: expect.any(Deadline),
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
+});
+
+test('background preparation never waits for or fails a start', async () => {
+  const preparation = createPreparationStub({
+    prepare: () => new Promise<PreparedVideoValidator>(() => undefined),
+  });
+  const { finalizer } = createFinalizer(preparation);
+
+  await expect(finalizer.prepare({ container: 'mp4' })).resolves.toBeUndefined();
+  expect(preparation.prepare).toHaveBeenCalledOnce();
+  await expect(finalizer.prepare({ container: 'webm' })).resolves.toBeUndefined();
+  expect(preparation.prepare).toHaveBeenCalledOnce();
+});
+
+test('a rejected preparation stays invisible to the start that warmed it', async () => {
+  const preparation = createPreparationStub({
+    prepare: () => Promise.reject(new AppError('TOOL_MISSING', 'no swiftc')),
+  });
+  const { finalizer } = createFinalizer(preparation);
+
+  await expect(finalizer.prepare({ container: 'mp4' })).resolves.toBeUndefined();
 });
 
 test('names the retry and the escape for a recording that never became playable', async () => {
   video.playable.mockResolvedValueOnce(false);
 
   await expect(
-    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+    createFinalizer().finalizer.complete({
       outputPath: '/tmp/capture.mp4',
       showTouches: false,
       gestureEvents: [],
@@ -112,7 +146,7 @@ test('a validator that was not prepared reaches the caller as its own retriable 
   video.playable.mockRejectedValueOnce(compileTimeout);
 
   await expect(
-    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+    createFinalizer().finalizer.complete({
       outputPath: '/tmp/capture.mp4',
       showTouches: false,
       gestureEvents: [],
@@ -123,7 +157,7 @@ test('a validator that was not prepared reaches the caller as its own retriable 
 });
 
 test('burns touches into a playable recording without a warning', async () => {
-  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+  const result = await createFinalizer().finalizer.complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -135,7 +169,7 @@ test('burns touches into a playable recording without a warning', async () => {
 });
 
 test('hands the caller fps to the touch overlay', async () => {
-  await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+  await createFinalizer().finalizer.complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -154,7 +188,7 @@ test('the overlay budget covers the playability checks that run before the overl
       vi.setSystemTime(Date.now() + playabilityMs);
     });
 
-    await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+    await createFinalizer().finalizer.complete({
       outputPath: '/tmp/capture.mp4',
       showTouches: true,
       gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -182,7 +216,7 @@ test('a recording confirmed playable as the budget runs out is not refused by a 
     });
 
     await expect(
-      createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+      createFinalizer().finalizer.complete({
         outputPath: '/tmp/capture.mp4',
         showTouches: false,
         gestureEvents: [],
@@ -207,7 +241,7 @@ test('#2707 reports a dropped overlay and keeps the raw when compositing throws'
     ),
   );
 
-  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+  const result = await createFinalizer().finalizer.complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -229,14 +263,12 @@ test.each([0, OVERLAY_BUDGET_MS])(
         vi.setSystemTime(Date.now() + elapsedMs);
       });
       video.isPlayable.mockResolvedValueOnce(false);
-      const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete(
-        {
-          outputPath: '/tmp/capture.mp4',
-          showTouches: true,
-          gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
-          targetLabel: 'test recording',
-        },
-      );
+      const result = await createFinalizer().finalizer.complete({
+        outputPath: '/tmp/capture.mp4',
+        showTouches: true,
+        gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
+        targetLabel: 'test recording',
+      });
       expect(overlay).toHaveBeenCalledOnce();
       expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
       expect(video.isPlayable).not.toHaveBeenCalled();
@@ -249,14 +281,14 @@ test.each([0, OVERLAY_BUDGET_MS])(
 test('sniffs a collected copy without spawning the validator, and refuses one with no container', async () => {
   const validatorCalls = video.isPlayable.mock.calls.length + video.playable.mock.calls.length;
   await expect(
-    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).sniff({
+    createFinalizer().finalizer.sniff({
       outputPath: '/tmp/capture.collected.mp4',
     }),
   ).resolves.toBeUndefined();
   video.container.mockResolvedValueOnce(false);
 
   await expect(
-    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).sniff({
+    createFinalizer().finalizer.sniff({
       outputPath: '/tmp/capture.collected.mp4',
     }),
   ).rejects.toMatchObject({

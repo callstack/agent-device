@@ -11,22 +11,24 @@ import {
 import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
 import {
   hasVideoContainer,
-  prepareVideoValidator,
-  readPreparedVideoValidator,
   type VideoValidator,
+  type VideoValidatorPreparation,
   waitForPlayableVideo,
   waitForStableFile,
 } from '@agent-device/capture-kit/recording-video';
 
 export function createScreenRecordingFinalizer(
   host: HostEnvironment,
+  validator: VideoValidatorPreparation,
 ): ScreenRecordingRuntimeHost['finalize'] {
   return Object.freeze({
     prepare: async (input) => {
-      if (input.container === 'mp4') void prepareVideoValidator(host);
+      // Preparation is best effort and outside this request: it never delays a capture, and a stop
+      // that outlives it keeps the compile running for the host that owns it.
+      if (input.container === 'mp4') void validator.prepare().catch(() => undefined);
     },
     sniff: async (input) => await sniffRecording(input),
-    complete: async (input) => await finalizeScreenRecording(host, input),
+    complete: async (input) => await finalizeScreenRecording(host, validator, input),
   });
 }
 
@@ -36,19 +38,25 @@ async function sniffRecording(input: Readonly<{ outputPath: string }>): Promise<
 
 async function finalizeScreenRecording(
   host: HostEnvironment,
+  validator: VideoValidatorPreparation,
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
 ) {
-  const validator = readPreparedVideoValidator(host);
+  const prepared = validator.read();
   const finalizeDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
-  if (!(await waitForPlayableVideo(input.outputPath, { validator, deadline: finalizeDeadline }))) {
+  if (
+    !(await waitForPlayableVideo(input.outputPath, {
+      validator: prepared,
+      deadline: finalizeDeadline,
+    }))
+  ) {
     throw unplayableRecording(input.outputPath);
   }
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
-  return await overlayTouches(host, input, telemetryPath, finalizeDeadline, validator);
+  return await overlayTouches(host, input, telemetryPath, finalizeDeadline, prepared);
 }
 
 async function overlayTouches(

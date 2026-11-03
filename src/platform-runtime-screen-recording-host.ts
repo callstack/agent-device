@@ -1,23 +1,52 @@
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { VideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
+
+/**
+ * The one validator owner this host composes, plus the shutdown its compile needs. A cold compile
+ * runs outside any request, so the host that started it is the only owner left that can stop it;
+ * the daemon closes it with the rest of its durable resources.
+ */
+export type ScreenRecordingVideoValidatorHost = Readonly<{
+  /**
+   * Cancels an unfinished validator compile this host started and awaits its settlement, including
+   * the compiler's exit, its temporary output and the Swift cache lock. It loads nothing this host
+   * never loaded, and it never waits for a compile that already settled.
+   */
+  closeValidatorPreparation(): Promise<void>;
+}>;
 
 /** Lazy host-only composition; platform semantics stay package-owned. */
 export function createScreenRecordingRuntimeHost(options: {
   ownedProcesses?: OwnedProcessRecordWriter;
   host: HostEnvironment;
-}): ScreenRecordingRuntimeHost {
+}): ScreenRecordingRuntimeHost & ScreenRecordingVideoValidatorHost {
   const host = options.host;
+  // One preparation owner for this host, created when a recording first asks for it. Compilation
+  // across runtimes and processes stays with the Swift cache lock, not a second lock database.
+  let validator: Promise<VideoValidatorPreparation> | undefined;
+  let validatorClosed = false;
+  const loadValidator = async () => {
+    validator ??= import('@agent-device/capture-kit/recording-video').then((video) =>
+      video.createVideoValidatorPreparation(host),
+    );
+    const preparation = await validator;
+    // A load that lands after this host closed hands out a closed owner: nothing it is asked for
+    // afterwards may start a compile no shutdown will reach.
+    if (validatorClosed) await preparation.close();
+    return preparation;
+  };
   const loadFinalizer = async () => {
     const { createScreenRecordingFinalizer } =
       await import('./platform-runtime-screen-recording-finalizer-host.ts');
-    return createScreenRecordingFinalizer(host);
+    return createScreenRecordingFinalizer(host, await loadValidator());
   };
   const android: ScreenRecordingRuntimeHost['android'] = Object.freeze({
     resolve: async (device) => {
       const { createAndroidScreenRecordingTransport } =
         await import('./platform-runtime-screen-recording-android-host.ts');
-      return await createAndroidScreenRecordingTransport(device, host);
+      return await createAndroidScreenRecordingTransport(device, await loadValidator());
     },
   });
   const web: ScreenRecordingRuntimeHost['web'] = Object.freeze({
@@ -63,6 +92,14 @@ export function createScreenRecordingRuntimeHost(options: {
     outputs,
     finalize,
     ownedProcesses,
+    closeValidatorPreparation: async () => {
+      // Closed first, so a preparation that is still loading is closed too and nothing that comes
+      // afterwards can start a compile this shutdown will not reach.
+      validatorClosed = true;
+      // Nothing loaded means nothing to close: a host that never recorded never started a compile.
+      if (!validator) return;
+      await (await validator).close();
+    },
   });
 }
 

@@ -13,6 +13,8 @@ import type {
 export function createApplicationResourceLifecycle(tools: {
   android: AndroidApplicationTools;
   apple: AppleApplicationTools;
+  /** The recording host's validator owner: its background compile outlives every request. */
+  recording: Readonly<{ closeValidatorPreparation(): Promise<void> }>;
 }): ApplicationLifecycleResourceLifecycle {
   return Object.freeze({
     // Android test IME is the one durable device mutation that outlives a crashed daemon. The
@@ -22,6 +24,21 @@ export function createApplicationResourceLifecycle(tools: {
       await tools.android.recoverTestImeStartup(input);
     },
     detachForDaemonShutdown: async () => await tools.apple.detachRunnerSessionsForShutdown(),
-    finalizeDaemonShutdown: async () => await tools.apple.finalizeRunnerSessionsForShutdown(),
+    finalizeDaemonShutdown: async () => {
+      // A cold validator compile runs outside every request, so this is the last owner that can
+      // stop it before the process exits. It closes first and on every path: a runner sweep that
+      // waits on a recorder, or fails, must not leave the compiler and its cache lock behind. The
+      // sweep stays the failure this phase reports when both owners failed.
+      const validatorFailure = await tools.recording
+        .closeValidatorPreparation()
+        .catch((error: unknown) => error);
+      const sweep = await tools.apple
+        .finalizeRunnerSessionsForShutdown()
+        .then((devices) => ({ failed: false, devices }) as const)
+        .catch((error: unknown) => ({ failed: true, error }) as const);
+      if (sweep.failed) throw sweep.error;
+      if (validatorFailure !== undefined) throw validatorFailure;
+      return sweep.devices;
+    },
   });
 }
