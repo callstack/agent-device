@@ -306,6 +306,27 @@ test('daemon session teardown closes an open web session immediately, not on age
   });
 });
 
+test('daemon session teardown closes the browser session its public name carries, and no other', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:0123456789abcdef:web';
+  sessionStore.publish(address, makeSession('default', WEB_DESKTOP_DEVICE));
+  sessionStore.publish('web-sibling', makeSession('web-sibling', WEB_DESKTOP_DEVICE));
+  const platformCleanup = platformResourceCleanupFixture();
+
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    ref: sessionStore.lookup(address)!,
+    sessionStore,
+    platformCleanup,
+  });
+
+  expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledOnce();
+  const [{ sessionName, openSessionNames }] = vi.mocked(platformCleanup.closeManagedBrowser).mock
+    .calls[0]!;
+  expect(sessionName).toBe('default');
+  expect(openSessionNames()).toEqual(['default', 'web-sibling']);
+});
+
 test('daemon session teardown surfaces a web close failure through the cleanup-failure channel', async () => {
   const sessionName = 'web-close-failure-teardown-session';
   const sessionStore = makeSessionStore();
