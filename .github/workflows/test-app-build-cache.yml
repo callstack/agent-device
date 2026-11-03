@@ -88,14 +88,14 @@ jobs:
               {
                 name: "iOS Release",
                 platform: "ios",
-                runsOn: (if $iosBuild then "macos-26" else "ubuntu-latest" end),
+                runsOn: (if $iosBuild then "blacksmith-6vcpu-macos-26" else "blacksmith-4vcpu-ubuntu-2404" end),
                 artifactName: $iosName,
                 build: $iosBuild
               },
               {
                 name: "Android Release",
                 platform: "android",
-                runsOn: "ubuntu-latest",
+                runsOn: "blacksmith-4vcpu-ubuntu-2404",
                 artifactName: $androidName,
                 build: $androidBuild
               }
