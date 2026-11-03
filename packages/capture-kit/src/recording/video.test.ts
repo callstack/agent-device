@@ -283,7 +283,15 @@ test('an unavailable validator at execution never makes an MP4 playable', async 
     stderr: `error: no such module 'AVFoundation'`,
   });
   await expect(isPlayableVideo(mp4, validator)).rejects.toMatchObject({
-    details: { reason: 'video_validator_unavailable' },
+    details: {
+      reason: 'video_validator_unavailable',
+      exitCode: 1,
+      stdout: '',
+      stderr: `error: no such module 'AVFoundation'`,
+    },
+    cause: {
+      details: { stderr: `error: no such module 'AVFoundation'` },
+    },
   });
 });
 
