@@ -17,7 +17,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
+async function runIsolationScenario(failBeforeClose: boolean, stallClose = false): Promise<void> {
   Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   const cacheDir = mkdtempForTestSync('video-cache-isolation-');
   const host = {
@@ -28,6 +28,7 @@ async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
   const second = createVideoValidatorPreparation(host);
   const signals: AbortSignal[] = [];
   let finishSecond!: () => void;
+  let releaseSecond = false;
   vi.mocked(runCmd).mockImplementation(async (_command, args, options) => {
     const signal = options!.signal!;
     signals.push(signal);
@@ -44,7 +45,10 @@ async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
         abort();
       } else {
         signal.addEventListener('abort', abort, { once: true });
-        if (signals.length > 1) finishSecond = finish;
+        if (signals.length > 1) {
+          finishSecond = finish;
+          if (releaseSecond) finish();
+        }
       }
     });
     const output = args[args.indexOf('-o') + 1]!;
@@ -97,7 +101,8 @@ async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
       if (earlyFailureReached) await expect.poll(() => signals.length, { timeout: 5_000 }).toBe(2);
     } finally {
       try {
-        const closing = second.close();
+        const close = second.close();
+        const closing = stallClose ? close.then(() => new Promise<void>(() => {})) : close;
         let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([
@@ -111,8 +116,8 @@ async function runIsolationScenario(failBeforeClose: boolean): Promise<void> {
           ]);
         } finally {
           clearTimeout(timeout);
+          releaseSecond = true;
           finishSecond?.();
-          await closing;
         }
       } finally {
         await Promise.allSettled([firstResult, ...(secondResult ? [secondResult] : [])]);
@@ -138,3 +143,15 @@ test('closing a cache lock holder lets another pending owner compile and publish
 test('cleanup cancels a compiler that starts after an early failure', async () => {
   await expect(runIsolationScenario(true)).rejects.toThrow('intentional early assertion failure');
 }, 15_000);
+
+test('cleanup reports a close that never settles and removes its cache', async () => {
+  const remove = vi.spyOn(fs, 'rmSync');
+  await expect(runIsolationScenario(true, true)).rejects.toThrow(
+    'second owner cleanup did not settle',
+  );
+  const cache = remove.mock.calls
+    .map(([file]) => String(file))
+    .find((file) => path.basename(file).startsWith('video-cache-isolation-'));
+  expect(cache).toBeDefined();
+  expect(fs.existsSync(cache!)).toBe(false);
+}, 10_000);
