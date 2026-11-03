@@ -134,7 +134,7 @@ export function createSnapshotBridgePreparation(
     close: async () => {
       binaries.clear();
       attempts.close();
-      await Promise.allSettled([...running]);
+      await Promise.allSettled(running);
     },
   };
 }

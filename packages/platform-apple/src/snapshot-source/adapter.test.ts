@@ -236,8 +236,14 @@ test('concurrent source close callers await the same detached preparation cleanu
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   for (const file of SNAPSHOT_BRIDGE_SOURCE_FILENAMES)
     await writeFile(path.join(sourceRoot, file), 'fixture source');
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
+  let entered!: () => void;
+  const enteredPromise = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let release!: () => void;
+  const releasePromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const fixture = createAdapterHost();
   const source = createSimulatorSnapshotSource({
     sourceRoot,
@@ -246,8 +252,8 @@ test('concurrent source close callers await the same detached preparation cleanu
       ...fixture.host,
       run: async (command, args, options) => {
         if (command === 'xcrun' && args.includes('clang')) {
-          entered.resolve();
-          await release.promise;
+          entered();
+          await releasePromise;
         }
         return await fixture.host.run(command, args, options);
       },
@@ -257,7 +263,7 @@ test('concurrent source close callers await the same detached preparation cleanu
     target: { ...targetForTest(), generation: 'generation-1' },
     hint: deriveIosCaptureHint(createIosSnapshotRequest()),
   });
-  await entered.promise;
+  await enteredPromise;
   const first = source.close();
   let secondFinished = false;
   const second = source.close().then(() => {
@@ -267,7 +273,7 @@ test('concurrent source close callers await the same detached preparation cleanu
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(secondFinished, false, 'close resolved before the owned build settled');
   } finally {
-    release.resolve();
+    release();
     await Promise.all([first, second, acquiring]);
     await rm(root, { recursive: true, force: true });
   }
