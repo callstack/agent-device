@@ -32,6 +32,24 @@ export function bundledLicenseNotices(root: string): ReturnType<typeof license> 
   };
 }
 
+/**
+ * A bundled dependency must be attributable before it can be listed: `version` is optional to
+ * `rollup-plugin-license` and reports `null` for a module whose `package.json` has none, which is what
+ * an unresolvable or path-linked module looks like to it. Emitting `included@null (MIT)` would
+ * attribute code to a release that never existed, so the version is named first and every later
+ * diagnostic can name the package the way the notice file does.
+ */
+function assertBundledDependencyAttributable(dependency: Dependency): void {
+  if (!dependency.version?.trim()) {
+    throw new Error(`Bundled dependency ${dependency.name} is missing its version.`);
+  }
+  if (!dependency.license || !dependency.licenseText?.trim()) {
+    throw new Error(
+      `Bundled dependency ${dependency.name}@${dependency.version} is missing its license or license text.`,
+    );
+  }
+}
+
 function renderNotices(root: string, dependencies: readonly Dependency[]): string {
   if (dependencies.length === 0) return 'No third-party dependencies are bundled.\n';
   const texts = new Map<string, number>();
@@ -51,11 +69,7 @@ function renderNotices(root: string, dependencies: readonly Dependency[]): strin
     return a < b ? -1 : a > b ? 1 : 0;
   });
   for (const dependency of sortedDependencies) {
-    if (!dependency.license || !dependency.licenseText?.trim()) {
-      throw new Error(
-        `Bundled dependency ${dependency.name}@${dependency.version} is missing its license or license text.`,
-      );
-    }
+    assertBundledDependencyAttributable(dependency);
     const references = [reference(dependency.licenseText)];
     if (dependency.noticeText?.trim()) references.push(reference(dependency.noticeText));
     if (dependency.name === 'jpeg-js') {

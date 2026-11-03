@@ -94,6 +94,34 @@ test('bundling fails when a dependency has a license identifier but no license t
   await assert.rejects(bundle(root), /included@1\.0\.0 is missing its license or license text/);
 });
 
+// `rollup-plugin-license` reports `version: null` for a module whose `package.json` has none, which
+// is what an unresolvable or path-linked module looks like to it. Before the version was checked, a
+// fully licensed such dependency shipped a notice reading `included@null (MIT)`, attributing code to
+// a release that never existed, and one missing its license too was reported as a license problem —
+// sending the reader to the fixture's LICENSE file instead of to the version-less module.
+test.each([
+  { name: 'no version field', version: undefined },
+  { name: 'blank version', version: '   ' },
+])('bundling rejects a licensed dependency with a missing version: $name', async ({ version }) => {
+  const manifest: Record<string, unknown> = { name: 'included', license: 'MIT', main: 'index.js' };
+  if (version !== undefined) manifest.version = version;
+  const root = await fixture({
+    'input.ts': "export { value } from 'included';",
+    'node_modules/included/package.json': JSON.stringify(manifest),
+    'node_modules/included/index.js': 'export const value = 42;',
+    'node_modules/included/LICENSE': 'Copyright fixture author\nFull license terms.',
+  });
+  await assert.rejects(bundle(root), /Bundled dependency included is missing its version/);
+  await assert.rejects(fs.stat(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt')), {
+    code: 'ENOENT',
+  });
+});
+
+// A module whose `package.json` carries neither a version nor a license identifier never reaches
+// `renderNotices`: the plugin reports no dependencies for it at all, and the bundle gets the generic
+// empty notice. That gap belongs to the publish gate, not to this formatter — see the
+// `size-report-package` notices content test.
+
 test('identical notices are shared without losing packages or distinct copyrights', async () => {
   const sharedLicense = 'Copyright shared author\nFull shared license terms.';
   const sharedNotice = 'Shared upstream attribution.';
@@ -227,6 +255,26 @@ test.each(['0.4.4', '0.4.5'])(
     assert.ok(notices.includes(apacheLicense.replaceAll('\r\n', '\n').trim()));
   },
 );
+
+// A project that genuinely bundles nothing keeps getting the generic notice: the content policy that
+// holds the published CLI to naming somebody is the publish gate's, not this formatter's. Pinning it
+// here keeps a future "reject the placeholder" edit at the formatter from breaking an empty build.
+test('a bundle with no third-party code emits the generic notice unchanged', async () => {
+  const root = await fixture({
+    'input.ts': "import { external } from 'external';\nexport const result = external;",
+    'node_modules/external/package.json': JSON.stringify({
+      name: 'external',
+      version: '1.0.0',
+      main: 'index.js',
+    }),
+    'node_modules/external/index.js': 'export const external = 1;',
+  });
+  await bundle(root);
+  assert.equal(
+    await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8'),
+    'No third-party dependencies are bundled.\n',
+  );
+});
 
 test('output overrides write notices beside the bundle without creating the default dist', async () => {
   const root = await fixture({
