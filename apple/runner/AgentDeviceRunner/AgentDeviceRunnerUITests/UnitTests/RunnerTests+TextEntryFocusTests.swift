@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
@@ -116,6 +117,43 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testLandscapeReplacementDispatchPreservesFocusedAndPenalizedRoutes() throws {
+    for orientation in [UIDeviceOrientation.landscapeLeft, .landscapeRight] {
+      let field = try launchTextEntryWitness(prefilled: true)
+      defer {
+        XCUIDevice.shared.orientation = .portrait
+        tearDownSynthesizedReplacementField()
+      }
+      XCUIDevice.shared.orientation = orientation
+      let expected = orientation == .landscapeLeft
+        ? RunnerInterfaceOrientation.landscapeRight : RunnerInterfaceOrientation.landscapeLeft
+      let landscape = XCTNSPredicateExpectation(
+        predicate: NSPredicate { _, _ in
+          Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: self.app)) == expected
+        }, object: app
+      )
+      XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 5), .completed)
+      field.tap()
+      let initialTaps = try textEntryWitnessCounts().taps
+
+      let focused = try executeWitnessEntry(field, text: "hello", prepared: true)
+      XCTAssertTrue(focused.ok, String(describing: focused.error))
+      XCTAssertEqual(try textEntryWitnessCounts().taps, initialTaps)
+      XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "hello")
+
+      penalizeSnapshotXCTestChannel(bundleId: nil, reason: "test")
+      let penalized = try executeWitnessEntry(field, text: "fresh", prepared: true)
+      XCTAssertTrue(penalized.ok, String(describing: penalized.error))
+      XCTAssertEqual(penalized.data?.textEntryRoute, "synthesized-first-responder-replacement")
+      XCTAssertGreaterThan(try textEntryWitnessCounts().taps, initialTaps)
+      XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "fresh")
+      let cleared = try executeWitnessEntry(field, text: "", prepared: true)
+      XCTAssertTrue(cleared.ok, String(describing: cleared.error))
+      XCTAssertEqual(app.staticTexts["agent-device-text-entry-value-reads"].value as? String, "")
+    }
+  }
+
+  @MainActor
   private func launchTextEntryWitness(prefilled: Bool = false, extra: [String] = []) throws -> XCUIElement {
     app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-witness"]
       + (prefilled ? ["--agent-device-text-entry-witness-prefill"] : []) + extra
@@ -128,12 +166,15 @@ extension RunnerTests {
   }
 
   @MainActor
-  private func executeWitnessEntry(_ field: XCUIElement, text: String, mode: String = "replace") throws -> Response {
+  private func executeWitnessEntry(_ field: XCUIElement, text: String, mode: String = "replace", prepared: Bool = false) throws -> Response {
     let frame = field.frame
     let command = try runnerCommandFixture(
       #"{"command":"type","text":"\#(text)","textEntryMode":"\#(mode)","x":\#(frame.midX),"y":\#(frame.midY)}"#
     )
-    return executeTypeCommand(activeApp: app, command: command)
+    if prepared {
+      return try executeOnMainPrepared(command: command, activeApp: app)
+    }
+    return try executeTypeCommand(activeApp: app, command: command)
   }
 
   @MainActor
