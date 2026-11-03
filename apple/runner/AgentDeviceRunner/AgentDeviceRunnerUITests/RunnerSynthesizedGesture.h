@@ -16,8 +16,10 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 // `resolvedWindow` is the app window the caller already resolved for the gesture's reference
 // frame, so the record's display ID is read from that same window. Pass nil for the sole-screen
 // route: the app's tree could not name its window and the screen is proven instead.
+// `interfaceOrientation` is the orientation used to convert the supplied points.
 + (NSString * _Nullable)synthesizeSwipeWithApplication:(id)application
                                         resolvedWindow:(id _Nullable)resolvedWindow
+                                  interfaceOrientation:(NSInteger)interfaceOrientation
                                                     x:(double)x
                                                     y:(double)y
                                                    x2:(double)x2
@@ -26,6 +28,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 
 + (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
                                                  resolvedWindow:(id _Nullable)resolvedWindow
+                                  interfaceOrientation:(NSInteger)interfaceOrientation
                                                                 x:(double)x
                                                                 y:(double)y
                                                                x2:(double)x2
@@ -34,6 +37,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 
 + (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
+                                  interfaceOrientation:(NSInteger)interfaceOrientation
                                                    x:(double)x
                                                    y:(double)y
                                             deadline:(NSDate * _Nullable)deadline
@@ -43,6 +47,7 @@ typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
 // starts contact; subsequent samples move it; all pointers lift at their final offset.
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
                                           resolvedWindow:(id _Nullable)resolvedWindow
+                                  interfaceOrientation:(NSInteger)interfaceOrientation
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples;
 
 // UIInterfaceOrientation of the app (1 portrait, 2 upsideDown, 3 landscapeRight,

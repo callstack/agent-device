@@ -44,6 +44,7 @@ extension RunnerTests {
       RunnerSynthesizedGesture.synthesizeControlledScroll(
         withApplication: app,
         resolvedWindow: context.resolvedWindow,
+        interfaceOrientation: geometry.orientation,
         x: Double(start.x),
         y: Double(start.y),
         x2: Double(end.x),
@@ -54,6 +55,7 @@ extension RunnerTests {
       RunnerSynthesizedGesture.synthesizeSwipe(
         withApplication: app,
         resolvedWindow: context.resolvedWindow,
+        interfaceOrientation: geometry.orientation,
         x: Double(start.x),
         y: Double(start.y),
         x2: Double(end.x),
@@ -120,6 +122,7 @@ extension RunnerTests {
     let status = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: app,
       resolvedWindow: resolvedWindow,
+      interfaceOrientation: orientation,
       x: Double(point.x),
       y: Double(point.y),
       deadline: deadline,
@@ -200,6 +203,7 @@ extension RunnerTests {
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
       resolvedWindow: resolvedWindow,
+      interfaceOrientation: orientation,
       pointerSamples: [samples]
     ) {
       return .unsupported(
@@ -806,6 +810,7 @@ extension RunnerTests {
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
       resolvedWindow: context.resolvedWindow,
+      interfaceOrientation: geometry.orientation,
       pointerSamples: pointerSamples
     ) {
       return .unsupported(

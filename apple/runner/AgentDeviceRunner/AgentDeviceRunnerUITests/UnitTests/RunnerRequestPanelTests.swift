@@ -19,6 +19,14 @@ private final class SurfaceSelectorQuery: NSObject {
     unsafeBitCast(SurfaceSelectorQuery(elements.filter { predicate.evaluate(with: $0) }), to: XCUIElementQuery.self)
   }
   @objc var allElementsBoundByIndex: [XCUIElement] { elements }
+  @objc var firstMatch: XCUIElement { elements[0] }
+}
+
+private struct RecordedSurfaceDispatch {
+  let displayID: UInt
+  let start: CGPoint
+  let end: CGPoint?
+  let orientation: Int
 }
 
 @MainActor
@@ -32,8 +40,17 @@ private final class LitPanelBookingProbe: NSObject {
   static var target: XCUIElement?
   static var darkTarget: XCUIElement?
   static var composedDarkWindow: DisplayWindowFixture?
-  static var synthesizedPoint: CGPoint?
-  static var synthesizedDisplay: UInt?
+  static var dispatches: [RecordedSurfaceDispatch] = []
+  static var synthesizedPoint: CGPoint? { dispatches.last?.start }
+  static var synthesizedDisplay: UInt? { dispatches.last?.displayID }
+  static var application: XCUIApplication?
+  static var applicationFrame: CGRect?
+  static var keyboard: XCUIElement?
+  static var keyboardFrame: CGRect?
+  static var targetFrame = CGRect(x: 190, y: 140, width: 20, height: 20)
+  static var windowDisplayID: UInt = 3
+  static var includeDarkSelector = true
+  static var onDispatch: (() -> Void)?
   static var beforeElementLookup: (() -> Void)?
 
   static var coordinate: XCUICoordinate?
@@ -58,38 +75,68 @@ private final class LitPanelBookingProbe: NSObject {
         if let max = Self.maxWindowListReads, Self.windowListReads > max { return [] }
         if let dark = Self.composedDarkWindow { return [dark, Self.window!] as [NSObject] }
         return [Self.window!, Self.darkWindow].compactMap { $0 }
-      case "screen": return LitPanelBookingScreen(self === Self.darkWindow ? 1 : 3)
+      case "screen": return LitPanelBookingScreen(self === Self.darkWindow ? 1 : Self.windowDisplayID)
       case "exists": return true
-      case "frame": return NSValue(cgRect: Self.windowFrame)
+      case "frame": return NSValue(cgRect: Self.elementFrame(self))
       default: break
       }
       return original(self, #selector(NSObject.value(forKey:)), key as NSString)
     }
   }
 
-  @objc var exists: Bool { true }
+  @objc var exists: Bool { self !== Self.keyboard || Self.keyboardFrame != nil }
   @objc var isHittable: Bool { true }
   @objc var elementType: UInt { XCUIElement.ElementType.button.rawValue }
   @objc var label: String { "same-selector" }
-  @objc var frame: CGRect {
-    (self === Self.target || self === Self.darkTarget)
-      ? CGRect(x: 190, y: 140, width: 20, height: 20) : Self.windowFrame
+  @objc var frame: CGRect { Self.elementFrame(self) }
+  private static func elementFrame(_ element: AnyObject) -> CGRect {
+    if element === keyboard { return keyboardFrame ?? .zero }
+    if element === application, let applicationFrame { return applicationFrame }
+    return element === target || element === darkTarget ? targetFrame : windowFrame
   }
+  @objc var keyboards: XCUIElementQuery {
+    unsafeBitCast(SurfaceSelectorQuery([Self.keyboard!]), to: XCUIElementQuery.self)
+  }
+  @objc var allElementsBoundByIndex: [XCUIElement] { [Self.window!] }
   @objc(descendantsMatchingType:)
   func descendants(matching type: UInt) -> XCUIElementQuery {
     Self.beforeElementLookup?()
-    let elements = self === Self.window ? [Self.target!] : [Self.darkTarget!, Self.target!]
+    let elements = self === Self.window || !Self.includeDarkSelector ? [Self.target!] : [Self.darkTarget!, Self.target!]
     return unsafeBitCast(SurfaceSelectorQuery(elements), to: XCUIElementQuery.self)
   }
 
-  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
-  class func synthesizeTap(_ app: AnyObject, resolvedWindow: AnyObject?, x: Double, y: Double,
+  @objc(synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:)
+  class func synthesizeTap(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int, x: Double, y: Double,
                           deadline: NSDate?, errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?) -> Int {
-    var display: UInt = 0
-    if let resolvedWindow { _ = RunnerResolveWindowDisplayID(resolvedWindow, &display) }
-    synthesizedDisplay = display
-    synthesizedPoint = CGPoint(x: x, y: y)
+    record(window: resolvedWindow, orientation: interfaceOrientation, start: CGPoint(x: x, y: y))
     return 0
+  }
+
+  @objc(synthesizeControlledScrollWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:)
+  class func synthesizeDrag(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int,
+                            x: Double, y: Double, x2: Double, y2: Double, durationMs: Double) -> String? {
+    record(window: resolvedWindow, orientation: interfaceOrientation,
+           start: CGPoint(x: x, y: y), end: CGPoint(x: x2, y: y2))
+    return nil
+  }
+
+  @objc(synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:)
+  class func synthesizeGesture(_ app: AnyObject, resolvedWindow: AnyObject?, interfaceOrientation: Int,
+                               pointerSamples: [[[String: NSNumber]]]) -> String? {
+    guard let first = pointerSamples.first?.first, let last = pointerSamples.first?.last else {
+      return "fixture pointer path is empty"
+    }
+    record(window: resolvedWindow, orientation: interfaceOrientation,
+           start: CGPoint(x: first["x"]!.doubleValue, y: first["y"]!.doubleValue),
+           end: CGPoint(x: last["x"]!.doubleValue, y: last["y"]!.doubleValue))
+    return nil
+  }
+
+  private static func record(window: AnyObject?, orientation: Int, start: CGPoint, end: CGPoint? = nil) {
+    var display: UInt = 0
+    if let window { _ = RunnerResolveWindowDisplayID(window, &display) }
+    dispatches.append(RecordedSurfaceDispatch(displayID: display, start: start, end: end, orientation: orientation))
+    onDispatch?()
   }
 
   @objc(coordinateWithNormalizedOffset:)
@@ -109,7 +156,10 @@ private final class LitPanelBookingProbe: NSObject {
     return Self.coordinate!
   }
 
-  @objc func tap() { Self.tappedPoint = Self.point }
+  @objc func tap() {
+    Self.tappedPoint = Self.point
+    Self.onDispatch?()
+  }
 }
 
 extension RunnerTests {
@@ -142,8 +192,7 @@ extension RunnerTests {
         for synthesized in [true, false] {
           LitPanelBookingProbe.anchor = nil
           LitPanelBookingProbe.tappedPoint = nil
-          LitPanelBookingProbe.synthesizedPoint = nil
-          LitPanelBookingProbe.synthesizedDisplay = nil
+          LitPanelBookingProbe.dispatches.removeAll()
           let command = try runnerCommandFixture(
             #"{"command":"tap","selectorKey":"label","selectorValue":"same-selector","x":200,"y":150,"allowNonHittableCoordinateFallback":true,"synthesized":\#(synthesized),"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
           )
@@ -177,6 +226,125 @@ extension RunnerTests {
       }
       XCTAssertNil(LitPanelBookingProbe.tappedPoint)
 
+    }
+  }
+
+  @MainActor
+  func testRepeatedPressStopsWhenTheFirstActionChangesOrientation() throws {
+    try withLitPanelBookingProbe(composed: true) { _ in
+      for synthesized in [false, true] {
+        for nextKind in ["tap", "longPress"] {
+          LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 80, width: 669, height: 871)
+          LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.portrait
+          LitPanelBookingProbe.dispatches.removeAll()
+          LitPanelBookingProbe.onDispatch = {
+            LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.landscapeLeft
+            LitPanelBookingProbe.windowFrame = CGRect(x: 80, y: 0, width: 871, height: 669)
+          }
+          let command = try runnerCommandFixture(
+            #"{"command":"sequence","litPanel":{"displayId":3,"widthPt":669,"heightPt":951},"steps":[{"kind":"tap","x":200,"y":150,"synthesized":\#(synthesized)},{"kind":"\#(nextKind)","x":200,"y":150,"synthesized":true,"durationMs":100}]}"#
+          )
+          let requestID = setRequestLitPanel(from: command)
+          defer { endRequestLitPanel(requestID) }
+          let response = try executeOnMainPrepared(command: command, activeApp: app)
+          XCTAssertTrue(response.ok, response.error?.message ?? "")
+          XCTAssertEqual(response.data?.completedSteps, 1)
+          XCTAssertEqual(response.data?.failedStepIndex, 1)
+          XCTAssertEqual(response.data?.sequenceResults?.last?.errorCode, "UNSUPPORTED_OPERATION")
+          XCTAssertEqual(LitPanelBookingProbe.dispatches.count, synthesized ? 1 : 0)
+          if synthesized {
+            let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+            XCTAssertEqual(dispatch.displayID, 3)
+            XCTAssertEqual(dispatch.start, CGPoint(x: 200, y: 150))
+            XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.portrait)
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  func testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis() throws {
+    let health = mainOwned.accessibilityHealth
+    defer { mainOwned.accessibilityHealth = health }
+    try withLitPanelBookingProbe(composed: true) { _ in
+      mainOwned.accessibilityHealth = .healthy
+      LitPanelBookingProbe.windowFrame = CGRect(x: 0, y: 80, width: 669, height: 871)
+      LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.landscapeRight
+      LitPanelBookingProbe.keyboardFrame = CGRect(x: 0, y: 600, width: 951, height: 300)
+      let command = try runnerCommandFixture(
+        #"{"command":"scroll","direction":"down","pixels":200,"durationMs":400,"litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      )
+      let requestID = setRequestLitPanel(from: command)
+      defer { endRequestLitPanel(requestID) }
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, response.error?.message ?? "")
+      XCTAssertEqual(response.data?.referenceWidth, 669)
+      XCTAssertEqual(response.data?.referenceHeight, 508)
+      XCTAssertEqual(response.data?.keyboardAvoided, true)
+      XCTAssertEqual(response.data?.keyboardMinY, 600)
+      XCTAssertEqual(response.data?.x, 335)
+      XCTAssertEqual(response.data?.y, 434)
+      XCTAssertEqual(response.data?.x2, 335)
+      XCTAssertEqual(response.data?.y2, 234)
+      XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
+      let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+      XCTAssertEqual(dispatch.displayID, 3)
+      XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
+      XCTAssertEqual(dispatch.start, CGPoint(x: 235, y: 335))
+      XCTAssertEqual(dispatch.end, CGPoint(x: 435, y: 335))
+    }
+  }
+
+  @MainActor
+  func testPlacedIPadWindowDispatchUsesTheMeasuredSoleDisplay() throws {
+    try XCTSkipUnless(XCUIScreen.screens.count == 1, "the fixture requires a single-display host")
+    let cached = mainOwned.soleDisplayPortraitSize
+    defer { mainOwned.soleDisplayPortraitSize = cached }
+    mainOwned.soleDisplayPortraitSize = nil
+    let selector = #selector(NSObject.value(forKey:))
+    let inherited = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    class_addMethod(XCUIScreen.self, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited))
+    let target = try XCTUnwrap(class_getInstanceMethod(XCUIScreen.self, selector))
+    let original = method_getImplementation(target)
+    typealias ReadValue = @convention(c) (AnyObject, Selector, NSString) -> AnyObject?
+    let readValue = unsafeBitCast(original, to: ReadValue.self)
+    var screenReads = 0
+    let read: @convention(block) (AnyObject, NSString) -> AnyObject? = { screen, key in
+      if key == "bounds" {
+        screenReads += 1
+        return NSValue(cgRect: CGRect(x: 0, y: 0, width: 2048, height: 2732))
+      }
+      if key == "scale" { return NSNumber(value: 2) }
+      return readValue(screen, selector, key)
+    }
+    let replacement = imp_implementationWithBlock(read)
+    method_setImplementation(target, replacement)
+    defer {
+      method_setImplementation(target, original)
+      imp_removeBlock(replacement)
+    }
+    try withLitPanelBookingProbe(composed: true) { _ in
+      LitPanelBookingProbe.windowDisplayID = 1
+      LitPanelBookingProbe.includeDarkSelector = false
+      LitPanelBookingProbe.windowFrame = CGRect(x: 224, y: 207, width: 386, height: 682)
+      LitPanelBookingProbe.applicationFrame = CGRect(x: 0, y: 0, width: 1366, height: 1024)
+      LitPanelBookingProbe.targetFrame = CGRect(x: 290, y: 390, width: 20, height: 20)
+      LitPanelBookingProbe.orientation = RunnerInterfaceOrientation.landscapeRight
+      let command = try runnerCommandFixture(
+        #"{"command":"tap","selectorKey":"label","selectorValue":"same-selector","synthesized":true}"#
+      )
+      let requestID = setRequestLitPanel(from: command)
+      defer { endRequestLitPanel(requestID) }
+      let response = try executeOnMainPrepared(command: command, activeApp: app)
+      XCTAssertTrue(response.ok, response.error?.message ?? "")
+      XCTAssertGreaterThan(screenReads, 0)
+      XCTAssertEqual(mainOwned.soleDisplayPortraitSize, CGSize(width: 1024, height: 1366))
+      XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
+      let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
+      XCTAssertEqual(dispatch.displayID, 1)
+      XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
+      XCTAssertEqual(dispatch.start, CGPoint(x: 624, y: 300))
     }
   }
 
@@ -353,6 +521,8 @@ extension RunnerTests {
     let window = query.firstMatch
     LitPanelBookingProbe.window = window
     if composed {
+      LitPanelBookingProbe.application = app
+      LitPanelBookingProbe.keyboard = app.keyboards.firstMatch
       LitPanelBookingProbe.target = app.buttons.element(boundBy: 0)
       LitPanelBookingProbe.darkTarget = app.buttons.element(boundBy: 1)
       LitPanelBookingProbe.composedDarkWindow = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 466, height: 678), displayID: 1)
@@ -383,9 +553,20 @@ extension RunnerTests {
       (#selector(XCUIElement.descendants(matching:)), #selector(LitPanelBookingProbe.descendants(matching:))),
     ].map { (class_getInstanceMethod(windowClass, $0.0), class_getInstanceMethod(LitPanelBookingProbe.self, $0.1)) }
     let synthesisSwap = (
-      class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")),
-      class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeTap(_:resolvedWindow:x:y:deadline:errorMessage:)))
+      class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:")),
+      class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeTap(_:resolvedWindow:interfaceOrientation:x:y:deadline:errorMessage:)))
     )
+    let dragStub = class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeDrag(_:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:)))
+    let composedSwaps: [(Method?, Method?)] = [
+      (class_getInstanceMethod(try XCTUnwrap(object_getClass(app)), NSSelectorFromString("keyboards")),
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.keyboards))),
+      (class_getInstanceMethod(try XCTUnwrap(object_getClass(query)), #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
+       class_getInstanceMethod(LitPanelBookingProbe.self, #selector(getter: LitPanelBookingProbe.allElementsBoundByIndex))),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeControlledScrollWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:")), dragStub),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeSwipeWithApplication:resolvedWindow:interfaceOrientation:x:y:x2:y2:durationMs:")), dragStub),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, NSSelectorFromString("synthesizeGestureWithApplication:resolvedWindow:interfaceOrientation:pointerSamples:")),
+       class_getClassMethod(LitPanelBookingProbe.self, #selector(LitPanelBookingProbe.synthesizeGesture(_:resolvedWindow:interfaceOrientation:pointerSamples:))))
+    ]
     var originals: [(Method, IMP)] = []
     defer {
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
@@ -396,13 +577,22 @@ extension RunnerTests {
       LitPanelBookingProbe.darkTarget = nil
       LitPanelBookingProbe.composedDarkWindow = nil
       LitPanelBookingProbe.beforeElementLookup = nil
+      LitPanelBookingProbe.application = nil
+      LitPanelBookingProbe.applicationFrame = nil
+      LitPanelBookingProbe.keyboard = nil
+      LitPanelBookingProbe.keyboardFrame = nil
+      LitPanelBookingProbe.targetFrame = CGRect(x: 190, y: 140, width: 20, height: 20)
+      LitPanelBookingProbe.windowDisplayID = 3
+      LitPanelBookingProbe.includeDarkSelector = true
+      LitPanelBookingProbe.dispatches.removeAll()
+      LitPanelBookingProbe.onDispatch = nil
       LitPanelBookingProbe.anchor = nil
       LitPanelBookingProbe.originalValueForKey = nil
       LitPanelBookingProbe.maxWindowListReads = nil
       litPanelState.panel = nil
       litPanelState.surface = nil
     }
-    for (method, stub) in swaps + (composed ? attributeSwaps + [synthesisSwap] : []) {
+    for (method, stub) in swaps + (composed ? attributeSwaps + [synthesisSwap] + composedSwaps : []) {
       let method = try XCTUnwrap(method)
       let stub = try XCTUnwrap(stub)
       originals.append((method, method_setImplementation(method, method_getImplementation(stub))))

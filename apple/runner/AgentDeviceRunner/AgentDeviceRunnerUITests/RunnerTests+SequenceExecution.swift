@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   // MARK: - Sequence command
@@ -45,8 +46,20 @@ extension RunnerTests {
         ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
+#if os(iOS)
+    let orientation = synthesizedContext?.geometry.orientation ?? litPanelState.surface?.geometry.orientation
+      ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp))
+#endif
     let execution = try assembleSequenceExecution(steps: steps) { _, step in
-      try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
+#if os(iOS)
+      if orientation != Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: activeApp)) {
+        return finishedSequenceStep(step, timing: measureGesture {}, outcome: .unsupported(
+          message: "sequence stopped because the screen orientation changed",
+          hint: "Inspect the screen before continuing with the remaining actions."
+        ))
+      }
+#endif
+      return try performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
     }
     return sequenceResponse(execution: execution, touchFrame: firstFrame)
   }

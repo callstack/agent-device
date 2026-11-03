@@ -54,6 +54,7 @@ extension RunnerTests {
     let expired = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: TapApplicationFixture(),
       resolvedWindow: window,
+      interfaceOrientation: 1,
       x: 50,
       y: 50,
       deadline: deadline,
@@ -69,6 +70,7 @@ extension RunnerTests {
     let control = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: TapApplicationFixture(),
       resolvedWindow: TapWindowFixture {},
+      interfaceOrientation: 1,
       x: 50,
       y: 50,
       deadline: .distantFuture,
