@@ -23,9 +23,11 @@ export function bundledLicenseNotices(root: string, outputDirectory: string) {
             return `[${id}]`;
           };
           const packages: string[] = [];
-          const sortedDependencies = [...dependencies].sort((left, right) =>
-            `${left.name}@${left.version}`.localeCompare(`${right.name}@${right.version}`),
-          );
+          const sortedDependencies = [...dependencies].sort((left, right) => {
+            const a = `${left.name}@${left.version}`;
+            const b = `${right.name}@${right.version}`;
+            return a < b ? -1 : a > b ? 1 : 0;
+          });
           for (const dependency of sortedDependencies) {
             if (!dependency.license || !dependency.licenseText?.trim()) {
               throw new Error(
@@ -35,8 +37,20 @@ export function bundledLicenseNotices(root: string, outputDirectory: string) {
             const references = [reference(dependency.licenseText)];
             if (dependency.noticeText?.trim()) references.push(reference(dependency.noticeText));
             if (dependency.name === 'jpeg-js') {
+              const sourceNotices = fs.readFileSync(
+                path.join(root, 'LICENSES/jpeg-js.txt'),
+                'utf8',
+              );
+              const noticeVersion = sourceNotices
+                .split(/\r?\n/, 1)[0]
+                ?.match(/^jpeg-js (\S+) source-file notices$/)?.[1];
+              if (noticeVersion !== dependency.version) {
+                throw new Error(
+                  `Refresh LICENSES/jpeg-js.txt for bundled jpeg-js@${dependency.version}; its first line must name that version.`,
+                );
+              }
               references.push(
-                reference(fs.readFileSync(path.join(root, 'LICENSES/jpeg-js.txt'), 'utf8')),
+                reference(sourceNotices),
                 reference(fs.readFileSync(path.join(root, 'LICENSES/Apache-2.0.txt'), 'utf8')),
               );
             }

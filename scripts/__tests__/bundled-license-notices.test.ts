@@ -34,7 +34,18 @@ async function bundle(root: string, dts = false): Promise<void> {
     outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
     dts,
     minify: true,
-    deps: { onlyBundle: ['included', 'shared', 'distinct', 'unused', 'jpeg-js'] },
+    deps: {
+      onlyBundle: [
+        'included',
+        'shared',
+        'distinct',
+        'unused',
+        'jpeg-js',
+        'included-extra',
+        'included.extra',
+        'included_extra',
+      ],
+    },
     plugins: [bundledLicenseNotices(root, path.join(root, 'dist'))],
     logLevel: 'silent',
   });
@@ -144,6 +155,36 @@ test('identical notices are shared without losing packages or distinct copyright
   assert.equal(await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8'), notices);
 });
 
+test('notice references use code-unit ordering for package names', async () => {
+  const names = ['included_extra', 'included-extra', 'included.extra'];
+  const files: Record<string, string> = {
+    'input.ts': names
+      .map((name, index) => `export { value as value${index} } from '${name}';`)
+      .join('\n'),
+  };
+  for (const name of names) {
+    files[`node_modules/${name}/package.json`] = JSON.stringify({
+      name,
+      version: '1.0.0',
+      license: 'MIT',
+      main: 'index.js',
+    });
+    files[`node_modules/${name}/index.js`] = `export const value = '${name}';`;
+    files[`node_modules/${name}/LICENSE`] = 'Copyright ordering fixture\nShared license terms.';
+  }
+  const root = await fixture(files);
+  await bundle(root);
+  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+  assert.equal(
+    notices.split('\n\n')[0],
+    [
+      'included-extra@1.0.0 (MIT): [1]',
+      'included.extra@1.0.0 (MIT): [1]',
+      'included_extra@1.0.0 (MIT): [1]',
+    ].join('\n'),
+  );
+});
+
 test('declaration generation preserves JavaScript dependency notices', async () => {
   const root = await fixture({
     'input.ts': "export { value } from 'included';",
@@ -166,24 +207,32 @@ test('declaration generation preserves JavaScript dependency notices', async () 
   assert.equal(await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8'), notices);
 });
 
-test('bundled jpeg-js retains source-file notices and the Apache license', async () => {
-  const root = await fixture({
-    'input.ts': "export { value } from 'jpeg-js';",
-    'node_modules/jpeg-js/package.json': JSON.stringify({
-      name: 'jpeg-js',
-      version: '0.4.4',
-      license: 'BSD-3-Clause',
-      main: 'index.js',
-    }),
-    'node_modules/jpeg-js/index.js': 'export const value = process.env.FIXTURE_NUMBER;',
-    'node_modules/jpeg-js/LICENSE': 'Package-level BSD terms.',
-    'LICENSES/jpeg-js.txt': 'Copyright 2011 notmasteryet\nCopyright 2008 Adobe.',
-    'LICENSES/Apache-2.0.txt': 'Full Apache license text.',
-  });
-  await bundle(root);
-  const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
-  assert.match(notices, /Package-level BSD terms/);
-  assert.match(notices, /Copyright 2011 notmasteryet/);
-  assert.match(notices, /Copyright 2008 Adobe/);
-  assert.match(notices, /Full Apache license text/);
-});
+test.each(['0.4.4', '0.4.5'])(
+  'bundled jpeg-js@%s requires matching source-file notices',
+  async (version) => {
+    const root = await fixture({
+      'input.ts': "export { value } from 'jpeg-js';",
+      'node_modules/jpeg-js/package.json': JSON.stringify({
+        name: 'jpeg-js',
+        version,
+        license: 'BSD-3-Clause',
+        main: 'index.js',
+      }),
+      'node_modules/jpeg-js/index.js': 'export const value = process.env.FIXTURE_NUMBER;',
+      'node_modules/jpeg-js/LICENSE': 'Package-level BSD terms.',
+      'LICENSES/jpeg-js.txt':
+        'jpeg-js 0.4.4 source-file notices\n\nCopyright 2011 notmasteryet\nCopyright 2008 Adobe.',
+      'LICENSES/Apache-2.0.txt': 'Full Apache license text.',
+    });
+    if (version === '0.4.5') {
+      await assert.rejects(bundle(root), /LICENSES\/jpeg-js\.txt.*jpeg-js@0\.4\.5/);
+      return;
+    }
+    await bundle(root);
+    const notices = await fs.readFile(path.join(root, 'dist/THIRD_PARTY_NOTICES.txt'), 'utf8');
+    assert.match(notices, /Package-level BSD terms/);
+    assert.match(notices, /Copyright 2011 notmasteryet/);
+    assert.match(notices, /Copyright 2008 Adobe/);
+    assert.match(notices, /Full Apache license text/);
+  },
+);
