@@ -39,10 +39,15 @@ export function createOwnedFakeCompiler(name: string): OwnedFakeCompiler {
       "const fs = require('node:fs');",
       `const pidDir = process.env[${JSON.stringify(PID_DIR_ENV)}];`,
       `const selfBoundMs = ${SELF_BOUND_MS};`,
-      'fs.mkdirSync(pidDir, { recursive: true });',
-      'fs.writeFileSync(`${pidDir}/${process.pid}`, process.argv.slice(2).join(" "));',
+      'const args = process.argv.slice(2);',
+      "if (args.length < 4 || args[0] !== 'swiftc' || args[args.length - 2] !== '-o' || args.slice(1, -2).some((arg) => !arg.endsWith('.swift')) || !args[args.length - 1]) {",
+      '  console.error(`fake xcrun: expected swiftc <source.swift>... -o <output>; got ${JSON.stringify(args)}`);',
+      '  process.exit(2);',
+      '}',
       "process.on('SIGINT', () => process.exit(0));",
       "process.on('SIGTERM', () => process.exit(0));",
+      'fs.mkdirSync(pidDir, { recursive: true });',
+      'fs.writeFileSync(`${pidDir}/${process.pid}`, process.argv.slice(2).join(" "));',
       // A test that never reached its shutdown still gives this compiler back on its own, so no
       // harness leaves a spinning child behind for the next worker or the next run to inherit.
       'setTimeout(() => process.exit(0), selfBoundMs);',
