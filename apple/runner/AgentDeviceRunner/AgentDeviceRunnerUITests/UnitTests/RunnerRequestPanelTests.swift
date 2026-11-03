@@ -48,6 +48,20 @@ extension RunnerTests {
     XCTAssertEqual(queuedLater, 3)
   }
 
+  /// The Duo leaves a status strip beside an app's window on the inner panel; a point must still map
+  /// into the whole screen, so the booked frame is the panel's box turned like the window.
+  func testLitPanelBookingMapsIntoTheWholeTurnedPanel() {
+    let inner = RunnerLitPanel(displayID: 3, widthPt: 669, heightPt: 951)
+    XCTAssertEqual(
+      Self.litPanelScreenFrame(inner, windowFrame: CGRect(x: 0, y: 0, width: 871, height: 669)),
+      CGRect(x: 0, y: 0, width: 951, height: 669)
+    )
+    XCTAssertEqual(
+      Self.litPanelScreenFrame(inner, windowFrame: CGRect(x: 0, y: 0, width: 669, height: 951)),
+      CGRect(x: 0, y: 0, width: 669, height: 951)
+    )
+  }
+
   func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() throws {
     func refusal(_ fields: String) throws -> ErrorPayload? {
       try Self.litPanelBackendPinRefusal(runnerCommandFixture(#"{"command":"snapshot"\#(fields)}"#))?.error

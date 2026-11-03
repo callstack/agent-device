@@ -44,7 +44,9 @@ extension RunnerTests {
 
   /// Books `app`'s window on the lit panel for the rest of the request, or returns why it cannot. A
   /// request that named no panel books nothing. Later surface reads of `app` answer with this
-  /// window, so none of them can fall back to the application's own coordinates.
+  /// window, so none of them can fall back to the application's own coordinates. The booked frame
+  /// is the panel's box turned like the window, at the window's origin: a window that leaves part
+  /// of the panel uncovered still maps points into the whole screen.
   func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
     guard let litPanel = requestLitPanel else { return nil }
     if let booked = litPanelState.surface, booked.app === app { return nil }
@@ -54,8 +56,20 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    litPanelState.surface = LitPanelSurface(app: app, displayID: litPanel.displayID, window: element, frame: frame)
+    litPanelState.surface = LitPanelSurface(
+      app: app,
+      displayID: litPanel.displayID,
+      window: element,
+      frame: Self.litPanelScreenFrame(litPanel, windowFrame: frame)
+    )
     return nil
+  }
+
+  static func litPanelScreenFrame(_ panel: RunnerLitPanel, windowFrame: CGRect) -> CGRect {
+    let long = max(panel.widthPt, panel.heightPt)
+    let short = min(panel.widthPt, panel.heightPt)
+    let turned = windowFrame.width > windowFrame.height
+    return CGRect(origin: windowFrame.origin, size: turned ? CGSize(width: long, height: short) : CGSize(width: short, height: long))
   }
 
   /// Where an element read searches: the application, or on a lit-panel request only the windows
