@@ -32,7 +32,12 @@ final class DisplayWindowFixture: NSObject {
   override func value(forKey key: String) -> Any? {
     switch key {
     case "exists": return exists
-    case "frame": return NSValue(cgRect: frame)
+    case "frame":
+#if os(macOS)
+      return NSValue(rect: frame)
+#else
+      return NSValue(cgRect: frame)
+#endif
     case "screen": return screen
     default: return super.value(forKey: key)
     }
