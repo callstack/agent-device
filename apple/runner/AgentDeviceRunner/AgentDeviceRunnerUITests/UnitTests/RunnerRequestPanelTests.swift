@@ -23,6 +23,7 @@ private final class SurfaceSelectorQuery: NSObject {
 }
 
 private struct RecordedSurfaceDispatch {
+  let window: AnyObject?
   let displayID: UInt
   let start: CGPoint
   let end: CGPoint?
@@ -100,6 +101,9 @@ private final class LitPanelBookingProbe: NSObject {
   @objc var allElementsBoundByIndex: [XCUIElement] { [Self.window!] }
   @objc(descendantsMatchingType:)
   func descendants(matching type: UInt) -> XCUIElementQuery {
+    if type == XCUIElement.ElementType.window.rawValue {
+      return unsafeBitCast(SurfaceSelectorQuery([Self.window!]), to: XCUIElementQuery.self)
+    }
     Self.beforeElementLookup?()
     let elements = self === Self.window || !Self.includeDarkSelector ? [Self.target!] : [Self.darkTarget!, Self.target!]
     return unsafeBitCast(SurfaceSelectorQuery(elements), to: XCUIElementQuery.self)
@@ -135,7 +139,7 @@ private final class LitPanelBookingProbe: NSObject {
   private static func record(window: AnyObject?, orientation: Int, start: CGPoint, end: CGPoint? = nil) {
     var display: UInt = 0
     if let window { _ = RunnerResolveWindowDisplayID(window, &display) }
-    dispatches.append(RecordedSurfaceDispatch(displayID: display, start: start, end: end, orientation: orientation))
+    dispatches.append(RecordedSurfaceDispatch(window: window, displayID: display, start: start, end: end, orientation: orientation))
     onDispatch?()
   }
 
@@ -342,11 +346,15 @@ extension RunnerTests {
       XCTAssertTrue(response.ok, response.error?.message ?? "")
       XCTAssertGreaterThan(screenReads, 0)
       XCTAssertEqual(mainOwned.soleDisplayPortraitSize, CGSize(width: 1024, height: 1366))
+      XCTAssertEqual(response.data?.referenceWidth, 386)
+      XCTAssertEqual(response.data?.referenceHeight, 682)
       XCTAssertEqual(LitPanelBookingProbe.dispatches.count, 1)
       let dispatch = try XCTUnwrap(LitPanelBookingProbe.dispatches.first)
       XCTAssertEqual(dispatch.displayID, 1)
       XCTAssertEqual(dispatch.orientation, RunnerInterfaceOrientation.landscapeRight)
       XCTAssertEqual(dispatch.start, CGPoint(x: 624, y: 300))
+      XCTAssertTrue(dispatch.window === LitPanelBookingProbe.window)
+      XCTAssertEqual((dispatch.window as? XCUIElement)?.frame, CGRect(x: 224, y: 207, width: 386, height: 682))
     }
   }
 
