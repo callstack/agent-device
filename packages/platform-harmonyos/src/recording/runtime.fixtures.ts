@@ -37,6 +37,7 @@ export function harmonyRecordingHost(
   overrides: Partial<ScreenRecordingRuntimeHost['harmony']> & {
     complete?: ScreenRecordingRuntimeHost['finalize']['complete'];
     prepare?: ScreenRecordingRuntimeHost['outputs']['prepare'];
+    prepareValidator?: ScreenRecordingRuntimeHost['finalize']['prepare'];
   } = {},
 ): HarmonyHost {
   const harmony: ScreenRecordingRuntimeHost['harmony'] = {
@@ -57,7 +58,7 @@ export function harmonyRecordingHost(
         prepare: overrides.prepare ?? (async () => {}),
       },
       finalize: {
-        prepare: async () => {},
+        prepare: overrides.prepareValidator ?? (async () => {}),
         sniff: async () => {},
         complete: overrides.complete ?? (async () => ({})),
       },

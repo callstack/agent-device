@@ -8,25 +8,16 @@ export function createScreenRecordingRuntimeHost(options: {
   host: HostEnvironment;
 }): ScreenRecordingRuntimeHost {
   const host = options.host;
-  let finalizer:
-    | Promise<
-        ReturnType<
-          (typeof import('./platform-runtime-screen-recording-finalizer-host.ts'))['createScreenRecordingFinalizer']
-        >
-      >
-    | undefined;
-  const loadFinalizer = () =>
-    (finalizer ??= import('./platform-runtime-screen-recording-finalizer-host.ts').then(
-      ({ createScreenRecordingFinalizer }) => createScreenRecordingFinalizer(host),
-    ));
+  const loadFinalizer = async () => {
+    const { createScreenRecordingFinalizer } =
+      await import('./platform-runtime-screen-recording-finalizer-host.ts');
+    return createScreenRecordingFinalizer(host);
+  };
   const android: ScreenRecordingRuntimeHost['android'] = Object.freeze({
     resolve: async (device) => {
       const { createAndroidScreenRecordingTransport } =
         await import('./platform-runtime-screen-recording-android-host.ts');
-      return await createAndroidScreenRecordingTransport(
-        device,
-        (await loadFinalizer()).videoValidator,
-      );
+      return await createAndroidScreenRecordingTransport(device, host);
     },
   });
   const web: ScreenRecordingRuntimeHost['web'] = Object.freeze({
@@ -54,7 +45,7 @@ export function createScreenRecordingRuntimeHost(options: {
     },
   });
   const finalize: ScreenRecordingRuntimeHost['finalize'] = Object.freeze({
-    prepare: async (input, signal) => (await loadFinalizer()).prepare(input, signal),
+    prepare: async (input) => (await loadFinalizer()).prepare(input),
     sniff: async (input) => (await loadFinalizer()).sniff(input),
     complete: async (input, signal) => (await loadFinalizer()).complete(input, signal),
   });

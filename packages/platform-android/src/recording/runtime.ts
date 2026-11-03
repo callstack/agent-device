@@ -65,7 +65,7 @@ async function startAndroidRecording(params: {
 }) {
   const { host, transport, device, owner, input, signal } = params;
   signal.throwIfAborted();
-  await host.screenRecording.finalize.prepare({ container: 'mp4' }, signal);
+  void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   const startedAt = Date.now();
   const initial = await startInitialTransaction({
     transport,

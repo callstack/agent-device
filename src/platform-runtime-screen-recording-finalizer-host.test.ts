@@ -14,6 +14,7 @@ const video = vi.hoisted(() => ({
   isPlayable: vi.fn(async (_path: string, _host: unknown, _deadline?: Deadline) => true),
   container: vi.fn(async () => true),
   prepare: vi.fn(async () => ({ executablePath: '/bin/true', env: {} })),
+  read: vi.fn<() => Promise<{ executablePath: string; env: NodeJS.ProcessEnv }> | undefined>(),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
@@ -25,7 +26,7 @@ vi.mock('@agent-device/capture-kit/recording-video', () => ({
   isPlayableVideo: video.isPlayable,
   hasVideoContainer: video.container,
   prepareVideoValidator: video.prepare,
-  readPreparedVideoValidator: () => undefined,
+  readPreparedVideoValidator: video.read,
 }));
 vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
   persistRecordingTelemetry: telemetry,
@@ -45,10 +46,18 @@ beforeEach(() => {
   video.playable.mockReset().mockResolvedValue(true);
   video.isPlayable.mockReset().mockResolvedValue(true);
   video.container.mockReset().mockResolvedValue(true);
+  video.prepare.mockReset().mockResolvedValue({ executablePath: '/bin/true', env: {} });
+  video.read.mockReset();
 });
 
 test('requires stable playable media before publishing finalization telemetry', async () => {
-  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
+  const validator = Promise.resolve({ executablePath: '/prepared/validator', env: {} });
+  video.prepare.mockReturnValue(validator);
+  video.read.mockReturnValue(validator);
+  const finalizer = createScreenRecordingFinalizer(createLiveTestHostEnvironment());
+  await finalizer.prepare({ container: 'mp4' });
+  expect(video.prepare).toHaveBeenCalledOnce();
+  const result = await finalizer.complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: false,
     gestureEvents: [],
@@ -57,7 +66,7 @@ test('requires stable playable media before publishing finalization telemetry', 
 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
-    validator: undefined,
+    validator,
     deadline: expect.any(Deadline),
   });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });

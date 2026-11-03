@@ -99,10 +99,11 @@ export async function startTransportScreenRecording<Collectible>(params: {
   const { host, device, owner, input, signal, transport } = params;
   assertScreenRecordingOptionsSupported(input, params.support, params.unsupported);
   signal.throwIfAborted();
-  await host.screenRecording.finalize.prepare(
-    { container: input.outputPath.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4' },
-    signal,
-  );
+  void host.screenRecording.finalize
+    .prepare({
+      container: input.outputPath.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4',
+    })
+    .catch(() => {});
   await host.screenRecording.outputs.prepare(input.outputPath);
   const stopOnce = memoizeStop(transport);
   let acquired = false;

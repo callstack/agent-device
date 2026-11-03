@@ -629,18 +629,13 @@ test('compensates a runner finalizer failure without stopping the runner twice',
   expect(stop).toHaveBeenCalledOnce();
 });
 
-test('does not start or prepare recorder output while video validation preparation is pending', async () => {
+test('starts capture while video validation preparation is pending', async () => {
   let ready!: () => void;
   const preparing = new Promise<void>((resolve) => {
     ready = resolve;
   });
-  let entered!: () => void;
-  const preparationStarted = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
   const host = appleHost({
     prepare: async () => {
-      entered();
       await preparing;
     },
     apple: {
@@ -661,17 +656,10 @@ test('does not start or prepare recorder output while video validation preparati
     signal: new AbortController().signal,
   });
   const starting = operations.screenRecordingStart(input());
-  expect(
-    await Promise.race([
-      preparationStarted.then(() => 'preparing'),
-      starting.then(() => 'started'),
-    ]),
-  ).toBe('preparing');
-  expect(startRecorder).not.toHaveBeenCalled();
-  expect(prepareOutput).not.toHaveBeenCalled();
-  expect(clockAnchor).not.toHaveBeenCalled();
-  ready();
   const started = await starting;
   expect(startRecorder).toHaveBeenCalledOnce();
+  expect(prepareOutput).toHaveBeenCalledOnce();
+  expect(clockAnchor).toHaveBeenCalledOnce();
+  ready();
   await started.pendingHandle[Symbol.asyncDispose]();
 });

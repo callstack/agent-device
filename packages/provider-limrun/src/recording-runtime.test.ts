@@ -50,7 +50,9 @@ function fakeRecordingHost(calls: string[], finalize?: () => Promise<Record<stri
         remove: vi.fn(async () => 'removed' as const),
       },
       finalize: {
-        prepare: async () => {},
+        prepare: vi.fn(async ({ container }: { container: 'mp4' | 'webm' }) => {
+          calls.push(`prepare-validator:${container}`);
+        }),
         sniff: vi.fn(async () => {}),
         complete: vi.fn(async () => {
           calls.push('finalize');
@@ -95,7 +97,7 @@ test('start prepares the output, then asks the instance to record at the medium 
 
   const started = await operations.screenRecordingStart(input());
 
-  expect(calls).toEqual(['prepare', 'start:5']);
+  expect(calls).toEqual(['prepare-validator:mp4', 'prepare', 'start:5']);
   expect(started.envelope.descriptor.body).toMatchObject({
     backend: 'limrun-recorder',
     outputPath: '/tmp/limrun-recording.mp4',
@@ -123,6 +125,7 @@ test('stop asks the instance once, downloads the served MP4 to the output path, 
   const outcome = await started.pendingHandle.transfer().finish();
 
   expect(calls).toEqual([
+    'prepare-validator:mp4',
     'prepare',
     'start:5',
     'stop',
@@ -145,6 +148,14 @@ test('stop asks the instance once, downloads the served MP4 to the output path, 
   });
 });
 
+test('refuses a WebM destination before preparing output or starting the MP4 recorder', async () => {
+  const { operations, calls } = recorder();
+  await expect(
+    operations.screenRecordingStart(input({ outputPath: '/tmp/clip.webm' })),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(calls).toEqual([]);
+});
+
 test('a download that fails after the instance stopped is retried by the next stop without a second remote stop', async () => {
   const { operations, calls, session } = recorder({ failDownloads: 1 });
   const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
@@ -154,6 +165,7 @@ test('a download that fails after the instance stopped is retried by the next st
 
   expect(session.stopRecording).toHaveBeenCalledOnce();
   expect(calls).toEqual([
+    'prepare-validator:mp4',
     'prepare',
     'start:5',
     'stop',
@@ -252,6 +264,7 @@ test('the bound owner serves record start and stop through the live device sessi
     result: { backend: 'limrun-recorder', stopObservation: { recorder: 'confirmed' } },
   });
   expect(calls).toEqual([
+    'prepare-validator:mp4',
     'prepare',
     'start:8',
     'stop',

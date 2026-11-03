@@ -59,6 +59,9 @@ async function startLimrunRecording(
   params: Parameters<typeof createLimrunScreenRecordingOperations>[0],
   input: ScreenRecordingStartInput,
 ) {
+  if (input.outputPath.toLowerCase().endsWith('.webm')) {
+    throw new AppError('INVALID_ARGS', 'Limrun records MP4; use a .mp4 output path.');
+  }
   const session = params.getDeviceSession(params.device);
   if (!session) {
     throw new AppError(
