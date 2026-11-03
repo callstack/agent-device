@@ -51,8 +51,9 @@ test('publish package requires bundled dependency license notices', () => {
 
 // The publish gate's own copy of what a shipped notices file must contain. Written out rather than
 // produced by the bundler: a fixture the producer generates cannot show the producer emitted the wrong
-// thing. The attribution lines are the shape the real build writes; the placeholder is verbatim what
-// `rollup-plugin-license` reports for a zero-dependency bundle.
+// thing. The attribution lines, the reference markers and the license bodies are the shape
+// `renderNotices` in scripts/lib/bundled-license-notices.ts writes for a bundled build, and the
+// placeholder below is the line that same function writes when the bundle holds no third-party code.
 const REAL_NOTICES = [
   '@agent-device/proxy@0.21.37-dev (MIT): [1]',
   'undici@7.1.1 (MIT): [1]',
@@ -62,6 +63,22 @@ const REAL_NOTICES = [
   'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
 ].join('\n');
 const EMPTY_BUNDLE_NOTICES = 'No third-party dependencies are bundled.\n';
+
+// Two distinct license bodies, one of them shared by two attributions: the shape the bundler writes
+// when it deduplicates identical texts, which the gate must keep accepting.
+const TWO_LICENSES_NOTICES = [
+  '@agent-device/proxy@0.21.37-dev (MIT): [1]',
+  'undici@7.1.1 (MIT): [2]',
+  'yauzl@3.4.0 (MIT): [1], [2]',
+  '',
+  '[1]',
+  'Copyright (c) 2023 Callstack',
+  'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+  '',
+  '[2]',
+  'Copyright (c) 2018 Nathan LaFreniere and other contributors',
+  'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+].join('\n');
 
 /** The pack manifest's notices entry — non-empty by bytes, which is all a manifest can say. */
 function noticesEntry() {
@@ -109,6 +126,88 @@ test('pack gate accepts a tree whose notices attribute the bundled dependencies'
   );
 });
 
+test('pack gate rejects attributions whose references hold no license text', async () => {
+  // A marker is a heading, not a license: this file has the shape the bundler writes and zero terms
+  // in it, and a gate that only counts the two kinds of line lets it through.
+  const markerWithoutTerms = await treeWithNotices(
+    '@agent-device/proxy@0.21.37-dev (MIT): [1]\n\n[1]\n',
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: markerWithoutTerms,
+        context: 'npm pack',
+      }),
+    /no bundled dependency notices[\s\S]*1 attributions and 0 license texts[\s\S]*unresolved: @agent-device\/proxy@0\.21\.37-dev \(MIT\) -> \[1\]/,
+  );
+  // The other half: the reference names an id the file never writes.
+  const dangling = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): [3]',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], { noticesRoot: dangling, context: 'npm pack' }),
+    /unresolved: @agent-device\/proxy@0\.21\.37-dev \(MIT\) -> \[3\]/,
+  );
+  // An attribution with nothing after the colon promises a license and carries none.
+  const noReference = await treeWithNotices(
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): ',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+    ].join('\n'),
+  );
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: noReference,
+        context: 'npm pack',
+      }),
+    /unresolved: @agent-device\/proxy@0\.21\.37-dev \(MIT\) -> no reference/,
+  );
+});
+
+test('pack gate accepts every reference a deduplicated notices file makes', async () => {
+  // The bundler numbers each distinct license text once, so one package can point at two texts and
+  // two packages can share one. Resolving references must not read that as a missing license.
+  const root = await treeWithNotices(TWO_LICENSES_NOTICES);
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+  // The shapes the real build writes and a naive reader would reject: an attribution that names an
+  // author after the references, and an Apache-style license whose body carries blank lines.
+  await writeFile(
+    join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'),
+    [
+      '@agent-device/proxy@0.21.37-dev (MIT): [1]; Author: Callstack',
+      'undici@7.1.1 (Apache-2.0): [1], [2]; Author: Nathan LaFreniere <other@example.test>',
+      '',
+      '[1]',
+      'Copyright (c) 2023 Callstack',
+      'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+      '',
+      '[2]',
+      'Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file',
+      'except in compliance with the License.',
+      '',
+      'You may obtain a copy of the License at',
+      '',
+      '    https://www.apache.org/licenses/LICENSE-2.0',
+    ].join('\n'),
+  );
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
 test('pack gate names the tree it could not read notices from', async () => {
   const root = await treeWithNotices(null);
   assert.throws(
@@ -118,8 +217,10 @@ test('pack gate names the tree it could not read notices from', async () => {
 });
 
 test('pack gate reads content without a tree, staying a manifest-only check', () => {
-  // `check-package.ts` proves the bytes from the installed tree; a caller holding only the manifest
-  // (the size lane's base measurement of an older tree) still gets the presence check alone.
+  // The manifest entry alone is a presence-and-bytes claim, so that is all this call can prove; the
+  // content policy needs the tree whose bytes it is standing in for. Production callers — `collectNpmPack`
+  // and both calls in `check-package.ts` — always name that tree, so the packed and installed copies
+  // are read, never only the manifest.
   assert.doesNotThrow(() => assertBundledLicenseNotices([noticesEntry()]));
 });
 

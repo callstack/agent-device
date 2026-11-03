@@ -73,25 +73,83 @@ export function collectNpmPack(root) {
 const BUNDLED_LICENSE_NOTICES_PATH = 'dist/src/THIRD_PARTY_NOTICES.txt';
 
 /**
+ * The ids of the numbered license sections that hold text. A section runs from its `[n]` heading to
+ * the next heading, so a license whose body carries blank lines keeps that body. A line shaped like a
+ * heading inside a license body only shortens the section it sits in; it cannot fill an empty one.
+ */
+function readLicenseTextIds(lines) {
+  const idsWithText = new Set();
+  let openId;
+  let seenText = false;
+  for (const line of lines) {
+    const heading = line.match(/^\[(\d+)\]$/);
+    if (heading) {
+      if (seenText) idsWithText.add(openId);
+      openId = Number(heading[1]);
+      seenText = false;
+    } else if (openId !== undefined && line.trim()) {
+      seenText = true;
+    }
+  }
+  if (seenText) idsWithText.add(openId);
+  return idsWithText;
+}
+
+/**
+ * The `name@version (license): [n]` line the bundler writes, or undefined for any other line. The
+ * references are what stands between the colon and the optional `; Author: …` clause; one package can
+ * name several ids when it ships a NOTICE or source-file notices with its license.
+ */
+function readAttribution(line) {
+  const attribution = line.match(/^(\S+@\S+ \([^)]+\)): ?(.*)$/);
+  if (!attribution) return undefined;
+  return {
+    label: attribution[1],
+    references: [...attribution[2].matchAll(/\[(\d+)\]/g)].map((reference) => Number(reference[1])),
+  };
+}
+
+function describeUnresolvedAttribution(attribution) {
+  return (
+    `${attribution.label} -> ` +
+    (attribution.references.length > 0
+      ? `[${attribution.references.join('], [')}]`
+      : 'no reference')
+  );
+}
+
+/**
  * The published CLI bundles its runtime dependencies into `dist`, so the notices it ships must name
- * them: at least one `name@version (license)` attribution line and at least one referenced license
- * text. The plugin's zero-dependency output — the generic "nothing bundled" line — names neither, so
- * a build that stopped bundling dependencies would otherwise keep clearing this gate with a notice
- * file holding no license text for the code the tarball ships.
+ * them and carry the terms behind every name: each `name@version (license): [n]` attribution must
+ * point at a numbered section that holds text. The bundler's zero-dependency output — the generic
+ * "nothing bundled" line — names nobody, and a file of bare `[n]` headings has the right shape with
+ * no license terms in it, so a build that stopped bundling dependencies, or wrote headings without
+ * bodies, would otherwise keep clearing a gate that only counts the two kinds of line.
  *
  * This is the published CLI's policy, not the bundler's: a project that genuinely bundles nothing
  * still gets the generic notice, and only this package is held to naming somebody.
  */
 function assertLicenseNoticeContents(contents, context) {
-  const attributions = contents.match(/^\S+@\S+ \([^)]+\): /gm) ?? [];
-  const licenseTexts = contents.match(/^\[\d+\]$/gm) ?? [];
-  if (attributions.length === 0 || licenseTexts.length === 0) {
-    throw new Error(
-      `${context} ships ${BUNDLED_LICENSE_NOTICES_PATH} with no bundled dependency notices: ` +
-        `expected at least one "name@version (license)" attribution and one referenced license text, ` +
-        `found ${attributions.length} attributions and ${licenseTexts.length} license texts.`,
-    );
-  }
+  const lines = contents.replaceAll('\r\n', '\n').split('\n');
+  const licenseTextIds = readLicenseTextIds(lines);
+  const attributions = lines
+    .map(readAttribution)
+    .filter((attribution) => attribution !== undefined);
+  const unresolved = attributions.filter(
+    (attribution) =>
+      attribution.references.length === 0 ||
+      attribution.references.some((reference) => !licenseTextIds.has(reference)),
+  );
+  if (attributions.length > 0 && unresolved.length === 0) return;
+  throw new Error(
+    `${context} ships ${BUNDLED_LICENSE_NOTICES_PATH} with no bundled dependency notices: ` +
+      `expected every "name@version (license): [n]" attribution to reference a non-empty license ` +
+      `text, found ${attributions.length} attributions and ${licenseTextIds.size} license texts` +
+      (unresolved.length > 0
+        ? `; unresolved: ${unresolved.map(describeUnresolvedAttribution).join('; ')}`
+        : '') +
+      '.',
+  );
 }
 
 /**
