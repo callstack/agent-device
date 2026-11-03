@@ -77,6 +77,7 @@ async function startHarmonyRecording(params: {
     (unsupported) => `HarmonyOS recordings do not support ${unsupported.join(', ')}`,
   );
   signal.throwIfAborted();
+  await host.screenRecording.finalize.prepare({ container: 'mp4' }, signal);
   await host.screenRecording.outputs.prepare(input.outputPath);
   const fileName = `agent-device-recording-${randomUUID()}.mp4`;
   const remotePath = `/data/local/tmp/${fileName}`;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { prepareRecordingValidatorFixture } from '@agent-device/test-kit';
 import {
   collectedRecordingPath,
   nativeRecordingPath,
@@ -105,9 +106,10 @@ test('iOS simulator recording reports host contention and recovers through the f
           });
         },
       };
+      const env = { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') };
+      await prepareRecordingValidatorFixture({ env, cwd: tmpDir });
       const daemon = await createProviderScenarioHarness({
-        // No real tool is on the daemon's PATH, and its Swift helper compiles into the scenario's cache.
-        env: { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') },
+        env,
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         appleSimulatorScreenRecordingTransport: () => recordingTransport,

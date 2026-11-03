@@ -10,7 +10,7 @@ import {
   compileSwiftSourceFile,
   resolveRecordingScriptPath,
 } from './swift-cache.ts';
-import { waitForPlayableVideo } from './video.ts';
+import { waitForPlayableVideo, type PreparedVideoValidator } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
@@ -29,7 +29,7 @@ export function getRecordingOverlaySupportWarning(
  * `record stop` is one daemon request, which the client abandons after `record`'s 90 s envelope:
  * the caller gets "Daemon request timed out" while the daemon finishes the stop. So the overlay must
  * end well inside it. The budget starts with the stop's finalization, so the playability checks
- * before the overlay (on a cold host they compile their validator first) come out of it, as do
+ * before the overlay come out of it, as do
  * compiling the helper, its export, its exit and verifying its output; past it the stop keeps the raw video and its
  * gesture telemetry, with a warning.
  */
@@ -79,6 +79,7 @@ async function exportProcessedVideo(params: {
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
+  validator: PreparedVideoValidator | undefined;
 }): Promise<void> {
   const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
   const outputPath = temporarySiblingVideoPath(videoPath);
@@ -117,7 +118,7 @@ async function exportProcessedVideo(params: {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    if (!(await waitForPlayableVideo(outputPath, { host, deadline }))) {
+    if (!(await waitForPlayableVideo(outputPath, { validator: params.validator, deadline }))) {
       exportOverran = deadline.isExpired();
       throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
     }
@@ -158,6 +159,7 @@ function temporarySiblingVideoPath(videoPath: string): string {
 
 export async function overlayRecordingTouches(params: {
   host: HostEnvironment;
+  validator: PreparedVideoValidator | undefined;
   videoPath: string;
   telemetryPath: string;
   exportQuality?: RecordingExportQuality;
@@ -186,5 +188,6 @@ export async function overlayRecordingTouches(params: {
     ],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
     deadline: params.deadline,
+    validator: params.validator,
   });
 }

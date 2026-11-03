@@ -65,7 +65,7 @@ function harness(
       host: {
         screenRecording: {
           outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
-          finalize: { sniff: async () => {}, complete },
+          finalize: { prepare: async () => {}, sniff: async () => {}, complete },
         },
       },
       device,
@@ -165,7 +165,7 @@ test('unsupported options are refused with a typed error before the output is pr
     host: {
       screenRecording: {
         outputs: { prepare, copy: async () => {}, remove: async () => 'removed' as const },
-        finalize: { sniff: async () => {}, complete: async () => ({}) },
+        finalize: { prepare: async () => {}, sniff: async () => {}, complete: async () => ({}) },
       },
     },
     device,

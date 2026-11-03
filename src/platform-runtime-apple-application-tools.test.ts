@@ -46,7 +46,7 @@ const macOsDevice: DeviceInfo = {
 test('the runner session prewarm forwards the request execution, signal, and error policy to the runner module', async () => {
   const signal = new AbortController().signal;
 
-  await createAppleApplicationTools(process.env).prewarmRunnerSession(
+  await createAppleApplicationTools(process.env, async () => {}).prewarmRunnerSession(
     iosSimulator,
     { requestId: 'req-1', logPath: '/tmp/daemon.log', verbose: true },
     signal,
@@ -68,7 +68,7 @@ test('the runner session prewarm forwards the request execution, signal, and err
 test('preparing the runner spends the requested budget on stale-bundle cleanup, build, health, and startup', async () => {
   const signal = new AbortController().signal;
 
-  const result = await createAppleApplicationTools(process.env).prepareRunner(
+  const result = await createAppleApplicationTools(process.env, async () => {}).prepareRunner(
     iosSimulator,
     {
       timeoutMs: 240_000,
@@ -105,10 +105,29 @@ test('a macOS frontmost-app open resolves the identity of the frontmost applicat
   });
 
   await expect(
-    createAppleApplicationTools(process.env).resolveOpenTarget(macOsDevice, {
+    createAppleApplicationTools(process.env, async () => {}).resolveOpenTarget(macOsDevice, {
       surface: 'frontmost-app',
       currentAppBundleId: 'com.apple.TextEdit',
     }),
   ).resolves.toEqual({ appBundleId: 'com.apple.TextEdit', appName: 'TextEdit' });
   expect(mockResolveFrontmostMacOsApp).toHaveBeenCalledOnce();
+});
+
+test('runner preparation fails before startup when the recording helper cannot be prepared', async () => {
+  mockPrepareIosRunner.mockClear();
+  const failure = new Error('video validator compile failed');
+  const tools = createAppleApplicationTools(process.env, async () => {
+    throw failure;
+  });
+  await expect(
+    tools.prepareRunner(
+      iosSimulator,
+      {
+        timeoutMs: 10_000,
+        execution: {},
+      },
+      new AbortController().signal,
+    ),
+  ).rejects.toBe(failure);
+  expect(mockPrepareIosRunner).not.toHaveBeenCalled();
 });

@@ -113,7 +113,7 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
       android: { resolve: async () => transport },
       outputs: Object.assign({}, store.outputs, legacy.outputs),
       finalize: Object.assign(
-        { sniff: async () => {}, complete: async () => ({}) },
+        { prepare: async () => {}, sniff: async () => {}, complete: async () => ({}) },
         legacy.finalize,
       ),
     },

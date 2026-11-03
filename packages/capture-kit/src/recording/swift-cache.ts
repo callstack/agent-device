@@ -128,19 +128,36 @@ export async function compileSwiftSourceFile(params: {
   return executablePath;
 }
 
-export async function compileSwiftSourceText(params: {
+type SwiftSourceTextInput = Readonly<{
   host: HostEnvironment;
   source: string;
   cacheName: string;
-  timeoutMs?: number;
-  /** Cancels the compile: kills `swiftc`, or stops waiting for another process's compile. */
-  signal?: AbortSignal;
-}): Promise<string> {
+}>;
+
+function swiftSourceTextPaths(params: SwiftSourceTextInput) {
   const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
   const cacheRoot = getSwiftCacheRoot(params.host.env);
   const sourcePath = path.join(cacheRoot, 'sources', `${cacheName}-${key}.swift`);
   const executablePath = path.join(cacheRoot, 'bin', `${cacheName}-${key}`);
+
+  return { sourcePath, executablePath };
+}
+
+/** Reads an already published executable without acquiring a lock or starting a compiler. */
+export function readCompiledSwiftSourceText(params: SwiftSourceTextInput): string | undefined {
+  const { executablePath } = swiftSourceTextPaths(params);
+  return isExecutableFile(executablePath) ? executablePath : undefined;
+}
+
+export async function compileSwiftSourceText(
+  params: SwiftSourceTextInput & {
+    timeoutMs?: number;
+    /** Cancels the compile: kills swiftc, or stops waiting for another process's compile. */
+    signal?: AbortSignal;
+  },
+): Promise<string> {
+  const { sourcePath, executablePath } = swiftSourceTextPaths(params);
 
   await ensureSwiftExecutable({
     host: params.host,

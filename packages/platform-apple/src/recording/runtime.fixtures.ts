@@ -81,6 +81,7 @@ export function simulatorRecorderStart(): Pick<
 export function appleRecordingHost(
   options: {
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
+    prepare?: ScreenRecordingFinalizer['prepare'];
     complete?: ScreenRecordingFinalizer['complete'];
     sniff?: ScreenRecordingFinalizer['sniff'];
     files?: ReturnType<typeof recordingFileStore>;
@@ -127,6 +128,7 @@ export function appleRecordingHost(
       apple,
       outputs: Object.assign({}, store.outputs, options.outputs),
       finalize: {
+        prepare: options.prepare ?? (async () => {}),
         // The real sniff reads the file and refuses one that is not there or not a video, which is
         // what lets a recovery ask whether a recorder's file can still become an export.
         sniff:

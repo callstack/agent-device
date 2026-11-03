@@ -1,3 +1,5 @@
+import { prepareVideoValidator } from '@agent-device/capture-kit/recording-video';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -465,6 +467,7 @@ async function assertCapture(context: LiveContext): Promise<void> {
   verifyCommand(context, C.screenshot, 'captured fixture file has a valid PNG signature');
 
   const recordingPath = path.join(context.artifactDir, 'fixture.mp4');
+  const validator = await prepareVideoValidator(captureHostEnvironment(process));
   const recording = await runStep(context, 'start screen recording', [
     'record',
     'start',
@@ -479,7 +482,7 @@ async function assertCapture(context: LiveContext): Promise<void> {
   await assertWaitText(context, 'Checkout form');
   const stopped = await runStep(context, 'stop screen recording', ['record', 'stop']);
   assert.equal(stopped.json?.data?.recording, 'stopped', JSON.stringify(stopped.json));
-  await assertMp4File(recordingPath);
+  await assertMp4File(recordingPath, validator);
   verifyCommand(
     context,
     C.record,

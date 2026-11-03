@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
-import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import {
+  isPlayableVideo,
+  type PreparedVideoValidator,
+} from '@agent-device/capture-kit/recording-video';
 import type { CliJsonResult } from '../cli-json.ts';
 import type { LiveDeviceContext } from './runtime.ts';
 
@@ -86,10 +88,13 @@ export function assertNonEmptyFile(filePath: string, name: string): void {
   assert.ok(fs.statSync(filePath).size > 0, `${name} artifact is empty: ${filePath}`);
 }
 
-export async function assertMp4File(filePath: string): Promise<void> {
+export async function assertMp4File(
+  filePath: string,
+  validator: PreparedVideoValidator,
+): Promise<void> {
   assertNonEmptyFile(filePath, 'recording');
   assert.equal(
-    await isPlayableVideo(filePath, captureHostEnvironment(process)),
+    await isPlayableVideo(filePath, validator),
     true,
     `recording is not a finalized playable video: ${filePath}`,
   );

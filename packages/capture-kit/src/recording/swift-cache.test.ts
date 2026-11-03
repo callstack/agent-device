@@ -20,6 +20,7 @@ import {
   buildRecordingScriptPathCandidates,
   compileSwiftSourceFile,
   compileSwiftSourceText,
+  readCompiledSwiftSourceText,
 } from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -364,4 +365,25 @@ test('the cache root and tool environment come from the host it is given, not th
     FROM_HOST: 'yes',
     HOME: path.join(hostCacheDir, 'home'),
   });
+});
+
+test('reads only a published executable for the exact source and cache, without compiling', async () => {
+  const input = { host: createTestHost(), source: 'print("prepared")', cacheName: 'prepared' };
+  expect(readCompiledSwiftSourceText(input)).toBeUndefined();
+  const executable = await compileSwiftSourceText(input);
+  mockRunCmd.mockClear();
+  expect(readCompiledSwiftSourceText(input)).toBe(executable);
+  expect(readCompiledSwiftSourceText({ ...input, source: 'print("changed")' })).toBeUndefined();
+  expect(
+    readCompiledSwiftSourceText({
+      ...input,
+      host: {
+        ...input.host,
+        env: { AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'other-cache') },
+      },
+    }),
+  ).toBeUndefined();
+  fs.chmodSync(executable, 0o644);
+  expect(readCompiledSwiftSourceText(input)).toBeUndefined();
+  expect(mockRunCmd).not.toHaveBeenCalled();
 });
