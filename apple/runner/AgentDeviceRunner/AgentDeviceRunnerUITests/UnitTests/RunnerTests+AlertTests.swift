@@ -77,7 +77,9 @@ extension RunnerTests {
     defer { terminateCrowdedScreen() }
 
     let alert = try requireResolvedAlert(within: RunnerTests.defaultAlertCommandTimeout)
-    let button = try XCTUnwrap(try chooseAlertButton(alert, action: "dismiss"))
+    let button = try XCTUnwrap(try chooseAlertButton(
+      alert, action: "dismiss", deadline: Date().addingTimeInterval(Self.defaultAlertCommandTimeout)
+    ))
     XCTAssertEqual(button.identifier, "agent-device-close-popover")
   }
 

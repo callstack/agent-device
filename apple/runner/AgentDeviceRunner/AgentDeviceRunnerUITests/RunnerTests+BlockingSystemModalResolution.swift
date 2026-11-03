@@ -18,6 +18,9 @@ extension RunnerTests {
         source: .blockingSystemModal, window: modal.window
       ))
     } catch {
+      if case ModalReadFailure.deadlineExceeded = error {
+        NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DEADLINE stage=required-read")
+      }
       return .unresolved
     }
   }

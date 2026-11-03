@@ -128,7 +128,7 @@ extension RunnerTests {
 
   @MainActor
   func testAlertWithNoEnabledButtonsStaysResolved() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-disabled-buttons"]
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-replacement-disabled-buttons"]
     app.launch()
     defer { app.terminate() }
     let root = app.alerts.firstMatch

@@ -26,7 +26,7 @@ extension RunnerTests {
 
   @MainActor
   func testBlockingModalSnapshotIncludesDisabledActions() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-disabled-buttons"]
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-replacement-disabled-buttons"]
     app.launch()
     defer { app.terminate() }
     let alert = try requireResolvedAlert(within: Self.defaultAlertCommandTimeout)

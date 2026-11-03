@@ -308,7 +308,7 @@ extension RunnerTests {
 
   // Internal, not private: the dismiss-popup wiring is pinned by
   // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
-  func chooseAlertButton(_ alert: RunnerAlert, action: String, deadline: Date = .distantFuture) throws -> XCUIElement? {
+  func chooseAlertButton(_ alert: RunnerAlert, action: String, deadline: Date) throws -> XCUIElement? {
     let buttons = try readModalValue(deadline: deadline) {
       alert.actions.filter { $0.exists && $0.isEnabled }
     }
