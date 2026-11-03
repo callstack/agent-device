@@ -118,7 +118,7 @@ extension RunnerTests {
         let resolved = try XCTUnwrap(resolveRunnerWindowElement(app: app))
         context = try XCTUnwrap(
           SynthesizedCoordinateContext(
-            validating: windowFrame ?? resolved.frame,
+            validating: surfaceGeometry(windowFrame: windowFrame ?? resolved.frame, app: app),
             resolvedWindow: resolved.window,
             accessibilityHealth: .healthy
           )
@@ -309,6 +309,15 @@ extension RunnerTests {
     XCTAssertEqual(displayID, 0)
   }
 
+  @MainActor
+  private func unscopedDigitizerBasis(
+    app: XCUIApplication, window: CGRect, interfaceOrientation: Int
+  ) -> CGRect? {
+    digitizerGeometry(app: app, surface: SurfaceGeometry(
+      windowOnScreen: SurfaceRect(window), panelNativeSize: nil, orientation: interfaceOrientation
+    ))?.digitizerBasis.rect
+  }
+
   /// Physical iOS can report no system application's AX frame while its display is measurable.
   @MainActor
   func testSoleDisplaySizeDoesNotRequireASystemApplicationAccessibilityFrame() throws {
@@ -326,8 +335,8 @@ extension RunnerTests {
     defer { restoreAXRuntime() }
     mainOwned.soleDisplayPortraitSize = nil
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
-    let measured = try XCTUnwrap(synthesizedRotationFrame(
-      app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    let measured = try XCTUnwrap(unscopedDigitizerBasis(
+      app: app, window: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     ))
     XCTAssertEqual(measured.origin, .zero)
     XCTAssertEqual(measured.width, max(frame.width, frame.height), accuracy: 0.5)
@@ -361,7 +370,7 @@ extension RunnerTests {
       (RunnerInterfaceOrientation.landscapeRight, CGSize(width: screen.height, height: screen.width)),
     ]
     for (orientation, expected) in expectations {
-      let frame = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: orientation))
+      let frame = try XCTUnwrap(unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: orientation))
       XCTAssertEqual(frame.origin, .zero)
       XCTAssertEqual(frame.width, expected.width, accuracy: 0.5)
       XCTAssertEqual(frame.height, expected.height, accuracy: 0.5)
@@ -377,21 +386,21 @@ extension RunnerTests {
     let placedWindow = CGRect(x: 224, y: 207, width: 386, height: 682)
     let landscape = RunnerInterfaceOrientation.landscapeRight
     mainOwned.soleDisplayPortraitSize = nil
-    let measured = try XCTUnwrap(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape))
+    let measured = try XCTUnwrap(unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: landscape))
     XCTAssertNotEqual(measured, placedWindow)
 
     let nextCommand = try runnerCommandFixture(#"{"command":"uptime","commandId":"next-command"}"#)
     // Nothing between the install and the restore throws, so the restore always runs.
     let restoreDisplay = try simulateUnreadableDisplay()
-    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
+    XCTAssertEqual(unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: landscape), measured)
     _ = try? executeOnMainPrepared(command: nextCommand, activeApp: app)
     XCTAssertNotEqual(
-      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape),
+      unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: landscape),
       measured,
       "the next command must read the size again rather than reuse the kept one"
     )
     restoreDisplay()
-    XCTAssertEqual(synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: landscape), measured)
+    XCTAssertEqual(unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: landscape), measured)
   }
 
   /// #4091: a portrait turn leaves the point as it is, so an unreadable display box neither refuses
@@ -468,7 +477,7 @@ extension RunnerTests {
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let windowFrame = try XCTUnwrap(context).referenceFrame
     XCTAssertEqual(
-      synthesizedRotationFrame(app: app, fallback: windowFrame, interfaceOrientation: orientation),
+      unscopedDigitizerBasis(app: app, window: windowFrame, interfaceOrientation: orientation),
       windowFrame
     )
     let outcome = try synthesizedTapAt(app: app, x: 40, y: 40, context: context)
@@ -492,10 +501,10 @@ extension RunnerTests {
     )
 
     XCTAssertNil(
-      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
+      unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
     )
     XCTAssertEqual(
-      synthesizedRotationFrame(app: app, fallback: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      unscopedDigitizerBasis(app: app, window: placedWindow, interfaceOrientation: RunnerInterfaceOrientation.portrait),
       placedWindow,
       "portrait skips the box read (only landscape and upside-down read it), so it must not refuse"
     )

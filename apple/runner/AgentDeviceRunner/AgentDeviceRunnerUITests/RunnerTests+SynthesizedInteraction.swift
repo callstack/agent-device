@@ -96,13 +96,14 @@ extension RunnerTests {
         hint: "Retry with finite x and y values."
       )
     }
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let context = try context ?? synthesizedCoordinateContext(app: app)
+    let orientation = context?.geometry.orientation ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let resolution = pointGestureTarget(
       app: app,
       x: x,
       y: y,
       orientation: orientation,
-      context: try context ?? synthesizedCoordinateContext(app: app),
+      context: context,
       gesture: .tap
     )
     guard case .target(let point, let resolvedWindow, let referenceFrame) = resolution else {
@@ -170,7 +171,7 @@ extension RunnerTests {
         hint: "Retry with finite x and y values and a positive durationMs."
       )
     }
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let orientation = context?.geometry.orientation ?? Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
     let resolution = pointGestureTarget(
       app: app,
       x: x,
