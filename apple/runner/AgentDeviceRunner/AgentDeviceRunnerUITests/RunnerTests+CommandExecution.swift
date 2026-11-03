@@ -338,7 +338,7 @@ extension RunnerTests {
             y2: gesture.planFrame.minY + gesture.plan.y2,
             durationMs: defaults.durationMs,
             message: "scrolled",
-            context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
+            context: scrollContext,
             releaseBehavior: command.scrollReleaseBehavior
           )
         )

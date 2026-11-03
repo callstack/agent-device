@@ -188,8 +188,8 @@ extension RunnerTests {
       y: plan.points.y,
       x2: plan.points.x2,
       y2: plan.points.y2,
-      referenceWidth: Double(plan.referenceFrame.width),
-      referenceHeight: Double(plan.referenceFrame.height)
+      referenceWidth: Double(plan.context.geometry.windowOnScreen.rect.width),
+      referenceHeight: Double(plan.context.geometry.windowOnScreen.rect.height)
     )
     switch try performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
       try synthesizedDragAt(

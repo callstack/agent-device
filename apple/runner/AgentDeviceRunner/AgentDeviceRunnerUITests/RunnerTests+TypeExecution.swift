@@ -123,7 +123,7 @@ extension RunnerTests {
     let point = target.refreshPoint
     let frame: CGRect
     if let resolvedCoordinateContext {
-      frame = resolvedCoordinateContext.referenceFrame
+      frame = resolvedCoordinateContext.geometry.windowOnScreen.rect
     } else if point != nil {
       frame = activeApp.frame
     } else {

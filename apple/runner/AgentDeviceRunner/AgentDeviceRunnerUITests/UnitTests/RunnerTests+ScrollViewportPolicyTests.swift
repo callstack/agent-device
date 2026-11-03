@@ -103,7 +103,6 @@ extension RunnerTests {
     }
     XCTAssertEqual(gesture.planFrame, band)
     XCTAssertEqual(gesture.keyboardMinY, keyboardMinY)
-    XCTAssertEqual(gesture.coordinateFrame, viewport, "the rotation basis must survive the clip")
     XCTAssertLessThanOrEqual(
       max(gesture.plan.y1, gesture.plan.y2),
       keyboard.minY - ScrollViewportPolicy.accessoryAllowance,
@@ -129,7 +128,7 @@ extension RunnerTests {
     let orientedStartY = gesture.planFrame.minY + gesture.plan.y1
     let dispatchedFromViewport = CoordinateSpaceRotation.native(
       point: CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: orientedStartY),
-      in: gesture.coordinateFrame,
+      in: viewport,
       interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
     let dispatchedFromBand = CoordinateSpaceRotation.native(

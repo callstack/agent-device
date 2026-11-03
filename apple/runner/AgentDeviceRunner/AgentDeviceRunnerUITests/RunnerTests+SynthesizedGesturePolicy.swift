@@ -38,21 +38,9 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
 }
 
 struct SynthesizedCoordinateContext {
-  let referenceFrame: CGRect
-  /// The window `referenceFrame` was measured on. Synthesized records route their display ID
-  /// through this same window so geometry and routing can never name different windows. Nil is the
-  /// sole-screen route: XCTest could not resolve the window, `referenceFrame` is the device's only
-  /// screen, and the record is routed to that screen.
+  let geometry: SurfaceGeometry
   let resolvedWindow: XCUIElement?
   let accessibilityHealth: RunnerAccessibilityHealth
-
-  func withReferenceFrame(_ frame: CGRect) -> SynthesizedCoordinateContext {
-    SynthesizedCoordinateContext(
-      referenceFrame: frame,
-      resolvedWindow: resolvedWindow,
-      accessibilityHealth: accessibilityHealth
-    )
-  }
 
   /// The keyboard probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch`
   /// with a live AX fetch — so `.unavailable` skips it: there the fetch is known not to answer,
@@ -205,15 +193,15 @@ extension RunnerTests {
 }
 
 extension SynthesizedCoordinateContext {
-  /// Nil when `referenceFrame` is not a finite, non-empty box a point can be placed in.
+  /// Nil when the window has no finite, non-empty box.
   init?(
-    validating referenceFrame: CGRect,
+    validating geometry: SurfaceGeometry,
     resolvedWindow: XCUIElement?,
     accessibilityHealth: RunnerAccessibilityHealth
   ) {
-    guard SnapshotGeometry.isPositiveFinite(referenceFrame) else { return nil }
+    guard SnapshotGeometry.isPositiveFinite(geometry.windowOnScreen.rect) else { return nil }
     self.init(
-      referenceFrame: referenceFrame,
+      geometry: geometry,
       resolvedWindow: resolvedWindow,
       accessibilityHealth: accessibilityHealth
     )
