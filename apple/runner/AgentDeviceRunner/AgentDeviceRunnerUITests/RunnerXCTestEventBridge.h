@@ -71,6 +71,13 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
   NSUInteger *displayID
 );
 
+// The sole XCTest display's pixel bounds divided by its scale, in points. Neither the runner's
+// compatibility-mode `UIScreen` nor the system application's possibly empty AX frame supplies
+// this measurement. Any failed read or a screen count other than one answers `CGSizeZero`.
+#if TARGET_OS_IOS
+FOUNDATION_EXPORT CGSize RunnerSoleScreenSize(void);
+#endif
+
 // What the full-screen proof concluded. The decision is a function of these values, so a test
 // supplies them directly instead of restating the device rule.
 typedef NS_ENUM(NSUInteger, RunnerFullScreenEvidence) {

@@ -251,6 +251,37 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
   return cached;
 }
 
+CGSize RunnerSoleScreenSize(void) {
+  __block NSUInteger screenCount = 0;
+  __block CGRect bounds = CGRectNull;
+  __block CGFloat scale = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
+    screenCount = screens.count;
+    if (screenCount != 1) return;
+    XCUIScreen *screen = screens.firstObject;
+    NSValue *boundsValue = [screen valueForKey:@"bounds"];
+    [boundsValue getValue:&bounds size:sizeof(bounds)];
+    NSNumber *scaleValue = [screen valueForKey:@"scale"];
+    if ([scaleValue isKindOfClass:NSNumber.class]) scale = scaleValue.doubleValue;
+  }];
+  if (exception != nil || screenCount != 1 ||
+      !AgentDeviceForegroundFrameIsMeasurable(bounds) || !isfinite(scale) || scale <= 0) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen-size screens=%lu bounds=(%g,%g %gx%g) scale=%g raised=%@",
+      (unsigned long)screenCount,
+      bounds.origin.x,
+      bounds.origin.y,
+      bounds.size.width,
+      bounds.size.height,
+      scale,
+      exception != nil ? @"yes" : @"no"
+    );
+    return CGSizeZero;
+  }
+  return CGSizeMake(bounds.size.width / scale, bounds.size.height / scale);
+}
+
 // One contained probe: it checks each selector before sending it and reads the target pid and both
 // frames inside one exception scope, so any failed read answers Unknown. The target pid comes from
 // the existing runner owner for that read (RunnerAXSnapshotBridge).
@@ -321,8 +352,11 @@ NSString * _Nullable RunnerResolveSoleScreen(
     );
     return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
   }
-  // An iPhone keeps every app full-screen, so its idiom answers the rule and the route never pays
-  // for the probe. Off the phone idiom the route opens only on the fills-screen proof.
+  // An iPhone keeps every app full-screen, so its idiom answers the rule and admission never pays
+  // for the fills-screen probe. Off the phone idiom the route opens only on that proof. The display
+  // size is a separate XCTest screen read the caller makes after admission, the first time
+  // a command needs the box; a command keeps a successful read, and the next gesture retries a failed
+  // one.
   if (UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone &&
       RunnerProbeApplicationFillsScreen(application) != RunnerFullScreenEvidenceFillsScreen) {
     return @"private XCTest event synthesis unavailable: no resolved application window, and the sole screen is not provably the app's full-screen frame";
