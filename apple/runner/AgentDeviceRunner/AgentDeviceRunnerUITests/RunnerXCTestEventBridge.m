@@ -234,7 +234,7 @@ static NSArray *_Nullable RunnerCopyWindowList(id application) {
   return exception == nil ? windows : nil;
 }
 
-static RunnerApplicationScreenFailure RunnerResolveLitPanelWindowScreen(
+RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
   id application,
   RunnerLitPanel litPanel,
   id _Nullable *window,
@@ -333,34 +333,6 @@ NSArray *RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel) {
     }
   }
   return lit;
-}
-
-RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
-  id application,
-  RunnerLitPanel litPanel,
-  id _Nullable *window,
-  CGRect *windowFrame
-) {
-  id screen = nil;
-  return RunnerResolveLitPanelWindowScreen(application, litPanel, window, windowFrame, &screen);
-}
-
-BOOL RunnerResolveLitPanelScreen(
-  id application,
-  RunnerLitPanel litPanel,
-  id _Nullable *screen,
-  NSUInteger *displayID,
-  RunnerApplicationScreenFailure *failure
-) {
-  *displayID = 0;
-  id window = nil;
-  CGRect windowFrame = CGRectNull;
-  *failure = RunnerResolveLitPanelWindowScreen(application, litPanel, &window, &windowFrame, screen);
-  if (*failure != RunnerApplicationScreenFailureNone) {
-    return NO;
-  }
-  *displayID = litPanel.displayID;
-  return YES;
 }
 
 BOOL RunnerResolveApplicationScreen(

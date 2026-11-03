@@ -80,7 +80,7 @@ extension RunnerTests {
     let waitStartedAt = Date()
     NSLog("[DEBUG-1874] wait start expectedLen=%ld route=replacement", expectedText.count)
     let ingredients = try synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
-    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+    let outcome = try Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
       fieldIsUnreadable: ingredients.fieldIsUnreadable,
@@ -135,7 +135,7 @@ extension RunnerTests {
   ) throws -> (
     placeholder: String?,
     fieldIsUnreadable: Bool,
-    observe: () -> TextValueRead,
+    observe: () throws -> TextValueRead,
     waitForNextObservation: () -> Void
   ) {
     let field = try resolveTextEntryInput(app: app, target: target)?.attributes
@@ -146,7 +146,7 @@ extension RunnerTests {
       fieldIsUnreadable: textValueRead(for: field) == .unreadable,
       observe: {
         let observed = self.textValueRead(
-          for: (try? self.resolveTextEntryInput(app: app, target: target))??.attributes,
+          for: try self.resolveTextEntryInput(app: app, target: target)?.attributes,
           treatingPlaceholderAsEmpty: true
         )
         var observedText: String?

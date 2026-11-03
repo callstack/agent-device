@@ -1,9 +1,7 @@
 import XCTest
 
-// The lit panel of the command in flight (ADR 0025). It is main-owned, and `executeAccepted` writes
-// it onto the main queue ahead of the command's own main-thread work. Main work a previous command
-// abandoned therefore runs first and still reads that command's panel. A recording pump outlives
-// its command, so `recordStart` reads the panel once and carries it.
+// The lit panel of the command in flight (ADR 0025), main-owned and written behind main work a
+// previous command left queued, so that work still reads its own command's panel.
 struct LitPanelSurface {
   let app: XCUIApplication
   let displayID: UInt
@@ -42,16 +40,15 @@ extension RunnerTests {
   /// The lit panel the current request named, or nil for a single-panel request. Main only.
   var requestLitPanel: RunnerLitPanel? { litPanelState.panel }
 
-  /// Books `app`'s window on the lit panel for the rest of the request, or returns why it cannot. A
-  /// request that named no panel books nothing. Later surface reads of `app` answer with this
-  /// window, so none of them can fall back to the application's own coordinates. The booked frame
-  /// is the panel's box turned like the window, so a partial window maps into the whole screen.
+  /// Books `app`'s lit-panel window for the request, or returns why it cannot. The booked frame is
+  /// the panel's box turned like the window, so a partial window maps into the whole screen.
   func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
     guard let litPanel = requestLitPanel else { return nil }
     if let booked = litPanelState.surface, booked.app === app { return nil }
     var window: AnyObject?
     var frame = CGRect.null
-    let failure = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame)
+    var screen: AnyObject?
+    let failure = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame, &screen)
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
@@ -71,10 +68,8 @@ extension RunnerTests {
     return CGRect(origin: windowFrame.origin, size: turned ? CGSize(width: long, height: short) : CGSize(width: short, height: long))
   }
 
-  /// Where an element read searches: the application, or on a lit-panel request only the windows
-  /// proven on the lit display. A list that cannot be read throws `APP_SCREEN_UNRESOLVED`. The walk
-  /// runs inside an issue scope, so a window that vanishes mid-walk refuses instead of ending the
-  /// session (#2995).
+  /// The roots of every element read: the app, or the windows proven on the lit display. A walk that
+  /// cannot read the list, or that records an issue (#2995), throws `APP_SCREEN_UNRESOLVED`.
   func elementSearchRoots(app: XCUIApplication) throws -> [XCUIElement] {
     guard let litPanel = requestLitPanel else { return [app] }
     if let cached = litPanelState.windows, cached.app === app { return cached.elements }

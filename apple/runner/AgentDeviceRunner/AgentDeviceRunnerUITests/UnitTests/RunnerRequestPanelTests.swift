@@ -203,6 +203,7 @@ extension RunnerTests {
     XCTAssertThrowsError(try resolveTextEntryInput(app: app, target: target)) {
       XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
     }
+    XCTAssertThrowsError(try clearedFieldRead(app: app, target: target), "a clear pass read propagates it too")
     XCTAssertFalse(boundTextEntryInputIsGone(app: app, target: target))
   }
 

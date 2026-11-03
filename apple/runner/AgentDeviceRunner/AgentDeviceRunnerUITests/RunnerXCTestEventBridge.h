@@ -33,8 +33,7 @@ typedef NS_ENUM(NSUInteger, RunnerApplicationScreenFailure) {
   RunnerApplicationScreenFailureOffLitPanel,
 };
 
-// The panel the host reports as lit (ADR 0025): its display and its native box in points. The
-// system presents a panel turned, so a window on it may report the box with its sides swapped.
+// The lit panel (ADR 0025): its display and native box in points, sides swapped on a turned window.
 typedef struct {
   NSUInteger displayID;
   CGFloat widthPt;
@@ -48,12 +47,14 @@ typedef struct {
 // Resolves the window on `litPanel`: the first window on that display whose frame is the panel's
 // box either way up, else the largest window on that display. An unreadable list, an unplaced
 // window, or a list past the cap with no full-panel window in it, is `UnresolvedScreen`. Windows
-// that are all on another display are `OffLitPanel`; no window at all is `UnresolvedWindow`.
+// that are all on another display are `OffLitPanel`; no window at all is `UnresolvedWindow`. The
+// screen is the one the chosen window reports.
 FOUNDATION_EXPORT RunnerApplicationScreenFailure RunnerResolveLitPanelWindow(
   id application,
   RunnerLitPanel litPanel,
   id _Nullable *window,
-  CGRect *windowFrame
+  CGRect *windowFrame,
+  id _Nullable *screen
 );
 
 // Resolves the shared core against the live XCTest runtime. Returns nil on success, or a
@@ -80,16 +81,6 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
 // The application's windows that report `litPanel`'s display, in list order; a window that is gone
 // or names no display is left out. Nil when the window list itself cannot be read.
 FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel);
-
-// `RunnerResolveApplicationScreen` for a multi-panel device: the window comes from
-// `RunnerResolveLitPanelWindow` instead of the application's first window.
-FOUNDATION_EXPORT BOOL RunnerResolveLitPanelScreen(
-  id application,
-  RunnerLitPanel litPanel,
-  id _Nullable *screen,
-  NSUInteger *displayID,
-  RunnerApplicationScreenFailure *failure
-);
 
 // Reads the display ID off an already-resolved window, keeping a synthesized record's display and
 // the caller's booked reference frame on the same window. The frame is still read before the

@@ -359,7 +359,7 @@ extension RunnerTests {
       plan,
       text: request.text,
       post: { slice, step in
-        func enter(_ text: String, replacingExistingText: Bool) -> SynthesizedStepDispatch {
+        func enter(_ text: String, replacingExistingText: Bool) throws -> SynthesizedStepDispatch {
           switch request.synthesizer.enterText(
             app: request.app,
             text: text,
@@ -379,18 +379,18 @@ extension RunnerTests {
         }
         if step.replacesExistingText {
           var passes = 0
-          let outcome = Self.clearUntilEmpty(
+          let outcome = try Self.clearUntilEmpty(
             clearOnce: {
               passes += 1
-              return enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)
+              return try enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)
             },
-            read: { self.clearedFieldRead(app: request.app, target: request.target) }
+            read: { try self.clearedFieldRead(app: request.app, target: request.target) }
           )
           clearOutcome = outcome
           NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR passes=%d outcome=%@", passes, String(describing: outcome))
           guard outcome == .cleared || outcome == .unverified else { return .stop }
         }
-        return enter(slice, replacingExistingText: false)
+        return try enter(slice, replacingExistingText: false)
       },
       // A replacement never peels a warmup character, so no step asks for a read-back.
       waitAfterWarmupCharacter: { _ in }
@@ -523,9 +523,9 @@ extension RunnerTests {
     stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
     ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date = { Date() },
-    observe: () -> TextValueRead,
+    observe: () throws -> TextValueRead,
     waitForNextObservation: () -> Void
-  ) -> SynthesizedTextCommitOutcome {
+  ) rethrows -> SynthesizedTextCommitOutcome {
     // An unreadable field never exposes its value, so every read could only expire the wait. The
     // element route leaves such a field unverified rather than failed; so does this one. A masked
     // value appears only once the burst lands, so a read that turns unreadable mid-wait ends it
@@ -545,7 +545,7 @@ extension RunnerTests {
     // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
     while true {
       let observedText: String?
-      switch observe() {
+      switch try observe() {
       case .unreadable:
         return .unobservable
       case .text(let value):

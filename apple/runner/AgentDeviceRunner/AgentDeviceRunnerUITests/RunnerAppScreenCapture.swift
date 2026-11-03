@@ -140,10 +140,15 @@ extension RunnerTests {
     var screen: AnyObject?
     var displayID: UInt = 0
     var resolution: RunnerApplicationScreenFailure = .unresolvedScreen
-    let resolved = if let litPanel {
-      RunnerResolveLitPanelScreen(app, litPanel, &screen, &displayID, &resolution)
+    var resolved: Bool
+    if let litPanel {
+      var window: AnyObject?
+      var frame = CGRect.null
+      resolution = RunnerResolveLitPanelWindow(app, litPanel, &window, &frame, &screen)
+      resolved = resolution == .none
+      displayID = litPanel.displayID
     } else {
-      RunnerResolveApplicationScreen(app, &screen, &displayID, &resolution)
+      resolved = RunnerResolveApplicationScreen(app, &screen, &displayID, &resolution)
     }
     guard resolved,
       let captureScreen = screen as? XCUIScreen

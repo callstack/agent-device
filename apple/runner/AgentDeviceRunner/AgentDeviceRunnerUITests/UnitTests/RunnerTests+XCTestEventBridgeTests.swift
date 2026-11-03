@@ -263,12 +263,13 @@ extension RunnerTests {
   private func resolveLitPanelWindow(
     _ windows: [NSObject],
     panel: RunnerLitPanel = innerPanel
-  ) -> (failure: RunnerApplicationScreenFailure, window: AnyObject?, frame: CGRect) {
+  ) -> (failure: RunnerApplicationScreenFailure, window: AnyObject?, frame: CGRect, screen: AnyObject?) {
     var window: AnyObject?
     var frame = CGRect.null
+    var screen: AnyObject?
     let failure = RunnerResolveLitPanelWindow(
-      DisplayApplicationFixture(windows: WindowListFixture(windows)), panel, &window, &frame)
-    return (failure, window, frame)
+      DisplayApplicationFixture(windows: WindowListFixture(windows)), panel, &window, &frame, &screen)
+    return (failure, window, frame, screen)
   }
 
   func testLitPanelWindowSkipsTheFirstWindowOnTheDarkPanel() {
@@ -308,8 +309,9 @@ extension RunnerTests {
   func testLitPanelWindowRefusesAWindowListItCannotRead() {
     var window: AnyObject?
     var frame = CGRect.null
+    var screen: AnyObject?
     let failure = RunnerResolveLitPanelWindow(
-      DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel, &window, &frame)
+      DisplayApplicationFixture(windows: UnanswerableWindowsFixture()), Self.innerPanel, &window, &frame, &screen)
     XCTAssertEqual(failure, .unresolvedScreen)
     XCTAssertNil(window)
   }
@@ -377,18 +379,9 @@ extension RunnerTests {
 
   func testLitPanelScreenIsTheScreenTheChosenWindowReported() {
     let home = DisplayWindowFixture(frame: Self.innerHome, displayID: 3)
-    var screen: AnyObject?
-    var displayID: UInt = 0
-    var failure = RunnerApplicationScreenFailure.unresolvedScreen
-    XCTAssertTrue(
-      RunnerResolveLitPanelScreen(
-        DisplayApplicationFixture(windows: WindowListFixture([
-          DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1), home,
-        ])),
-        Self.innerPanel, &screen, &displayID, &failure)
-    )
-    XCTAssertEqual(displayID, 3)
-    XCTAssertTrue(screen === home.screen)
+    let walk = resolveLitPanelWindow([DisplayWindowFixture(frame: Self.outerStatusBar, displayID: 1), home])
+    XCTAssertEqual(walk.failure, .none)
+    XCTAssertTrue(walk.screen === home.screen)
   }
 }
 #endif

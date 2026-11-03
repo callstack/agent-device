@@ -296,16 +296,14 @@ extension RunnerTests {
     )
   }
 
-  /// The application's frame names one panel, so a lit-panel snapshot's root, raw or regular, is the
-  /// booked window's box (ADR 0025).
+  /// A lit-panel snapshot's root, raw or regular, is the booked box (ADR 0025).
   static func publishLitPanelRoot(_ root: inout RawAXNode, surface: LitPanelSurface?) {
     if let surface {
       root.rect = SnapshotRect(surface.frame)
     }
   }
 
-  /// A multi-panel device lists windows on both panels under one application, so a lit-panel
-  /// snapshot descends only into the windows proven on the lit display, and refuses when none is.
+  /// A lit-panel snapshot descends only into windows proven on the lit display; none refuses.
   static func litPanelRootChildren(
     _ root: XCUIElementSnapshot,
     surface: LitPanelSurface?
@@ -318,8 +316,7 @@ extension RunnerTests {
     return lit
   }
 
-  /// The windows a lit-panel snapshot keeps: only those whose reported display is the lit one. A
-  /// window that reports no display is dropped, because it may be on the dark panel.
+  /// A window that reports no display is dropped: it may be on the dark panel.
   static func windowsOnLitDisplay<Window>(
     _ windows: [Window],
     litDisplayID: UInt,

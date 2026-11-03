@@ -81,12 +81,19 @@ extension RunnerTests {
   }
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
-  /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
-  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
+  /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`;
+  /// a lit-panel refusal propagates.
+  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) throws -> TextValueRead {
+    var refusal: Error?
     let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
-      guard let input = try? resolveTextEntryInput(app: app, target: target) else { return .unavailable }
-      return textValueRead(for: input.attributes, treatingPlaceholderAsEmpty: true)
+      do {
+        return textValueRead(for: try resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
+      } catch {
+        refusal = error
+        return .unavailable
+      }
     }
+    if let refusal { throw refusal }
     guard case .success(let read) = probed else { return .unavailable }
     return read
   }

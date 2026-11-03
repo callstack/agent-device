@@ -390,7 +390,7 @@ extension RunnerTests {
   }
 
   /// Clears the reader's input. Every post goes through `reader.dispatch` and every read back through
-  /// `try reader.input()`, so a bound target's clear stops at an input that took its place. On iOS a
+  /// `reader.input()`, so a bound target's clear stops at an input that took its place. On iOS a
   /// readable value is selected whole and deleted, wherever the caret is. Otherwise, or when text is
   /// left, delete bursts run from the caret, and a value longer than one burst is read again after
   /// each burst until it reads empty, stops shortening, or has had at least one burst more than it
@@ -591,8 +591,7 @@ extension RunnerTests {
     }
   }
 
-  /// The query, under the element search's roots, for an input whose identifier is unique enough
-  /// to search by. Of several lit windows, the first one holding a match answers.
+  /// The query, under the element search's roots, for an input whose identifier is distinctive.
   private func boundTextEntryInputQuery(app: XCUIApplication, identity: TextEntryInputIdentity) throws -> XCUIElement? {
     guard identity.isDistinguishable else {
       return nil
