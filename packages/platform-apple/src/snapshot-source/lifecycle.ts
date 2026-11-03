@@ -50,7 +50,7 @@ type OwnedWork = Readonly<{
 /**
  * What the manager holds for one Simulator, and the one place that says who may stop a bridge.
  *
- * `creating` says a request is inside the host making the session, and so owns any helper and
+ * `creating` says source-owned work is inside the host making the session, and owns any helper and
  * connection it starts; `live` says a session is published and the manager owns it. A creation
  * publishes only when it succeeds, so one phase names one owner and a creation that a close refuses
  * still stops what it started. A creation clears its own entry, including after a close, because only

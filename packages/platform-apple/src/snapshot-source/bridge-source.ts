@@ -77,6 +77,7 @@ export function createSnapshotBridgeSource<Target extends SnapshotBridgeTarget>(
   const depthHints = new AcceptedDepthHints();
   const diagnostics = options.diagnostics;
   let closed = false;
+  let closing: Promise<void> | undefined;
 
   const acquire = async (
     request: SnapshotBridgeSourceRequest<Target>,
@@ -136,10 +137,11 @@ export function createSnapshotBridgeSource<Target extends SnapshotBridgeTarget>(
 
   return {
     acquire,
-    close: async () => {
-      if (closed) return;
+    close: () => {
+      if (closing) return closing;
       closed = true;
-      await transport.close();
+      closing = transport.close();
+      return closing;
     },
   };
 }

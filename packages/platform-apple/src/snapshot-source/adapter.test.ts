@@ -230,6 +230,51 @@ test('the Simulator AX source asks the guest for running surface hosts only when
   }
 });
 
+test('concurrent source close callers await the same detached preparation cleanup', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-close-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const file of SNAPSHOT_BRIDGE_SOURCE_FILENAMES)
+    await writeFile(path.join(sourceRoot, file), 'fixture source');
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const fixture = createAdapterHost();
+  const source = createSimulatorSnapshotSource({
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+    host: {
+      ...fixture.host,
+      run: async (command, args, options) => {
+        if (command === 'xcrun' && args.includes('clang')) {
+          entered.resolve();
+          await release.promise;
+        }
+        return await fixture.host.run(command, args, options);
+      },
+    },
+  });
+  const acquiring = source.acquire({
+    target: { ...targetForTest(), generation: 'generation-1' },
+    hint: deriveIosCaptureHint(createIosSnapshotRequest()),
+  });
+  await entered.promise;
+  const first = source.close();
+  let secondFinished = false;
+  const second = source.close().then(() => {
+    secondFinished = true;
+  });
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(secondFinished, false, 'close resolved before the owned build settled');
+  } finally {
+    release.resolve();
+    await Promise.all([first, second, acquiring]);
+    await rm(root, { recursive: true, force: true });
+  }
+  assert.equal(secondFinished, true);
+  assert.equal(fixture.startedTargets.length, 0);
+});
+
 test('a capture reports a cold preparation instead of spending its deadline on it', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-preparing-');
   const sourceRoot = path.join(root, 'source');
