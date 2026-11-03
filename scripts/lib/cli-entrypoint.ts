@@ -36,7 +36,28 @@ export function runEntrypoint(prefix: string, main: () => Promise<number>): void
   const retainOutputFailure = (error: unknown): void => {
     if (!isClosedPipe(error) && !Number(process.exitCode)) process.exitCode = 1;
   };
-  for (const stream of [process.stdout, process.stderr]) stream.on('error', retainOutputFailure);
+  let stdoutDiagnosticAttempted = false;
+  const reportStdoutFailure = (error: unknown): void => {
+    if (
+      stdoutDiagnosticAttempted ||
+      process.stderr.destroyed ||
+      !process.stderr.writable ||
+      process.stderr.errored != null
+    )
+      return;
+    stdoutDiagnosticAttempted = true;
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      process.stderr.write(`${prefix}: unable to flush stdout: ${message}\n`);
+    } catch (error) {
+      retainOutputFailure(error);
+    }
+  };
+  process.stderr.on('error', retainOutputFailure);
+  process.stdout.on('error', (error: unknown) => {
+    retainOutputFailure(error);
+    if (!isClosedPipe(error)) reportStdoutFailure(error);
+  });
   const exitAfterOutput = async (code: number): Promise<never> => {
     const deadline = Date.now() + OUTPUT_DRAIN_TIMEOUT_MS;
     const [stdoutError, initialStderrError] = await Promise.all([
@@ -45,13 +66,8 @@ export function runEntrypoint(prefix: string, main: () => Promise<number>): void
     ]);
     let stderrError = initialStderrError;
     if (stdoutError != null && stderrError == null) {
-      const message = stdoutError instanceof Error ? stdoutError.message : String(stdoutError);
-      try {
-        process.stderr.write(`${prefix}: unable to flush stdout: ${message}\n`);
-        stderrError = await drainOutput(process.stderr, Date.now() + OUTPUT_DRAIN_TIMEOUT_MS);
-      } catch (error) {
-        stderrError = error;
-      }
+      reportStdoutFailure(stdoutError);
+      stderrError = await drainOutput(process.stderr, Date.now() + OUTPUT_DRAIN_TIMEOUT_MS);
     }
     process.exit(code || (stdoutError != null || stderrError != null ? 1 : 0));
   };

@@ -92,17 +92,21 @@ test.each(
 );
 
 test.each(
-  ['EIO', 'EPIPE'].flatMap((errorCode) => [0, 7].map((exitCode) => ({ errorCode, exitCode }))),
+  ['EIO', 'EPIPE'].flatMap((errorCode) =>
+    [0, 7].flatMap((exitCode) =>
+      [false, true].map((settles) => ({ errorCode, exitCode, settles })),
+    ),
+  ),
 )(
-  'early output error sets natural exit status while main stays pending ($errorCode, code=$exitCode)',
-  async ({ errorCode, exitCode }) => {
+  'early output error reports once and preserves status ($errorCode, code=$exitCode, settles=$settles)',
+  async ({ errorCode, exitCode, settles }) => {
     const source = [
       `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
       "import { Writable } from 'node:stream';",
       `const output = new Writable({ write(_chunk, _encoding, done) { done(Object.assign(new Error('fixture write failure'), { code: ${JSON.stringify(errorCode)} })); } });`,
       "Object.defineProperty(process, 'stdout', { value: output });",
       `process.exitCode = ${exitCode};`,
-      "runEntrypoint('fixture', () => { process.stdout.write('trigger'); return new Promise(() => {}); });",
+      `runEntrypoint('fixture', () => { process.stdout.write('trigger'); return ${settles ? `new Promise(resolve => setImmediate(() => resolve(${exitCode})))` : 'new Promise(() => {})'}; });`,
     ].join('\n');
     const child = spawn(
       process.execPath,
@@ -114,7 +118,40 @@ test.each(
     const [code, signal] = await once(child, 'close');
     assert.equal(signal, null);
     assert.equal(code, exitCode || (errorCode === 'EPIPE' ? 0 : 1));
-    assert.equal(stderr, '');
+    assert.equal(
+      stderr,
+      errorCode === 'EPIPE' ? '' : 'fixture: unable to flush stdout: fixture write failure\n',
+    );
+  },
+);
+
+test.each([0, 7])(
+  'an early diagnostic queued after the initial drain is flushed (code=%s)',
+  async (exitCode) => {
+    const source = [
+      `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+      "import { Writable } from 'node:stream';",
+      'const stderr = process.stderr;',
+      "const output = new Writable({ write(_chunk, _encoding, done) { done(Object.assign(new Error('fixture write failure'), { code: 'EIO' })); } });",
+      'const delayed = new Writable({ write(chunk, encoding, done) {',
+      '  if (chunk.length > 0) setTimeout(() => stderr.write(chunk, encoding, done), 50);',
+      '  else stderr.write(chunk, encoding, done);',
+      '} });',
+      "Object.defineProperty(process, 'stdout', { value: output });",
+      "Object.defineProperty(process, 'stderr', { value: delayed });",
+      `runEntrypoint('fixture', async () => ${exitCode});`,
+    ].join('\n');
+    const child = spawn(
+      process.execPath,
+      ['--experimental-strip-types', '--input-type=module', '--eval', source],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+    const [code, signal] = await once(child, 'close');
+    assert.equal(signal, null);
+    assert.equal(code, exitCode || 1);
+    assert.equal(stderr, 'fixture: unable to flush stdout: fixture write failure\n');
   },
 );
 
