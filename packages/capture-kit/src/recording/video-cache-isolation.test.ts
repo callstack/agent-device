@@ -146,9 +146,22 @@ test('cleanup cancels a compiler that starts after an early failure', async () =
 
 test('cleanup reports a close that never settles and removes its cache', async () => {
   const remove = vi.spyOn(fs, 'rmSync');
-  await expect(runIsolationScenario(true, true)).rejects.toThrow(
-    'second owner cleanup did not settle',
+  const outcome = runIsolationScenario(true, true).then(
+    () => ({ status: 'resolved' as const }),
+    (error: unknown) => ({ status: 'rejected' as const, reason: error }),
   );
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    outcome,
+    new Promise<{ status: 'timed out' }>((resolve) => {
+      timeout = setTimeout(() => resolve({ status: 'timed out' }), 3_000);
+    }),
+  ]);
+  clearTimeout(timeout);
+  expect(result).toMatchObject({
+    status: 'rejected',
+    reason: expect.objectContaining({ message: 'second owner cleanup did not settle' }),
+  });
   const cache = remove.mock.calls
     .map(([file]) => String(file))
     .find((file) => path.basename(file).startsWith('video-cache-isolation-'));
