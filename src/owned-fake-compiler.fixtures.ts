@@ -70,7 +70,7 @@ function readPids(pidDir: string): number[] {
   try {
     return fs
       .readdirSync(pidDir)
-      .map((entry) => Number(entry))
+      .map(Number)
       .filter((pid) => Number.isSafeInteger(pid) && pid > 0);
   } catch {
     return [];

@@ -223,7 +223,7 @@ test('closing the owner cancels the compile it started and awaits its settlement
 test('closing marks the owner closed synchronously and later preparation starts nothing', async () => {
   const compile = pendingCompile();
   const preparation = createVideoValidatorPreparation(createTestHost());
-  const preparing = preparation.prepare();
+  void preparation.prepare();
   await compile.enter;
 
   const closing = preparation.close();
@@ -504,4 +504,25 @@ test('waiting for a playable video stops polling once its deadline passes', asyn
     deadline: Deadline.fromTimeoutMs(0),
   });
   expect(Date.now() - started).toBeLessThan(1_000);
+});
+
+test('close reports a typed Swift cache cleanup failure', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'cleanup failed', {
+    reason: 'swift_cache_cleanup_failed',
+  });
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  await expect(preparation.prepare()).rejects.toBe(failure);
+  await expect(preparation.close()).rejects.toBe(failure);
+});
+
+test('a retry does not erase an earlier cleanup failure from close', async () => {
+  const failure = new AppError('COMMAND_FAILED', 'cleanup failed', {
+    reason: 'swift_cache_cleanup_failed',
+  });
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(failure);
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  await expect(preparation.prepare()).rejects.toBe(failure);
+  await expect(preparation.prepare()).resolves.toMatchObject({ kind: 'avfoundation' });
+  await expect(preparation.close()).rejects.toBe(failure);
 });

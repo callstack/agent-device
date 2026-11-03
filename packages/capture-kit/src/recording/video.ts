@@ -80,6 +80,7 @@ type VideoValidatorCompile = {
 export function createVideoValidatorPreparation(host: HostEnvironment): VideoValidatorPreparation {
   let compile: VideoValidatorCompile | undefined;
   let closed = false;
+  let cleanupFailure: AppError | undefined;
   return Object.freeze({
     prepare: () => {
       if (closed) return Promise.reject(videoValidatorPreparationClosed());
@@ -92,8 +93,11 @@ export function createVideoValidatorPreparation(host: HostEnvironment): VideoVal
           promise: compileVideoValidator(host, cancel.signal),
         };
         compile = next;
-        void next.promise.catch(() => {
+        void next.promise.catch((error: unknown) => {
           next.failed = true;
+          if (error instanceof AppError && error.details?.reason === 'swift_cache_cleanup_failed') {
+            cleanupFailure = error;
+          }
         });
       }
       return compile.promise;
@@ -121,6 +125,7 @@ export function createVideoValidatorPreparation(host: HostEnvironment): VideoVal
       // temporary output and gives the cache lock back before this settles.
       pending.cancel.abort();
       await pending.promise.catch(() => undefined);
+      if (cleanupFailure) throw cleanupFailure;
     },
   });
 }
