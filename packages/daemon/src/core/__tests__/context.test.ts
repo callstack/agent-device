@@ -8,9 +8,9 @@ test('contextFromFlags propagates back mode into the dispatch context', () => {
   assert.equal(context.backMode, 'system');
 });
 
-test('contextFromFlags forwards the Maestro runner screenshot backend', () => {
+test('contextFromFlags forwards the runner screenshot capture backend', () => {
   const context = contextFromFlags('/tmp/agent-device.log', {
-    maestro: { screenshotCaptureBackend: 'runner' },
+    screenshotCaptureBackend: 'runner',
   });
   assert.equal(context.screenshotCaptureBackend, 'runner');
 });

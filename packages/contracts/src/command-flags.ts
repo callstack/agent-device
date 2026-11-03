@@ -22,7 +22,6 @@ export type MaestroRuntimeFlags = {
   allowNonHittableCoordinateFallback?: boolean;
   expectedTapPoint?: Point;
   prewarmRunnerBeforeOpen?: boolean;
-  screenshotCaptureBackend?: 'runner';
 };
 
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {

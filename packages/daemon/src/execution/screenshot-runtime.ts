@@ -2,12 +2,13 @@ import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
+  SCREENSHOT_CAPTURE_BACKENDS,
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
-import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
+import { isApplePlatform, isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { promises as fs } from 'node:fs';
@@ -64,6 +65,7 @@ export async function resolveScreenshotGenericExecution(
   const retiredMaxSize = retiredScreenshotMaxSizeFlagError('screenshot', req.flags);
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotCaptureBackend(session.device, req.flags);
 
   const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
@@ -317,6 +319,33 @@ async function annotateScreenshotWithSessionRefs(
   });
 }
 
+/** The runner capture exists on Apple targets only, and it encodes the device's own density. */
+function assertSupportedScreenshotCaptureBackend(
+  device: SessionState['device'],
+  flags: DaemonRequest['flags'],
+): void {
+  const backend: unknown = flags?.screenshotCaptureBackend;
+  if (backend === undefined) return;
+  if (!(SCREENSHOT_CAPTURE_BACKENDS as readonly unknown[]).includes(backend)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `--capture-backend takes ${SCREENSHOT_CAPTURE_BACKENDS.join(', ')}`,
+    );
+  }
+  if (!isApplePlatform(device.platform)) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--capture-backend runner is supported only on Apple targets',
+    );
+  }
+  if (flags?.screenshotPixelDensity !== undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--pixel-density cannot be combined with --capture-backend runner: the runner captures at the device density',
+    );
+  }
+}
+
 /**
  * `screenshot [path]` and `--out <path>` are the same destination expressed two ways, and both are
  * user-typed paths resolved against the client's cwd. The normalized form is also what the session
@@ -372,7 +401,7 @@ function createBoundScreenshotBackend(
           skipIosSimulatorBootCheck:
             dispatchContext.skipIosSimulatorBootCheck ??
             (isIosFamily(session.device) && session.device.kind === 'simulator'),
-          captureBackend: dispatchContext.screenshotCaptureBackend,
+          captureBackend: resolved.captureBackend,
         },
         execution: screenshotExecutionFromContext(dispatchContext),
       });

@@ -380,7 +380,12 @@ function summarizeProviderScenarioFlagExclusions() {
     {
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
-      keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity', 'screenshotScreenMask'],
+      keys: [
+        'screenshotNormalizeStatusBar',
+        'screenshotPixelDensity',
+        'screenshotScreenMask',
+        'screenshotCaptureBackend',
+      ],
     },
     {
       // Reading accessibility custom actions has no provider-scenario surface:

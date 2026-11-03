@@ -192,7 +192,7 @@ describe('Maestro public operation projection', () => {
         positionals: ['/tmp/animation-runner.png'],
         flags: {
           screenshotNoStabilize: true,
-          maestro: { screenshotCaptureBackend: 'runner' },
+          screenshotCaptureBackend: 'runner',
         },
       },
     },

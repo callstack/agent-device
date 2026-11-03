@@ -251,6 +251,40 @@ test('rejects --pixel-density outside iOS-family simulators before inspecting ow
   expect(fixture.binds).toHaveLength(0);
 });
 
+test('refuses --capture-backend runner outside Apple targets, with --pixel-density, and any other backend, before inspecting owner facts', async () => {
+  const refused = async (
+    device: SessionState['device'],
+    // The wire flags are untyped, so a request can name a backend the type does not list.
+    flags: Record<string, unknown>,
+    code: string,
+  ): Promise<void> => {
+    const fixture = screenshotRuntimeFixture();
+    await expect(
+      resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: screenshotRequest({
+          positionals: ['/tmp/runner.png'],
+          flags: flags as DaemonRequest['flags'],
+        }),
+        session: makeSession('default', { device }),
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(fixture.binds).toHaveLength(0);
+  };
+
+  await refused(ANDROID_EMULATOR, { screenshotCaptureBackend: 'runner' }, 'UNSUPPORTED_OPERATION');
+  await refused(
+    IOS_SIMULATOR,
+    { screenshotCaptureBackend: 'runner', screenshotPixelDensity: 3 },
+    'INVALID_ARGS',
+  );
+  await refused(IOS_SIMULATOR, { screenshotCaptureBackend: 'simctl' }, 'INVALID_ARGS');
+});
+
 const CROP_TREE_ROOT = {
   index: 0,
   depth: 0,

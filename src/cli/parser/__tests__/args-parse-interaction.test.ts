@@ -265,6 +265,8 @@ test('parseArgs recognizes screenshot flags', () => {
       '0.3',
       '--no-stabilize',
       '--normalize-status-bar',
+      '--capture-backend',
+      'runner',
     ],
     {
       strictFlags: true,
@@ -275,6 +277,7 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.flags.screenshotPixelDensity, 2);
   assert.equal(parsed.flags.screenshotScreenMask, 'black');
   assert.equal(parsed.flags.screenshotFullscreen, true);
+  assert.equal(parsed.flags.screenshotCaptureBackend, 'runner');
   assert.equal(parsed.flags.screenshotScale, 0.3);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
   assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
