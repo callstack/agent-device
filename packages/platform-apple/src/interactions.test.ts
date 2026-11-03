@@ -299,6 +299,7 @@ test('iosRunnerOverrides owns alternate-button presses', async () => {
 test('iosRunnerOverrides remaps a later chunk failure to global press indices', async () => {
   mockRunAppleRunnerCommand
     .mockResolvedValueOnce({
+      sequenceOrientation: 1,
       completedSteps: 20,
       sequenceResults: Array.from({ length: 20 }, () => ({ ok: true, kind: 'tap' })),
     })

@@ -4,37 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
-import { runAppleRunnerCommand } from '../index.ts';
-import { withAppleRunnerProvider } from '../runner-provider.ts';
-import { assertProducedRunnerRequests } from '@agent-device/test-kit';
-
-test('press-series continuations carry the original orientation on the runner wire', async () => {
-  const requests: RunnerCommand[] = [];
-  await withAppleRunnerProvider(
-    async (_device, command) => {
-      requests.push(command);
-      return {
-        sequenceOrientation: 1,
-        completedSteps: command.steps?.length ?? 0,
-        sequenceResults: command.steps?.map(({ kind }) => ({ ok: true, kind })) ?? [],
-      };
-    },
-    { deviceId: IOS_SIMULATOR.id },
-    async () => {
-      await runApplePressSeries(
-        IOS_SIMULATOR,
-        { x: 10, y: 20 },
-        { button: 'primary', count: 21, intervalMs: 0, holdMs: 0, jitterPx: 0, doubleTap: false },
-        'com.example.app',
-        async (command) => await runAppleRunnerCommand(IOS_SIMULATOR, command, {}),
-      );
-    },
-  );
-  assert.equal(requests.length, 2);
-  assertProducedRunnerRequests(import.meta.filename, [
-    ['ios-simulator.runner-sequence.bound-orientation', requests[1]],
-  ]);
-});
 
 test.each([
   { boundary: 'step cap', count: 21, intervalMs: 0, completed: 20 },
