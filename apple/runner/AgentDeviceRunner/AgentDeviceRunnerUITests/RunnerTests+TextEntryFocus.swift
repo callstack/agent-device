@@ -104,7 +104,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) throws -> TextEntryTarget {
+  func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?, reusingFocusedInput: Bool = false) throws -> TextEntryTarget {
     let contentTranslation = liveContentTranslation(app: app)
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)
@@ -135,8 +135,23 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true, contentTranslation: contentTranslation)
     }
 
-    let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let input = try textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y), contentTranslation: contentTranslation).first
+#if os(iOS)
+    if reusingFocusedInput, let input, let identity = input.identity, identity.isDistinguishable,
+       let snapshot = input.snapshot, snapshotHasKeyboardFocus(snapshot) {
+      NSLog("%@current-input-reports-keyboard-focus polls=0", TextEntryFocusEvidence.logMarker)
+      return TextEntryTarget(
+        element: input.element,
+        refreshPoint: textEntryRefreshPoint(frame: input.frameOnScreen, fallbackTo: CGPoint(x: x, y: y)),
+        prefersFocusedElement: false,
+        contentTranslation: contentTranslation,
+        reusesCurrentFocus: true,
+        boundIdentity: identity,
+        postFocusRead: input
+      )
+    }
+#endif
+    let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let target = input?.element
     let requestedPoint = CGPoint(x: x, y: y)
     // `tapAt` takes a screen point: with no screen box, tap the caller's own point (#3899, #3060).
