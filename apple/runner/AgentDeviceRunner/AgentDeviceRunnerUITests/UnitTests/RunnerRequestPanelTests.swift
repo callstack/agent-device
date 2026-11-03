@@ -168,6 +168,22 @@ extension RunnerTests {
     }
   }
 
+  /// A target bound to the regression fixture's field by identifier, refreshed at its center.
+  @MainActor
+  private func boundFixtureTarget() throws -> TextEntryTarget {
+    let identifier = "agent-device-hardware-keyboard-input"
+    let field = app.textFields[identifier]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let frame = field.frame
+    return TextEntryTarget(
+      element: nil,
+      refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+      prefersFocusedElement: false,
+      contentTranslation: .none,
+      boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: identifier)
+    )
+  }
+
   /// A bound input re-read on a lit-panel request whose walk fails propagates the refusal, and the
   /// input cannot be proven gone.
   @MainActor
@@ -178,17 +194,7 @@ extension RunnerTests {
       app.launchArguments = []
       tearDownLitPanelApp()
     }
-    let identifier = "agent-device-hardware-keyboard-input"
-    let field = app.textFields[identifier]
-    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let frame = field.frame
-    let target = TextEntryTarget(
-      element: nil,
-      refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
-      prefersFocusedElement: false,
-      contentTranslation: .none,
-      boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: identifier)
-    )
+    let target = try boundFixtureTarget()
     let command = try runnerCommandFixture(#"{"command":"type",\#(panel)}"#)
     setRequestLitPanel(from: command)
     XCTAssertNotNil(try resolveTextEntryInput(app: app, target: target), "the walk answers")
@@ -212,23 +218,15 @@ extension RunnerTests {
       app.launchArguments = []
       tearDownLitPanelApp()
     }
-    let identifier = "agent-device-hardware-keyboard-input"
-    let field = app.textFields[identifier]
-    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
-    let frame = field.frame
-    let target = TextEntryTarget(
-      element: nil,
-      refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
-      prefersFocusedElement: false,
-      contentTranslation: .none,
-      boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: identifier)
-    )
+    let target = try boundFixtureTarget()
     setRequestLitPanel(from: try runnerCommandFixture(#"{"command":"type"}"#))
     XCTAssertNotNil(try resolveTextEntryInput(app: app, target: target), "the app-wide query finds it")
     setRequestLitPanel(from: try runnerCommandFixture(
       #"{"command":"type","litPanel":{"displayId":999,"widthPt":669,"heightPt":951}}"#
     ))
-    guard case .absent = try probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY), contentTranslation: .none) else {
+    guard let point = target.refreshPoint,
+      case .absent = try probeTextInputs(app: app, point: point, contentTranslation: .none)
+    else {
       return XCTFail("the walk answers with no input at the point")
     }
     XCTAssertNil(try resolveTextEntryInput(app: app, target: target))
