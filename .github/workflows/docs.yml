@@ -52,11 +52,11 @@ concurrency:
 jobs:
   check:
     name: Prose, internal links, and heading anchors
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm
@@ -82,11 +82,11 @@ jobs:
   # command's docs, fails here instead.
   command-docs:
     name: Command reference doc coverage
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: useblacksmith/checkout@2b9fe87d796feea153b455ec2f3125b471a7b0e7 # v1.8.2
 
       - name: Setup Node and pnpm
         uses: ./.github/actions/setup-node-pnpm

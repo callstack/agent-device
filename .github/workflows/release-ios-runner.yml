@@ -25,7 +25,7 @@ permissions:
 jobs:
   publish-ios-simulator-runner:
     name: Publish iOS Simulator Runner
-    runs-on: macos-26
+    runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 90
     env:
       AGENT_DEVICE_XCUITEST_PLATFORM: ios
