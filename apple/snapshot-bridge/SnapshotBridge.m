@@ -93,6 +93,11 @@ static int serve(NSString *socketPath, int idleTimeoutSeconds, BOOL exitOnDiscon
     return 1;
   }
 
+  NSString *setupError = nil;
+  if (!sharedRuntime(&setupError)) {
+    bridgeLog([NSString stringWithFormat:@"runtime initialization failed: %@", setupError]);
+    return 1;
+  }
   int listener = socket(AF_UNIX, SOCK_STREAM, 0);
   if (listener < 0) {
     bridgeLog([NSString stringWithFormat:@"socket failed: %s", strerror(errno)]);

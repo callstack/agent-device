@@ -51,9 +51,10 @@ export type SnapshotBridgePreparation = Readonly<{
     runtime: string,
     deadline: SnapshotSourceDeadline,
     code: string,
+    readinessDeadline?: SnapshotSourceDeadline,
   ): Promise<SnapshotSourceBridgeBinary>;
   /** Stops a build that is still running. Called when the snapshot source closes. */
-  close(): void;
+  close(): Promise<void>;
 }>;
 
 export function createSnapshotBridgePreparation(
@@ -67,6 +68,7 @@ export function createSnapshotBridgePreparation(
   }>,
 ): SnapshotBridgePreparation {
   const now = deps.now ?? Date.now;
+  const running = new Set<Promise<SnapshotSourceBridgeBinary>>();
   // The binary a finished preparation produced. Content-addressed and verified at rest, so it is
   // good for the life of this source; re-deriving it per capture would re-hash the bridge source
   // every time. This is the cache the attempt table deliberately does not keep.
@@ -104,6 +106,7 @@ export function createSnapshotBridgePreparation(
           }),
         { producer: deps.producer },
       );
+      if (signal.aborted) throw snapshotSourceError('unsupported', 'source-closed');
       binaries.set(runtime, binary);
       return binary;
     } catch (error) {
@@ -112,20 +115,26 @@ export function createSnapshotBridgePreparation(
   };
 
   return {
-    readyBinary: async (runtime, deadline, code) => {
+    readyBinary: async (runtime, deadline, code, readinessDeadline = deadline) => {
       const binary = binaries.get(runtime);
       if (binary) return binary;
       return await attempts.value(runtime, {
-        start: (signal) => build(runtime, signal),
+        start: (signal) => {
+          const work = build(runtime, signal);
+          running.add(work);
+          void work.finally(() => running.delete(work)).catch(() => {});
+          return work;
+        },
         // Waiting inside the request's own deadline keeps a genuine client abort typed
         // `cancelled`: only a preparation that is simply still running is reported as `preparing`.
-        wait: (waitMs, stop) => waitForSnapshotSourceDelay(deadline, waitMs, code, stop),
+        wait: (waitMs, stop) => waitForSnapshotSourceDelay(readinessDeadline, waitMs, code, stop),
         pending: () => snapshotSourceError('preparing', 'bridge-preparation-pending'),
       });
     },
-    close: () => {
+    close: async () => {
       binaries.clear();
       attempts.close();
+      await Promise.allSettled([...running]);
     },
   };
 }

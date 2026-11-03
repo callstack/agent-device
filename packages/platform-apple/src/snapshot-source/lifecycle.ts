@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { asSnapshotSourceError, snapshotSourceError, SnapshotSourceError } from './errors.ts';
 import {
+  createSnapshotSourceDeadline,
   remainingSnapshotSourceMs,
   waitForSnapshotSourceDelay,
   type SnapshotSourceDeadline,
 } from './deadline.ts';
+import { createDetachedAttempts } from '../detached-attempt.ts';
 import { snapshotSourceSocketPath } from './host.ts';
 import { bridgeProcessExited } from './process.ts';
 import { createSnapshotBridgeDescribeRequest, encodeSnapshotBridgeFrame } from './protocol.ts';
@@ -55,7 +57,7 @@ type OwnedWork = Readonly<{
  * it knows how far it got.
  */
 type BridgeEntry =
-  | Readonly<{ phase: 'creating' }>
+  | { phase: 'creating'; work: OwnedWork; session?: BridgeSession; failure?: SnapshotSourceError }
   | Readonly<{
       phase: 'live';
       session: BridgeSession;
@@ -69,6 +71,7 @@ type SnapshotBridgeRequest = Readonly<{
   nativeLevelsHint?: number;
   surfaceHostExecutables?: readonly string[];
   deadline: SnapshotSourceDeadline;
+  readinessDeadline?: SnapshotSourceDeadline;
 }>;
 
 export class SnapshotBridgeManager {
@@ -82,6 +85,12 @@ export class SnapshotBridgeManager {
   private readonly activeWork = new Set<OwnedWork>();
   private readonly ownerId = randomUUID();
   private closed = false;
+  private closing?: Promise<void>;
+  private readonly readiness = createDetachedAttempts<BridgeSession>({
+    waitMs: 2000,
+    waitGrant: 'first-caller',
+    retryAfterMs: 60000,
+  });
   private readonly host: SnapshotSourceHost;
 
   constructor(host: SnapshotSourceHost) {
@@ -175,8 +184,9 @@ export class SnapshotBridgeManager {
    * the rest, and close waits for that capture to settle before it returns.
    */
   async close(): Promise<void> {
-    if (this.closed) return;
+    if (this.closing) return this.closing;
     this.closed = true;
+    this.readiness.close();
     const adopted = [...this.activeWork];
     this.requestQueues.clear();
     for (const work of adopted) work.interrupt.abort();
@@ -186,12 +196,13 @@ export class SnapshotBridgeManager {
       this.entries.delete(udid);
       sessions.push(entry.session);
     }
-    await Promise.all([
+    this.closing = Promise.all([
       ...sessions.map((session) => this.dispose(session, true)),
       ...adopted.map(async (work) => {
         await work.settled;
       }),
-    ]);
+    ]).then(() => {});
+    return this.closing;
   }
 
   private async ensureSession(
@@ -211,24 +222,84 @@ export class SnapshotBridgeManager {
       await this.removeSession(existing, true);
     }
 
+    if (refusedByClose(this.closed, turn)) throw closedSourceRefusal();
+    const waitDeadline =
+      input.readinessDeadline ??
+      createSnapshotSourceDeadline(
+        Math.min(2000, remainingSnapshotSourceMs(deadline, 'bridge-readiness-deadline')),
+        deadline.signal,
+      );
+    return await this.readiness.value(`${udid}:${input.bridge.path}`, {
+      start: (signal) => this.createSession(udid, input, signal),
+      wait: async (ms, stop) => {
+        const creation = this.entries.get(udid);
+        const left = Math.max(0, waitDeadline.clock.remainingMs(waitDeadline.now()));
+        await waitForSnapshotSourceDelay(
+          deadline,
+          Math.min(ms, left),
+          'bridge-readiness-deadline',
+          AbortSignal.any([stop, turn.interrupt.signal]),
+        );
+        if (refusedByClose(this.closed, turn)) {
+          if (creation?.phase === 'creating') {
+            await creation.work.settled;
+            if (creation.failure?.failureKind === 'process-crash') throw creation.failure;
+          }
+          throw closedSourceRefusal();
+        }
+      },
+      pending: () => {
+        const creation = this.entries.get(udid);
+        if (
+          deadline.clock.remainingMs(deadline.now()) <= 0 &&
+          creation?.phase === 'creating' &&
+          creation.session &&
+          !creation.session.process.isAlive()
+        ) {
+          return snapshotSourceError('timeout', 'bridge-exit-deadline');
+        }
+        return snapshotSourceError('preparing', 'bridge-readiness-pending');
+      },
+    });
+  }
+
+  private async createSession(
+    udid: string,
+    input: SnapshotBridgeRequest,
+    signal: AbortSignal,
+  ): Promise<BridgeSession> {
     const socketPath = snapshotSourceSocketPath(this.host, udid, this.ownerId);
     let resolveSettled!: () => void;
     const settled = new Promise<void>((resolve) => {
       resolveSettled = resolve;
     });
     const creation: OwnedWork = { interrupt: new AbortController(), settled };
-    const entry: BridgeEntry = { phase: 'creating' };
+    const expiry = new AbortController();
+    const timer = setTimeout(() => expiry.abort(), 10000);
+    const deadline = createSnapshotSourceDeadline(
+      10000,
+      AbortSignal.any([signal, expiry.signal, creation.interrupt.signal]),
+    );
+    const assertOpen = () => {
+      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+      remainingSnapshotSourceMs(deadline, 'bridge-startup-deadline');
+    };
+    const entry: Extract<BridgeEntry, { phase: 'creating' }> = {
+      phase: 'creating',
+      work: creation,
+    };
     // Registered before the first await, in the same synchronous step as the refusal check below: from
     // here the creation is the only owner of this Simulator's bridge, and of whatever it starts.
     this.entries.set(udid, entry);
     this.activeWork.add(creation);
     try {
-      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+      assertOpen();
       await this.host.ensureDirectory(path.dirname(socketPath));
+      assertOpen();
       await this.host.remove(socketPath);
       // The host held this call, so a close that landed inside it is the manager's own refusal rather
       // than a host failure: the creation started nothing, so it has nothing to stop.
-      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+      assertOpen();
       const session: BridgeSession = {
         udid,
         bridgePath: input.bridge.path,
@@ -237,16 +308,30 @@ export class SnapshotBridgeManager {
           signal: deadline.signal,
         }),
       };
+      entry.session = session;
       try {
         session.socket = await this.connectUntilReady(session, deadline, creation.interrupt.signal);
-        if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+        assertOpen();
         this.entries.set(udid, { phase: 'live', session });
         return session;
       } catch (error) {
+        const failure = expiry.signal.aborted
+          ? snapshotSourceError('timeout', 'bridge-startup-deadline')
+          : asSnapshotSourceError(error);
         await this.removeSession(session, true);
-        throw asSnapshotSourceError(error);
+        if (failure.failureKind !== 'process-crash' && refusedByClose(this.closed, creation)) {
+          throw closedSourceRefusal();
+        }
+        throw failure;
       }
+    } catch (error) {
+      entry.failure = asSnapshotSourceError(error);
+      if (entry.failure.failureKind === 'process-crash') throw entry.failure;
+      if (refusedByClose(this.closed, creation)) throw closedSourceRefusal();
+      if (expiry.signal.aborted) throw snapshotSourceError('timeout', 'bridge-startup-deadline');
+      throw entry.failure;
     } finally {
+      clearTimeout(timer);
       resolveSettled();
       this.activeWork.delete(creation);
       if (this.entries.get(udid) === entry) this.entries.delete(udid);
@@ -276,9 +361,10 @@ export class SnapshotBridgeManager {
       }
       // A connect stops early only because a close owns this work, and a close ends a session it
       // published. A refused caller would never hand this connection to anyone, so it ends here.
-      if (stop.aborted) {
+      if (stop.aborted || deadline.signal?.aborted) {
         socket.destroy();
-        throw closedSourceRefusal();
+        if (stop.aborted) throw closedSourceRefusal();
+        throw snapshotSourceError('cancelled', 'abort-signal');
       }
       return socket;
     }

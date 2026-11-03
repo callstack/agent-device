@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
@@ -212,7 +212,8 @@ test('request cancellation after dispatch reaps the exact helper before recovery
     maxDepth: 10,
     deadline: deadline(controller.signal),
   });
-  setTimeout(() => controller.abort(), 10);
+  await waitForDispatch(fixture);
+  controller.abort();
 
   await assert.rejects(
     request,
@@ -996,3 +997,246 @@ class FakeSocket extends EventEmitter implements SnapshotSourceSocket {
     queueMicrotask(() => this.emit('close'));
   }
 }
+
+test('slow helper readiness detaches from a capture and later uses the same process', async () => {
+  vi.useFakeTimers();
+  const fixture = createLifecycleFixture({ connectDelayMs: 3000 });
+  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+  const manager = new SnapshotBridgeManager(fixture.host);
+  try {
+    const first = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(undefined, 5000),
+    });
+    const rejected = assert.rejects(
+      first,
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    const concurrent = assert.rejects(
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      }),
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    await vi.advanceTimersByTimeAsync(2001);
+    await Promise.all([rejected, concurrent]);
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets.length, 0);
+    await vi.advanceTimersByTimeAsync(1000);
+    const later = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: deadline(undefined, 5000),
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    await later;
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets[0]?.writes, 1);
+  } finally {
+    await manager.close();
+    vi.useRealTimers();
+  }
+});
+
+test('owned startup expiry remains a timeout for a later uncancelled capture', async () => {
+  vi.useFakeTimers();
+  const fixture = createLifecycleFixture({ connectDelayMs: 20000 });
+  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const caller = new AbortController();
+  try {
+    const first = assert.rejects(
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      }),
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    await vi.advanceTimersByTimeAsync(2001);
+    await first;
+    await vi.advanceTimersByTimeAsync(8000);
+    await assert.rejects(
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(caller.signal, 5000),
+      }),
+      (error: unknown) =>
+        error instanceof SnapshotSourceError &&
+        error.failureKind === 'timeout' &&
+        error.failureCode === 'bridge-startup-deadline',
+    );
+    assert.equal(caller.signal.aborted, false);
+    assert.equal(fixture.processes.length, 1);
+    assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
+    assert.equal(fixture.sockets.length, 0);
+  } finally {
+    await manager.close();
+    vi.useRealTimers();
+  }
+});
+
+test('close adopts paused startup, awaits cleanup and refuses future requests', async () => {
+  const fixture = createLifecycleFixture();
+  let release!: () => void;
+  let entered!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const manager = new SnapshotBridgeManager({
+    ...fixture.host,
+    ensureDirectory: async () => {
+      entered();
+      await paused;
+    },
+  });
+  const pending = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 5000),
+  });
+  const refused = assert.rejects(
+    pending,
+    (error: unknown) =>
+      error instanceof SnapshotSourceError && error.failureCode === 'source-closed',
+  );
+  await reached;
+  let finished = false;
+  const closing = manager.close().then(() => {
+    finished = true;
+  });
+  await Promise.resolve();
+  assert.equal(finished, false);
+  release();
+  await closing;
+  await refused;
+  assert.equal(fixture.processes.length, 0);
+  await assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline() }),
+    /source-closed/,
+  );
+});
+
+test('caller abort cancels only the wait for shared helper readiness', async () => {
+  const fixture = createLifecycleFixture({ connectDelayMs: 80 });
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const controller = new AbortController();
+  const pending = manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(controller.signal, 1000),
+  });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(
+    pending,
+    (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'cancelled',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await manager.request({
+    target,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(undefined, 1000),
+  });
+  assert.equal(fixture.processes.length, 1);
+  assert.deepEqual(fixture.processes[0]?.signals, []);
+  await manager.close();
+});
+
+test('binary time and helper startup consume one readiness allowance', async () => {
+  vi.useFakeTimers();
+  const fixture = createLifecycleFixture({ connectDelayMs: 1500 });
+  fixture.host = { ...fixture.host, ensureDirectory: async () => {}, remove: async () => {} };
+  const manager = new SnapshotBridgeManager(fixture.host);
+  try {
+    const captureDeadline = deadline(undefined, 5000);
+    const readinessDeadline = deadline(undefined, 2000);
+    await vi.advanceTimersByTimeAsync(1500);
+    const pending = manager.request({
+      target,
+      bridge,
+      limits,
+      maxDepth: 10,
+      deadline: captureDeadline,
+      readinessDeadline,
+    });
+    const rejected = assert.rejects(
+      pending,
+      (error: unknown) => error instanceof SnapshotSourceError && error.failureKind === 'preparing',
+    );
+    await vi.advanceTimersByTimeAsync(501);
+    await rejected;
+    assert.equal(fixture.sockets.length, 0);
+    await vi.advanceTimersByTimeAsync(1000);
+    const callers = [1, 2].map(() =>
+      manager.request({
+        target,
+        bridge,
+        limits,
+        maxDepth: 10,
+        deadline: deadline(undefined, 5000),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await Promise.all(callers);
+    assert.equal(fixture.processes.length, 1);
+    assert.equal(fixture.sockets[0]?.writes, 2);
+  } finally {
+    await manager.close();
+    vi.useRealTimers();
+  }
+});
+
+test('close cleans a late connection without publishing it', async () => {
+  const fixture = createLifecycleFixture();
+  let release!: () => void;
+  let entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const manager = new SnapshotBridgeManager({
+    ...fixture.host,
+    connect: async (...args) => {
+      entered();
+      await gate;
+      return await fixture.host.connect(...args);
+    },
+  });
+  const refused = assert.rejects(
+    manager.request({ target, bridge, limits, maxDepth: 10, deadline: deadline(undefined, 5000) }),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError && error.failureCode === 'source-closed',
+  );
+  await reached;
+  const closing = manager.close();
+  release();
+  await closing;
+  await refused;
+  assert.equal(fixture.sockets[0]?.destroyed, true);
+  assert.deepEqual(fixture.processes[0]?.signals, ['SIGTERM']);
+});
