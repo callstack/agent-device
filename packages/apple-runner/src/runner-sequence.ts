@@ -11,6 +11,7 @@ import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
   type RunnerCommand,
+  type RunnerSequenceOrientation,
   type RunnerSequenceStep,
 } from './runner-contract.ts';
 
@@ -65,18 +66,11 @@ export async function runApplePressSeries(
     completedSteps += parsed.completedSteps;
     sequenceResults.push(...parsed.results);
     stepOffset += command.steps?.length ?? 0;
-    if (bindsOrientation && sequenceOrientation === undefined) {
-      if (parsed.sequenceOrientation === undefined) {
-        throw discloseDispatchAfterSteps(
-          new AppError('COMMAND_FAILED', 'The runner did not return the press series orientation', {
-            reason: 'runner_sequence_orientation_unavailable',
-            completedSteps,
-            hint: 'Run snapshot -i to inspect the current UI before continuing with the remaining actions.',
-          }),
-          completedSteps,
-        );
-      }
-      sequenceOrientation = parsed.sequenceOrientation;
+    if (bindsOrientation) {
+      sequenceOrientation ??= requirePressSeriesOrientation(
+        parsed.sequenceOrientation,
+        completedSteps,
+      );
     }
   }
   // Preserve the first response's acquisition frame and the last response's gesture completion.
@@ -89,6 +83,21 @@ export async function runApplePressSeries(
       : { gestureEndUptimeMs: last.gestureEndUptimeMs }),
     timingMode: 'runner-sequence',
   };
+}
+
+function requirePressSeriesOrientation(
+  orientation: RunnerSequenceOrientation | undefined,
+  completedSteps: number,
+): RunnerSequenceOrientation {
+  if (orientation !== undefined) return orientation;
+  throw discloseDispatchAfterSteps(
+    new AppError('COMMAND_FAILED', 'The runner did not return the press series orientation', {
+      reason: 'runner_sequence_orientation_unavailable',
+      completedSteps,
+      hint: 'Run snapshot -i to inspect the current UI before continuing with the remaining actions.',
+    }),
+    completedSteps,
+  );
 }
 
 /**
