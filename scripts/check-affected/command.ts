@@ -18,13 +18,5 @@ runEntrypoint('validation command', async () => {
       process.stderr.write(chunk);
     },
   });
-  await Promise.all(
-    [process.stdout, process.stderr].map(
-      (stream) =>
-        new Promise<void>((resolve, reject) =>
-          stream.write('', (error) => (error ? reject(error) : resolve())),
-        ),
-    ),
-  );
   return result.exitCode;
 });
