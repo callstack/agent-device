@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,28 +7,15 @@ import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
-import { createSnapshotSourceHost } from './host.ts';
 import { createSimulatorSnapshotSource } from './adapter.ts';
-import { simulatorAddressFor } from '../core/simctl.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../core/tool-provider.ts';
 import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
 import { SNAPSHOT_BRIDGE_SOURCE_FILENAMES } from './cache-identity.ts';
-import { MAXIMUM_REQUEST_LEVELS } from './limits.ts';
 import { ADAPTER_KEYBOARD_CASES } from './adapter-keyboard.fixtures.ts';
-import {
-  encodeSnapshotBridgeFrame,
-  SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-  SNAPSHOT_SOURCE_VERSION,
-} from './protocol.ts';
-import type {
-  SnapshotSourceHost,
-  SnapshotSourceOutcome,
-  SnapshotSourceProcess,
-  SnapshotSourceSocket,
-} from './types.ts';
+import type { SnapshotSourceOutcome } from './types.ts';
+import { createAdapterHost, targetForTest, type AdapterFixture } from './adapter.fixtures.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
-import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 test('the Simulator AX source returns raw acquisition facts and discloses unsupported facets', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-');
@@ -323,6 +309,84 @@ test('a capture reports a cold preparation instead of spending its deadline on i
   }
 });
 
+test('binary preparation and helper connection share the source readiness allowance', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-readiness-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost(1500);
+  let buildEntered!: () => void;
+  const building = new Promise<void>((resolve) => {
+    buildEntered = resolve;
+  });
+  let connectEntered!: () => void;
+  const connecting = new Promise<void>((resolve) => {
+    connectEntered = resolve;
+  });
+  let connections = 0;
+  const source = createSimulatorSnapshotSource({
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+    host: {
+      ...fixture.host,
+      run: async (command, args, options) => {
+        const work = fixture.host.run(command, args, options);
+        if (command === 'xcrun' && args.includes('clang')) buildEntered();
+        return await work;
+      },
+      connect: async (...args) => {
+        connections += 1;
+        const delay = new Promise((resolve) => setTimeout(resolve, 1000));
+        connectEntered();
+        await delay;
+        return await fixture.host.connect(...args);
+      },
+    },
+  });
+  const request = {
+    target: { ...targetForTest(), generation: 'generation-1' },
+    hint: deriveIosCaptureHint(createIosSnapshotRequest()),
+  };
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  try {
+    const startedAt = Date.now();
+    let finished = false;
+    const acquiring = source.acquire(request).then((outcome) => {
+      finished = true;
+      return outcome;
+    });
+    await building;
+    await vi.advanceTimersByTimeAsync(1500);
+    await connecting;
+    await vi.advanceTimersByTimeAsync(499);
+    assert.equal(finished, false);
+    await vi.advanceTimersByTimeAsync(1);
+    assert.equal(finished, true, 'helper startup received a second readiness allowance');
+    const pending = await acquiring;
+    assert.equal(pending.stage, 'failed');
+    assert.equal(pending.failure.kind, 'preparing');
+    assert.equal(pending.failure.code, 'bridge-readiness-pending');
+    assert.equal(Date.now() - startedAt, 2000);
+    assert.equal(fixture.requestedDepths.length, 0, 'pending startup dispatched no capture');
+
+    await vi.advanceTimersByTimeAsync(500);
+    assert.equal((await source.acquire(request)).stage, 'acquired');
+    assert.equal((await source.acquire(request)).stage, 'acquired');
+    assert.equal(fixture.builds, 1);
+    assert.equal(fixture.startedTargets.length, 1);
+    assert.equal(connections, 1);
+    assert.equal(fixture.requestedDepths.length, 2);
+  } finally {
+    const closing = source.close();
+    await vi.advanceTimersByTimeAsync(1000);
+    await closing;
+    vi.useRealTimers();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('the Simulator AX source learns a hint only from a validated acquisition', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-hints-');
   const sourceRoot = path.join(root, 'source');
@@ -582,310 +646,6 @@ test('the Simulator AX source follows the shared hint contract', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
-
-type AdapterFixture = {
-  host: SnapshotSourceHost;
-  builds: number;
-  runs: number;
-  responsePid: number;
-  requestedDepths: number[];
-  requestedHints: (number | undefined)[];
-  /** Native levels above which the fake guest reports a rejection-then-recovery. */
-  rejectLevelsAbove: number | undefined;
-  /** Whether the fake guest reports a depth- or node-bounded tree. */
-  truncated: boolean;
-  /** Whether the fake guest answers with sound counters but an unusable tree. */
-  malformedTree: boolean;
-  /** Whether the fake guest's tree ends at another process's content (a remote element leaf). */
-  remoteContent: boolean;
-  /** Whether the fake guest's tree holds a window reporting the app box quarter-turned (#2612). */
-  turnedWindow: boolean;
-  /** Whether the fake guest's root omits its frame, leaving the capture without a viewport. */
-  omitViewport: boolean;
-  /** Whether the fake guest finds a requested system surface host process running. */
-  runningSurfaceHost: boolean;
-  /** The surface host check each request carried: its executables and Simulator, or undefined. */
-  surfaceHostChecks: Array<Readonly<{ executables: unknown; simulatorUdid: unknown }> | undefined>;
-  /** The windows the fake guest reports under its root when no other tree shape is selected. */
-  windows: readonly Record<string, unknown>[];
-  omitRecovery: boolean;
-  diagnostics: Record<string, unknown>[];
-  startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
-};
-
-function targetForTest(simulatorSetPath?: string) {
-  return {
-    simulator: simulatorAddressFor({
-      platform: 'apple',
-      id: 'simulator-1',
-      name: 'iPhone 17',
-      kind: 'simulator',
-      target: 'mobile',
-      ...(simulatorSetPath ? { simulatorSetPath } : {}),
-    }),
-    runtime: 'iOS 26.2',
-    pid: 321,
-  };
-}
-
-function createAdapterHost(buildDelayMs = 0): AdapterFixture {
-  const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
-  const fixture: AdapterFixture = {
-    host: undefined as never,
-    builds: 0,
-    runs: 0,
-    responsePid: 321,
-    requestedDepths: [],
-    requestedHints: [],
-    rejectLevelsAbove: undefined,
-    truncated: false,
-    malformedTree: false,
-    remoteContent: false,
-    turnedWindow: false,
-    omitViewport: false,
-    runningSurfaceHost: false,
-    surfaceHostChecks: [],
-    windows: [],
-    omitRecovery: false,
-    diagnostics: [],
-    startedTargets: [],
-  };
-  const host: SnapshotSourceHost = {
-    ...realHost,
-    cpuArch: async () => 'arm64',
-    emitDiagnostic: (event) => {
-      if (event.phase === 'ios_snapshot_source_recovery')
-        fixture.diagnostics.push(event.data ?? {});
-    },
-    run: async (command, args) => {
-      fixture.runs += 1;
-      if (command === 'xcrun' && args.includes('clang')) {
-        fixture.builds += 1;
-        if (buildDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, buildDelayMs));
-        await writeFile(args.at(-1)!, 'bridge-binary');
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
-      return {
-        stdout:
-          command === 'xcodebuild'
-            ? 'Xcode 16.4\nBuild version 16F6'
-            : command === 'sw_vers'
-              ? '15.6'
-              : '26.2',
-        stderr: '',
-        exitCode: 0,
-      };
-    },
-    start: (target) => {
-      fixture.startedTargets.push(target);
-      return new AdapterProcess();
-    },
-    connect: async () => new AdapterSocket(fixture),
-    readTargetProcessStartTime: async () => 'target-start',
-  };
-  fixture.host = host;
-  return fixture;
-}
-
-class AdapterProcess implements SnapshotSourceProcess {
-  readonly pid = 801;
-  readonly wait: Promise<{ stdout: string; stderr: string; exitCode: number }>;
-  private resolveWait!: (result: { stdout: string; stderr: string; exitCode: number }) => void;
-  private alive = true;
-
-  constructor() {
-    this.wait = new Promise((resolve) => {
-      this.resolveWait = resolve;
-    });
-  }
-
-  isAlive(): boolean {
-    return this.alive;
-  }
-
-  signal(): void {
-    this.alive = false;
-    this.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
-  }
-
-  readLog(): string {
-    return '';
-  }
-}
-
-class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
-  destroyed = false;
-  private readonly fixture: AdapterFixture;
-
-  constructor(fixture: AdapterFixture) {
-    super();
-    this.fixture = fixture;
-  }
-
-  /** The guest root's frame, or undefined when the fixture reports a viewportless tree. */
-  private rootFrame(): Record<string, number> | undefined {
-    return this.fixture.omitViewport ? undefined : { X: 0, Y: 0, Width: 390, Height: 844 };
-  }
-
-  write(frame: Buffer): boolean {
-    const bodyLength = frame.readUInt32BE(0);
-    const request = JSON.parse(frame.subarray(4, bodyLength + 4).toString('utf8')) as {
-      requestId: string;
-      pid: number;
-      generation: string;
-      maxDepth: number;
-      nativeLevelsHint?: number;
-      surfaceHostExecutables?: string[];
-      simulatorUdid?: string;
-    };
-    this.fixture.surfaceHostChecks.push(
-      request.surfaceHostExecutables
-        ? { executables: request.surfaceHostExecutables, simulatorUdid: request.simulatorUdid }
-        : undefined,
-    );
-    if (this.fixture.runningSurfaceHost && request.surfaceHostExecutables) {
-      queueMicrotask(() =>
-        this.emit(
-          'data',
-          encodeSnapshotBridgeFrame(
-            {
-              protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-              sourceVersion: SNAPSHOT_SOURCE_VERSION,
-              requestId: request.requestId,
-              ok: false,
-              pid: this.fixture.responsePid,
-              generation: request.generation,
-              error_kind: 'unsupported',
-              error_code: 'system-surface-host-present',
-              surfaceHostExecutable: request.surfaceHostExecutables![0],
-            },
-            { maxRequestBytes: 64 * 1024 },
-          ),
-        ),
-      );
-      return true;
-    }
-    this.fixture.requestedDepths.push(request.maxDepth);
-    this.fixture.requestedHints.push(request.nativeLevelsHint);
-    // The guest's own recovery: one request reads at most 65 levels, and a rejected depth halves
-    // at most twice, like SnapshotBridgeCapture.
-    const requestedLevels = Math.min(
-      request.maxDepth + 1,
-      request.nativeLevelsHint ?? MAXIMUM_REQUEST_LEVELS,
-    );
-    const rejectAbove = this.fixture.rejectLevelsAbove;
-    let acceptedLevels = requestedLevels;
-    let rejected = 0;
-    while (rejectAbove !== undefined && acceptedLevels > rejectAbove && rejected < 3) {
-      rejected += 1;
-      acceptedLevels = Math.max(1, Math.floor(acceptedLevels / 2));
-    }
-    const rejectedEverywhere = rejectAbove !== undefined && acceptedLevels > rejectAbove;
-    queueMicrotask(() => {
-      if (this.destroyed) return;
-      if (rejectedEverywhere) {
-        this.emit(
-          'data',
-          encodeSnapshotBridgeFrame(
-            {
-              protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-              sourceVersion: SNAPSHOT_SOURCE_VERSION,
-              requestId: request.requestId,
-              ok: false,
-              pid: this.fixture.responsePid,
-              generation: request.generation,
-              error_kind: 'application_unavailable',
-              error_code: 'application-server-unavailable',
-            },
-            { maxRequestBytes: 64 * 1024 },
-          ),
-        );
-        return;
-      }
-      this.emit(
-        'data',
-        encodeSnapshotBridgeFrame(
-          {
-            protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-            sourceVersion: SNAPSHOT_SOURCE_VERSION,
-            requestId: request.requestId,
-            ok: true,
-            pid: this.fixture.responsePid,
-            generation: request.generation,
-            truncated: request.maxDepth === 1 || this.fixture.truncated,
-            automationEnabled: true,
-            ...(this.fixture.omitRecovery
-              ? {}
-              : {
-                  recovery: {
-                    requests: 1 + rejected,
-                    rejected,
-                    continuations: 0,
-                    acceptedLevels,
-                  },
-                }),
-            tree: this.fixture.malformedTree
-              ? null
-              : {
-                  XC_kAXXCAttributeElementType: 'Application',
-                  XC_kAXXCAttributeFrame: this.rootFrame(),
-                  XC_kAXXCAttributeChildren:
-                    request.maxDepth === 1
-                      ? [{ XC_kAXXCAttributeElementType: 'Button', XC_kAXXCAttributeChildren: [] }]
-                      : this.fixture.remoteContent
-                        ? [
-                            {
-                              XC_kAXXCAttributeElementType: 'WebView',
-                              XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
-                              XC_kAXXCAttributeChildren: [
-                                {
-                                  XC_kAXXCAttributeElementType: 'AXRemoteElement',
-                                  XC_kAXXCAttributeElementBaseType: 'NSObject',
-                                  XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
-                                  XC_kAXXCAttributeChildren: [],
-                                },
-                              ],
-                            },
-                          ]
-                        : this.fixture.turnedWindow
-                          ? [
-                              {
-                                XC_kAXXCAttributeElementType: 'Application',
-                                XC_kAXXCAttributeElementBaseType: 'UIRemoteKeyboardWindow',
-                                XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 844, Height: 390 },
-                                XC_kAXXCAttributeChildren: [
-                                  {
-                                    XC_kAXXCAttributeAutomationType: 20,
-                                    XC_kAXXCAttributeLabel: 'q',
-                                    XC_kAXXCAttributeFrame: {
-                                      X: 154,
-                                      Y: 77,
-                                      Width: 45,
-                                      Height: 72,
-                                    },
-                                    XC_kAXXCAttributeChildren: [],
-                                  },
-                                ],
-                              },
-                            ]
-                          : this.fixture.windows,
-                },
-          },
-          {
-            maxRequestBytes: 64 * 1024,
-          },
-        ),
-      );
-    });
-    return true;
-  }
-
-  destroy(): void {
-    if (this.destroyed) return;
-    this.destroyed = true;
-    queueMicrotask(() => this.emit('close'));
-  }
-}
 
 test('the Simulator AX source refuses a window whose coordinate space it cannot resolve', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-');
