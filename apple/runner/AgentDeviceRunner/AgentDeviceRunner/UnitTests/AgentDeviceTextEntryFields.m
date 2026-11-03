@@ -48,6 +48,10 @@ static NSUInteger AgentDeviceTextEntryValueReads = 0;
     self.delegate = self;
     self.autocorrectionType = UITextAutocorrectionTypeNo;
     self.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(recordTap:)];
+    tap.cancelsTouchesInView = NO;
+    tap.delegate = self;
+    [self addGestureRecognizer:tap];
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-witness-prefill"]) {
       self.text = @"seedvalue";
     }
@@ -55,9 +59,15 @@ static NSUInteger AgentDeviceTextEntryValueReads = 0;
   return self;
 }
 
-- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+- (void)recordTap:(UITapGestureRecognizer *)recognizer {
+  (void)recognizer;
   self.taps += 1;
-  [super touchesEnded:touches withEvent:event];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+  (void)gestureRecognizer;
+  (void)otherGestureRecognizer;
+  return YES;
 }
 
 - (void)selectAll:(id)sender {
@@ -68,7 +78,8 @@ static NSUInteger AgentDeviceTextEntryValueReads = 0;
 - (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   if ([arguments containsObject:@"--agent-device-text-entry-witness-refuse-edits"] ||
-      ([arguments containsObject:@"--agent-device-text-entry-witness-refuse-selection"] && range.length > 1 && string.length == 0)) {
+      ([arguments containsObject:@"--agent-device-text-entry-witness-refuse-selection"] &&
+       !textField.selectedTextRange.isEmpty && range.length > 1 && string.length == 0)) {
     self.rejectedEdits += 1;
     UITextPosition *start = textField.beginningOfDocument;
     textField.selectedTextRange = [textField textRangeFromPosition:start toPosition:start];

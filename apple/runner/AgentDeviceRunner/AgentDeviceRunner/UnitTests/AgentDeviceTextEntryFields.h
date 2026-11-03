@@ -13,6 +13,6 @@
 @property(nonatomic, weak) UITextField *countedField;
 @end
 
-@interface AgentDeviceTextEntryWitnessField : UITextField <UITextFieldDelegate>
+@interface AgentDeviceTextEntryWitnessField : UITextField <UITextFieldDelegate, UIGestureRecognizerDelegate>
 @end
 #endif

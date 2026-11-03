@@ -65,6 +65,7 @@ extension RunnerTests {
     let field = try launchTextEntryWitness(prefilled: true)
     defer { invalidateCachedTarget(reason: "unit_test_cleanup"); app.terminate() }
     field.tap()
+    field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
 
     let response = try executeWitnessEntry(field, text: "hello", mode: "append")
 
