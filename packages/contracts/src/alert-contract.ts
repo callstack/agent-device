@@ -32,9 +32,9 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
- * The Apple XCUITest runner saw a blocking system modal but could not read its remote host, so
- * it has no buttons to report or press. A prompt is on screen: this is never absence, and it
- * travels as its own wire code with `dispatched: no`.
+ * The Apple XCUITest runner could not complete required alert acquisition: a query failed,
+ * the search deadline expired, or a system modal's host could not be read. Presence or absence
+ * is unconfirmed, so this travels as its own wire code with `dispatched: no`.
  */
 export const ALERT_UNRESOLVED_RUNNER_CODE = 'ALERT_UNRESOLVED';
 

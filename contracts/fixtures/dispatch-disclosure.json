@@ -226,7 +226,7 @@
   {
     "id": "ios-runner.reply.ALERT_UNRESOLVED",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code ALERT_UNRESOLVED: a visible blocking system modal whose host could not be read, refused before any activation",
+    "trigger": "structured runner reply with code ALERT_UNRESOLVED: required alert acquisition failed or exhausted its deadline, refused before any activation",
     "dispatched": "no"
   },
   {

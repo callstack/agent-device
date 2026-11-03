@@ -9,10 +9,11 @@ extension RunnerTests {
     app.launch()
     defer { app.terminate() }
     XCTAssertTrue(app.switches["native-off"].waitForFixtureExistence(timeout: appExistenceTimeout))
-    let resolved = ResolvedBlockingSystemModal(
+    let resolved = RunnerAlert(
       root: app,
       ownerApp: app,
-      actions: actionableElements(in: app),
+      buttons: try readModalActions(in: app, deadline: .distantFuture),
+      source: .blockingSystemModal,
       window: nil
     )
     let payload = try XCTUnwrap(try snapshotForBlockingSystemModal(resolved))

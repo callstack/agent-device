@@ -13,7 +13,7 @@ extension RunnerTests {
 
   enum AlertResolution {
     case absent
-    /// A blocking system modal is on screen but its remote host could not be read.
+    /// Required alert acquisition did not establish presence or absence.
     case unresolved
     case resolved(RunnerAlert)
   }
@@ -26,27 +26,11 @@ extension RunnerTests {
     "No alert button was activated. Inspect the current alert before deciding on an action."
 
   static let alertUnresolvedHint =
-    "A system prompt is visible but alert could not read it. Inspect it with screenshot, then snapshot -i, and press @ref on the visible button."
+    "Alert could not finish reading the current prompt state. Inspect it with screenshot, then snapshot -i, and press @ref on the visible button."
 
   static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
     guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
     return max(0.001, timeoutMs / 1000)
-  }
-
-  /// The alert answer for a blocking system modal. Nil means no modal is on screen, so the active
-  /// app's own alert surfaces are read next.
-  static func alertResolution(
-    forSystemModal resolution: BlockingSystemModalResolution,
-    resolved: (ResolvedBlockingSystemModal) -> AlertResolution
-  ) -> AlertResolution? {
-    switch resolution {
-    case .resolved(let modal):
-      return resolved(modal)
-    case .unresolved:
-      return .unresolved
-    case .absent:
-      return nil
-    }
   }
 
   @MainActor
@@ -56,42 +40,37 @@ extension RunnerTests {
       return override(deadline)
     }
 #endif
+    do {
 #if !os(macOS)
-    if let resolution = Self.alertResolution(
-      forSystemModal: resolveBlockingSystemModal(deadline: deadline),
-      resolved: { modal in
-        runnerAlert(
-          root: modal.root,
-          ownerApp: modal.ownerApp,
-          actions: modal.actions,
-          source: .blockingSystemModal,
-          window: modal.window
-        )
+      let systemResolution = resolveBlockingSystemModal(deadline: deadline)
+      switch systemResolution {
+      case .absent: break
+      case .resolved, .unresolved: return systemResolution
       }
-    ) {
-      return resolution
-    }
 #endif
-    let state = activeApp.state
-    guard state != .notRunning && state != .unknown else {
+      let state = try readModalValue(deadline: deadline) { activeApp.state }
+      guard state != .unknown else { return .unresolved }
+      guard state != .notRunning else { return .absent }
+      if let alert = try firstExistingElement(in: readModalElements(deadline: deadline) {
+        activeApp.alerts.allElementsBoundByIndex
+      }, deadline: deadline) {
+        return try runnerAlert(root: alert, ownerApp: activeApp,
+          actions: readModalActions(in: alert, deadline: deadline), source: .appAlert, deadline: deadline)
+      }
+      if let dialog = try firstExistingElement(in: readModalElements(deadline: deadline) {
+        activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
+      }, deadline: deadline) {
+        return try runnerAlert(root: dialog, ownerApp: activeApp,
+          actions: readModalActions(in: dialog, deadline: deadline), source: .safariDialog, deadline: deadline)
+      }
+      if let popup = try firstDismissPopupWindow(in: activeApp, deadline: deadline) {
+        return try runnerAlert(root: popup, ownerApp: activeApp,
+          actions: readModalActions(in: popup, deadline: deadline), source: .dismissPopup, deadline: deadline)
+      }
       return .absent
+    } catch {
+      return .unresolved
     }
-    // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
-    // picker) was just dismissed, the dismissal re-check re-enters here with the
-    // now-gone host as `activeApp`, and its `alerts` query raises
-    // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
-    if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
-      return runnerAlert(root: alert, ownerApp: activeApp, actions: actionableElements(in: alert), source: .appAlert)
-    }
-    if let dialog = firstExistingElement(in: safeElementsQuery {
-      activeApp.otherElements.matching(identifier: AlertSurface.safariDialogIdentifier).allElementsBoundByIndex
-    }) {
-      return runnerAlert(root: dialog, ownerApp: activeApp, actions: actionableElements(in: dialog), source: .safariDialog)
-    }
-    if let popup = firstDismissPopupWindow(in: activeApp) {
-      return runnerAlert(root: popup, ownerApp: activeApp, actions: actionableElements(in: popup), source: .dismissPopup)
-    }
-    return .absent
   }
 
   @MainActor
@@ -149,7 +128,7 @@ extension RunnerTests {
       }
       while true {
         sleepFor(min(0.2, max(0, deadline.timeIntervalSinceNow)))
-        let verification = RunnerAlertVerification.verify(
+        guard let verification = RunnerAlertVerification.verify(
           original: original,
           observation: observeAlert(
             in: alert.ownerApp,
@@ -157,13 +136,12 @@ extension RunnerTests {
             observesApplicationRoot: observesApplicationRoot,
             deadline: deadline
           )
-        )
-        if verification == .stillVisible { continue }
+        ) else { continue }
         return alertVerificationResponse(verification, action: action, activated: true)
       }
     }
 
-    let title = preferredAlertTitle(alert.root, buttons: alert.buttons)
+    let title = safely("ALERT_TITLE", "Alert") { preferredAlertTitle(alert.root, buttons: alert.buttons) }
     let items = alert.buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
     return Response(
       ok: true,
@@ -283,32 +261,34 @@ extension RunnerTests {
     operation()
   }
 
-  private func runnerAlert(
+  func runnerAlert(
     root: XCUIElement,
     ownerApp: XCUIApplication,
     actions: [XCUIElement],
     source: AlertSurfaceSource,
-    window: XCUIElement? = nil
-  ) -> AlertResolution {
-    let buttons = actions.filter { isEnabledElement($0) }
-    guard !buttons.isEmpty else {
-      return .absent
+    window: XCUIElement? = nil,
+    deadline: Date
+  ) throws -> AlertResolution {
+    let buttons = try actions.filter { candidate in
+      try readModalValue(deadline: deadline) { candidate.exists && candidate.isEnabled }
     }
     return .resolved(RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source, window: window))
   }
 
-  private func firstExistingElement(in elements: [XCUIElement]) -> XCUIElement? {
-    elements.first { isVisibleElement($0) }
+  private func firstExistingElement(in elements: [XCUIElement], deadline: Date) throws -> XCUIElement? {
+    try elements.first { element in
+      try readModalValue(deadline: deadline) { isVisibleElement(element) }
+    }
   }
 
   /// The marker is matched inside XCTest's query, so the screen is read once per query. Reading each
   /// descendant instead costs one round trip per element, and on a screen whose tree changes while
   /// it is read (a loading web view) each vanished element adds XCTest's retry cycle. `containing`
   /// also matches a window that is itself the marker.
-  private func firstDismissPopupWindow(in app: XCUIApplication) -> XCUIElement? {
-    firstExistingElement(in: safeElementsQuery {
+  private func firstDismissPopupWindow(in app: XCUIApplication, deadline: Date) throws -> XCUIElement? {
+    try firstExistingElement(in: readModalElements(deadline: deadline) {
       app.windows.containing(Self.dismissPopupMarker).allElementsBoundByIndex
-    })
+    }, deadline: deadline)
   }
 
   private static let dismissPopupMarker = NSPredicate(
@@ -382,10 +362,6 @@ extension RunnerTests {
 
   private func isVisibleElement(_ element: XCUIElement) -> Bool {
     element.exists && !element.frame.isNull && !element.frame.isEmpty
-  }
-
-  private func isEnabledElement(_ element: XCUIElement) -> Bool {
-    safely("ALERT_BUTTON_ENABLED", false) { element.exists && element.isEnabled }
   }
 
   // A snapshot can expose an alert's button a beat before the owning app has made it

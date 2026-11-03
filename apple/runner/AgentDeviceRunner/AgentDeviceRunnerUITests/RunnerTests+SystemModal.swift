@@ -16,12 +16,12 @@ extension RunnerTests {
   }
 
   func snapshotForBlockingSystemModal(
-    _ resolvedModal: ResolvedBlockingSystemModal,
+    _ resolvedModal: RunnerAlert,
     options: PresentationOptions = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
     deadline: Date = .distantFuture
   ) throws -> DataPayload? {
     let modal = resolvedModal.root
-    let actions = resolvedModal.actions
+    let actions = resolvedModal.buttons
 
     let title = preferredSystemModalTitle(modal)
     guard let modalNode = safeMakeSnapshotNode(
@@ -113,36 +113,28 @@ extension RunnerTests {
   func firstBlockingSystemModal(
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
-  ) -> SpringBoardModal? {
-    if let alert = firstBlockingSystemModal(in: springboard, matching: .alert, deadline: deadline) {
+  ) throws -> SpringBoardModal? {
+    if let alert = try firstBlockingSystemModal(in: springboard, matching: .alert, deadline: deadline) {
       return alert
     }
 
-    // Don't start the second (sheet) enumeration once the shared probe deadline is spent (#1244).
-    if Date() >= deadline {
-      NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DEADLINE stage=sheets")
-      return nil
-    }
-
-    return firstBlockingSystemModal(in: springboard, matching: .sheet, deadline: deadline)
+    return try firstBlockingSystemModal(in: springboard, matching: .sheet, deadline: deadline)
   }
 
   private func firstBlockingSystemModal(
     in springboard: XCUIApplication,
     matching type: XCUIElement.ElementType,
     deadline: Date
-  ) -> SpringBoardModal? {
-    let windows = safeElementsQuery {
+  ) throws -> SpringBoardModal? {
+    let windows = try readModalElements(deadline: deadline) {
       springboard.windows.containing(type, identifier: nil).allElementsBoundByIndex
     }
     for window in windows {
-      guard Date() < deadline else { return nil }
-      let modals = safeElementsQuery {
+      let modals = try readModalElements(deadline: deadline) {
         window.descendants(matching: type).allElementsBoundByIndex
       }
       for modal in modals {
-        guard Date() < deadline else { return nil }
-        if safeIsBlockingSystemModal(modal, in: window) {
+        if try readModalValue(deadline: deadline, { isBlockingSystemModal(modal, in: window) }) {
           return SpringBoardModal(root: modal, window: window)
         }
       }
@@ -150,39 +142,55 @@ extension RunnerTests {
     return nil
   }
 
-  func safeElementsQuery(_ fetch: () -> [XCUIElement]) -> [XCUIElement] {
-    safely("MODAL_QUERY", [], fetch)
+  enum ModalReadFailure: Error {
+    case queryFailed
+    case deadlineExceeded
   }
 
-  private func safeIsBlockingSystemModal(_ element: XCUIElement, in window: XCUIElement) -> Bool {
-    safely("MODAL_CHECK", false) { isBlockingSystemModal(element, in: window) }
+  func readModalValue<T>(deadline: Date, _ fetch: () -> T) throws -> T {
+    guard Date() < deadline else { throw ModalReadFailure.deadlineExceeded }
+    let (result, exception) = catchingObjCException(fallback: nil as T?) { fetch() }
+    guard exception == nil, let result else { throw ModalReadFailure.queryFailed }
+    guard Date() < deadline else { throw ModalReadFailure.deadlineExceeded }
+    return result
+  }
+
+  func readModalElements(deadline: Date, _ fetch: () -> [XCUIElement]) throws -> [XCUIElement] {
+    try readModalValue(deadline: deadline) {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      if let override = modalElementsQueryOverrideForTesting { return override() }
+#endif
+      return fetch()
+    }
+  }
+
+  func safeElementsQuery(_ fetch: () -> [XCUIElement]) -> [XCUIElement] {
+    safely("MODAL_QUERY", [], fetch)
   }
 
   private func isBlockingSystemModal(_ element: XCUIElement, in window: XCUIElement) -> Bool {
     element.exists && AlertSurface.isPlaced(element.frame, in: window.frame)
   }
 
-  func actionableElements(in element: XCUIElement) -> [XCUIElement] {
+  func readModalActions(in element: XCUIElement, deadline: Date) throws -> [XCUIElement] {
     var seen = Set<String>()
     var actions: [XCUIElement] = []
-    let descendants = actionableTypes.flatMap { modalDescendants(in: element, matching: $0) }
-    for candidate in descendants {
-      if !safeIsActionableCandidate(candidate, seen: &seen) { continue }
-      actions.append(candidate)
+    for type in actionableTypes {
+      let descendants = try readModalElements(deadline: deadline) {
+        element.descendants(matching: type).allElementsBoundByIndex
+      }
+      for candidate in descendants {
+        let actionable = try readModalValue(deadline: deadline) {
+          if !candidate.exists || !candidate.isHittable { return false }
+          let frame = candidate.frame
+          if frame.isNull || frame.isEmpty { return false }
+          let key = "\(candidate.elementType.rawValue)-\(frame.origin.x)-\(frame.origin.y)-\(frame.size.width)-\(frame.size.height)-\(candidate.label)"
+          return seen.insert(key).inserted
+        }
+        if actionable { actions.append(candidate) }
+      }
     }
     return actions
-  }
-
-  private func safeIsActionableCandidate(_ candidate: XCUIElement, seen: inout Set<String>) -> Bool {
-    safely("MODAL_ACTION", false) {
-      if !candidate.exists || !candidate.isHittable { return false }
-      let frame = candidate.frame
-      if frame.isNull || frame.isEmpty { return false }
-      let key = "\(candidate.elementType.rawValue)-\(frame.origin.x)-\(frame.origin.y)-\(frame.size.width)-\(frame.size.height)-\(candidate.label)"
-      if seen.contains(key) { return false }
-      seen.insert(key)
-      return true
-    }
   }
 
   private func informativeElements(in element: XCUIElement, deadline: Date) -> [XCUIElement] {

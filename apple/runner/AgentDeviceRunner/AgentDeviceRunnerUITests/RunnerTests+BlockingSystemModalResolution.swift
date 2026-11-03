@@ -1,52 +1,25 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  struct ResolvedBlockingSystemModal {
-    let root: XCUIElement
-    let ownerApp: XCUIApplication
-    let actions: [XCUIElement]
-    /// The SpringBoard window hosting `root`; nil for a remote host queried as a whole app.
-    let window: XCUIElement?
-  }
-
-  enum BlockingSystemModalResolution {
-    case absent
-    case unresolved
-    case resolved(ResolvedBlockingSystemModal)
-  }
-
-  func resolveBlockingSystemModal(
-    deadline: Date
-  ) -> BlockingSystemModalResolution {
-    guard Self.hasSpringBoardSystemModalHost else {
-      return .absent
-    }
-
-    guard let springboardModal = firstBlockingSystemModal(
-      in: springboard,
-      deadline: deadline
-    ) else {
-      return .absent
-    }
-
-    let springboardActions = actionableElements(in: springboardModal.root)
-    if !RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(
-      springboardActionCount: springboardActions.count
-    ) {
-      return .resolved(
-        ResolvedBlockingSystemModal(
-          root: springboardModal.root,
-          ownerApp: springboard,
-          actions: springboardActions,
-          window: springboardModal.window
-        )
+  func resolveBlockingSystemModal(deadline: Date) -> AlertResolution {
+    guard Self.hasSpringBoardSystemModalHost else { return .absent }
+    do {
+      guard let modal = try firstBlockingSystemModal(in: springboard, deadline: deadline) else {
+        return .absent
+      }
+      let actions = try readModalActions(in: modal.root, deadline: deadline)
+      if RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: actions.count),
+         let remote = try remoteHostedSystemModal(deadline: deadline) {
+        return remote
+      }
+      return try runnerAlert(
+        root: modal.root, ownerApp: springboard, actions: actions,
+        source: .blockingSystemModal, window: modal.window, deadline: deadline
       )
-    }
-
-    guard Date() < deadline, let remoteModal = remoteHostedSystemModal(deadline: deadline) else {
+    } catch {
       return .unresolved
     }
-    return .resolved(remoteModal)
   }
 
   // AccessorySetupUI mirrors into SpringBoard, but its mirrored elements are not
@@ -55,19 +28,18 @@ extension RunnerTests {
     "com.apple.AccessorySetupUI"
   ]
 
-  private func remoteHostedSystemModal(deadline: Date) -> ResolvedBlockingSystemModal? {
+  private func remoteHostedSystemModal(deadline: Date) throws -> AlertResolution? {
     for bundleId in Self.remoteSystemModalHostBundleIds {
-      guard Date() < deadline else { return nil }
       let host = XCUIApplication(bundleIdentifier: bundleId)
-      let state = safely("REMOTE_MODAL_STATE", XCUIApplication.State.unknown) { host.state }
+      let state = try readModalValue(deadline: deadline) { host.state }
       guard RemoteHostedSystemModalPolicy.isEligibleHostState(state) else { continue }
-      guard Date() < deadline else { return nil }
 
-      // A dismissed remote host can raise kAXErrorServerNotFound. The safe queries
-      // inside actionableElements turn that disappearance into an empty result.
-      let actions = actionableElements(in: host)
+      let actions = try readModalActions(in: host, deadline: deadline)
       guard !actions.isEmpty else { continue }
-      return ResolvedBlockingSystemModal(root: host, ownerApp: host, actions: actions, window: nil)
+      return try runnerAlert(
+        root: host, ownerApp: host, actions: actions,
+        source: .blockingSystemModal, deadline: deadline
+      )
     }
     return nil
   }

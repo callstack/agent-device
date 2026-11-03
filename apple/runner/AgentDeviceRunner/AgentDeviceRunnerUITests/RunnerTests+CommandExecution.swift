@@ -650,7 +650,7 @@ extension RunnerTests {
           ok: false,
           error: ErrorPayload(
             code: RunnerWireErrorCode.alertUnresolved,
-            message: "a system prompt is visible but its buttons could not be read",
+            message: "alert could not finish reading the current prompt state",
             hint: RunnerTests.alertUnresolvedHint
           )
         )
