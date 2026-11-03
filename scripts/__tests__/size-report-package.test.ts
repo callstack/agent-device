@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'vitest';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { formatMarkdown } from '../size-report.mjs';
-import { assertPublishPackageContents, parseNpmPackOutput } from '../size-report-package.mjs';
+import {
+  assertBundledLicenseNotices,
+  assertPublishPackageContents,
+  parseNpmPackOutput,
+} from '../size-report-package.mjs';
 
 const fixturePack = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
@@ -41,6 +46,99 @@ test('publish package requires bundled dependency license notices', () => {
         { macosHelperManifestSource: helperManifestSource },
       ),
     /non-empty.*THIRD_PARTY_NOTICES\.txt/,
+  );
+});
+
+// The publish gate's own copy of what a shipped notices file must contain. Written out rather than
+// produced by the bundler: a fixture the producer generates cannot show the producer emitted the wrong
+// thing. The attribution lines are the shape the real build writes; the placeholder is verbatim what
+// `rollup-plugin-license` reports for a zero-dependency bundle.
+const REAL_NOTICES = [
+  '@agent-device/proxy@0.21.37-dev (MIT): [1]',
+  'undici@7.1.1 (MIT): [1]',
+  '',
+  '[1]',
+  'Copyright (c) 2023 Callstack',
+  'Permission is hereby granted, free of charge, to any person obtaining a copy of this software.',
+].join('\n');
+const EMPTY_BUNDLE_NOTICES = 'No third-party dependencies are bundled.\n';
+
+/** The pack manifest's notices entry — non-empty by bytes, which is all a manifest can say. */
+function noticesEntry() {
+  return fixturePack.files.find((entry) => entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt');
+}
+
+/**
+ * A pack manifest plus the tree it was built from, so the gate is asked about real content and not
+ * only about a byte count. `noticesRoot` is the half the placeholder slipped past before.
+ */
+async function treeWithNotices(contents: string | null): Promise<string> {
+  const root = await mkdtempForTest('notices-tree-');
+  await mkdir(join(root, 'dist', 'src'), { recursive: true });
+  if (contents !== null) {
+    await writeFile(join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'), contents);
+  }
+  return root;
+}
+
+test('pack gate rejects the zero-dependency placeholder a non-empty manifest reports', async () => {
+  // The failure this exists for: the bundler stops bundling dependencies, the bundler reports none,
+  // and the tarball still ships a non-empty notices file. The manifest entry below is exactly the one
+  // a healthy build produces, so only the bytes tell the two apart.
+  const root = await treeWithNotices(EMPTY_BUNDLE_NOTICES);
+  assert.throws(
+    () => assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+    /no bundled dependency notices[\s\S]*found 0 attributions and 0 license texts/,
+  );
+  // Attribution lines with no license text behind them are the same defect by half.
+  const halfWritten = await treeWithNotices('@agent-device/proxy@0.21.37-dev (MIT): [1]\n');
+  assert.throws(
+    () =>
+      assertBundledLicenseNotices([noticesEntry()], {
+        noticesRoot: halfWritten,
+        context: 'npm pack',
+      }),
+    /found 1 attributions and 0 license texts/,
+  );
+});
+
+test('pack gate accepts a tree whose notices attribute the bundled dependencies', async () => {
+  const root = await treeWithNotices(REAL_NOTICES);
+  assert.doesNotThrow(() =>
+    assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+  );
+});
+
+test('pack gate names the tree it could not read notices from', async () => {
+  const root = await treeWithNotices(null);
+  assert.throws(
+    () => assertBundledLicenseNotices([noticesEntry()], { noticesRoot: root, context: 'npm pack' }),
+    /npm pack has no dist\/src\/THIRD_PARTY_NOTICES\.txt/,
+  );
+});
+
+test('pack gate reads content without a tree, staying a manifest-only check', () => {
+  // `check-package.ts` proves the bytes from the installed tree; a caller holding only the manifest
+  // (the size lane's base measurement of an older tree) still gets the presence check alone.
+  assert.doesNotThrow(() => assertBundledLicenseNotices([noticesEntry()]));
+});
+
+test('publish package gate rejects placeholder notices from the tree it packed', async () => {
+  const root = await treeWithNotices(EMPTY_BUNDLE_NOTICES);
+  assert.throws(
+    () =>
+      assertPublishPackageContents(fixturePack.files, {
+        noticesRoot: root,
+        macosHelperManifestSource: helperManifestSource,
+      }),
+    /no bundled dependency notices/,
+  );
+  await writeFile(join(root, 'dist', 'src', 'THIRD_PARTY_NOTICES.txt'), REAL_NOTICES);
+  assert.doesNotThrow(() =>
+    assertPublishPackageContents(fixturePack.files, {
+      noticesRoot: root,
+      macosHelperManifestSource: helperManifestSource,
+    }),
   );
 });
 

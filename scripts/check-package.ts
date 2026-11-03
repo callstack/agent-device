@@ -243,10 +243,19 @@ function smokeTestBin(installedRoot: string, manifest: PackedManifest): void {
 step(`Packing and verifying agent-device in ${workDir}`);
 try {
   const { tarball, packedEntries } = packTarball();
-  assertBundledLicenseNotices(packedEntries);
+  assertBundledLicenseNotices(packedEntries, {
+    noticesRoot: repoRoot,
+    context: `The build packed from ${repoRoot}`,
+  });
   const packedPaths = packedEntries.map((file) => file.path);
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
+  // A user's machine is the tree that has to carry the attribution, so the content policy runs again
+  // against the installed file, not only the working-tree copy the tarball was built from.
+  assertBundledLicenseNotices(packedEntries, {
+    noticesRoot: installedRoot,
+    context: `The installed package at ${installedRoot}`,
+  });
   assertInstalledSnapshotBridge(installedRoot);
   assertInstalledTreeIsNotASourceCheckout(installedRoot);
   assertPackedTreeCarriesNoTestCode(installedRoot, packedPaths);

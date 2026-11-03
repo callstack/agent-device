@@ -52,6 +52,7 @@ export function collectNpmPack(root) {
   const pack = parseNpmPackOutput(stdout);
   const entries = pack.files;
   assertPublishPackageContents(entries, {
+    noticesRoot: root,
     repoRoot: root,
     requireSnapshotBridge: fs.existsSync(path.join(root, 'apple', 'snapshot-bridge')),
   });
@@ -65,16 +66,59 @@ export function collectNpmPack(root) {
   };
 }
 
-export function assertBundledLicenseNotices(entries) {
-  if (
-    !entries.some((entry) => entry.path === 'dist/src/THIRD_PARTY_NOTICES.txt' && entry.size > 0)
-  ) {
-    throw new Error('npm pack is missing non-empty dist/src/THIRD_PARTY_NOTICES.txt');
+/**
+ * The notices asset a packed tree ships, and the build output it comes from. One path keeps the
+ * manifest check and the content check naming the same file.
+ */
+const BUNDLED_LICENSE_NOTICES_PATH = 'dist/src/THIRD_PARTY_NOTICES.txt';
+
+/**
+ * The published CLI bundles its runtime dependencies into `dist`, so the notices it ships must name
+ * them: at least one `name@version (license)` attribution line and at least one referenced license
+ * text. The plugin's zero-dependency output — the generic "nothing bundled" line — names neither, so
+ * a build that stopped bundling dependencies would otherwise keep clearing this gate with a notice
+ * file holding no license text for the code the tarball ships.
+ *
+ * This is the published CLI's policy, not the bundler's: a project that genuinely bundles nothing
+ * still gets the generic notice, and only this package is held to naming somebody.
+ */
+function assertLicenseNoticeContents(contents, context) {
+  const attributions = contents.match(/^\S+@\S+ \([^)]+\): /gm) ?? [];
+  const licenseTexts = contents.match(/^\[\d+\]$/gm) ?? [];
+  if (attributions.length === 0 || licenseTexts.length === 0) {
+    throw new Error(
+      `${context} ships ${BUNDLED_LICENSE_NOTICES_PATH} with no bundled dependency notices: ` +
+        `expected at least one "name@version (license)" attribution and one referenced license text, ` +
+        `found ${attributions.length} attributions and ${licenseTexts.length} license texts.`,
+    );
   }
 }
 
+/**
+ * Requires the notices asset the `npm pack` manifest declares, and — when `noticesRoot` names the tree
+ * that was packed or installed — that its contents attribute somebody. A manifest says only that a
+ * path exists and how many bytes it is, which the bundler's zero-dependency placeholder satisfies;
+ * reading the bytes is what lets the gate see the attribution a user actually receives. A tree without
+ * the file fails naming the path, rather than with a bare ENOENT from a read.
+ */
+export function assertBundledLicenseNotices(entries, options = {}) {
+  if (!entries.some((entry) => entry.path === BUNDLED_LICENSE_NOTICES_PATH && entry.size > 0)) {
+    throw new Error(`npm pack is missing non-empty ${BUNDLED_LICENSE_NOTICES_PATH}`);
+  }
+  if (!options.noticesRoot) return;
+  const noticesPath = path.join(options.noticesRoot, BUNDLED_LICENSE_NOTICES_PATH);
+  const context = options.context ?? options.noticesRoot;
+  if (!fs.existsSync(noticesPath)) {
+    throw new Error(`${context} has no ${BUNDLED_LICENSE_NOTICES_PATH}.`);
+  }
+  assertLicenseNoticeContents(fs.readFileSync(noticesPath, 'utf8'), context);
+}
+
 export function assertPublishPackageContents(entries, options = {}) {
-  assertBundledLicenseNotices(entries);
+  assertBundledLicenseNotices(entries, {
+    noticesRoot: options.noticesRoot,
+    context: options.noticesRoot ? `npm pack of ${options.noticesRoot}` : undefined,
+  });
   const paths = entries.map((entry) => entry.path);
   const requiredAssets = [
     { directory: 'android/snapshot-helper/dist/', suffix: '.apk' },
