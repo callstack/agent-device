@@ -86,14 +86,18 @@ extension RunnerTests {
 
   @MainActor
   func testAlertWithNoEnabledButtonsStaysResolved() throws {
-    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-disabled-buttons"]
     app.launch()
     defer { app.terminate() }
     let root = app.alerts.firstMatch
     XCTAssertTrue(root.waitForFixtureExistence(timeout: appExistenceTimeout))
-    guard case .resolved(let alert) = try runnerAlert(
-      root: root, ownerApp: app, actions: [], source: .appAlert, deadline: .distantFuture
+    let buttons = root.buttons.allElementsBoundByIndex
+    XCTAssertEqual(buttons.count, 2)
+    XCTAssertTrue(buttons.allSatisfy { !$0.isEnabled })
+    guard case .resolved(let alert) = resolveAlert(
+      app: app, deadline: Date().addingTimeInterval(Self.defaultAlertCommandTimeout)
     ) else { return XCTFail("a recognized surface remains resolved without enabled buttons") }
+    XCTAssertEqual(alert.source, .appAlert)
     XCTAssertTrue(alert.buttons.isEmpty)
     let inspection = handleAlert(alert, action: "get", deadline: .distantFuture)
     XCTAssertTrue(inspection.ok)
