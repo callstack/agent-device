@@ -55,15 +55,6 @@ extension RunnerTests {
     return nil
   }
 
-  /// The lit panel's screen in `interfaceOrientation`, at the screen origin: the box a synthesized
-  /// turn swaps sides about, whatever the booked window's origin or shape.
-  static func litPanelScreenFrame(_ panel: RunnerLitPanel, interfaceOrientation: Int) -> CGRect? {
-    soleScreenReferenceFrame(
-      nativePortraitSize: CGSize(width: panel.widthPt, height: panel.heightPt),
-      interfaceOrientation: interfaceOrientation
-    )
-  }
-
   /// The roots of every element read: the app, or the windows proven on the lit display. A walk that
   /// cannot read the list, or that records an issue (#2995), throws `APP_SCREEN_UNRESOLVED`.
   func elementSearchRoots(app: XCUIApplication) throws -> [XCUIElement] {

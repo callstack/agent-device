@@ -49,18 +49,6 @@ extension RunnerTests {
     XCTAssertEqual(queuedLater, 3)
   }
 
-  /// The box a lit-panel turn swaps sides about is the panel's screen in the interface orientation,
-  /// at the screen origin; it takes no window input.
-  func testLitPanelScreenFrameIsTheScreenInTheInterfaceOrientation() {
-    let inner = RunnerLitPanel(displayID: 3, widthPt: 669, heightPt: 951)
-    let landscape = CGRect(x: 0, y: 0, width: 951, height: 669)
-    let portrait = CGRect(x: 0, y: 0, width: 669, height: 951)
-    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft), landscape)
-    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight), landscape)
-    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.portrait), portrait)
-    XCTAssertNil(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.unknown), "an unknown orientation books nothing")
-  }
-
   func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() throws {
     func refusal(_ fields: String) throws -> ErrorPayload? {
       try Self.litPanelBackendPinRefusal(runnerCommandFixture(#"{"command":"snapshot"\#(fields)}"#))?.error
@@ -96,25 +84,27 @@ extension RunnerTests {
   }
 
 #if os(iOS)
-  /// The Duo's 80 pt status strip puts a portrait app's window at (0,80) on the inner panel. Points
-  /// stay in the window's translated space, and the turn is about the whole lit screen, not the
-  /// window's shape.
-  func testLitPanelRotationIsAboutTheScreenForAWindowAtANonZeroOrigin() throws {
-    defer { setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#)) }
+  /// A window that leaves part of the lit panel uncovered, like an app beside the Duo's 80 pt status
+  /// strip, books its own frame as the reference, and a synthesized turn is about the whole panel.
+  @MainActor
+  func testLitPanelBookingTurnsAboutTheWholePanelForAPartialWindow() throws {
+    let (_, frame) = launchAppOnTheLitPanel()
+    defer { tearDownLitPanelApp() }
+    let window = app.windows.firstMatch
+    var displayID: UInt = 0
+    XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
     setRequestLitPanel(from: try runnerCommandFixture(
-      #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+      #"{"command":"tap","litPanel":{"displayId":\#(displayID),"widthPt":\#(frame.width),"heightPt":\#(frame.height + 80)}}"#
     ))
-    let window = CGRect(x: 0, y: 80, width: 669, height: 871)
+    XCTAssertNil(bookRequestLitPanelSurface(app: app))
+    let context = try XCTUnwrap(synthesizedCoordinateContext(app: app))
+    XCTAssertEqual(context.referenceFrame, frame, "the booked reference is the window's own frame")
     XCTAssertEqual(
-      synthesizedRotationFrame(fallback: window, interfaceOrientation: RunnerInterfaceOrientation.portrait),
-      CGRect(x: 0, y: 0, width: 669, height: 951)
-    )
-    XCTAssertEqual(
-      synthesizedRotationFrame(fallback: CGRect(x: 0, y: 0, width: 871, height: 669), interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft),
-      CGRect(x: 0, y: 0, width: 951, height: 669)
+      synthesizedRotationFrame(fallback: context.referenceFrame, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      CGRect(x: 0, y: 0, width: frame.width, height: frame.height + 80),
+      "the turn is about the whole lit panel, not the window"
     )
   }
-
   /// Launches the app and names its own window's display and box as the lit panel: the
   /// `litPanel` JSON member, and the window frame.
   @MainActor

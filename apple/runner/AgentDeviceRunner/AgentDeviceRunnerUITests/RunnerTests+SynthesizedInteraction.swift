@@ -521,7 +521,10 @@ extension RunnerTests {
   @MainActor
   func synthesizedRotationFrame(app: XCUIApplication, fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
     if let panel = requestLitPanel {
-      return Self.litPanelScreenFrame(panel, interfaceOrientation: interfaceOrientation) ?? fallback
+      return Self.soleScreenReferenceFrame(
+        portraitSize: CGSize(width: panel.widthPt, height: panel.heightPt),
+        interfaceOrientation: interfaceOrientation
+      ) ?? fallback
     }
     guard XCUIScreen.screens.count == 1 else { return fallback }
     switch interfaceOrientation {

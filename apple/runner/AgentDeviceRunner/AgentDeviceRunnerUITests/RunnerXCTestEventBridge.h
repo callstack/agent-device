@@ -40,8 +40,8 @@ typedef struct {
   CGFloat heightPt;
 } RunnerLitPanel;
 
-// The walk reads at most this many windows: each read of a window that has vanished records an
-// XCTest issue (#2995), and SpringBoard lists about forty.
+// The booking walk (`RunnerResolveLitPanelWindow`) reads at most this many windows: a vanished
+// window's read records an XCTest issue (#2995), and SpringBoard lists about forty.
 #define AGENT_DEVICE_MAX_LIT_PANEL_WINDOWS 8
 
 // Resolves the window on `litPanel`: the first window on that display whose frame is the panel's
@@ -78,8 +78,9 @@ FOUNDATION_EXPORT BOOL RunnerResolveApplicationScreen(
   RunnerApplicationScreenFailure *failure
 );
 
-// The application's windows that report `litPanel`'s display, in list order; a window that is gone
-// or names no display is left out. Nil when the window list itself cannot be read.
+// Every application window that reports `litPanel`'s display, in list order, uncapped so element
+// search sees all of them; the caller holds the walk's XCTest issues. A window that is gone or names
+// no display is left out. Nil when the window list itself cannot be read.
 FOUNDATION_EXPORT NSArray * _Nullable RunnerCopyLitPanelWindows(id application, RunnerLitPanel litPanel);
 
 // Reads the display ID off an already-resolved window, keeping a synthesized record's display and
