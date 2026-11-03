@@ -512,14 +512,17 @@ extension RunnerTests {
   }
 
   /// The box a synthesized turn swaps side lengths about. The digitizer turns about its display, so a
-  /// placed iPad window's smaller box is not the basis (#3899); a multi-screen host keeps the
-  /// resolved window `fallback`, which names its panel (ADR 0025). When the device's only screen
+  /// placed iPad window's smaller box is not the basis (#3899). A named lit panel supplies its full
+  /// screen box independently of the booked window translation (ADR 0025). When the device's only screen
   /// will not report its size, `fallback` is the basis only while the app provably fills that
   /// screen; otherwise this is nil and the gesture refuses before it dispatches. Portrait and an
   /// unknown orientation leave the point as it is, so they keep `fallback` without a read; landscape
   /// swaps the box's sides and upside-down mirrors the point across them, so both read it.
   @MainActor
   func synthesizedRotationFrame(app: XCUIApplication, fallback: CGRect, interfaceOrientation: Int) -> CGRect? {
+    if let panel = requestLitPanel {
+      return Self.litPanelScreenFrame(panel, interfaceOrientation: interfaceOrientation) ?? fallback
+    }
     guard XCUIScreen.screens.count == 1 else { return fallback }
     switch interfaceOrientation {
     case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight,

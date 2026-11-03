@@ -49,10 +49,9 @@ extension RunnerTests {
     XCTAssertEqual(queuedLater, 3)
   }
 
-  /// The Duo's 80 pt status strip can put an app's window at a non-zero origin on the inner panel.
-  /// The booked box takes no window input: it is the panel's screen in the interface orientation,
-  /// at the screen origin, so no window origin or shape can move it.
-  func testLitPanelBookingIsTheScreenInTheInterfaceOrientation() {
+  /// The box a lit-panel turn swaps sides about is the panel's screen in the interface orientation,
+  /// at the screen origin; it takes no window input.
+  func testLitPanelScreenFrameIsTheScreenInTheInterfaceOrientation() {
     let inner = RunnerLitPanel(displayID: 3, widthPt: 669, heightPt: 951)
     let landscape = CGRect(x: 0, y: 0, width: 951, height: 669)
     let portrait = CGRect(x: 0, y: 0, width: 669, height: 951)
@@ -97,6 +96,25 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  /// The Duo's 80 pt status strip puts a portrait app's window at (0,80) on the inner panel. Points
+  /// stay in the window's translated space, and the turn is about the whole lit screen, not the
+  /// window's shape.
+  func testLitPanelRotationIsAboutTheScreenForAWindowAtANonZeroOrigin() throws {
+    defer { setRequestLitPanel(from: try! runnerCommandFixture(#"{"command":"tap"}"#)) }
+    setRequestLitPanel(from: try runnerCommandFixture(
+      #"{"command":"tap","litPanel":{"displayId":3,"widthPt":669,"heightPt":951}}"#
+    ))
+    let window = CGRect(x: 0, y: 80, width: 669, height: 871)
+    XCTAssertEqual(
+      synthesizedRotationFrame(fallback: window, interfaceOrientation: RunnerInterfaceOrientation.portrait),
+      CGRect(x: 0, y: 0, width: 669, height: 951)
+    )
+    XCTAssertEqual(
+      synthesizedRotationFrame(fallback: CGRect(x: 0, y: 0, width: 871, height: 669), interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft),
+      CGRect(x: 0, y: 0, width: 951, height: 669)
+    )
+  }
+
   /// Launches the app and names its own window's display and box as the lit panel: the
   /// `litPanel` JSON member, and the window frame.
   @MainActor

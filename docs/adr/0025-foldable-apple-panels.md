@@ -732,6 +732,6 @@ Rejected alternatives:
 
 Consequences:
 
-- `runner.log` prints `AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=<id>(<w>x<h>) windows=<n> outcome=<reason> frame=(…)`. `SYNTHESIZED_DISPATCH reference=` is the lit panel's screen in the app's interface orientation, at the screen origin, whatever the booked window's origin or shape: an app beside the inner panel's status strip still maps points into the whole screen. `SYNTHESIZED_RECORD displayID=` must equal `lit=`.
+- `runner.log` prints `AGENT_DEVICE_RUNNER_LIT_PANEL_WINDOW lit=<id>(<w>x<h>) windows=<n> outcome=<reason> frame=(…)`. `SYNTHESIZED_DISPATCH reference=` must equal that frame. Snapshot points are translated by that frame's origin, as for a placed iPad window, and a synthesized turn is about the lit panel's screen in the app's interface orientation, not the window's shape: an app beside the inner panel's 80 pt status strip still maps into the whole screen. `SYNTHESIZED_RECORD displayID=` must equal `lit=`.
 - A recording keeps the panel that its `recordStart` named. The runner cannot read panel power, so it does not notice a fold during the recording: SpringBoard keeps windows on the panel that went dark, and later frames show that dark panel. Start a new recording after a fold.
 - Open gap: on the folded home screen, XCTest reports the page icons with the inner panel's layout in both panels' windows. The Dock and the page indicator report the outer panel correctly.

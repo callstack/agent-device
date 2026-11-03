@@ -6,8 +6,6 @@ struct LitPanelSurface {
   let app: XCUIApplication
   let displayID: UInt
   let window: XCUIElement
-  let windowOrigin: CGPoint
-  /// The lit panel's screen in the app's interface orientation, whatever the window's shape.
   let frame: CGRect
 }
 
@@ -53,23 +51,12 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
-    guard let screenFrame = Self.litPanelScreenFrame(
-      litPanel,
-      interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    ) else {
-      return .unresolvedScreen
-    }
-    litPanelState.surface = LitPanelSurface(
-      app: app,
-      displayID: litPanel.displayID,
-      window: element,
-      windowOrigin: frame.origin,
-      frame: screenFrame
-    )
+    litPanelState.surface = LitPanelSurface(app: app, displayID: litPanel.displayID, window: element, frame: frame)
     return nil
   }
 
-  /// The panel's native portrait box laid out in `interfaceOrientation`, at the screen origin.
+  /// The lit panel's screen in `interfaceOrientation`, at the screen origin: the box a synthesized
+  /// turn swaps sides about, whatever the booked window's origin or shape.
   static func litPanelScreenFrame(_ panel: RunnerLitPanel, interfaceOrientation: Int) -> CGRect? {
     soleScreenReferenceFrame(
       nativePortraitSize: CGSize(width: panel.widthPt, height: panel.heightPt),

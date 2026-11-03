@@ -647,11 +647,8 @@ extension RunnerTests {
     let resolved = resolveRunnerWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-    // A lit-panel window can sit inside the booked screen box, so the anchor is its own origin.
-    let booked = litPanelState.surface.flatMap { $0.app === app ? $0 : nil }
-    let anchor = booked?.windowOrigin ?? resolved.frame.origin
-    let offsetX = x - Double(anchor.x)
-    let offsetY = y - Double(anchor.y)
+    let offsetX = x - Double(resolved.frame.origin.x)
+    let offsetY = y - Double(resolved.frame.origin.y)
     return origin.withOffset(CGVector(dx: offsetX, dy: offsetY))
   }
 #endif
