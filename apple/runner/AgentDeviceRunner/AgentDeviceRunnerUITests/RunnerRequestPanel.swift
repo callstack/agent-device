@@ -6,6 +6,8 @@ struct LitPanelSurface {
   let app: XCUIApplication
   let displayID: UInt
   let window: XCUIElement
+  let windowOrigin: CGPoint
+  /// The lit panel's screen in the app's interface orientation, whatever the window's shape.
   let frame: CGRect
 }
 
@@ -40,8 +42,7 @@ extension RunnerTests {
   /// The lit panel the current request named, or nil for a single-panel request. Main only.
   var requestLitPanel: RunnerLitPanel? { litPanelState.panel }
 
-  /// Books `app`'s lit-panel window for the request, or returns why it cannot. The booked frame is
-  /// the panel's box turned like the window, so a partial window maps into the whole screen.
+  /// Books `app`'s lit-panel window for the request, or returns why it cannot.
   func bookRequestLitPanelSurface(app: XCUIApplication) -> RunnerAppScreenCaptureFailure? {
     guard let litPanel = requestLitPanel else { return nil }
     if let booked = litPanelState.surface, booked.app === app { return nil }
@@ -52,20 +53,28 @@ extension RunnerTests {
     guard failure == .none, let element = window as? XCUIElement else {
       return RunnerAppScreenCaptureFailure(failure == .none ? .unresolvedWindow : failure)
     }
+    guard let screenFrame = Self.litPanelScreenFrame(
+      litPanel,
+      interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    ) else {
+      return .unresolvedScreen
+    }
     litPanelState.surface = LitPanelSurface(
       app: app,
       displayID: litPanel.displayID,
       window: element,
-      frame: Self.litPanelScreenFrame(litPanel, windowFrame: frame)
+      windowOrigin: frame.origin,
+      frame: screenFrame
     )
     return nil
   }
 
-  static func litPanelScreenFrame(_ panel: RunnerLitPanel, windowFrame: CGRect) -> CGRect {
-    let long = max(panel.widthPt, panel.heightPt)
-    let short = min(panel.widthPt, panel.heightPt)
-    let turned = windowFrame.width > windowFrame.height
-    return CGRect(origin: windowFrame.origin, size: turned ? CGSize(width: long, height: short) : CGSize(width: short, height: long))
+  /// The panel's native portrait box laid out in `interfaceOrientation`, at the screen origin.
+  static func litPanelScreenFrame(_ panel: RunnerLitPanel, interfaceOrientation: Int) -> CGRect? {
+    soleScreenReferenceFrame(
+      nativePortraitSize: CGSize(width: panel.widthPt, height: panel.heightPt),
+      interfaceOrientation: interfaceOrientation
+    )
   }
 
   /// The roots of every element read: the app, or the windows proven on the lit display. A walk that

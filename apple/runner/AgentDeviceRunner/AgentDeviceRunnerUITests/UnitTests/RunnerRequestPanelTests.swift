@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
@@ -48,18 +49,17 @@ extension RunnerTests {
     XCTAssertEqual(queuedLater, 3)
   }
 
-  /// The Duo leaves a status strip beside an app's window on the inner panel; a point must still map
-  /// into the whole screen, so the booked frame is the panel's box turned like the window.
-  func testLitPanelBookingMapsIntoTheWholeTurnedPanel() {
+  /// The Duo's 80 pt status strip can put an app's window at a non-zero origin on the inner panel.
+  /// The booked box takes no window input: it is the panel's screen in the interface orientation,
+  /// at the screen origin, so no window origin or shape can move it.
+  func testLitPanelBookingIsTheScreenInTheInterfaceOrientation() {
     let inner = RunnerLitPanel(displayID: 3, widthPt: 669, heightPt: 951)
-    XCTAssertEqual(
-      Self.litPanelScreenFrame(inner, windowFrame: CGRect(x: 0, y: 0, width: 871, height: 669)),
-      CGRect(x: 0, y: 0, width: 951, height: 669)
-    )
-    XCTAssertEqual(
-      Self.litPanelScreenFrame(inner, windowFrame: CGRect(x: 0, y: 0, width: 669, height: 951)),
-      CGRect(x: 0, y: 0, width: 669, height: 951)
-    )
+    let landscape = CGRect(x: 0, y: 0, width: 951, height: 669)
+    let portrait = CGRect(x: 0, y: 0, width: 669, height: 951)
+    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft), landscape)
+    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight), landscape)
+    XCTAssertEqual(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.portrait), portrait)
+    XCTAssertNil(Self.litPanelScreenFrame(inner, interfaceOrientation: RunnerInterfaceOrientation.unknown), "an unknown orientation books nothing")
   }
 
   func testLitPanelSnapshotRefusesAPinToABackendThatCannotProveThePanel() throws {
@@ -203,7 +203,9 @@ extension RunnerTests {
     XCTAssertThrowsError(try resolveTextEntryInput(app: app, target: target)) {
       XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
     }
-    XCTAssertThrowsError(try clearedFieldRead(app: app, target: target), "a clear pass read propagates it too")
+    XCTAssertThrowsError(try clearedFieldRead(app: app, target: target), "a clear pass read propagates it too") {
+      XCTAssertEqual($0 as? RunnerAppScreenCaptureFailure, .unresolvedScreen)
+    }
     XCTAssertFalse(boundTextEntryInputIsGone(app: app, target: target))
   }
 
