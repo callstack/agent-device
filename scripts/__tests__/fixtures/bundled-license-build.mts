@@ -10,7 +10,7 @@ await build({
   cwd: root,
   tsconfig: path.join(root, 'tsconfig.json'),
   entry: ['input.ts'],
-  outDir: 'dist',
+  outDir: process.argv[4] ?? 'dist',
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   dts: process.argv[3] === 'true',
   minify: true,
@@ -26,6 +26,6 @@ await build({
       'included_extra',
     ],
   },
-  plugins: [bundledLicenseNotices(root, path.join(root, 'dist'))],
+  plugins: [bundledLicenseNotices(root)],
   logLevel: 'silent',
 });

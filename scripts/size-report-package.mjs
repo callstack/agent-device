@@ -50,7 +50,7 @@ export function collectNpmPack(root) {
     { cwd: root, encoding: 'utf8' },
   );
   const pack = parseNpmPackOutput(stdout);
-  const entries = normalizeNpmPackEntries(pack);
+  const entries = pack.files;
   assertPublishPackageContents(entries, {
     repoRoot: root,
     requireSnapshotBridge: fs.existsSync(path.join(root, 'apple', 'snapshot-bridge')),
@@ -166,9 +166,13 @@ export function assertPublishPackageContents(entries, options = {}) {
   }
 }
 
-function parseNpmPackOutput(stdout) {
+export function parseNpmPackOutput(stdout) {
   const parsed = JSON.parse(stdout);
-  return Array.isArray(parsed) ? parsed[0] : parsed;
+  const pack = Array.isArray(parsed) ? parsed[0] : parsed;
+  if (!pack || typeof pack.filename !== 'string' || pack.filename.length === 0) {
+    throw new Error('npm pack did not return a filename');
+  }
+  return { ...pack, files: normalizeNpmPackEntries(pack) };
 }
 
 function normalizeNpmPackEntries(pack) {

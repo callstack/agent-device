@@ -62,3 +62,27 @@ test.each([0, 7])('closed output pipe preserves command exit code %s', async (ex
   assert.equal(code, exitCode);
   assert.equal(stderr, '');
 });
+
+test.each([0, 7])(
+  'unexpected output error fails a successful command (code=%s)',
+  async (exitCode) => {
+    const source = [
+      `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+      "import { Writable } from 'node:stream';",
+      "const output = new Writable({ write(_chunk, _encoding, done) { done(Object.assign(new Error('fixture write failure'), { code: 'EIO' })); } });",
+      "Object.defineProperty(process, 'stdout', { value: output });",
+      `runEntrypoint('fixture', async () => ${exitCode});`,
+    ].join('\n');
+    const child = spawn(
+      process.execPath,
+      ['--experimental-strip-types', '--input-type=module', '--eval', source],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+    const [code, signal] = await once(child, 'close');
+    assert.equal(signal, null);
+    assert.equal(code, exitCode || 1);
+    assert.equal(stderr, '');
+  },
+);

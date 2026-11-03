@@ -27,12 +27,13 @@ async function fixture(files: Record<string, string>): Promise<string> {
   return root;
 }
 
-async function bundle(root: string, dts = false): Promise<void> {
+async function bundle(root: string, dts = false, outputDirectory = 'dist'): Promise<void> {
   await execFileAsync(process.execPath, [
     '--experimental-strip-types',
     fileURLToPath(new URL('./fixtures/bundled-license-build.mts', import.meta.url)),
     root,
     String(dts),
+    outputDirectory,
   ]);
 }
 
@@ -221,3 +222,23 @@ test.each(['0.4.4', '0.4.5'])(
     assert.match(notices, /Full Apache license text/);
   },
 );
+
+test('output overrides write notices beside the bundle without creating the default dist', async () => {
+  const root = await fixture({
+    'input.ts': "export { value } from 'included';",
+    'node_modules/included/package.json': JSON.stringify({
+      name: 'included',
+      version: '1.0.0',
+      license: 'MIT',
+      main: 'index.js',
+    }),
+    'node_modules/included/index.js': 'export const value = 42;',
+    'node_modules/included/LICENSE': 'Copyright fixture author\nFull license terms.',
+  });
+  await bundle(root, false, 'redirected');
+  assert.match(
+    await fs.readFile(path.join(root, 'redirected/THIRD_PARTY_NOTICES.txt'), 'utf8'),
+    /included@1\.0\.0/,
+  );
+  await assert.rejects(fs.stat(path.join(root, 'dist')), { code: 'ENOENT' });
+});

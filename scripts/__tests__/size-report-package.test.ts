@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'vitest';
 import { formatMarkdown } from '../size-report.mjs';
-import { assertPublishPackageContents } from '../size-report-package.mjs';
+import { assertPublishPackageContents, parseNpmPackOutput } from '../size-report-package.mjs';
 
 const fixturePack = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
@@ -191,4 +191,27 @@ test('base measurement uses the measured revision package asset policy', async (
     baseStep,
     /git checkout --detach[\s\S]*cp scripts\/size-report-package\.mjs \/tmp\/agent-device-size-report\/[\s\S]*node \/tmp\/agent-device-size-report\/size-report\.mjs/,
   );
+});
+
+test.each(['1', -1, 0.5, null])('npm pack rejects malformed file sizes (%s)', (size) => {
+  assert.throws(
+    () =>
+      parseNpmPackOutput(
+        JSON.stringify([
+          {
+            filename: 'fixture.tgz',
+            size: 1,
+            unpackedSize: 1,
+            files: [{ path: 'dist/src/THIRD_PARTY_NOTICES.txt', size }],
+          },
+        ]),
+      ),
+    /invalid file entry/,
+  );
+});
+
+test('npm pack parser shares validated file entries across both output shapes', () => {
+  const pack = { filename: 'fixture.tgz', ...fixturePack };
+  assert.deepEqual(parseNpmPackOutput(JSON.stringify([pack])).files, fixturePack.files);
+  assert.deepEqual(parseNpmPackOutput(JSON.stringify(pack)).files, fixturePack.files);
 });

@@ -13,3 +13,8 @@ export function assertPublishPackageContents(
     macosHelperManifestSource?: string;
   }>,
 ): void;
+
+export function parseNpmPackOutput(stdout: string): Readonly<{
+  filename: string;
+  files: readonly NpmPackEntry[];
+}>;

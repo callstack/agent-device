@@ -31,7 +31,11 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
-import { assertBundledLicenseNotices, type NpmPackEntry } from './size-report-package.mjs';
+import {
+  assertBundledLicenseNotices,
+  parseNpmPackOutput,
+  type NpmPackEntry,
+} from './size-report-package.mjs';
 import { testOnlyContentFailures, testOnlyPathFailures } from './lib/shipped-test-code.ts';
 import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
@@ -97,16 +101,16 @@ function packTarball(): { tarball: string; packedEntries: readonly NpmPackEntry[
     throw new Error('No dist/src build found. Run `pnpm build` first.');
   }
   fs.mkdirSync(packDestination, { recursive: true });
-  const packed = JSON.parse(
+  const packed = parseNpmPackOutput(
     run(
       'npm',
       ['pack', '--ignore-scripts', '--json', '--pack-destination', packDestination],
       repoRoot,
     ),
-  ) as [{ filename: string; files: NpmPackEntry[] }];
+  );
   return {
-    tarball: path.join(packDestination, packed[0].filename),
-    packedEntries: packed[0].files,
+    tarball: path.join(packDestination, packed.filename),
+    packedEntries: packed.files,
   };
 }
 
