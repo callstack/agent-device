@@ -32,8 +32,11 @@ function drainOutput(stream: NodeJS.WriteStream, deadline: number): Promise<unkn
 // pipe preserves its code. Primary output has a hard deadline, even for a slow reader.
 // A failure diagnostic gets one separate bounded drain window.
 export function runEntrypoint(prefix: string, main: () => Promise<number>): void {
-  // Node retains the cause on stream.errored; early writes must survive until the drain classifies it.
-  for (const stream of [process.stdout, process.stderr]) stream.on('error', () => undefined);
+  // A pending main promise does not keep Node alive; retain early failures for natural exit.
+  const retainOutputFailure = (error: unknown): void => {
+    if (!isClosedPipe(error) && !Number(process.exitCode)) process.exitCode = 1;
+  };
+  for (const stream of [process.stdout, process.stderr]) stream.on('error', retainOutputFailure);
   const exitAfterOutput = async (code: number): Promise<never> => {
     const deadline = Date.now() + OUTPUT_DRAIN_TIMEOUT_MS;
     const [stdoutError, initialStderrError] = await Promise.all([

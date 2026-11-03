@@ -91,6 +91,33 @@ test.each(
   },
 );
 
+test.each(
+  ['EIO', 'EPIPE'].flatMap((errorCode) => [0, 7].map((exitCode) => ({ errorCode, exitCode }))),
+)(
+  'early output error sets natural exit status while main stays pending ($errorCode, code=$exitCode)',
+  async ({ errorCode, exitCode }) => {
+    const source = [
+      `import { runEntrypoint } from ${JSON.stringify(new URL('./cli-entrypoint.ts', import.meta.url).href)};`,
+      "import { Writable } from 'node:stream';",
+      `const output = new Writable({ write(_chunk, _encoding, done) { done(Object.assign(new Error('fixture write failure'), { code: ${JSON.stringify(errorCode)} })); } });`,
+      "Object.defineProperty(process, 'stdout', { value: output });",
+      `process.exitCode = ${exitCode};`,
+      "runEntrypoint('fixture', () => { process.stdout.write('trigger'); return new Promise(() => {}); });",
+    ].join('\n');
+    const child = spawn(
+      process.execPath,
+      ['--experimental-strip-types', '--input-type=module', '--eval', source],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let stderr = '';
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
+    const [code, signal] = await once(child, 'close');
+    assert.equal(signal, null);
+    assert.equal(code, exitCode || (errorCode === 'EPIPE' ? 0 : 1));
+    assert.equal(stderr, '');
+  },
+);
+
 // A real pipe must stay unread: synthetic write callbacks cannot prove process termination under backpressure.
 test.each([
   { exitCode: 0, diagnosticDelayMs: 0 },
