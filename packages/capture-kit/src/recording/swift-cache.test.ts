@@ -434,7 +434,73 @@ test('a temp removal failure survives a canceled compile', async () => {
     expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
     expect(((error as Error).cause as AggregateError).errors).toEqual([
       cancelFailure,
-      removalFailure,
+      expect.objectContaining({
+        details: { reason: 'swift_cache_temp_removal_failed' },
+        cause: removalFailure,
+      }),
+    ]);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('simultaneous temp removal and lock release failures preserve all evidence', async () => {
+  const compileFailure = new Error('compile failed');
+  const removalFailure = new Error('temp removal failed');
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    const output = args[args.indexOf('-o') + 1]!;
+    const lock = path.join(path.dirname(path.dirname(output)), `${path.basename(output)}.lock`);
+    const owner = path.join(lock, 'owner.json');
+    fs.rmSync(owner);
+    fs.mkdirSync(owner);
+    throw compileFailure;
+  });
+  const original = fs.rmSync;
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
+    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    return original(target, options);
+  }) as typeof fs.rmSync);
+  try {
+    const error = await compileSwiftSourceText({
+      host: createTestHost(),
+      source: 'print(2)',
+      cacheName: 'both',
+    }).catch((error: unknown) => error);
+    expect(((error as Error).cause as AggregateError).errors).toEqual([
+      compileFailure,
+      expect.objectContaining({
+        details: { reason: 'swift_cache_temp_removal_failed' },
+        cause: removalFailure,
+      }),
+      expect.objectContaining({
+        details: { reason: 'swift_cache_lock_release_failed' },
+        cause: expect.any(Error),
+      }),
+    ]);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('successful compilation still reports failure to remove temporary output', async () => {
+  const removalFailure = new Error('temp removal failed');
+  const original = fs.rmSync;
+  const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
+    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    return original(target, options);
+  }) as typeof fs.rmSync);
+  try {
+    const error = await compileSwiftSourceText({
+      host: createTestHost(),
+      source: 'print(3)',
+      cacheName: 'successful',
+    }).catch((error: unknown) => error);
+    expect(error).toMatchObject({ details: { reason: 'swift_cache_cleanup_failed' } });
+    expect(((error as Error).cause as AggregateError).errors).toEqual([
+      expect.objectContaining({
+        details: { reason: 'swift_cache_temp_removal_failed' },
+        cause: removalFailure,
+      }),
     ]);
   } finally {
     spy.mockRestore();

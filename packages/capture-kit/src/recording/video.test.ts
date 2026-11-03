@@ -526,3 +526,26 @@ test('a retry does not erase an earlier cleanup failure from close', async () =>
   await expect(preparation.prepare()).resolves.toMatchObject({ kind: 'avfoundation' });
   await expect(preparation.close()).rejects.toBe(failure);
 });
+
+test('close retains cleanup failures from successive attempts after a successful retry', async () => {
+  const first = new AppError(
+    'COMMAND_FAILED',
+    'first cleanup',
+    { reason: 'swift_cache_cleanup_failed' },
+    new Error('first cause'),
+  );
+  const second = new AppError(
+    'COMMAND_FAILED',
+    'second cleanup',
+    { reason: 'swift_cache_cleanup_failed' },
+    new Error('second cause'),
+  );
+  vi.mocked(compileSwiftSourceText).mockRejectedValueOnce(first).mockRejectedValueOnce(second);
+  const preparation = createVideoValidatorPreparation(createTestHost());
+  await expect(preparation.prepare()).rejects.toBe(first);
+  await expect(preparation.prepare()).rejects.toBe(second);
+  await expect(preparation.prepare()).resolves.toMatchObject({ kind: 'avfoundation' });
+  const failure = await preparation.close().catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).errors).toEqual([first, second]);
+});
