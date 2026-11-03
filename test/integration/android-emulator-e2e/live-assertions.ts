@@ -54,18 +54,18 @@ export async function scrollToVisibleSelector(
 }
 
 export function assertDiffLine(
-  result: CliJsonResult,
+  result: { lines?: unknown } | undefined,
   kind: SnapshotDiffLine['kind'],
   expectedText: string,
 ): void {
-  const lines: unknown = result.json?.data?.lines;
-  assert.ok(Array.isArray(lines), `snapshot diff has no lines: ${JSON.stringify(result.json)}`);
+  const lines = result?.lines;
+  assert.ok(Array.isArray(lines), `snapshot diff has no lines: ${JSON.stringify(result)}`);
   assert.ok(
     lines.some(
       (line: unknown) =>
         isSnapshotDiffLine(line) && line.kind === kind && line.text.includes(expectedText),
     ),
-    `expected ${kind} snapshot line containing ${expectedText}: ${JSON.stringify(result.json)}`,
+    `expected ${kind} snapshot line containing ${expectedText}: ${JSON.stringify(result)}`,
   );
 }
 

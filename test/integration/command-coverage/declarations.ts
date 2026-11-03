@@ -732,7 +732,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   [C.diff]: {
     androidEmulator: androidEmulator.live(
       'smoke:automation-system',
-      'snapshot diff observes the Automation-to-Settings transition',
+      'snapshot diff observes removed and added Android input canary text',
     ),
     iosSimulator: iosSimulator.live(
       'smoke:form-input',
