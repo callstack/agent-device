@@ -125,7 +125,13 @@ async function resolveFreshSessionDevice(
   );
   if (!resolution) return undefined;
   try {
-    return await resolveTargetDevice(resolution.flags, { ...resolution.options, env });
+    // A fresh web session locks its own device whichever command starts it (ADR 0035 rule 3: a
+    // replay or batch locks only the device it starts on), never the shared host device.
+    return await resolveTargetDevice(resolution.flags, {
+      ...resolution.options,
+      env,
+      webSessionName: resolvePublicSessionName(req),
+    });
   } catch {
     // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
     return undefined;
