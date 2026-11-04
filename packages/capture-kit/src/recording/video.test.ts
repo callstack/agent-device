@@ -15,12 +15,20 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
 }));
-vi.mock('./swift-cache.ts', () => ({
-  buildSwiftToolEnv: () => ({}),
-  getSwiftCacheRoot: (env: NodeJS.ProcessEnv) => env.AGENT_DEVICE_SWIFT_CACHE_DIR,
-  readCompiledSwiftSourceText: vi.fn(() => undefined),
-  compileSwiftSourceText: vi.fn(async () => '/bin/true'),
-}));
+vi.mock(import('./swift-cache.ts'), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    createSwiftAttempt: (env: NodeJS.ProcessEnv, kind: 'compiler' | 'overlay' | 'validator') =>
+      actual.createSwiftAttempt(
+        { ...env, AGENT_DEVICE_SWIFT_CACHE_DIR: process.env.AGENT_DEVICE_SWIFT_CACHE_DIR },
+        kind,
+      ),
+    buildSwiftToolEnv: () => ({}),
+    readCompiledSwiftSourceText: vi.fn(() => undefined),
+    compileSwiftSourceText: vi.fn(async () => '/bin/true'),
+  };
+});
 
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 
@@ -163,7 +171,10 @@ test('each runtime owner compiles for itself instead of sharing a module-global 
   // Each owner memoizes its own compile: two runtimes on one cache compile twice, because no
   // module-global map shares their work any more, and the Swift cache lock is what excludes them.
   expect(firstResult).toEqual(secondResult);
-  expect(otherResult).toEqual(firstResult);
+  expect(otherResult).toMatchObject({ kind: 'avfoundation', executablePath: '/bin/true' });
+  expect(otherResult.kind === 'avfoundation' && otherResult.env.AGENT_DEVICE_SWIFT_CACHE_DIR).toBe(
+    `${host.env.AGENT_DEVICE_SWIFT_CACHE_DIR}-other`,
+  );
   expect(compileSwiftSourceText).toHaveBeenCalledTimes(3);
 
   // Closing one owner stops that owner's compile only; the other owners' work is untouched.

@@ -80,7 +80,7 @@ const output = path.join(root, 'video.mp4');
 fs.writeFileSync(output, Buffer.from('0000000c6674797069736f6d000000086d6f6f76', 'hex'));
 const trigger = path.join(root, 'frontend-trigger');
 const ready = path.join(root, 'frontend-ready');
-const written = path.join(cache, 'frontend-late-write');
+let written = '';
 const done = path.join(root, 'frontend-done');
 let frontend: { pid: number; startTime: string } | undefined;
 let notifyStarted!: () => void;
@@ -104,6 +104,8 @@ await withCommandExecutorOverride(
   (cmd, _args, options) => {
     if (cmd !== 'xcrun') return undefined;
     return (async () => {
+      if (!options.cwd) throw new Error('compiler has no private working directory');
+      written = path.join(options.cwd, 'frontend-late-write');
       const child = spawn(process.execPath, ['-e', script, trigger, ready, written, done], {
         detached: true,
         stdio: 'ignore',
@@ -142,7 +144,7 @@ await withCommandExecutorOverride(
       if (!result.overlayWarning) throw new Error('expected timeout warning');
       await started;
     }
-    process.stdout.write(`${JSON.stringify({ frontend, ownerPid: process.pid, mode })}\n`);
+    process.stdout.write(`${JSON.stringify({ frontend, written, ownerPid: process.pid, mode })}\n`);
     await new Promise<void>(() => {});
   },
 );

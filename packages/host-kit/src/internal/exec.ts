@@ -7,7 +7,14 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
-import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap } from '@agent-device/kernel/source-value';
+import { commandDeveloperDir, getCommandTraceEnv, resolveSpawnEnv } from './command-host-scope.ts';
+export {
+  commandDeveloperDir,
+  commandHostEnvironment,
+  withCommandHost,
+  withRestrictedCommandEnvironment,
+} from './command-host-scope.ts';
 
 export type ExecResult = {
   stdout: string;
@@ -108,58 +115,6 @@ export async function withoutCommandExecutorOverride<T>(fn: () => Promise<T>): P
   return await commandExecutorOverrideScope.run(undefined, fn);
 }
 
-type CommandHostScope = Readonly<{
-  host: HostEnvironment;
-  requestEnv: EnvMap | undefined;
-}>;
-
-const commandHostScope = new AsyncLocalStorage<CommandHostScope>();
-
-/**
- * Runs `fn` as the host that owns the commands it spawns. A command without its own `env` starts
- * from `host.env`, then takes `requestEnv` on top, so neither the process's environment nor a
- * concurrent request's values reach it. Outside a scope a command without `env` inherits the process's.
- */
-export async function withCommandHost<T>(
-  scope: CommandHostScope,
-  fn: () => Promise<T>,
-): Promise<T> {
-  // A nested scope of the same host that names no request env keeps the enclosing request's.
-  const enclosing = commandHostScope.getStore();
-  const requestEnv =
-    scope.requestEnv ?? (enclosing?.host === scope.host ? enclosing.requestEnv : undefined);
-  return await commandHostScope.run({ host: scope.host, requestEnv }, fn);
-}
-
-/**
- * The host of the enclosing {@link withCommandHost} scope, for code that has no host of its own.
- * Outside a scope there is no host to answer with, so it refuses rather than guess.
- */
-export function commandHostEnvironment(): HostEnvironment {
-  const scope = commandHostScope.getStore();
-  if (!scope) {
-    throw new AppError('COMMAND_FAILED', 'No host environment is bound to this command.', {
-      reason: 'host_environment_unscoped',
-    });
-  }
-  return scope.host;
-}
-
-/** Effective toolchain selection; an explicitly empty request value selects `xcode-select`. */
-export function commandDeveloperDir(): string | undefined {
-  const scope = commandHostScope.getStore();
-  if (scope?.requestEnv && Object.hasOwn(scope.requestEnv, 'DEVELOPER_DIR')) {
-    return scope.requestEnv.DEVELOPER_DIR || undefined;
-  }
-  return scope?.host.env.DEVELOPER_DIR || undefined;
-}
-
-function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {
-  const scope = commandHostScope.getStore();
-  if (!scope) return env;
-  return { ...(env ?? scope.host.env), ...scope.requestEnv };
-}
-
 export async function runCmd(
   cmd: string,
   args: readonly string[],
@@ -209,7 +164,7 @@ function runSpawnedCommand(
   const execTrace = createExecTraceContext(
     cmd,
     normalizeTimeoutMs(options.timeoutMs),
-    commandHostScope.getStore()?.host.env,
+    getCommandTraceEnv(),
   );
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
@@ -507,7 +462,7 @@ export function runCmdBackground(
   options: ExecBackgroundOptions = {},
 ): ExecBackgroundResult {
   const executable = normalizeExecutableCommand(cmd);
-  const execTrace = createExecTraceContext(cmd, undefined, commandHostScope.getStore()?.host.env);
+  const execTrace = createExecTraceContext(cmd, undefined, getCommandTraceEnv());
   const child = spawn(executable, args, {
     cwd: options.cwd,
     env: resolveSpawnEnv(options.env),

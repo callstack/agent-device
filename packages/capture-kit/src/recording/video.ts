@@ -3,9 +3,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError, runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import {
-  buildSwiftToolEnv,
   compileSwiftSourceText,
+  createSwiftAttempt,
   readCompiledSwiftSourceText,
+  withSwiftAttempt,
 } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
@@ -140,7 +141,7 @@ function preparedVideoValidator(
   host: HostEnvironment,
   executablePath: string,
 ): PreparedVideoValidator {
-  return Object.freeze({ kind: 'avfoundation', executablePath, env: buildSwiftToolEnv(host.env) });
+  return Object.freeze({ kind: 'avfoundation', executablePath, env: host.env });
 }
 
 /** A preparation whose owner has closed will not compile again; this outcome is terminal. */
@@ -289,15 +290,24 @@ export async function isPlayableVideo(
     deadline?.remainingMs() ?? VALIDATOR_RUN_TIMEOUT_MS,
   );
   if (runTimeoutMs <= 0) return false;
-  const result = await runCmd(prepared.executablePath, [filePath], {
-    allowFailure: true,
-    timeoutMs: runTimeoutMs,
-    env: prepared.env,
-  }).catch((error: unknown) => {
-    if (isCommandTimeoutError(error)) return undefined;
-    if (isUnavailableVideoValidatorError(error)) throw unavailableVideoValidator(error);
-    throw error;
-  });
+  const attempt = createSwiftAttempt(prepared.env, 'validator');
+  let result;
+  try {
+    result = await withSwiftAttempt(attempt, (env) =>
+      runCmd(prepared.executablePath, [filePath], {
+        allowFailure: true,
+        timeoutMs: runTimeoutMs,
+        cwd: attempt.work,
+        env,
+      }),
+    ).catch((error: unknown) => {
+      if (isCommandTimeoutError(error)) return undefined;
+      if (isUnavailableVideoValidatorError(error)) throw unavailableVideoValidator(error);
+      throw error;
+    });
+  } finally {
+    fs.rmSync(attempt.work, { recursive: true, force: true });
+  }
   if (!result) return false;
   if (isSwiftVideoValidatorUnavailable(result.stderr, result.stdout)) {
     throw unavailableVideoValidator(

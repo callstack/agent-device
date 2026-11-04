@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import { runCmd, withRestrictedCommandEnvironment } from '@agent-device/host-kit/command';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
@@ -14,8 +14,8 @@ import {
   type ProcessLockRelease,
 } from '@agent-device/host-kit/file';
 
-const SWIFT_CACHE_VERSION = '2';
-const SWIFT_SOURCE_TEXT_CACHE_VERSION = '3';
+const SWIFT_CACHE_VERSION = '3';
+const SWIFT_SOURCE_TEXT_CACHE_VERSION = '4';
 const LOCK_RETRY_DELAY_MS = 25;
 // swift-driver runs each frontend job in its own process group. It stops them on SIGINT, but
 // SIGKILL or SIGTERM leaves them compiling with no parent.
@@ -122,7 +122,10 @@ export async function compileSwiftSourceFile(params: {
   );
   await ensureSwiftExecutable({
     host: params.host,
-    sourcePaths,
+    sources: sources.map(({ sourcePath, source }) => ({
+      name: path.basename(sourcePath),
+      contents: source,
+    })),
     executablePath,
     timeoutMs: params.timeoutMs,
   });
@@ -144,10 +147,9 @@ function swiftSourceTextPaths(params: SwiftSourceTextInput) {
     params.source,
   ]);
   const cacheRoot = getSwiftCacheRoot(params.host.env);
-  const sourcePath = path.join(cacheRoot, 'sources', `${cacheName}-${key}.swift`);
   const executablePath = path.join(cacheRoot, 'bin', `${cacheName}-${key}`);
 
-  return { sourcePath, executablePath };
+  return { executablePath };
 }
 
 /** Reads an already published executable without acquiring a lock or starting a compiler. */
@@ -163,13 +165,12 @@ export async function compileSwiftSourceText(
     signal?: AbortSignal;
   },
 ): Promise<string> {
-  const { sourcePath, executablePath } = swiftSourceTextPaths(params);
+  const { executablePath } = swiftSourceTextPaths(params);
 
   await ensureSwiftExecutable({
     host: params.host,
-    sourcePaths: [sourcePath],
+    sources: [{ name: `${sanitizeCacheName(params.cacheName)}.swift`, contents: params.source }],
     executablePath,
-    sourceText: params.source,
     timeoutMs: params.timeoutMs,
     signal: params.signal,
   });
@@ -185,11 +186,63 @@ export function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
   return path.join(os.tmpdir(), 'agent-device-swift-cache');
 }
 
+/** Creates a unique cache-owned work area. Its record remains until its owner can prove cleanup. */
+export function createSwiftAttempt(
+  env: NodeJS.ProcessEnv,
+  kind: 'compiler' | 'overlay' | 'validator',
+) {
+  const attempts = path.join(getSwiftCacheRoot(env), 'attempts');
+  fs.mkdirSync(attempts, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(attempts, `${kind}-`));
+  const work = path.join(directory, 'work');
+  fs.mkdirSync(work);
+  const home = path.join(work, 'home');
+  const tmp = path.join(work, 'tmp');
+  const moduleCache = path.join(work, 'module-cache');
+  const xdgCache = path.join(work, 'xdg-cache');
+  for (const dir of [home, tmp, moduleCache, xdgCache]) fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(directory, 'pending.json'), JSON.stringify({ version: 1, kind }), {
+    flag: 'wx',
+  });
+  const toolEnv: NodeJS.ProcessEnv = {};
+  for (const key of [
+    'PATH',
+    'DEVELOPER_DIR',
+    'SDKROOT',
+    'TOOLCHAINS',
+    'LANG',
+    'LC_ALL',
+    'LC_CTYPE',
+  ]) {
+    if (env[key] !== undefined) toolEnv[key] = env[key];
+  }
+  Object.assign(toolEnv, {
+    HOME: home,
+    CFFIXED_USER_HOME: home,
+    TMPDIR: tmp,
+    TMP: tmp,
+    TEMP: tmp,
+    XDG_CACHE_HOME: xdgCache,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    CLANG_MODULE_CACHE_PATH: moduleCache,
+    SWIFT_MODULECACHE_PATH: moduleCache,
+  });
+  return { directory, work, env: toolEnv };
+}
+
+/** Prevents a request environment from replacing an attempt's private writable paths. */
+export async function withSwiftAttempt<T>(
+  attempt: ReturnType<typeof createSwiftAttempt>,
+  run: (env: NodeJS.ProcessEnv) => Promise<T>,
+): Promise<T> {
+  return await withRestrictedCommandEnvironment({ cwd: attempt.work, env: attempt.env }, run);
+}
+
 async function ensureSwiftExecutable(params: {
   host: HostEnvironment;
-  sourcePaths: string[];
+  sources: Array<{ name: string; contents: string | Buffer }>;
   executablePath: string;
-  sourceText?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<void> {
@@ -214,34 +267,50 @@ async function ensureSwiftExecutable(params: {
       if (isExecutableFile(params.executablePath)) {
         return;
       }
-      const tempDir = fs.mkdtempSync(
-        path.join(executableDir, `.${path.basename(params.executablePath)}.${process.pid}.`),
-      );
-      const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
+      const attempt = createSwiftAttempt(params.host.env, 'compiler');
+      const tempExecutablePath = path.join(attempt.work, path.basename(params.executablePath));
       try {
-        const [primarySourcePath] = params.sourcePaths;
-        if (params.sourceText !== undefined && primarySourcePath) {
-          fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
-          let cachedSource: string | undefined;
-          try {
-            cachedSource = fs.readFileSync(primarySourcePath, 'utf8');
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          }
-          if (cachedSource !== params.sourceText) {
-            publishFileSync({ destination: primarySourcePath, contents: params.sourceText });
-          }
-        }
-        await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
-          timeoutMs,
-          signal: params.signal,
-          kill: SWIFTC_STOP,
-          env: buildSwiftToolEnv(params.host.env),
+        const sourcePaths = params.sources.map((source, index) => {
+          const sourceDir = path.join(attempt.work, 'sources', String(index));
+          fs.mkdirSync(sourceDir, { recursive: true });
+          const sourcePath = path.join(sourceDir, source.name);
+          fs.writeFileSync(sourcePath, source.contents);
+          return sourcePath;
         });
-        fs.renameSync(tempExecutablePath, params.executablePath);
+        await withSwiftAttempt(attempt, (env) =>
+          runCmd(
+            'xcrun',
+            [
+              '--no-cache',
+              'swiftc',
+              ...sourcePaths,
+              '-module-cache-path',
+              path.join(attempt.work, 'module-cache'),
+              '-sdk-module-cache-path',
+              path.join(attempt.work, 'module-cache'),
+              '-Xcc',
+              `-fmodules-cache-path=${path.join(attempt.work, 'module-cache')}`,
+              '-o',
+              tempExecutablePath,
+            ],
+            {
+              cwd: attempt.work,
+              timeoutMs,
+              signal: params.signal,
+              kill: SWIFTC_STOP,
+              env,
+            },
+          ),
+        );
+        const snapshot = snapshotSwiftExecutable(tempExecutablePath);
+        publishFileSync({
+          destination: params.executablePath,
+          contents: snapshot.contents,
+          mode: snapshot.mode,
+        });
       } finally {
         try {
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          fs.rmSync(attempt.work, { recursive: true, force: true });
         } catch (error) {
           cleanupFailures.push(
             new AppError(
@@ -279,6 +348,31 @@ async function ensureSwiftExecutable(params: {
     );
   }
   if (taskFailed) throw taskFailure;
+}
+
+function snapshotSwiftExecutable(source: string): { contents: Buffer; mode: number } {
+  const fd = fs.openSync(source, 'r');
+  try {
+    const before = fs.fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.size === 0n || !(before.mode & 0o111n)) {
+      throw new AppError('COMMAND_FAILED', 'Swift compiler did not produce an executable');
+    }
+    const contents = fs.readFileSync(fd);
+    const after = fs.fstatSync(fd, { bigint: true });
+    if (
+      before.size !== after.size ||
+      before.mtimeNs !== after.mtimeNs ||
+      before.ctimeNs !== after.ctimeNs ||
+      BigInt(contents.length) !== after.size
+    ) {
+      throw new AppError('COMMAND_FAILED', 'Swift compiler output changed while being copied', {
+        reason: 'swift_cache_output_changed',
+      });
+    }
+    return { contents, mode: Number(after.mode & 0o777n) };
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 async function acquireSwiftCacheLock(

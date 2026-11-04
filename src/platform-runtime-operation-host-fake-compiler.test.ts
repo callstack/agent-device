@@ -12,7 +12,7 @@ fixtureTest('the fake compiler remains pending until its own child is cancelled'
   const compiler = createOwnedFakeCompiler('fake-compiler-direct-');
   const child = spawn(
     path.join(compiler.toolchainDir, 'xcrun'),
-    ['swiftc', 'validator.swift', 'support.swift', '-o', 'validator'],
+    ['--no-cache', 'swiftc', 'validator.swift', 'support.swift', '-o', 'validator'],
     { env: { ...process.env, ...compiler.env } },
   );
   const exited = once(child, 'exit');

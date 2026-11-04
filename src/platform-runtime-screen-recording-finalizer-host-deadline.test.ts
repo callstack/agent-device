@@ -74,9 +74,7 @@ test('a finalizer deadline leaves the compiler running for a later stop', async 
     await expect(finalizer.complete(input)).resolves.toEqual({ telemetryPath: expect.any(String) });
     expect(compilerSignal?.aborted).toBe(false);
     expect(compilerEntered).toHaveBeenCalledOnce();
-    expect(validatorCalls).toEqual([
-      path.join(path.dirname(path.dirname(compiledPath)), path.basename(compiledPath)),
-    ]);
+    expect(validatorCalls).toEqual([path.join(root, 'cache', 'bin', path.basename(compiledPath))]);
   } finally {
     finishCompile?.();
     try {

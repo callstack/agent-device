@@ -3,9 +3,10 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
-vi.mock('@agent-device/host-kit/command', async () => {
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const fs = await import('node:fs');
   return {
+    ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
     runCmd: vi.fn(async (_cmd: string, args: string[]) => {
       fs.writeFileSync(args[args.indexOf('--output') + 1]!, 'processed');
       return { stdout: '', stderr: '', exitCode: 0 };
@@ -13,7 +14,8 @@ vi.mock('@agent-device/host-kit/command', async () => {
   };
 });
 vi.mock('../video.ts', () => ({ waitForPlayableVideo: vi.fn(async () => true) }));
-vi.mock('../swift-cache.ts', () => ({
+vi.mock(import('../swift-cache.ts'), async (importOriginal) => ({
+  ...(await importOriginal()),
   buildSwiftToolEnv: () => ({}),
   compileSwiftSourceFile: vi.fn(async () => '/bin/true'),
   resolveRecordingScriptPath: vi.fn(
@@ -33,7 +35,7 @@ test('a helper script path is resolved per host working directory, not once per 
     fs.writeFileSync(videoPath, 'original');
     await overlayRecordingTouches({
       validator: undefined,
-      host: { env: {}, cwd },
+      host: { env: { AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(root, 'cache') }, cwd },
       videoPath,
       telemetryPath,
       deadline: startRecordingOverlayBudget(),

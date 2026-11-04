@@ -57,7 +57,7 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('overlay burns touches through a cached helper and same-directory temp output', async () => {
+test('overlay burns touches through private copies and publishes a cached helper result', async () => {
   const validator = {
     kind: 'avfoundation' as const,
     executablePath: '/prepared/video-validator',
@@ -85,7 +85,7 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   });
 
   const compileCalls = mockRunCmd.mock.calls.filter(([cmd, args]) => {
-    return cmd === 'xcrun' && args[0] === 'swiftc';
+    return cmd === 'xcrun' && args[0] === '--no-cache' && args[1] === 'swiftc';
   });
   const helperCalls = mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun');
 
@@ -96,15 +96,17 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   const [helperCmd, helperArgs, helperOptions] = helperCalls[0]!;
   const inputPath = helperArgs[helperArgs.indexOf('--input') + 1]!;
   const outputPath = helperArgs[helperArgs.indexOf('--output') + 1]!;
-  expect(inputPath).toBe(videoPath);
-  expect(outputPath).not.toBe(videoPath);
-  expect(path.dirname(outputPath)).toBe(tmpDir);
-  expect(path.basename(outputPath)).toMatch(/^\.recording\.agent-device-/);
+  expect(inputPath).not.toBe(videoPath);
+  expect(path.dirname(inputPath)).toBe(path.dirname(outputPath));
+  expect(outputPath).toContain(path.join('swift-cache', 'attempts'));
+  expect(helperArgs[helperArgs.indexOf('--events') + 1]).toBe(
+    path.join(path.dirname(outputPath), 'events.json'),
+  );
   expect(fs.existsSync(outputPath)).toBe(false);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe(`processed ${path.basename(helperCmd)}`);
-  expect(helperOptions?.env?.HOME).toBe(path.join(tmpDir, 'swift-cache', 'home'));
+  expect(helperOptions?.env?.HOME).toBe(path.join(path.dirname(outputPath), 'home'));
   expect(helperOptions?.env?.CLANG_MODULE_CACHE_PATH).toBe(
-    path.join(tmpDir, 'swift-cache', 'module-cache'),
+    path.join(path.dirname(outputPath), 'module-cache'),
   );
 });
 
@@ -136,6 +138,34 @@ test('overlay preserves Swift helper compile hints', async () => {
   });
 });
 
+test('refuses an overlay that changes while the parent copies it', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'events.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const copy = fs.copyFileSync;
+  const spy = vi.spyOn(fs, 'copyFileSync').mockImplementation((source, destination, flags) => {
+    copy(source, destination, flags);
+    if (typeof source === 'string' && path.basename(source) === 'output.mp4') {
+      fs.appendFileSync(source, 'late');
+    }
+  });
+  try {
+    await expect(
+      overlayRecordingTouches({
+        host: createTestHost(),
+        validator: undefined,
+        videoPath,
+        telemetryPath,
+        deadline: startRecordingOverlayBudget(),
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'recording_overlay_output_changed' } });
+    expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 test('overlay defaults to the fast medium export preset', async () => {
   const videoPath = path.join(tmpDir, 'recording.mp4');
   const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
@@ -150,9 +180,7 @@ test('overlay defaults to the fast medium export preset', async () => {
     deadline: startRecordingOverlayBudget(),
   });
 
-  expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--events', telemetryPath, '--quality', 'medium']),
-  );
+  expect(helperScriptArgs()).toEqual(expect.arrayContaining(['--events', '--quality', 'medium']));
 });
 
 test('overlay forwards the requested high export preset', async () => {
@@ -170,9 +198,7 @@ test('overlay forwards the requested high export preset', async () => {
     exportQuality: 'high',
   });
 
-  expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--events', telemetryPath, '--quality', 'high']),
-  );
+  expect(helperScriptArgs()).toEqual(expect.arrayContaining(['--events', '--quality', 'high']));
 });
 
 test('overlay caps the helper frame rate at the caller fps only when one was asked for', async () => {

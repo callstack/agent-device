@@ -15,6 +15,7 @@ import {
   runCmdSync,
   whichCmd,
   withCommandHost,
+  withRestrictedCommandEnvironment,
   type ExecResult,
 } from './exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -293,6 +294,43 @@ const PRINT_DEVELOPER_DIR = ['-e', 'process.stdout.write(process.env.DEVELOPER_D
 function hostWith(env: Record<string, string | undefined>): HostEnvironment {
   return { env: { ...process.env, ...env }, cwd: process.cwd() };
 }
+
+test('restricted command environments preserve toolchain selection without request path overrides', async () => {
+  const host = hostWith({ DEVELOPER_DIR: '/daemon/Xcode' });
+  const restricted: HostEnvironment = {
+    cwd: process.cwd(),
+    env: { HOME: '/attempt/home', TMPDIR: '/attempt/tmp', DEVELOPER_DIR: '/host/Xcode' },
+  };
+  const script = ['-e', 'process.stdout.write(JSON.stringify(process.env))'];
+  for (const developerDir of ['/request/Xcode', '']) {
+    const result = await withCommandHost(
+      {
+        host,
+        requestEnv: {
+          HOME: '/foreign/home',
+          TMPDIR: '/foreign/tmp',
+          DEVELOPER_DIR: developerDir,
+          EXTRA: 'foreign',
+        },
+      },
+      async () =>
+        await withRestrictedCommandEnvironment(
+          restricted,
+          async (env) => await runCmd(process.execPath, script, { env }),
+        ),
+    );
+    const env = JSON.parse(result.stdout) as NodeJS.ProcessEnv;
+    assert.equal(env.HOME, '/attempt/home');
+    assert.equal(env.TMPDIR, '/attempt/tmp');
+    assert.equal(env.DEVELOPER_DIR, developerDir || undefined);
+    assert.equal(env.EXTRA, undefined);
+  }
+  const unscoped = await withRestrictedCommandEnvironment(
+    restricted,
+    async (env) => await runCmd(process.execPath, script, { env }),
+  );
+  assert.equal((JSON.parse(unscoped.stdout) as NodeJS.ProcessEnv).DEVELOPER_DIR, '/host/Xcode');
+});
 
 test('a request command env reaches spawned commands; outside it they inherit the host env', async () => {
   const host = hostWith({ DEVELOPER_DIR: '/daemon/Developer' });

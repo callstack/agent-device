@@ -6,9 +6,10 @@ import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import {
-  buildSwiftToolEnv,
   compileSwiftSourceFile,
+  createSwiftAttempt,
   resolveRecordingScriptPath,
+  withSwiftAttempt,
 } from './swift-cache.ts';
 import { waitForPlayableVideo, type VideoValidator } from './video.ts';
 import {
@@ -75,14 +76,17 @@ function getExportSupportScriptPath(host: HostEnvironment): string {
 async function exportProcessedVideo(params: {
   host: HostEnvironment;
   videoPath: string;
+  telemetryPath: string;
   scriptPath: string;
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
   validator: VideoValidator | undefined;
 }): Promise<void> {
-  const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
-  const outputPath = temporarySiblingVideoPath(videoPath);
+  const { host, videoPath, telemetryPath, scriptPath, scriptArgs, commandDescription, deadline } =
+    params;
+  const publicationPath = temporarySiblingVideoPath(videoPath);
+  let work: string | undefined;
   let exportOverran = false;
   try {
     const executablePath = await compileSwiftSourceFile({
@@ -92,6 +96,19 @@ async function exportProcessedVideo(params: {
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
     });
+    if (deadline.remainingMs() <= HELPER_EXIT_GRACE_MS) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `No time was left for the export within the ${OVERLAY_BUDGET_MS}ms budget`,
+      );
+    }
+    const attempt = createSwiftAttempt(host.env, 'overlay');
+    work = attempt.work;
+    const inputPath = path.join(work, `input${path.extname(videoPath) || '.mp4'}`);
+    const outputPath = path.join(work, `output${path.extname(videoPath) || '.mp4'}`);
+    const eventsPath = path.join(work, 'events.json');
+    fs.copyFileSync(videoPath, inputPath);
+    fs.copyFileSync(telemetryPath, eventsPath);
     const helperMs = deadline.remainingMs();
     const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
     if (exportMs <= 0) {
@@ -101,28 +118,33 @@ async function exportProcessedVideo(params: {
       );
     }
     try {
-      await runCmd(
-        executablePath,
-        [
-          '--input',
-          videoPath,
-          '--output',
-          outputPath,
-          ...scriptArgs,
-          '--timeout-ms',
-          String(Math.round(exportMs)),
-        ],
-        { timeoutMs: helperMs, env: buildSwiftToolEnv(host.env) },
+      await withSwiftAttempt(attempt, (env) =>
+        runCmd(
+          executablePath,
+          [
+            '--input',
+            inputPath,
+            '--output',
+            outputPath,
+            '--events',
+            eventsPath,
+            ...scriptArgs,
+            '--timeout-ms',
+            String(Math.round(exportMs)),
+          ],
+          { timeoutMs: helperMs, cwd: work, env },
+        ),
       );
     } catch (error) {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    if (!(await waitForPlayableVideo(outputPath, { validator: params.validator, deadline }))) {
+    copyStableOverlay(outputPath, publicationPath);
+    if (!(await waitForPlayableVideo(publicationPath, { validator: params.validator, deadline }))) {
       exportOverran = deadline.isExpired();
       throw new AppError('COMMAND_FAILED', 'The composited video was not verified as playable');
     }
-    fs.renameSync(outputPath, videoPath);
+    fs.renameSync(publicationPath, videoPath);
   } catch (error) {
     const description = exportOverran
       ? `${commandDescription}: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`
@@ -147,7 +169,28 @@ async function exportProcessedVideo(params: {
       cause,
     );
   } finally {
-    fs.rmSync(outputPath, { force: true });
+    fs.rmSync(publicationPath, { force: true });
+    if (work) fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
+function copyStableOverlay(source: string, destination: string): void {
+  const before = fs.statSync(source, { bigint: true });
+  if (!before.isFile() || before.size === 0n) {
+    throw new AppError('COMMAND_FAILED', 'The overlay helper did not produce a video');
+  }
+  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  const after = fs.statSync(source, { bigint: true });
+  if (
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.size !== after.size ||
+    before.mtimeNs !== after.mtimeNs ||
+    before.ctimeNs !== after.ctimeNs
+  ) {
+    throw new AppError('COMMAND_FAILED', 'The overlay output changed while being copied', {
+      reason: 'recording_overlay_output_changed',
+    });
   }
 }
 
@@ -178,10 +221,9 @@ export async function overlayRecordingTouches(params: {
   await exportProcessedVideo({
     host: params.host,
     videoPath,
+    telemetryPath,
     scriptPath: getOverlayScriptPath(params.host),
     scriptArgs: [
-      '--events',
-      telemetryPath,
       '--quality',
       exportQuality,
       ...(params.fps === undefined ? [] : ['--max-fps', String(params.fps)]),

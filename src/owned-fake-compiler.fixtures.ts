@@ -37,10 +37,10 @@ export function createOwnedFakeCompiler(name: string): OwnedFakeCompiler {
     [
       `#!${process.execPath}`,
       "const fs = require('node:fs');",
-      `const pidDir = process.env[${JSON.stringify(PID_DIR_ENV)}];`,
+      "const pidDir = require('node:path').join(__dirname, '..', 'pids');",
       `const selfBoundMs = ${SELF_BOUND_MS};`,
       'const args = process.argv.slice(2);',
-      "if (args.length < 4 || args[0] !== 'swiftc' || args[args.length - 2] !== '-o' || args.slice(1, -2).some((arg) => !arg.endsWith('.swift')) || !args[args.length - 1]) {",
+      "if (args.length < 5 || args[0] !== '--no-cache' || args[1] !== 'swiftc' || args[args.length - 2] !== '-o' || !args[args.length - 1]) {",
       '  console.error(`fake xcrun: expected swiftc <source.swift>... -o <output>; got ${JSON.stringify(args)}`);',
       '  process.exit(2);',
       '}',

@@ -51,10 +51,33 @@ test('compileSwiftSourceFile compiles to a unique temp executable before publish
   const outputPath = compileCall[1][compileCall[1].indexOf('-o') + 1]!;
 
   expect(outputPath).not.toBe(executablePath);
-  expect(path.dirname(outputPath)).toContain(path.join('swift-cache', 'bin'));
+  expect(path.dirname(outputPath)).toContain(path.join('swift-cache', 'attempts'));
   expect(path.basename(outputPath)).toBe(path.basename(executablePath));
   expect(fs.statSync(executablePath).mode & 0o111).not.toBe(0);
   expect(fs.existsSync(outputPath)).toBe(false);
+});
+
+test('refuses publication when the compiler output changes during its snapshot', async () => {
+  let output = '';
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    output = args[args.indexOf('-o') + 1]!;
+    fs.writeFileSync(output, 'compiled', { mode: 0o755 });
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  const read = fs.readFileSync;
+  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation(((target, options) => {
+    const result = read(target, options as never);
+    if (typeof target === 'number' && output) fs.appendFileSync(output, 'late');
+    return result;
+  }) as typeof fs.readFileSync);
+  try {
+    await expect(
+      compileSwiftSourceText({ host: createTestHost(), source: 'print(1)', cacheName: 'changing' }),
+    ).rejects.toMatchObject({ details: { reason: 'swift_cache_output_changed' } });
+    expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'bin'))).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
 });
 
 test('concurrent file-backed helper compiles for the same cache key reuse the winning executable', async () => {
@@ -96,10 +119,10 @@ test('extra source paths participate in the cache key and reach the compiler', a
   expect(withSupportAgain).toBe(withSupport);
   expect(withChangedSupport).not.toBe(withSupport);
   const compiledPaths = mockRunCmd.mock.calls.map((call) =>
-    call[1].slice(0, call[1].indexOf('-o')),
+    call[1].slice(2, 4).map((item) => path.basename(item)),
   );
-  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, supportPath]);
-  expect(compiledPaths).toContainEqual(['swiftc', sourcePath, changedSupportPath]);
+  expect(compiledPaths).toContainEqual(['recording-overlay.swift', 'RecordingExportSupport.swift']);
+  expect(compiledPaths).toContainEqual(['recording-overlay.swift', 'OtherSupport.swift']);
 });
 
 test('cache locks with a proven dead owner are recovered before compiling', async () => {
@@ -264,12 +287,8 @@ test('a failed compile and an unverified lock release retain both errors', async
   const buildFailure = new Error('swiftc: error: build failed');
   let lockDir = '';
   mockRunCmd.mockImplementationOnce(async (_cmd: string, args: readonly string[]) => {
-    // The temp executable sits one directory under the cache entry, and the lock beside it.
     const outputPath = args[args.indexOf('-o') + 1]!;
-    const executablePath = path.join(
-      path.dirname(path.dirname(outputPath)),
-      path.basename(outputPath),
-    );
+    const executablePath = path.join(tmpDir, 'swift-cache', 'bin', path.basename(outputPath));
     lockDir = `${executablePath}.lock`;
     // A record that cannot be read is a release that cannot prove ownership.
     const ownerFile = path.join(lockDir, 'owner.json');
@@ -381,7 +400,11 @@ test('the cache root and tool environment come from the host it is given, not th
 
   const executablePath = await compileSwiftSourceText({
     host: {
-      env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, FROM_HOST: 'yes' },
+      env: {
+        AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir,
+        DEVELOPER_DIR: '/host/developer',
+        FROM_HOST: 'no',
+      },
       cwd: tmpDir,
     },
     source: 'print("host")',
@@ -390,9 +413,10 @@ test('the cache root and tool environment come from the host it is given, not th
 
   expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'bin'));
   expect(mockRunCmd.mock.calls[0]?.[2]?.env).toMatchObject({
-    FROM_HOST: 'yes',
-    HOME: path.join(hostCacheDir, 'home'),
+    DEVELOPER_DIR: '/host/developer',
+    HOME: expect.stringContaining(path.join(hostCacheDir, 'attempts')),
   });
+  expect(mockRunCmd.mock.calls[0]?.[2]?.env).not.toHaveProperty('FROM_HOST');
 });
 
 test('reads only a published executable for the exact source and cache, without compiling', async () => {
@@ -423,7 +447,12 @@ test('a temp removal failure survives a canceled compile', async () => {
   mockRunCmd.mockRejectedValueOnce(cancelFailure);
   const original = fs.rmSync;
   const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    if (
+      typeof target === 'string' &&
+      path.basename(target) === 'work' &&
+      target.includes(`${path.sep}attempts${path.sep}`)
+    )
+      throw removalFailure;
     return original(target, options);
   }) as typeof fs.rmSync);
   try {
@@ -450,7 +479,7 @@ test('simultaneous temp removal and lock release failures preserve all evidence'
   const removalFailure = new Error('temp removal failed');
   mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
     const output = args[args.indexOf('-o') + 1]!;
-    const lock = path.join(path.dirname(path.dirname(output)), `${path.basename(output)}.lock`);
+    const lock = path.join(tmpDir, 'swift-cache', 'bin', `${path.basename(output)}.lock`);
     const owner = path.join(lock, 'owner.json');
     fs.rmSync(owner);
     fs.mkdirSync(owner);
@@ -458,7 +487,12 @@ test('simultaneous temp removal and lock release failures preserve all evidence'
   });
   const original = fs.rmSync;
   const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    if (
+      typeof target === 'string' &&
+      path.basename(target) === 'work' &&
+      target.includes(`${path.sep}attempts${path.sep}`)
+    )
+      throw removalFailure;
     return original(target, options);
   }) as typeof fs.rmSync);
   try {
@@ -487,7 +521,12 @@ test('successful compilation still reports failure to remove temporary output', 
   const removalFailure = new Error('temp removal failed');
   const original = fs.rmSync;
   const spy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
-    if (typeof target === 'string' && path.basename(target).startsWith('.')) throw removalFailure;
+    if (
+      typeof target === 'string' &&
+      path.basename(target) === 'work' &&
+      target.includes(`${path.sep}attempts${path.sep}`)
+    )
+      throw removalFailure;
     return original(target, options);
   }) as typeof fs.rmSync);
   try {
@@ -517,7 +556,7 @@ test('an interrupted source write is repaired before a later prepare compiles it
   const failure = new Error('interrupted source write');
   const write = fs.writeFileSync;
   const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation(((target, data, options) => {
-    if (typeof target === 'string' && path.dirname(target).endsWith(`${path.sep}sources`)) {
+    if (typeof target === 'string' && target.endsWith(`${path.sep}interrupted.swift`)) {
       write(target, 'print("partial")\n');
       throw failure;
     }
@@ -528,9 +567,9 @@ test('an interrupted source write is repaired before a later prepare compiles it
   } finally {
     spy.mockRestore();
   }
-  expect(fs.readdirSync(path.join(tmpDir, 'swift-cache', 'sources'))).toEqual([]);
+  expect(fs.existsSync(path.join(tmpDir, 'swift-cache', 'sources'))).toBe(false);
   mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
-    const source = fs.readFileSync(args[1]!, 'utf8');
+    const source = fs.readFileSync(args[2]!, 'utf8');
     const output = args[args.indexOf('-o') + 1]!;
     fs.writeFileSync(output, source);
     fs.chmodSync(output, 0o755);
@@ -540,37 +579,29 @@ test('an interrupted source write is repaired before a later prepare compiles it
   expect(fs.readFileSync(executable, 'utf8')).toBe(input.source);
 });
 
-test('repairs an incorrect derived source before compiling and reuses the published executable', async () => {
-  const input = { host: createTestHost(), source: 'print("complete")', cacheName: 'repair' };
-  mockRunCmd.mockRejectedValueOnce(new Error('stop after source publication'));
-  await expect(compileSwiftSourceText(input)).rejects.toThrow('stop after source publication');
-  const sourceDir = path.join(tmpDir, 'swift-cache', 'sources');
-  const sourcePath = path.join(sourceDir, fs.readdirSync(sourceDir)[0]!);
-  fs.writeFileSync(sourcePath, 'print("partial")');
+test('a retry compiles a new private source and reuses its published executable', async () => {
+  const input = { host: createTestHost(), source: 'print("complete")', cacheName: 'retry' };
+  let firstSource = '';
   mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    firstSource = args[2]!;
+    throw new Error('compiler failed');
+  });
+  await expect(compileSwiftSourceText(input)).rejects.toThrow('compiler failed');
+  let secondSource = '';
+  mockRunCmd.mockImplementationOnce(async (_cmd, args) => {
+    secondSource = args[2]!;
     const output = args[args.indexOf('-o') + 1]!;
-    fs.writeFileSync(output, fs.readFileSync(args[1]!));
+    fs.writeFileSync(output, fs.readFileSync(secondSource));
     fs.chmodSync(output, 0o755);
     return { stdout: '', stderr: '', exitCode: 0 };
   });
   const executable = await compileSwiftSourceText(input);
+  expect(firstSource).not.toBe(secondSource);
   expect(fs.readFileSync(executable, 'utf8')).toBe(input.source);
   mockRunCmd.mockClear();
   expect(readCompiledSwiftSourceText(input)).toBe(executable);
   expect(await compileSwiftSourceText(input)).toBe(executable);
   expect(mockRunCmd).not.toHaveBeenCalled();
-});
-
-test('a valid cached source is reused when compilation is retried', async () => {
-  const input = { host: createTestHost(), source: 'print("ready")', cacheName: 'retry' };
-  mockRunCmd.mockRejectedValueOnce(new Error('compiler failed'));
-  await expect(compileSwiftSourceText(input)).rejects.toThrow('compiler failed');
-  const sourceDir = path.join(tmpDir, 'swift-cache', 'sources');
-  const sourcePath = path.join(sourceDir, fs.readdirSync(sourceDir)[0]!);
-  const before = fs.statSync(sourcePath);
-  await compileSwiftSourceText(input);
-  expect(fs.statSync(sourcePath).ino).toBe(before.ino);
-  expect(fs.readFileSync(sourcePath, 'utf8')).toBe(input.source);
 });
 
 test('concurrent text-backed prepares reuse the winning executable', async () => {
@@ -581,7 +612,7 @@ test('concurrent text-backed prepares reuse the winning executable', async () =>
 test('does not reuse a potentially poisoned executable from the previous text cache identity', async () => {
   const input = { host: createTestHost(), source: 'print("canonical")', cacheName: 'legacy' };
   const hash = createHash('sha256');
-  for (const part of ['2', process.platform, process.arch, input.source]) {
+  for (const part of ['3', process.platform, process.arch, input.source]) {
     hash.update(part);
     hash.update('\0');
   }
@@ -598,4 +629,37 @@ test('does not reuse a potentially poisoned executable from the previous text ca
   expect(executable).not.toBe(oldPath);
   expect(mockRunCmd).toHaveBeenCalledOnce();
   expect(fs.readFileSync(oldPath, 'utf8')).toBe('poisoned');
+});
+
+test('does not reuse a file-backed executable published under the previous cache identity', async () => {
+  const sourcePath = writeSourceFile('print("canonical")');
+  const source = fs.readFileSync(sourcePath);
+  const hash = createHash('sha256');
+  for (const part of [
+    '2',
+    process.platform,
+    process.arch,
+    path.resolve(sourcePath),
+    source.length,
+    source,
+  ]) {
+    hash.update(Buffer.isBuffer(part) ? part : String(part));
+    hash.update('\0');
+  }
+  const oldPath = path.join(
+    tmpDir,
+    'swift-cache',
+    'bin',
+    `legacy-file-${hash.digest('hex').slice(0, 16)}`,
+  );
+  fs.mkdirSync(path.dirname(oldPath), { recursive: true });
+  fs.writeFileSync(oldPath, 'previous executable', { mode: 0o755 });
+  const executable = await compileSwiftSourceFile({
+    host: createTestHost(),
+    sourcePath,
+    cacheName: 'legacy-file',
+  });
+  expect(executable).not.toBe(oldPath);
+  expect(mockRunCmd).toHaveBeenCalledOnce();
+  expect(fs.readFileSync(executable, 'utf8')).toBe('compiled');
 });

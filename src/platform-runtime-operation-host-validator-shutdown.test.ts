@@ -34,7 +34,11 @@ const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 // The only compiler this file can learn about is one its own spawn started.
 const compiler = createOwnedFakeCompiler('operation-host-validator-shutdown-');
 const hostEnvironment: HostEnvironment = {
-  env: { PATH: compiler.toolchainDir, ...compiler.env },
+  env: {
+    PATH: compiler.toolchainDir,
+    ...compiler.env,
+    AGENT_DEVICE_CLAIMS_DIR: path.join(path.dirname(compiler.cacheDir), 'claims'),
+  },
   cwd: compiler.toolchainDir,
 };
 
@@ -65,7 +69,9 @@ validatorShutdownTest(
     // The compile belongs to no request: the warm-up already returned, the compiler is still
     // running, it holds the Swift cache lock, and its unpublished output sits inside the cache.
     expect(compiler.cacheBinEntries().some((entry) => entry.endsWith('.lock'))).toBe(true);
-    expect(compiler.cacheBinEntries().filter((entry) => entry.startsWith('.'))).toHaveLength(1);
+    const attempts = path.join(compiler.cacheDir, 'attempts');
+    const [attempt] = fs.readdirSync(attempts);
+    expect(fs.existsSync(path.join(attempts, attempt!, 'work'))).toBe(true);
 
     await host.applicationResources.finalizeDaemonShutdown();
 
@@ -75,6 +81,8 @@ validatorShutdownTest(
     await expect.poll(() => compiler.runningCompilerPids()).toEqual([]);
     expect(compiler.cacheBinEntries().some((entry) => entry.endsWith('.lock'))).toBe(false);
     expect(compiler.cacheBinEntries().filter((entry) => entry.startsWith('.'))).toEqual([]);
+    expect(fs.existsSync(path.join(attempts, attempt!, 'pending.json'))).toBe(true);
+    expect(fs.existsSync(path.join(attempts, attempt!, 'work'))).toBe(false);
   },
 );
 
@@ -83,7 +91,14 @@ validatorShutdownTest(
   async () => {
     const idleCompiler = createOwnedFakeCompiler('operation-host-validator-idle-');
     const host = createRuntimeHost(
-      { env: { PATH: idleCompiler.toolchainDir, ...idleCompiler.env }, cwd: '/tmp' },
+      {
+        env: {
+          PATH: idleCompiler.toolchainDir,
+          ...idleCompiler.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(path.dirname(idleCompiler.cacheDir), 'claims'),
+        },
+        cwd: '/tmp',
+      },
       '/tmp/platform-runtime-idle-sessions',
       'idle-sessions',
     );
@@ -102,7 +117,14 @@ validatorShutdownTest(
   async () => {
     const lateCompiler = createOwnedFakeCompiler('operation-host-validator-late-');
     const host = createRuntimeHost(
-      { env: { PATH: lateCompiler.toolchainDir, ...lateCompiler.env }, cwd: '/tmp' },
+      {
+        env: {
+          PATH: lateCompiler.toolchainDir,
+          ...lateCompiler.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(path.dirname(lateCompiler.cacheDir), 'claims'),
+        },
+        cwd: '/tmp',
+      },
       '/tmp/platform-runtime-late-sessions',
       'late-sessions',
     );
@@ -125,7 +147,14 @@ validatorShutdownTest(
   async () => {
     const racingCompiler = createOwnedFakeCompiler('operation-host-validator-racing-');
     const host = createRuntimeHost(
-      { env: { PATH: racingCompiler.toolchainDir, ...racingCompiler.env }, cwd: '/tmp' },
+      {
+        env: {
+          PATH: racingCompiler.toolchainDir,
+          ...racingCompiler.env,
+          AGENT_DEVICE_CLAIMS_DIR: path.join(path.dirname(racingCompiler.cacheDir), 'claims'),
+        },
+        cwd: '/tmp',
+      },
       '/tmp/platform-runtime-racing-sessions',
       'racing-sessions',
     );

@@ -10,6 +10,8 @@ import {
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { readProcessIdentityFacts } from '@agent-device/host-kit/process';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
+import { createVideoValidatorPreparation } from '@agent-device/capture-kit/recording-video';
 import {
   inspectDeviceClaims,
   reconcileOrphanedDeviceClaims,
@@ -54,6 +56,12 @@ test.each(['warmup', 'overlay'] as const)(
     });
     let frontend: { pid: number; startTime: string } | undefined;
     try {
+      if (!daemon.pid) throw new Error('fixture daemon did not start');
+      const daemonIdentity = {
+        pid: daemon.pid,
+        startTime: (await readProcessIdentityFacts(daemon.pid)).startTime,
+      };
+      expect(daemonIdentity.startTime).toBeTruthy();
       const checkpoint = await new Promise<string>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new Error(`compiler checkpoint timeout: ${stderr}`)),
@@ -72,8 +80,13 @@ test.each(['warmup', 'overlay'] as const)(
           reject(error);
         });
       });
-      frontend = JSON.parse(checkpoint).frontend;
+      const { frontend: recordedFrontend, written } = JSON.parse(checkpoint) as {
+        frontend: { pid: number; startTime: string };
+        written: string;
+      };
+      frontend = recordedFrontend;
       expect(frontend?.startTime).toBeTruthy();
+      expect(written.startsWith(path.join(root, 'cache', 'attempts') + path.sep)).toBe(true);
       const claims = inspectDeviceClaims({}, host.env);
       expect(claims).toHaveLength(1);
       const claimPath = path.join(host.env.AGENT_DEVICE_CLAIMS_DIR!, claims[0]!.fileName);
@@ -111,13 +124,43 @@ test.each(['warmup', 'overlay'] as const)(
       });
       expect((await reconcileOrphanedDeviceClaims(reconcile, stateDir, host.env)).retained).toBe(1);
       expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
+      const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+      let published = '';
+      try {
+        await withCommandExecutorOverride(
+          (cmd, args) => {
+            if (cmd !== 'xcrun') return undefined;
+            const output = args[args.indexOf('-o') + 1]!;
+            fs.writeFileSync(output, 'successor validator', { mode: 0o755 });
+            return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+          },
+          async () => {
+            const preparation = createVideoValidatorPreparation(host);
+            const result = await preparation.prepare();
+            if (result.kind !== 'avfoundation') throw new Error('expected validator');
+            published = result.executablePath;
+            await preparation.close();
+          },
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', platform);
+      }
+      expect(fs.readFileSync(published, 'utf8')).toBe('successor validator');
+      console.log('crashed compiler fixture', {
+        root,
+        cache: path.join(root, 'cache'),
+        written,
+        published,
+        daemonIdentity,
+        frontend,
+      });
       fs.writeFileSync(path.join(root, 'frontend-trigger'), 'continue');
       await vi.waitFor(() =>
         expect(fs.readFileSync(path.join(root, 'frontend-done'), 'utf8')).toBe('done'),
       );
-      expect(fs.readFileSync(path.join(root, 'cache', 'frontend-late-write'), 'utf8')).toBe(
-        'late compiler write',
-      );
+      expect(fs.readFileSync(written, 'utf8')).toBe('late compiler write');
+      expect(fs.readFileSync(published, 'utf8')).toBe('successor validator');
       expect(fs.readFileSync(claimPath, 'utf8')).toBe(before);
       expect(screenRecordingDurableResource.store.read(resourcePath)).toMatchObject({
         status: 'decoded',
@@ -129,16 +172,16 @@ test.each(['warmup', 'overlay'] as const)(
       if (!fs.existsSync(path.join(root, 'frontend-done'))) {
         fs.writeFileSync(path.join(root, 'frontend-trigger'), 'cleanup');
         if (frontend)
-          try {
-            await vi.waitFor(
-              () => expect(fs.existsSync(path.join(root, 'frontend-done'))).toBe(true),
-              { timeout: 2000 },
-            );
-          } catch {
-            const facts = await readProcessIdentityFacts(frontend.pid);
-            if (facts.startTime === frontend.startTime) process.kill(frontend.pid, 'SIGKILL');
-          }
+          await vi.waitFor(
+            () => expect(fs.existsSync(path.join(root, 'frontend-done'))).toBe(true),
+            { timeout: 2000 },
+          );
       }
+      if (frontend)
+        await vi.waitFor(async () => {
+          const facts = await readProcessIdentityFacts(frontend!.pid);
+          expect(facts.startTime !== frontend!.startTime || facts.zombie).toBe(true);
+        });
       fs.rmSync(root, { recursive: true, force: true });
     }
   },
