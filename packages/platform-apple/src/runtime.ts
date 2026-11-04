@@ -255,10 +255,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
     bind: async (request) => {
       const logs = await appLogs.bind(request);
       const facts = await inspectFacts(request.device);
-      const recordingCleanupRecovery =
-        request.device.kind === 'simulator'
-          ? await host.screenRecording.apple.cleanupRecoveryScope?.(request.device)
-          : undefined;
       const recordingFacts = facts.operations.screenRecordingStart;
       // Typed on its own so the operations literal below stays within what tsc can represent.
       const appStateOperations: Partial<AppStateRuntimeOperations> = whenAdmitted(
@@ -436,7 +432,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: logs.device,
         owner,
         facts,
-        ...(recordingCleanupRecovery === 'local-drained' ? { recordingCleanupRecovery } : {}),
         operations: Object.freeze(operations),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;

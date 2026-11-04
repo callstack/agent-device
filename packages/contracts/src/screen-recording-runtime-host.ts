@@ -48,8 +48,6 @@ export type AppleScreenRecordingClockAnchor = Readonly<{
 
 export type AppleScreenRecordingHost = Readonly<{
   availability(device: DeviceInfo): Promise<AppleScreenRecordingAvailability>;
-  /** Confirms that recording stop effects use the local, fully drained simulator transport. */
-  cleanupRecoveryScope?(device: DeviceInfo): Promise<'local-drained' | 'unsupported'>;
   runRunner(
     device: DeviceInfo,
     request: AppleScreenRecordingRunnerRequest,

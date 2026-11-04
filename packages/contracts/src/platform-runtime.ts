@@ -251,12 +251,6 @@ export type DeviceBinding<Operations extends object> = AsyncDisposable &
     owner: RuntimeOwnerRef;
     facts: RuntimeFacts<Operations>;
     operations: Readonly<Partial<Pick<Operations, RuntimeOperationKey<Operations>>>>;
-    /**
-     * Binding construction and disposal leave no work that can outlive the process, and a
-     * successful recording stop has drained every effect it dispatched. Scoped or remote backends
-     * must not advertise this.
-     */
-    recordingCleanupRecovery?: 'local-drained';
     /** Resolves only after a failed disposal and all binding-owned work have settled. */
     retryDisposal?: () => Promise<void>;
     recoverIncompleteRecordingStart?: (

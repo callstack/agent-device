@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, test, vi } from 'vitest';
 import * as deviceSelection from '@agent-device/device-selection/dispatch-resolve';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
-import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY } from '@agent-device/contracts/screen-recording-runtime';
+import { reconcileOrphanedDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
+import { createOwnerScopedDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { isolatedDeviceClaimStores } from '../../../__tests__/support/device-claim-store.ts';
 import { seed } from './device-claim-admission-recording.fixtures.ts';
 import { cleanupCrashFixture } from './recording-cleanup-crash.fixtures.ts';
@@ -67,10 +67,7 @@ function fixture() {
   if (record.status !== 'decoded') throw new Error('missing fixture manifest');
   screenRecordingDurableResource.store.write(seeded.resourcePath, {
     ...record.envelope,
-    metadata: {
-      ...record.envelope.metadata,
-      [SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY]: 'local-drained',
-    },
+    metadata: { ...record.envelope.metadata, recordingCleanupScope: 'local-drained' },
   });
   return {
     stateDir,
@@ -81,133 +78,101 @@ function fixture() {
   };
 }
 
-test.each(['stop-prepared', 'stop-completed-release', 'stop-drained-release'] as const)(
-  'a dead stop owner is recovered from its durable %s proof through the record handler',
+function addLegacyPhase(claimPath: string, phase: string) {
+  const claim = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+  fs.writeFileSync(claimPath, JSON.stringify({ ...claim, recordingCleanupProof: phase }));
+}
+
+test.each([
+  'stop-prepared',
+  'stop-completed-release',
+  'stop-drained-release',
+  'stop-completed-retain',
+  'stop-drained-retain',
+] as const)(
+  'legacy %s metadata cannot clear a crashed owner with a surviving resource',
   async (phase) => {
     const f = fixture();
-    await crashAt(f.stateDir, f.claimsDir, phase);
-    const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
-    expect(claim.recordingCleanupProof).toBe(phase);
-    expect(claim.ownerToken).toBe('original-token');
-    expect(claim.ownerPid).not.toBe(process.pid);
-    const beforeEffects = fs.existsSync(f.runtime.events)
-      ? fs.readFileSync(f.runtime.events, 'utf8')
-      : '';
-    if (phase === 'stop-prepared') expect(beforeEffects).toBe('');
-    else {
-      expect(beforeEffects).toContain('finish\n');
-      if (phase === 'stop-drained-release') expect(beforeEffects).toContain('dispose\n');
-      else expect(beforeEffects).not.toContain('dispose\n');
-      expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
+    const resource = spawn(
+      process.execPath,
+      ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+      {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
+    const exited = once(resource, 'exit');
+    try {
+      await once(resource.stdout, 'data');
+      await crashAt(f.stateDir, f.claimsDir, phase);
+      addLegacyPhase(f.claimPath, phase);
+      const beforeClaim = fs.readFileSync(f.claimPath, 'utf8');
+      const beforeManifest = fs.readFileSync(f.resourcePath, 'utf8');
+      const beforeEffects = fs.existsSync(f.runtime.events)
+        ? fs.readFileSync(f.runtime.events, 'utf8')
+        : '';
+      const claim = JSON.parse(beforeClaim);
+      expect(claim).toMatchObject({ ownerToken: 'original-token', recordingCleanupPending: true });
+      expect(claim.ownerPid).not.toBe(process.pid);
+      if (phase !== 'stop-prepared') {
+        expect(beforeEffects).toContain('finish\n');
+        expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
+      }
+      if (phase.startsWith('stop-drained-')) expect(beforeEffects).toContain('dispose\n');
+      expect(await f.runtime.stop()).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'cleanup-unconfirmed' } },
+      });
+      const reconcile = createOwnerScopedDeviceClaimReconciler({
+        scope: f.runtime.platformScope,
+        composeGateway: () => f.runtime.gateway,
+      });
+      expect(
+        (await reconcileOrphanedDeviceClaims(reconcile, f.stateDir, f.runtime.host.env)).retained,
+      ).toBe(1);
+      const otherState = path.join(f.stateDir, '..', 'other');
+      fs.mkdirSync(otherState, { recursive: true });
+      const competing = cleanupCrashFixture(otherState, f.claimsDir);
+      expect(await competing.start()).toMatchObject({
+        ok: false,
+        error: { code: 'DEVICE_IN_USE' },
+      });
+      expect(fs.existsSync(competing.events)).toBe(true);
+      expect(fs.readFileSync(competing.events, 'utf8')).not.toContain('start\n');
+      expect(resource.exitCode).toBeNull();
+      expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(beforeClaim);
+      expect(fs.readFileSync(f.resourcePath, 'utf8')).toBe(beforeManifest);
+      expect(fs.readFileSync(f.native, 'utf8')).toBe('original recording');
+      expect(fs.existsSync(f.runtime.events) ? fs.readFileSync(f.runtime.events, 'utf8') : '').toBe(
+        beforeEffects,
+      );
+    } finally {
+      if (resource.exitCode === null && resource.signalCode === null) resource.kill('SIGKILL');
+      await exited;
     }
-    const response = await f.runtime.stop();
-    if (!response.ok) throw new Error(JSON.stringify(response));
-    expect(fs.existsSync(f.claimPath)).toBe(false);
-    expect(fs.readFileSync(f.native, 'utf8')).toBe('original recording');
-    expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
-    const afterEffects = fs.readFileSync(f.runtime.events, 'utf8');
-    if (phase !== 'stop-prepared') expect(afterEffects).toBe(beforeEffects);
-    expect(screenRecordingDurableResource.store.read(f.resourcePath)).toMatchObject({
-      status: 'decoded',
-      envelope: { lifecycle: 'completed' },
-    });
   },
 );
 
-test('a completed local stop survives a lost failed-disposal closure', async () => {
+test('a lost failed-disposal retry retains the completed export and exact claim', async () => {
   const f = fixture();
   await crashAt(f.stateDir, f.claimsDir, 'failed-disposal');
-  expect(JSON.parse(fs.readFileSync(f.claimPath, 'utf8'))).toMatchObject({
-    ownerToken: 'original-token',
-    recordingCleanupProof: 'stop-completed-release',
-  });
-  const before = fs.readFileSync(f.runtime.events, 'utf8');
-  expect(before).toContain('finish\n');
-  expect(before).toContain('dispose\n');
-  expect(await f.runtime.stop()).toMatchObject({ ok: true });
-  expect(fs.existsSync(f.claimPath)).toBe(false);
-  expect(fs.readFileSync(f.runtime.events, 'utf8')).toBe(before);
-  expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
-});
-
-test('a completed export cannot substitute for missing binding authority', async () => {
-  const f = fixture();
-  await crashAt(f.stateDir, f.claimsDir, 'unsupported-binding');
+  addLegacyPhase(f.claimPath, 'stop-completed-release');
   const claim = fs.readFileSync(f.claimPath, 'utf8');
-  expect(JSON.parse(claim)).not.toHaveProperty('recordingCleanupProof');
-  const effects = fs.readFileSync(f.runtime.events, 'utf8');
-  expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
+  const events = fs.readFileSync(f.runtime.events, 'utf8');
+  expect(events).toContain('finish\n');
+  expect(events).toContain('dispose\n');
   expect(await f.runtime.stop()).toMatchObject({
     ok: false,
     error: { details: { reason: 'cleanup-unconfirmed' } },
   });
   expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(claim);
-  expect(fs.readFileSync(f.runtime.events, 'utf8')).toBe(effects);
+  expect(fs.readFileSync(f.runtime.events, 'utf8')).toBe(events);
+  expect(fs.readFileSync(f.runtime.output, 'utf8')).toBe('preserved export');
 });
 
-test('completed cleanup retains and promotes the exact claim for other session owners', async () => {
-  const f = fixture();
-  await crashAt(f.stateDir, f.claimsDir, 'stop-drained-retain');
-  const effects = fs.readFileSync(f.runtime.events, 'utf8');
-  expect(await f.runtime.stop()).toMatchObject({ ok: true });
-  expect(JSON.parse(fs.readFileSync(f.claimPath, 'utf8'))).toMatchObject({
-    ownerToken: 'original-token',
-    claimOwnerKind: 'open-session',
-  });
-  expect(JSON.parse(fs.readFileSync(f.claimPath, 'utf8'))).not.toHaveProperty(
-    'recordingCleanupPending',
-  );
-  expect(fs.readFileSync(f.runtime.events, 'utf8')).toBe(effects);
-});
-
-test.each(['live', 'replacement', 'unproven', 'remote-origin', 'generation'] as const)(
-  'cleanup recovery retains %s authority and performs no recording work',
-  async (scenario) => {
-    const f = fixture();
-    await crashAt(f.stateDir, f.claimsDir, 'stop-prepared');
-    const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
-    if (scenario === 'live') {
-      const owner = readCurrentOwnerIdentity();
-      claim.ownerPid = owner.pid;
-      claim.ownerStartTime = owner.startTime;
-    } else if (scenario === 'replacement') claim.ownerToken = 'replacement-token';
-    else if (scenario === 'unproven') delete claim.recordingCleanupProof;
-    fs.writeFileSync(f.claimPath, JSON.stringify(claim));
-    if (scenario === 'remote-origin' || scenario === 'generation') {
-      const record = screenRecordingDurableResource.store.read(f.resourcePath);
-      if (record.status !== 'decoded') throw new Error('missing fixture manifest');
-      const metadata = { ...record.envelope.metadata };
-      if (scenario === 'remote-origin')
-        delete metadata[SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY];
-      screenRecordingDurableResource.store.write(f.resourcePath, {
-        ...record.envelope,
-        metadata,
-        ...(scenario === 'generation'
-          ? {
-              fence: { ...record.envelope.fence, generation: record.envelope.fence.generation + 1 },
-            }
-          : {}),
-      });
-    }
-    const beforeClaim = fs.readFileSync(f.claimPath, 'utf8');
-    const beforeManifest = fs.readFileSync(f.resourcePath, 'utf8');
-    expect(await f.runtime.stop()).toMatchObject({
-      ok: false,
-      error: { details: { reason: 'cleanup-unconfirmed' } },
-    });
-    expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(beforeClaim);
-    expect(fs.readFileSync(f.resourcePath, 'utf8')).toBe(beforeManifest);
-    expect(fs.readFileSync(f.native, 'utf8')).toBe('original recording');
-    expect(fs.existsSync(f.runtime.events)).toBe(false);
-  },
-);
-
-test('a dispatched stop with an unsettled child remains reserved after its owner exits', async () => {
+test('an unsettled test-owned child can still write after the daemon exits', async () => {
   const f = fixture();
   await crashAt(f.stateDir, f.claimsDir, 'stop-prepared');
-  const claim = JSON.parse(fs.readFileSync(f.claimPath, 'utf8'));
-  delete claim.recordingCleanupProof;
-  fs.writeFileSync(f.claimPath, JSON.stringify(claim));
+  addLegacyPhase(f.claimPath, 'stop-prepared');
   const child = spawn(
     process.execPath,
     [
@@ -215,7 +180,7 @@ test('a dispatched stop with an unsettled child remains reserved after its owner
       String.raw`process.stdout.write('ready\n'); process.stdin.once('data', () => { require('node:fs').appendFileSync(process.argv[1], 'late child\n'); process.exit(0); });`,
       f.runtime.events,
     ],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
+    { detached: true, stdio: ['pipe', 'pipe', 'pipe'] },
   );
   const exited = once(child, 'exit');
   try {
@@ -226,13 +191,69 @@ test('a dispatched stop with an unsettled child remains reserved after its owner
       error: { details: { reason: 'cleanup-unconfirmed' } },
     });
     expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(beforeClaim);
-    expect(fs.existsSync(f.runtime.events)).toBe(false);
     child.stdin.write('continue\n');
     await exited;
     expect(fs.readFileSync(f.runtime.events, 'utf8')).toBe('late child\n');
     expect(fs.existsSync(f.claimPath)).toBe(true);
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
+  }
+});
+
+test('cold stop transfers the recording while retaining the old daemon session obligation', async () => {
+  const { stateDir, claimsDir } = setup();
+  vi.spyOn(deviceSelection, 'resolveTargetDevice').mockResolvedValue(IOS_SIMULATOR);
+  const resource = spawn(
+    process.execPath,
+    ['-e', String.raw`process.stdout.write('ready\n'); process.stdin.resume()`],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  );
+  const exited = once(resource, 'exit');
+  try {
+    await once(resource.stdout, 'data');
+    await crashAt(stateDir, claimsDir, 'active-app');
+    const claimPath = path.join(
+      claimsDir,
+      fs.readdirSync(claimsDir).find((name) => name.endsWith('.json'))!,
+    );
+    const oldClaim = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+    expect(oldClaim.recordingSessionOwner).toEqual({
+      pid: oldClaim.ownerPid,
+      startTime: oldClaim.ownerStartTime,
+    });
+    expect(oldClaim.recordingSessionOwner.pid).not.toBe(process.pid);
+    const runtime = cleanupCrashFixture(stateDir, claimsDir, false);
+    expect(await runtime.stop()).toMatchObject({ ok: true });
+    const transferred = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+    expect(transferred).toMatchObject({
+      ownerToken: oldClaim.ownerToken,
+      claimOwnerKind: 'open-session',
+      recordingSessionOwner: oldClaim.recordingSessionOwner,
+    });
+    expect(transferred.ownerPid).toBe(process.pid);
+    expect(fs.readFileSync(runtime.output, 'utf8')).toBe('preserved export');
+    const reconcile = createOwnerScopedDeviceClaimReconciler({
+      scope: runtime.platformScope,
+      composeGateway: () => runtime.gateway,
+    });
+    expect(await reconcile(transferred)).toMatchObject({
+      status: 'retained',
+      reason: 'screen-recording-session-owner-pending',
+    });
+    expect(resource.exitCode).toBeNull();
+    const otherState = path.join(stateDir, '..', 'other');
+    fs.mkdirSync(otherState, { recursive: true });
+    const competing = cleanupCrashFixture(otherState, claimsDir);
+    expect(await competing.start()).toMatchObject({ ok: false, error: { code: 'DEVICE_IN_USE' } });
+    expect(fs.readFileSync(competing.events, 'utf8')).not.toContain('start\n');
+    expect(JSON.parse(fs.readFileSync(claimPath, 'utf8')).recordingSessionOwner).toEqual(
+      oldClaim.recordingSessionOwner,
+    );
+  } finally {
+    if (resource.exitCode === null && resource.signalCode === null) resource.kill('SIGKILL');
     await exited;
   }
 });

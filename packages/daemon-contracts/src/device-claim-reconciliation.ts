@@ -114,8 +114,13 @@ export type ClaimRecoveryInspection =
   | { status: 'retained'; reason: string };
 
 /** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
-export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
+export function inspectDeviceClaimRecovery(
+  claim: DeviceClaim,
+  options?: { allowPendingSessionOwner?: boolean },
+): ClaimRecoveryInspection {
   try {
+    if (claim.recordingSessionOwner && !options?.allowPendingSessionOwner)
+      return { status: 'retained', reason: 'screen-recording-session-owner-pending' };
     if (claim.recordingCleanupPending)
       return { status: 'retained', reason: 'screen-recording-binding-cleanup-pending' };
     const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;

@@ -98,7 +98,6 @@ async function startAppleRecording(params: AppleRecordingStartParams) {
 async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
   const { host, device, owner, input, signal } = params;
   await validateAppleSimulatorRecording(device, input, host.screenRecording.apple.isRunnerBundleId);
-  const cleanupRecoveryScope = await host.screenRecording.apple.cleanupRecoveryScope?.(device);
   void host.screenRecording.finalize.prepare({ container: 'mp4' }).catch(() => {});
   const clockAnchor = input.activeSessionApp
     ? await host.screenRecording.apple.captureClockAnchor(
@@ -162,7 +161,6 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
     device,
     owner,
     input,
-    ...(cleanupRecoveryScope === 'local-drained' ? { cleanupRecoveryScope } : {}),
     descriptor: {
       backend: 'simctl',
       outputPath: nativePath,
@@ -454,7 +452,6 @@ function startResult(params: {
   owner: RuntimeOwnerRef;
   input: ScreenRecordingStartInput;
   descriptor: AppleRecordingDescriptor;
-  cleanupRecoveryScope?: 'local-drained';
   snapshot: ScreenRecordingLiveSnapshot;
   finish(
     snapshot: ScreenRecordingLiveSnapshot,
@@ -462,8 +459,7 @@ function startResult(params: {
   ): Promise<FinishOutcome<ScreenRecordingCompletion>>;
   cleanup(): Promise<CleanupOutcome>;
 }) {
-  const { device, owner, input, descriptor, cleanupRecoveryScope, snapshot, finish, cleanup } =
-    params;
+  const { device, owner, input, descriptor, snapshot, finish, cleanup } = params;
   const handle = createScreenRecordingLiveHandle(snapshot, {
     finish,
     forceCleanup: cleanup,
@@ -475,7 +471,6 @@ function startResult(params: {
       owner,
       input,
       descriptor,
-      cleanupRecoveryScope,
     }),
   });
 }

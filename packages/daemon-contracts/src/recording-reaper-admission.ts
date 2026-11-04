@@ -27,7 +27,11 @@ import { resolveSessionDir } from './session-artifact-paths.ts';
 const RECORDING_REAP_ADMISSION_BUDGET_MS = 1_000;
 
 export type RecordingReapRetention = Readonly<{
-  reason: 'claim-lock-busy' | 'claim-lock-unproven' | 'admission-budget-exhausted';
+  reason:
+    | 'claim-lock-busy'
+    | 'claim-lock-unproven'
+    | 'admission-budget-exhausted'
+    | 'recording-cleanup-pending';
   sessionId: string;
   pid: number;
   resourcePath: string;
@@ -72,6 +76,10 @@ export function createRecordingReapAdmission(params: {
     const claimPath = resolveDeviceClaimPath(key, params.env);
     const scanned = inspectDeviceClaimFile(claimPath)?.claim;
     if (!scanned || !matchesClaim(scanned, expected, params.stateDir)) return;
+    if (scanned.recordingCleanupPending) {
+      retain('recording-cleanup-pending');
+      return;
+    }
     const hostId = hostDeviceIdOf(expected.device.id);
     const hostKey =
       hostId === expected.device.id
@@ -113,6 +121,10 @@ export function createRecordingReapAdmission(params: {
           return;
         }
         const current = inspectDeviceClaimFile(claimPath)?.claim;
+        if (current?.recordingCleanupPending) {
+          retain('recording-cleanup-pending');
+          return;
+        }
         if (
           !current ||
           !sameClaim(scanned, current) ||

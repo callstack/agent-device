@@ -59,7 +59,11 @@ export type DeviceClaim = {
   recordingRuntimeOwner?: RuntimeOwnerRef;
   /** The request still owes verified cleanup of recording runtime bindings. */
   recordingCleanupPending?: true;
-  /** Durable proof for the narrow stop phases whose effects cannot outlive their owner. */
+  /** A session close still owns teardown as well as binding cleanup. */
+  recordingClosePending?: true;
+  /** The daemon that still owes settlement of a session owner attached to this recording. */
+  recordingSessionOwner?: { pid: number; startTime: string | null };
+  /** Untrusted legacy phase metadata. It never authorizes cleanup or claim release. */
   recordingCleanupProof?:
     | 'stop-prepared'
     | 'stop-completed-release'
@@ -117,6 +121,8 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
     transientCommand,
     recordingFence,
     recordingCleanupPending,
+    recordingClosePending,
+    recordingSessionOwner,
     recordingCleanupProof,
     recordingRuntimeOwner,
     recordingStartPending,
@@ -141,6 +147,25 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
   )
     return null;
   if (recordingCleanupPending && recordingFence === undefined) return null;
+  if (
+    recordingSessionOwner !== undefined &&
+    (!recordingKind ||
+      recordingFence === undefined ||
+      recordingRuntimeOwner === undefined ||
+      !isRecord(recordingSessionOwner) ||
+      !isPositiveInteger(recordingSessionOwner.pid) ||
+      (recordingSessionOwner.startTime !== null &&
+        !isNonEmptyString(recordingSessionOwner.startTime)))
+  )
+    return null;
+  if (
+    recordingClosePending !== undefined &&
+    (recordingClosePending !== true ||
+      !recordingCleanupPending ||
+      !recordingKind ||
+      recordingRuntimeOwner === undefined)
+  )
+    return null;
   if (
     recordingCleanupProof !== undefined &&
     (!recordingCleanupPending ||
@@ -176,6 +201,15 @@ function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
       ? { transientCommand: transientCommand as string }
       : {}),
     ...(recordingCleanupPending ? { recordingCleanupPending: true as const } : {}),
+    ...(recordingClosePending ? { recordingClosePending: true as const } : {}),
+    ...(recordingSessionOwner === undefined
+      ? {}
+      : {
+          recordingSessionOwner: {
+            pid: (recordingSessionOwner as { pid: number }).pid,
+            startTime: (recordingSessionOwner as { startTime: string | null }).startTime,
+          },
+        }),
     ...(recordingCleanupProof === undefined ? {} : { recordingCleanupProof }),
     ...(recordingStartPending ? { recordingStartPending: true as const } : {}),
     ...(recordingRuntimeOwner === undefined

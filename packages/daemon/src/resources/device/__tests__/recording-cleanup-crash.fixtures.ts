@@ -5,13 +5,18 @@ import {
   createTestHostEnvironment,
   createUnavailableRuntimeFactsForTest,
 } from '@agent-device/test-kit';
-import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
+import {
+  createDurableResourceEnvelope,
+  createScreenRecordingLiveHandle,
+} from '@agent-device/capture-kit';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import {
   localRuntimeOwner,
   type DeviceRuntimeGateway,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { deviceIdentity } from '@agent-device/kernel/device';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
@@ -25,7 +30,7 @@ export function cleanupCrashFixture(
   publish = true,
   failDisposal = false,
   retainSession = false,
-  localBinding = true,
+  recordOnlySession = false,
 ) {
   const host = createTestHostEnvironment({
     env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
@@ -79,10 +84,21 @@ export function cleanupCrashFixture(
       device,
       owner,
       facts,
-      ...(localBinding ? { recordingCleanupRecovery: 'local-drained' as const } : {}),
       operations: {
-        screenRecordingStart: async () => {
-          throw new Error('unexpected recording start');
+        screenRecordingStart: async (input) => {
+          fs.appendFileSync(events, 'start\n');
+          return {
+            pendingHandle: new PendingTransferGuard(handle),
+            envelope: createDurableResourceEnvelope({
+              resourceKind: 'screen-recording',
+              sessionId: input.sessionId,
+              device: deviceIdentity(device),
+              owner,
+              fence: input.fence,
+              lifecycle: 'open',
+              descriptor: { version: 1, body: { outputPath: output } },
+            }),
+          };
         },
         screenRecordingReattach: async () => {
           fs.appendFileSync(events, 'reattach\n');
@@ -117,46 +133,51 @@ export function cleanupCrashFixture(
       device,
       createdAt: 1,
       actions: [],
-      recordOnlySession: false,
+      recordOnlySession,
       ...(retainSession ? { appBundleId: 'com.example.app' } : {}),
     });
+  async function record(action: 'start' | 'stop') {
+    const scope = await createRequestExecutionScope({
+      host,
+      req: {
+        token: 't',
+        session: 'recording',
+        command: 'record',
+        positionals: [action],
+        flags: { recordingScope: 'device' },
+      },
+      sessionStore: store,
+      leaseRegistry: new LeaseRegistry(),
+      deviceRuntimeGateway: gateway,
+      claimRecoveryGateway: () => gateway,
+      platformServices: services,
+      platformRequestScope: platformScope,
+    });
+    const response = await scope.runLocked(
+      async () =>
+        await handleRecordCommand({
+          req: scope.req,
+          sessionName: scope.sessionName,
+          sessionStore: store,
+          bindDevice: scope.bindDevice,
+          bindExactDevice: scope.bindExactDevice,
+          admissionLedger: createScreenRecordingAdmissionLedger(),
+          requestScope: platformScope,
+          platformServices: scope.platformServices,
+          retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
+          throwIfCanceled: scope.throwIfCanceled,
+        }),
+    );
+    await scope[Symbol.asyncDispose]();
+    return response;
+  }
   return {
     output,
     events,
-    async stop() {
-      const scope = await createRequestExecutionScope({
-        host,
-        req: {
-          token: 't',
-          session: 'recording',
-          command: 'record',
-          positionals: ['stop'],
-          flags: { recordingScope: 'device' },
-        },
-        sessionStore: store,
-        leaseRegistry: new LeaseRegistry(),
-        deviceRuntimeGateway: gateway,
-        claimRecoveryGateway: () => gateway,
-        platformServices: services,
-        platformRequestScope: platformScope,
-      });
-      const response = await scope.runLocked(
-        async () =>
-          await handleRecordCommand({
-            req: scope.req,
-            sessionName: scope.sessionName,
-            sessionStore: store,
-            bindDevice: scope.bindDevice,
-            bindExactDevice: scope.bindExactDevice,
-            admissionLedger: createScreenRecordingAdmissionLedger(),
-            requestScope: platformScope,
-            platformServices: scope.platformServices,
-            retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
-            throwIfCanceled: scope.throwIfCanceled,
-          }),
-      );
-      await scope[Symbol.asyncDispose]();
-      return response;
-    },
+    host,
+    gateway,
+    platformScope,
+    stop: async () => await record('stop'),
+    start: async () => await record('start'),
   };
 }

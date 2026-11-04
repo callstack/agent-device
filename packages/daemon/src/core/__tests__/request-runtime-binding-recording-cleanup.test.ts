@@ -23,7 +23,6 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import { SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY } from '@agent-device/contracts/screen-recording-runtime';
 import {
   canonicalLocalDeviceKey,
   clearDeviceClaim,
@@ -60,7 +59,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 
 const setup = isolatedDeviceClaimStores('recording-cleanup-authority-');
 
-function fixture(retryable = true, localBinding = false) {
+function fixture(retryable = true) {
   const { stateDir, claimsDir } = setup();
   const host = createTestHostEnvironment({
     env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
@@ -114,7 +113,6 @@ function fixture(retryable = true, localBinding = false) {
       metadata: {
         deviceClaimToken: 'original-token',
         deviceClaimBindingVersion: 1,
-        ...(localBinding ? { [SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY]: 'local-drained' } : {}),
       },
     }),
   );
@@ -184,7 +182,6 @@ function fixture(retryable = true, localBinding = false) {
       device,
       owner,
       facts,
-      ...(localBinding ? { recordingCleanupRecovery: 'local-drained' as const } : {}),
       operations: {
         screenRecordingStart: async () => {
           throw new Error('unexpected start');
@@ -271,7 +268,7 @@ function fixture(retryable = true, localBinding = false) {
 }
 
 test('completed replay keeps native cleanup authority until the exact handle settles', async () => {
-  const f = fixture(true, true);
+  const f = fixture();
   const open = screenRecordingDurableResource.store.read(f.resourcePath);
   if (open.status !== 'decoded') throw new Error('missing recording');
   fs.writeFileSync(f.output, 'recorded bytes');

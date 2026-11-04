@@ -155,6 +155,7 @@ async function dispatchTargetedPlatformClose(params: {
 }): Promise<unknown> {
   const { req, session, logPath, lifecycle } = params;
   if (!shouldDispatchPlatformClose(req, session)) return undefined;
+  req.internal?.markRecordingCloseEffectsStarted?.();
   try {
     await lifecycle.operations.closeApplication({
       positionals: req.positionals ?? [],
@@ -238,9 +239,15 @@ export async function handleSessionCloseCommands(
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
   const ref = sessionStore.lookup(sessionName);
+  const cleanupRetry = await req.internal?.retryRecordingCloseCleanup?.();
   if (!ref) {
-    if (await req.internal?.retryRecordingCloseCleanup?.())
+    if (cleanupRetry === 'released')
       return { ok: true, data: { session: sessionName, ...successText(`Closed: ${sessionName}`) } };
+    if (cleanupRetry === 'settled')
+      throw new AppError('COMMAND_FAILED', 'Session close effects are not confirmed', {
+        reason: 'cleanup-unconfirmed',
+        retriable: true,
+      });
     return await closeWithoutSession({
       req,
       sessionName,
@@ -296,10 +303,9 @@ export async function handleSessionCloseCommands(
       app,
     });
   }
-  const releaseRecordingClaimAfterCleanup =
-    session.recordOnlySession && session.deviceClaim
-      ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim, session.device)
-      : undefined;
+  const releaseRecordingClaimAfterCleanup = session.deviceClaim
+    ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim, session.device)
+    : undefined;
   const repair = await prepareRepairClose({
     req,
     ref,
@@ -308,6 +314,7 @@ export async function handleSessionCloseCommands(
     lifecycle: admission.runtime,
   });
   if ('response' in repair) return repair.response;
+  req.internal?.markRecordingCloseEffectsStarted?.();
   const closed = await runCloseTeardownAndRelease({
     env: params.host.env,
     req,
@@ -418,6 +425,8 @@ async function runCloseTeardownAndRelease(params: {
         });
     }
   }
+  if (deviceClaimBlockingError && params.releaseRecordingClaimAfterCleanup)
+    throw deviceClaimBlockingError;
   sessionStore.retire(ref, { retainExecutionHost });
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;
   if (saveScriptError) throw saveScriptError;

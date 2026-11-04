@@ -665,3 +665,86 @@ test('startup retains an unproven orphan lock while reconciling a separate claim
     await f.cleanup();
   }
 });
+
+test('startup leaves an interrupted stop and its exact recorder untouched', async () => {
+  const f = await fixture();
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  try {
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    const guarded = {
+      ...f.claim,
+      recordingCleanupPending: true,
+      recordingCleanupProof: 'stop-prepared',
+    };
+    fs.writeFileSync(f.claimPath, JSON.stringify(guarded));
+    runtime = await f.start();
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'ready',
+        method: 'agent_device.command',
+        params: { command: 'session_list', meta: { requestId: 'ready' } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: 'ready', result: expect.anything() });
+    expectPreserved(f);
+    expect(JSON.parse(fs.readFileSync(f.claimPath, 'utf8'))).toEqual(guarded);
+    expect(fs.readFileSync(path.join(f.stateDir, 'daemon.log'), 'utf8')).toContain(
+      'recording-cleanup-pending',
+    );
+    await Promise.resolve();
+    expectPreserved(f);
+  } finally {
+    await runtime?.close();
+    await f.cleanup();
+  }
+});
+
+test('full readiness waits for an already admitted recorder to exit under its lease', async () => {
+  const f = await fixture();
+  let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+  let startup: ReturnType<typeof f.start> | undefined;
+  try {
+    await stopChild(f.oldDaemon);
+    control.ownerPid = 0;
+    let ready = false;
+    startup = f.start();
+    void startup.then(() => {
+      ready = true;
+    });
+    await vi.waitFor(() => expect(fs.readFileSync(f.signalPath, 'utf8')).toBe('SIGINT'));
+    expect(ready).toBe(false);
+    expect(inspectProcessLock(`${f.claimPath}.lock`).state).toBe('held');
+    expect(f.store.read()[0]?.records).toHaveLength(1);
+    expect(fs.readFileSync(f.nativePath, 'utf8')).toBe('recoverable video');
+    f.child.send!('exit');
+    runtime = await startup;
+    const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${runtime.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'ready-after-reap',
+        method: 'agent_device.command',
+        params: { command: 'session_list', meta: { requestId: 'ready-after-reap' } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: 'ready-after-reap',
+      result: expect.anything(),
+    });
+    expect(f.store.read()).toEqual([]);
+    expect(fs.readFileSync(f.nativePath, 'utf8')).toBe('recoverable video');
+    expect(fs.existsSync(f.claimPath)).toBe(true);
+  } finally {
+    await stopChild(f.child);
+    if (!runtime && startup) runtime = await startup.catch(() => undefined);
+    await runtime?.close();
+    await f.cleanup();
+  }
+});

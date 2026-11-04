@@ -207,6 +207,10 @@ export async function settleVerifiedOrphanedClaim(
   reconcile: DeviceClaimReconciler,
   env: EnvMap,
 ): Promise<DeviceClaimReconciliationResult> {
+  if (claim.recordingCleanupPending)
+    return { status: 'retained', reason: 'screen-recording-binding-cleanup-pending' };
+  if (claim.recordingSessionOwner)
+    return { status: 'retained', reason: 'screen-recording-session-owner-pending' };
   const guarded = claim.recordingStartPending && !claim.recordingCleanupPending;
   if (guarded && !beginIncompleteStartRecoveryCleanup(claim, env))
     return { status: 'retained', reason: 'screen-recording-claim-changed' };

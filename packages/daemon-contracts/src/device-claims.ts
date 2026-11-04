@@ -9,11 +9,6 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
-import {
-  sameRuntimeOwner,
-  type ResourceOwnershipFence,
-  type RuntimeOwnerRef,
-} from '@agent-device/contracts/platform-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
@@ -51,6 +46,13 @@ import {
   type InspectedClaimSettlement,
 } from './device-claim-settlement.ts';
 import { withDeviceClaimLock, tryDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
+import { writeOwnedDeviceClaim } from './device-claim-owned.ts';
+
+export {
+  retainRecordingClaimForSession,
+  holdRecordingClaimForClose,
+  finishRecordingClaimClose,
+} from './device-claim-close.ts';
 
 export { canonicalLocalDeviceKey, deviceClaimIdentity } from './device-claim-paths.ts';
 export {
@@ -688,7 +690,12 @@ export async function clearDeviceClaim(
     ownership,
     env,
     (claim, claimPath) => {
-      if (claim.recordingCleanupPending || claim.recordingStartPending) return 'cleanup-pending';
+      if (
+        claim.recordingCleanupPending ||
+        claim.recordingStartPending ||
+        claim.recordingSessionOwner
+      )
+        return 'cleanup-pending';
       try {
         fs.unlinkSync(claimPath);
       } catch (error) {
@@ -704,66 +711,6 @@ export async function clearDeviceClaim(
       // the file told us nothing we can attribute to either side.
       return conflict.claim ? 'ownership-changed' : 'unattributable';
     },
-  );
-}
-
-/** Retain a promoted recording claim while its owning session and request bindings close. */
-export async function holdRecordingClaimForClose(
-  ownership: DeviceClaimSessionOwnership,
-  env: EnvMap,
-): Promise<
-  | { status: 'held'; fence: ResourceOwnershipFence; owner: RuntimeOwnerRef }
-  | { status: 'ordinary' | 'cleanup-pending' | 'ownership-changed' }
-> {
-  return await writeOwnedDeviceClaim(
-    ownership,
-    env,
-    (claim) => {
-      if (claim.recordingCleanupPending || claim.recordingStartPending)
-        return { status: 'cleanup-pending' } as const;
-      if (claim.claimOwnerKind !== 'open-session' || !claim.recordingFence)
-        return { status: 'ordinary' } as const;
-      if (!claim.recordingRuntimeOwner) return { status: 'cleanup-pending' } as const;
-      writeDeviceClaim({ ...claim, recordingCleanupPending: true }, env);
-      return {
-        status: 'held',
-        fence: claim.recordingFence,
-        owner: claim.recordingRuntimeOwner,
-      } as const;
-    },
-    () => ({ status: 'ownership-changed' as const }),
-  );
-}
-
-/** Finish only the reservation held by this close, after request runtime cleanup settles. */
-export async function finishRecordingClaimClose(
-  ownership: DeviceClaimSessionOwnership,
-  fence: ResourceOwnershipFence,
-  owner: RuntimeOwnerRef,
-  env: EnvMap,
-  release: boolean,
-): Promise<'settled' | 'ownership-changed'> {
-  return await writeOwnedDeviceClaim(
-    ownership,
-    env,
-    (claim, claimPath) => {
-      if (
-        !claim.recordingCleanupPending ||
-        claim.recordingStartPending ||
-        claim.recordingFence?.token !== fence.token ||
-        claim.recordingFence.generation !== fence.generation ||
-        !claim.recordingRuntimeOwner ||
-        !sameRuntimeOwner(claim.recordingRuntimeOwner, owner)
-      )
-        return 'ownership-changed' as const;
-      if (release) fs.unlinkSync(claimPath);
-      else {
-        const { recordingCleanupPending: _, recordingCleanupProof: _proof, ...settled } = claim;
-        writeDeviceClaim(settled, env);
-      }
-      return 'settled' as const;
-    },
-    () => 'ownership-changed' as const,
   );
 }
 
@@ -833,39 +780,6 @@ export async function renewDeviceClaim(
       return { status: 'renewed' } as const;
     },
     (conflict) => ({ status: 'lost' as const, conflict }),
-  );
-}
-
-/**
- * Runs one claim write under the claim lock, for the owner that acquired it, and reports the record
- * that took the device when it is no longer the one that ownership took.
- */
-async function writeOwnedDeviceClaim<O, L>(
-  ownership: DeviceClaimSessionOwnership,
-  env: EnvMap,
-  act: (claim: DeviceClaim, claimPath: string) => O,
-  lost: (conflict: InspectedDeviceClaim | undefined) => L,
-): Promise<O | L> {
-  return await withDeviceClaimLock(ownership.deviceKey, env, async () => {
-    const claimPath = resolveDeviceClaimPath(ownership.deviceKey, env);
-    const inspected = inspectDeviceClaimFile(claimPath);
-    if (!inspected) return lost(undefined);
-    const claim = inspected.claim;
-    if (!claim || !claimMatchesOwnership(claim, ownership)) return lost(inspected);
-    return act(claim, claimPath);
-  });
-}
-
-function claimMatchesOwnership(
-  claim: DeviceClaim,
-  ownership: DeviceClaimSessionOwnership,
-): boolean {
-  return (
-    claim.ownerToken === ownership.ownerToken &&
-    ownerIdentityMatches(
-      { pid: claim.ownerPid, startTime: claim.ownerStartTime },
-      { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
-    )
   );
 }
 

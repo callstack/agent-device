@@ -18,8 +18,6 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { withDurableCaptureResourceFence } from '@agent-device/capture-kit/durable-capture';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { readReplayableStoredCompletion } from '@agent-device/capture-kit/screen-recording-stop-recovery';
-import { SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY } from '@agent-device/contracts/screen-recording-runtime';
 import {
   SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY as CLAIM_TOKEN,
   SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY as CLAIM_BINDING_VERSION,
@@ -55,7 +53,6 @@ import {
   beginIncompleteStartRecoveryCleanup,
   finishIncompleteStartRecoveryCleanup,
 } from './device-claim-settlement.ts';
-import { recoverStoppedRecordingCleanup } from './device-claim-cleanup-recovery.ts';
 
 type RecordingClaimContext = {
   device: DeviceInfo;
@@ -139,7 +136,6 @@ export async function admitRecordingStop(
   params: RecordingClaimContext & {
     owner: RuntimeOwnerRef;
     sessionOwnership?: DeviceClaimSessionOwnership;
-    recordingCleanupRecovery?: 'local-drained';
   },
 ) {
   const key = canonicalLocalDeviceKey(deviceClaimIdentity(params.device));
@@ -193,7 +189,7 @@ export async function admitRecordingStop(
       });
       if (liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused')
         throw claimError();
-      const resources = inspectDeviceClaimRecovery(claim);
+      const resources = inspectDeviceClaimRecovery(claim, { allowPendingSessionOwner: true });
       if (
         resources.status !== 'inspectable' ||
         resources.recoveryKinds.some((kind) => kind !== 'screen-recording')
@@ -239,10 +235,6 @@ export async function admitRecordingStop(
           recordingFence: envelope.fence,
           recordingRuntimeOwner: envelope.owner,
           recordingCleanupPending: true,
-          ...(params.recordingCleanupRecovery === 'local-drained' &&
-          envelope.metadata?.[SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY] === 'local-drained'
-            ? { recordingCleanupProof: 'stop-prepared' as const }
-            : {}),
           updatedAtMs: Date.now(),
         };
         writeDeviceClaim(transferred, params.env);
@@ -289,51 +281,17 @@ export async function admitRecordingStop(
           guarded.recordingFence.generation !== expected.fence.generation ||
           !guarded.recordingRuntimeOwner ||
           !sameRuntimeOwner(guarded.recordingRuntimeOwner, expected.owner) ||
-          (guarded.recordingCleanupProof !== undefined &&
-            guarded.recordingCleanupProof !== 'stop-prepared') ||
           !ownerIdentityMatches(
             { pid: guarded.ownerPid, startTime: guarded.ownerStartTime },
             { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
           )
         )
           throw claimError();
-        if (guarded.recordingCleanupProof === 'stop-prepared') {
-          const { recordingCleanupProof: _proof, ...active } = guarded;
-          writeDeviceClaim(active, params.env);
-        }
-      },
-      completedLocally: async (retainForSession: boolean | undefined) => {
-        hostLock?.assertHeld();
-        lock.assertHeld();
-        await recordCompletedStopProof(
-          {
-            ...params,
-            ownership,
-            expectedOwner: expected.owner,
-            fence: expected.fence,
-            release: admitted.status === 'reserved' && !retainForSession,
-            phase: 'completed',
-          },
-          key,
-        );
       },
       finish: async (input: RecordingClaimFinish) => {
         try {
           hostLock?.assertHeld();
           lock.assertHeld();
-          if (input.succeeded && input.runtimeDisposed && input.runtimeDrainedLocally) {
-            await recordCompletedStopProof(
-              {
-                ...params,
-                ownership,
-                expectedOwner: expected.owner,
-                fence: expected.fence,
-                release: admitted.status === 'reserved' && !input.retainForSession,
-                phase: 'drained',
-              },
-              key,
-            );
-          }
           return await finishRecordingClaimUnderLock(
             {
               ...params,
@@ -369,6 +327,7 @@ export async function reserveRecordingClaimFence(
     ownership: DeviceClaimSessionOwnership;
     fence: ResourceOwnershipFence;
     owner: RuntimeOwnerRef;
+    retainForSession?: boolean;
   },
 ): Promise<void> {
   await withRecordingClaimLocks(params, async (key) => {
@@ -383,6 +342,11 @@ export async function reserveRecordingClaimFence(
         (claim.claimOwnerKind === 'transient-command' && claim.transientCommand === 'record')
       ) ||
       claim.ownerToken !== params.ownership.ownerToken ||
+      (claim.recordingSessionOwner !== undefined &&
+        !ownerIdentityMatches(claim.recordingSessionOwner, {
+          pid: params.ownership.ownerPid,
+          startTime: params.ownership.ownerStartTime,
+        })) ||
       !ownerIdentityMatches(
         { pid: claim.ownerPid, startTime: claim.ownerStartTime },
         { pid: params.ownership.ownerPid, startTime: params.ownership.ownerStartTime },
@@ -394,6 +358,14 @@ export async function reserveRecordingClaimFence(
         ...claim,
         recordingFence: params.fence,
         recordingRuntimeOwner: params.owner,
+        ...(params.retainForSession && !claim.recordingSessionOwner
+          ? {
+              recordingSessionOwner: {
+                pid: params.ownership.ownerPid,
+                startTime: params.ownership.ownerStartTime,
+              },
+            }
+          : {}),
         recordingCleanupPending: true,
         recordingStartPending: true,
         updatedAtMs: Date.now(),
@@ -408,7 +380,6 @@ type RecordingClaimFinish = {
   action: 'start' | 'stop';
   succeeded: boolean;
   runtimeDisposed: boolean;
-  runtimeDrainedLocally?: boolean;
   startAttempted: boolean;
   retainForSession?: boolean;
   startProof?: 'not-dispatched' | 'rolled-back';
@@ -416,63 +387,6 @@ type RecordingClaimFinish = {
   expectedOwner?: RuntimeOwnerRef;
   releaseWhenComplete?: boolean;
 };
-
-async function recordCompletedStopProof(
-  params: RecordingClaimContext & {
-    ownership: DeviceClaimSessionOwnership;
-    expectedOwner: RuntimeOwnerRef;
-    fence: ResourceOwnershipFence;
-    release: boolean;
-    phase: 'completed' | 'drained';
-  },
-  key: string,
-): Promise<void> {
-  await withDurableCaptureResourceFence({
-    store: screenRecordingDurableResource.store,
-    resourcePath: params.resourcePath,
-    expected: params.fence,
-    run: async () => {},
-    onCompleted: ({ envelope }) => {
-      const claim = inspectDeviceClaimFile(resolveDeviceClaimPath(key, params.env))?.claim;
-      if (
-        !claim ||
-        !matchesContext(claim, params) ||
-        !claim.recordingCleanupPending ||
-        claim.recordingStartPending ||
-        claim.ownerToken !== params.ownership.ownerToken ||
-        !ownerIdentityMatches(
-          { pid: claim.ownerPid, startTime: claim.ownerStartTime },
-          { pid: params.ownership.ownerPid, startTime: params.ownership.ownerStartTime },
-        ) ||
-        claim.recordingFence?.token !== params.fence.token ||
-        claim.recordingFence.generation !== params.fence.generation ||
-        !claim.recordingRuntimeOwner ||
-        !sameRuntimeOwner(claim.recordingRuntimeOwner, params.expectedOwner) ||
-        envelope.sessionId !== claim.session ||
-        !sameDeviceIdentity(envelope.device, claim.device) ||
-        !sameRuntimeOwner(envelope.owner, params.expectedOwner) ||
-        envelope.metadata?.[CLAIM_TOKEN] !== claim.ownerToken ||
-        envelope.metadata?.[SCREEN_RECORDING_CLEANUP_SCOPE_METADATA_KEY] !== 'local-drained' ||
-        !readReplayableStoredCompletion(envelope.metadata)
-      )
-        return;
-      writeDeviceClaim(
-        {
-          ...claim,
-          recordingCleanupProof:
-            params.phase === 'completed'
-              ? params.release
-                ? 'stop-completed-release'
-                : 'stop-completed-retain'
-              : params.release
-                ? 'stop-drained-release'
-                : 'stop-drained-retain',
-        },
-        params.env,
-      );
-    },
-  });
-}
 
 export async function finishRecordingClaimRequest(
   params: RecordingClaimContext &
@@ -558,7 +472,7 @@ async function finishRecordingClaimUnderLock(
         },
       });
     }
-    if (params.releaseWhenComplete !== false) {
+    if (params.releaseWhenComplete !== false && !claim.recordingSessionOwner) {
       fs.unlinkSync(resolveDeviceClaimPath(key, params.env));
       return true;
     }
@@ -568,7 +482,10 @@ async function finishRecordingClaimUnderLock(
       recordingStartPending: _start,
       ...settled
     } = claim;
-    writeDeviceClaim(settled, params.env);
+    if (claim.recordingSessionOwner && claim.claimOwnerKind === 'transient-command') {
+      const { transientCommand: _command, ...sessionClaim } = settled;
+      writeDeviceClaim({ ...sessionClaim, claimOwnerKind: 'open-session' }, params.env);
+    } else writeDeviceClaim(settled, params.env);
     return false;
   }
   if (record.status === 'missing') {
@@ -576,6 +493,7 @@ async function finishRecordingClaimUnderLock(
       params.action === 'start' &&
       !params.succeeded &&
       !params.startAttempted &&
+      !claim.recordingSessionOwner &&
       params.releaseWhenComplete !== false
     ) {
       fs.unlinkSync(resolveDeviceClaimPath(key, params.env));
@@ -605,14 +523,27 @@ async function finishRecordingClaimUnderLock(
         params.expectedOwner !== undefined &&
         sameRuntimeOwner(envelope.owner, params.expectedOwner)
       ) {
-        if (params.releaseWhenComplete && params.retainForSession) {
+        if (
+          params.releaseWhenComplete &&
+          (params.retainForSession || claim.recordingSessionOwner)
+        ) {
           const {
             recordingCleanupPending: _,
             recordingCleanupProof: _proof,
             transientCommand: _command,
             ...rest
           } = claim;
-          writeDeviceClaim({ ...rest, claimOwnerKind: 'open-session' }, params.env);
+          writeDeviceClaim(
+            {
+              ...rest,
+              claimOwnerKind: 'open-session',
+              recordingSessionOwner: claim.recordingSessionOwner ?? {
+                pid: claim.ownerPid,
+                startTime: claim.ownerStartTime,
+              },
+            },
+            params.env,
+          );
           return false;
         }
         if (params.releaseWhenComplete) {
@@ -620,12 +551,21 @@ async function finishRecordingClaimUnderLock(
           return true;
         }
         const { recordingCleanupPending: _, recordingCleanupProof: _proof, ...settled } = claim;
-        writeDeviceClaim(settled, params.env);
+        writeDeviceClaim(
+          params.retainForSession && !claim.recordingSessionOwner
+            ? {
+                ...settled,
+                recordingSessionOwner: { pid: claim.ownerPid, startTime: claim.ownerStartTime },
+              }
+            : settled,
+          params.env,
+        );
         return false;
       }
       if (
         params.action === 'start' &&
         params.releaseWhenComplete !== false &&
+        !claim.recordingSessionOwner &&
         !params.succeeded &&
         (!params.startAttempted ||
           (token === claim.ownerToken &&
@@ -681,6 +621,7 @@ export type RetainedRecordingCleanup = Readonly<{
   purpose: 'start' | 'stop' | 'close';
   startProof?: 'not-dispatched' | 'rolled-back';
   releaseWhenComplete?: boolean;
+  sessionOwner?: DeviceClaim['recordingSessionOwner'];
   retry(): Promise<void>;
 }>;
 
@@ -704,15 +645,7 @@ export async function retryRecordingClaimCleanup(
       return 'none';
     }
     const retained = params.retained;
-    if (!retained) {
-      const recovered = await recoverStoppedRecordingCleanup({
-        claim,
-        resourcePath: params.resourcePath,
-        env: params.env,
-      });
-      if (recovered === 'unconfirmed') throw cleanupPendingError();
-      return recovered;
-    }
+    if (!retained) throw cleanupPendingError();
     const current = readCurrentOwnerIdentity();
     if (
       claim.ownerToken !== retained.ownership.ownerToken ||
@@ -727,6 +660,8 @@ export async function retryRecordingClaimCleanup(
       ) ||
       claim.recordingFence?.token !== retained.fence.token ||
       claim.recordingFence.generation !== retained.fence.generation ||
+      (retained.purpose === 'close' &&
+        !sameSessionOwner(claim.recordingSessionOwner, retained.sessionOwner)) ||
       !claim.recordingRuntimeOwner ||
       !sameRuntimeOwner(claim.recordingRuntimeOwner, retained.owner)
     )
@@ -809,6 +744,8 @@ export async function retryRecordingClaimCleanup(
         !after.recordingCleanupPending ||
         after.recordingFence?.token !== retained.fence.token ||
         after.recordingFence.generation !== retained.fence.generation ||
+        (retained.purpose === 'close' &&
+          !sameSessionOwner(after.recordingSessionOwner, retained.sessionOwner)) ||
         !after.recordingRuntimeOwner ||
         !sameRuntimeOwner(after.recordingRuntimeOwner, retained.owner) ||
         !ownerIdentityMatches(
@@ -831,14 +768,19 @@ export async function retryRecordingClaimCleanup(
         completed = true;
       }
       if (retained.purpose === 'close' && completed && retained.releaseWhenComplete) {
+        if (!after.recordingClosePending) throw claimError();
         fs.unlinkSync(resolveDeviceClaimPath(key, params.env));
         return 'released' as const;
+      }
+      if (retained.purpose === 'close') {
+        if (!after.recordingClosePending) throw claimError();
+        return 'settled' as const;
       }
       if (
         completed &&
         claim.claimOwnerKind === 'transient-command' &&
         claim.transientCommand === 'record' &&
-        params.retainForSession?.(retained.ownership)
+        (params.retainForSession?.(retained.ownership) || claim.recordingSessionOwner)
       ) {
         const {
           recordingCleanupPending: _,
@@ -846,7 +788,17 @@ export async function retryRecordingClaimCleanup(
           transientCommand: _command,
           ...rest
         } = after;
-        writeDeviceClaim({ ...rest, claimOwnerKind: 'open-session' }, params.env);
+        writeDeviceClaim(
+          {
+            ...rest,
+            claimOwnerKind: 'open-session',
+            recordingSessionOwner: claim.recordingSessionOwner ?? {
+              pid: claim.ownerPid,
+              startTime: claim.ownerStartTime,
+            },
+          },
+          params.env,
+        );
         return 'settled' as const;
       }
       if (
@@ -874,6 +826,14 @@ export async function retryRecordingClaimCleanup(
         }),
     });
   });
+}
+
+function sameSessionOwner(
+  left: DeviceClaim['recordingSessionOwner'],
+  right: DeviceClaim['recordingSessionOwner'],
+): boolean {
+  if (!left || !right) return left === right;
+  return Boolean(left.startTime && right.startTime && ownerIdentityMatches(left, right));
 }
 
 function cleanupPendingError(): AppError {
@@ -944,9 +904,9 @@ export async function recoverIncompleteRecordingStartClaim(
     )
       throw claimError();
     if (!isIncompleteRecordingStartClaim(after)) throw claimError();
-    if (after.claimOwnerKind === 'open-session') {
-      const { recordingStartPending: _, ...settled } = after;
-      writeDeviceClaim(settled, params.env);
+    if (after.claimOwnerKind === 'open-session' || after.recordingSessionOwner) {
+      const { recordingStartPending: _, transientCommand: _command, ...settled } = after;
+      writeDeviceClaim({ ...settled, claimOwnerKind: 'open-session' }, params.env);
       return true;
     }
     fs.unlinkSync(resolveDeviceClaimPath(key, params.env));

@@ -51,13 +51,11 @@ test('reports a focused simulator transport as available', async () => {
     },
     async () => {
       await expect(host.availability(simulator)).resolves.toEqual({ available: true });
-      await expect(host.cleanupRecoveryScope?.(simulator)).resolves.toBe('unsupported');
     },
   );
 });
 
-test('only the local simulator transport advertises drained cleanup recovery', async () => {
+test('the Apple host does not attest that helper descendants have drained', () => {
   const host = createAppleScreenRecordingHost(isolatedHost());
-  await expect(host.cleanupRecoveryScope?.(simulator)).resolves.toBe('local-drained');
-  await expect(host.cleanupRecoveryScope?.(device)).resolves.toBe('unsupported');
+  expect(host).not.toHaveProperty('cleanupRecoveryScope');
 });

@@ -32,7 +32,10 @@ import {
 } from './session-open-foreground.ts';
 export { resolveForegroundOpenRequest };
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
+import {
+  retainRecordingClaimForSession,
+  type DeviceClaimReconciler,
+} from '@agent-device/daemon-contracts/device-claims';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -264,6 +267,19 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       params.host.env,
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
+    if (admittedSession.deviceClaim) {
+      const retained = await retainRecordingClaimForSession(
+        admittedSession.deviceClaim,
+        params.host.env,
+      );
+      if (retained !== 'retained' && retained !== 'ordinary')
+        return {
+          type: 'response',
+          response: errorResponse('DEVICE_IN_USE', 'The recording session owner is not settled', {
+            reason: 'cleanup-unconfirmed',
+          }),
+        };
+    }
 
     const device = await refreshSessionDeviceIfNeeded(
       session.device,

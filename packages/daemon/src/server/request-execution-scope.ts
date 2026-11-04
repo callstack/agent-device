@@ -376,6 +376,7 @@ export async function createRequestExecutionScope(params: {
           ...scopedReq.internal,
           retryRecordingCloseCleanup: closeCleanup.retry,
           holdRecordingClaimForClose: closeCleanup.hold,
+          markRecordingCloseEffectsStarted: closeCleanup.effectsStarted,
         },
       };
     }
@@ -384,8 +385,6 @@ export async function createRequestExecutionScope(params: {
       bindingCleanup ??= (async () => {
         try {
           await runtimeBindings[Symbol.asyncDispose]();
-          if (runtimeBindings.hasLocalRecordingCleanupAuthority())
-            claimAdmission.runtimeDisposalDrainedLocally();
           closeCleanup.retainPending();
         } catch (error) {
           claimAdmission.runtimeDisposalFailed();
@@ -526,9 +525,7 @@ export async function createRequestExecutionScope(params: {
           if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           const result = await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
           if (typeof result === 'object' && result !== null && 'ok' in result && result.ok === true)
-            await claimAdmission.recordingSucceeded(
-              runtimeBindings.hasLocalRecordingCleanupAuthority(),
-            );
+            await claimAdmission.recordingSucceeded();
           return result;
         } finally {
           // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED

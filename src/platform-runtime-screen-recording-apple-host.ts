@@ -7,13 +7,6 @@ export function createAppleScreenRecordingHost(
 ): ScreenRecordingRuntimeHost['apple'] {
   return Object.freeze({
     availability: appleScreenRecordingAvailability,
-    cleanupRecoveryScope: async (device) => {
-      if (device.kind !== 'simulator') return 'unsupported';
-      const { resolveAppleSimulatorScreenRecordingTransport } =
-        await import('./platform-runtime-screen-recording-apple-transport.ts');
-      const transport = resolveAppleSimulatorScreenRecordingTransport();
-      return transport.available && transport.mode === 'local' ? 'local-drained' : 'unsupported';
-    },
     runRunner: async (device, request, signal) => {
       const { runAppleRecordingRunner } =
         await import('./platform-runtime-screen-recording-apple-runner-host.ts');

@@ -20,6 +20,7 @@ export function createRequestRecordingCloseCleanup(params: {
   let finish: (() => Promise<void>) | undefined;
   let retain: ((retry: () => Promise<void>) => RetainedRecordingCleanup) | undefined;
   let recordingRetry: (() => Promise<void>) | undefined;
+  let markEffectsStarted: (() => void) | undefined;
   return {
     recordingPending(retry: () => Promise<void>) {
       params.claimAdmission.runtimeDisposalFailed();
@@ -34,18 +35,18 @@ export function createRequestRecordingCloseCleanup(params: {
       const retained = retain?.(retry) ?? params.claimAdmission.retainedRecordingCleanup(retry);
       if (retained) params.sessionStore.retainRecordingCleanup(params.sessionName, retained);
     },
-    async retry(): Promise<boolean> {
+    async retry(): Promise<'none' | 'settled' | 'released'> {
       const retained = params.sessionStore.recordingCleanup(params.sessionName);
-      if (!retained || retained.purpose !== 'close') return false;
+      if (!retained || retained.purpose !== 'close') return 'none';
       const result = await params.claimAdmission.retryRecordingCleanup(retained.device, retained);
       if (result !== 'none')
         params.sessionStore.clearRecordingCleanup(params.sessionName, retained);
-      if (result !== 'released')
+      if (result === 'none')
         throw new AppError('COMMAND_FAILED', 'Session close effects are not confirmed', {
           reason: 'cleanup-unconfirmed',
           retriable: true,
         });
-      return true;
+      return result;
     },
     async hold(ownership: DeviceClaimSessionOwnership, device: DeviceInfo) {
       if (finish)
@@ -61,6 +62,10 @@ export function createRequestRecordingCloseCleanup(params: {
         });
       if (held.status !== 'held') throw changedClaim();
       let release = false;
+      let effectsStarted = held.resumed;
+      markEffectsStarted = () => {
+        effectsStarted = true;
+      };
       retain = (retry) => ({
         device,
         owner: held.owner,
@@ -68,13 +73,16 @@ export function createRequestRecordingCloseCleanup(params: {
         ownership,
         purpose: 'close',
         releaseWhenComplete: release,
+        sessionOwner: held.sessionOwner,
         retry,
       });
       finish = async () => {
+        if (recordingRetry || (!release && effectsStarted)) return;
         const result = await finishRecordingClaimClose(
           ownership,
           held.fence,
           held.owner,
+          held.sessionOwner,
           params.env,
           release,
         );
@@ -83,6 +91,9 @@ export function createRequestRecordingCloseCleanup(params: {
       return () => {
         release = true;
       };
+    },
+    effectsStarted() {
+      if (markEffectsStarted) markEffectsStarted();
     },
     finish: async () => await finish?.(),
   };
