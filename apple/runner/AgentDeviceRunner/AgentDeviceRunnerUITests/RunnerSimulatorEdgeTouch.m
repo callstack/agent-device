@@ -38,14 +38,16 @@ typedef struct {
   RunnerDispatchEvent dispatchEvent;
 } RunnerHIDFunctions;
 
-// IOHIDDigitizerEventMask bits.
+// IOHIDDigitizerEventMask bits (IOHIDFamily IOHIDEventTypes.h). A real edge swipe on a simulator
+// carries Range/Touch/Position plus SwipeLocked and the swipe direction on every frame.
 static const uint32_t RunnerDigitizerRange = 1u << 0;
 static const uint32_t RunnerDigitizerTouch = 1u << 1;
 static const uint32_t RunnerDigitizerPosition = 1u << 2;
-static const uint32_t RunnerDigitizerIdentity = 1u << 5;
-static const uint32_t RunnerDigitizerFromEdgeFlat = 1u << 10;
-static const uint32_t RunnerDigitizerFromEdgeTip = 1u << 11;
-static const uint32_t RunnerDigitizerEdgeMask = RunnerDigitizerFromEdgeFlat | RunnerDigitizerFromEdgeTip;
+static const uint32_t RunnerDigitizerSwipeLocked = 1u << 18;
+static const uint32_t RunnerDigitizerSwipeUp = 1u << 24;
+static const uint32_t RunnerDigitizerSwipeDown = 1u << 25;
+static const uint32_t RunnerDigitizerSwipeLeft = 1u << 26;
+static const uint32_t RunnerDigitizerSwipeRight = 1u << 27;
 
 // IOHIDEventField values of the digitizer event type (11).
 static const uint32_t RunnerDigitizerFieldMajorRadius = (11u << 16) | 20u;
@@ -136,7 +138,8 @@ static NSString * _Nullable RunnerDisplayUUID(NSUInteger displayID) {
   return nil;
 }
 
-// Touches reach the app only with its display's touchscreen service as their sender.
+// Touches reach the app only with its display's touchscreen service as their sender. A display has
+// one service per attached simulator client; the oldest, created at boot, is always present.
 static NSString * _Nullable RunnerResolveTouchscreenSender(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
@@ -156,15 +159,18 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
     NSString *serviceDisplayUUID = RunnerServiceStringProperty(functions, service, CFSTR("displayUUID"));
     if (serviceDisplayUUID != displayUUID && ![serviceDisplayUUID isEqualToString:displayUUID]) continue;
     CFTypeRef registryID = functions->getServiceRegistryID(service);
-    if (registryID != NULL && CFGetTypeID(registryID) == CFNumberGetTypeID()) {
-      CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, sender);
-      matches += 1;
+    uint64_t candidate = 0;
+    if (registryID != NULL && CFGetTypeID(registryID) == CFNumberGetTypeID() &&
+        CFNumberGetValue((CFNumberRef)registryID, kCFNumberSInt64Type, &candidate) &&
+        (matches == 0 || candidate < *sender)) {
+      *sender = candidate;
     }
+    if (registryID != NULL) matches += 1;
   }
   if (services != NULL) CFRelease(services);
-  if (matches == 1) return nil;
-  return [NSString stringWithFormat:@"display %lu has %lu simulator touchscreen HID services; an edge touch needs exactly one",
-                                    (unsigned long)displayID, (unsigned long)matches];
+  if (matches > 0) return nil;
+  return [NSString stringWithFormat:@"display %lu has no simulator touchscreen HID service",
+                                    (unsigned long)displayID];
 }
 
 // Returns NO when the event could not be created, so nothing was dispatched.
@@ -203,6 +209,15 @@ static CGPoint RunnerSamplePoint(NSDictionary<NSString *, NSNumber *> *sample, C
   return CGPointMake(sample[@"x"].doubleValue / screenSize.width, sample[@"y"].doubleValue / screenSize.height);
 }
 
+// The swipe direction the system reports for a contact moving from `start` to `end`, in the
+// display's native axes, where y grows downward.
+static uint32_t RunnerSwipeDirection(CGPoint start, CGPoint end) {
+  double dx = end.x - start.x;
+  double dy = end.y - start.y;
+  if (fabs(dx) >= fabs(dy)) return dx >= 0 ? RunnerDigitizerSwipeRight : RunnerDigitizerSwipeLeft;
+  return dy >= 0 ? RunnerDigitizerSwipeDown : RunnerDigitizerSwipeUp;
+}
+
 // The contact position at `offsetMs`, interpolated between the planned samples.
 static CGPoint RunnerPointAtOffset(
   NSArray<NSDictionary<NSString *, NSNumber *> *> *samples,
@@ -221,6 +236,17 @@ static CGPoint RunnerPointAtOffset(
     return CGPointMake(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress);
   }
   return RunnerSamplePoint(samples.lastObject, screenSize);
+}
+
+// The contact position at `offsetMs` when it eases in quadratically along the planned path.
+static CGPoint RunnerEasedPoint(
+  NSArray<NSDictionary<NSString *, NSNumber *> *> *samples,
+  double offsetMs,
+  double durationMs,
+  CGSize screenSize
+) {
+  double progress = durationMs > 0 ? offsetMs / durationMs : 1;
+  return RunnerPointAtOffset(samples, durationMs * progress * progress, screenSize);
 }
 
 static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
@@ -258,10 +284,12 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
   }
 
   double durationMs = samples.lastObject[@"offsetMs"].doubleValue;
+  uint32_t swipe = RunnerDigitizerSwipeLocked |
+    RunnerSwipeDirection(RunnerPointAtOffset(samples, 0, screenSize), RunnerPointAtOffset(samples, durationMs, screenSize));
   uint64_t startTicks = mach_absolute_time();
   if (!RunnerDispatchFrame(
         &functions, client, sender, RunnerPointAtOffset(samples, 0, screenSize),
-        RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerIdentity | RunnerDigitizerEdgeMask, true)) {
+        RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerPosition | swipe, true)) {
     CFRelease(client);
     return @"simulator HID dispatch could not create the touch-down event";
   }
@@ -270,9 +298,11 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
   for (double offsetMs = RunnerFrameIntervalMs; offsetMs < liftOffsetMs; offsetMs += RunnerFrameIntervalMs) {
     double frameOffset = MIN(offsetMs, durationMs);
     RunnerWaitUntil(startTicks, frameOffset);
+    // The edge recognizer fails when the first move leaves the edge region in one frame, as a fast
+    // finger does on a wide panel, so the contact eases in like a real swipe.
     if (!RunnerDispatchFrame(
-          &functions, client, sender, RunnerPointAtOffset(samples, frameOffset, screenSize),
-          RunnerDigitizerPosition | RunnerDigitizerEdgeMask, true)) {
+          &functions, client, sender, RunnerEasedPoint(samples, frameOffset, durationMs, screenSize),
+          RunnerDigitizerPosition | swipe, true)) {
       moved = NO;
       liftOffsetMs = frameOffset;
       break;
@@ -281,8 +311,8 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
   // The contact is down, so it lifts even after a failed move.
   RunnerWaitUntil(startTicks, liftOffsetMs);
   BOOL lifted = RunnerDispatchFrame(
-    &functions, client, sender, RunnerPointAtOffset(samples, MIN(liftOffsetMs, durationMs), screenSize),
-    RunnerDigitizerRange | RunnerDigitizerTouch | RunnerDigitizerIdentity, false);
+    &functions, client, sender, RunnerEasedPoint(samples, MIN(liftOffsetMs, durationMs), durationMs, screenSize),
+    RunnerDigitizerRange | RunnerDigitizerTouch | swipe, false);
   CFRelease(client);
   if (!lifted) return @"simulator HID dispatch could not create the touch-up event";
   if (!moved) return @"simulator HID dispatch could not create a touch-move event; the contact lifted early";
