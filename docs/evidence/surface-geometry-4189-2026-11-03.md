@@ -70,3 +70,32 @@ The first full gate at `3090b336` rejected ten new native duplicate blocks.
 The follow-up consolidates drag dispatch, passes tap points as `CGPoint`, resolves point orientation with its target, and shares screen-query and preparation fixtures.
 Two existing fallback/alert stubs were also updated to the current native selector.
 The live observations above precede this API consolidation; final-head native and gate results are recorded in the PR validation section.
+
+## Natural rejected-query route, 2026-11-04
+
+Source under test: `84f1e6adccd54e4131d763c5c65f4880b6ac91f9`, the branch rebased onto `main` at `7d42395ff7e1c03b643c2cf56683808bf5427cf3`.
+This section closes the `AX-unavailable iPhone routes` limit above and answers [the readiness review](https://github.com/callstack/agent-device/pull/4189#issuecomment-6627588706).
+No production source, and no fault patch, was involved: the app's Heavy feed fixture exceeds the depth XCTest can serialize, so the accessibility query refuses on its own.
+
+Setup: sole-display `iPhone 17 Pro` simulator `5FEADD02-98E4-4F01-861C-07003C1A3291`, iOS 26.2, driven through the command returned by `device_open` in session `surface4189`.
+A daemon from this checkout (`0.21.37-dev`, `codeOrigin=checkout`, signature `graph:123:89e270aa80446b4444ddc2a562ce3e7ee7b4b469`) owned a private state directory `/private/tmp/agent-device-4189-ax` and built the exact-head runner into the pinned derived path `.tmp/4189-ax-derived`.
+`Agent Device Tester` was that simulator's existing install with its JavaScript repacked from this checkout; bundle hashes: original `ca4c0c3d5eedf000792a143c10f3c036309d9f16d5d4c2899fcf3e053f26ffab`, repacked `ac93ac57877b43f52dbce40abac65d4711af339b24f3629fb1cd9af01223448d`. The original bundle was reinstalled afterward.
+
+`back --in-app` on the heavy feed took the early rejected-query route. One `kAXErrorIllegalArgument` rejection was recorded, then `IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION`, then `SYNTHESIZED_SOLE_SCREEN_ROUTE resolved={{0, 0}, {402, 874}}`.
+No further rejection was recorded before delivery, so the route opened without another windows query.
+Delivery logged `BACK_FALLBACK_TOP_INSET read=62.0 windows=1`, a tap at `(32.2,84.0)` against reference `(0,0,402,874)` in orientation `1`, and a record naming display `1`.
+`IN_APP_BACK_VISUAL_VERIFICATION … changed=yes` reported the visible navigation outcome, and a follow-up read of `heavy-feed-title` refused because the screen had left the feed.
+
+In the same state, three gestures reached the sole-screen route through their own refused windows query, each preceded by its own recorded rejection:
+
+| Command | Native evidence | Fresh outcome |
+| --- | --- | --- |
+| `press 273.33 458.5` | record `agent-device-tap`, display `1`, orientation `1`, point `(273.3,458.5)` | `Liked posts: 0` became `Liked posts: 1` |
+| `longpress 273.33 458.5 900` | record `agent-device-gesture-plan`, display `1`, orientation `1` | `heavy-feed-last-action` became `Last action: unliked post 0`: the hold's contact toggled the same like control the tap had pressed |
+| `gesture pan 201 400 0 -220 800` | record `agent-device-gesture-plan`, display `1`, orientation `1` | `heavy-post-2-like` moved from y `1001.3` to y `798.3` |
+
+Limits of this run. Only `back --in-app` passes `windowQueryRejected` into the coordinate context, so the gesture rows prove the sole-screen route after a refused windows query, not the early argument.
+The pan ran the sampled plan; `SYNTHESIZED_DISPATCH kind=longPress` is shared by both hold routes, so the record name separates the hold from the tap.
+This covers one sole-display iPhone on the default fixture shape: not a foldable, a physical device, a scoped simulator set, or a global accessibility outage. Snapshots still answered through the private route.
+
+Cleanup: the session and the owned daemon were closed, Metro stopped, the original app bundle was reinstalled, and the simulator was left booted with its claim released.
