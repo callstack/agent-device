@@ -1,4 +1,7 @@
-import type { OwnedProcessRecord } from '@agent-device/contracts/platform-runtime-host';
+import type {
+  OwnedProcessRecord,
+  OwnedProcessRecordScope,
+} from '@agent-device/contracts/platform-runtime-host';
 import {
   isProcessAlive,
   readProcessIdentityFacts,
@@ -29,15 +32,14 @@ export async function reapOwnedProcessRecordsAtStartup(
     purposes?: readonly string[];
     termTimeoutMs?: number;
     killTimeoutMs?: number;
+    withRecordingAdmission?: RecordingReapAdmission;
   }> = {},
 ): Promise<OwnedProcessReapSummary> {
   const summary = createReapSummary();
   const policy = createReapPolicy(options);
   for (const entry of store.read()) {
     if (!isDecodedRecord(entry)) continue;
-    const retained = await reapDecodedEntry(entry, policy, summary);
-    if (retained.length === 0) store.clear(entry.scope);
-    else if (retained.length !== entry.records.length) store.replace(entry.scope, retained);
+    await reapDecodedEntry(store, entry, policy, summary);
   }
   return Object.freeze(summary);
 }
@@ -60,11 +62,18 @@ type MutableReapSummary = {
   skippedForOpenWebSession: boolean;
 };
 
+export type RecordingReapAdmission = (
+  scope: OwnedProcessRecordScope,
+  record: OwnedProcessRecord,
+  reap: () => Promise<void>,
+) => Promise<void>;
+
 type ReapPolicy = Readonly<{
   openWebSession: boolean;
   purposes?: ReadonlySet<string>;
   termTimeoutMs: number;
   killTimeoutMs: number;
+  withRecordingAdmission?: RecordingReapAdmission;
 }>;
 
 function createReapSummary(): MutableReapSummary {
@@ -86,35 +95,83 @@ function createReapPolicy(options: {
   purposes?: readonly string[];
   termTimeoutMs?: number;
   killTimeoutMs?: number;
+  withRecordingAdmission?: RecordingReapAdmission;
 }): ReapPolicy {
   return {
     openWebSession: (options.openWebSessionNames ?? []).length > 0,
     purposes: options.purposes ? new Set(options.purposes) : undefined,
     termTimeoutMs: options.termTimeoutMs ?? DEFAULT_TERM_TIMEOUT_MS,
     killTimeoutMs: options.killTimeoutMs ?? DEFAULT_KILL_TIMEOUT_MS,
+    withRecordingAdmission: options.withRecordingAdmission,
   };
 }
 
 async function reapDecodedEntry(
+  store: OwnedProcessRecordStore,
   entry: OwnedProcessRecordRead & { status: 'decoded' },
   policy: ReapPolicy,
   summary: MutableReapSummary,
-): Promise<OwnedProcessRecord[]> {
-  const retained: OwnedProcessRecord[] = [];
+): Promise<void> {
   for (const record of entry.records) {
     if (shouldRetainWithoutInspection(entry.scope.kind, record, policy)) {
-      retained.push(record);
       if (isOpenWebSessionSkip(entry.scope.kind, record, policy)) {
         summary.skippedForOpenWebSession = true;
       }
       continue;
     }
-    summary.inspected += 1;
-    summary.inspectedPids.push(record.pid);
-    const outcome = await reapOwnedProcess(record, policy);
-    appendReapOutcome(summary, record, outcome, retained);
+    const reap = async () => {
+      if (!readMatchingRecord(store, entry.scope, record)) return;
+      summary.inspected += 1;
+      summary.inspectedPids.push(record.pid);
+      const outcome = await reapOwnedProcess(record, policy);
+      const retained: OwnedProcessRecord[] = [];
+      appendReapOutcome(summary, record, outcome, retained);
+      if (retained.length === 0) removeMatchingRecord(store, entry.scope, record);
+    };
+    if (record.purpose === 'simctl-screen-recording') {
+      await policy.withRecordingAdmission?.(entry.scope, record, reap);
+    } else {
+      await reap();
+    }
   }
-  return retained;
+}
+
+function readMatchingRecord(
+  store: OwnedProcessRecordStore,
+  scope: OwnedProcessRecordScope,
+  expected: OwnedProcessRecord,
+): OwnedProcessRecordRead | undefined {
+  return store
+    .read()
+    .find(
+      (entry) =>
+        entry.status === 'decoded' &&
+        entry.scope.kind === scope.kind &&
+        (scope.kind === 'daemon' ||
+          (entry.scope.kind === 'session' && entry.scope.sessionId === scope.sessionId)) &&
+        entry.records.some((record) => sameRecord(record, expected)),
+    );
+}
+
+function removeMatchingRecord(
+  store: OwnedProcessRecordStore,
+  scope: OwnedProcessRecordScope,
+  expected: OwnedProcessRecord,
+): void {
+  const current = readMatchingRecord(store, scope, expected);
+  if (!current) return;
+  const retained = current.records.filter((record) => !sameRecord(record, expected));
+  if (retained.length === 0) store.clear(scope);
+  else store.replace(scope, retained);
+}
+
+function sameRecord(left: OwnedProcessRecord, right: OwnedProcessRecord): boolean {
+  return (
+    left.pid === right.pid &&
+    left.startTime === right.startTime &&
+    left.command === right.command &&
+    left.purpose === right.purpose
+  );
 }
 
 function shouldRetainWithoutInspection(

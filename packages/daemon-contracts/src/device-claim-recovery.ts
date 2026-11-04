@@ -8,3 +8,4 @@ export {
   type OwnerScopedClaimRecoveryComposer,
 } from './device-claim-owner-recovery.ts';
 export { createRecoveryPlatformScope } from './recovery-platform-scope.ts';
+export { createRecordingReapAdmission } from './recording-reaper-admission.ts';

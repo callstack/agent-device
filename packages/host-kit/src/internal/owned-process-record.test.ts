@@ -158,6 +158,14 @@ test('startup interrupts an exact simctl recorder before clearing its record', a
     store.replace({ kind: 'session', sessionId: 'record' }, [record]);
 
     await reapOwnedProcessRecordsAtStartup(store, { termTimeoutMs: 1, killTimeoutMs: 1 });
+    assert.deepEqual(signals, []);
+    assert.equal(store.read().length, 1);
+
+    await reapOwnedProcessRecordsAtStartup(store, {
+      termTimeoutMs: 1,
+      killTimeoutMs: 1,
+      withRecordingAdmission: async (_scope, _record, reap) => await reap(),
+    });
 
     assert.deepEqual(signals, ['SIGINT']);
     assert.equal(store.read().length, 0);

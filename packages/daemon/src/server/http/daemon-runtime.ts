@@ -4,6 +4,7 @@ import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/ses
 import {
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
+  createRecordingReapAdmission,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -614,6 +615,7 @@ async function startDaemonRuntimeOnHost(
   await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
     openWebSessionNames: openWebSessionNames(sessionStore),
     purposes: ['simctl-screen-recording'],
+    withRecordingAdmission: createRecordingReapAdmission({ stateDir: baseDir, sessionsDir, env }),
     termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
   });
   await deps.cleanupManagedWebOrphans({
