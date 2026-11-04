@@ -356,6 +356,9 @@ test('decidePostGestureStabilityVerdict does not read keyboard facts sampled apa
     ],
     [{ kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } }, { kind: 'absent' }],
     [KEYBOARD_UP, { kind: 'visibility-only', visible: false }],
+    // The mirror: a binding on the quiet side alone proves nothing either.
+    [{ kind: 'visibility-only', visible: true }, KEYBOARD_DOWN],
+    [{ kind: 'visible', frame: { x: 0, y: 400, width: 390, height: 444 } }, KEYBOARD_DOWN],
   ];
   for (const [baselineKeyboard, quietKeyboard] of unbound) {
     assert.deepEqual(

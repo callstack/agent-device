@@ -582,6 +582,9 @@ test('capturePostGestureStabilizedResult still distrusts a stale WebDriver sourc
   };
   const session = makeSession('ios');
   session.snapshot = appiumCapture(true);
+  // Both reads carry a visibility probe that disagrees; only the missing binding keeps them apart.
+  assert.deepEqual(session.snapshot.keyboard, { kind: 'visibility-only', visible: true });
+  assert.deepEqual(appiumCapture(false).keyboard, { kind: 'visibility-only', visible: false });
   markPostGestureStabilization(session, 'swipe');
 
   const capture = vi.fn(async () => appiumCapture(false));
@@ -601,7 +604,6 @@ test('capturePostGestureStabilizedResult still distrusts a stale WebDriver sourc
   await vi.advanceTimersByTimeAsync(10_000);
   const { staleAccepts, settled } = await resultPromise;
 
-  assert.equal(session.snapshot?.keyboard?.kind, 'visibility-only');
   assert.equal(staleAccepts, 1);
   assert.equal(settled, 0);
 });
