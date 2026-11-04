@@ -20,6 +20,8 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   case synthesizedDrag
 
   /// Whether the call site's XCTest coordinate gesture may run after private synthesis fails.
+  /// A coordinate tap resolves its anchor through the same tree read as a long press, so it follows
+  /// the long press rule.
   /// Scroll's swipe is viewport-center-symmetric, so an unverified dispatch cannot be told apart
   /// from one that never reached the view, and it keeps the refusal. A coordinate long press
   /// resolves the app frame through the tree, so on a tree XCTest cannot serialize that read fails
@@ -27,9 +29,7 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   /// that answers.
   func allowsXCTestCoordinateFallback(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
     switch self {
-    case .coordinateTap:
-      return true
-    case .coordinateLongPress, .synthesizedDrag:
+    case .coordinateTap, .coordinateLongPress, .synthesizedDrag:
       return accessibilityHealth != .unavailable
     case .scroll:
       return false

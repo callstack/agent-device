@@ -422,8 +422,40 @@ extension RunnerTests {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "tap") {
       return outcome
     }
+#if os(iOS)
+    if let outcome = try runOnMainActor({ try tapWithoutAccessibilityTree(app: app, x: x, y: y) }).get() {
+      return outcome
+    }
+#endif
     return try performCoordinateTap(app: app, x: x, y: y)
   }
+
+#if os(iOS)
+  /// An XCTest coordinate tap resolves its anchor through the application's accessibility snapshot.
+  /// On a tree XCTest cannot serialize (a deep React Native screen) that read fails, XCTest records
+  /// an issue that ends the runner test, and the infinite point it leaves raises an exception. A tap
+  /// at a screen point needs no tree, so where the context proves the tree unavailable it is
+  /// synthesized, and a refused synthesis throws instead of reaching the XCTest coordinate.
+  /// Returns nil when the tree answers, so the XCTest coordinate tap runs.
+  @MainActor
+  private func tapWithoutAccessibilityTree(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) throws -> RunnerInteractionOutcome? {
+    guard let context = try synthesizedCoordinateContext(app: app),
+      context.accessibilityHealth == .unavailable
+    else {
+      return nil
+    }
+    switch try performSynthesizedTapGesture(app: app, x: x, y: y, context: context) {
+    case .performed:
+      return .performed
+    case .xctestFallback(let message, _), .refused(_, let message, _):
+      throw RunnerUnsupportedOperationError(message: message)
+    }
+  }
+#endif
 
   func mouseClickAt(app: XCUIApplication, x: Double, y: Double, button: String) throws {
 #if os(macOS)

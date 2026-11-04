@@ -21,11 +21,17 @@ extension RunnerTests {
 #if os(iOS)
     let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     var resolvedCoordinateTarget: TextEntryTarget?
+    // The penalty clock lapses while a tree stays unreadable to XCTest, so a coordinate replacement
+    // also reads the tree's health: the XCTest focus route taps through an XCUICoordinate, which
+    // needs the application snapshot.
+    let xCTestTreeUnavailable = try xCTestChannelPenalized
+      || (textEntryMode == .replacement && command.x != nil && command.y != nil
+        && synthesizedCoordinateContext(app: activeApp)?.accessibilityHealth == .unavailable)
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,
       hasX: command.x != nil,
       hasY: command.y != nil,
-      xCTestChannelPenalized: xCTestChannelPenalized
+      xCTestChannelPenalized: xCTestTreeUnavailable
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
       // A replacement with no input at the point has nothing to bind to: its clear and its typed

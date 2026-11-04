@@ -26,6 +26,14 @@ private final class RunnerCoordinatePressCounter: NSObject {
   }
 }
 
+/// Counts XCTest coordinate taps without performing them.
+private final class RunnerCoordinateTapCounter: NSObject {
+  static var taps = 0
+  @objc func tap() {
+    Self.taps += 1
+  }
+}
+
 /// Answers like the runner process's `UIScreen` in iPad compatibility mode, which the generated runner
 /// app (no launch screen) can run in: 768x1024 whatever the device (#4091). It replaces the getters a
 /// runner-process screen read takes: `bounds`, and `nativeBounds` over `nativeScale`.
@@ -172,12 +180,15 @@ extension RunnerTests {
        class_getInstanceMethod(RunnerUnserializableTreeStub.self, #selector(getter: RunnerUnserializableTreeStub.frame))),
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
        class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
+      (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.tap)),
+       class_getInstanceMethod(RunnerCoordinateTapCounter.self, #selector(RunnerCoordinateTapCounter.tap))),
     ]
     let resolved = try swaps.map { (try XCTUnwrap($0.0), try XCTUnwrap($0.1)) }
     let originals = resolved.map { target, stub in
       (target, method_setImplementation(target, method_getImplementation(stub)))
     }
     RunnerCoordinatePressCounter.presses = 0
+    RunnerCoordinateTapCounter.taps = 0
     RunnerUnserializableTreeStub.frameReads = 0
     return {
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
@@ -231,6 +242,67 @@ extension RunnerTests {
       XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
       XCTAssertEqual(RunnerCoordinatePressCounter.presses, 3)
     }
+  }
+
+  /// On a tree XCTest cannot serialize, an XCTest coordinate tap fails to snapshot the application,
+  /// and the infinite point that leaves raises an exception that ends the runner test. An internal
+  /// tap at a screen point (a text entry focus tap) is synthesized instead, whatever health the
+  /// runner last recorded, and never reaches the XCTest coordinate.
+  @MainActor
+  func testScreenPointTapOnAnUnserializableTreeNeverReachesTheXCTestCoordinate() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .unknown
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    if soleScreenRouteIsOpen(for: app) {
+      guard case .performed = try tapAt(app: app, x: 40, y: 40) else {
+        return XCTFail("a screen point tap on an unserializable tree must be synthesized")
+      }
+    } else {
+      XCTAssertThrowsError(try tapAt(app: app, x: 40, y: 40))
+    }
+
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+  }
+
+  /// The penalty clock lapses while a tree stays unreadable to XCTest, and a coordinate `fill` then
+  /// used to take the XCTest focus route, whose coordinate tap raised the exception that ends the
+  /// runner. With no penalty on record the fill reads the tree itself, refuses with a typed
+  /// reason, and dispatches no XCTest coordinate and records no XCTest failure.
+  @MainActor
+  func testCoordinateFillOnAnUnserializableTreeWithoutPenaltyRefusesWithoutAnXCTestCoordinate() throws {
+    app.launch()
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .healthy
+    clearSnapshotXCTestChannelPenalty(reason: "test-setup")
+    let restoreXCTest = try simulateUnserializableAppTree()
+    defer {
+      restoreXCTest()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    guard soleScreenRouteIsOpen(for: app) else { return }
+    let fill = try runnerCommandFixture(
+      #"{"command":"type","commandId":"unserializable-fill","text":"hello","textEntryMode":"replace","x":40,"y":40}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+
+    let response = try executeTypeCommand(activeApp: app, command: fill)
+
+    let recordedFailure = didRecordXCTestFailure(since: failureCountBefore)
+    XCTAssertFalse(response.ok)
+    XCTAssertTrue(
+      ["TEXT_INPUT_PROBE_UNAVAILABLE", "NO_TEXT_INPUT_AT_POINT"].contains(response.error?.code ?? ""),
+      String(describing: response.error)
+    )
+    XCTAssertEqual(RunnerCoordinateTapCounter.taps, 0)
+    XCTAssertFalse(recordedFailure)
   }
 
   /// A swipe asks for the gesture viewport before it plans its path. On a tree XCTest cannot

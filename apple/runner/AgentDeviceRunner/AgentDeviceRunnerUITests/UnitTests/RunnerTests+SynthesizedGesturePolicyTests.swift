@@ -33,7 +33,7 @@ extension RunnerTests {
     let cases: [(kind: SynthesizedGesturePolicyKind, health: RunnerAccessibilityHealth, allowed: Bool)] = [
       (.coordinateTap, .unknown, true),
       (.coordinateTap, .healthy, true),
-      (.coordinateTap, .unavailable, true),
+      (.coordinateTap, .unavailable, false),
       (.coordinateLongPress, .unknown, true),
       (.coordinateLongPress, .healthy, true),
       (.coordinateLongPress, .unavailable, false),
@@ -101,7 +101,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() throws {
+  func testFailedCoordinateTapSynthesisFallsBackToXCTestUnlessTheTreeIsUnavailable() throws {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       mainOwned.accessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
@@ -112,7 +112,7 @@ extension RunnerTests {
           context: context,
           synthesize: failedSynthesis
         )
-        XCTAssertEqual(synthesizedGestureRoute(attempt), "xctestFallback", label)
+        XCTAssertEqual(synthesizedGestureRoute(attempt), health == .unavailable ? "refused" : "xctestFallback", label)
       }
     }
   }
@@ -126,7 +126,7 @@ extension RunnerTests {
       (.scroll, synthesizedGestureTestContext(accessibilityHealth: .healthy), "refused"),
       (.synthesizedDrag, unavailable, "refused"),
       (.synthesizedDrag, unknown, "xctestFallback"),
-      (.coordinateTap, unavailable, "xctestFallback"),
+      (.coordinateTap, unavailable, "refused"),
       (.coordinateLongPress, unavailable, "refused"),
       (.coordinateLongPress, unknown, "xctestFallback"),
     ]
