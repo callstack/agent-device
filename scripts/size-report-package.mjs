@@ -4,6 +4,8 @@ import path from 'node:path';
 import { readLicenseNotices } from './size-report-package-notices.mjs';
 export const SNAPSHOT_BRIDGE_ASSET_PATHS = Object.freeze([
   'apple/snapshot-bridge/SnapshotBridge.m',
+  'apple/snapshot-bridge/SnapshotBridgeRequest.h',
+  'apple/snapshot-bridge/SnapshotBridgeRequest.m',
   'apple/snapshot-bridge/SnapshotBridgeRuntime.m',
   'apple/snapshot-bridge/SnapshotBridgeRuntime.h',
   'apple/snapshot-bridge/SnapshotBridgeCapture.h',

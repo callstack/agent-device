@@ -1,9 +1,9 @@
 # Simulator AX bridge
 
 This directory contains the small private accessibility reader used by the
-Apple platform acquisition facet. The framed server and request validation
-live in `SnapshotBridge.m`; private runtime binding lives in
-`SnapshotBridgeRuntime.m`. It is compiled for the iOS Simulator on first use
+Apple platform acquisition facet. The framed server lives in
+`SnapshotBridge.m`; request validation lives in `SnapshotBridgeRequest.m`;
+private runtime binding lives in `SnapshotBridgeRuntime.m`. It is compiled for the iOS Simulator on first use
 and is never downloaded, pre-signed, or built by npm installation. It serves
 iPhone and iPad Simulators, which both run the iOS Simulator runtime (#3844).
 
