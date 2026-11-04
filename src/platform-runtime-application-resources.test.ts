@@ -8,7 +8,7 @@ import { createApplicationResourceLifecycle } from './platform-runtime-applicati
 import fs from 'node:fs';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntime } from '../packages/daemon/src/server/http/daemon-runtime.ts';
+import { startDaemonRuntime } from '@agent-device/daemon';
 import { daemonRuntimeDepsFixture } from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../packages/daemon/src/__tests__/support/test-device-runtime-gateway.ts';
 

@@ -9,7 +9,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { androidScreenRecordingDescriptorCodec } from '../packages/platform-android/src/recording/manifest.ts';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
-import { startDaemonRuntime } from '../packages/daemon/src/server/http/daemon-runtime.ts';
+import { startDaemonRuntime } from '@agent-device/daemon';
 import * as transport from '../packages/daemon/src/server/http/transport.ts';
 import { daemonRuntimeDepsFixture } from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
 import { makeTestScreenRecordingResource } from '../packages/daemon/src/__tests__/support/screen-recording-live-handle.ts';

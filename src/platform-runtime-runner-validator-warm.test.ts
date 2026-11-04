@@ -14,7 +14,7 @@ import type {
   AndroidApplicationTools,
   AppleApplicationTools,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { mp4Atom, mp4MovieHeader } from '../packages/capture-kit/src/recording/mp4.fixtures.ts';
+import { mp4Atom, mp4MovieHeader } from '@agent-device/capture-kit/recording-mp4-fixtures';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 import { createAppleApplicationTools } from './platform-runtime-apple-application-tools.ts';
 

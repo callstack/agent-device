@@ -6,7 +6,7 @@ import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/tes
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
-import { startDaemonRuntime } from '../packages/daemon/src/server/http/daemon-runtime.ts';
+import { startDaemonRuntime } from '@agent-device/daemon';
 import * as transport from '../packages/daemon/src/server/http/transport.ts';
 import { daemonRuntimeDepsFixture } from '../packages/daemon/src/__tests__/support/daemon-runtime-deps-fixture.ts';
 
