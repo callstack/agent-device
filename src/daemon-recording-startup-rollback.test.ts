@@ -84,17 +84,17 @@ test.each([false, true])(
       { reason: 'bind_failed', exitCode: 7, token: 'primarysecret' },
       new Error('original bind cause'),
     );
-    const originalRemove = fs.rmSync;
-    const remove = vi.spyOn(fs, 'rmSync');
+    const originalRename = fs.renameSync;
+    const rename = vi.spyOn(fs, 'renameSync');
     if (failCleanup)
-      remove.mockImplementation((target, options) => {
+      rename.mockImplementation((source, target) => {
         if (
           compilerWork &&
-          path.dirname(String(target)) === path.dirname(compilerWork) &&
-          path.basename(String(target)).startsWith('.sealed-')
+          path.dirname(String(source)) === path.dirname(compilerWork) &&
+          path.basename(String(source)).startsWith('.sealed-')
         )
           throw new Error('password=cleanupsecret');
-        return originalRemove(target, options);
+        return originalRename(source, target);
       });
     const listen = failDaemonHttpListen(bindFailure, {
       beforeFailure: async () => {
@@ -138,18 +138,14 @@ test.each([false, true])(
                   {
                     details: {
                       reason: 'swift_cache_cleanup_failed',
-                      shutdownFailures: [
+                      cleanupFailures: [
                         {
-                          message: 'request canceled',
-                          details: { reason: 'request_canceled' },
-                          cause: { message: 'compiler stopped' },
-                        },
-                        {
-                          details: { reason: 'swift_cache_temp_removal_failed' },
-                          cause: { message: 'password=[REDACTED]' },
+                          reason: 'swift_cache_temp_removal_failed',
+                          attemptId: path.basename(attemptDirectory),
                         },
                       ],
                     },
+                    cause: { message: 'request canceled' },
                   },
                 ],
               },
@@ -162,6 +158,7 @@ test.each([false, true])(
         expect(
           fs.existsSync(path.join(cache, 'pending-attempts', path.basename(attemptDirectory))),
         ).toBe(true);
+        expect(fs.lstatSync(compilerWork).isSymbolicLink()).toBe(true);
       } else {
         expect(error).toBe(bindFailure);
         if (fs.existsSync(compilerWork)) expect(fs.lstatSync(compilerWork).isFile()).toBe(true);
@@ -177,7 +174,7 @@ test.each([false, true])(
       release();
       releaseListener();
       await result;
-      remove.mockRestore();
+      rename.mockRestore();
       fs.rmSync(cache, { recursive: true, force: true });
       listen.mockRestore();
       vi.mocked(runCmd).mockReset();

@@ -54,15 +54,12 @@ export function normalizeShutdownFailure(
 ): NormalizedError {
   const normalized = redactDiagnosticData(normalizeError(error));
   if (ancestors.has(error)) return normalized;
-  const cause = error instanceof AppError ? error.cause : undefined;
   const aggregate =
     error instanceof AggregateError
       ? error
-      : cause instanceof AggregateError
-        ? cause
-        : cause instanceof AppError && cause.cause instanceof AggregateError
-          ? cause.cause
-          : undefined;
+      : error instanceof AppError && error.cause instanceof AggregateError
+        ? error.cause
+        : undefined;
   if (!aggregate || ancestors.has(aggregate)) return normalized;
   const next = new Set(ancestors).add(error).add(aggregate);
   return {
