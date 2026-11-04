@@ -1,5 +1,4 @@
 #import "RunnerSimulatorEdgeTouch.h"
-#import "RunnerSimulatorEdgeTouch+Internal.h"
 
 #if TARGET_OS_IOS && TARGET_OS_SIMULATOR
 
@@ -7,6 +6,40 @@
 #import <dlfcn.h>
 #import <mach/mach_time.h>
 #import <objc/message.h>
+
+typedef CFTypeRef RunnerHIDEventRef;
+typedef RunnerHIDEventRef _Nullable (*RunnerCreateDigitizerEvent)(
+  CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, double, double,
+  double, double, double, Boolean, Boolean, uint32_t);
+typedef RunnerHIDEventRef _Nullable (*RunnerCreateDigitizerFingerEvent)(
+  CFAllocatorRef, uint64_t, uint32_t, uint32_t, uint32_t, double, double, double, double, double,
+  Boolean, Boolean, uint32_t);
+typedef void (*RunnerAppendEvent)(RunnerHIDEventRef, RunnerHIDEventRef, uint32_t);
+typedef void (*RunnerSetIntegerValue)(RunnerHIDEventRef, uint32_t, long);
+typedef void (*RunnerSetFloatValue)(RunnerHIDEventRef, uint32_t, double);
+typedef void (*RunnerSetSenderID)(RunnerHIDEventRef, uint64_t);
+typedef void (*RunnerSetTimeStamp)(RunnerHIDEventRef, uint64_t);
+typedef CFTypeRef _Nullable (*RunnerCreateEventSystemClient)(CFAllocatorRef);
+typedef CFArrayRef _Nullable (*RunnerCopyServices)(CFTypeRef);
+typedef CFTypeRef _Nullable (*RunnerCopyServiceProperty)(CFTypeRef, CFStringRef);
+typedef CFTypeRef _Nullable (*RunnerGetServiceRegistryID)(CFTypeRef);
+typedef void (*RunnerDispatchEvent)(CFTypeRef, RunnerHIDEventRef);
+
+// The IOKit HID entry points the edge touch uses, resolved at run time.
+typedef struct {
+  RunnerCreateDigitizerEvent createDigitizerEvent;
+  RunnerCreateDigitizerFingerEvent createFingerEvent;
+  RunnerAppendEvent appendEvent;
+  RunnerSetIntegerValue setIntegerValue;
+  RunnerSetFloatValue setFloatValue;
+  RunnerSetSenderID setSenderID;
+  RunnerSetTimeStamp setTimeStamp;
+  RunnerCreateEventSystemClient createClient;
+  RunnerCopyServices copyServices;
+  RunnerCopyServiceProperty copyServiceProperty;
+  RunnerGetServiceRegistryID getServiceRegistryID;
+  RunnerDispatchEvent dispatchEvent;
+} RunnerHIDFunctions;
 
 
 // IOHIDDigitizerEventMask bits (IOHIDFamily IOHIDEventTypes.h). A real edge swipe on a simulator
@@ -231,7 +264,10 @@ static void RunnerWaitUntil(uint64_t startTicks, double offsetMs) {
   mach_wait_until(startTicks + nanoseconds * timebase.denom / timebase.numer);
 }
 
-NSString * _Nullable RunnerDispatchEdgeContact(
+// Owns one edge contact from touch-down to its terminal event. The cancel event is built before
+// touch-down; after touch-down, every exit dispatches either the touch-up or that cancel event.
+// Returns nil on success, or the reason the contact did not complete.
+static NSString * _Nullable RunnerDispatchEdgeContact(
   const RunnerHIDFunctions *functions,
   CFTypeRef client,
   uint64_t sender,
@@ -320,5 +356,71 @@ NSString * _Nullable RunnerDispatchEdgeContact(
 }
 
 @end
+
+#if defined(AGENT_DEVICE_RUNNER_UNIT_TESTS)
+#import "UnitTests/RunnerEdgeContactTesting.h"
+
+// Test facade: the contact owner with HID constructors that fail on demand. Unit-test builds only.
+static NSInteger RunnerTestingFailingFrame;
+static NSInteger RunnerTestingCreatedFrames;
+static NSMutableArray<NSDictionary<NSString *, NSNumber *> *> *RunnerTestingDispatched;
+
+static RunnerHIDEventRef RunnerTestingCreateHand(
+  CFAllocatorRef allocator, uint64_t timestamp, uint32_t transducer, uint32_t index, uint32_t identity,
+  uint32_t mask, uint32_t buttons, double x, double y, double z, double tip, double barrel,
+  Boolean range, Boolean touch, uint32_t options
+) {
+  NSInteger frame = RunnerTestingCreatedFrames++;
+  if (RunnerTestingFailingFrame >= 0 && frame >= RunnerTestingFailingFrame) return NULL;
+  NSMutableDictionary *event = [@{ @"mask": @(mask), @"touching": @(touch), @"restamped": @NO } mutableCopy];
+  return CFBridgingRetain(event);
+}
+
+static RunnerHIDEventRef RunnerTestingCreateFinger(
+  CFAllocatorRef allocator, uint64_t timestamp, uint32_t index, uint32_t identity, uint32_t mask,
+  double x, double y, double z, double tip, double twist, Boolean range, Boolean touch, uint32_t options
+) {
+  return CFBridgingRetain([NSMutableDictionary dictionary]);
+}
+
+static void RunnerTestingAppend(RunnerHIDEventRef parent, RunnerHIDEventRef child, uint32_t options) {}
+static void RunnerTestingSetInteger(RunnerHIDEventRef event, uint32_t field, long value) {}
+static void RunnerTestingSetFloat(RunnerHIDEventRef event, uint32_t field, double value) {}
+static void RunnerTestingSetSender(RunnerHIDEventRef event, uint64_t sender) {}
+
+static void RunnerTestingSetTimeStamp(RunnerHIDEventRef event, uint64_t timestamp) {
+  ((__bridge NSMutableDictionary *)event)[@"restamped"] = @YES;
+}
+
+static void RunnerTestingDispatch(CFTypeRef client, RunnerHIDEventRef event) {
+  [RunnerTestingDispatched addObject:[(__bridge NSDictionary *)event copy]];
+}
+
+NSArray<NSDictionary<NSString *, NSNumber *> *> *RunnerEdgeContactDispatches(
+  NSInteger failingFrame,
+  NSString **failure
+) {
+  RunnerTestingFailingFrame = failingFrame;
+  RunnerTestingCreatedFrames = 0;
+  RunnerTestingDispatched = [NSMutableArray array];
+  RunnerHIDFunctions functions = {
+    .createDigitizerEvent = RunnerTestingCreateHand,
+    .createFingerEvent = RunnerTestingCreateFinger,
+    .appendEvent = RunnerTestingAppend,
+    .setIntegerValue = RunnerTestingSetInteger,
+    .setFloatValue = RunnerTestingSetFloat,
+    .setSenderID = RunnerTestingSetSender,
+    .setTimeStamp = RunnerTestingSetTimeStamp,
+    .dispatchEvent = RunnerTestingDispatch,
+  };
+  NSArray *samples = @[
+    @{ @"x": @0, @"y": @50, @"offsetMs": @0 },
+    @{ @"x": @100, @"y": @50, @"offsetMs": @48 },
+  ];
+  NSString *result = RunnerDispatchEdgeContact(&functions, (__bridge CFTypeRef)samples, 1, samples, CGSizeMake(100, 100));
+  if (failure != NULL) *failure = result;
+  return [RunnerTestingDispatched copy];
+}
+#endif
 
 #endif
