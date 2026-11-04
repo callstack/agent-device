@@ -24,6 +24,7 @@ import {
   reserveRecordingClaimFence,
   retryRecordingClaimCleanup,
   recoverIncompleteRecordingStartClaim,
+  findIncompleteRecordingReservation,
   type RetainedRecordingCleanup,
   clearDeviceClaim,
   type DeviceClaimReconciler,
@@ -56,6 +57,7 @@ export type DeviceClaimAdmission = AsyncDisposable &
     reserveRecordingFence(fence: ResourceOwnershipFence): Promise<void>;
     runtimeDisposalFailed(): void;
     recoverIncompleteStart(device: DeviceInfo): Promise<boolean>;
+    incompleteStartDevice(): ReturnType<typeof findIncompleteRecordingReservation>;
     retainedRecordingCleanup(retry: () => Promise<void>): RetainedRecordingCleanup | undefined;
     retryRecordingCleanup(
       device: DeviceInfo,
@@ -68,6 +70,7 @@ export function createDeviceClaimAdmission(params: {
   recordingAction?: 'start' | 'stop';
   recordingClaimReleased?: (ownership: DeviceClaimSessionOwnership) => void;
   currentSessionClaim?: () => DeviceClaimSessionOwnership | undefined;
+  retainFailedRecordingCleanup?: (cleanup: RetainedRecordingCleanup) => void;
   recordingHasOtherOwners?: (ownership: DeviceClaimSessionOwnership) => boolean;
   command: string;
   /**
@@ -193,7 +196,11 @@ export function createDeviceClaimAdmission(params: {
             }
             recording = { device, owner };
             if (params.recordingAction === 'stop') {
-              const result = await admitRecordingStop({ ...recordingContext(device), owner });
+              const result = await admitRecordingStop({
+                ...recordingContext(device),
+                owner,
+                sessionOwnership: params.currentSessionClaim?.(),
+              });
               recording.stopLease = result;
               if (result.status === 'reserved') recording.ownership = result.ownership;
               return;
@@ -261,8 +268,17 @@ export function createDeviceClaimAdmission(params: {
         ...recordingContext(device),
         gateway: params.gateway,
         scope: params.scope,
+        retainFailedCleanup: params.retainFailedRecordingCleanup,
       });
     },
+    incompleteStartDevice: () =>
+      findIncompleteRecordingReservation({
+        session: params.session,
+        stateDir: params.stateDir,
+        workspaceMatches: (workspace) =>
+          !requestScopeRoot || params.resolveScopeRoot(workspace) === requestScopeRoot,
+        env: params.env,
+      }),
     runtimeDisposalFailed: () => {
       runtimeDisposed = false;
     },

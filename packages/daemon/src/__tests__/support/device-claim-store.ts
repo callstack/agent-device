@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 
 export type IsolatedDeviceClaimStore = {
@@ -10,6 +10,12 @@ export type IsolatedDeviceClaimStore = {
   stateDir: string;
   claimsDir: string;
 };
+
+export function isolatedClaimTestHost() {
+  const claimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  if (!claimsDir) throw new Error('missing isolated claim directory');
+  return createTestHostEnvironment({ env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir } });
+}
 
 /**
  * Device claims are host-global by design, so a test that exercises them must

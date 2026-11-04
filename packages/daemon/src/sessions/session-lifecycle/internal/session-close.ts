@@ -239,6 +239,8 @@ export async function handleSessionCloseCommands(
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
   const ref = sessionStore.lookup(sessionName);
   if (!ref) {
+    if (await req.internal?.retryRecordingCloseCleanup?.())
+      return { ok: true, data: { session: sessionName, ...successText(`Closed: ${sessionName}`) } };
     return await closeWithoutSession({
       req,
       sessionName,
@@ -296,7 +298,7 @@ export async function handleSessionCloseCommands(
   }
   const releaseRecordingClaimAfterCleanup =
     session.recordOnlySession && session.deviceClaim
-      ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim)
+      ? await req.internal?.holdRecordingClaimForClose?.(session.deviceClaim, session.device)
       : undefined;
   const repair = await prepareRepairClose({
     req,

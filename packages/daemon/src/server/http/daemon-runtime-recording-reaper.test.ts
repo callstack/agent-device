@@ -151,6 +151,7 @@ async function fixture() {
         claimOwnerKind: 'transient-command' as const,
         transientCommand: 'record',
         recordingFence: fence,
+        recordingRuntimeOwner: localRuntimeOwner('apple'),
       };
       fs.writeFileSync(claimPath, JSON.stringify(claim));
       const resourcePath = screenRecordingResourceStore.resolvePath(sessionDir);
@@ -313,6 +314,45 @@ test.each(['token', 'fence', 'device', 'identity', 'stateDir', 'session'] as con
       expectPreserved(f);
       expect(fs.readFileSync(f.claimPath, 'utf8')).toBe(claimBefore);
     } finally {
+      await runtime?.close();
+      await f.cleanup();
+    }
+  },
+);
+
+test.each([true, false])(
+  'open-session reaper requires its exact recording generation: %s',
+  async (matches) => {
+    const f = await fixture();
+    let runtime: Awaited<ReturnType<typeof f.start>> | undefined;
+    let startup: ReturnType<typeof f.start> | undefined;
+    try {
+      await stopChild(f.oldDaemon);
+      control.ownerPid = 0;
+      const { transientCommand: _, ...claim } = f.claim;
+      fs.writeFileSync(
+        f.claimPath,
+        JSON.stringify({
+          ...claim,
+          claimOwnerKind: 'open-session',
+          recordingFence: matches ? fence : { ...fence, generation: fence.generation + 1 },
+        }),
+      );
+      startup = f.start();
+      if (matches) {
+        await vi.waitFor(() => expect(fs.readFileSync(f.signalPath, 'utf8')).toBe('SIGINT'));
+        expect(inspectProcessLock(`${f.claimPath}.lock`).state).toBe('held');
+        f.child.send!('exit');
+        runtime = await startup;
+        expect(f.store.read()).toEqual([]);
+        expect(fs.readFileSync(f.nativePath, 'utf8')).toBe('recoverable video');
+      } else {
+        runtime = await startup;
+        expectPreserved(f);
+      }
+    } finally {
+      await stopChild(f.child);
+      if (!runtime && startup) runtime = await startup.catch(() => undefined);
       await runtime?.close();
       await f.cleanup();
     }

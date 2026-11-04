@@ -4,7 +4,7 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import {
   ANDROID_EMULATOR,
-  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
   createUnavailableRuntimeFactsForTest,
 } from '@agent-device/test-kit';
 import {
@@ -57,7 +57,9 @@ const setup = isolatedDeviceClaimStores('recording-cleanup-authority-');
 
 function fixture(retryable = true) {
   const { stateDir, claimsDir } = setup();
-  const host = createLiveTestHostEnvironment();
+  const host = createTestHostEnvironment({
+    env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+  });
   const store = new SessionStore(path.join(stateDir, 'sessions'), host);
   const registry = new LeaseRegistry();
   const scope = platformRequestScopeFixture();
@@ -87,6 +89,8 @@ function fixture(retryable = true) {
       createdAtMs: 1,
       updatedAtMs: 1,
       claimOwnerKind: 'open-session',
+      recordingFence: { token: 'recording-fence', generation: 3 },
+      recordingRuntimeOwner: owner,
     }),
   );
   const resourcePath = screenRecordingDurableResource.store.resolvePath(
@@ -102,6 +106,7 @@ function fixture(retryable = true) {
       fence: { token: 'recording-fence', generation: 3 },
       lifecycle: 'open',
       descriptor: { version: 1, body: {} },
+      metadata: { deviceClaimToken: 'original-token', deviceClaimBindingVersion: 1 },
     }),
   );
   const finish = vi.fn(async () => {

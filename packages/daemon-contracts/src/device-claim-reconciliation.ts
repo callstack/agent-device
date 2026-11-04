@@ -19,10 +19,7 @@ import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture
 import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import {
-  SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY,
-  SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY,
-} from '@agent-device/capture-kit/screen-recording-resource-store';
+import { SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { classifyOwnerLiveness } from '@agent-device/host-kit/process';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
@@ -248,16 +245,19 @@ function inspectResourceOwnership(
     };
   }
   if (
+    resource.resourceKind === 'screen-recording' &&
+    record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] === undefined
+  )
+    return { status: 'retained', reason: 'screen-recording-provenance-unconfirmed' };
+  if (
     record.envelope.sessionId !== claim.session ||
     !sameDeviceIdentity(record.envelope.device, claim.device) ||
     (resource.resourceKind === 'screen-recording' &&
-      ((record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] === undefined &&
-        claim.recordingFence !== undefined) ||
-        (record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== undefined &&
-          record.envelope.metadata[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !==
-            claim.ownerToken) ||
-        (record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_BINDING_VERSION_KEY] !== undefined &&
-          record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] === undefined)))
+      (record.envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken ||
+        claim.recordingFence?.token !== record.envelope.fence.token ||
+        claim.recordingFence.generation !== record.envelope.fence.generation ||
+        !claim.recordingRuntimeOwner ||
+        !sameRuntimeOwner(claim.recordingRuntimeOwner, record.envelope.owner)))
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
@@ -294,6 +294,7 @@ export async function recoverIncompleteRecordingClaim(
   claim: DeviceClaim,
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
   scope: PlatformRequestScope,
+  onFailedDisposal?: (retry: () => Promise<void>) => void,
 ): Promise<'confirmed-no-effect' | 'retained' | 'cleanup-unconfirmed'> {
   if (
     !claim.recordingFence ||
@@ -334,6 +335,7 @@ export async function recoverIncompleteRecordingClaim(
   try {
     await binding[Symbol.asyncDispose]();
   } catch {
+    if (binding.retryDisposal) onFailedDisposal?.(async () => await binding.retryDisposal!());
     return 'cleanup-unconfirmed';
   }
   return result;

@@ -13,10 +13,7 @@ import {
   createOwnerScopedDeviceClaimReconciler,
   type ClaimRecoveryGatewayFactory,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
-import {
-  finishRecordingClaimClose,
-  holdRecordingClaimForClose,
-} from '@agent-device/daemon-contracts/device-claims';
+import { createRequestRecordingCloseCleanup } from './request-recording-close-cleanup.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -336,7 +333,12 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
     });
 
-    let finishDeferredClose: (() => Promise<void>) | undefined;
+    const closeCleanup = createRequestRecordingCloseCleanup({
+      env: params.host.env,
+      sessionName,
+      sessionStore,
+      claimAdmission,
+    });
     if (command === 'record') {
       scopedReq = {
         ...scopedReq,
@@ -345,6 +347,7 @@ export async function createRequestExecutionScope(params: {
           recordStartAttempt: claimAdmission.recordingStartAttempt,
           recordStartNoEffect: claimAdmission.recordingStartNoEffect,
           recoverIncompleteRecordingStart: claimAdmission.recoverIncompleteStart,
+          incompleteRecordingStartDevice: claimAdmission.incompleteStartDevice,
           recordingClaimOwnership: claimAdmission.recordingClaimOwnership,
           reserveRecordingFence: claimAdmission.reserveRecordingFence,
           retryRecordingCleanup: async (device) => {
@@ -355,6 +358,11 @@ export async function createRequestExecutionScope(params: {
               if (result === 'released')
                 releaseRecordOnlyRecordingClaim(sessionStore, sessionName, retained.ownership);
             }
+            return {
+              startRolledBack: Boolean(
+                retained?.purpose === 'start' && retained.startProof && result !== 'none',
+              ),
+            };
           },
         },
       };
@@ -363,39 +371,8 @@ export async function createRequestExecutionScope(params: {
         ...scopedReq,
         internal: {
           ...scopedReq.internal,
-          holdRecordingClaimForClose: async (ownership) => {
-            if (finishDeferredClose)
-              throw new AppError('COMMAND_FAILED', 'Recording claim cleanup is already pending', {
-                reason: 'cleanup-unconfirmed',
-              });
-            const held = await holdRecordingClaimForClose(ownership, params.host.env);
-            if (held.status === 'ordinary') return undefined;
-            if (held.status === 'cleanup-pending')
-              throw new AppError('COMMAND_FAILED', 'Recording runtime cleanup is not confirmed', {
-                reason: 'cleanup-unconfirmed',
-                retriable: true,
-              });
-            if (held.status !== 'held')
-              throw new AppError('DEVICE_IN_USE', 'The recording device claim changed', {
-                reason: 'DEVICE_CLAIM_OWNER_UNCERTAIN',
-              });
-            let release = false;
-            finishDeferredClose = async () => {
-              const result = await finishRecordingClaimClose(
-                ownership,
-                held.fence,
-                params.host.env,
-                release,
-              );
-              if (result !== 'settled')
-                throw new AppError('DEVICE_IN_USE', 'The recording device claim changed', {
-                  reason: 'DEVICE_CLAIM_OWNER_UNCERTAIN',
-                });
-            };
-            return () => {
-              release = true;
-            };
-          },
+          retryRecordingCloseCleanup: closeCleanup.retry,
+          holdRecordingClaimForClose: closeCleanup.hold,
         },
       };
     }
@@ -407,13 +384,15 @@ export async function createRequestExecutionScope(params: {
         } catch (error) {
           claimAdmission.runtimeDisposalFailed();
           const retry = runtimeBindings.failedDisposal();
-          const retained = retry && claimAdmission.retainedRecordingCleanup(retry);
+          const retained =
+            retry &&
+            (closeCleanup.retained(retry) ?? claimAdmission.retainedRecordingCleanup(retry));
           if (retained) sessionStore.retainRecordingCleanup(sessionName, retained);
           throw error;
         } finally {
           await claimAdmission[Symbol.asyncDispose]();
         }
-        await finishDeferredClose?.();
+        await closeCleanup.finish();
       })();
       return bindingCleanup;
     };
@@ -652,6 +631,8 @@ function createRequestDeviceAccess(params: {
     recordingClaimReleased: (ownership) =>
       releaseRecordOnlyRecordingClaim(params.sessionStore, params.sessionName, ownership),
     currentSessionClaim: () => params.sessionStore.lookup(params.sessionName)?.session.deviceClaim,
+    retainFailedRecordingCleanup: (cleanup) =>
+      params.sessionStore.retainRecordingCleanup(params.sessionName, cleanup),
     recordingHasOtherOwners: () => {
       const session = params.sessionStore.lookup(params.sessionName)?.session;
       return Boolean(session && sessionHasNonRecordingOwners(session));

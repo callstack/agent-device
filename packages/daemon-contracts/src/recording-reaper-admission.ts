@@ -164,13 +164,14 @@ function matchesClaim(claim: DeviceClaim, envelope: RecordingEnvelope, stateDir:
     path.resolve(claim.stateDir) !== path.resolve(stateDir) ||
     claim.session !== envelope.sessionId ||
     !sameDeviceIdentity(claim.device, envelope.device) ||
+    !claim.recordingRuntimeOwner ||
+    !sameRuntimeOwner(claim.recordingRuntimeOwner, envelope.owner) ||
     envelope.metadata?.[SCREEN_RECORDING_CLAIM_TOKEN_METADATA_KEY] !== claim.ownerToken
   )
     return false;
-  if (claim.claimOwnerKind === 'open-session') return true;
   return (
-    claim.claimOwnerKind === 'transient-command' &&
-    claim.transientCommand === 'record' &&
+    (claim.claimOwnerKind === 'open-session' ||
+      (claim.claimOwnerKind === 'transient-command' && claim.transientCommand === 'record')) &&
     claim.recordingFence?.token === envelope.fence.token &&
     claim.recordingFence.generation === envelope.fence.generation
   );

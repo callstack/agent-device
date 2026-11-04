@@ -38,8 +38,8 @@ const DAEMON_SESSION_LIFECYCLE_FACADES = [
     exports: [
       'SessionOpenCommandInput',
       'adoptRecordOnlyRecordingClaim',
-      'releaseRecordOnlyRecordingClaim',
       'handleSessionOpenCommands',
+      'releaseRecordOnlyRecordingClaim',
       'resolveExistingOpenRequest',
       'resolveForegroundOpenRequest',
     ],

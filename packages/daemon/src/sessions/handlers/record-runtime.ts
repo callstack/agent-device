@@ -2,7 +2,10 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { isScreenRecordingStartNotDispatched } from '@agent-device/contracts/screen-recording-runtime';
+import {
+  isScreenRecordingStartNotDispatched,
+  ScreenRecordingStartRolledBack,
+} from '@agent-device/contracts/screen-recording-runtime';
 import type {
   ScreenRecordingCompletion,
   ScreenRecordingStartInput,
@@ -201,6 +204,8 @@ async function resolveUnheldRecordingDevice(
   if (!namesSessionWithoutTarget(req))
     return await resolveTargetDevice(req.flags ?? {}, { env: params.sessionStore.host.env });
   if (plan.kind === 'stop-recovery') {
+    const reservation = req.internal?.incompleteRecordingStartDevice?.();
+    if (reservation) return await resolveManifestDevice(params, reservation);
     const recorded = screenRecordingManifestDevice({
       sessionName,
       sessionStore: params.sessionStore,
@@ -272,6 +277,8 @@ async function startRecording(
   } catch (error) {
     if (isScreenRecordingStartNotDispatched(error))
       params.req.internal?.recordStartNoEffect?.('not-dispatched');
+    else if (error instanceof ScreenRecordingStartRolledBack)
+      params.req.internal?.recordStartNoEffect?.('rolled-back');
     throw error;
   }
   const tenantId = session.lease?.tenantId ?? params.req.meta?.tenantId;
@@ -522,20 +529,23 @@ async function finishRecovered(
   session: SessionState,
   needsReadiness: boolean,
 ): Promise<ScreenRecordingStop> {
+  const cleanup = await params.req.internal?.retryRecordingCleanup?.(session.device);
+  if (cleanup?.startRolledBack)
+    throw new AppError('INVALID_ARGS', 'no active recording', {
+      reason: 'recording-start-rolled-back',
+    });
+  const settled = await params.req.internal?.recoverIncompleteRecordingStart?.(session.device);
+  if (settled) {
+    throw new AppError('INVALID_ARGS', 'no active recording', {
+      reason: 'recording-start-rolled-back',
+    });
+  }
   const recovery = resolveScreenRecordingStopRecovery({
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,
     device: session.device,
   });
-  await params.req.internal?.retryRecordingCleanup?.(session.device);
-  const settled = await params.req.internal?.recoverIncompleteRecordingStart?.(session.device);
-  if (recovery.kind === 'none' || settled) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'no active recording',
-      settled ? { reason: 'recording-start-rolled-back' } : undefined,
-    );
-  }
+  if (recovery.kind === 'none') throw new AppError('INVALID_ARGS', 'no active recording');
   if (recovery.kind === 'completed') {
     return { completion: recovery.completion, recordsSessionAction: false };
   }

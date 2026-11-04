@@ -9,7 +9,11 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
-import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
+import {
+  sameRuntimeOwner,
+  type ResourceOwnershipFence,
+  type RuntimeOwnerRef,
+} from '@agent-device/contracts/platform-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
@@ -346,6 +350,7 @@ export async function acquireTransientDeviceClaim(params: {
 function inspectTransientLocalClaim(
   existing: InspectedDeviceClaim,
   params: {
+    command: string;
     coveredBySession: string;
     coveredRecordingOwnership?: DeviceClaimSessionOwnership;
     coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
@@ -362,23 +367,27 @@ function inspectTransientLocalClaim(
     return undefined;
   }
   if (claim.recordingCleanupPending || claim.recordingStartPending) return 'conflict';
-  if (claim.claimOwnerKind === 'open-session') {
-    return claim.session === params.coveredBySession && params.coveredClaimIsOwnedByRequest(claim)
-      ? 'covered'
-      : undefined;
-  }
   const ownership = params.coveredRecordingOwnership;
-  if (
-    claim.claimOwnerKind === 'transient-command' &&
-    claim.transientCommand === 'record' &&
+  const matchesOwnership =
     ownership &&
-    claim.session === params.coveredBySession &&
     claim.ownerToken === ownership.ownerToken &&
     claim.deviceKey === ownership.deviceKey &&
     ownerIdentityMatches(
       { pid: claim.ownerPid, startTime: claim.ownerStartTime },
       { pid: ownership.ownerPid, startTime: ownership.ownerStartTime },
-    ) &&
+    );
+  if (claim.claimOwnerKind === 'open-session') {
+    if (claim.session !== params.coveredBySession || !params.coveredClaimIsOwnedByRequest(claim))
+      return undefined;
+    return (claim.recordingFence || params.command === 'record' || ownership) && !matchesOwnership
+      ? 'conflict'
+      : 'covered';
+  }
+  if (
+    claim.claimOwnerKind === 'transient-command' &&
+    claim.transientCommand === 'record' &&
+    matchesOwnership &&
+    claim.session === params.coveredBySession &&
     params.coveredClaimIsOwnedByRequest(claim)
   )
     return 'covered';
@@ -703,7 +712,7 @@ export async function holdRecordingClaimForClose(
   ownership: DeviceClaimSessionOwnership,
   env: EnvMap,
 ): Promise<
-  | { status: 'held'; fence: ResourceOwnershipFence }
+  | { status: 'held'; fence: ResourceOwnershipFence; owner: RuntimeOwnerRef }
   | { status: 'ordinary' | 'cleanup-pending' | 'ownership-changed' }
 > {
   return await writeOwnedDeviceClaim(
@@ -714,8 +723,13 @@ export async function holdRecordingClaimForClose(
         return { status: 'cleanup-pending' } as const;
       if (claim.claimOwnerKind !== 'open-session' || !claim.recordingFence)
         return { status: 'ordinary' } as const;
+      if (!claim.recordingRuntimeOwner) return { status: 'cleanup-pending' } as const;
       writeDeviceClaim({ ...claim, recordingCleanupPending: true }, env);
-      return { status: 'held', fence: claim.recordingFence } as const;
+      return {
+        status: 'held',
+        fence: claim.recordingFence,
+        owner: claim.recordingRuntimeOwner,
+      } as const;
     },
     () => ({ status: 'ownership-changed' as const }),
   );
@@ -725,6 +739,7 @@ export async function holdRecordingClaimForClose(
 export async function finishRecordingClaimClose(
   ownership: DeviceClaimSessionOwnership,
   fence: ResourceOwnershipFence,
+  owner: RuntimeOwnerRef,
   env: EnvMap,
   release: boolean,
 ): Promise<'settled' | 'ownership-changed'> {
@@ -736,7 +751,9 @@ export async function finishRecordingClaimClose(
         !claim.recordingCleanupPending ||
         claim.recordingStartPending ||
         claim.recordingFence?.token !== fence.token ||
-        claim.recordingFence.generation !== fence.generation
+        claim.recordingFence.generation !== fence.generation ||
+        !claim.recordingRuntimeOwner ||
+        !sameRuntimeOwner(claim.recordingRuntimeOwner, owner)
       )
         return 'ownership-changed' as const;
       if (release) fs.unlinkSync(claimPath);
@@ -975,5 +992,6 @@ export {
   reserveRecordingClaimFence,
   retryRecordingClaimCleanup,
   recoverIncompleteRecordingStartClaim,
+  findIncompleteRecordingReservation,
   type RetainedRecordingCleanup,
 } from './device-claim-recording.ts';

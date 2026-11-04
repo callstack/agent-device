@@ -211,6 +211,7 @@ test.each(
       fence: { token: 'fence', generation: 1 },
       lifecycle: 'open',
       descriptor: { version: 1, body: {} },
+      ...(kind === 'screen-recording' ? { metadata: { deviceClaimToken: claim.ownerToken } } : {}),
     });
     const contents =
       evidence === 'unreadable'
@@ -250,7 +251,10 @@ test.each([
   'a later foreign manifest $caseName during $mode recovery retains the claim',
   async ({ initiallyOwned, mode }) => {
     const stateDir = mkdtempForTestSync('device-claim-late-resource-');
-    const claim = makeClaim(stateDir);
+    const claim = {
+      ...makeClaim(stateDir),
+      recordingFence: { token: 'screen-fence', generation: 1 },
+    };
     const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
     writeDeviceClaim(claim, env);
     const sessionDir = path.join(stateDir, 'sessions', claim.session);
@@ -278,6 +282,7 @@ test.each([
           fence: { token: 'screen-fence', generation: 1 },
           lifecycle: 'open',
           descriptor: { version: 1, body: {} },
+          metadata: { deviceClaimToken: claim.ownerToken },
         }),
       );
     if (initiallyOwned) writeScreen(claim.session);
@@ -355,6 +360,8 @@ function makeClaim(stateDir: string): DeviceClaim {
     ownerPid: 999_999_999,
     ownerStartTime: 'dead-start',
     ownerToken: 'claim-token',
+    recordingFence: { token: 'fence', generation: 1 },
+    recordingRuntimeOwner: localRuntimeOwner('android'),
     createdAtMs: 1,
     updatedAtMs: 1,
   };
@@ -364,6 +371,8 @@ test('missing finalized simulator export retains the claim and recovered stop re
   const stateDir = mkdtempForTestSync('missing-recording-claim-');
   const claim = {
     ...makeClaim(stateDir),
+    recordingFence: { token: 'screen-fence', generation: 1 },
+    recordingRuntimeOwner: localRuntimeOwner('apple'),
     deviceKey: 'local:apple:ios:sim',
     device: {
       family: 'apple' as const,
@@ -392,6 +401,7 @@ test('missing finalized simulator export retains the claim and recovered stop re
       lifecycle: 'open',
       descriptor: { version: 1, body: { backend: 'simctl', outputPath: native } },
       metadata: {
+        deviceClaimToken: claim.ownerToken,
         stopObservation: { recorder: 'confirmed' },
         stoppedAtMs: 1,
         exportPath: output,
@@ -472,6 +482,7 @@ test('claim reconciliation retains the exact recording claim and journals settle
       fence: { token: 'fence', generation: 1 },
       lifecycle: 'open',
       descriptor: { version: 1, body: {} },
+      metadata: { deviceClaimToken: claim.ownerToken },
     }),
   );
   const cleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
@@ -558,6 +569,7 @@ test('a still-live previous daemon cannot be settled while it may publish anothe
       fence: { token: 'fence', generation: 1 },
       lifecycle: 'open',
       descriptor: { version: 1, body: {} },
+      metadata: { deviceClaimToken: claim.ownerToken },
     }),
   );
   const bind = vi.fn();

@@ -8,7 +8,6 @@ import { createAndroidRuntimeModule } from '@agent-device/platform-android';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
-  createLiveTestHostEnvironment,
   createUnavailableRuntimeFactsForTest,
 } from '@agent-device/test-kit';
 import {
@@ -26,6 +25,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
+import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import { deviceIdentity, hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   canonicalLocalDeviceKey,
@@ -38,7 +38,10 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { handleRecordCommand } from '../../../sessions/handlers/record-runtime.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
-import { isolatedDeviceClaimStores } from '../../../__tests__/support/device-claim-store.ts';
+import {
+  isolatedClaimTestHost,
+  isolatedDeviceClaimStores,
+} from '../../../__tests__/support/device-claim-store.ts';
 import { platformRequestScopeFixture } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -186,7 +189,7 @@ async function request(
 ) {
   if (store.resolveDaemonStateDir() !== stateDir)
     throw new Error('Unexpected test state directory');
-  const host = createLiveTestHostEnvironment();
+  const host = isolatedClaimTestHost();
   const platformScope = platformRequestScopeFixture();
   const scope = await createRequestExecutionScope({
     host,
@@ -241,6 +244,7 @@ function seed(
   session: string,
   device: DeviceInfo,
   native: string,
+  envelope?: DurableResourceEnvelope<'screen-recording'>,
 ) {
   const key = canonicalLocalDeviceKey(deviceIdentity(device));
   const claim = {
@@ -256,6 +260,8 @@ function seed(
     createdAtMs: 1,
     updatedAtMs: 1,
     claimOwnerKind: 'open-session',
+    recordingFence: envelope?.fence ?? { token: 'recording-fence', generation: 7 },
+    recordingRuntimeOwner: localRuntimeOwner(device.platform),
   };
   fs.mkdirSync(claimsDir, { recursive: true });
   const claimPath = path.join(
@@ -268,15 +274,25 @@ function seed(
   );
   screenRecordingDurableResource.store.write(
     resourcePath,
-    createDurableResourceEnvelope({
-      resourceKind: 'screen-recording',
-      sessionId: session,
-      device: deviceIdentity(device),
-      owner: localRuntimeOwner(device.platform),
-      fence: { token: 'recording-fence', generation: 7 },
-      lifecycle: 'open',
-      descriptor: { version: 1, body: { outputPath: native } },
-    }),
+    envelope
+      ? {
+          ...envelope,
+          metadata: {
+            ...envelope.metadata,
+            deviceClaimToken: 'original-token',
+            deviceClaimBindingVersion: 1,
+          },
+        }
+      : createDurableResourceEnvelope({
+          resourceKind: 'screen-recording',
+          sessionId: session,
+          device: deviceIdentity(device),
+          owner: localRuntimeOwner(device.platform),
+          fence: { token: 'recording-fence', generation: 7 },
+          lifecycle: 'open',
+          descriptor: { version: 1, body: { outputPath: native } },
+          metadata: { deviceClaimToken: 'original-token', deviceClaimBindingVersion: 1 },
+        }),
   );
   return { claimPath, resourcePath, claim };
 }
@@ -285,10 +301,7 @@ test.for([ANDROID_EMULATOR, IOS_SIMULATOR])(
   'sweep preserves the claim and a same-session stop exports $platform material',
   async (device) => {
     const { stateDir, claimsDir } = setup();
-    const store = new SessionStore(
-      path.join(stateDir, 'sessions'),
-      createLiveTestHostEnvironment(),
-    );
+    const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
     const output = path.join(stateDir, 'output.mp4');
     const rt = runtime(device, output);
     const { claimPath, resourcePath } = seed(stateDir, claimsDir, 'recording', device, rt.native);
@@ -315,7 +328,7 @@ test.for([ANDROID_EMULATOR, IOS_SIMULATOR])(
 
 test('failed export and missing resource retain the transferred claim until a successful retry', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath, resourcePath } = seed(
     stateDir,
@@ -353,10 +366,7 @@ test('failed export and missing resource retain the transferred claim until a su
 test('a different state directory cannot replace an open recording or start native capture', async () => {
   const { root, stateDir, claimsDir } = setup();
   const otherState = path.join(root, 'other');
-  const store = new SessionStore(
-    path.join(otherState, 'sessions'),
-    createLiveTestHostEnvironment(),
-  );
+  const store = new SessionStore(path.join(otherState, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath, resourcePath } = seed(
     stateDir,
@@ -377,7 +387,7 @@ test('a different state directory cannot replace an open recording or start nati
 
 test('a new recording retains its transient claim through start and clears it after stop', async () => {
   const { stateDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   vi.spyOn(deviceSelection, 'resolveTargetDevice').mockResolvedValue(ANDROID_EMULATOR);
   const started = await request(stateDir, ANDROID_EMULATOR, rt, 'start', store, false);
@@ -406,7 +416,7 @@ test('a new recording retains its transient claim through start and clears it af
 
 test('a changed claim token refuses a retry without reaching the recorder', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath, resourcePath } = seed(
     stateDir,
@@ -431,7 +441,7 @@ test('a changed claim token refuses a retry without reaching the recorder', asyn
 
 test('a live or uncertain previous daemon never transfers a recording claim', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath, claim, resourcePath } = seed(
     stateDir,
@@ -458,7 +468,7 @@ test('a live or uncertain previous daemon never transfers a recording claim', as
 
 test('a failed preflight rolls back its transient reservation', async () => {
   const { stateDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const initialBind = rt.gateway.bind;
   vi.spyOn(rt.gateway, 'bind').mockImplementation(async (req) => {
@@ -482,7 +492,7 @@ test('a failed preflight rolls back its transient reservation', async () => {
 
 test('a confirmed failed-adoption rollback releases its recording reservation', async () => {
   const { stateDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const result = await request(stateDir, ANDROID_EMULATOR, rt, 'start', store, true, true);
   expect(result.response.ok).toBe(false);
@@ -500,7 +510,7 @@ test('a confirmed failed-adoption rollback releases its recording reservation', 
 
 test('an unconfirmed native start keeps its reservation even when an older manifest is completed', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const resourcePath = screenRecordingDurableResource.store.resolvePath(
     path.join(stateDir, 'sessions', 'recording'),
@@ -536,7 +546,7 @@ test('an unconfirmed native start keeps its reservation even when an older manif
 
 test('a replacement token survives completion while runtime bindings drain', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath } = seed(stateDir, claimsDir, 'recording', ANDROID_EMULATOR, rt.native);
   let unblock!: () => void;
@@ -570,7 +580,7 @@ test('a replacement token survives completion while runtime bindings drain', asy
 
 test('a sweep holds claim admission until settlement drains before stop and competing start', async () => {
   const { root, stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath } = seed(stateDir, claimsDir, 'recording', ANDROID_EMULATOR, rt.native);
   let release!: () => void;
@@ -617,10 +627,7 @@ test('a sweep holds claim admission until settlement drains before stop and comp
   const sweep = reconcileOrphanedDeviceClaims(reconciler, stateDir, process.env);
   await entered;
   const otherState = path.join(root, 'other');
-  const other = new SessionStore(
-    path.join(otherState, 'sessions'),
-    createLiveTestHostEnvironment(),
-  );
+  const other = new SessionStore(path.join(otherState, 'sessions'), isolatedClaimTestHost());
   const competing = request(otherState, ANDROID_EMULATOR, rt, 'start', other);
   const stopping = request(stateDir, ANDROID_EMULATOR, rt, 'stop', store);
   expect(rt.start).not.toHaveBeenCalled();
@@ -636,14 +643,14 @@ test('a sweep holds claim admission until settlement drains before stop and comp
 
 test('the Apple runtime exports a proven-gone simulator recording through claim reconciliation and the request handler', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const output = path.join(stateDir, 'real-apple.mp4');
   const native = path.join(stateDir, 'real-apple.native.mp4');
   const prepare = vi.fn(async () => {});
   const finalize = vi.fn(async () => ({}));
   const terminate = vi.fn(async () => 'terminated' as const);
   const host = {
-    hostEnvironment: createLiveTestHostEnvironment(),
+    hostEnvironment: isolatedClaimTestHost(),
     localInteractors: {
       resolve: async () => {
         throw new Error('unexpected interactor');
@@ -708,11 +715,18 @@ test('the Apple runtime exports a proven-gone simulator recording through claim 
     showTouches: false,
     hideTouchesRequested: false,
     recordOnlySession: false,
+    claimToken: 'original-token',
     fence: { token: 'real-fence', generation: 1 },
   });
   expect(fs.readFileSync(native, 'utf8')).toBe('simulator video');
-  const { claimPath, resourcePath } = seed(stateDir, claimsDir, 'recording', IOS_SIMULATOR, native);
-  screenRecordingDurableResource.store.write(resourcePath, started.envelope);
+  const { claimPath } = seed(
+    stateDir,
+    claimsDir,
+    'recording',
+    IOS_SIMULATOR,
+    native,
+    started.envelope,
+  );
   prepare.mockClear();
   prepare.mockImplementation(async () => await new Promise<void>(() => {}));
   const rt = runtime(IOS_SIMULATOR, path.join(stateDir, 'fixture-unused.mp4'));
@@ -737,7 +751,7 @@ test('the Apple runtime exports a proven-gone simulator recording through claim 
 
 test('the Android runtime settles its exact recorder and exports its preserved chunk through the claim and handler', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const output = path.join(stateDir, 'real-android.mp4');
   const deviceFiles = new Map<string, string>();
   let marker = '';
@@ -786,7 +800,7 @@ test('the Android runtime settles its exact recorder and exports its preserved c
     },
   };
   const host = {
-    hostEnvironment: createLiveTestHostEnvironment(),
+    hostEnvironment: isolatedClaimTestHost(),
     androidTools: { probeClipboardShellSupport: async () => 'unsupported' },
     processTransports: { resolve: async () => ({}) },
     localInteractors: {
@@ -842,17 +856,18 @@ test('the Android runtime settles its exact recorder and exports its preserved c
     showTouches: false,
     hideTouchesRequested: false,
     recordOnlySession: false,
+    claimToken: 'original-token',
     fence: { token: 'real-android-fence', generation: 1 },
   });
   expect([...deviceFiles.values()]).toEqual(['android video']);
-  const { claimPath, resourcePath } = seed(
+  const { claimPath } = seed(
     stateDir,
     claimsDir,
     'recording',
     ANDROID_EMULATOR,
     path.join(stateDir, 'unused'),
+    started.envelope,
   );
-  screenRecordingDurableResource.store.write(resourcePath, started.envelope);
   prepare.mockClear();
   prepare.mockImplementation(async () => await new Promise<void>(() => {}));
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'fixture-unused.mp4'));
@@ -879,7 +894,7 @@ test('the Android runtime settles its exact recorder and exports its preserved c
 
 test('claim replacement before exact binding refuses before native recovery', async () => {
   const { stateDir, claimsDir } = setup();
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const rt = runtime(ANDROID_EMULATOR, path.join(stateDir, 'output.mp4'));
   const { claimPath, resourcePath } = seed(
     stateDir,
@@ -923,7 +938,7 @@ test('an app-device stop keeps the host lock until its runtime bindings drain', 
     booted: true,
   };
   const app = hostAppDevice(host, 'com.example.editor');
-  const store = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
+  const store = new SessionStore(path.join(stateDir, 'sessions'), isolatedClaimTestHost());
   const appRuntime = runtime(app, path.join(stateDir, 'app.mp4'));
   const { claimPath } = seed(stateDir, claimsDir, 'recording', app, appRuntime.native);
   let release!: () => void;
@@ -945,10 +960,7 @@ test('an app-device stop keeps the host lock until its runtime bindings drain', 
   const stopping = request(stateDir, app, appRuntime, 'stop', store);
   await blocked;
   const hostState = path.join(root, 'host-state');
-  const hostStore = new SessionStore(
-    path.join(hostState, 'sessions'),
-    createLiveTestHostEnvironment(),
-  );
+  const hostStore = new SessionStore(path.join(hostState, 'sessions'), isolatedClaimTestHost());
   const hostRuntime = runtime(host, path.join(root, 'host.mp4'));
   const starting = request(hostState, host, hostRuntime, 'start', hostStore);
   expect(fs.existsSync(claimPath)).toBe(true);

@@ -33,6 +33,13 @@ export function isScreenRecordingStartNotDispatched(error: unknown): boolean {
   );
 }
 
+/** A dispatched start whose exact recorder and artifact were fully rolled back. */
+export class ScreenRecordingStartRolledBack extends Error {
+  constructor(cause: unknown) {
+    super('Screen recording start was rolled back', { cause });
+  }
+}
+
 /** The recording's file exists and is not a video, which only a still-finalizing recorder can undo. */
 export const RECORDING_OUTPUT_UNPLAYABLE_REASON = 'recording-output-unplayable';
 

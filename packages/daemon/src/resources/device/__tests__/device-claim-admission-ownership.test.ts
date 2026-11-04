@@ -81,7 +81,10 @@ function fixture() {
   fs.mkdirSync(path.join(workspace, '.git'), { recursive: true });
   fs.mkdirSync(subdir, { recursive: true });
   fs.mkdirSync(foreign, { recursive: true });
-  const host = createTestHostEnvironment({ cwd: workspace, env: process.env });
+  const host = createTestHostEnvironment({
+    cwd: workspace,
+    env: { ...process.env, AGENT_DEVICE_CLAIMS_DIR: claimsDir },
+  });
   const store = new SessionStore(path.join(stateDir, 'sessions'), host);
   const registry = new LeaseRegistry();
   const scope = platformRequestScopeFixture();
@@ -137,6 +140,7 @@ function fixture() {
   const closeApplication = vi.fn(async () => {});
   const finalizeApplicationClose = vi.fn(async () => ({}));
   let disposeBinding: () => Promise<void> = async () => {};
+  let retryBinding: (() => Promise<void>) | undefined;
   const factsBase = createUnavailableRuntimeFactsForTest(device, owner);
   const facts = {
     ...factsBase,
@@ -153,7 +157,9 @@ function fixture() {
     inspectFacts: async () => facts,
     bind: async () => {
       const dispose = disposeBinding;
+      const retry = retryBinding;
       disposeBinding = async () => {};
+      retryBinding = undefined;
       return {
         device,
         owner,
@@ -166,6 +172,7 @@ function fixture() {
           closeApplication,
           finalizeApplicationClose,
         },
+        ...(retry ? { retryDisposal: retry } : {}),
         [Symbol.asyncDispose]: async () => await dispose(),
       };
     },
@@ -257,6 +264,9 @@ function fixture() {
     setBindingDisposal: (dispose: () => Promise<void>) => {
       disposeBinding = dispose;
     },
+    setBindingRetry: (retry: () => Promise<void>) => {
+      retryBinding = retry;
+    },
     setGateway: (value: DeviceRuntimeGateway<PlatformRuntimeOperations>) => {
       gateway = value;
     },
@@ -264,6 +274,27 @@ function fixture() {
       startRecovery = value;
     },
   };
+}
+
+function runClose(
+  f: ReturnType<typeof fixture>,
+  close: Awaited<ReturnType<ReturnType<typeof fixture>['scopeFor']>>,
+) {
+  return close.runLocked(
+    async () =>
+      await handleSessionCloseCommands({
+        host: f.host,
+        req: close.req,
+        sessionName: close.sessionName,
+        logPath: close.requestLogPath,
+        sessionStore: f.store,
+        leaseRegistry: f.registry,
+        inspectFacts: close.inspectFacts,
+        bindDevice: close.bindDevice,
+        platformServices: close.platformServices,
+        platformResourceCleanup: platformResourceCleanupFixture(),
+      }),
+  );
 }
 
 test('a record-only session keeps its exact claim for surviving app and audio owners', async () => {
@@ -381,21 +412,7 @@ test('a record-only session keeps its exact claim for surviving app and audio ow
     await disposalGate;
   });
   const close = await f.scopeFor('close', 'org.example.editor', f.workspace);
-  const closing = close.runLocked(
-    async () =>
-      await handleSessionCloseCommands({
-        host: f.host,
-        req: close.req,
-        sessionName: close.sessionName,
-        logPath: close.requestLogPath,
-        sessionStore: f.store,
-        leaseRegistry: f.registry,
-        inspectFacts: close.inspectFacts,
-        bindDevice: close.bindDevice,
-        platformServices: close.platformServices,
-        platformResourceCleanup: platformResourceCleanupFixture(),
-      }),
-  );
+  const closing = runClose(f, close);
   const competing = () => f.record('start', f.workspace, other, new LeaseRegistry());
   try {
     await Promise.race([
@@ -449,39 +466,63 @@ test.each(['failed disposal', 'replacement claim'] as const)(
       fs.readdirSync(f.claimsDir).find((name) => name.endsWith('.json'))!,
     );
     const original = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+    let enterRetry!: () => void;
+    let releaseRetry!: () => void;
+    const retryEntered = new Promise<void>((resolve) => {
+      enterRetry = resolve;
+    });
+    const retryGate = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    if (failure === 'failed disposal')
+      f.setBindingRetry(async () => {
+        enterRetry();
+        await retryGate;
+      });
     f.setBindingDisposal(async () => {
       if (failure === 'failed disposal') throw new Error('binding cleanup failed');
       const current = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
       fs.writeFileSync(claimFile, JSON.stringify({ ...current, ownerToken: 'successor' }));
     });
     const close = await f.scopeFor('close', 'org.example.editor', f.workspace);
-    const response = await close.runLocked(
-      async () =>
-        await handleSessionCloseCommands({
-          host: f.host,
-          req: close.req,
-          sessionName: close.sessionName,
-          logPath: close.requestLogPath,
-          sessionStore: f.store,
-          leaseRegistry: f.registry,
-          inspectFacts: close.inspectFacts,
-          bindDevice: close.bindDevice,
-          platformServices: close.platformServices,
-          platformResourceCleanup: platformResourceCleanupFixture(),
-        }),
-    );
+    const response = await runClose(f, close);
     expect(response.ok).toBe(true);
     await expect(Promise.resolve(close[Symbol.asyncDispose]())).rejects.toThrow();
     expect(JSON.parse(fs.readFileSync(claimFile, 'utf8'))).toMatchObject({
       ownerToken: failure === 'replacement claim' ? 'successor' : original.ownerToken,
       recordingCleanupPending: true,
     });
+    if (failure === 'failed disposal') {
+      const foreign = await f.scopeFor('close', undefined, f.foreign);
+      await expect(runClose(f, foreign)).rejects.toMatchObject({ code: 'DEVICE_IN_USE' });
+      await foreign[Symbol.asyncDispose]();
+      expect(JSON.parse(fs.readFileSync(claimFile, 'utf8')).ownerToken).toBe(original.ownerToken);
+      const retry = await f.scopeFor('close', undefined, f.workspace);
+      const closing = runClose(f, retry);
+      try {
+        await Promise.race([
+          retryEntered,
+          closing.then(() => {
+            throw new Error('close skipped retry');
+          }),
+        ]);
+        expect(JSON.parse(fs.readFileSync(claimFile, 'utf8')).ownerToken).toBe(original.ownerToken);
+        releaseRetry();
+        expect((await closing).ok).toBe(true);
+        await retry[Symbol.asyncDispose]();
+        expect(fs.existsSync(claimFile)).toBe(false);
+      } finally {
+        releaseRetry();
+        await closing.catch(() => {});
+        await Promise.resolve(retry[Symbol.asyncDispose]()).catch(() => {});
+      }
+    }
   },
 );
 
 test('open-session recordings bind the claim token and reject a replacement before recovery', async () => {
   const f = fixture();
-  f.publish(false);
+  const ref = f.publish(false);
   const acquired = await acquireDeviceClaim({
     device: f.device,
     session: 'recording',
@@ -491,6 +532,7 @@ test('open-session recordings bind the claim token and reject a replacement befo
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
   if (acquired.status !== 'acquired') throw new Error('claim not acquired');
+  f.store.update(ref, { deviceClaim: acquired.ownership });
   expect((await f.record('start', f.subdir)).ok).toBe(true);
   const record = screenRecordingDurableResource.store.read(f.manifestPath);
   expect(record).toMatchObject({
@@ -516,6 +558,54 @@ test('open-session recordings bind the claim token and reject a replacement befo
   });
   expect(JSON.parse(fs.readFileSync(claimFile, 'utf8')).ownerToken).toBe('successor');
 });
+
+test.each(['generation', 'successor'] as const)(
+  'an open-session %s mismatch cannot reach recording finish or claim coverage',
+  async (changed) => {
+    const f = fixture();
+    const ref = f.publish(false);
+    const acquired = await acquireDeviceClaim({
+      device: f.device,
+      session: 'recording',
+      workspace: f.workspace,
+      stateDir: f.stateDir,
+      env: process.env,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    if (acquired.status !== 'acquired') throw new Error('claim not acquired');
+    f.store.update(ref, { deviceClaim: acquired.ownership });
+    expect((await f.record('start', f.workspace)).ok).toBe(true);
+    const claimFile = path.join(
+      f.claimsDir,
+      fs.readdirSync(f.claimsDir).find((name) => name.endsWith('.json'))!,
+    );
+    const claim = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+    const replacement =
+      changed === 'successor'
+        ? { ...claim, ownerToken: 'successor' }
+        : {
+            ...claim,
+            recordingFence: {
+              ...claim.recordingFence,
+              generation: claim.recordingFence.generation + 1,
+            },
+          };
+    fs.writeFileSync(claimFile, JSON.stringify(replacement));
+    expect(await f.record('stop', f.workspace)).toMatchObject({
+      ok: false,
+      error: { code: 'DEVICE_IN_USE' },
+    });
+    expect(fs.existsSync(path.join(f.stateDir, 'output.mp4'))).toBe(false);
+    if (changed === 'successor') {
+      const install = await f.scopeFor('install', undefined, f.workspace);
+      await expect(
+        install.bindDevice(f.device, { required: [], preferred: [] }),
+      ).rejects.toMatchObject({ code: 'DEVICE_IN_USE' });
+      await install[Symbol.asyncDispose]();
+    }
+    expect(JSON.parse(fs.readFileSync(claimFile, 'utf8'))).toEqual(replacement);
+  },
+);
 
 test('root and subdirectory share workspace authority while another worktree is refused', async () => {
   const f = fixture();
@@ -829,36 +919,56 @@ test('Android incomplete-start recovery retries an interrupted exact no-effect c
   expect(stop).not.toHaveBeenCalled();
 });
 
-test('an incomplete-start recovery with failed binding disposal keeps its exact reservation', async () => {
-  const f = fixture();
-  f.publish(true);
-  f.start.mockRejectedValueOnce(new Error('launch outcome unknown'));
-  expect((await f.record('start', f.workspace)).ok).toBe(false);
-  const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
-  f.setStartRecovery('confirmed-no-effect');
-  const original = f.gateway;
-  const bind = vi.fn(async (...args: Parameters<typeof original.bind>) => {
-    const binding = await original.bind(...args);
-    return {
-      ...binding,
-      [Symbol.asyncDispose]: async () => {
-        throw new Error('dispose failed');
-      },
-    };
-  });
-  f.setGateway({ ...original, bind });
-  expect(await f.record('stop', f.workspace)).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'cleanup-unconfirmed' } },
-  });
-  expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
-    ownerToken: claim.ownerToken,
-    recordingCleanupPending: true,
-  });
-  expect(await f.record('stop', f.workspace)).toMatchObject({
-    ok: false,
-    error: { details: { reason: 'cleanup-unconfirmed' } },
-  });
-  expect(bind).toHaveBeenCalledOnce();
-  expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
-});
+test.each([true, false])(
+  'incomplete-start cleanup retry respects retry capability %s',
+  async (retryable) => {
+    const f = fixture();
+    f.publish(true);
+    f.start.mockRejectedValueOnce(new Error('launch outcome unknown'));
+    expect((await f.record('start', f.workspace)).ok).toBe(false);
+    const claim = inspectDeviceClaims({}, process.env)[0]!.claim!;
+    f.setStartRecovery('confirmed-no-effect');
+    const original = f.gateway;
+    const retryDisposal = vi.fn(async () => {});
+    let failDisposal = true;
+    const bind = vi.fn(async (...args: Parameters<typeof original.bind>) => {
+      const binding = await original.bind(...args);
+      return {
+        ...binding,
+        ...(retryable ? { retryDisposal } : {}),
+        [Symbol.asyncDispose]: async () => {
+          if (failDisposal) {
+            failDisposal = false;
+            throw new Error('dispose failed');
+          }
+          await binding[Symbol.asyncDispose]();
+        },
+      };
+    });
+    f.setGateway({ ...original, bind });
+    expect(await f.record('stop', f.workspace)).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'cleanup-unconfirmed' } },
+    });
+    expect(inspectDeviceClaims({}, process.env)[0]?.claim).toMatchObject({
+      ownerToken: claim.ownerToken,
+      recordingCleanupPending: true,
+    });
+    const retried = await f.record('stop', f.workspace);
+    if (retryable) {
+      expect(retried).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'recording-start-rolled-back' } },
+      });
+      expect(retryDisposal).toHaveBeenCalledOnce();
+      expect(inspectDeviceClaims({}, process.env)).toHaveLength(0);
+    } else {
+      expect(retried).toMatchObject({
+        ok: false,
+        error: { details: { reason: 'cleanup-unconfirmed' } },
+      });
+      expect(bind).toHaveBeenCalledOnce();
+      expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe(claim.ownerToken);
+    }
+  },
+);
